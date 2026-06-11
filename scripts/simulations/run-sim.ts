@@ -38,6 +38,7 @@ import {
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 import { classifyStroke } from '../../utils/geometryFitting';
+import { mergeSwingDetections } from '../../services/swing/swingSegmentation';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 
 interface ScenarioResult {
@@ -1424,6 +1425,30 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /prefetchSwing\(selectedSwing \+ 1\)/.test(smA) &&
       /void analyzeSwingForIndex\(idx\)\.finally\(\(\) => \{ prefetchInFlightRef\.current = false; \}\)/.test(smA),
     'once a swing\'s read lands, the next swing prefetches in the background — bounded to depth 1 with a single in-flight prefetch, so stepping the reel is instant without fanning out concurrent calls');
+
+  // Video-locate over-detection merge — validated against Tim's REAL clips
+  // (2026-06-11): the live locate_swings returned 3 detections for a 1-swing
+  // down-the-line clip and 6 for a face-on; mergeSwingDetections collapses them.
+  const dtlReal = mergeSwingDetections([
+    { timeSec: 10.2, confidence: 'high' }, { timeSec: 11.1, confidence: 'high' }, { timeSec: 12.0, confidence: 'high' },
+  ]);
+  check('Smart Motion: a 1-swing clip over-detected as 3 collapses to one (real DTL)',
+    dtlReal.length === 1 && Math.abs(dtlReal[0].timeSec - 11.1) < 0.001,
+    'the down-the-line clip whose single swing the locator split into 3 (10.2/11.1/12.0s) now reads as ONE swing at the median (≈impact) time — no phantom reel swings in range mode');
+
+  const faceOnReal = mergeSwingDetections(
+    [11.6, 13, 14.3, 15.7, 17, 18.4].map((t) => ({ timeSec: t, confidence: 'high' as const })),
+  );
+  check('Smart Motion: tightly-spaced face-on detections collapse (6 → few)',
+    faceOnReal.length === 3,
+    'the face-on clip\'s 6 detections at ~1.3s spacing collapse to 3 (each >2.5s apart) instead of showing 6 phantom swings');
+
+  const distinctSwings = mergeSwingDetections([
+    { timeSec: 5, confidence: 'high' }, { timeSec: 12, confidence: 'high' }, { timeSec: 20, confidence: 'low' },
+  ]);
+  check('Smart Motion: genuinely distinct swings (>2.5s apart) are preserved',
+    distinctSwings.length === 3,
+    'real separate range swings are never merged — only a single swing\'s own sub-2.5s phases collapse');
 
   const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
   check('Swing analysis opt #2: analysis output token caps trimmed 800→650',

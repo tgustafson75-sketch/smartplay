@@ -17,6 +17,39 @@
 
 import type { DetectedStrike } from './strikeDetector';
 
+/**
+ * 2026-06-11 — Merge over-detections from the VIDEO swing locator. With coarse
+ * locate frames ~1-1.5s apart, the model labels a SINGLE swing's backswing / top
+ * / downswing frames as separate swings (verified on Tim's real clips: a 1-swing
+ * down-the-line clip returned 3 detections 0.9s apart; a face-on returned 6 at
+ * ~1.3s). Group detections that begin within minSepSec of the group's start into
+ * ONE swing at the group's MEDIAN time (closest to impact) — a genuinely distinct
+ * range swing (address a new ball → swing → reset) is always >minSepSec from the
+ * next, while one swing's own phases all fall inside it. Confidence = group max.
+ */
+export const MIN_SWING_SEP_SEC = 2.5;
+
+export function mergeSwingDetections(
+  raw: Array<{ timeSec: number; confidence: 'high' | 'low' }>,
+  minSepSec: number = MIN_SWING_SEP_SEC,
+): Array<{ timeSec: number; confidence: 'high' | 'low' }> {
+  if (raw.length <= 1) return raw;
+  const sorted = [...raw].sort((a, b) => a.timeSec - b.timeSec);
+  const out: Array<{ timeSec: number; confidence: 'high' | 'low' }> = [];
+  let group: Array<{ timeSec: number; confidence: 'high' | 'low' }> = [sorted[0]];
+  const flush = () => {
+    const mid = group[Math.floor(group.length / 2)]; // median time ≈ impact
+    const conf: 'high' | 'low' = group.some((g) => g.confidence === 'high') ? 'high' : 'low';
+    out.push({ timeSec: mid.timeSec, confidence: conf });
+  };
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timeSec - group[0].timeSec < minSepSec) group.push(sorted[i]);
+    else { flush(); group = [sorted[i]]; }
+  }
+  flush();
+  return out;
+}
+
 /** A swing carved out of the open-window clip by one detected strike. */
 export interface SwingSegment {
   /** 1-based swing number in the session. */

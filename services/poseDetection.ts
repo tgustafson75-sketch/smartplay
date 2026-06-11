@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { mergeSwingDetections } from './swing/swingSegmentation';
 /**
  * Phase K — Pose detection client.
  *
@@ -667,13 +668,18 @@ export async function locateSwings(
     }
     const data = (await res.json()) as { swings?: Array<{ time_sec?: number; confidence?: string }> };
     const durSec = durationMs / 1000;
-    const out = (data.swings ?? [])
+    const raw = (data.swings ?? [])
       .filter((s) => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
       .map((s) => ({
         timeSec: Math.max(0, Math.min(durSec, s.time_sec as number)),
         confidence: (s.confidence === 'high' ? 'high' : 'low') as 'high' | 'low',
       }));
-    logLocate('range_located', { count: out.length, coarse_frames: frames.length });
+    // 2026-06-11 — Collapse the model's over-detections (one swing's phases
+    // labeled as multiple swings on ~1-1.5s-spaced coarse frames). Verified on
+    // real clips: a 1-swing DTL clip came back as 3, a face-on as 6. See
+    // mergeSwingDetections.
+    const out = mergeSwingDetections(raw);
+    logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length });
     return out;
   } catch (e) {
     logLocate('range_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });
