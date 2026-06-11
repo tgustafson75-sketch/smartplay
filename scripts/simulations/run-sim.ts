@@ -1385,7 +1385,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   const poseSrc2 = fs.readFileSync(path.resolve(__dirname, '../../services/poseDetection.ts'), 'utf-8');
 
   check('Swing analysis: per-swing result is dropped if the reel moved on (stale guard)',
-    /selectedSwingRef\.current === idx\) setAnalysis/.test(smA) &&
+    /if \(selectedSwingRef\.current === idx\) \{/.test(smA) &&
       /useEffect\(\(\) => \{ selectedSwingRef\.current = selectedSwing;/.test(smA),
     'a late-resolving per-swing analysis only updates the display when its swing is STILL selected — no more one swing\'s read under another\'s header on a fast reel scrub');
 
@@ -1417,6 +1417,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /knownDurationMs\?: number/.test(poseSrc2) &&
       /extractKeyFrames\(clipUri, effectiveBoundaries, quickTier, probedDurMs \|\| undefined\)/.test(poseSrc2),
     'analyzeSwing threads its probed duration into extractKeyFrames so the same clip is not probeDurationMs-ed twice on a short/locate-failed upload');
+
+  check('Swing analysis: next swing is prefetched (depth 1, single in-flight)',
+    /const prefetchInFlightRef = useRef\(false\)/.test(smA) &&
+      /if \(prefetchInFlightRef\.current\) return;/.test(smA) &&
+      /prefetchSwing\(selectedSwing \+ 1\)/.test(smA) &&
+      /void analyzeSwingForIndex\(idx\)\.finally\(\(\) => \{ prefetchInFlightRef\.current = false; \}\)/.test(smA),
+    'once a swing\'s read lands, the next swing prefetches in the background — bounded to depth 1 with a single in-flight prefetch, so stepping the reel is instant without fanning out concurrent calls');
 
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',

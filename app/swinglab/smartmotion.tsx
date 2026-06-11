@@ -938,19 +938,17 @@ export default function SmartMotion() {
     setPage(Math.round(e.nativeEvent.contentOffset.x / w));
   }, []);
 
-  const selectSwing = useCallback(
-    async (idx: number) => {
+  // 2026-06-11 (audit) — background-safe per-swing analysis shared by the
+  // on-demand selectSwing AND the prefetch below. Windows the clip to the
+  // segment, races a 30s watchdog, caches by swing index, and returns the
+  // analysis (or null). Does NOT touch any display state, so it's safe to run
+  // in the background.
+  const analyzeSwingForIndex = useCallback(
+    async (idx: number): Promise<SwingAnalysis | null> => {
       const seg = segments[idx];
-      if (!seg) return;
-      setSelectedSwing(idx);
-      videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
-      videoRef.current?.playAsync().catch(() => undefined);
-
-      const cached = analysisCacheRef.current[idx];
-      if (cached) { setAnalysis(cached); return; }
-      if (!clipUri) return;
-      // Per-swing analysis on demand — windowed to this segment.
-      setSwingAnalyzing(true);
+      if (!seg || !clipUri) return null;
+      const cachedHit = analysisCacheRef.current[idx];
+      if (cachedHit) return cachedHit;
       try {
         const r = await Promise.race([
           analyzeSwing(clipUri, {
@@ -973,18 +971,63 @@ export default function SmartMotion() {
             setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
           ),
         ]);
-        if (r.kind === 'ok') {
-          analysisCacheRef.current[idx] = r.analysis; // always cache the result
-          // Only apply to the display if THIS swing is still selected — a fast
-          // reel scrub could have moved on, and a late-resolving older read
-          // would otherwise overwrite the current swing's view. (audit)
-          if (selectedSwingRef.current === idx) setAnalysis(r.analysis);
-        }
-      } catch { /* keep prior analysis on failure */ }
-      if (selectedSwingRef.current === idx) setSwingAnalyzing(false);
+        if (r.kind === 'ok') { analysisCacheRef.current[idx] = r.analysis; return r.analysis; }
+      } catch { /* non-fatal */ }
+      return null;
     },
     [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
   );
+
+  // 2026-06-11 (audit opt #1) — prefetch the NEXT swing's read in the background
+  // so stepping through the reel is instant instead of a 3-8s wait per tab.
+  // BOUNDED: depth 1 (only the immediate next swing) and a single in-flight
+  // prefetch at a time, so a 6-swing reel never fans out 6 concurrent Haiku
+  // calls — at most one read ahead of the user. If the user stops at swing 1,
+  // only swing 2 is ever prefetched.
+  const prefetchInFlightRef = useRef(false);
+  const prefetchSwing = useCallback((idx: number) => {
+    if (idx < 0 || idx >= segments.length) return;
+    if (analysisCacheRef.current[idx]) return;
+    if (prefetchInFlightRef.current) return;
+    prefetchInFlightRef.current = true;
+    void analyzeSwingForIndex(idx).finally(() => { prefetchInFlightRef.current = false; });
+  }, [segments.length, analyzeSwingForIndex]);
+
+  const selectSwing = useCallback(
+    async (idx: number) => {
+      const seg = segments[idx];
+      if (!seg) return;
+      setSelectedSwing(idx);
+      videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
+      videoRef.current?.playAsync().catch(() => undefined);
+
+      const cached = analysisCacheRef.current[idx];
+      if (cached) { setAnalysis(cached); return; }
+      if (!clipUri) return;
+      // Per-swing analysis on demand — windowed to this segment.
+      setSwingAnalyzing(true);
+      const a = await analyzeSwingForIndex(idx);
+      // Only apply to the display if THIS swing is still selected — a fast reel
+      // scrub could have moved on, and a late-resolving older read would
+      // otherwise overwrite the current swing's view. (audit)
+      if (selectedSwingRef.current === idx) {
+        if (a) setAnalysis(a);
+        setSwingAnalyzing(false);
+      }
+    },
+    [segments, clipUri, analyzeSwingForIndex],
+  );
+
+  // 2026-06-11 (audit opt #1) — once the current swing's read is in, prefetch the
+  // next one. Watching `analysis` covers both the fetch and the cache-hit paths
+  // (selectSwing sets analysis in both, and the first swing's read after capture
+  // sets it too), while the in-flight + cached guards keep it to a single read
+  // ahead. The background prefetch itself never sets `analysis`, so it can't
+  // re-trigger this effect into a loop.
+  useEffect(() => {
+    if (!analysis || segments.length <= 1) return;
+    prefetchSwing(selectedSwing + 1);
+  }, [analysis, selectedSwing, segments.length, prefetchSwing]);
 
   const startRecording = useCallback(async () => {
     if (!cameraRef.current || recordingPromiseRef.current) return;
