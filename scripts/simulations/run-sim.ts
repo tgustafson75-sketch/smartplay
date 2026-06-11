@@ -1025,6 +1025,19 @@ check('API base URL — one resolver, never relative/dead (spine fix)',
     /getApiBaseUrl\(\)/.test(read('hooks/useVoiceCaddie.ts')),
   'every backend fetch resolves through getApiBaseUrl(), which honors EXPO_PUBLIC_API_URL only when it is an absolute http(s) url and otherwise falls back to production — so an env var missing from an OTA bundle can never again leave the client with no server address');
 
+// 2026-06-10 — Voice warmup coverage. prewarmVoice() previously fired ONLY on the
+// greeting screen, so the first mic tap after navigating in (or after the app
+// backgrounded long enough for the Lambdas to idle out) paid full cold-start —
+// the "thinking forever → took too long" first turn. Now the voice hook warms on
+// mount of any voice surface AND on app foreground.
+const vcWarmSrc = read('hooks/useVoiceCaddie.ts');
+check('Voice warmup fires on voice-surface mount + app foreground (not just greeting)',
+  /import \{ prewarmVoice \} from '\.\.\/services\/voiceWarmup'/.test(vcWarmSrc) &&
+    /AppState\.addEventListener\('change'/.test(vcWarmSrc) &&
+    /next === 'active'\) warmIfVoice\(\)/.test(vcWarmSrc) &&
+    /voiceEnabled\) prewarmVoice\(\)/.test(vcWarmSrc),
+  "useVoiceCaddie warms the four voice Lambdas whenever a voice surface mounts and whenever the app returns to the foreground (gated on voiceEnabled, 30s-deduped) so the FIRST mic tap is hot — not the third");
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

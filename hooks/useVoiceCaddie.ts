@@ -1,7 +1,8 @@
 import { useRef, useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
-import { Vibration, Alert, Linking } from 'react-native';
+import { Vibration, Alert, Linking, AppState } from 'react-native';
+import { prewarmVoice } from '../services/voiceWarmup';
 import { usePathname } from 'expo-router';
 import {
   configureAudioForRecording,
@@ -483,6 +484,25 @@ export const useVoiceCaddie = ({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 2026-06-10 — Warm the voice-pipeline Lambdas when a voice surface mounts AND
+  // whenever the app returns to the foreground. Previously prewarmVoice() fired
+  // ONLY on the greeting screen, so the first mic tap after navigating to the
+  // caddie/cockpit (or after the app had been backgrounded long enough for the
+  // Vercel Lambdas to idle out) paid full cold-start — the "thinking forever →
+  // took too long" first turn. The 30s dedupe inside prewarmVoice keeps repeated
+  // mounts/foregrounds cheap. (This only does anything now that getApiBaseUrl()
+  // resolves a real URL — pre-spine-fix it fired "Invalid URL" and warmed nothing.)
+  useEffect(() => {
+    const warmIfVoice = () => {
+      if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
+    };
+    warmIfVoice(); // entering a voice surface
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') warmIfVoice(); // returning to the app
+    });
+    return () => sub.remove();
   }, []);
 
   const {
