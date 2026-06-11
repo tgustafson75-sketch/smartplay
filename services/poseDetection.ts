@@ -610,6 +610,62 @@ export async function locateSwingWindow(
   }
 }
 
+const LOCATE_SWINGS_TIMEOUT_MS = 20_000;
+
+/**
+ * RANGE MODE (acoustics off) — find ALL swings in a multi-swing clip. Plural
+ * sibling of locateSwingWindow: sends DENSER coarse timestamped frames and asks
+ * the model for every distinct swing-impact time. Returns an array (possibly
+ * empty — caller then falls back to single-swing localization). Best-effort:
+ * own timeout, never throws, never trips the analysis breaker.
+ */
+export async function locateSwings(
+  clipUri: string,
+  durationMs: number,
+): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {
+  const apiUrl = getApiBaseUrl();
+  if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
+    logLocate('range_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_too_short' : 'no_api_url', dur_ms: durationMs });
+    return [];
+  }
+  // Denser than single-swing localize so we don't miss swings: ~1 frame / 5s,
+  // clamped 12-24 (a 2-min range session needs broad-but-bounded coverage).
+  const count = Math.max(12, Math.min(24, Math.round(durationMs / 1000 / 5)));
+  const frames = await extractCoarseFrames(clipUri, durationMs, count);
+  if (frames.length < 3) {
+    logLocate('range_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
+    return [];
+  }
+  try {
+    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'locate_swings',
+        frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+      }),
+      signal: AbortSignal.timeout(LOCATE_SWINGS_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      logLocate('range_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
+      return [];
+    }
+    const data = (await res.json()) as { swings?: Array<{ time_sec?: number; confidence?: string }> };
+    const durSec = durationMs / 1000;
+    const out = (data.swings ?? [])
+      .filter((s) => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
+      .map((s) => ({
+        timeSec: Math.max(0, Math.min(durSec, s.time_sec as number)),
+        confidence: (s.confidence === 'high' ? 'high' : 'low') as 'high' | 'low',
+      }));
+    logLocate('range_located', { count: out.length, coarse_frames: frames.length });
+    return out;
+  } catch (e) {
+    logLocate('range_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });
+    return [];
+  }
+}
+
 /**
  * Analyze a single swing. Extracts frames, sends to vision endpoint, returns
  * structured swing fault + the list of timestamps (in seconds) those frames

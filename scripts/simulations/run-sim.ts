@@ -1059,6 +1059,16 @@ check('Environment mode phase 1: range window + acoustics-off gating (cage uncha
     /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc), // toggle cycles modes
   'range records up to 120s and starts NO metered audio (acoustics off — neighbors/outdoor); cage + course keep the 60s window and acoustic metering exactly as before; a setup-rail toggle cycles cage/range/course');
 
+// 2026-06-10 — Environment mode phase 2: range segments swings from VIDEO.
+check('Environment mode phase 2: range video swing-segmentation (acoustics off)',
+  /export function segmentsFromVideoSwings/.test(read('services/swing/swingSegmentation.ts')) &&
+    /export async function locateSwings/.test(read('services/poseDetection.ts')) &&
+    /mode: 'locate_swings'/.test(read('services/poseDetection.ts')) &&
+    /body\.mode === 'locate_swings'/.test(read('api/swing-analysis.ts')) &&
+    /environmentMode === 'range' && detectedSegments\.length === 0/.test(smEnvSrc) &&
+    /segmentsFromVideoSwings\(swings, durMs\)/.test(smEnvSrc),
+  'range mode (acoustics off) finds every swing from video: locateSwings() asks the new server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage path uses (shared reel + per-swing analysis), and an empty result falls back to single-swing localization');
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

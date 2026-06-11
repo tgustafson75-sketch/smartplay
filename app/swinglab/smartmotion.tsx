@@ -66,7 +66,7 @@ import {
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes } from '../../services/swing/strikeDetector';
-import { segmentsFromStrikes, confirmedCount, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, confirmedCount, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { useFamilyStore } from '../../store/familyStore';
@@ -1029,9 +1029,30 @@ export default function SmartMotion() {
       // effect once both the clip and a ball spot are available (the ball spot
       // may be a pre-record draft or placed in review).
       firstStrikeMsRef.current = firstStrikeMs;
+
+      // 2026-06-10 — RANGE mode: acoustics are off, so segment the swings from
+      // VIDEO. Find every swing in the clip and build the SAME SwingSegment[]
+      // the cage acoustic path produces, so the reel + per-swing analysis are
+      // shared. An empty result falls through to single-swing localization
+      // (runAnalysis with no segment) — graceful, never a dead end.
+      let segsForAnalysis = detectedSegments;
+      if (useSettingsStore.getState().environmentMode === 'range' && detectedSegments.length === 0) {
+        try {
+          const pose = await import('../../services/poseDetection');
+          const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          const swings = await pose.locateSwings(recorded.uri, durMs);
+          if (swings.length > 0) {
+            segsForAnalysis = segmentsFromVideoSwings(swings, durMs);
+            setSegments(segsForAnalysis);
+            setSelectedSwing(0);
+          }
+        } catch (e) {
+          console.log('[smartmotion] range video segmentation failed (non-fatal):', e);
+        }
+      }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
-      void runAnalysis(recorded.uri, detectedSegments[0]);
+      void runAnalysis(recorded.uri, segsForAnalysis[0]);
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;

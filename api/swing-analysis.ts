@@ -779,6 +779,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
       }
     }
+    // 2026-06-10 — Range mode: find EVERY swing in a multi-swing clip (acoustics
+    // off outdoors). Plural sibling of locate_swing — returns an array of swing
+    // impact timestamps the client turns into per-swing segments.
+    if (body.mode === 'locate_swings') {
+      const locFrames = (body.frames ?? []) as { b64: string; media_type?: string; time_sec?: number }[];
+      if (!Array.isArray(locFrames) || locFrames.length === 0 || !locFrames[0]?.b64) {
+        return res.status(400).json({ error: 'frames[] with time_sec required for locate_swings' });
+      }
+      if (locFrames.length > 24) {
+        return res.status(400).json({ error: 'maximum 24 locate frames' });
+      }
+      try {
+        const locContent = [
+          ...locFrames.flatMap((f, i) => {
+            const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
+            return [
+              { type: 'text' as const, text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
+              {
+                type: 'image' as const,
+                source: {
+                  type: 'base64' as const,
+                  media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                  data: f.b64,
+                },
+              },
+            ];
+          }),
+          {
+            type: 'text' as const,
+            text: 'These timestamped frames span ONE continuous range-practice video with MULTIPLE swings. List EVERY distinct swing — each downswing-through-impact/follow-through, body rotated and club in motion. Distinct swings are separated by the golfer resetting (standing, addressing a new ball, walking up). Do NOT count address, practice waggles, walk-ups, or post-shot standing, and do NOT report the same swing twice. Return ONLY JSON: { "swings": [ { "time_sec": <number>, "confidence": "high"|"low" } ] } ordered by time. If no real swing is visible, return { "swings": [] }. No prose, no markdown.',
+          },
+        ];
+        const completion = await anthropicHaiku.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+          temperature: 0.0,
+          system: 'You are a precise golf-swing temporal locator. Given timestamped frames from ONE continuous range-practice video, list the timestamp of EVERY distinct swing (the impact/follow-through moment), excluding address, waggles, walk-ups, and post-shot standing. Never report the same swing twice. Return only JSON.',
+          messages: [{ role: 'user', content: locContent }],
+        });
+        const block = completion.content.find(c => c.type === 'text');
+        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        let parsed: { swings?: Array<{ time_sec?: number; confidence?: string }> } = {};
+        try {
+          const m = raw.match(/\{[\s\S]*\}/);
+          if (m) parsed = JSON.parse(m[0]);
+        } catch { /* fallthrough → empty */ }
+        const swings = Array.isArray(parsed.swings)
+          ? parsed.swings
+              .filter(s => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
+              .map(s => ({ time_sec: Math.max(0, s.time_sec as number), confidence: s.confidence === 'high' ? 'high' : 'low' }))
+              .sort((a, b) => a.time_sec - b.time_sec)
+          : [];
+        return res.status(200).json({ swings });
+      } catch (e) {
+        console.error('[swing-analysis] locate_swings failed', e);
+        return res.status(200).json({ swings: [], error: e instanceof Error ? e.message : 'locate failed' });
+      }
+    }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];
     if (!Array.isArray(frames) || frames.length === 0) {
       return res.status(400).json({ error: 'frames[] (1-12 base64 images) required' });

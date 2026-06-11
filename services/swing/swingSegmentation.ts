@@ -88,3 +88,23 @@ export function segmentsFromStrikes(
 export function confirmedCount(segments: SwingSegment[]): number {
   return segments.filter((s) => s.confirmed).length;
 }
+
+/**
+ * 2026-06-10 — Range mode (acoustics off): map VIDEO-located swing times into
+ * the same SwingSegment[] the acoustic path produces, so the reel + per-swing
+ * analysis are identical downstream. No peakDb (no acoustics); confidence comes
+ * from the visual locator. Reuses segmentsFromStrikes for windowing/clamping.
+ */
+export function segmentsFromVideoSwings(
+  swings: Array<{ timeSec: number; confidence: 'high' | 'medium' | 'low' }>,
+  durationMs: number,
+  opts?: SegmentOptions,
+): SwingSegment[] {
+  const pseudo: DetectedStrike[] = swings.map((s) => ({
+    timeMs: Math.round(s.timeSec * 1000),
+    peakDb: 0,
+    attackMs: 0,
+    confidence: s.confidence,
+  }));
+  return segmentsFromStrikes(pseudo, durationMs, opts);
+}
