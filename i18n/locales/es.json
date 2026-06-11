@@ -176,5 +176,22 @@
     "discard_body": "Todos los golpes, puntajes y planes de esta ronda se eliminarán. Esto no se puede deshacer.",
     "cancel": "Cancelar",
     "discard_everything": "Descartar todo"
+  },
+  "swinglab": {
+    "practice": "PRÁCTICA",
+    "card_smartmotion_title": "Smart Motion",
+    "card_smartmotion_sub": "Análisis de swing con IA · detección acústica · mecánica corporal",
+    "card_coach-mode_title": "Modo Coach",
+    "card_coach-mode_sub": "Observa y analiza el swing de otra persona · roster de jugadores · notas del coach",
+    "card_drills_title": "Ejercicios",
+    "card_drills_sub": "Problema principal · fallos comunes · videos de instructores",
+    "card_library_title": "Biblioteca de Swings",
+    "card_library_sub": "Swings capturados, subidas desde el carrete",
+    "tut_title": "SwingLab",
+    "tut_1": "SwingLab es tu centro de práctica — captura swings, haz ejercicios, estudia repeticiones.",
+    "tut_2": "Toca Smart Motion para capturar y analizar tus swings; el Modo Coach es para trabajar con alguien más.",
+    "tut_3": "Cada swing que analizas alimenta mi lectura de tus tendencias en el campo.",
+    "tut_spoken": "SwingLab. Centro de práctica. Toca una tarjeta para empezar.",
+    "listening_prompt": "Oye — activa la Escucha Activa para comandos de swing manos libres, o tócame para hablar."
   }
 }

@@ -176,5 +176,22 @@
     "discard_body": "All shots, scores, and plans from this round will be deleted. This cannot be undone.",
     "cancel": "Cancel",
     "discard_everything": "Discard everything"
+  },
+  "swinglab": {
+    "practice": "PRACTICE",
+    "card_smartmotion_title": "Smart Motion",
+    "card_smartmotion_sub": "AI swing analysis · acoustic swing detection · body mechanics",
+    "card_coach-mode_title": "Coach Mode",
+    "card_coach-mode_sub": "Watch + analyze someone else's swing · player roster · coach notes",
+    "card_drills_title": "Drills",
+    "card_drills_sub": "Primary Issue · Common Faults · pro instructor videos",
+    "card_library_title": "Swing Library",
+    "card_library_sub": "Captured swings, uploads from camera roll",
+    "tut_title": "SwingLab",
+    "tut_1": "SwingLab is your practice hub — capture swings, run drills, study reps.",
+    "tut_2": "Tap Smart Motion to capture and analyze your swings; Coach Mode is for working with someone else.",
+    "tut_3": "Every swing you analyze feeds my read of your tendencies on the course.",
+    "tut_spoken": "SwingLab. Practice hub. Tap a card to jump in.",
+    "listening_prompt": "Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk."
   }
 }

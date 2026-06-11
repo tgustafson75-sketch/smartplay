@@ -27,6 +27,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -110,6 +111,7 @@ const CARDS: LauncherCardSpec[] = [
 
 export default function SwingLab() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const trustLevel = useTrustLevelStore(s => s.level);
   // 2026-05-24 — beta-minimal responsive: centered max-width on wide
@@ -135,7 +137,7 @@ export default function SwingLab() {
     //     leave the flag UNSET so it retries cleanly next time,
     //   • mark "shown" only after it actually plays in full.
     let cancelled = false;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       void (async () => {
         if (cancelled || isSpeaking()) return; // never collide with in-flight TTS
         try {
@@ -144,7 +146,7 @@ export default function SwingLab() {
           await configureAudioForSpeech();
           if (cancelled || isSpeaking()) return;
           await speak(
-            'Heads up - turn on Active Listening for hands-free swing commands, or just tap me to talk.',
+            t('swinglab.listening_prompt'),
             s.voiceGender,
             s.language,
             apiUrl,
@@ -156,8 +158,8 @@ export default function SwingLab() {
         }
       })();
     }, 1200);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [trustLevel]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [trustLevel, t]);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -169,7 +171,7 @@ export default function SwingLab() {
         {/* BRAND HEADER — shared v3-style row, matches every other tab. */}
         <BrandHeaderRow />
 
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>PRACTICE</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('swinglab.practice')}</Text>
 
         {visibleCards.map((card) => (
           <LauncherCard
@@ -185,13 +187,13 @@ export default function SwingLab() {
       </ScrollView>
       <QuickTutorial
         slug="swinglab_intro"
-        title="SwingLab"
+        title={t('swinglab.tut_title')}
         lines={[
-          "SwingLab is your practice hub — capture swings, run drills, study reps.",
-          "Tap Smart Motion to capture and analyze your swings; Coach Mode is for working with someone else.",
-          "Every swing you analyze feeds my read of your tendencies on the course.",
+          t('swinglab.tut_1'),
+          t('swinglab.tut_2'),
+          t('swinglab.tut_3'),
         ]}
-        spokenText="SwingLab. Practice hub. Tap a card to jump in."
+        spokenText={t('swinglab.tut_spoken')}
       />
     </SafeAreaView>
   );
@@ -204,11 +206,14 @@ interface LauncherCardProps {
 }
 
 function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
+  const { t } = useTranslation();
+  const title = t('swinglab.card_' + spec.key + '_title');
+  const sub = t('swinglab.card_' + spec.key + '_sub');
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${spec.title}. ${spec.sub}`}
+      accessibilityLabel={`${title}. ${sub}`}
       style={({ pressed }) => [
         styles.card,
         {
@@ -222,9 +227,9 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
         <Ionicons name={spec.icon} size={26} color={colors.accent} />
       </View>
       <View style={styles.cardText}>
-        <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{spec.title}</Text>
+        <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{title}</Text>
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
-          {spec.sub}
+          {sub}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
