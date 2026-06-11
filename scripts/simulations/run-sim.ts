@@ -1450,6 +1450,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     distinctSwings.length === 3,
     'real separate range swings are never merged — only a single swing\'s own sub-2.5s phases collapse');
 
+  check('Smart Motion: selfie/front-camera toggle, recording stays un-mirrored (analysis-safe)',
+    /const \[facing, setFacing\] = useState<'back' \| 'front'>\('back'\)/.test(smA) &&
+      /facing=\{facing\}/.test(smA) && /mirror=\{false\}/.test(smA) &&
+      /setFacing\(\(f\) => \(f === 'back' \? 'front' : 'back'\)\)/.test(smA),
+    'a setup-phase toggle flips to the front camera for face-on self-framing; mirror={false} keeps the clip un-mirrored so a front face-on clip reads identically to a rear one — handedness/direction faults/ball-target coords unaffected');
+
   const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
   check('Swing analysis opt #2: analysis output token caps trimmed 800→650',
     /maxOutputTokens: 650/.test(swingApiSrc2) &&

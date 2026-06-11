@@ -353,6 +353,14 @@ export default function SmartMotion() {
   const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
 
   const cameraRef = useRef<CameraView>(null);
+  // 2026-06-11 — Front/rear camera toggle ("selfie mode"). Lets the user flip to
+  // the FRONT camera to self-frame a face-on recording (verify they're centered /
+  // fully in shot) — impossible with the rear camera pointed away. mirror={false}
+  // keeps the recording UN-mirrored, so a front face-on clip is geometrically
+  // identical to a rear face-on one: handedness, direction faults, and ball/target
+  // coords are all unaffected — zero analysis changes. (A mirrored selfie preview
+  // would feel natural but flip every direction read, so we deliberately don't.)
+  const [facing, setFacing] = useState<'back' | 'front'>('back');
   const videoRef = useRef<Video>(null);
   const pagerRef = useRef<ScrollView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
@@ -1496,7 +1504,8 @@ export default function SmartMotion() {
           <CameraView
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
-            facing="back"
+            facing={facing}
+            mirror={false}
             mode="video"
             mute
             onCameraReady={() => {
@@ -1654,6 +1663,17 @@ export default function SmartMotion() {
               <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>
                 {effectiveMode === 'cage' ? 'CAGE' : effectiveMode === 'range' ? 'RNGE' : 'CRSE'}
               </Text>
+            </Pressable>
+            {/* 2026-06-11 — Selfie/front-camera toggle for face-on self-framing.
+                Recording stays un-mirrored (mirror={false} on the CameraView) so
+                analysis is unaffected. Setup-phase only (can't flip mid-record). */}
+            <Pressable
+              onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+              style={[styles.toolBtn, { borderColor: facing === 'front' ? colors.success : colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel={facing === 'front' ? 'Selfie camera on — tap for rear camera' : 'Flip to selfie camera for face-on self-framing'}
+            >
+              <Ionicons name="camera-reverse-outline" size={20} color={facing === 'front' ? colors.success : colors.accent} />
             </Pressable>
           </View>
         ) : null}
