@@ -707,25 +707,9 @@ export default function PlayTab() {
         contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
       >
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
-        {/* 2026-05-24 — Tournament Mode CTA. Standalone group-play
-            scoring tool — independent of the standard round flow.
-            Public surface so the whole group can use it on the host's
-            phone. Pinned to the top of the Play tab so it's the first
-            non-active-round element a user sees when planning a
-            multi-player session. */}
-        <TouchableOpacity
-          style={styles.tournamentCta}
-          onPress={() => router.push('/tournament' as never)}
-          activeOpacity={0.85}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.tournamentCtaTitle}>Tournament Mode</Text>
-            <Text style={styles.tournamentCtaSub}>
-              Scramble · Best Ball · Stableford · Skins · Match Play · Stroke. Up to 5 teams of 5.
-            </Text>
-          </View>
-          <AppIcon name="trophy" size={22} color="#00C896" />
-        </TouchableOpacity>
+        {/* 2026-06-10 — Tournament Mode moved into the round-setup FORMAT row
+            (next to 9-Hole / Competition) so it lives with the other format
+            choices instead of as a standalone card pinned to the top of the tab. */}
 
         {/* 2026-06-02 — Fix GO (Tim req): removed the 2026 Hayes Open
             card. 2026-06-04 — Maplewood + Pembroke Pines bundles also
@@ -1056,6 +1040,18 @@ export default function PlayTab() {
               >
                 <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>Competition</Text>
               </TouchableOpacity>
+              {/* 2026-06-10 — Tournament: not a toggle — opens the full group-play
+                  flow (scramble/skins/match play/etc). Moved here from the old
+                  standalone top-of-tab card so it sits with the format choices. */}
+              <TouchableOpacity
+                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }]}
+                onPress={() => router.push('/tournament' as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Tournament Mode — group play setup"
+              >
+                <AppIcon name="trophy" size={13} color="#00C896" />
+                <Text style={[styles.chipText, { marginLeft: 5 }]}>Tournament</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Phase 405 wave 3 — tee box selection. Standard 4 colors.
@@ -1164,17 +1160,6 @@ export default function PlayTab() {
 function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
 return StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
-
-  tournamentCta: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 12, marginTop: 12,
-    paddingHorizontal: 14, paddingVertical: 14,
-    backgroundColor: c.surface_elevated,
-    borderRadius: 10,
-    borderWidth: 1, borderColor: c.border,
-  },
-  tournamentCtaTitle: { color: c.accent, fontSize: 15, fontWeight: '900' },
-  tournamentCtaSub: { color: c.text_muted, fontSize: 11, marginTop: 4, lineHeight: 16 },
 
   // 2026-05-24 — Hayes Open card (Memorial Day weekend skin). Subtle
   // red/blue stripe motif (USA flag colors) without going overboard;

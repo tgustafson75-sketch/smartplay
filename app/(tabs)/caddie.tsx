@@ -1961,6 +1961,33 @@ export default function CaddieTab() {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
 
+      {/* 2026-06-10 — Smart Finder floating shortcut. The rangefinder reticle
+          used to live on every surface but only survived on the Play tab. This
+          main return is L2/L3 ONLY (L1 returns the cockpit screen above, which
+          has its own yardage-card → SmartFinder path), so the shortcut shows on
+          L2/L3 — and intentionally even with no active round, so it's testable
+          any time (e.g. putting distance). Right side, floating, above the
+          bottom controls. */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute', right: 14, bottom: insets.bottom + 168, zIndex: 20,
+          width: 46, height: 46, borderRadius: 12, borderWidth: 1.5,
+          borderColor: '#00C896', backgroundColor: 'rgba(6,15,9,0.7)',
+          alignItems: 'center', justifyContent: 'center',
+        }}
+        onPress={() => {
+          if (!canAccess('smartfinder', subscription_status)) {
+            void triggerPaywall('smartfinder', () => router.push('/paywall' as never));
+            return;
+          }
+          router.push('/smartfinder' as never);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Open Smart Finder rangefinder"
+      >
+        <AppIcon name="locate-outline" size={22} color="#00C896" />
+      </TouchableOpacity>
+
       {/* KEVIN — Phase E Trust Spectrum gating.
            L2 path is byte-identical to the locked elite Kevin layout (the
            original 9:16 frame anchored at top with no over-zoom). L3 and L4
