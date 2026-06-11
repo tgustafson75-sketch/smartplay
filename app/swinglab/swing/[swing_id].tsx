@@ -300,6 +300,42 @@ export default function SwingDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, swing_id]);
 
+  // 2026-06-10 — Legacy-clip rescue. Clips uploaded/recorded before the
+  // persist-to-documents path existed (or that arrived as a volatile
+  // content:// pick) keep a clipUri the OS can revoke — the "won't reanalyze /
+  // scrub stuck at 0:00" case. On first open, if the source still exists but
+  // ISN'T already under documentDirectory, copy it in and repoint the shot so
+  // replay + every future re-analyze read the durable copy. Best-effort; never
+  // blocks render. Runs once per swing (guarded by the ref).
+  const rescuedClipRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!swing_id || !shot?.clipUri || !shot.id) return;
+    const uri = shot.clipUri;
+    const shotId = shot.id;
+    if (rescuedClipRef.current === swing_id) return;
+    if (!uri.startsWith('file:') && !uri.startsWith('content:')) return; // ph://, remote — leave
+    rescuedClipRef.current = swing_id;
+    void (async () => {
+      try {
+        const FS = await import('expo-file-system/legacy');
+        const docDir = FS.documentDirectory;
+        if (docDir && uri.startsWith(docDir)) return; // already durable
+        // Only rescue what's actually still readable; a gone file can't be saved
+        // (the onReanalyze guard already gives that case an honest message).
+        if (uri.startsWith('file:')) {
+          const info = await FS.getInfoAsync(uri);
+          if (!info.exists) return;
+        }
+        const { persistClipToDocuments } = await import('../../../services/videoUpload');
+        const durable = await persistClipToDocuments(uri, `${swing_id}_${shotId}`);
+        if (durable && durable !== uri) {
+          useCageStore.getState().setShotClipUri(swing_id, shotId, durable);
+          uploadLog('legacy-clip-rescued', { from_scheme: uri.split(':')[0] }, swing_id);
+        }
+      } catch { /* best-effort — original uri stays, onReanalyze handles gone */ }
+    })();
+  }, [swing_id, shot?.clipUri, shot?.id]);
+
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;

@@ -997,6 +997,19 @@ check('Captured clips persisted to documents (survive OS cache eviction)',
     /isn't on this device anymore/.test(read('app/swinglab/swing/[swing_id].tsx')),
   'uploads + SmartMotion recordings are copied to documentDirectory so they stay replayable/re-analyzable; a missing source clip gives an honest "re-upload" message instead of a stuck spinner');
 
+// 2026-06-10 — Re-analyze hardening: persist content:// picks, rescue legacy
+// clips on open, and tell the truth when frames won't extract (codec/VFR, not
+// "lighting"). Root fixes, not patches.
+const swingDetailSrc = read('app/swinglab/swing/[swing_id].tsx');
+check('Re-analyze hardening: content:// persisted, legacy clips rescued on open, honest no-frames copy',
+  /uri\.startsWith\('file:'\) \|\| uri\.startsWith\('content:'\)/.test(uploadSrc) &&  // content:// now persisted
+    /setShotClipUri:/.test(read('store/cageStore.ts')) &&                            // repoint action exists
+    /legacy-clip-rescued/.test(swingDetailSrc) &&                                    // rescue effect wired
+    /setShotClipUri\(swing_id, shotId, durable\)/.test(swingDetailSrc) &&
+    !/better lighting and a wider angle/.test(uploadSrc) &&                          // misleading copy gone
+    /can't sample for analysis, even though it plays/.test(uploadSrc),              // honest codec copy
+  'content:// picks are persisted to documents, legacy/volatile clips are rescued into documentDirectory on first open, and an unreadable-frames failure names the real cause (format/frame-rate) instead of blaming lighting');
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

@@ -80,7 +80,11 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
     try {
       const currentPar = getCurrentPar();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25_000);
+      // 2026-06-10 — 35s, not 25s. The server's Anthropic SDK timeout is 25s
+      // and it can retry on a 529 overload; a 25s client abort could cut a
+      // still-valid response right as it lands. 35s gives the server its full
+      // window + network round-trip. (Voice path already uses 60s.)
+      const timeout = setTimeout(() => controller.abort(), 35_000);
 
       // 2026-05-22 — Vision context. When a recent frame is in the
       // glassesVisionInput queue (lie capture, glasses POV, putting

@@ -540,6 +540,10 @@ interface CageState {
    *  marked swing window instead of the whole clip. Pass null to clear
    *  the bounds (reverts to whole-clip / tiered sampling). */
   setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null) => void;
+  /** 2026-06-10 — Repoint a shot's source clip uri. Used when a legacy clip is
+   *  re-persisted from a volatile cache/content uri into documentDirectory on
+   *  first open, so replay + re-analyze read the durable copy from then on. */
+  setShotClipUri: (sessionId: string, shotId: string, clipUri: string) => void;
   /** Phase R — delete a session from the library. */
   deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
@@ -1219,6 +1223,18 @@ export const useCageStore = create<CageState>()(
                   clipStartSeconds: startSec ?? undefined,
                   clipEndSeconds: endSec ?? undefined,
                 }
+              ),
+            }
+          ),
+        })),
+
+      setShotClipUri: (sessionId, shotId, clipUri) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(shot =>
+                shot.id !== shotId ? shot : { ...shot, clipUri }
               ),
             }
           ),

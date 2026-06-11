@@ -107,7 +107,12 @@ export async function pickVideo(): Promise<PickResult> {
  */
 export async function persistClipToDocuments(uri: string, keyHint?: string): Promise<string> {
   try {
-    if (!uri || !uri.startsWith('file:')) return uri; // ph:// / remote — leave as-is
+    // Persist file:// (picker/recorder cache) AND content:// (Android SAF /
+    // media-store picks). Both are volatile — the OS revokes content:// grants
+    // and clears cache files, which is exactly why an old upload later "won't
+    // reanalyze". expo-file-system copyAsync can read content:// on Android.
+    // Leave ph:// (iOS asset) and remote http(s):// untouched.
+    if (!uri || !(uri.startsWith('file:') || uri.startsWith('content:'))) return uri;
     const dir = FileSystem.documentDirectory;
     if (!dir) return uri;
     // Already persistent? Don't re-copy.
@@ -709,7 +714,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const allNoNetwork = failureKinds.every(k => k === 'no_network');
       const allError = failureKinds.every(k => k === 'error');
       const message = allNoFrames
-        ? "Couldn't read the frames — try a clearer recording with better lighting and a wider angle."
+        ? "I can't pull frames from this clip — its format or frame-rate is one this device can't sample for analysis, even though it plays back fine. Record the swing in Smart Motion (in-app) and it'll analyze cleanly."
         : allNoNetwork
         ? "Lost connection to the analyzer. Check your network and try Re-analyze."
         : allError
