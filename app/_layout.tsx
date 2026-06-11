@@ -9,6 +9,7 @@ import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/playerProfileStore';
+import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
@@ -165,6 +166,29 @@ function AppNavigator() {
       console.log('[debug-gate] redirect failed', e);
     }
   }, [pathname, ownerEmail]);
+
+  // 2026-06-11 (audit 4c) — one-time migration of the custom-caddie image blobs
+  // out of playerProfileStore (which re-serialized them on every profile/handicap
+  // write) into customCaddieMediaStore. Runs once BOTH stores have hydrated so
+  // the legacy values are present to copy; idempotent (guarded by the media
+  // store's _migratedFromProfile flag). Read-site fallbacks keep the avatar
+  // visible until it completes.
+  useEffect(() => {
+    let done = false;
+    const tryMigrate = (): boolean => {
+      if (done) return true;
+      if (usePlayerProfileStore.persist.hasHydrated() && useCustomCaddieMediaStore.persist.hasHydrated()) {
+        done = true;
+        try { useCustomCaddieMediaStore.getState().migrateFromProfile(); } catch { /* non-fatal */ }
+        return true;
+      }
+      return false;
+    };
+    if (tryMigrate()) return;
+    const unsubA = usePlayerProfileStore.persist.onFinishHydration(() => { tryMigrate(); });
+    const unsubB = useCustomCaddieMediaStore.persist.onFinishHydration(() => { tryMigrate(); });
+    return () => { unsubA?.(); unsubB?.(); };
+  }, []);
 
   // Intentionally removed: do not redirect here. app/index.tsx owns initial
   // routing after hydration. A guard here fires before AsyncStorage hydrates,

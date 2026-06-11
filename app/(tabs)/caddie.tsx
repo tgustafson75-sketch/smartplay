@@ -36,6 +36,7 @@ import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
@@ -607,7 +608,10 @@ export default function CaddieTab() {
     customCaddieName: s.customCaddieName,
   })));
   const setUseCustomCaddie = usePlayerProfileStore((s) => s.setUseCustomCaddie);
-  const activeCustomPortrait = useCustomCaddie ? customCaddiePortraitB64 : null;
+  // 2026-06-11 (audit 4c) — portrait moved to its own store; read it there,
+  // fall back to the legacy profile field until migration completes.
+  const mediaPortrait = useCustomCaddieMediaStore((s) => s.customCaddiePortraitB64);
+  const activeCustomPortrait = useCustomCaddie ? (mediaPortrait ?? customCaddiePortraitB64) : null;
   const { skip_briefings, proactive_kevin_enabled: _proactive_kevin_enabled } = useSettingsStore(useShallow((s) => ({
     skip_briefings: s.skip_briefings,
     proactive_kevin_enabled: s.proactive_kevin_enabled,

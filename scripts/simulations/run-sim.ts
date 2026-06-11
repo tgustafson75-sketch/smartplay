@@ -1357,6 +1357,29 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /lastToolAction = result\.tool_action/.test(seqSrc) && /tool_action: lastToolAction/.test(seqSrc),
     '"open Smart Motion and switch to quiet mode" now actually navigates — the sequence handler forwards the step tool_action instead of dropping it');
 
+  // 4c — custom-caddie base64 blobs moved off the hot-write profile store.
+  const mediaStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/customCaddieMediaStore.ts'), 'utf-8');
+  check('Storage 4c: custom-caddie media store exists with an idempotent migration',
+    /custom-caddie-media-v1/.test(mediaStoreSrc) && /migrateFromProfile/.test(mediaStoreSrc) &&
+      /_migratedFromProfile/.test(mediaStoreSrc) && /selfieB64: null,\s*\n\s*customCaddiePortraitB64: null,/.test(mediaStoreSrc),
+    'the two base64 blobs live in their own persisted store; migrateFromProfile copies legacy values then nulls the profile fields (idempotent via _migratedFromProfile)');
+
+  const profileStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/playerProfileStore.ts'), 'utf-8');
+  check('Storage 4c: profile store no longer writes the base64 blobs',
+    !/setSelfieB64: \(b\) => set/.test(profileStoreSrc) && !/setCustomCaddiePortraitB64: \(b\) => set/.test(profileStoreSrc),
+    'the profile-store setters that wrote the heavy base64 fields are removed — writes go to the media store, so the profile blob stops re-serializing them on every handicap/profile change');
+
+  const layoutSrc = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+  check('Storage 4c: migration runs once both stores have hydrated',
+    /migrateFromProfile\(\)/.test(layoutSrc) &&
+      /usePlayerProfileStore\.persist\.hasHydrated\(\) && useCustomCaddieMediaStore\.persist\.hasHydrated\(\)/.test(layoutSrc),
+    'the one-time migration is gated on both stores being hydrated so the legacy values are present to copy');
+
+  const caddieSrc = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
+  check('Storage 4c: avatar read falls back to legacy until migration completes',
+    /mediaPortrait \?\? customCaddiePortraitB64/.test(caddieSrc),
+    'the caddie avatar reads the media store first and falls back to the legacy profile field, so it never flickers/disappears during migration');
+
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',
     /=== 'navigate'/.test(listenSrc) && /router\.push\(path\)/.test(listenSrc),

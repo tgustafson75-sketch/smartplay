@@ -99,6 +99,8 @@ interface PlayerProfileState {
   // home + voice service. When on, voice playback runs slightly faster +
   // slightly quieter so the personal caddie sounds different from default
   // Kevin even though the underlying TTS voice is the same.
+  // 2026-06-11 (audit 4c) — LEGACY: these blobs moved to customCaddieMediaStore.
+  // Kept only as a read fallback + migration source; nulled after migration.
   selfieB64: string | null;
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
@@ -193,8 +195,11 @@ interface PlayerProfileState {
   setKevinContext: (c: string | null) => void;
   setPersistentPatterns: (p: string | null) => void;
   // Phase BI
-  setSelfieB64: (b: string | null) => void;
-  setCustomCaddiePortraitB64: (b: string | null) => void;
+  // 2026-06-11 (audit 4c) — selfieB64/customCaddiePortraitB64 setters removed:
+  // those base64 blobs now live in customCaddieMediaStore (off this hot-write
+  // store). The READ fields above are kept as a legacy fallback + migration
+  // source and are nulled once migrateFromProfile() runs. Write via the media
+  // store's setSelfieB64 / setCustomCaddiePortraitB64.
   setUseCustomCaddie: (on: boolean) => void;
   setCustomCaddieName: (name: string | null) => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
@@ -325,8 +330,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setKevinContext: (c) => set({ kevinContext: c }),
       setPersistentPatterns: (p) =>
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
-      setSelfieB64: (b) => set({ selfieB64: b }),
-      setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -392,9 +395,13 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // omit persists every OTHER field unchanged (no enumeration / data
       // loss). Old blobs purge their stored GHIN on the next persist write.
       partialize: (s) => {
-        const { ghin_number, ...rest } = s;
-        void ghin_number;
-        return rest as Omit<PlayerProfileState, 'ghin_number'>;
+        // 2026-06-11 (audit 4c) — also drop the custom-caddie base64 blobs from
+        // this store's persisted payload; they live in customCaddieMediaStore
+        // now, so this hot-write store stops re-serializing ~hundreds of KB on
+        // every profile/handicap change. (ghin_number stays omitted for privacy.)
+        const { ghin_number, selfieB64, customCaddiePortraitB64, ...rest } = s;
+        void ghin_number; void selfieB64; void customCaddiePortraitB64;
+        return rest as Omit<PlayerProfileState, 'ghin_number' | 'selfieB64' | 'customCaddiePortraitB64'>;
       },
       storage: createJSONStorage(() => getPersistStorage()),
       // Phase 410 — Sentry breadcrumb on profile hydration so future

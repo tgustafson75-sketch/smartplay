@@ -41,6 +41,7 @@ import { configureAudioForRecording, configureAudioForSpeech } from '../../servi
 import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 // 2026-05-26 — Fix DY: in-screen voice recorder for personal caddie.
 // Same UI as the AI portrait flow per Tim's directive — no separate
 // screen — so the user records their own greetings right where they
@@ -56,11 +57,7 @@ const apiUrl = getApiBaseUrl();
 export default function CustomCaddieScreen() {
   const insets = useSafeAreaInsets();
   const {
-    selfieB64,
-    customCaddiePortraitB64,
     customCaddieName,
-    setSelfieB64,
-    setCustomCaddiePortraitB64,
     setUseCustomCaddie,
     setCustomCaddieName,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
@@ -71,7 +68,21 @@ export default function CustomCaddieScreen() {
     customCaddieClips: rawCustomCaddieClips,
     setCustomCaddieClip,
     clearAllCustomCaddieClips,
+    // 2026-06-11 (audit 4c) — legacy read fallback until migration moves these
+    // blobs into customCaddieMediaStore.
+    selfieB64: legacySelfieB64,
+    customCaddiePortraitB64: legacyPortraitB64,
   } = usePlayerProfileStore();
+  // The two base64 blobs now live in their own store (off the hot-write profile
+  // store). Read media first, fall back to the legacy profile value.
+  const {
+    selfieB64: mediaSelfieB64,
+    customCaddiePortraitB64: mediaPortraitB64,
+    setSelfieB64,
+    setCustomCaddiePortraitB64,
+  } = useCustomCaddieMediaStore();
+  const selfieB64 = mediaSelfieB64 ?? legacySelfieB64;
+  const customCaddiePortraitB64 = mediaPortraitB64 ?? legacyPortraitB64;
   const customCaddieClips: Record<string, string> = rawCustomCaddieClips ?? {};
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);

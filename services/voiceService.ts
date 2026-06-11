@@ -469,7 +469,11 @@ const currentPlaybackVolume = (): number => {
     // gives the personal caddie a noticeably different presence.
     const profileMod = require('../store/playerProfileStore');
     const p = profileMod.usePlayerProfileStore.getState();
-    if (p.useCustomCaddie && p.customCaddiePortraitB64) base *= 0.85;
+    // 2026-06-11 (audit 4c) — portrait moved to customCaddieMediaStore; read it
+    // there, fall back to the legacy profile field.
+    const mediaMod = require('../store/customCaddieMediaStore');
+    const portrait = mediaMod.useCustomCaddieMediaStore.getState().customCaddiePortraitB64 ?? p.customCaddiePortraitB64;
+    if (p.useCustomCaddie && portrait) base *= 0.85;
     return base;
   } catch {
     return 1.0;
@@ -483,7 +487,9 @@ const currentPlaybackRate = (): number => {
   try {
     const profileMod = require('../store/playerProfileStore');
     const p = profileMod.usePlayerProfileStore.getState();
-    if (p.useCustomCaddie && p.customCaddiePortraitB64) return 1.08;
+    const mediaMod = require('../store/customCaddieMediaStore');
+    const portrait = mediaMod.useCustomCaddieMediaStore.getState().customCaddiePortraitB64 ?? p.customCaddiePortraitB64;
+    if (p.useCustomCaddie && portrait) return 1.08;
   } catch {}
   return 1.0;
 };
