@@ -56,6 +56,7 @@ import {
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import type { Course } from '../../types/course';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 type CourseSummary = {
   id: string;
@@ -263,7 +264,7 @@ export default function PlayTab() {
   // button dismisses the keyboard cleanly.
   const [notesDictating, setNotesDictating] = useState(false);
   const notesInputRef = React.useRef<TextInput>(null);
-  const apiUrlForNotes = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrlForNotes = getApiBaseUrl();
   const notesLanguage = useSettingsStore(s => s.language);
   const handleDictateNotes = React.useCallback(async () => {
     if (notesDictating) return;

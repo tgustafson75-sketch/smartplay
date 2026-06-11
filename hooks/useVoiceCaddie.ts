@@ -52,6 +52,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
+import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -465,7 +466,7 @@ export const useVoiceCaddie = ({
   // context-aware variants only land for new onboarding users; everyone
   // else keeps hearing the prior pool. generateLibrary internally checks
   // the hash and no-ops if up to date, so it's safe to call every boot.
-  const _apiUrlForBoot = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const _apiUrlForBoot = getApiBaseUrl();
   const _personaForBoot = useSettingsStore.getState().caddiePersonality;
   const _languageForBoot = useSettingsStore.getState().language;
   useEffect(() => {
@@ -543,7 +544,7 @@ export const useVoiceCaddie = ({
   const getRecentHeroMoments = useRelationshipStore((s) => s.getRecentHeroMoments);
   const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
   const currentPar = getCurrentPar();
   const smartVision = useSmartVision();
 

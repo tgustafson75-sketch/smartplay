@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Course, TeeBox, Hole } from '../types/course';
 import type { CourseHole } from '../store/roundStore';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -8,7 +9,7 @@ const CACHE_DIR = (FileSystem.documentDirectory ?? '') + 'course_cache/';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function proxyUrl(params: Record<string, string>): string {
-  const base = (process.env.EXPO_PUBLIC_API_URL ?? '') + '/api/course-proxy';
+  const base = (getApiBaseUrl()) + '/api/course-proxy';
   const qs = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   return `${base}?${qs}`;
 }

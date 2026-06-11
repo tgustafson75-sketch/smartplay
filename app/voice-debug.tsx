@@ -7,12 +7,13 @@ import { voiceCommandRouter } from '../services/intents';
 import { useRoundStore } from '../store/roundStore';
 import type { AppContext, VoiceIntent, IntentResult } from '../types/voiceIntent';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { getApiBaseUrl } from '../services/apiBase';
 
 export default function VoiceDebugScreen() {
   const _gateAllowed = useDebugRouteGate();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const [text, setText] = useState('');
   const [parsed, setParsed] = useState<VoiceIntent | null>(null);

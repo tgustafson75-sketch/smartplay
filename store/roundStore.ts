@@ -15,6 +15,7 @@ import type { RulesDecision } from '../types/penalty';
 // Switched from require() per the no-anti-pattern refinement pass.
 import { forceHoleReconciliation } from '../services/holeReconciliation';
 import { haversineYards } from '../utils/geoDistance';
+import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── TYPES ────────────────────────────────
 
@@ -1328,7 +1329,7 @@ export const useRoundStore = create<RoundState>()(
                 return p.firstName || p.name || 'the player';
               } catch { return 'the player'; }
             })();
-            const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+            const apiUrl = getApiBaseUrl();
             // 2026-05-21 — Fix Q: pass voiceGender + persona so the recap
             // renders in the user's selected caddie's voice instead of
             // falling through to the server's Kevin default. cur is the
@@ -1547,7 +1548,7 @@ export const useRoundStore = create<RoundState>()(
                 let text = `Hole ${clamped}.`;
                 if (par) text += ` Par ${par}.`;
                 if (yards) text += ` ${yards} yards.`;
-                const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+                const apiUrl = getApiBaseUrl();
                 void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
                   ?.catch?.(() => {});
               }

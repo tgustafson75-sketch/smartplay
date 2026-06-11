@@ -19,6 +19,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { getApiBaseUrl } from './apiBase';
 
 const MAX_ROUNDS = 5;
 const MAX_SHOTS = 60;
@@ -29,7 +30,7 @@ export async function generateKevinRead(): Promise<void> {
   if (inFlight) return;
   inFlight = true;
   try {
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     if (!apiUrl) {
       // No API URL configured (likely dev without env) — leave the cache
       // alone; dashboard falls back to its inline default line.

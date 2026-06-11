@@ -28,8 +28,9 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { getDialog } from '../services/dialogEngine';
 import { useTrustLevelStore } from '../store/trustLevelStore';
+import { getApiBaseUrl } from '../services/apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = getApiBaseUrl();
 
 /**
  * Phase H — Lie Analysis Tool screen.

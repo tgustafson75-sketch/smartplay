@@ -25,6 +25,7 @@ import { useRoundStore, type ShotResult } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import * as voiceService from './voiceService';
+import { getApiBaseUrl } from './apiBase';
 
 export const REWARD_DRIVE_YARDS = 250;
 export const REWARD_PUTTS = 1;
@@ -75,7 +76,7 @@ function trustAllowsReward(): boolean {
 async function fireReward(text: string): Promise<void> {
   const s = useSettingsStore.getState();
   if (!s.voiceEnabled) return;
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   try {
     await voiceService.speak(text, s.voiceGender, s.language, apiUrl);
   } catch (e) {

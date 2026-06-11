@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 /**
  * 2026-05-27 — Fix EK: pre-warm the swing-analysis Vercel function.
  *
@@ -35,7 +36,7 @@ export function prewarmSwingAnalysis(opts?: { force?: boolean }): void {
   if (!opts?.force && now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
   lastWarmupAt = now;
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl) return;
 
   // Fire and forget. Don't await; the user opening the screen shouldn't

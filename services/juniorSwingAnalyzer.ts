@@ -41,6 +41,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { getCaddieName } from '../lib/persona';
 import { getActiveVisionContext } from './glassesVisionInput';
 import { devLog } from './devLog';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Schema ──────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ export async function getMemberSwingHistory(memberId: string): Promise<JuniorSwi
 
 // ─── Public API ──────────────────────────────────────────────────────────
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 /**
  * Run junior swing analysis. Always resolves to a populated result —

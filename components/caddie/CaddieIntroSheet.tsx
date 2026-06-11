@@ -26,6 +26,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { speak } from '../../services/voiceService';
 import { CaddieMicBadge } from './CaddieMicBadge';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 export type CaddieIntroSlug = 'smartmotion' | 'cage_mode';
 
@@ -160,7 +161,7 @@ export function CaddieIntroSheet({ slug, visible, onDismiss }: CaddieIntroSheetP
     if (spokenRef.current) return;
     spokenRef.current = true;
     if (!voiceEnabled) return;
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     const text = lines.join(' ');
     speak(text, voiceGender, language, apiUrl, { userInitiated: true })
       .catch((e) => console.log('[caddie-intro] speak failed', e));

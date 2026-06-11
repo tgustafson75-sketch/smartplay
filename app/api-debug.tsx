@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { searchCourses, getCourse, clearCourseCache } from '../services/golfCourseApi';
 import type { Course } from '../types/course';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { getApiBaseUrl } from '../services/apiBase';
 
 const BATTERY_TESTS = [
   {
@@ -86,7 +87,7 @@ export default function ApiDebug() {
   const [batteryResults, setBatteryResults] = useState<Record<string, string>>({});
   const [batteryLoading, setBatteryLoading] = useState<Record<string, boolean>>({});
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const runBatteryTest = async (test: typeof BATTERY_TESTS[0]) => {
     setBatteryLoading(prev => ({ ...prev, [test.key]: true }));

@@ -34,6 +34,7 @@ import {
 } from './earbudControl';
 import { subscribeWatchTap, subscribeWatchVoice } from './watchBridge';
 import { devLog } from './devLog';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ async function replayLastCaddieLine(): Promise<void> {
       last,
       settings.voiceGender,
       settings.language ?? 'en',
-      process.env.EXPO_PUBLIC_API_URL ?? '',
+      getApiBaseUrl(),
       { userInitiated: true },
     )?.catch?.(() => undefined);
     devLog('[handsFree] replayed last caddie line');

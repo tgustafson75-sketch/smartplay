@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from '../apiBase';
 /**
  * 2026-05-24 v1.2.3 — Meta glasses video → audio extraction client.
  *
@@ -23,7 +24,7 @@
  *   - Never fabricates a result
  */
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const API_URL = getApiBaseUrl();
 
 export interface MetaVideoTempoResult {
   ok: boolean;

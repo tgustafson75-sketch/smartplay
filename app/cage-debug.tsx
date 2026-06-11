@@ -34,6 +34,7 @@ import { playLocalFile } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import type { FillerCategory } from '../types/filler';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export default function CageDebug() {
   // ── Filler debug state ─────────────────────────────────────────────────────
   const { language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
   const [fillerStatus, setFillerStatus] = useState<ReturnType<typeof getLibraryInfo>>(null);
   const [fillerGenerating, setFillerGenerating] = useState(false);
   const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
@@ -218,7 +219,7 @@ export default function CageDebug() {
     const session = sessionHistory[sessionHistory.length - 1];
     if (!session || session.shots.length === 0) return;
     setReviewDebugLoading(true);
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+    const apiUrl = getApiBaseUrl();
     const mockTranscripts = ['heel, came up short', 'pure, right at it', 'fat, didn\'t transfer', 'thin, rushed it', 'solid', 'pulled it left'];
     const { useCageStore: cageStoreHook } = await import('../store/cageStore');
     const updateShotLabels = cageStoreHook.getState().updateShotLabels;

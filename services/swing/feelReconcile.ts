@@ -18,8 +18,9 @@
 
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getApiBaseUrl } from '../apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 // Sample a few frames across the swing for the caddie to look at.
 const FRAME_FRACTIONS = [0.25, 0.55, 0.85];

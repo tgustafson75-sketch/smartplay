@@ -25,6 +25,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../voiceService';
 import { usePracticeStore } from '../../store/practiceStore';
+import { getApiBaseUrl } from '../apiBase';
 
 const ANALYSIS_WATCHDOG_MS = 20_000;
 
@@ -70,7 +71,7 @@ function watchAndSpeakNextSwingAnalysis(): void {
       console.log('[mediaCapture] practiceStore update failed (non-fatal):', e);
     }
     const settings = useSettingsStore.getState();
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     // userInitiated: true because this is a direct consequence of a
     // user voice command ("watch my swing") — preserves L1-Quiet behavior
     // per the voiceUserInitiated rule in memory.
@@ -83,7 +84,7 @@ function watchAndSpeakNextSwingAnalysis(): void {
     spoke = true;
     unsub();
     const settings = useSettingsStore.getState();
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     void speak(
       'Analysis is taking longer than usual. Check the app for results.',
       settings.voiceGender, settings.language, apiUrl, { userInitiated: true },

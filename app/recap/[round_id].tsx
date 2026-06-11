@@ -40,6 +40,7 @@ import RoundShareCard from '../../components/RoundShareCard';
 import type { RoundRecap, HoleComparison } from '../../types/plan';
 import type { GhostHoleResult } from '../../types/ghost';
 import type { RoundPhoto } from '../../store/roundStore';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 // Day 1 fix — module-level stable empty array. Used as the selector
 // fallback below so the Zustand selector returns the SAME reference
@@ -194,7 +195,7 @@ export default function RecapScreen() {
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).
   const issueEntries = useIssueLogStore(s => s.entries);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const cardRef = useRef<View>(null);
   const flatListRef = useRef<FlatList>(null);

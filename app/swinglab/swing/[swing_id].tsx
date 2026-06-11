@@ -53,6 +53,7 @@ import ComparisonResultSheet from '../../../components/swinglab/ComparisonResult
 import type { SimilarMatch, ReferenceSwing } from '../../../services/swingDatabase';
 import type { PoseEstimate } from '../../../services/poseEstimator';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
+import { getApiBaseUrl } from '../../../services/apiBase';
 
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
@@ -88,7 +89,7 @@ export default function SwingDetail() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   // 2026-05-28 — Fix FI: caddie persona for presence brain calls.
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   // Phase V — subscribe via the store selector so the surface re-renders
   // when Phase K transitions analysis_status / populates primary_issue.
@@ -1495,7 +1496,7 @@ function CageTargetingSlot({ session }: { session: import('../../../store/cageSt
     if (!frameUri) return;
     setAutoDetecting(true);
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const apiUrl = getApiBaseUrl();
       const FS = await import('expo-file-system/legacy');
       const b64 = await FS.readAsStringAsync(frameUri, { encoding: FS.EncodingType.Base64 });
       const res = await fetch(`${apiUrl}/api/swing-analysis`, {
@@ -1560,7 +1561,7 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
   // current draft so a coach can dictate multiple snippets before save.
   const [recording, setRecording] = React.useState(false);
   const language = useSettingsStore(s => s.language);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   // Sync local draft to persisted note if it changes externally (e.g.
   // user navigated away and back, or another surface updated it).

@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 /**
  * 2026-06-04 — Pre-warm the FOUR voice-pipeline Vercel functions in
  * parallel after splash completes. Mirrors services/swingAnalysisWarmup.ts
@@ -44,7 +45,7 @@ export function prewarmVoice(): void {
   if (now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
   lastWarmupAt = now;
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl) return;
 
   // Query param AND body both carry `mode: 'warmup'` so handlers can

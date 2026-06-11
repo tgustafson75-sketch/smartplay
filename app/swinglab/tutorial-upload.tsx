@@ -28,6 +28,7 @@ import { analyzeTutorial } from '../../services/tutorialAnalysis';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import type { ClubId } from '../../services/clubRecognition';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const CLUBS: { label: string; value: ClubId }[] = [
   { label: 'Driver', value: 'DR' },
@@ -48,7 +49,7 @@ const CLUBS: { label: string; value: ClubId }[] = [
 export default function TutorialUpload() {
   const router = useRouter();
   const { colors } = useTheme();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const addTutorial = useTutorialStore(s => s.addTutorial);
   const caddieName = getCaddieName(useSettingsStore(s => s.caddiePersonality));
 

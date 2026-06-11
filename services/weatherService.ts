@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
+import { getApiBaseUrl } from './apiBase';
 
 /**
  * Phase C — Weather snapshot fetch + cache.
@@ -134,7 +135,7 @@ export async function fetchWeatherAt(location: ShotLocation): Promise<WeatherSna
     return existing.snapshot;
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const url = `${apiUrl}/api/weather?lat=${location.lat}&lng=${location.lng}`;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(6_000) });

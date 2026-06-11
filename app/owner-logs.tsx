@@ -27,6 +27,7 @@ import { useRoundStore } from '../store/roundStore';
 // from the synthetic GPS bench so an issue captured mid-harness has
 // the same recent-event context the post-run review would use.
 import { subscribeHarnessEvents } from '../services/simulatedGPS';
+import { getApiBaseUrl } from '../services/apiBase';
 
 function formatTimestamp(ms: number): string {
   const d = new Date(ms);
@@ -114,7 +115,7 @@ export default function OwnerLogsScreen() {
     if (!entry) return;
     setTriageLoadingId(entryId);
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const apiUrl = getApiBaseUrl();
       const settings = useSettingsStore.getState();
       const round = useRoundStore.getState();
       const Updates = await import('expo-updates');

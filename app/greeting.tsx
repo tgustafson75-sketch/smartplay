@@ -48,6 +48,7 @@ import { getGreetingAssetForPersona } from '../services/kevinGreetingManifest';
 // Side effect: kills the boot cut-off bug because the video owns its
 // own audio — no separate playLocalFile to race the screen transition.
 import { getCaddieClip } from '../services/getCaddieClip';
+import { getApiBaseUrl } from '../services/apiBase';
 
 // 2026-06-03 — Greeting-complete signal exported for future consumers.
 // Resolves when ANY greeting playback path sets
@@ -91,7 +92,7 @@ export default function GreetingScreen() {
   // the hook re-renders with the persisted values; the audio effect
   // sees a stable state then fires.
   const settingsHydrated = useSettingsStore(s => s.hasHydrated);
-  const _apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const _apiUrl = getApiBaseUrl();
   const { width: W, height: H } = useWindowDimensions();
 
   const [phase, setPhase] = useState<Phase>('ENTERING');

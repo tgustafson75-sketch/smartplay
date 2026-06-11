@@ -13,6 +13,7 @@ import { getGreenYardagesSync } from '../services/smartFinderService';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { tryLocalReply } from '../services/localStatusResponder';
 import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
+import { getApiBaseUrl } from '../services/apiBase';
 
 export type { ToolAction };
 
@@ -36,7 +37,7 @@ interface KevinCallbacks {
   onToolAction?: (action: ToolAction) => void;
 }
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const API_URL = getApiBaseUrl();
 
 export function useKevin(callbacks: KevinCallbacks = {}) {
   const [isThinking, setIsThinking] = useState(false);

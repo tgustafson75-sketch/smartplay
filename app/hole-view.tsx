@@ -69,6 +69,7 @@ import {
 // inline implementations being fed out-of-range coords. WGS84 guard
 // returns NaN on bad input (caller must check Number.isFinite).
 import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
+import { getApiBaseUrl } from '../services/apiBase';
 
 const CLUBS = [
   'Driver', '3W', '5W', 'Hybrid',
@@ -229,7 +230,7 @@ export default function HoleView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setMode('badge'); }, []);
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
   const mapsKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
 
   // ── Core state ─────────────────────────

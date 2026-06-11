@@ -39,6 +39,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { isActiveListeningEnabled } from '../../services/listeningSession';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 let swingLabListeningPromptShown = false;
 
@@ -137,7 +138,7 @@ export default function SwingLab() {
         if (cancelled) return;
         try {
           const s = useSettingsStore.getState();
-          const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+          const apiUrl = getApiBaseUrl();
           await configureAudioForSpeech();
           if (cancelled) return;
           await speak(

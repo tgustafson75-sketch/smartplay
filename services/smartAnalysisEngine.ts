@@ -55,6 +55,7 @@ import { buildEvidenceStack, confidenceNote, clarifyingQuestion } from './recomm
 import { adaptOnCourseVoice, deriveComplexityLevel, hasMobilityFlag, type CoachingComplexity } from './coachingAdaptation';
 import { getCaddieName } from '../lib/persona';
 import { devLog } from './devLog';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Public request union ─────────────────────────────────────────────────
 
@@ -652,7 +653,7 @@ async function speakEnvelope(env: AnalysisEnvelope): Promise<void> {
       env.voice_summary,
       settings.voiceGender,
       settings.language ?? 'en',
-      process.env.EXPO_PUBLIC_API_URL ?? '',
+      getApiBaseUrl(),
       { userInitiated: true },
     )?.catch?.(() => undefined);
   } catch (e) {

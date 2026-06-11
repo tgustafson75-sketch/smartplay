@@ -31,6 +31,7 @@ import { useCoachKnowledgeStore } from '../../store/coachKnowledgeStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { isInviteeCoach } from '../../data/inviteePreferences';
 import { getRecentTurns } from '../conversationState';
+import { getApiBaseUrl } from '../apiBase';
 
 const COACH_CAPTURE_MS = 15_000;
 
@@ -110,7 +111,7 @@ export const coachRefineHandler: IntentHandler = {
     const vs = require('../voiceService') as typeof import('../voiceService');
     const { useSettingsStore } = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
     const settings = useSettingsStore.getState();
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     void context;
 
     try {

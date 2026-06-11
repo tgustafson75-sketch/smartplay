@@ -48,13 +48,14 @@ import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const COACH_TUTORIAL_KEY = 'coach_mode';
 
 export default function CoachMode() {
   const router = useRouter();
   const { colors } = useTheme();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   // ── Family roster + active member ───────────────────────────────
   const members = useFamilyStore(s => s.members);

@@ -25,6 +25,7 @@ import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const SCORE_FILL = (diff: number): string => {
   if (diff <= -2) return '#3b82f6'; // eagle blue
@@ -37,7 +38,7 @@ const SCORE_FILL = (diff: number): string => {
 
 export default function Scorecard() {
   const router = useRouter();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const { voiceGender, language, voiceEnabled } = useSettingsStore();
   const theme = useTheme();
   const c = theme.colors;

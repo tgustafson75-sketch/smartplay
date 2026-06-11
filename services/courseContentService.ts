@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from './apiBase';
 
 /**
  * Phase D-1 — Course Detail content client.
@@ -113,7 +114,7 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   try {
     // 2026-05-22 — Fix Q follow-up audit. Threading persona so
     // course About / Caddie Tips / Hole Notes render in the active

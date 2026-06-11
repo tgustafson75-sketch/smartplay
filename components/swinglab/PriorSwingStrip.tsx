@@ -40,6 +40,7 @@ import { getCaddieName } from '../../lib/persona';
 import {
   speak, configureAudioForSpeech, stopSpeaking,
 } from '../../services/voiceService';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 interface Props {
   /** The clipUri of the CURRENT swing on screen (excluded from the
@@ -47,7 +48,7 @@ interface Props {
   currentClipUri: string | null;
 }
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = getApiBaseUrl();
 
 function getFaultFrame(s: CageSession): string | null {
   if (s.primary_issue?.visual_reference_path) return s.primary_issue.visual_reference_path;

@@ -24,6 +24,7 @@ import { useCageStore, type SwingTag } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
 const TAGS: { id: SwingTag; label: string }[] = [
@@ -41,7 +42,7 @@ export default function UploadSwing() {
   const { colors } = useTheme();
   const { isWide } = useDeviceLayout();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis on mount so the
   // first uploaded swing doesn't pay Vercel cold-start.

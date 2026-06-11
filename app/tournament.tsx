@@ -26,6 +26,7 @@ import { computeLeaderboard, leaderboardAsText } from '../services/tournament/co
 // names ("Bob, Mike, and Sarah"), and the players[] populates.
 import { captureUtterance } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
+import { getApiBaseUrl } from '../services/apiBase';
 
 /**
  * Parse a spoken name list into up to 5 trimmed, title-cased first names.
@@ -108,7 +109,7 @@ function SetupPanel() {
   // see the indeterminate state. apiUrl + language threaded into
   // captureUtterance so transcription respects the user's settings.
   const [recordingTeamId, setRecordingTeamId] = useState<string | null>(null);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const language = useSettingsStore(s => s.language) ?? 'en';
   const handleRosterMic = useCallback(async (teamId: string) => {
     if (recordingTeamId) return;

@@ -19,6 +19,7 @@ import {
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 export default function BatteryPrompt() {
   const insets = useSafeAreaInsets();
@@ -29,7 +30,7 @@ export default function BatteryPrompt() {
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const language = useSettingsStore(s => s.language);
   const voiceEnabled = useSettingsStore(s => s.voiceEnabled);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const [bs, setBs] = useState<BatteryState | null>(null);
 
   useEffect(() => subscribeBattery(setBs), []);

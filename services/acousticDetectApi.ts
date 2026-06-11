@@ -11,6 +11,7 @@
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+import { getApiBaseUrl } from './apiBase';
 
 export interface BallSpeedResult {
   /** Server-confirmed impact timestamp (independent of client metering). */
@@ -31,7 +32,7 @@ export interface BallSpeedResult {
   source: 'acoustic_real';
 }
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 export async function detectBallSpeed(args: {
   audioUri: string;

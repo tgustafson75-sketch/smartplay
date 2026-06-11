@@ -20,13 +20,14 @@ import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
 import { safeBack } from '../services/safeBack';
 import { getCaddieName } from '../lib/persona';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
+import { getApiBaseUrl } from '../services/apiBase';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
   const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
 
   const caddieName = getCaddieName(caddiePersonality);

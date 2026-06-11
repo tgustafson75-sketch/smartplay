@@ -12,6 +12,7 @@ import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary'
 import { getActiveSurface } from './activeSurfaceRegistry';
 import type { AppContext } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── External URL allowlist ───────────────────────────────────────────────────
 // Audit P1 follow-up: server tool_use responses can include open_url actions.
@@ -259,7 +260,7 @@ export async function speakHonestFailure(
 async function openSession() {
   setSessionStateMirror('opening');
   const settings = useSettingsStore.getState();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
@@ -689,7 +690,7 @@ async function openSession() {
         await speakHonestFailure(
           settingsFresh.language,
           settingsFresh.voiceGender,
-          process.env.EXPO_PUBLIC_API_URL ?? '',
+          getApiBaseUrl(),
         );
       }
     } catch (innerErr) { console.log('[listeningSession] outer-catch fallback failed', innerErr); }
@@ -743,7 +744,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

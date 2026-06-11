@@ -26,6 +26,7 @@ import {
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { safeBack } from '../../services/safeBack';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 type Phase = 'capture' | 'analyzing' | 'result' | 'failed';
 
@@ -41,7 +42,7 @@ const SPACE_TYPE_LABEL: Record<SpaceType, string> = {
 export default function SpaceScanScreen() {
   const router = useRouter();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   const [phase, setPhase] = useState<Phase>('capture');
   const [photoUri, setPhotoUri] = useState<string | null>(null);

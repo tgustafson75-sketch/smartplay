@@ -17,13 +17,14 @@ import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
 import type { VocabularyProfile } from '../../types/vocabulary';
 import type { ReviewLabels } from '../../store/cageStore';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 export default function CageReviewSummary() {
   const { review_session_id } = useLocalSearchParams<{ review_session_id: string }>();
   const router = useRouter();
   const { sessionHistory } = useCageStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const [review, setReview] = useState<ReviewSession | null>(null);
   const [profile, setProfile] = useState<VocabularyProfile | null>(null);

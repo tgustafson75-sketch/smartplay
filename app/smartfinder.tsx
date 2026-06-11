@@ -60,6 +60,7 @@ import { isSendToTankAvailable } from '../services/tankReview';
 import { Ionicons } from '@expo/vector-icons';
 // 2026-05-27 — Fix EQ: toast feedback for capture results.
 import { useToastStore } from '../store/toastStore';
+import { getApiBaseUrl } from '../services/apiBase';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -164,7 +165,7 @@ export default function SmartFinder() {
   const voiceEnabled = useSettingsStore(s => s.voiceEnabled);
   const language = useSettingsStore(s => s.language);
   const trustLevel = useTrustLevelStore(s => s.level);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   useEffect(() => {
     if (calloutSpokenRef.current) return;
     if (!isRoundActive) return;

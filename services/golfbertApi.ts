@@ -11,8 +11,9 @@
  */
 
 import { getGolfbertMapping } from '../constants/golfbertCourses';
+import { getApiBaseUrl } from './apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = (): string => getApiBaseUrl();
 
 function proxyUrl(params: Record<string, string>): string {
   const qs = new URLSearchParams(params).toString();

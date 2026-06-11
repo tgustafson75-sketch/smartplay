@@ -20,8 +20,9 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { getApiBaseUrl } from './apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = getApiBaseUrl();
 
 export type ImportedHole = {
   hole: number;

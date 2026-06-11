@@ -18,8 +18,9 @@ import { View, Text, StyleSheet, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useConnectivityStore, reportOnline } from '../store/connectivityStore';
+import { getApiBaseUrl } from '../services/apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = getApiBaseUrl();
 
 export function OfflineBanner() {
   const insets = useSafeAreaInsets();

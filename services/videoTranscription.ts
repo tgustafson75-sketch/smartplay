@@ -29,6 +29,7 @@
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+import { getApiBaseUrl } from './apiBase';
 
 interface TranscribeOpts {
   /** Caller-known has_audio flag from probeVideo. When explicitly
@@ -83,7 +84,7 @@ export async function transcribeVideoAudio(
     return null;
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl) {
     console.log('[transcribe-video] EXPO_PUBLIC_API_URL not configured');
     return null;

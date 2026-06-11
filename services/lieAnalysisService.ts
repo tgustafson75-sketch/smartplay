@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/react-native';
 import { bumpToActive } from './gpsManager';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { adaptOnCourseVoice, deriveComplexityLevel, hasMobilityFlag } from './coachingAdaptation';
+import { getApiBaseUrl } from './apiBase';
 
 /**
  * Phase H — client-side fetcher for the lie-analysis endpoint.
@@ -92,7 +93,7 @@ export async function analyzeLie(
   imageMediaType: 'image/jpeg' | 'image/png' = 'image/jpeg',
   voiceGender: 'male' | 'female' = 'male',
 ): Promise<LieAnalysisResult> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
 
   // Lie analysis tap is a shot-intent signal — bump GPS to active.
   try { bumpToActive('lie_analysis'); } catch {}

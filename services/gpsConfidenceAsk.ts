@@ -37,6 +37,7 @@
 
 import { subscribePoorSignal } from './gpsManager';
 import { useGpsHealthStore } from '../store/gpsHealthStore';
+import { getApiBaseUrl } from './apiBase';
 
 /** Per-time cooldown between proactive asks. 5 min absorbs accuracy
  *  flap (parking lot under trees → open fairway) without re-asking. */
@@ -174,7 +175,7 @@ async function maybeAskWhatHole(accuracy_m: number | null): Promise<void> {
   // All gates passed — speak the question.
   const voiceGender = settings.useSettingsStore.getState().voiceGender;
   const language = settings.useSettingsStore.getState().language ?? 'en';
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const text = "GPS is a little soft here — what hole are you on?";
 
   try {

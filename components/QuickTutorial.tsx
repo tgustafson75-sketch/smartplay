@@ -37,8 +37,9 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
 import { speak } from '../services/voiceService';
+import { getApiBaseUrl } from '../services/apiBase';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const API_URL = getApiBaseUrl();
 
 interface QuickTutorialProps {
   /** Persisted-seen key. Matches Coach Mode's COACH_TUTORIAL_KEY pattern. */

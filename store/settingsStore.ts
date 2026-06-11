@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
+import { getApiBaseUrl } from '../services/apiBase';
 
 // ─── Phase 105 — Team Caddie Architecture ─────────────────────────────────────
 
@@ -513,7 +514,7 @@ export const useSettingsStore = create<SettingsState>()(
           setTimeout(() => {
             try {
               const voiceMod = require('../services/voiceService');
-              const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+              const apiUrl = getApiBaseUrl();
               const lang = get().language ?? 'en';
               voiceMod.speak?.(text, gender, lang, apiUrl, { userInitiated: true })
                 ?.catch?.((e: unknown) => console.log('[persona-handoff] speak failed', e));

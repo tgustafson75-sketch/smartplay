@@ -25,8 +25,9 @@
  */
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
+import { getApiBaseUrl } from '../apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = getApiBaseUrl();
 
 export const inRoundDiagnosticHandler: IntentHandler = {
   intent_type: 'in_round_diagnostic',

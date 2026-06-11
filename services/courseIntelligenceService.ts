@@ -17,6 +17,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBaseUrl } from './apiBase';
 
 const CACHE_KEY_PREFIX = 'smartplay.courseIntel.v1.';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -95,7 +96,7 @@ export async function fetchCourseIntelligence(
   input: CourseIntelligenceInput,
 ): Promise<CourseIntelligenceResult> {
   const { courseId, courseName, location } = input;
-  const apiUrl = input.apiUrl ?? process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = input.apiUrl ?? getApiBaseUrl();
   if (!courseId || !courseName) {
     return { intelligence: null, source: 'error', cached_at: Date.now() };
   }

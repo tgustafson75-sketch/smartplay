@@ -39,6 +39,7 @@ import { useCageStore, type CageShot, type CageSession } from '../store/cageStor
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { track } from './analytics';
+import { getApiBaseUrl } from './apiBase';
 
 // Track shot IDs that have already been kicked off so the subscribe
 // doesn't double-fire when the store mutates for other reasons (next
@@ -46,7 +47,7 @@ import { track } from './analytics';
 const inflight = new Set<string>();
 const done = new Set<string>();
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const API_URL = getApiBaseUrl();
 
 /**
  * One-shot transcription for a specific shot. Posts the clip's mp4 to

@@ -23,6 +23,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech, configureAudioForRecording } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
 import type { CageShot } from '../../store/cageStore';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
   android: {
@@ -64,7 +65,7 @@ export default function CageReviewInterview() {
   // /api/cage-review fetch below so responses stay in the active
   // caddie's voice.
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const [review, setReview] = useState<ReviewSession | null>(null);
   const [eligibleShots, setEligibleShots] = useState<CageShot[]>([]);

@@ -17,6 +17,7 @@
  */
 
 import type { Persona } from '../lib/persona';
+import { getApiBaseUrl } from './apiBase';
 
 const MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_MOCK_MODE === 'true';
 const KEVIN_MOCK_MODE = process.env.EXPO_PUBLIC_CAGE_KEVIN_MOCK_MODE === 'true';
@@ -39,7 +40,7 @@ export type ApiResult<T> =
   | { kind: 'no_network' }
   | { kind: 'error'; message: string };
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 async function delay(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));

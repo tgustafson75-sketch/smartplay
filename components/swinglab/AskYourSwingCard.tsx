@@ -38,6 +38,7 @@ import { getCaddieName } from '../../lib/persona';
 import {
   captureUtterance, speak, configureAudioForSpeech, stopSpeaking,
 } from '../../services/voiceService';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 interface Props {
   session: CageSession;
@@ -49,7 +50,7 @@ interface AskResponse {
   error?: string;
 }
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = getApiBaseUrl();
 
 function resolveFrameUri(session: CageSession): string | null {
   if (session.primary_issue?.visual_reference_path) {

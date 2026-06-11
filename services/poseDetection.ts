@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 /**
  * Phase K — Pose detection client.
  *
@@ -546,7 +547,7 @@ export async function locateSwingWindow(
   clipUri: string,
   durationMs: number,
 ): Promise<{ startSec: number; endSec: number } | null> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) return null;
   // ~1 coarse frame per 4s, clamped 8-14.
   const count = Math.max(8, Math.min(14, Math.round(durationMs / 1000 / 4)));
@@ -731,7 +732,7 @@ export async function analyzeSwing(
     return { kind: 'error', message: 'Analyzer is catching up — give it a few seconds, then tap Re-analyze.' };
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   try {
     const wireFrames = frames.map(({ b64, media_type }) => ({ b64, media_type }));
     const totalKB = Math.round(wireFrames.reduce((acc, f) => acc + f.b64.length, 0) / 1024);
@@ -1070,7 +1071,7 @@ export async function analyzeSwingTentative(
     return { kind: 'no_frames' };
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   try {
     V6('TENTATIVE STAGE 3 — POST /api/swing-analysis (tentative mode)', {
       total_payload_kb: Math.round(frame.b64.length / 1024),

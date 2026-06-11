@@ -105,6 +105,7 @@ import { resolvePenalty } from '../../services/rulesEngine';
 import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -153,7 +154,7 @@ export default function CaddieTab() {
   const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : _preRoundBudget);
   const _avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
   const familyMembers = useFamilyStore(s => s.members);
   const activeFamilyMemberId = useFamilyStore(s => s.active_member_id);
   const _activeFamilyMember = useMemo(

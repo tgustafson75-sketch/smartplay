@@ -17,8 +17,9 @@
 
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getApiBaseUrl } from './apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = (): string => getApiBaseUrl();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

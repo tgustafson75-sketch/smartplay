@@ -11,8 +11,9 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { getApiBaseUrl } from './apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 /** Front-camera selfie → square → small avatar file URI. null = cancelled
  *  or permission denied. */

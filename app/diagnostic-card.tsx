@@ -34,8 +34,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { speak, stopSpeaking } from '../services/voiceService';
 import { getCaddieName } from '../lib/persona';
+import { getApiBaseUrl } from '../services/apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = getApiBaseUrl();
 
 /**
  * Heuristic split of Kevin's reasoning text into structured sections.

@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 /**
  * 2026-05-28 — Fix FE: "Keep the presence alive."
  *
@@ -99,7 +100,7 @@ async function fetchPresenceFromBrain(
   trigger: PresenceTrigger,
   context: PresenceContext,
 ): Promise<string | null> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl) return null;
   try {
     const playerLine = context.playerName ? `Player: ${context.playerName}.` : '';

@@ -14,8 +14,9 @@ import { useGhostStore } from '../store/ghostStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { generateRecap } from '../services/recapGenerator';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
+import { getApiBaseUrl } from '../services/apiBase';
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = getApiBaseUrl();
 
 // ─── Synthetic ghost for when roundHistory is empty ───────────────────────────
 

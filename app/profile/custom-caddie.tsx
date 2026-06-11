@@ -46,11 +46,12 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 // screen — so the user records their own greetings right where they
 // took the selfie + generated the caddie image.
 import { phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
 
-const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+const apiUrl = getApiBaseUrl();
 
 export default function CustomCaddieScreen() {
   const insets = useSafeAreaInsets();

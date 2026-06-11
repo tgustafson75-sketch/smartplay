@@ -98,6 +98,7 @@ import { detectBallDeparture, type BallDepartureResult } from '../../services/sw
 import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 const RECORDING_MAX_SECONDS = 60; // open window — player swings freely
 // Default ball-box position (normalized). Lower-center of the frame, where a
@@ -719,7 +720,7 @@ export default function SmartMotion() {
     if (!targetFrameUri || !sessionId) return;
     setAutoDetectingBall(true);
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const apiUrl = getApiBaseUrl();
       const FS = await import('expo-file-system/legacy');
       const b64 = await FS.readAsStringAsync(targetFrameUri, { encoding: FS.EncodingType.Base64 });
       const res = await fetch(`${apiUrl}/api/swing-analysis`, {
@@ -832,7 +833,7 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
-          await speak(reply, s.voiceGender, s.language, process.env.EXPO_PUBLIC_API_URL ?? '', { userInitiated: true });
+          await speak(reply, s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
         } catch { /* speech non-fatal */ }
       }
     } catch {
@@ -1030,7 +1031,7 @@ export default function SmartMotion() {
     if (scanningClub) return;
     setScanningClub(true);
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+      const apiUrl = getApiBaseUrl();
       const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.5, skipProcessing: true });
       const b64 = pic?.base64;
       if (!apiUrl || !b64) { setClubMenuOpen(true); return; }

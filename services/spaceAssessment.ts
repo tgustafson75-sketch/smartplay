@@ -9,6 +9,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sentry from '@sentry/react-native';
+import { getApiBaseUrl } from './apiBase';
 
 export type SpaceType = 'cage' | 'range_bay' | 'backyard' | 'basement' | 'garage' | 'other';
 
@@ -65,7 +66,7 @@ export async function scanSpace(
   imageMediaType: 'image/jpeg' | 'image/png' = 'image/jpeg',
   voiceGender: 'male' | 'female' = 'male',
 ): Promise<SpaceScanResult> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const myController = controller.beginNew();
 
   try {

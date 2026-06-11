@@ -1010,6 +1010,21 @@ check('Re-analyze hardening: content:// persisted, legacy clips rescued on open,
     /can't sample for analysis, even though it plays/.test(uploadSrc),              // honest codec copy
   'content:// picks are persisted to documents, legacy/volatile clips are rescued into documentDirectory on first open, and an unreadable-frames failure names the real cause (format/frame-rate) instead of blaming lighting');
 
+// 2026-06-10 — SPINE FIX: one API base resolver. EXPO_PUBLIC_API_URL is absent
+// from eas-update bundles (only eas.json build.env has it), so ~85 sites doing
+// `?? ''`/`?? 'localhost'` produced "Invalid URL: /api/voice" — voice, brain,
+// and analysis all silently failed. Now a single getApiBaseUrl() with a prod
+// fallback that can never emit a relative/dead URL; no site reads the env raw.
+const apiBaseSrc = read('services/apiBase.ts');
+check('API base URL — one resolver, never relative/dead (spine fix)',
+  /export function getApiBaseUrl/.test(apiBaseSrc) &&
+    /https:\/\/smartplay-beta\.vercel\.app/.test(apiBaseSrc) &&
+    /\^https\?:\\\/\\\/\.\+/.test(apiBaseSrc) &&                          // absolute-url guard present
+    !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useVoiceCaddie.ts')) && // voice no longer reads env raw
+    !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useKevin.ts')) &&       // brain no longer reads env raw
+    /getApiBaseUrl\(\)/.test(read('hooks/useVoiceCaddie.ts')),
+  'every backend fetch resolves through getApiBaseUrl(), which honors EXPO_PUBLIC_API_URL only when it is an absolute http(s) url and otherwise falls back to production — so an env var missing from an OTA bundle can never again leave the client with no server address');
+
 // 2026-06-10 — Pose pipeline is angle-aware (knows DTL from FO).
 const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',

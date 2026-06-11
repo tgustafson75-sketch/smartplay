@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
 import { LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
+import { getApiBaseUrl } from './apiBase';
 
 // 2026-05-17 — Known hole count per local course. Passed to the
 // /api/course-geometry endpoint so the OSM-Overpass fallback can cap
@@ -394,7 +395,7 @@ export async function fetchCourseGeometry(
     }
   }
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   const params = new URLSearchParams({ courseId: upstreamId });
   if (centroid) {
     params.set('lat', String(centroid.lat));
@@ -472,7 +473,7 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
         centroid = deriveCentroidFromActiveCourseLocation(courseId);
       }
     }
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+    const apiUrl = getApiBaseUrl();
     const params = new URLSearchParams({ courseId: upstreamId });
     if (centroid) {
       params.set('lat', String(centroid.lat));

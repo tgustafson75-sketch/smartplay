@@ -35,6 +35,7 @@ import { analyze, type AnalysisEnvelope } from './smartAnalysisEngine';
 import { buildGolferModel } from './golferModel';
 import { getCaddieName } from '../lib/persona';
 import { devLog } from './devLog';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Public types (must mirror api/meta-voice.ts) ───────────────────────
 
@@ -189,7 +190,7 @@ function profileUnused(): void {
 // ─── Remote path — POST to api/meta-voice ───────────────────────────────
 
 async function callRemote(req: MetaVoiceRequest): Promise<MetaVoiceResponse> {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  const apiUrl = getApiBaseUrl();
   if (!apiUrl) {
     return {
       speak: 'No backend configured — open the app to ask.',
@@ -373,7 +374,7 @@ async function speakResult(result: MetaVoiceResponse): Promise<void> {
       result.speak,
       settings.voiceGender,
       settings.language ?? 'en',
-      process.env.EXPO_PUBLIC_API_URL ?? '',
+      getApiBaseUrl(),
       { userInitiated: true },
     )?.catch?.(() => undefined);
   } catch (e) {

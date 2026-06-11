@@ -33,8 +33,9 @@ import {
   type ClubId,
   type ClubRecognitionOutcome,
 } from '../../services/clubRecognition';
+import { getApiBaseUrl } from '../../services/apiBase';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
+const API_URL = getApiBaseUrl();
 
 type PendingConfirm = {
   club_id: ClubId;

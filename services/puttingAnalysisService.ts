@@ -29,6 +29,7 @@ import { getHoleGeometry } from './courseGeometryService';
 import { getActiveVisionContext } from './glassesVisionInput';
 import { getCaddieName } from '../lib/persona';
 import { devLog } from './devLog';
+import { getApiBaseUrl } from './apiBase';
 
 // ─── Schema (matches the user's 2026-05-22 spec exactly) ─────────────
 
@@ -116,7 +117,7 @@ export interface PuttingAnalysisInput {
 
 // ─── Public API ──────────────────────────────────────────────────────────
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 /**
  * Run putting analysis. Always returns a fully-populated PuttingAnalysis;

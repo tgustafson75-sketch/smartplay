@@ -28,6 +28,7 @@ import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
 import { cageLog } from '../../services/cageTelemetry';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 export default function CageSummary() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function CageSummary() {
   } = useWatchStore();
   const watchSummary = getSessionSummary();
 
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const session =
     sessionHistory.length > 0 ? sessionHistory[sessionHistory.length - 1] : null;

@@ -15,8 +15,9 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getApiBaseUrl } from '../apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 // How far before / after the acoustic impact to sample. A real strike has
 // the ball still at rest a beat before and clearly gone a beat after.

@@ -15,8 +15,9 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useCageStore } from '../store/cageStore';
 import { useRoundStore, type RoundRecord } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { getApiBaseUrl } from './apiBase';
 
-const apiUrl = (): string => process.env.EXPO_PUBLIC_API_URL ?? '';
+const apiUrl = (): string => getApiBaseUrl();
 
 async function callSynthesis(
   type: 'onboarding' | 'cage_session' | 'round' | 'patterns',

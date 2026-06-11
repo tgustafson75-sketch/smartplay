@@ -22,6 +22,7 @@ import { checkContent } from '../../services/contentGuardrail';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { getFirstTeeHint } from '../../services/voiceOnboardingService';
 import { ROUND_MODE_LABELS } from '../../types/patterns';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 type Phase = 'thinking' | 'speaking' | 'done';
 
@@ -53,7 +54,7 @@ export default function BriefingScreen() {
   // { userInitiated: true } so Quiet (L1) doesn't suppress it. Keeping
   // the subscription removed avoids the misleading "trustLevel is read"
   // signal a future reader would see.
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8081';
+  const apiUrl = getApiBaseUrl();
 
   const [phase, setPhase] = useState<Phase>('thinking');
   const [briefText, setBriefText] = useState('');
