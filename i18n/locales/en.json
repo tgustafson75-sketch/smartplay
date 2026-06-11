@@ -102,5 +102,33 @@
     "stop": "Stop",
     "listen": "Listen",
     "competition_round": "Competition Round"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "shared_group": "SHARED GROUP",
+    "try_new_look": "Try a new look",
+    "current_round": "CURRENT ROUND",
+    "round_in_progress": "● ROUND IN PROGRESS",
+    "score": "Score",
+    "vs_par": "Vs Par",
+    "holes": "Holes",
+    "no_round": "No round in progress",
+    "no_round_sub": "Pick a course to start a round →",
+    "shot_stats": "SHOT STATS",
+    "shots_logged": "SHOTS LOGGED",
+    "fairway_pct": "FAIRWAY HIT %",
+    "tee_avg": "TEE AVG",
+    "recent_shots": "RECENT SHOTS",
+    "kevins_read": "Kevin's Read",
+    "refreshing": "Refreshing…",
+    "highlights": "Highlights",
+    "best_round": "BEST ROUND",
+    "longest_drive": "LONGEST DRIVE",
+    "longest_putt": "LONGEST PUTT",
+    "saved_highlights": "SAVED HIGHLIGHTS",
+    "milestones": "Milestones",
+    "no_rounds": "No rounds yet",
+    "no_rounds_sub": "Start your first round with Kevin to see your stats here.",
+    "pattern_shift": "PATTERN SHIFT"
   }
 }

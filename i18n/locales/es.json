@@ -102,5 +102,33 @@
     "stop": "Parar",
     "listen": "Escuchar",
     "competition_round": "Ronda de Competición"
+  },
+  "dashboard": {
+    "title": "Panel",
+    "shared_group": "GRUPO COMPARTIDO",
+    "try_new_look": "Prueba un nuevo look",
+    "current_round": "RONDA ACTUAL",
+    "round_in_progress": "● RONDA EN CURSO",
+    "score": "Golpes",
+    "vs_par": "Vs Par",
+    "holes": "Hoyos",
+    "no_round": "No hay ronda en curso",
+    "no_round_sub": "Elige un campo para empezar una ronda →",
+    "shot_stats": "ESTADÍSTICAS DE GOLPES",
+    "shots_logged": "GOLPES REGISTRADOS",
+    "fairway_pct": "% DE FAIRWAY",
+    "tee_avg": "PROM. TEE",
+    "recent_shots": "GOLPES RECIENTES",
+    "kevins_read": "Lectura de Kevin",
+    "refreshing": "Actualizando…",
+    "highlights": "Destacados",
+    "best_round": "MEJOR RONDA",
+    "longest_drive": "DRIVE MÁS LARGO",
+    "longest_putt": "PUTT MÁS LARGO",
+    "saved_highlights": "MOMENTOS GUARDADOS",
+    "milestones": "Logros",
+    "no_rounds": "Aún no hay rondas",
+    "no_rounds_sub": "Juega tu primera ronda con Kevin para ver tus estadísticas aquí.",
+    "pattern_shift": "CAMBIO DE PATRÓN"
   }
 }

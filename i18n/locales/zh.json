@@ -102,5 +102,33 @@
     "stop": "停止",
     "listen": "收听",
     "competition_round": "比赛轮"
+  },
+  "dashboard": {
+    "title": "面板",
+    "shared_group": "共享小组",
+    "try_new_look": "换个新造型",
+    "current_round": "当前球局",
+    "round_in_progress": "● 球局进行中",
+    "score": "成绩",
+    "vs_par": "对标准杆",
+    "holes": "球洞",
+    "no_round": "没有进行中的球局",
+    "no_round_sub": "选择球场开始一局 →",
+    "shot_stats": "击球统计",
+    "shots_logged": "已记录击球",
+    "fairway_pct": "球道命中率",
+    "tee_avg": "开球平均",
+    "recent_shots": "最近击球",
+    "kevins_read": "Kevin 的解读",
+    "refreshing": "刷新中…",
+    "highlights": "精彩时刻",
+    "best_round": "最佳球局",
+    "longest_drive": "最远开球",
+    "longest_putt": "最长推杆",
+    "saved_highlights": "已保存精彩",
+    "milestones": "里程碑",
+    "no_rounds": "还没有球局",
+    "no_rounds_sub": "和 Kevin 打第一局来查看你的统计。",
+    "pattern_shift": "模式变化"
   }
 }

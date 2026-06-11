@@ -31,6 +31,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore } from '../../store/roundStore';
@@ -51,6 +52,7 @@ import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 
 export default function Dashboard() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { colors } = useTheme();
   // 2026-05-24 — beta-minimal responsive: centered max-width on wide
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
@@ -254,7 +256,7 @@ export default function Dashboard() {
 
         {/* ─── 2. TITLE + WELCOME ────────────────────────────────────── */}
         <View style={styles.titleBlock}>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Dashboard</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('dashboard.title')}</Text>
           <Text style={[styles.welcome, { color: colors.text_muted }]}>
             Welcome back, {welcomeName}
           </Text>
@@ -290,7 +292,7 @@ export default function Dashboard() {
           <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
             <View style={styles.sharedHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>SHARED GROUP</Text>
+                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>{t('dashboard.shared_group')}</Text>
                 <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
                   {activeFamilyRoster.length} golfer{activeFamilyRoster.length === 1 ? '' : 's'}
                 </Text>
@@ -354,7 +356,7 @@ export default function Dashboard() {
             <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.selfieTitle, { color: colors.text_primary }]}>Try a new look</Text>
+            <Text style={[styles.selfieTitle, { color: colors.text_primary }]}>{t('dashboard.try_new_look')}</Text>
             <Text style={[styles.selfieSub, { color: colors.text_muted }]} numberOfLines={1}>
               Selfie + AI — see yourself as your caddie
             </Text>
@@ -363,11 +365,11 @@ export default function Dashboard() {
         </TouchableOpacity>
 
         {/* ─── 4. CURRENT ROUND ──────────────────────────────────────── */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>CURRENT ROUND</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.current_round')}</Text>
         {isRoundActive ? (
           <View style={[styles.activeCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
             <View style={styles.activeHeader}>
-              <Text style={[styles.activeLabel, { color: colors.accent }]}>● ROUND IN PROGRESS</Text>
+              <Text style={[styles.activeLabel, { color: colors.accent }]}>{t('dashboard.round_in_progress')}</Text>
               <Text style={[styles.activeCourse, { color: colors.text_primary }]}>{activeCourse}</Text>
             </View>
             <View style={styles.activeStats}>
@@ -375,7 +377,7 @@ export default function Dashboard() {
                 <Text style={[styles.activeStatValue, { color: colors.text_primary }]}>
                   {totalScore > 0 ? totalScore : '—'}
                 </Text>
-                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>Score</Text>
+                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>{t('dashboard.score')}</Text>
               </View>
               <View style={styles.activeStat}>
                 <Text style={[
@@ -389,11 +391,11 @@ export default function Dashboard() {
                 ]}>
                   {holesPlayed > 0 ? scoreVsParDisplay : '—'}
                 </Text>
-                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>Vs Par</Text>
+                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>{t('dashboard.vs_par')}</Text>
               </View>
               <View style={styles.activeStat}>
                 <Text style={[styles.activeStatValue, { color: colors.text_primary }]}>{holesPlayed}</Text>
-                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>Holes</Text>
+                <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>{t('dashboard.holes')}</Text>
               </View>
             </View>
           </View>
@@ -407,8 +409,8 @@ export default function Dashboard() {
           >
             <Ionicons name="flag-outline" size={26} color={colors.accent} />
             <View style={styles.noRoundText}>
-              <Text style={[styles.noRoundTitle, { color: colors.text_primary }]}>No round in progress</Text>
-              <Text style={[styles.noRoundSub, { color: colors.text_muted }]}>Pick a course on the Play tab to start →</Text>
+              <Text style={[styles.noRoundTitle, { color: colors.text_primary }]}>{t('dashboard.no_round')}</Text>
+              <Text style={[styles.noRoundSub, { color: colors.text_muted }]}>{t('dashboard.no_round_sub')}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -451,18 +453,18 @@ export default function Dashboard() {
             distance of tee shots). Tee-shot count surfaces too so a
             single-shot round doesn't look like "100% fairway" with
             no context. When teeShots=0, show dashes instead of 0/0%. */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>SHOT STATS</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.shot_stats')}</Text>
         <View style={styles.statsRow}>
-          <StatTile colors={colors} value={String(shotStats.shotsLogged)} label="SHOTS LOGGED" />
+          <StatTile colors={colors} value={String(shotStats.shotsLogged)} label={t('dashboard.shots_logged')} />
           <StatTile
             colors={colors}
             value={shotStats.teeShots === 0 ? '—' : `${shotStats.fairwayPct}%`}
-            label="FAIRWAY HIT %"
+            label={t('dashboard.fairway_pct')}
           />
           <StatTile
             colors={colors}
             value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(shotStats.avgYds)}
-            label="TEE AVG"
+            label={t('dashboard.tee_avg')}
           />
         </View>
 
@@ -472,7 +474,7 @@ export default function Dashboard() {
             Same data, richer rendering. Caddie-tab placement comes
             next iteration; for now Dashboard gets the upgrade plus a
             full-round Shot Log entry in the ••• Tools menu. */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>RECENT SHOTS</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.recent_shots')}</Text>
         {recentShots.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
             No shots logged yet — log a shot from the Caddie tab.
@@ -511,7 +513,7 @@ export default function Dashboard() {
               <AppIcon name="trending-up-outline" size={20} color="#fbbf24" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.alertLabel}>PATTERN SHIFT</Text>
+              <Text style={styles.alertLabel}>{t('dashboard.pattern_shift')}</Text>
               <Text style={[styles.alertMsg, { color: colors.text_primary }]}>{patternShift.alert_message}</Text>
             </View>
             <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
@@ -531,9 +533,9 @@ export default function Dashboard() {
           accessibilityLabel={`Kevin's Read. ${refreshingKevinRead ? 'Refreshing.' : 'Tap to refresh.'}`}
         >
           <View style={styles.kevinReadHeader}>
-            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Kevin&apos;s Read</Text>
+            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{t('dashboard.kevins_read')}</Text>
             {refreshingKevinRead ? (
-              <Text style={[styles.kevinReadFooter, { color: colors.accent }]}>Refreshing…</Text>
+              <Text style={[styles.kevinReadFooter, { color: colors.accent }]}>{t('dashboard.refreshing')}</Text>
             ) : null}
           </View>
           <Text style={[styles.kevinReadText, { color: colors.text_primary }]}>{kevinReadText}</Text>
@@ -547,14 +549,14 @@ export default function Dashboard() {
             Highlights. "—" renders when a stat is null (never show 0
             for drive/putt; 0 is meaningless, — is honest). */}
         <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Highlights</Text>
+          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{t('dashboard.highlights')}</Text>
           <View style={styles.highlightsGrid}>
             <View style={styles.highlightCell}>
-              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>BEST ROUND</Text>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.best_round')}</Text>
               <Text style={[styles.highlightValue, { color: colors.text_primary }]}>{bestRound ?? '—'}</Text>
             </View>
             <View style={styles.highlightCell}>
-              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>LONGEST DRIVE</Text>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.longest_drive')}</Text>
               <Text style={[styles.highlightValue, { color: colors.text_primary }]}>
                 {derivedLongestDrive != null ? `${derivedLongestDrive}y` : '—'}
               </Text>
@@ -568,13 +570,13 @@ export default function Dashboard() {
               accessibilityRole="button"
               accessibilityLabel={longestPutt == null ? 'Set longest putt in Settings' : `Longest putt ${longestPutt} yards`}
             >
-              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>LONGEST PUTT</Text>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.longest_putt')}</Text>
               <Text style={[styles.highlightValue, { color: colors.text_primary }]}>
                 {longestPutt != null ? `${longestPutt}y` : '—'}
               </Text>
             </TouchableOpacity>
             <View style={styles.highlightCell}>
-              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>SAVED HIGHLIGHTS</Text>
+              <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.saved_highlights')}</Text>
               <Text style={[styles.highlightValue, { color: '#F5A623' }]}>
                 {heroMoments.length > 0 ? `★ ${heroMoments.length}` : '—'}
               </Text>
@@ -585,7 +587,7 @@ export default function Dashboard() {
         {/* MILESTONES (last 3) */}
         {breakthroughs.length > 0 && (
           <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>Milestones</Text>
+            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{t('dashboard.milestones')}</Text>
             {[...breakthroughs].slice(-3).reverse().map((bt) => (
               <View key={bt.id} style={styles.btItem}>
                 <AppIcon name="trophy" size={18} color="#F5A623" />
@@ -598,9 +600,9 @@ export default function Dashboard() {
         {/* EMPTY STATE — no rounds yet */}
         {roundsTogether === 0 && (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>No rounds yet</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('dashboard.no_rounds')}</Text>
             <Text style={[styles.emptySub, { color: colors.text_muted }]}>
-              Start your first round with Kevin to see your stats here.
+              {t('dashboard.no_rounds_sub')}
             </Text>
           </View>
         )}
