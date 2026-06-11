@@ -40,6 +40,10 @@ import {
 } from 'react-native';
 import Svg, { Path, Circle, Line, Text as SvgText, Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
+// 2026-06-11 — Smart freehand: a roughly-straight stroke is auto-straightened
+// into a clean line, a sloppy loop snaps to a clean focus circle. Conservative
+// classifier — ambiguous strokes (scribbles, curves, arrows) stay freehand.
+import { classifyStroke } from '../../utils/geometryFitting';
 
 // 2026-05-26 — Fix DX: two new coach tools.
 //  - 'straight' = swing-plane / spine / shaft alignment guide.
@@ -254,12 +258,20 @@ export default function VideoAnnotationOverlay() {
         if (t === 'freehand') {
           const d = pendingPathRef.current;
           if (d && d.length > 0) {
-            addShape({
-              id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-              type: 'freehand',
-              color: colorRef.current,
-              d,
-            });
+            const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const col = colorRef.current;
+            // Smart freehand: straighten a line-like stroke / snap a loop to a
+            // clean circle, keeping the user's drawn orientation + extent. Only
+            // replaces the stroke when the fit is clearly good (see
+            // utils/geometryFitting thresholds); otherwise commits raw freehand.
+            const cls = classifyStroke(d);
+            if (cls.kind === 'line') {
+              addShape({ id, type: 'line', color: col, x1: cls.x1, y1: cls.y1, x2: cls.x2, y2: cls.y2 });
+            } else if (cls.kind === 'circle') {
+              addShape({ id, type: 'roi', color: col, cx: cls.cx, cy: cls.cy, r: cls.r });
+            } else {
+              addShape({ id, type: 'freehand', color: col, d });
+            }
           }
           pendingPathRef.current = '';
           setPendingPath('');

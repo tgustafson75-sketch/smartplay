@@ -37,6 +37,7 @@ import {
   type Persona,
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
+import { classifyStroke } from '../../utils/geometryFitting';
 
 interface ScenarioResult {
   scenario: string;
@@ -1190,6 +1191,63 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /dominant_miss: cnsTend\.dominantMiss \?\? profile\.dominantMiss/.test(smSrc) &&
     /prior_issues: cnsTend\.recentFaults\.length > 0/.test(smSrc),
   'the swing analyzer is told handedness (mirrors direction-dependent faults) and the CNS learned dominant-miss + recent faults as soft priors — closing the brain→analysis loop, with the visual read still winning');
+
+// ─── Smart freehand annotation (geometry fitting) ───────────────────────────────
+{
+  // Crooked-but-straight line (finger wobble ±3px) → straightened to a line,
+  // preserving the drawn orientation/extent.
+  let lineD = 'M 20 200';
+  for (let i = 1; i <= 30; i++) lineD += ` L ${20 + i * 6} ${200 - i * 5 + (i % 2 ? 3 : -3)}`;
+  const lineCls = classifyStroke(lineD);
+  check('Smart freehand: crooked line straightens',
+    lineCls.kind === 'line' &&
+      Math.abs(lineCls.x1 - 20) < 12 && Math.abs(lineCls.y1 - 200) < 12,
+    'a roughly-straight finger stroke becomes a clean line with the drawn endpoints preserved (not extended to edges)');
+
+  // Wobbly vertical → line (PCA fit handles verticals; a y=mx+b fit could not).
+  let vertD = 'M 100 20';
+  for (let i = 1; i <= 25; i++) vertD += ` L ${100 + (i % 2 ? 4 : -4)} ${20 + i * 7}`;
+  check('Smart freehand: vertical line straightens', classifyStroke(vertD).kind === 'line',
+    'a near-vertical stroke straightens (total-least-squares fit, not slope-based)');
+
+  // Sloppy near-closed circle → snapped to a clean focus circle near the true center/radius.
+  let circD = 'M 200 150';
+  for (let i = 1; i <= 40; i++) {
+    const a = (i / 40) * 2 * Math.PI; const r = 50 + (i % 3 ? 4 : -4);
+    circD += ` L ${(150 + r * Math.cos(a)).toFixed(1)} ${(150 + r * Math.sin(a)).toFixed(1)}`;
+  }
+  const circCls = classifyStroke(circD);
+  check('Smart freehand: sloppy circle snaps clean',
+    circCls.kind === 'circle' &&
+      Math.abs(circCls.cx - 150) < 10 && Math.abs(circCls.cy - 150) < 10 &&
+      Math.abs(circCls.r - 50) < 10,
+    'a sloppy loop around a hip/shoulder snaps to a clean circle at the true center + radius');
+
+  // Genuine 120° traced arc → stays freehand (we never flatten an intended curve).
+  let arcD = 'M 100 50';
+  for (let i = 1; i <= 20; i++) {
+    const a = (-Math.PI / 2) + (i / 20) * (2 * Math.PI / 3);
+    arcD += ` L ${(100 + 60 * Math.cos(a)).toFixed(1)} ${(120 + 60 * Math.sin(a)).toFixed(1)}`;
+  }
+  check('Smart freehand: real arc stays freehand', classifyStroke(arcD).kind === 'freehand',
+    'a deliberately curved 120° stroke (e.g. tracing a swing arc) is NOT straightened');
+
+  // Scribble + a too-short tick → freehand (only replace strokes we are sure about).
+  let scribD = 'M 10 10';
+  for (const [x, y] of [[40, 80], [70, 15], [100, 90], [130, 20], [160, 85], [60, 60]]) scribD += ` L ${x} ${y}`;
+  check('Smart freehand: scribble + short tick stay freehand',
+    classifyStroke(scribD).kind === 'freehand' &&
+      classifyStroke('M 10 10 L 13 12 L 16 14').kind === 'freehand',
+    'ambiguous scribbles and tiny ticks are left as raw freehand, never force-fit');
+
+  // The overlay actually wires the classifier into the freehand commit path.
+  const overlaySrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/VideoAnnotationOverlay.tsx'), 'utf-8');
+  check('Smart freehand: overlay routes freehand release through classifyStroke',
+    /classifyStroke\(d\)/.test(overlaySrc) &&
+      /cls\.kind === 'line'/.test(overlaySrc) &&
+      /cls\.kind === 'circle'/.test(overlaySrc),
+    "the freehand PanResponder release classifies the stroke and commits a clean line/roi when confident, raw freehand otherwise");
+}
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
