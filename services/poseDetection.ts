@@ -537,6 +537,18 @@ async function extractCoarseFrames(clipUri: string, durationMs: number, count: n
   return out.filter((f): f is Frame => f !== null);
 }
 
+// 2026-06-10 — Field telemetry for the auto swing-finder. Logged to /owner-logs
+// (ANALYSIS tab) so a setup/address read is diagnosable: did the localizer find
+// the swing, miss it, or fail to extract coarse frames? This is the thing that,
+// when it silently fell back (e.g. during the API-base spine outage), caused the
+// analyzer to spread frames across setup/walk-up and read the address.
+function logLocate(stage: string, details: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details);
+  } catch { /* best-effort */ }
+}
+
 /**
  * Find WHEN the swing happens in a long, unbounded clip and return a tight
  * window around it. Returns null when it can't locate (caller falls back to
@@ -548,11 +560,17 @@ export async function locateSwingWindow(
   durationMs: number,
 ): Promise<{ startSec: number; endSec: number } | null> {
   const apiUrl = getApiBaseUrl();
-  if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) return null;
+  if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
+    logLocate('swing_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_under_12s' : 'no_api_url', dur_ms: durationMs });
+    return null;
+  }
   // ~1 coarse frame per 4s, clamped 8-14.
   const count = Math.max(8, Math.min(14, Math.round(durationMs / 1000 / 4)));
   const frames = await extractCoarseFrames(clipUri, durationMs, count);
-  if (frames.length < 3) return null;
+  if (frames.length < 3) {
+    logLocate('swing_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
+    return null;
+  }
   try {
     const res = await fetch(`${apiUrl}/api/swing-analysis`, {
       method: 'POST',
@@ -563,10 +581,14 @@ export async function locateSwingWindow(
       }),
       signal: AbortSignal.timeout(LOCATE_TIMEOUT_MS),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logLocate('swing_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
+      return null;
+    }
     const data = (await res.json()) as { found?: boolean; swing_time_sec?: number; confidence?: string };
     if (!data.found || typeof data.swing_time_sec !== 'number' || !Number.isFinite(data.swing_time_sec)) {
       V6('LOCATE — no swing located (fallback to wide spread)', { coarse_frames: frames.length });
+      logLocate('swing_locate_fallback', { reason: 'model_found_no_swing', coarse_frames: frames.length });
       return null;
     }
     const durSec = durationMs / 1000;
@@ -579,9 +601,11 @@ export async function locateSwingWindow(
       swing_time_sec: t, startSec, endSec,
       confidence: data.confidence ?? null, coarse_frames: frames.length,
     });
+    logLocate('swing_located', { swing_time_sec: Math.round(t * 10) / 10, start_sec: Math.round(startSec * 10) / 10, end_sec: Math.round(endSec * 10) / 10, confidence: data.confidence ?? null });
     return { startSec, endSec };
   } catch (e) {
     V6('LOCATE — failed (fallback to wide spread)', { error: e instanceof Error ? e.message : String(e) });
+    logLocate('swing_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });
     return null;
   }
 }
