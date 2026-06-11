@@ -36,13 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
-import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech, isSpeaking } from '../../services/voiceService';
-import { isActiveListeningEnabled } from '../../services/listeningSession';
-import { useTrustLevelStore } from '../../store/trustLevelStore';
-import { getApiBaseUrl } from '../../services/apiBase';
 
-let swingLabListeningPromptShown = false;
 
 interface LauncherCardSpec {
   key: string;
@@ -113,7 +107,6 @@ export default function SwingLab() {
   const router = useRouter();
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const trustLevel = useTrustLevelStore(s => s.level);
   // 2026-05-24 — beta-minimal responsive: centered max-width on wide
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
   // unchanged.
@@ -123,43 +116,12 @@ export default function SwingLab() {
   // SmartMotion calibration now); SwingLab shows all cards.
   const visibleCards = CARDS;
 
-  React.useEffect(() => {
-    if (trustLevel === 1) return;
-    if (swingLabListeningPromptShown) return;
-    if (isActiveListeningEnabled()) return;
-    // 2026-06-10 — Reliability fix. The prompt was (a) marked "shown" the
-    // instant the tab mounted — so a fast nav-in/out, or a clipped collision,
-    // permanently suppressed it (you'd see the text but never hear it again),
-    // and (b) firing into any in-flight TTS (e.g. the launch greeting), which
-    // clipped it AND left the audio session flaky for the next turns. Now:
-    //   • wait longer for the tab transition + any greeting tail to clear,
-    //   • SKIP this visit if something is still speaking (no collision) and
-    //     leave the flag UNSET so it retries cleanly next time,
-    //   • mark "shown" only after it actually plays in full.
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      void (async () => {
-        if (cancelled || isSpeaking()) return; // never collide with in-flight TTS
-        try {
-          const s = useSettingsStore.getState();
-          const apiUrl = getApiBaseUrl();
-          await configureAudioForSpeech();
-          if (cancelled || isSpeaking()) return;
-          await speak(
-            t('swinglab.listening_prompt'),
-            s.voiceGender,
-            s.language,
-            apiUrl,
-            { userInitiated: true },
-          );
-          if (!cancelled) swingLabListeningPromptShown = true; // only after a clean full play
-        } catch {
-          // Non-fatal; advisory only. Leave the flag unset so it can retry.
-        }
-      })();
-    }, 1200);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [trustLevel, t]);
+  // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
+  // swing commands" prompt. Active listening is Caddie-tab + round-only and was
+  // deliberately NOT wired into SmartMotion (one mic, owned by the camera during
+  // capture), so the prompt promised a capability that doesn't exist in any
+  // SwingLab mode — and its warm-up/collision timing made it fire unreliably.
+  // The QuickTutorial intro below is the only voice on this tab now.
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
