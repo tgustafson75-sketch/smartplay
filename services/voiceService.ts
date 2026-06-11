@@ -308,7 +308,12 @@ export const captureUtterance = async (
     formData.append('language', language);
 
     const controller = new AbortController();
-    const cancelTimer = setTimeout(() => controller.abort(), 12_000);
+    // 2026-06-11 — bumped 12s → 20s. Telemetry (transcribe_http "Aborted",
+    // Jun 10–11) showed the client abort firing before a cold/slow Whisper
+    // Lambda responded — the request was killed client-side, not server-side.
+    // Whisper + Gemini fallback can take 8–15s on a cold function or weak
+    // cellular; 20s clears that without leaving a truly-dead request hanging.
+    const cancelTimer = setTimeout(() => controller.abort(), 20_000);
     const res = await fetch(apiUrl + '/api/transcribe', {
       method: 'POST',
       body: formData,
@@ -983,7 +988,11 @@ export const speak = async (
   try {
     const abortController = new AbortController();
     currentAbortController = abortController;
-    const voiceTimeout = setTimeout(() => abortController.abort(), 12_000);
+    // 2026-06-11 — bumped 12s → 20s. Telemetry (speak_catch "Network request
+    // failed", Jun 10–11) included client-side aborts of the TTS fetch when a
+    // cold /api/voice Lambda or weak cellular pushed the round-trip past 12s.
+    // A silent handoff/greeting was the visible symptom. 20s matches transcribe.
+    const voiceTimeout = setTimeout(() => abortController.abort(), 20_000);
 
     // Persona is the source-of-truth selector for ElevenLabs voice routing.
     // Read from settings store at request time (dynamic require avoids a

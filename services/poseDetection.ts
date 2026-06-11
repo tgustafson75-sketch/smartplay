@@ -509,7 +509,12 @@ export async function extractKeyFrames(
 const LOCATE_FRAME_WIDTH = 320;
 const LOCATE_FRAME_COMPRESS = 0.5;
 const LOCATE_MIN_CLIP_MS = 12_000;
-const LOCATE_TIMEOUT_MS = 15_000;
+// 2026-06-11 — bumped 15s → 25s. Telemetry (swing_locate_fallback "Aborted",
+// Jun 10–11) showed the coarse-frame locate pass aborting client-side before a
+// cold /api/swing-analysis Lambda returned. The locate pass is cheap (small
+// frames) but cold-start + inference can exceed 15s; 25s clears it while still
+// failing fast enough to fall back to wide-spread sampling if the server is dead.
+const LOCATE_TIMEOUT_MS = 25_000;
 
 // Small, many, evenly-spread frames tagged with timestamps. Cheap to extract
 // and tiny on the wire — used only to ASK "where's the swing", not to read it.
@@ -610,7 +615,10 @@ export async function locateSwingWindow(
   }
 }
 
-const LOCATE_SWINGS_TIMEOUT_MS = 20_000;
+// 2026-06-11 — bumped 20s → 30s alongside LOCATE_TIMEOUT_MS. Range mode locates
+// across 2-min clips, so its coarse pass is larger and slower than the single-
+// swing locate; give it proportionally more headroom over a cold Lambda.
+const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
 
 /**
  * RANGE MODE (acoustics off) — find ALL swings in a multi-swing clip. Plural
