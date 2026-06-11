@@ -30,7 +30,7 @@ import {
 type Phase =
   | { kind: 'pick' }
   | { kind: 'parsing'; uri: string }
-  | { kind: 'confirm'; uri: string; rounds: NormalizedListRound[]; skippedNoScore: number; confidence: string; warnings: string[] }
+  | { kind: 'confirm'; uri: string; rounds: NormalizedListRound[]; skippedNoScore: number; skippedIncomplete: number; confidence: string; warnings: string[] }
   | { kind: 'error'; message: string; retryable: boolean };
 
 export default function ImportRoundsListScreen() {
@@ -53,12 +53,12 @@ export default function ImportRoundsListScreen() {
     if (parsed.kind === 'ok') {
       const norm = normalizeImportedList(parsed.result.rounds);
       if (norm.keep.length === 0) {
-        setPhase({ kind: 'error', message: norm.skippedNoScore > 0
-          ? 'Every row in that screenshot was missing a score (in-progress rounds). Try a screen with completed rounds.'
+        setPhase({ kind: 'error', message: norm.skippedNoScore > 0 || norm.skippedIncomplete > 0
+          ? 'Every row in that screenshot was an in-progress or unfinished round (no score, or too few holes). Try a screen with completed rounds.'
           : 'No rounds were readable. Try a clearer round-list screenshot.', retryable: true });
         return;
       }
-      setPhase({ kind: 'confirm', uri: picked.uri, rounds: norm.keep, skippedNoScore: norm.skippedNoScore, confidence: parsed.result.confidence, warnings: parsed.result.warnings });
+      setPhase({ kind: 'confirm', uri: picked.uri, rounds: norm.keep, skippedNoScore: norm.skippedNoScore, skippedIncomplete: norm.skippedIncomplete, confidence: parsed.result.confidence, warnings: parsed.result.warnings });
       return;
     }
     if (parsed.kind === 'too_large') { setPhase({ kind: 'error', message: 'Screenshot is too large. Crop it tighter and retry.', retryable: true }); return; }
@@ -169,6 +169,7 @@ export default function ImportRoundsListScreen() {
             </Text>
             <Text style={[styles.cardSub, { color: colors.text_muted, marginBottom: 4 }]}>
               {phase.skippedNoScore > 0 ? `${phase.skippedNoScore} in-progress round${phase.skippedNoScore === 1 ? '' : 's'} (no score) skipped. ` : ''}
+              {phase.skippedIncomplete > 0 ? `${phase.skippedIncomplete} unfinished round${phase.skippedIncomplete === 1 ? '' : 's'} (too few holes) skipped. ` : ''}
               Tap a 9/18 chip to correct it. Read confidence:{' '}
               <Text style={{ fontWeight: '800', color: phase.confidence === 'high' ? colors.accent : phase.confidence === 'low' ? '#F5A623' : colors.text_primary }}>{phase.confidence}</Text>
             </Text>

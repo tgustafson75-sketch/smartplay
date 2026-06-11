@@ -195,44 +195,76 @@ export interface RoundHandicapResult {
 }
 
 /**
+ * 2026-06-11 — Expected 9-hole Score Differential for the "second nine" a
+ * player didn't play, as a function of their Handicap Index. WHS combines a
+ * played-9 differential with this EXPECTED value rather than assuming the
+ * player would repeat the exact nine they shot — which, for a strong nine,
+ * understates the round and biases the Index down. Linear approximation of
+ * the USGA Expected Score Differential table (within ~±0.6 across 0–30).
+ */
+export function expectedNineDifferential(handicapIndex: number): number {
+  const hi = Math.max(0, handicapIndex);
+  return Math.round((0.55 * hi + 2.7) * 10) / 10;
+}
+
+/**
+ * Minimum plausible strokes-per-hole for a COMPLETED round. A finished round
+ * cannot average under this (it would be many-under-par on every hole), so a
+ * score below `holes × MIN_STROKES_PER_HOLE` is an abandoned/partial round —
+ * e.g. an imported "4" from a round quit after one hole.
+ */
+const MIN_STROKES_PER_HOLE = 3;
+
+/**
  * 2026-05-26 — Fix BD: rebuild differentials from a list of historical
  * round records. Used by the "Recalculate Handicap From Round History"
- * button in Settings so a user who has populated their roundHistory via
- * Import Past Round (Batch 28) OR completed in-app rounds can derive
- * their WHS-equivalent Index from scratch without having to enter it
- * manually.
+ * button + the bulk round-list import so a user who has populated their
+ * roundHistory can derive their WHS-equivalent Index from scratch.
  *
- * Approach: for each round, compute a score differential against the
- * neutral USGA baseline (course rating 72.0, slope 113) using the
- * totalScore. Per-hole AGS capping is skipped because imported rounds
- * don't carry per-hole pars; the trend remains meaningful even without
- * per-hole adjustment. Result: differentials in chronological order
- * (oldest first), trimmed to last 20 (the WHS look-back window).
+ * Approach: each round becomes a Score Differential against the neutral USGA
+ * baseline (course rating 72.0 for 18 holes / 36.0 for 9, slope 113). Imported
+ * rounds don't carry real course ratings, so this is an ESTIMATE that runs a
+ * touch under the official WHS Index (which uses each course's true rating).
+ * Per-hole AGS capping is skipped (no per-hole pars). Differentials are
+ * returned oldest-first, trimmed to the last 20 (the WHS look-back window).
  */
 export function rebuildDifferentialsFromHistory(rounds: {
   startedAt: number;
   totalScore: number;
   holesPlayed: number;
 }[]): number[] {
-  // 2026-06-06 — Phase 6.1: 9-hole rounds get totalScore × 2 as an
-  // 18-hole-equivalent for differential math. Previously a 9-hole
-  // round's raw totalScore (~40 strokes) was being fed into a
-  // computeScoreDifferential() expecting an 18-hole AGS (~80-95),
-  // producing falsely-LOW differentials and biasing the user's
-  // estimated Index down by ~10-15 strokes per 9-hole round in
-  // history. WHS handles 9-hole rounds by pairing them; for our
-  // simplified-estimate path, doubling is the cleanest single-round
-  // approximation (assumes the player would have repeated similar
-  // play on a second 9). Partial 10-17 hole rounds are rejected
-  // entirely — there's no honest way to treat them as either format.
-  return rounds
+  const NINE_HOLE_CR = 36; // neutral 9-hole course rating (half of 72)
+  const eligible = rounds
     .filter(r => r.totalScore > 0 && (r.holesPlayed === 9 || r.holesPlayed === 18))
-    .sort((a, b) => a.startedAt - b.startedAt)
-    .map(r => {
-      const adjustedScore = r.holesPlayed === 9 ? r.totalScore * 2 : r.totalScore;
-      return computeScoreDifferential(adjustedScore, 72.0, 113);
-    })
-    .slice(-20);
+    // 2026-06-11 — Drop INCOMPLETE rounds (under MIN_STROKES_PER_HOLE / hole).
+    // An abandoned round (e.g. an imported "4") would otherwise convert into a
+    // wildly-negative differential that lands in the "best 8" and craters the
+    // Index — the single biggest cause of a too-low imported Index.
+    .filter(r => r.totalScore >= MIN_STROKES_PER_HOLE * r.holesPlayed)
+    .sort((a, b) => a.startedAt - b.startedAt);
+
+  // 2026-06-11 — 9-hole rounds need an 18-hole-EQUIVALENT differential.
+  // OLD: double the gross score (score×2 vs 72) — treats a strong nine as if
+  // repeated, understating the differential and biasing the Index DOWN (a
+  // good 39 became a near-scratch 78). NEW (WHS): played-9 differential + the
+  // player's EXPECTED second nine (expectedNineDifferential, a function of the
+  // Index). That's circular — the Index depends on the differentials — so we
+  // iterate to a fixed point from a neutral seed (converges in 2–3 passes).
+  let hi = 14;
+  let diffs: number[] = [];
+  for (let pass = 0; pass < 8; pass++) {
+    diffs = eligible.map(r =>
+      r.holesPlayed === 9
+        ? Math.round((computeScoreDifferential(r.totalScore, NINE_HOLE_CR, NEUTRAL_SLOPE) + expectedNineDifferential(hi)) * 10) / 10
+        : computeScoreDifferential(r.totalScore, 72.0, NEUTRAL_SLOPE),
+    );
+    const est = estimateNewIndex(diffs);
+    if (est.newIndex == null) break;
+    const converged = Math.abs(est.newIndex - hi) < 0.05;
+    hi = est.newIndex;
+    if (converged) break;
+  }
+  return diffs.slice(-20);
 }
 
 export function computeRoundHandicap(input: {

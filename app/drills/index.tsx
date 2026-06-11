@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
 
 // 2026-05-27 — Fix EF: pin Tank's drill first, Randy's drill second.
@@ -38,6 +39,11 @@ export default function DrillsIndex() {
   // system UI. New chipping + tank_caddie cards (rows 5-6) hit this
   // hardest. Add insets.bottom + 32 so the floor scales with device.
   const insets = useSafeAreaInsets();
+  // 2026-06-11 — Fix: on a narrow cover screen (Galaxy Z Fold closed, ~348dp,
+  // and small phones) two 48.5% cards render too small to read. Drop to a
+  // single full-width column under 380dp; mainstream phones keep the 2-col grid.
+  const { width } = useDeviceLayout();
+  const oneCol = width < 380;
 
   // 2026-05-27 — Fix EF: render pinned drills first (Tank → Randy →
   // rest in catalog order). Memoized so the sort only runs on catalog
@@ -92,6 +98,7 @@ export default function DrillsIndex() {
               key={entry.id}
               entry={entry}
               colors={colors}
+              oneCol={oneCol}
               onPress={() => router.push(`/drills/${entry.id}` as never)}
             />
           ))}
@@ -104,10 +111,11 @@ export default function DrillsIndex() {
 interface DrillCardProps {
   entry: DrillEntry;
   colors: ReturnType<typeof useTheme>['colors'];
+  oneCol: boolean;
   onPress: () => void;
 }
 
-function DrillCard({ entry, colors, onPress }: DrillCardProps) {
+function DrillCard({ entry, colors, oneCol, onPress }: DrillCardProps) {
   return (
     <Pressable
       onPress={onPress}
@@ -115,6 +123,7 @@ function DrillCard({ entry, colors, onPress }: DrillCardProps) {
       accessibilityLabel={`${entry.title}. ${entry.missPattern}.`}
       style={({ pressed }) => [
         styles.card,
+        { width: oneCol ? '100%' : '48.5%' },
         {
           backgroundColor: colors.surface_elevated,
           borderColor: colors.border,

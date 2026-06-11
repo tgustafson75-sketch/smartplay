@@ -40,6 +40,7 @@ import { detectStrikes, type MeterSample } from '../../services/swing/strikeDete
 import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections } from '../../services/swing/swingSegmentation';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
+import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 
 interface ScenarioResult {
   scenario: string;
@@ -1257,37 +1258,41 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // 9-hole rounds land in the 30s/40s, 18-hole rounds in the 80s/90s, and a
   // couple of rows are in-progress with no score.
   const rows: ListedRoundRow[] = [
-    { played_date: '2026-06-04', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 39, score_vs_par: 4, holes_played: null },
+    { played_date: '2026-06-04', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 39, score_vs_par: 4, holes_played: null },  // par 35 → 9h (vs-par)
     { played_date: '2026-05-25', course_name: 'Menifee Lakes Country Club - Palms', total_score: null, score_vs_par: null, holes_played: null }, // no score → drop
     { played_date: '2026-05-21', course_name: 'Menifee Lakes Country Club - Palms', total_score: null, score_vs_par: null, holes_played: null }, // no score → drop
-    { played_date: '2026-04-18', course_name: 'Menifee Lakes Country Club - Lakes', total_score: 87, score_vs_par: 15, holes_played: null },
-    { played_date: '2026-02-13', course_name: 'Riverwalk Golf Club', total_score: 93, score_vs_par: 21, holes_played: null },
-    { played_date: '2026-01-19', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 35, score_vs_par: 4, holes_played: null }, // sub-50 → 9-hole
-    { played_date: '2025-12-16', course_name: 'The Golf Club at Rancho California', total_score: 45, score_vs_par: 9, holes_played: 18 }, // stated 18 overrides forties rule
+    { played_date: '2026-05-06', course_name: 'Menifee Lakes Country Club - Palms', total_score: 4, score_vs_par: 0, holes_played: null },   // par 4 → abandoned → drop
+    { played_date: '2026-04-18', course_name: 'Menifee Lakes Country Club - Lakes', total_score: 87, score_vs_par: 15, holes_played: null }, // par 72 → 18h (vs-par)
+    { played_date: '2026-02-13', course_name: 'Riverwalk Golf Club', total_score: 93, score_vs_par: 21, holes_played: null },               // par 72 → 18h (vs-par)
+    { played_date: '2026-01-19', course_name: 'Echo Hills Golf Club - Echo Hills', total_score: 44, score_vs_par: null, holes_played: null }, // no vs-par → forties → 9h
+    { played_date: '2025-12-16', course_name: 'The Golf Club at Rancho California', total_score: 55, score_vs_par: null, holes_played: 9 },  // stated 9 overrides (forties would say 18)
   ];
   const norm = normalizeImportedList(rows);
 
-  check('Bulk import: drops no-score (in-progress) rounds',
-    norm.skippedNoScore === 2 && norm.keep.length === 5,
-    'rows with a blank score are dropped as incomplete; only scored rounds are kept');
+  check('Bulk import: drops no-score AND abandoned (sub-3/hole) rounds',
+    norm.skippedNoScore === 2 && norm.skippedIncomplete === 1 && norm.keep.length === 5,
+    'two blank-score rows dropped; the "4" abandoned round dropped as incomplete; 5 real rounds kept');
 
   const echo39 = norm.keep.find(r => r.totalScore === 39)!;
-  const echo35 = norm.keep.find(r => r.totalScore === 35)!;
-  check('Bulk import: a 39/35 is read as a 9-hole round (forties rule)',
-    echo39.holesPlayed === 9 && echo39.nineHoleMode && echo39.holesSource === 'forties_rule' &&
-      echo35.holesPlayed === 9 && echo35.holesSource === 'forties_rule',
-    "sub-50 gross → 9-hole so the handicap pipeline doubles it instead of reading a 39 as a brilliant 18");
+  check('Bulk import: hole count derived from par-played (vs-par), not gross guess',
+    echo39.holesPlayed === 9 && echo39.nineHoleMode && echo39.holesSource === 'vs_par',
+    "score−vsPar = par 35 → 9-hole, tagged vs_par (reliable signal, not the sub-50 gross guess)");
 
   const round87 = norm.keep.find(r => r.totalScore === 87)!;
   const round93 = norm.keep.find(r => r.totalScore === 93)!;
-  check('Bulk import: 80s/90s are 18-hole rounds',
-    round87.holesPlayed === 18 && !round87.nineHoleMode && round93.holesPlayed === 18,
-    'a normal full-round gross stays 18-hole');
+  check('Bulk import: 80s/90s (par ~72) are 18-hole rounds',
+    round87.holesPlayed === 18 && !round87.nineHoleMode && round87.holesSource === 'vs_par' && round93.holesPlayed === 18,
+    'a par-72 full-round stays 18-hole via par-played');
 
-  const stated = norm.keep.find(r => r.totalScore === 45)!;
-  check('Bulk import: a stated hole count overrides the score heuristic',
-    stated.holesPlayed === 18 && stated.holesSource === 'stated',
-    'when the screenshot says 18, a 45 is kept as 18-hole (not flipped to 9 by the forties rule)');
+  const forties44 = norm.keep.find(r => r.totalScore === 44)!;
+  check('Bulk import: forties rule still classifies a 9 when no vs-par is present',
+    forties44.holesPlayed === 9 && forties44.holesSource === 'forties_rule',
+    'a sub-50 gross with no vs-par falls back to the 9-hole guess');
+
+  const stated = norm.keep.find(r => r.totalScore === 55)!;
+  check('Bulk import: a stated hole count overrides the heuristics',
+    stated.holesPlayed === 9 && stated.holesSource === 'stated',
+    'when the screenshot says 9, a 55 is kept as 9-hole (forties would have called it 18)');
 
   const persist = buildListPersistInput(echo39);
   check('Bulk import: persist input matches addImportedRound shape',
@@ -1552,6 +1557,35 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Pose: local Expo module registers MlkitPoseModule for autolinking',
     /expo\.modules\.mlkitpose\.MlkitPoseModule/.test(mlkitCfg),
     "the native module is discoverable by expo prebuild/EAS so requireOptionalNativeModule('MlkitPose') resolves on a real build");
+
+  // ─── Handicap: incomplete-round drop + proper 9-hole conversion ──────────
+  // Tim's real Golfshot history (score, holes): the May-06 "4" is an
+  // abandoned round; Golfshot's official Index is 17.9, his own estimate ~16.
+  const TIM_ROUNDS = [
+    [39, 9], [4, 9], [44, 9], [87, 18], [40, 9], [93, 18], [45, 9], [93, 18], [90, 18], [44, 9],
+    [40, 9], [43, 9], [88, 18], [46, 9], [89, 18], [99, 18], [46, 9], [90, 18], [94, 18], [91, 18],
+  ].map(([s, h], i) => ({ startedAt: i * 1000, totalScore: s, holesPlayed: h }));
+  const timDiffs = rebuildDifferentialsFromHistory(TIM_ROUNDS);
+  const timIndex = estimateNewIndex(timDiffs).newIndex;
+  check('Handicap: incomplete "4" round is dropped from the differentials',
+    timDiffs.length === 19,
+    `19 differentials expected (20 rounds − 1 abandoned 4); got ${timDiffs.length}`);
+  check('Handicap: Tim\'s real history lands ~16 (was 8.7), near Golfshot 17.9',
+    timIndex != null && timIndex >= 15 && timIndex <= 17.5,
+    `expected ~16.2 (the naive double-score method gave 8.7); got ${timIndex}`);
+
+  // A lone abandoned round must not produce a phantom-great differential.
+  const partialOnly = rebuildDifferentialsFromHistory([
+    { startedAt: 1, totalScore: 4, holesPlayed: 9 },
+    { startedAt: 2, totalScore: 20, holesPlayed: 18 },
+  ]);
+  check('Handicap: sub-3-strokes/hole rounds excluded (4@9h, 20@18h both partial)',
+    partialOnly.length === 0,
+    `both are under 3 strokes/hole = incomplete; got ${partialOnly.length} differentials`);
+
+  check('Handicap: expectedNineDifferential rises with Index (WHS second-nine)',
+    expectedNineDifferential(8) < expectedNineDifferential(18) && expectedNineDifferential(18) > 10,
+    `expected a monotonic, ~10-13 value at HI 18; got ${expectedNineDifferential(18)}`);
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
