@@ -191,6 +191,32 @@ function AppNavigator() {
     return () => { unsubA?.(); unsubB?.(); };
   }, []);
 
+  // 2026-06-12 (CNS fix) — onboarding was removed, so synthesizeOnboardingProfile (which
+  // builds the brain's "ABOUT THIS GOLFER" kevinContext block) lost its trigger and the
+  // block never populated — the caddie's day-one "knows me" grounding silently went dark.
+  // Backfill it ONCE after the profile hydrates, when there's real profile data but no
+  // kevinContext yet. Fire-and-forget; the synthesizer is fully guarded, and the brain
+  // already falls back to discrete profile fields if this never lands.
+  useEffect(() => {
+    let done = false;
+    const tryBackfill = (): boolean => {
+      if (done) return true;
+      if (!usePlayerProfileStore.persist.hasHydrated()) return false;
+      done = true;
+      const p = usePlayerProfileStore.getState();
+      const hasData = p.handicap != null || !!p.goal || !!p.dominantMiss || !!p.homeCourse;
+      if (hasData && !p.kevinContext) {
+        void import('../services/contextSynthesizer')
+          .then(m => m.synthesizeOnboardingProfile())
+          .catch(() => { /* non-fatal */ });
+      }
+      return true;
+    };
+    if (tryBackfill()) return;
+    const unsub = usePlayerProfileStore.persist.onFinishHydration(() => { tryBackfill(); });
+    return () => { unsub?.(); };
+  }, []);
+
   // Intentionally removed: do not redirect here. app/index.tsx owns initial
   // routing after hydration. A guard here fires before AsyncStorage hydrates,
   // races against index.tsx's redirect, and corrupts the nav stack.

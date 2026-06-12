@@ -121,7 +121,8 @@
     "owner": "tgustafson76",
     "runtimeVersion": "1.0.0",
     "updates": {
-      "url": "https://u.expo.dev/60b7ee0e-0165-4971-a9c8-219960fed645"
+      "url": "https://u.expo.dev/60b7ee0e-0165-4971-a9c8-219960fed645",
+      "fallbackToCacheTimeout": 10000
     }
   }
 }
