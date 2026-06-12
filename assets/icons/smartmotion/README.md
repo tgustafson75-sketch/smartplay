@@ -38,5 +38,12 @@ set on one sheet (evenly spaced columns) the same way the existing ones were.
 
 ## Current assets
 - Rail: `rail-calibrate` `rail-ballbox` `rail-selfie` `rail-chip` + `env-{cage,range,course}` + `club-detect`
-- Angle badges: `angle-{dtl,faceon,putt}`  · Controls: `ctrl-{record,playpause,slowmo,delete,save}`
+- Angle badges: `angle-{dtl,faceon,putt}`  · Controls: `ctrl-{record,playpause,slowmo,delete,save,stop}`
+- Metric badges: `metric-{tempo,ballspeed,ballresult,clubpath,faceangle,smash}` · Biomech: `biomech-{sway,tilt,posture,weight,shoulder,hip}`
 - Feature marks (saved, not yet wired): `feature-{smartmotion,swingvision}`
+
+> NOTE: `ctrl-stop`, `metric-clubpath`, `biomech-shoulder`, `biomech-hip` (2026-06-12) were
+> rendered programmatically (PIL, `/tmp/gen_icons.py`) to this exact spec — thin `#88F700`
+> line art, no fill, transparent, ~85% of a thin lime circle — because they're geometric
+> (square / rotation arrows / swept arc). Swap with hand-made ChatGPT versions anytime; the
+> `require()` maps already point at these names.

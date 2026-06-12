@@ -59,7 +59,6 @@ import { evaluateSwingValidity } from '../../services/swingValidity';
 import {
   synthesizeSwingMetrics,
   isTruthGrade,
-  type SwingMetric,
   type SwingMetricSet,
 } from '../../services/swingMetricsService';
 import {
@@ -83,7 +82,6 @@ import { useRoundStore } from '../../store/roundStore';
 import {
   SmartMotionHeader,
   CaptureGuides,
-  MetricRail,
   SpeedStat,
   TempoBar,
   BodyAnalysisRow,
@@ -157,6 +155,7 @@ const ICON_METRIC = {
   ballresult: require('../../assets/icons/smartmotion/metric-ballresult.png'),
   face: require('../../assets/icons/smartmotion/metric-faceangle.png'),
   smash: require('../../assets/icons/smartmotion/metric-smash.png'),
+  clubpath: require('../../assets/icons/smartmotion/metric-clubpath.png'),
 } as const;
 // Biomech RESULT badges (Tim — the dashed-line set for the body-analysis row).
 const ICON_BIOMECH = {
@@ -164,6 +163,8 @@ const ICON_BIOMECH = {
   tilt: require('../../assets/icons/smartmotion/biomech-tilt.png'),
   posture: require('../../assets/icons/smartmotion/biomech-posture.png'),
   weight: require('../../assets/icons/smartmotion/biomech-weight.png'),
+  shoulder: require('../../assets/icons/smartmotion/biomech-shoulder.png'),
+  hip: require('../../assets/icons/smartmotion/biomech-hip.png'),
 } as const;
 // 2026-06-12 — the rest of the rail as matching green-circle badges (Tim's art), so
 // every rail button uses its OWN circle (our button border dropped — no double circle).
@@ -180,6 +181,7 @@ const ICON_CTRL = {
   slowmo: require('../../assets/icons/smartmotion/ctrl-slowmo.png'),
   delete: require('../../assets/icons/smartmotion/ctrl-delete.png'),
   save: require('../../assets/icons/smartmotion/ctrl-save.png'),
+  stop: require('../../assets/icons/smartmotion/ctrl-stop.png'),
 } as const;
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
@@ -192,31 +194,6 @@ function transitionLabel(score: number): string {
   if (score > 65) return 'hips lead';
   if (score < 35) return 'shoulders lead';
   return 'even';
-}
-
-function metricToSpec(key: string, label: string, m: SwingMetric, icon?: MetricSpec['icon']): MetricSpec {
-  return {
-    key,
-    label,
-    value: m.value != null ? String(m.value) : null,
-    unit: m.unit || undefined,
-    estimate: !isTruthGrade(m.source),
-    confidence: m.confidenceLabel,
-    status: m.value != null && m.range ? `${m.range[0]}–${m.range[1]}` : undefined,
-    statusTone: 'neutral',
-    icon,
-  };
-}
-
-function degSpec(key: string, label: string, deg: number | null | undefined, icon?: MetricSpec['icon']): MetricSpec {
-  return {
-    key,
-    label,
-    value: deg != null ? String(Math.round(deg)) : null,
-    unit: deg != null ? '°' : undefined,
-    estimate: true,
-    icon,
-  };
 }
 
 // Club path is qualitative (we don't measure degrees on a phone).
@@ -685,15 +662,20 @@ export default function SmartMotion() {
     [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap, club],
   );
 
-  const railMetrics: MetricSpec[] = useMemo(
-    () => [
-      clubPathSpec(analysis),
-      degSpec('shoulder_turn', 'SHOULDER', biomech?.shoulderTurnDeg, 'sync-outline'),
-      degSpec('hip_turn', 'HIP TURN', biomech?.hipTurnDeg, 'refresh-outline'),
-      metricToSpec('smash', 'SMASH', metrics.smash_factor, 'flash-outline'),
-    ],
-    [analysis, biomech, metrics],
-  );
+  // 2026-06-12 — RIGHT rail: now the SAME custom green badges as the left rail
+  // (Tim — no more teal Ionicon cards). Club path (qualitative, OUT→IN / IN→OUT
+  // or "—"), shoulder turn, hip turn. SMASH is DROPPED here — it's parked (no club
+  // speed) and lives on the page-2 COMING SOON roadmap, so it must not masquerade
+  // as a live rail metric (honesty rule). Each shows "—" until measured.
+  const rightMetrics = useMemo(() => {
+    if (isPutt) return [];
+    const path = clubPathSpec(analysis);
+    return [
+      { key: 'club_path', img: ICON_METRIC.clubpath, value: path.value, unit: '', label: 'CLUB PATH' },
+      { key: 'shoulder', img: ICON_BIOMECH.shoulder, value: biomech?.shoulderTurnDeg != null ? `${Math.round(biomech.shoulderTurnDeg)}` : null, unit: '°', label: 'SHOULDER' },
+      { key: 'hip', img: ICON_BIOMECH.hip, value: biomech?.hipTurnDeg != null ? `${Math.round(biomech.hipTurnDeg)}` : null, unit: '°', label: 'HIP TURN' },
+    ];
+  }, [isPutt, analysis, biomech]);
   // 2026-06-12 — LEFT rail: the ball/result metrics as custom badges (Tim). Honest +
   // distinct: TEMPO (ratio), BALL SPEED (acoustic mph), BALL RESULT (the DTL trace's
   // start direction). Each shows "—" until measured — no fabricated number. (Inferred
@@ -1812,8 +1794,10 @@ export default function SmartMotion() {
   // Stop. Review: Play/Pause · Slow-mo · Save · Delete · Record-again.
   const actionBtn =
     phase === 'recording' ? (
-      <Pressable onPress={() => void stopRecording()} style={[styles.barBtn, { backgroundColor: colors.error }]} accessibilityRole="button" accessibilityLabel="Stop recording">
-        <Ionicons name="stop" size={22} color="#fff" />
+      // Stop as the matching green-circle badge (Tim's set), with a faint red fill so
+      // "recording — tap to stop" still reads as live/urgent against the rest of the bar.
+      <Pressable onPress={() => void stopRecording()} style={[styles.toolBtnBare, styles.barBtnStop]} accessibilityRole="button" accessibilityLabel="Stop recording">
+        <Image source={ICON_CTRL.stop} style={{ width: 56, height: 56 }} resizeMode="contain" />
       </Pressable>
     ) : isReview ? (
       // Review controls as matching green-circle badges (Tim's art): play/pause ·
@@ -2222,8 +2206,18 @@ export default function SmartMotion() {
 
         {/* RIGHT RAIL — floating metric cards (review) */}
         {isReview && showResults && !isPutt ? (
-          <View style={[styles.rightRail, { top: insets.top + 60 }]}>
-            <MetricRail metrics={railMetrics} />
+          <View style={[styles.rightRail, { top: insets.top + 60 }]} pointerEvents="none">
+            {rightMetrics.map((m) => (
+              <View key={m.key} style={styles.metricBadgeCard}>
+                <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
+                <View style={styles.metricBadgeText}>
+                  <Text style={styles.metricBadgeValue} numberOfLines={1}>
+                    {m.value ?? '—'}{m.value != null && m.unit ? <Text style={styles.metricBadgeUnit}>{m.unit}</Text> : null}
+                  </Text>
+                  <Text style={styles.metricBadgeLabel} numberOfLines={1}>{m.label}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -2696,7 +2690,7 @@ const styles = StyleSheet.create({
   dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
 
-  rightRail: { position: 'absolute', right: 8, width: 118, gap: 8, zIndex: 4 },
+  rightRail: { position: 'absolute', right: 8, width: 124, gap: 8, zIndex: 4 },
   leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },
   metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.62)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.28)' },
   metricBadgeImg: { width: 32, height: 32 },
@@ -2789,6 +2783,7 @@ const styles = StyleSheet.create({
   barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' },
   overlayToggle: { position: 'absolute', right: 46, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', zIndex: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.5)' },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
+  barBtnStop: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(229,72,77,0.22)' },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
   barRate: { fontSize: 15, fontWeight: '900' },
 
