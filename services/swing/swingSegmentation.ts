@@ -141,3 +141,58 @@ export function segmentsFromVideoSwings(
   }));
   return segmentsFromStrikes(pseudo, durationMs, opts);
 }
+
+/** How close (ms) an acoustic candidate must be to a video-located swing to be
+ *  accepted as that swing's impact. ~0.6s spans the slop between the visual
+ *  locator's coarse frame time and the true strike instant without reaching the
+ *  next swing (swings are ≥2.5s apart — see MIN_SWING_SEP_SEC). */
+export const STRIKE_VIDEO_TOLERANCE_MS = 600;
+
+/**
+ * 2026-06-11 — RANGE correlation: acoustics PROPOSE *when*, vision DISPOSES *which*.
+ *
+ * On a busy range a mono mic can't tell your strike from the stall next door, so
+ * acoustic candidates alone aren't trustworthy. But the VIDEO locator only ever
+ * finds the swing that's actually in YOUR frame. So we make the video swings the
+ * spine (the count is never inflated by a neighbour's sound) and let each
+ * acoustic candidate, when it lands within `toleranceMs` of a video swing, donate
+ * the one thing video can't give precisely: the true impact instant + its energy
+ * (`peakDb`) — which is what makes honest tempo and the ball-trace anchor possible
+ * on the range.
+ *
+ * - video swing WITH a nearby acoustic candidate → acoustic-confirmed: precise
+ *   `strikeMs` + real `peakDb`, confidence upgraded to the stronger signal.
+ * - video swing with NO nearby candidate → kept, visual time, `peakDb` 0 (still
+ *   your swing — just not heard cleanly over the noise).
+ * - acoustic candidate with NO video swing → DROPPED (a neighbour's strike).
+ *
+ * Reuses segmentsFromStrikes for windowing/clamping, so the reel + per-swing
+ * analysis downstream are identical to every other mode (one shared spine).
+ */
+export function correlateStrikesWithVideo(
+  strikes: DetectedStrike[],
+  videoSwings: Array<{ timeSec: number; confidence: 'high' | 'medium' | 'low' }>,
+  durationMs: number,
+  opts?: SegmentOptions & { toleranceMs?: number },
+): SwingSegment[] {
+  const tol = opts?.toleranceMs ?? STRIKE_VIDEO_TOLERANCE_MS;
+  const pseudo: DetectedStrike[] = videoSwings.map((sw) => {
+    const tMs = Math.round(sw.timeSec * 1000);
+    let best: DetectedStrike | null = null;
+    let bestDist = Infinity;
+    for (const s of strikes) {
+      const d = Math.abs(s.timeMs - tMs);
+      if (d <= tol && d < bestDist) { bestDist = d; best = s; }
+    }
+    if (best) {
+      // Confirmed by two signals → confidence is the STRONGER of the two
+      // (acoustic energy ∪ visual): a clean strike upgrades a tentative video read.
+      const rank = { low: 1, medium: 2, high: 3 } as const;
+      const confidence: 'high' | 'medium' | 'low' =
+        rank[best.confidence] >= rank[sw.confidence] ? best.confidence : sw.confidence;
+      return { timeMs: best.timeMs, peakDb: best.peakDb, attackMs: best.attackMs, confidence };
+    }
+    return { timeMs: tMs, peakDb: 0, attackMs: 0, confidence: sw.confidence };
+  });
+  return segmentsFromStrikes(pseudo, durationMs, opts);
+}

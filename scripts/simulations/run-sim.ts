@@ -38,7 +38,7 @@ import {
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 import { classifyStroke } from '../../utils/geometryFitting';
-import { mergeSwingDetections } from '../../services/swing/swingSegmentation';
+import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
@@ -1053,35 +1053,73 @@ check('Pre-response conversational filler removed from the main voice path',
     /const rawResponse = await sendToBrain\(transcript\)/.test(vcWarmSrc),
   "the 'Let me see...' bridge no longer fires before Kevin's reply (it conflicted with the now-fast brain that already opens conversationally); the brain response is awaited directly and tool-action ack clips are untouched");
 
-// 2026-06-10 — Environment mode phase 1: range gets a longer window + acoustics
-// off; cage path unchanged (default). Additive, mode-gated.
+// 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
+// the metered track (acoustic candidates the video confirms). Course stays off.
 const smEnvSrc = read('app/swinglab/smartmotion.tsx');
-check('Environment mode phase 1: range window + acoustics-off gating (cage unchanged)',
+check('Environment mode phase 1: range window + metering gating (cage+range on, course off)',
   /environmentMode: 'cage' \| 'range' \| 'course'/.test(read('store/settingsStore.ts')) &&
     /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
     /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
-    /if \(captureMode === 'cage'\) \{/.test(smEnvSrc) &&            // metering only in cage
-    /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc), // toggle cycles modes
-  'range records up to 120s and starts NO metered audio; ONLY cage keeps the acoustic metered track (range + course go acoustics-off); a setup-rail toggle cycles cage/range/course');
+    /if \(captureMode === 'cage' \|\| captureMode === 'range'\) \{/.test(smEnvSrc) && // metering: cage+range, NOT course
+    /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc),                  // toggle cycles modes
+  'range records up to 120s and now ALSO runs the metered audio track (its strikes are candidates the in-frame video confirms); ONLY course goes acoustics-off (wind, single shot); a setup-rail toggle cycles cage/range/course');
 
-// 2026-06-10 — Environment mode phase 2: range segments swings from VIDEO.
-check('Environment mode phase 2: range video swing-segmentation (acoustics off)',
-  /export function segmentsFromVideoSwings/.test(read('services/swing/swingSegmentation.ts')) &&
+// 2026-06-11 — Environment mode phase 2: RANGE correlates acoustics with video.
+// Acoustics propose WHEN, the in-frame video locator disposes WHICH are yours.
+check('Environment mode phase 2: range acoustic↔video correlation (propose/dispose)',
+  /export function correlateStrikesWithVideo/.test(read('services/swing/swingSegmentation.ts')) &&
     /export async function locateSwings/.test(read('services/poseDetection.ts')) &&
     /mode: 'locate_swings'/.test(read('services/poseDetection.ts')) &&
     /body\.mode === 'locate_swings'/.test(read('api/swing-analysis.ts')) &&
-    /stopMode === 'range' \|\| \(stopMode === 'cage' && detectedSegments\.length <= 1\)/.test(smEnvSrc) &&
-    /segmentsFromVideoSwings\(swings, durMs\)/.test(smEnvSrc),
-  'range (acoustics off) segments swings from video — locateSwings() asks the server locate_swings mode for all swing times, segmentsFromVideoSwings() builds the SAME SwingSegment[] the cage acoustic path uses; cage also uses this as a SAFETY NET only when acoustics yield 0 segments; empty result still falls back to single-swing localization');
+    /if \(stopMode === 'range'\) \{/.test(smEnvSrc) &&
+    /correlateStrikesWithVideo\(acousticStrikes, swings, durMs\)/.test(smEnvSrc) &&
+    /segmentsFromVideoSwings\(swings, durMs\); \/\/ nothing heard cleanly/.test(smEnvSrc) &&
+    /segmentsFromStrikes\(acousticStrikes, durMs\); \/\/ vision empty/.test(smEnvSrc),
+  'range makes the VIDEO locator the spine (count never inflated by a neighbour); correlateStrikesWithVideo snaps each acoustic candidate onto its in-frame swing for a precise impact + peakDb; degrades to video-only (nothing heard) or acoustic-only (vision empty); unmatched neighbour strikes are dropped');
+
+// 2026-06-11 — Behavioral: the correlation itself is neighbour-proof + precise.
+// Two in-frame video swings (~5s, ~12s); acoustic candidates include a MATCH for
+// each (slightly off in time, loud) PLUS a neighbour strike at ~8.4s with no
+// video swing near it. Expect: 2 segments (video count, neighbour dropped), each
+// with the precise acoustic strikeMs + real peakDb.
+{
+  const videoSwings = [
+    { timeSec: 5.0, confidence: 'high' as const },
+    { timeSec: 12.0, confidence: 'low' as const },
+  ];
+  const strikes = [
+    { timeMs: 5180, peakDb: 41, attackMs: 12, confidence: 'high' as const },   // matches swing 1 (+180ms)
+    { timeMs: 8420, peakDb: 38, attackMs: 9, confidence: 'high' as const },    // NEIGHBOUR — no video swing
+    { timeMs: 12350, peakDb: 30, attackMs: 15, confidence: 'medium' as const },// matches swing 2 (+350ms)
+  ];
+  const segs = correlateStrikesWithVideo(strikes, videoSwings, 60_000);
+  const neighbourDropped = segs.length === 2;
+  const s0Precise = segs[0]?.strikeMs === 5180 && segs[0]?.peakDb === 41;       // acoustic donated time+energy
+  const s1Precise = segs[1]?.strikeMs === 12350 && segs[1]?.peakDb === 30;
+  const s1ConfUpgraded = segs[1]?.confidence === 'medium';                       // low video ∪ medium acoustic → medium
+  check('SmartMotion: range correlation is neighbour-proof + acoustic-precise (behavioral)',
+    neighbourDropped && s0Precise && s1Precise && s1ConfUpgraded,
+    `2 swings in frame + a stray neighbour strike → ${segs.length} segments (expect 2), strikeMs ${segs[0]?.strikeMs}/${segs[1]?.strikeMs} with peakDb ${segs[0]?.peakDb}/${segs[1]?.peakDb}: the neighbour at 8.42s is dropped (no in-frame swing), each kept swing carries its confirmed acoustic impact + energy`);
+
+  // A swing the mic never heard cleanly still survives (visual time, peakDb 0).
+  const unheard = correlateStrikesWithVideo(
+    [{ timeMs: 5180, peakDb: 41, attackMs: 12, confidence: 'high' as const }],
+    [{ timeSec: 5.0, confidence: 'high' as const }, { timeSec: 30.0, confidence: 'low' as const }],
+    60_000,
+  );
+  check('SmartMotion: range correlation keeps an unheard in-frame swing (degrade, not drop)',
+    unheard.length === 2 && unheard[1]?.peakDb === 0 && unheard[1]?.strikeMs === 30_000,
+    `a 2nd in-frame swing with no acoustic match is kept at its visual time with peakDb 0 (still your swing, just not heard) → ${unheard.length} segments, swing2 peakDb ${unheard[1]?.peakDb}`);
+}
 
 // 2026-06-10 — Environment mode phase 3: course = acoustics off + single shot,
 // and a live round forces course.
 check('Environment mode phase 3: course is acoustics-off single-shot; a live round forces course',
   /const effectiveMode.*isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) &&           // round forces course (reactive)
     /isRoundActive[\s\S]{0,30}\? 'course'[\s\S]{0,60}environmentMode/.test(smEnvSrc) &&           // and at capture time
-    /if \(captureMode === 'cage'\) \{/.test(smEnvSrc) &&                                            // course skips metering (not cage)
+    /if \(captureMode === 'cage' \|\| captureMode === 'range'\) \{/.test(smEnvSrc) &&              // course is excluded from metering
     /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
-  'course mode disables acoustics (wind) and is single-shot (skips range multi-segmentation → single-swing localization); a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
+  'course mode disables acoustics (wind) and is single-shot (skips multi-segmentation → single-swing localization); metering runs for cage+range but NOT course; a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
 
 // 2026-06-10 — Multi-swing UPLOAD expansion: a 60s uploaded video with several
 // swings gets one per-swing card, not "1 of 1".
@@ -1338,7 +1376,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
   check('SmartMotion: cage falls back to video locator when acoustics under-detect',
-    /stopMode === 'range' \|\| \(stopMode === 'cage' && detectedSegments\.length <= 1\)/.test(smSrc2) &&
+    /else if \(stopMode === 'cage' && detectedSegments\.length <= 1\) \{/.test(smSrc2) &&
       /worthVideo/.test(smSrc2),
     'cage acoustics that zero out (loud bay) OR find ≤1 strike in a long clip (cage mode at an open range) cross-check the video locator and use it when it finds more — working multi-strike acoustic captures are untouched');
 

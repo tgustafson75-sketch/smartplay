@@ -68,11 +68,23 @@ export interface DetectStrikesOptions {
   thresholdDb?: number;
   /** Minimum recording length to accept. Default 2000ms. */
   minRecordingMs?: number;
+  /**
+   * 2026-06-11 — override the "too loud to trust" floor (default -30dB). The
+   * cage uses the strict default (acoustics are the sole authority there, so a
+   * loud bay must bail rather than emit garbage). RANGE passes a higher ceiling:
+   * its strikes are only ever CANDIDATES the in-frame video confirms
+   * (correlateStrikesWithVideo), so a noisy floor can't produce a false swing —
+   * the worst case is an unconfirmed candidate that vision simply drops. Letting
+   * the detector run on a loud range is what makes the acoustic anchor available
+   * there at all.
+   */
+  noisyFloorDb?: number;
 }
 
 export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOptions): StrikeDetectionResult {
   const thresholdDb = opts?.thresholdDb ?? STRIKE_THRESHOLD_DB;
   const minRecordingMs = opts?.minRecordingMs ?? MIN_RECORDING_MS;
+  const noisyFloorDb = opts?.noisyFloorDb ?? NOISY_FLOOR_DB;
   if (samples.length < 2) {
     return { kind: 'too-short', floorDb: -160 };
   }
@@ -87,7 +99,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   if (totalMs < minRecordingMs) {
     return { kind: 'too-short', floorDb };
   }
-  if (floorDb > NOISY_FLOOR_DB) {
+  if (floorDb > noisyFloorDb) {
     return { kind: 'noisy-environment', floorDb };
   }
 

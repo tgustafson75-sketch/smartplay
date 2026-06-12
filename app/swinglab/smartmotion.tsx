@@ -66,8 +66,8 @@ import {
   type SwingTempo,
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
-import { detectStrikes } from '../../services/swing/strikeDetector';
-import { segmentsFromStrikes, segmentsFromVideoSwings, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { useFamilyStore } from '../../store/familyStore';
@@ -1080,14 +1080,18 @@ export default function SmartMotion() {
     // 2026-06-10 — Mode-aware capture. Read fresh so the current state wins
     // without re-creating this callback. A live round forces COURSE.
     //   cage   → metered audio track for acoustic multi-strike segmentation
-    //   range  → acoustics OFF (neighbors/outdoor), 2-min video multi-swing
+    //   range  → metered track ALSO runs, but as CANDIDATES the video locator
+    //            confirms (acoustics propose when, vision disposes which — the
+    //            mic can't separate a neighbour's strike, the in-frame video can)
     //   course → acoustics OFF (wind), single shot via video localization
-    // Only the CAGE keeps the metered track; range + course go video-only.
+    // 2026-06-11 — range was video-only; now it keeps the metered track too so a
+    // confirmed strike donates the precise impact instant + peakDb (honest tempo
+    // + the ball-trace anchor). Course stays off (single shot, wind).
     const captureMode = useRoundStore.getState().isRoundActive
       ? 'course'
       : useSettingsStore.getState().environmentMode;
     const maxSec = captureMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
-    if (captureMode === 'cage') {
+    if (captureMode === 'cage' || captureMode === 'range') {
       // Parallel metered audio track for multi-strike detection.
       try {
         meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
@@ -1131,16 +1135,34 @@ export default function SmartMotion() {
 
     // Stop metering → strikes → segments.
     let detectedSegments: SwingSegment[] = [];
+    // 2026-06-11 — raw acoustic candidates kept separate from the finalized
+    // segments. CAGE finalizes straight from acoustics (clean, alone). RANGE
+    // holds these as CANDIDATES the video locator confirms below (a busy range's
+    // mic can't separate a neighbour — only the in-frame video can).
+    let acousticStrikes: DetectedStrike[] = [];
     let firstStrikeMs: number | null = null;
     try {
       if (meteringRef.current) {
         const { samples, uri, durationMs } = await meteringRef.current.stop();
         meteringRef.current = null;
         audioUriRef.current = uri;
-        const res = detectStrikes(samples, { thresholdDb: appliedCalibration?.transientThresholdDb });
+        const meterMode = useRoundStore.getState().isRoundActive
+          ? 'course'
+          : useSettingsStore.getState().environmentMode;
+        // RANGE tolerates a louder floor (vision confirms every candidate, so a
+        // noisy floor can't fabricate a swing); cage keeps the strict default.
+        const res = detectStrikes(samples, {
+          thresholdDb: appliedCalibration?.transientThresholdDb,
+          noisyFloorDb: meterMode === 'range' ? 0 : undefined,
+        });
         if (res.kind === 'ok' && res.strikes.length > 0) {
-          detectedSegments = segmentsFromStrikes(res.strikes, durationMs);
-          firstStrikeMs = res.strikes[0]?.timeMs ?? null;
+          acousticStrikes = res.strikes;
+          // CAGE only: trust acoustics as the final segmentation here. RANGE waits
+          // for video confirmation (correlateStrikesWithVideo) in the clip branch.
+          if (meterMode === 'cage') {
+            detectedSegments = segmentsFromStrikes(res.strikes, durationMs);
+            firstStrikeMs = res.strikes[0]?.timeMs ?? null;
+          }
         }
       }
     } catch (e) {
@@ -1214,35 +1236,65 @@ export default function SmartMotion() {
       // may be a pre-record draft or placed in review).
       firstStrikeMsRef.current = firstStrikeMs;
 
-      // 2026-06-10 — RANGE mode: acoustics off → segment swings from VIDEO,
-      // building the SAME SwingSegment[] the cage acoustic path produces (shared
-      // reel + per-swing analysis). COURSE (incl. any live round) is single-shot,
-      // so it SKIPS multi-segmentation and falls through to single-swing
-      // localization (runAnalysis with no segment). Cage uses its acoustic
-      // segments. Empty range result also falls through gracefully.
-      // 2026-06-11 (audit C1) — CAGE also falls back to the video locator when
-      // acoustics yield ZERO segments. A loud bay (floor > -30dB), a failed
-      // mic-metering session, or a noisy clip routinely zeroes the strike
-      // detector — without this, a 6-swing cage reel silently collapsed to a
-      // single "1 of 1" read. The fallback only runs when there are NO acoustic
-      // segments, so a working acoustic capture is completely unaffected.
+      // 2026-06-11 — RANGE: acoustics PROPOSE *when*, vision DISPOSES *which*. The
+      // video locator finds the swings actually in YOUR frame (the spine — the
+      // count is never inflated by a neighbour's sound); correlateStrikesWithVideo
+      // snaps each acoustic candidate onto its video swing, donating the precise
+      // impact instant + peakDb (honest tempo + the ball-trace anchor) where they
+      // agree. Degrades cleanly: video-only if nothing was heard, acoustic-only if
+      // the locator came up empty. COURSE (incl. any live round) stays single-shot
+      // and falls through to single-swing localization (runAnalysis, no segment).
+      // CAGE: trust the acoustic segments, but cross-check the video locator when
+      // ≤1 strike (audit C1 — a loud/open bay zeroes the detector; don't collapse a
+      // 6-swing reel to "1 of 1"). That fallback only ADDS missed swings, never reduces.
       const stopMode = useRoundStore.getState().isRoundActive
         ? 'course'
         : useSettingsStore.getState().environmentMode;
       let segsForAnalysis = detectedSegments;
-      // RANGE: acoustics off → always segment from VIDEO. CAGE: trust the
-      // acoustic segments, but if they found ≤1 strike, cross-check the video
-      // locator — acoustics under-detect when "cage mode" is used at an OPEN
-      // range (no net echo, wind, other golfers). 2026-06-11: Tim's real 60s
-      // range clip recorded in cage mode heard only 1 strike for 6 real swings.
-      if (stopMode === 'range' || (stopMode === 'cage' && detectedSegments.length <= 1)) {
+      if (stopMode === 'range') {
+        try {
+          const pose = await import('../../services/poseDetection');
+          const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          const swings = await pose.locateSwings(recorded.uri, durMs);
+          if (swings.length > 0 && acousticStrikes.length > 0) {
+            segsForAnalysis = correlateStrikesWithVideo(acousticStrikes, swings, durMs);
+          } else if (swings.length > 0) {
+            segsForAnalysis = segmentsFromVideoSwings(swings, durMs); // nothing heard cleanly
+          } else if (acousticStrikes.length > 0) {
+            segsForAnalysis = segmentsFromStrikes(acousticStrikes, durMs); // vision empty — best effort
+          }
+          if (segsForAnalysis.length > 0) {
+            setSegments(segsForAnalysis);
+            setSelectedSwing(0);
+            // When the first swing is acoustic-CONFIRMED (peakDb > 0), it carries a
+            // real impact anchor — wire it for camera strike-verification + ball speed.
+            const s0 = segsForAnalysis[0];
+            if (s0 && (s0.peakDb ?? 0) > 0) {
+              firstStrikeMs = s0.strikeMs;
+              firstStrikeMsRef.current = s0.strikeMs;
+              if (audioUriRef.current) {
+                try {
+                  const speed = await detectBallSpeed({
+                    audioUri: audioUriRef.current,
+                    impact_ms: s0.strikeMs,
+                    club: clubIdToServerKey(clubRef.current),
+                  });
+                  if (speed) setBallSpeed(speed);
+                } catch { /* non-fatal */ }
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[smartmotion] range correlation failed (non-fatal):', e);
+        }
+      } else if (stopMode === 'cage' && detectedSegments.length <= 1) {
         try {
           const pose = await import('../../services/poseDetection');
           const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
           // cage with exactly 1 strike: only cross-check on a LONG clip — a short
           // single-strike clip is a legit single swing, don't override it with a
           // possibly-noisier video read. cage-0 always tries (nothing to lose).
-          const worthVideo = stopMode === 'range' || detectedSegments.length === 0 || durMs > 20_000;
+          const worthVideo = detectedSegments.length === 0 || durMs > 20_000;
           if (worthVideo) {
             const swings = await pose.locateSwings(recorded.uri, durMs);
             // Use the video segments only if they found MORE swings than acoustics
@@ -1254,7 +1306,7 @@ export default function SmartMotion() {
             }
           }
         } catch (e) {
-          console.log('[smartmotion] video segmentation fallback failed (non-fatal):', e);
+          console.log('[smartmotion] cage video fallback failed (non-fatal):', e);
         }
       }
       // Analyze the FIRST detected swing windowed to its segment; other
