@@ -483,6 +483,25 @@ function withSwiftSourceCopy(config) {
 
 // ─── Plugin entry point ─────────────────────────────────────────────
 function withMetaWearablesDAT(config) {
+  // 2026-06-11 — NO-OP when GITHUB_TOKEN is absent. The Meta Wearables DAT SDK lives in
+  // GitHub Packages (maven.pkg.github.com/facebook/…), which needs a PAT with
+  // read:packages. Without it, injecting the maven repo + mwdat deps makes gradle 401
+  // and FAILS the whole Android build (this is what broke the 2026-06-05 build). The app
+  // doesn't use the LIVE glasses SDK yet — glasses footage comes in as gallery video
+  // import (expo-image-picker, pure JS) and is analyzed as glasses-POV on the server, and
+  // services/metaWearablesBridge.ts is already null-guarded when the native module is
+  // absent. So when there's no token we skip ALL native DAT wiring: the build succeeds,
+  // MediaPipe (separate, public Google Maven) is unaffected, and the plugin auto-re-enables
+  // the instant a GITHUB_TOKEN is set + the live SDK is wanted.
+  const { token } = resolveGitHubToken(config);
+  if (!token) {
+    console.warn(
+      '\n[withMetaWearablesDAT] GITHUB_TOKEN not set — SKIPPING Meta Wearables DAT native wiring.\n' +
+      '  Live Ray-Ban Meta streaming stays dormant (gallery import + glasses-POV analysis are\n' +
+      '  unaffected). Set GITHUB_TOKEN (GitHub PAT, read:packages) in EAS env to enable it.\n',
+    );
+    return config;
+  }
   let next = config;
   // Android
   next = withMavenRepo(next);

@@ -374,10 +374,14 @@ export default function SmartMotion() {
         // starting/active/stopping — a takePictureAsync overlapping recordAsync can
         // throw or hiccup the video session on some devices (audit 2026-06-11).
         if (!scanningClub && !recordingPromiseRef.current && !stoppingRef.current) {
+          // Bail PERMANENTLY on builds without the on-device pose module (e.g. the
+          // older installed APK) — checked BEFORE the camera grab so we never poll
+          // takePictureAsync for nothing. Framing stays null (no pill); no crash.
+          const mp = await import('../../services/mediaPipePoseService');
+          if (!mp.isMediaPipeAvailable()) return; // no reschedule → loop ends
           const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.35, skipProcessing: true });
           const b64 = pic?.base64;
           if (b64 && !cancelled) {
-            const mp = await import('../../services/mediaPipePoseService');
             const frame = await mp.detectPoseFromBase64(b64).catch(() => null);
             if (frame && !cancelled) {
               const { evaluateFraming } = await import('../../services/swing/framingCheck');
