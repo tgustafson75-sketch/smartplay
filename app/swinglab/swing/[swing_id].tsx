@@ -55,6 +55,13 @@ import type { PoseEstimate } from '../../../services/poseEstimator';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 
+// 2026-06-12 — shared Smart Motion control badges, so Library video controls match
+// the SmartMotion review badges (whole-app control consistency).
+const ICON_CTRL = {
+  playpause: require('../../../assets/icons/smartmotion/ctrl-playpause.png'),
+  slowmo: require('../../../assets/icons/smartmotion/ctrl-slowmo.png'),
+};
+
 // Phase BW — short mm:ss formatter for the per-swing list rows.
 function formatMmSs(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -946,25 +953,21 @@ export default function SwingDetail() {
                   clears the bottom-right watermark + the bottom native scrubber and
                   doesn't intercept the pinch-zoom on the rest of the frame. Turns
                   green when slowed so the state is obvious. */}
+              {/* 2026-06-12 — slow-mo badge (matches the SmartMotion control set). Top-
+                  left corner; faint fill + a ½/¼ tag when slowed. */}
               <TouchableOpacity
                 onPress={cycleSlowMo}
-                style={{
-                  position: 'absolute', top: 8, left: 8,
-                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
-                  backgroundColor: playbackRate < 1 ? 'rgba(0,200,150,0.85)' : 'rgba(0,0,0,0.55)',
-                }}
+                style={{ position: 'absolute', top: 8, left: 8, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: playbackRate < 1 ? 'rgba(136,247,0,0.22)' : 'transparent' }}
                 accessibilityRole="button"
                 accessibilityLabel={`Playback speed ${playbackRate} times; tap to change`}
               >
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{playbackRate}×</Text>
+                <Image source={ICON_CTRL.slowmo} style={{ width: 42, height: 42 }} resizeMode="contain" />
+                {playbackRate < 1 ? <Text style={{ position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' }}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
               </TouchableOpacity>
-              {/* 2026-06-11 — brief center play-icon when paused, so tap-to-play
-                  reads as a video control (fades out while playing). */}
+              {/* Center play badge when paused (tap-to-play reads as a control). */}
               {!isPlaying ? (
                 <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="play" size={28} color="#fff" />
-                  </View>
+                  <Image source={ICON_CTRL.playpause} style={{ width: 60, height: 60 }} resizeMode="contain" />
                 </View>
               ) : null}
               {/* Tap-to-seek bar — replaces the native scrubber. Tap anywhere on it
@@ -982,7 +985,7 @@ export default function SwingDetail() {
                 accessibilityLabel="Seek bar — tap to jump to a point in the swing"
               >
                 <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.25)' }}>
-                  <View style={{ height: 4, width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%`, backgroundColor: '#34d399' }} />
+                  <View style={{ height: 4, width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%`, backgroundColor: '#88F700' }} />
                 </View>
               </Pressable>
             </View>
