@@ -1659,6 +1659,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Elevation: /api/elevation route registered in vercel.json allowlist',
     /"\/api\/elevation"/.test(vercelSrc),
     'explicit route exists before the SPA fallback, so /api/elevation returns JSON not index.html (deploy-mechanics gotcha)');
+
+  const hookSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useElevationDelta.ts'), 'utf-8');
+  check('Elevation: useElevationDelta is safe — 0/flat until both points resolve, gridded deps',
+    /getPlaysLikeElevationDeltaFeet/.test(hookSrc) &&
+      /setDelta\(0\);\s*\n\s*return;/.test(hookSrc) &&
+      /Math\.round\(v \* 1e4\)/.test(hookSrc),
+    'safe to pass straight to playsLikeDistance — never blocks a yardage; deps gridded to the ~11m cache cell so GPS jitter does not thrash the effect');
+
+  const sfSrc = fs.readFileSync(path.resolve(__dirname, '../../app/smartfinder.tsx'), 'utf-8');
+  check('Elevation: SmartFinder reticle plays-like now factors real elevation',
+    /useElevationDelta\(playerLoc, targetLoc\)/.test(sfSrc) &&
+      /playsLikeDistance\(targetYards, weather, targetBearing \?\? shotBearingDeg, elevationDeltaFeet\)/.test(sfSrc),
+    'the interactive aim-point plays-like passes the cached elevation delta — uphill/downhill is live (was always flat); other surfaces remain flat-safe follow-ups');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

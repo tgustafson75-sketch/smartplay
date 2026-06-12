@@ -47,6 +47,7 @@ import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeTogg
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
+import { useElevationDelta } from '../hooks/useElevationDelta';
 import type { WeatherSnapshot } from '../services/weatherService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
@@ -1178,6 +1179,10 @@ function TargetCameraOverlay({
   const [targetBearing, setTargetBearing] = useState<number | null>(shotBearingDeg);
   const [reticleConfidence, setReticleConfidence] = useState<'high' | 'medium' | 'low'>('medium');
   const [playerLoc, setPlayerLoc] = useState<{ lat: number; lng: number } | null>(null);
+  // 2026-06-11 — target coord (the reticle aim point) so plays-like can factor
+  // real uphill/downhill via the cached elevation service. Defaults flat.
+  const [targetLoc, setTargetLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const elevationDeltaFeet = useElevationDelta(playerLoc, targetLoc);
   const headingRef = useRef(0);
   const pitchRef = useRef(-10);
   const lastYardsRef = useRef<number | null>(null);
@@ -1234,6 +1239,9 @@ function TargetCameraOverlay({
     if (lastYardsRef.current !== geodesicYards) {
       lastYardsRef.current = geodesicYards;
       setTargetYards(geodesicYards);
+      // Update the target coord alongside the yardage (same ~1yd granularity)
+      // so the elevation lookup tracks the aim point without per-pixel churn.
+      setTargetLoc(target);
     }
     const nextBearing = bearingDegrees(fix.location, target);
     if (lastBearingRef.current !== nextBearing) {
@@ -1253,7 +1261,7 @@ function TargetCameraOverlay({
 
   const playsLike = useMemo(() => {
     if (targetYards == null || !weather) return null;
-    const b = playsLikeDistance(targetYards, weather, targetBearing ?? shotBearingDeg);
+    const b = playsLikeDistance(targetYards, weather, targetBearing ?? shotBearingDeg, elevationDeltaFeet);
     return {
       yards: b.plays_like_yards,
       delta: b.delta_yards,
@@ -1261,7 +1269,7 @@ function TargetCameraOverlay({
         ? `${Math.round(weather.wind_speed_mph)} mph ${describeWindDirection(weather.wind_direction_deg, targetBearing ?? shotBearingDeg)}`
         : null,
     };
-  }, [targetBearing, targetYards, shotBearingDeg, weather]);
+  }, [targetBearing, targetYards, shotBearingDeg, weather, elevationDeltaFeet]);
 
   const effectiveYards = playsLike?.yards ?? targetYards;
   const recommendedClub = useMemo(() => recommendClubForDistance(effectiveYards), [effectiveYards]);
