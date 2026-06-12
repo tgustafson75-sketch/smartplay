@@ -1692,6 +1692,11 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       !/launchDir=\{angle === 'face_on'/.test(smSrc),
     'the slanted launch line is removed from face-on (you cannot see ball flight from the front — it read as a false line); face-on keeps the vertical target alignment only');
 
+  const swingDetailSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf-8');
+  check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
+    /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc),
+    'the biomech backfill is gated off cage/long clips — a ~60s multi-swing session is no longer watched whole as one swing in the library detail (Tim\'s 1-min stuck)');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

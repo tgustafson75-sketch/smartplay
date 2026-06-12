@@ -248,8 +248,16 @@ export default function SwingDetail() {
     if (!swing_id || !shot?.clipUri) return;
     if (session?.biomechanics !== undefined) return;
     if (poseBackfillRef.current === swing_id) return;
-    poseBackfillRef.current = swing_id;
+    // 2026-06-11 (cage test) — state-aware: do NOT full-clip-backfill biomech on
+    // a cage multi-swing session. Its clip is a ~60s recording with several
+    // swings, so analyzeSwingFromVideo would "watch the whole minute" as one
+    // swing — the 1-min-stuck Tim hit in the library. Cage biomech is computed
+    // per-swing by SmartMotion's Motion step; this backfill is only for legacy
+    // single-swing uploads. Extra guard: skip any implausibly-long clip
+    // (a single swing is <~10s), so a long upload can't trigger it either.
     const durationMs = (session?.upload?.duration_sec ?? 3) * 1000;
+    if (session?.source === 'live_cage' || durationMs > 20_000) return;
+    poseBackfillRef.current = swing_id;
     void (async () => {
       try {
         const poseMod = await import('../../../services/poseAnalysisApi');
