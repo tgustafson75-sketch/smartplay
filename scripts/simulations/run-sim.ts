@@ -1639,6 +1639,26 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       hasMobilityFlag({ physicalLimitation: null }) === false &&
       hasMobilityFlag({ physicalLimitation: '' }) === false,
     'sciatica/arthritis/surgery/nerve now flag mobility-aware coaching in lieAnalysis + metaCourseIntelligence + smartAnalysisEngine — the deterministic path matches what the LLM already does via physicalLimitation context');
+
+  // ─── Elevation → plays-like (infra; call-site wiring is the next step) ──────
+  const elevSrc = fs.readFileSync(path.resolve(__dirname, '../../services/elevationService.ts'), 'utf-8');
+  check('Elevation: client service caches successes + fails safe to flat (0)',
+    /const cache = new Map/.test(elevSrc) &&
+      /getPlaysLikeElevationDeltaFeet/.test(elevSrc) &&
+      /if \(p == null \|\| t == null\) return 0;/.test(elevSrc) &&
+      /return Math\.round\(\(t - p\)/.test(elevSrc),
+    'elevation cached per ~11m cell; a missing lookup returns 0 (flat) so it can never block/corrupt a yardage — target−player matches playsLike uphill-positive');
+
+  const elevApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/elevation.ts'), 'utf-8');
+  check('Elevation: /api/elevation proxies Open-Topo-Data + returns feet, 200+null on failure',
+    /api\.opentopodata\.org/.test(elevApiSrc) && /elevation_ft/.test(elevApiSrc) &&
+      /status\(200\)\.json\(\{ elevation_ft: null/.test(elevApiSrc),
+    'keyless server proxy converts meters→feet; failures return 200 + null so the client falls back to flat, never an error path');
+
+  const vercelSrc = fs.readFileSync(path.resolve(__dirname, '../../vercel.json'), 'utf-8');
+  check('Elevation: /api/elevation route registered in vercel.json allowlist',
+    /"\/api\/elevation"/.test(vercelSrc),
+    'explicit route exists before the SPA fallback, so /api/elevation returns JSON not index.html (deploy-mechanics gotcha)');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
