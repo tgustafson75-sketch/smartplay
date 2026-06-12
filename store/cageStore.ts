@@ -214,6 +214,12 @@ export interface CageSession {
    *  reconciles it with the real read for coaching. Distinct from the
    *  owner-only feel_narration_transcript (passive feel-vs-real dataset). */
   feel_note?: string | null;
+  /** 2026-06-12 — Library card thumbnail. A representative frame screenshot,
+   *  lazily generated from the clip when no analysis fault-frame exists (e.g.
+   *  a SmartMotion swing that didn't produce a server visual_reference_path),
+   *  copied to documentDirectory so it survives cache clears. Null until first
+   *  generated; getLibrary prefers the real fault frame, then this. */
+  thumbnailUri?: string | null;
   /** 2026-05-27 — Fix EO: cage targeting metadata. Normalized 0-1
    *  coordinates relative to the video frame.
    *  - ball_area_norm: center + radius of the ball setup area. Both
@@ -483,6 +489,9 @@ interface CageState {
   setSessionCoachNote: (sessionId: string, note: string | null) => void;
   /** Feels engine — store the player's stated feel on the session. */
   setSessionFeel: (sessionId: string, note: string | null) => void;
+  /** 2026-06-12 — Persist a lazily-generated library thumbnail (representative
+   *  frame) for sessions with no analysis fault-frame. Pass null to clear. */
+  setSessionThumbnail: (sessionId: string, uri: string | null) => void;
   /** 2026-05-27 — Fix EO: cage targeting setters. Pass null to clear. */
   setSessionBallArea: (sessionId: string, area: { x: number; y: number; r: number } | null) => void;
   setSessionTarget: (sessionId: string, target: { x: number; y: number } | null) => void;
@@ -1108,6 +1117,13 @@ export const useCageStore = create<CageState>()(
               ...session,
               feel_note: note && note.trim().length > 0 ? note.trim() : null,
             }
+          ),
+        })),
+
+      setSessionThumbnail: (sessionId, uri) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, thumbnailUri: uri || null }
           ),
         })),
 

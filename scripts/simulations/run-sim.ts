@@ -670,11 +670,14 @@ check('Ball/target overlay matches the design reference',
     />TARGET</.test(targetOverlaySrc) && />BALL AREA</.test(targetOverlaySrc),
   'green perspective ball-area trapezoid + white target line/ring + pills');
 
-check('Pre-record ball box: default box + verifier gated to Motion step',
+check('Pre-record ball box: default box + verifier gated to Motion step + acoustic anchor',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
     /label=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
-    /\[showSkeleton, clipUri, ballArea, ballDeparture\]/.test(smSrc),
-  'default reference box + verifier runs under Motion (keeps the default read fast)');
+    /\[showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing\]/.test(smSrc) &&
+    // 2026-06-12 — departure only verifies off an ACOUSTIC anchor (peakDb > 0), never a
+    // video-located time (which is ~±1s and would read the wrong departure frames).
+    /const seg = segments\[selectedSwing\];\n\s*if \(\(seg\?\.peakDb \?\? 0\) <= 0\) return;/.test(smSrc),
+  'default reference box + verifier runs under Motion (fast default) AND only off a precise acoustic impact anchor');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
@@ -786,11 +789,15 @@ check('Verdict no longer claims ANALYZING forever',
     /NO READ — RECORD AGAIN/.test(smSrc),
   'errored/empty read shows honest state, not a perpetual spinner');
 
-check('Acoustic Listening only while recording',
+check('Acoustic Listening only while recording AND actually metering',
   /listening\?: boolean/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
     /Calibrated ✓ — Record to listen/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
-    /listening=\{phase === 'recording'\}/.test(smSrc),
-  'no fake "Listening…" in setup');
+    // 2026-06-12 (honesty) — gate on meteringActive too: never claim "Listening" when no
+    // mic track is running (course-in-round / chip-mode-on-range have metering off).
+    /listening=\{phase === 'recording' && meteringActive\}/.test(smSrc) &&
+    /const \[meteringActive, setMeteringActive\] = useState\(false\)/.test(smSrc) &&
+    /setMeteringActive\(meteringRef\.current != null\)/.test(smSrc),
+  'no fake "Listening…" in setup or when the mic isn\'t metering');
 
 check('Calibration auto-applies after a clean read',
   /Auto-apply: the user shouldn't have to tap/.test(read('app/swinglab/calibrate.tsx')) &&
@@ -1555,6 +1562,24 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /est · preview/.test(read('components/smartmotion/ShotMapPage.tsx')),
     'page 3 is a DTL-only shot map: full-swing course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
+
+  check('SmartMotion spine fixes: thumbnails, ball-speed honesty, feel-on-save (2026-06-12)',
+    // Every library card gets a thumbnail — fall back past the analysis fault frame to a
+    // lazily-generated frame screenshot, persisted on the session.
+    /thumbnail_uri: primaryThumb \?\? perShotThumb \?\? session\.fault_frame_uri \?\? session\.thumbnailUri \?\? null/.test(read('services/swingLibrary.ts')) &&
+      /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/cageStore.ts')) &&
+      /await VT\.getThumbnailAsync\(clipUri/.test(read('app/swinglab/library.tsx')) &&
+      // BALL SPEED badge is honest: driven by the SwingMetric, "~" prefix when it's an estimate.
+      /const bsEst = bs\.value != null && !isTruthGrade\(bs\.source\)/.test(smSrc2) &&
+      /\$\{bsEst \? '~' : ''\}\$\{Math\.round\(bs\.value\)\}/.test(smSrc2) &&
+      // typed/dictated FEEL persists on Save (not just via the caddie-submit button).
+      /if \(sid && feelText\.trim\(\)\) \{[\s\S]*?setSessionFeel\(sid, feelText\.trim\(\)\)/.test(smSrc2),
+    'library thumbnails backfill + persist; ball-speed badge shows ~est from the SwingMetric (no raw mph); feel saved on Save');
+
+  check('CNS fix: [LAST SHOT] reads roundStore.shots (not the phantom recentShots)',
+    /const shots = round\.shots \?\? \[\]/.test(read('services/unifiedVisionContext.ts')) &&
+      !/as unknown as \{ recentShots/.test(read('services/unifiedVisionContext.ts')),
+    'the unified context [LAST SHOT] line now reads the real shots array, so the brain sees the just-hit shot');
 
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).

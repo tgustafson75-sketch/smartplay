@@ -362,6 +362,11 @@ export default function SmartMotion() {
   // Camera cross-check of the acoustic strike (ball there → gone at impact).
   const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
   const [liveDb, setLiveDb] = useState<number | null>(null);
+  // 2026-06-12 (honesty) — true ONLY while a metered mic track is actually capturing
+  // (cage / range / off-round course). The AcousticPickupCard's "Listening" badge gates
+  // on this so we never claim to be listening when metering is off (course-in-round,
+  // or chip mode on a range) and no mic is running.
+  const [meteringActive, setMeteringActive] = useState(false);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   const [selectedSwing, setSelectedSwing] = useState(0);
   // 2026-06-11 (audit) — mirror selectedSwing in a ref so an async per-swing
@@ -665,8 +670,12 @@ export default function SmartMotion() {
   const ballTraceColor = useMemo(() => {
     if (!ballTrace) return '#34d399';
     const seg = segments[selectedSwing];
-    const refDb = segments.reduce((m, s) => Math.max(m, s.peakDb ?? 0), 0);
-    return traceColor(ballTrace.divergenceDeg, seg?.peakDb, refDb || undefined);
+    // 2026-06-12 — reference = the LOUDEST acoustic strike (peakDb is dBFS, negative;
+    // video-located segments are 0 and excluded). Old code seeded the max at 0, so the
+    // reference was always ≥ 0 and the weak-strike dim never fired. -Infinity → undefined
+    // = no dim when there's no acoustic reference.
+    const refDb = segments.reduce((m, s) => (typeof s.peakDb === 'number' && s.peakDb < 0 ? Math.max(m, s.peakDb) : m), -Infinity);
+    return traceColor(ballTrace.divergenceDeg, seg?.peakDb, refDb === -Infinity ? undefined : refDb);
   }, [ballTrace, segments, selectedSwing]);
 
   const metrics: SwingMetricSet = useMemo(
@@ -696,20 +705,25 @@ export default function SmartMotion() {
     ];
   }, [isPutt, analysis, biomech]);
   // 2026-06-12 — LEFT rail: the ball/result metrics as custom badges (Tim). Honest +
-  // distinct: TEMPO (ratio), BALL SPEED (acoustic mph), BALL RESULT (the DTL trace's
-  // start direction). Each shows "—" until measured — no fabricated number. (Inferred
-  // FACE ≈ ball result, so it's not duplicated; SMASH needs club speed we don't have.)
+  // distinct: TEMPO (ratio), BALL SPEED, BALL RESULT (the DTL trace's start direction).
+  // Each shows "—" until measured. BALL SPEED is driven by the synthesized SwingMetric
+  // (same source page 2 uses) and prefixed "~" when it's an ESTIMATE (acoustic loudness
+  // heuristic, not truth-grade) — never shown as a hard measured number (honesty fix
+  // 2026-06-12: the badge used to print a raw mph with no est marker). SMASH needs club
+  // speed we don't have; inferred FACE ≈ ball result, so neither is duplicated here.
   const leftMetrics = useMemo(() => {
     if (isPutt) return [];
     const dir = ballTrace
       ? (ballTrace.side === 'straight' ? 'ON LINE' : `${ballTrace.divergenceDeg}° ${ballTrace.side === 'left' ? 'L' : 'R'}`)
       : null;
+    const bs = metrics.ball_speed;
+    const bsEst = bs.value != null && !isTruthGrade(bs.source);
     return [
       { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
-      { key: 'speed', img: ICON_METRIC.ballspeed, value: ballSpeed?.ball_speed_mph != null ? `${Math.round(ballSpeed.ball_speed_mph)}` : null, unit: 'mph', label: 'BALL SPEED' },
+      { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${bsEst ? '~' : ''}${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
-  }, [isPutt, tempo, ballSpeed, ballTrace]);
+  }, [isPutt, tempo, metrics, ballTrace]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
@@ -722,12 +736,18 @@ export default function SmartMotion() {
   // once the user opens Motion, so it never competes with the core read.
   useEffect(() => {
     if (!showSkeleton || !clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
+    // 2026-06-12 (reliability) — only verify departure off an ACOUSTIC impact anchor
+    // (peakDb > 0). A video-LOCATED swing time (range/upload, peakDb === 0) is only
+    // frame-accurate (~±1s); sampling the ±120/160ms departure window around it reads
+    // the wrong frames and can emit a false departed/direction. Mirror the tempo gate.
+    const seg = segments[selectedSwing];
+    if ((seg?.peakDb ?? 0) <= 0) return;
     let cancelled = false;
     void detectBallDeparture({ videoUri: clipUri, impactMs: firstStrikeMsRef.current, ballArea })
       .then((r) => { if (!cancelled && r) setBallDeparture(r); })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, ballArea, ballDeparture]);
+  }, [showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
@@ -1169,6 +1189,7 @@ export default function SmartMotion() {
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
     setLiveDb(null);
+    setMeteringActive(false);
     // Clear caches BEFORE resetting selection so no stale per-swing
     // analysis/tempo can be read for the new recording (audit #2).
     tempoCacheRef.current = {};
@@ -1408,6 +1429,8 @@ export default function SmartMotion() {
     } else {
       meteringRef.current = null;
     }
+    // Honest "Listening" state: only when a mic track is actually running.
+    setMeteringActive(meteringRef.current != null);
 
     // Assign the camera promise BEFORE arming timers (avoid the stop race).
     try {
@@ -1745,9 +1768,15 @@ export default function SmartMotion() {
     if (sid && coachNote.trim()) {
       try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
     }
+    // 2026-06-12 (persistence fix) — also persist the typed/dictated FEEL on Save.
+    // Previously feel only reached the store via the separate "Run it by your caddie"
+    // button, so a user who spoke/typed how it felt and tapped Save lost it.
+    if (sid && feelText.trim()) {
+      try { useCageStore.getState().setSessionFeel(sid, feelText.trim()); } catch { /* non-fatal */ }
+    }
     useToastStore.getState().show('Saved to your Swing Library');
     router.push('/swinglab/library' as never);
-  }, [coachNote, router]);
+  }, [coachNote, feelText, router]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
@@ -2358,11 +2387,11 @@ export default function SmartMotion() {
                 accessibilityLabel={calibrated ? 'Re-calibrate acoustics, 10 strikes' : 'Calibrate acoustics, 10 strikes'}
               >
                 <AcousticPickupCard
-                  detected={phase === 'recording' ? liveDb != null && liveDb > -30 : segments.length > 0}
+                  detected={phase === 'recording' && meteringActive ? liveDb != null && liveDb > -30 : segments.length > 0}
                   swingCount={isReview ? segments.length : undefined}
                   calibrated={calibrated}
-                  levelDb={phase === 'recording' ? liveDb : null}
-                  listening={phase === 'recording'}
+                  levelDb={phase === 'recording' && meteringActive ? liveDb : null}
+                  listening={phase === 'recording' && meteringActive}
                   style={styles.glassCard}
                 />
               </Pressable>

@@ -569,29 +569,37 @@ function clubSpeedFromPose(
     return null;
   }
   const duration = clipDurationMs && clipDurationMs > 200 ? clipDurationMs : 3000;
-  // Track lead wrist (left for right-handed; mirroring handled
-  // upstream in poseEstimator.adjustKeypoint when lefty).
-  const wrists: Array<{ x: number; y: number; t: number; score: number }> = [];
-  for (const f of frames) {
-    const lw = f.keypoints.find((k) => k.name === 'left_wrist');
-    if (lw && lw.score >= 0.3) {
-      wrists.push({ x: lw.x, y: lw.y, t: f.timestampMs, score: lw.score });
+  // 2026-06-12 — track BOTH wrists and take the faster peak. The LEAD wrist is the
+  // fastest through impact; it's the left wrist for a right-hander and the right wrist
+  // for a lefty. Tracking only the literal 'left_wrist' gave lefties the slow TRAIL
+  // wrist (or too few points → null), and depended on upstream mirroring labeling
+  // being exactly right. Taking the max over both labels is handedness-agnostic and
+  // can't regress right-handers (their left wrist already wins). [[left-handed-support]]
+  const peakForWrist = (name: 'left_wrist' | 'right_wrist'): { peak: number; avgScore: number; count: number } | null => {
+    const w: Array<{ x: number; y: number; t: number; score: number }> = [];
+    for (const f of frames) {
+      const k = f.keypoints.find((kp) => kp.name === name);
+      if (k && k.score >= 0.3) w.push({ x: k.x, y: k.y, t: f.timestampMs, score: k.score });
     }
-  }
-  if (wrists.length < 3) return null;
-  // Compute frame-to-frame velocity; return the peak.
-  let peakVelocity = 0;
-  let avgScore = 0;
-  for (let i = 1; i < wrists.length; i++) {
-    const dx = wrists[i].x - wrists[i - 1].x;
-    const dy = wrists[i].y - wrists[i - 1].y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const dt = Math.max(1, wrists[i].t - wrists[i - 1].t);
-    const v = dist / dt; // normalized units per ms
-    if (v > peakVelocity) peakVelocity = v;
-    avgScore += wrists[i].score;
-  }
-  avgScore /= wrists.length;
+    if (w.length < 3) return null;
+    let peak = 0, avgScore = 0;
+    for (let i = 1; i < w.length; i++) {
+      const dx = w[i].x - w[i - 1].x;
+      const dy = w[i].y - w[i - 1].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dt = Math.max(1, w[i].t - w[i - 1].t);
+      const v = dist / dt;
+      if (v > peak) peak = v;
+      avgScore += w[i].score;
+    }
+    return { peak, avgScore: avgScore / w.length, count: w.length };
+  };
+  const left = peakForWrist('left_wrist');
+  const right = peakForWrist('right_wrist');
+  const lead = !left ? right : !right ? left : (left.peak >= right.peak ? left : right);
+  if (!lead) return null;
+  const peakVelocity = lead.peak;
+  const avgScore = lead.avgScore;
   if (peakVelocity === 0) return null;
   // Conversion: normalized image units → real-world m/s.
   // Empirical constant ~150 m/s per normalized-unit-per-ms for a
@@ -615,7 +623,7 @@ function clubSpeedFromPose(
   // confidence + widens the range — no silent clamp.
   const outOfBand = mph < 45 || mph > 130;
 
-  let confidence = Math.min(0.55, avgScore * (wrists.length >= 5 ? 1 : 0.8));
+  let confidence = Math.min(0.55, avgScore * (lead.count >= 5 ? 1 : 0.8));
   if (outOfBand) confidence = Math.min(confidence, 0.30);
 
   return { value: mph, confidence, outOfBand };

@@ -230,16 +230,21 @@ export async function getUnifiedVisionContext(): Promise<UnifiedVisionContext> {
   }
 
   // ── Recent shots ──
+  // 2026-06-12 (CNS fix) — roundStore's field is `shots` (ShotResult[]). A prior
+  // double-cast to a phantom field name hid the mismatch, so this array was ALWAYS
+  // empty and the [LAST SHOT] prompt line never populated. Read the real `shots`
+  // array so the brain can see the just-hit shot.
   let recentShots = empty.recentShots;
   try {
     const round = (await import('../store/roundStore')).useRoundStore.getState();
-    const shots = (round as unknown as { recentShots?: Array<Record<string, unknown>> }).recentShots ?? [];
-    recentShots = shots.slice(-3).map((s) => ({
+    const shots = round.shots ?? [];
+    recentShots = shots.slice(-3).map((s, i) => ({
       hole: typeof s.hole === 'number' ? s.hole : null,
-      shotIndex: typeof s.shotIndex === 'number' ? s.shotIndex : null,
+      shotIndex: shots.length - Math.min(3, shots.length) + i,
       club: typeof s.club === 'string' ? s.club : null,
       direction: typeof s.direction === 'string' ? s.direction : null,
-      outcome: typeof s.outcome === 'string' ? s.outcome : null,
+      outcome: typeof s.outcome === 'string' ? s.outcome
+        : (typeof s.outcome_text === 'string' ? s.outcome_text : null),
       distanceYards: typeof s.distance_yards === 'number' ? s.distance_yards : null,
     }));
   } catch { /* non-fatal */ }

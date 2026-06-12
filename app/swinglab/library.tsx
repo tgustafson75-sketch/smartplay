@@ -173,6 +173,22 @@ export default function SwingLibrary() {
           } else if (thumbUri && !thumbUri.startsWith('file://')) {
             thumbOk = true;
           }
+          // 2026-06-12 (Tim) — backfill a thumbnail for any card missing one (e.g. a
+          // SmartMotion video swing with no analysis fault-frame). Generate ONE
+          // representative frame, copy to documentDirectory so it survives cache
+          // clears, and persist it on the session. Runs once per session — next pass
+          // the entry already carries thumbnail_uri, so it won't regenerate.
+          if (!thumbOk && videoOk && clipUri) {
+            try {
+              const VT = await import('expo-video-thumbnails');
+              const { uri: tmp } = await VT.getThumbnailAsync(clipUri, { time: 500, quality: 0.7 });
+              let finalUri = tmp;
+              const dest = `${FS.documentDirectory}swing-thumb-${entry.session.id}.jpg`;
+              try { await FS.copyAsync({ from: tmp, to: dest }); finalUri = dest; } catch { /* keep tmp */ }
+              useCageStore.getState().setSessionThumbnail(entry.session.id, finalUri);
+              thumbOk = true;
+            } catch { /* generation failed — card shows the placeholder, no crash */ }
+          }
           next.set(entry.session.id, { video: videoOk, thumb: thumbOk });
           if (!videoOk) {
             missingCount++;

@@ -105,7 +105,10 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
         primary_issue_name: session.primary_issue?.name ?? null,
         swing_count: session.shots.length,
         display_label: describe(session),
-        thumbnail_uri: primaryThumb ?? perShotThumb ?? null,
+        // 2026-06-12 — fall back past the analysis fault-frame to the persisted
+        // display fault frame, then to a lazily-generated frame screenshot, so
+        // EVERY card gets a thumbnail (Tim: SmartMotion video swings had none).
+        thumbnail_uri: primaryThumb ?? perShotThumb ?? session.fault_frame_uri ?? session.thumbnailUri ?? null,
       };
     })
     .sort((a, b) => b.date_ms - a.date_ms);

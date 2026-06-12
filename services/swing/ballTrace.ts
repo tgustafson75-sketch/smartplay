@@ -88,9 +88,13 @@ export function traceColor(divergenceDeg: number, peakDb?: number, peakDbRef?: n
     const u = (t - 0.5) / 0.5;
     r = lerp(245, 239, u); g = lerp(158, 68, u); b = lerp(11, 68, u);
   }
-  // Weak-strike dim: if this strike's energy is well below the reference, fade it.
-  if (typeof peakDb === 'number' && typeof peakDbRef === 'number' && peakDbRef > 0) {
-    const strength = Math.max(0.4, Math.min(1, peakDb / peakDbRef));
+  // Weak-strike dim: fade toward grey when THIS strike is well below the loudest
+  // (reference) strike. Both are dBFS (negative), so use the dB DIFFERENCE, not a
+  // ratio of negatives (which inverts: a louder strike would dim). At the reference
+  // level → full colour; ~25 dB quieter → fully dimmed. (2026-06-12 fix.)
+  if (typeof peakDb === 'number' && typeof peakDbRef === 'number' && peakDb < 0 && peakDbRef < 0) {
+    const DIM_SPAN_DB = 25;
+    const strength = Math.max(0.4, Math.min(1, 1 + (peakDb - peakDbRef) / DIM_SPAN_DB));
     r = lerp(110, r, strength); g = lerp(110, g, strength); b = lerp(110, b, strength);
   }
   const hex = (n: number) => n.toString(16).padStart(2, '0');
