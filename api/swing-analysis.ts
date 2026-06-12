@@ -1031,6 +1031,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ctxLines.push(
         `Target anchor: player aimed at normalized (x=${targetPt.x.toFixed(2)}, y=${targetPt.y.toFixed(2)}). When ball-flight is visible, deviation from the line ball→target is a real fault signal (push / pull / start-direction off). Don't invent ball-flight observations if not visible.`
       );
+      // 2026-06-11 — GEOMETRY ↔ EFFORT (Tim's "connecting geometry and tempo"). The
+      // target's vertical distance ABOVE the ball, as a fraction of the ball's room to
+      // the top of the frame, is the player's DECLARED effort: target at the top = a
+      // full shot; halfway up = a ~half shot. Grade tempo + swing LENGTH against THAT
+      // intended shot, not a generic full swing — so a deliberately shorter partial
+      // swing isn't flagged as a fault. Only emitted for a genuinely partial shot.
+      if (ballArea && typeof ballArea.y === 'number') {
+        const up = ballArea.y - targetPt.y;
+        const headroom = Math.max(0.001, ballArea.y);
+        const effortPct = Math.round(Math.max(0, Math.min(1, up / headroom)) * 100);
+        if (effortPct > 0 && effortPct < 85) {
+          ctxLines.push(
+            `Intended effort (from geometry): the target sits ~${effortPct}% of the way up from the ball, so the player DECLARED a ~${effortPct}% shot, not a full swing. Grade tempo and swing LENGTH against a partial ${effortPct}% swing — a shorter backswing and quieter strike are CORRECT here, not faults — and scale expected carry to ~${effortPct}% of a full ${typeof ctx.club === 'string' ? ctx.club : 'club'}. The tempo RATIO (≈3:1) should still hold; effort changes amplitude, not rhythm.`
+          );
+        }
+      }
     }
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +

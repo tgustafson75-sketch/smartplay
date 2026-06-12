@@ -492,6 +492,17 @@ export default function SmartMotion() {
     if (Math.abs(deg) <= 2) return 'straight';
     return `${Math.abs(deg)}° ${deg > 0 ? 'right' : 'left'}`;
   }, [ballArea, targetPoint]);
+  // 2026-06-11 — GEOMETRY ↔ EFFORT. How far up the frame the target sits from the
+  // ball (vs the ball's room to the top) = the declared shot effort: target near the
+  // top = a full swing; halfway = a ~half shot. Honest (directly measured, no faked
+  // carry number). The server grades tempo/length against this; here we just show it.
+  const effortPct = useMemo(() => {
+    if (!ballArea || !targetPoint) return null;
+    const up = ballArea.y - targetPoint.y;
+    if (up <= 0.02) return null;
+    const pct = Math.round(Math.max(0, Math.min(1, up / Math.max(0.001, ballArea.y))) * 100);
+    return pct > 0 && pct < 85 ? pct : null; // only flag a genuinely PARTIAL shot
+  }, [ballArea, targetPoint]);
 
   const metrics: SwingMetricSet = useMemo(
     () =>
@@ -1731,6 +1742,17 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
+        {/* EFFORT chip — declared shot effort from ball→target geometry (a partial
+            shot). Honest: directly measured, no faked carry. The read is graded
+            against this intended effort, so a deliberate half-swing isn't a "fault". */}
+        {isReview && !isPutt && effortPct != null ? (
+          <View style={[styles.effortPill, { top: insets.top + 150 }]} pointerEvents="none">
+            <Text style={styles.tempoPillLabel}>EFFORT</Text>
+            <Text style={[styles.tempoPillValue, { color: '#7CE04F' }]}>{effortPct}%</Text>
+            <Text style={styles.tempoPillUnit}>shot</Text>
+          </View>
+        ) : null}
+
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
@@ -2352,6 +2374,7 @@ const styles = StyleSheet.create({
   tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
   tempoPillValue: { fontSize: 22, fontWeight: '900' },
   tempoPillUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700' },
+  effortPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },

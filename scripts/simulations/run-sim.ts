@@ -1441,6 +1441,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half energy, so
   // the default ~30dB threshold missed it; ON drops it to ~18dB above floor.
+  // 2026-06-11 — geometry↔tempo/effort. The target's vertical distance above the
+  // ball (vs the ball's room to the top) = declared effort; the read is graded
+  // against that intended partial shot instead of a generic full swing.
+  check('SmartMotion: geometry→effort grades the read against the intended shot',
+    /Intended effort \(from geometry\)/.test(swingApiSrc) &&
+      /DECLARED a ~\$\{effortPct\}% shot/.test(swingApiSrc) &&
+      /const effortPct = useMemo/.test(smSrc2) &&
+      /styles\.effortPill/.test(smSrc2),
+    'the server derives the declared effort from ball→target geometry (target near the top = full; halfway = ~half) and grades tempo + swing length against THAT partial shot — a deliberate half-swing is not flagged as a fault; the client shows an honest EFFORT % chip (measured, no faked carry)');
+
   check('SmartMotion: chip sensitivity drops the strike threshold for quiet chips',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
