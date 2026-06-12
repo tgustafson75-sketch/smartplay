@@ -24,11 +24,13 @@ import React from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   StyleSheet,
   type StyleProp,
   type ViewStyle,
   type DimensionValue,
+  type ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -263,6 +265,9 @@ export interface BodyItem {
   label: string;
   tone: SmTone;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** 2026-06-12 — custom biomech badge (the dashed-line set) for this metric. Stays
+   *  lime (on-theme); the verdict text below carries the result tone. */
+  image?: ImageSourcePropType;
 }
 
 const TONE_VERDICT: Record<SmTone, string> = {
@@ -280,7 +285,9 @@ export function BodyAnalysisRow({ items, style }: { items: BodyItem[]; style?: S
       <View style={styles.bodyRow}>
         {items.map((it) => (
           <View key={it.key} style={styles.bodyItem}>
-            <Ionicons name={it.icon ?? 'body-outline'} size={18} color={toneColor(it.tone, colors)} />
+            {it.image
+              ? <Image source={it.image} style={styles.bodyBadge} resizeMode="contain" />
+              : <Ionicons name={it.icon ?? 'body-outline'} size={18} color={toneColor(it.tone, colors)} />}
             <Text style={[styles.bodyLabel, { color: colors.text_secondary }]} numberOfLines={1}>{it.label}</Text>
             <Text style={[styles.bodyVerdict, { color: toneColor(it.tone, colors) }]}>{TONE_VERDICT[it.tone]}</Text>
           </View>
@@ -532,6 +539,7 @@ const styles = StyleSheet.create({
   bodyWrap: { borderWidth: 1, borderRadius: 12, padding: 10 },
   bodyRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   bodyItem: { flex: 1, alignItems: 'center', gap: 3 },
+  bodyBadge: { width: 30, height: 30 },
   bodyLabel: { fontSize: 10, fontWeight: '600' },
   bodyVerdict: { fontSize: 11, fontWeight: '800' },
 

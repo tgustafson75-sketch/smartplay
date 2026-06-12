@@ -149,6 +149,13 @@ const ICON_ENV = {
   course: require('../../assets/icons/smartmotion/env-course.png'),
 } as const;
 const ICON_CLUB = require('../../assets/icons/smartmotion/club-detect.png');
+// Biomech RESULT badges (Tim — the dashed-line set for the body-analysis row).
+const ICON_BIOMECH = {
+  sway: require('../../assets/icons/smartmotion/biomech-sway.png'),
+  tilt: require('../../assets/icons/smartmotion/biomech-tilt.png'),
+  posture: require('../../assets/icons/smartmotion/biomech-posture.png'),
+  weight: require('../../assets/icons/smartmotion/biomech-weight.png'),
+} as const;
 // 2026-06-12 — the rest of the rail as matching green-circle badges (Tim's art), so
 // every rail button uses its OWN circle (our button border dropped — no double circle).
 const ICON_RAIL = {
@@ -234,10 +241,10 @@ function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null)
     : bio?.weightShiftPct == null ? 'neutral'
     : bio.weightShiftPct < 30 ? 'warn' : 'good';
   return [
-    { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline' },
-    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline' },
-    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline' },
-    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline' },
+    { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline', image: ICON_BIOMECH.sway },
+    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt },
+    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline', image: ICON_BIOMECH.posture },
+    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline', image: ICON_BIOMECH.weight },
   ];
 }
 
