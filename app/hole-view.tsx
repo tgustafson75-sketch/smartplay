@@ -413,7 +413,6 @@ export default function HoleView() {
     onPanResponderTerminate: () => setIsDragging(false),
   })).current;
 
-  const gpsWatchRef = useRef<Location.LocationSubscription | null>(null);
 
   // ── Image source resolution (Phase S — Mapbox primary, Google Maps fallback) ──
   // Mapbox: course-agnostic, single PNG per hole, cacheable, free tier
@@ -606,60 +605,62 @@ export default function HoleView() {
   }, []);
 
   // ── GPS validity ───────────────────────
-  // 2026-06-08 — Loosened 30m → 55m. Real outdoor phone GPS is commonly
-  // 10–50m (worse under trees); the 30m gate rejected Golfshot-class
-  // fixes and showed "GPS SEARCHING" indefinitely where other apps work.
-  // 55m still keeps obviously-bad fixes out while matching real-world
-  // accuracy. Yardages from a weak fix are flagged elsewhere; showing an
-  // approximate number beats showing nothing (Golfshot parity).
+  // 2026-06-11 — Validity is now coord-sanity ONLY. The old accuracy<55m cliff
+  // was removed: it ran a PRIVATE Location.watch and hid the player marker +
+  // froze yardages above 55m (common under tree canopy) — the "too-strict gate
+  // → go dark" failure. We now source the smoothed fix from gpsManager, which
+  // already rejects garbage coords + anything worse than OUTLIER_ACCURACY_M
+  // (90m), so every fix that reaches us is usable. We SHOW the player and let
+  // the global confidence dot flag weak signal, rather than hiding.
   const checkGpsValid = (coords: {
     latitude: number; longitude: number; accuracy: number;
   }): boolean =>
     Math.abs(coords.latitude) > 0.01 &&
-    Math.abs(coords.longitude) > 0.01 &&
-    coords.accuracy < 55;
+    Math.abs(coords.longitude) > 0.01;
 
-  // ── GPS watcher ────────────────────────
+  // ── GPS — canonical gpsManager pipeline (smoothed, 90m-tolerant, confidence) ──
   useEffect(() => {
     if (!isRoundActive) return;
-    const startGPS = async () => {
-      const { granted } = await Location.requestForegroundPermissionsAsync();
-      if (!granted) return;
-      gpsWatchRef.current = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, distanceInterval: 2 },
-        (loc) => {
-          const coords = {
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            accuracy: loc.coords.accuracy ?? 99,
-          };
-          setGpsCoords(coords);
-          const valid = checkGpsValid(coords);
-          setGpsValid(valid);
-          if (valid && middleLat !== 0 && middleLng !== 0) {
-            const yards = haversineYards(coords.latitude, coords.longitude, middleLat, middleLng);
-            if (yards > 5 && yards < 800) setCenterYards(Math.round(yards));
-          }
-        },
-      );
+    let active = true;
+    const apply = (fix: { lat: number; lng: number; accuracy_m: number | null } | null) => {
+      if (!active || !fix) return;
+      const coords = {
+        latitude: fix.lat,
+        longitude: fix.lng,
+        accuracy: fix.accuracy_m ?? 99,
+      };
+      setGpsCoords(coords);
+      const valid = checkGpsValid(coords);
+      setGpsValid(valid);
+      if (valid && middleLat !== 0 && middleLng !== 0) {
+        const yards = haversineYards(coords.latitude, coords.longitude, middleLat, middleLng);
+        if (yards > 5 && yards < 800) setCenterYards(Math.round(yards));
+      }
     };
-    // 2026-06-08 (audit #2) — a thrown permission/watch request must not
-    // crash the round; degrade to GPS-invalid and let the UI show it.
-    startGPS().catch((err) => {
-      console.log('[hole-view] GPS startup failed (non-fatal)', err);
-      setGpsValid(false);
-      // Don't degrade silently on this screen — tell the user (audit).
+    let unsub = () => {};
+    (async () => {
       try {
-        const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
-        useToastStore.getState().show('GPS is having trouble — yardages may be slow. Check Location is on.');
-      } catch { /* best-effort */ }
-      // Self-log for field review (no ADB needed).
-      try {
-        const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
-        useIssueLogStore.getState().addGpsEvent('hole_view_watch_failed', { error: err instanceof Error ? err.message : String(err) });
-      } catch { /* best-effort */ }
-    });
-    return () => { gpsWatchRef.current?.remove(); };
+        const gps = await import('../services/gpsManager');
+        apply(gps.getLastFix()); // seed immediately from the cached smoothed fix
+        unsub = gps.subscribe((fix) => apply(fix));
+        // 2026-06-08 (audit #2) intent preserved, now health-driven: if the
+        // manager isn't delivering (permission off / dead watch), tell the user
+        // once instead of silently showing nothing.
+        if (!gps.getLastFix() && gps.getGpsHealth().state !== 'healthy') {
+          try {
+            const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
+            useToastStore.getState().show('GPS is having trouble — yardages may be slow. Check Location is on.');
+          } catch { /* best-effort */ }
+        }
+      } catch (err) {
+        console.log('[hole-view] gpsManager subscribe failed (non-fatal)', err);
+        try {
+          const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
+          useIssueLogStore.getState().addGpsEvent('hole_view_subscribe_failed', { error: err instanceof Error ? err.message : String(err) });
+        } catch { /* best-effort */ }
+      }
+    })();
+    return () => { active = false; unsub(); };
   }, [isRoundActive, middleLat, middleLng]);
 
   // ── SmartVision context ─────────────────

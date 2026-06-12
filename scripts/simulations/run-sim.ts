@@ -1616,6 +1616,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('GPS dot: mounted once in the root layout (persists across on-course screens)',
     /<GlobalGpsDotOverlay \/>/.test(rootLayoutSrc) && /import \{ GlobalGpsDotOverlay \}/.test(rootLayoutSrc),
     'single global mount inside SafeAreaProvider so the dot is the same on caddie / hole-view / smartfinder');
+
+  // ─── hole-view unified onto the canonical GPS pipeline (over-strict gate fix) ──
+  const holeViewSrc = fs.readFileSync(path.resolve(__dirname, '../../app/hole-view.tsx'), 'utf-8');
+  check('GPS: hole-view sources from gpsManager, not a private Location.watch',
+    !/watchPositionAsync/.test(holeViewSrc) &&
+      /import\('\.\.\/services\/gpsManager'\)/.test(holeViewSrc) &&
+      /gps\.subscribe\(/.test(holeViewSrc) && /gps\.getLastFix\(\)/.test(holeViewSrc),
+    'the hole map now rides the smoothed / 90m-tolerant / confidence pipeline — no rogue second watch (single GPS source)');
+
+  check('GPS: hole-view dropped the accuracy<55m cliff (no go-dark under canopy)',
+    !/coords\.accuracy < 55/.test(holeViewSrc),
+    'player marker + yardages no longer vanish above 55m; gpsManager already filters >90m + garbage, so any fix shown is usable — KEEP-and-FLAG, not hide');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
