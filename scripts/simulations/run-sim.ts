@@ -1577,6 +1577,28 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Handicap: expectedNineDifferential rises with Index (WHS second-nine)',
     expectedNineDifferential(8) < expectedNineDifferential(18) && expectedNineDifferential(18) > 10,
     `expected a monotonic, ~10-13 value at HI 18; got ${expectedNineDifferential(18)}`);
+
+  // ─── GPS: weighted smoothing + canonical confidence (no-regression) ──────
+  const gpsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/gpsManager.ts'), 'utf-8');
+  check('GPS: outlier gate stays at 90m (NOT lowered — would refreeze yardages)',
+    /OUTLIER_ACCURACY_M = 90\b/.test(gpsSrc),
+    'the gate was hardened 15→60→90 for real tree/canopy play; re-tightening brings back "no signal / frozen yardage" — guard against the stale-doc regression');
+
+  check('GPS: smoothing is inverse-accuracy WEIGHTED over a 5-fix window',
+    /SMOOTHING_WINDOW = 5\b/.test(gpsSrc) &&
+      /1 \/ Math\.max\(f\.accuracy_m \?\? 30, 5\)/.test(gpsSrc) &&
+      /wLat \/ wSum/.test(gpsSrc) && /wLng \/ wSum/.test(gpsSrc),
+    'stronger fixes pull the smoothed position harder than the weak (up-to-90m) fixes we now keep — replaces the flat 3-average');
+
+  check('GPS: smoothed fix reports the CURRENT accuracy, not the buffer best',
+    /lat: wLat \/ wSum,[\s\S]*?accuracy_m: raw\.accuracy_m,/.test(gpsSrc),
+    'the accuracy pill must reflect live signal — reporting the buffer minimum (Grok\'s bestAccuracy) would overstate quality');
+
+  check('GPS: GpsFix carries a canonical confidence bucket (high/medium/low)',
+    /confidence\?: 'high' \| 'medium' \| 'low';/.test(gpsSrc) &&
+      /function confidenceFromAccuracy/.test(gpsSrc) &&
+      /accuracy_m < 5\) return 'high'/.test(gpsSrc) && /accuracy_m < 15\) return 'medium'/.test(gpsSrc),
+    'confidence derived from accuracy at classifyAccuracy thresholds (5m/15m), no import cycle — set on every emit path');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

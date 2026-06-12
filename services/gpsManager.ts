@@ -41,6 +41,11 @@ export interface GpsFix {
   // 'user_mark'. shotDetectionService gates on this to avoid
   // phantom shot emissions from taps.
   source?: 'live' | 'user_mark';
+  // 2026-06-11 — canonical quality bucket derived from accuracy_m so
+  // consumers read ONE value off the fix instead of each re-deriving via
+  // classifyAccuracy. Mirrors classifyAccuracy's thresholds (<5m / <15m).
+  // Optional for back-compat with persisted/legacy fixes.
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 type Subscriber = (fix: GpsFix) => void;
@@ -84,8 +89,15 @@ const OUTLIER_ABSOLUTE_JUMP_M = 300;
 const OUTLIER_JUMP_M = 50;
 const OUTLIER_JUMP_WINDOW_MS = 5_000;
 
-// Phase 107 / B3 — rolling smoothing: average the most recent N accepted fixes.
-const SMOOTHING_WINDOW = 3;
+// Phase 107 / B3 — rolling smoothing window.
+// 2026-06-11 — widened 3 → 5 and switched from a flat mean to an
+// inverse-accuracy-WEIGHTED mean (see processFix). Now that the pipeline
+// KEEPS weak fixes (up to OUTLIER_ACCURACY_M = 90m) instead of discarding
+// them, a flat 3-average trusted a 70m fix as much as a 4m one and let weak
+// samples yank the smoothed position around. Weighting by 1/accuracy lets the
+// strong fixes dominate while the weak ones still contribute a little; a wider
+// window steadies it without adding much lag at golf walking speed.
+const SMOOTHING_WINDOW = 5;
 
 // Phase 400-followup — if no fix has arrived for this long while the watch
 // is supposedly running, assume the OS killed the subscription during
@@ -184,6 +196,21 @@ function breadcrumb(message: string, data?: Record<string, unknown>) {
 // utils/geoDistance.ts canonical (mathematically identical formula).
 
 /**
+ * 2026-06-11 — Canonical confidence bucket from a reported accuracy.
+ * Defined locally (NOT imported from smartFinderService.classifyAccuracy)
+ * to avoid an import cycle — smartFinderService subscribes to this module.
+ * Thresholds are kept identical to classifyAccuracy (<5m strong, <15m
+ * moderate) so the quick GpsFix.confidence and the detailed
+ * GPSQualityReading never disagree. null accuracy = 'low' (unknown quality).
+ */
+function confidenceFromAccuracy(accuracy_m: number | null): 'high' | 'medium' | 'low' {
+  if (accuracy_m == null) return 'low';
+  if (accuracy_m < 5) return 'high';
+  if (accuracy_m < 15) return 'medium';
+  return 'low';
+}
+
+/**
  * Phase 405 wave 4 — shared fix-processing path. Runs the outlier
  * rejection + rolling smoothing + motion-tracking + subscriber-fanout
  * for any incoming fix, whether sourced from watchPositionAsync (the
@@ -260,14 +287,26 @@ function processFix(raw: GpsFix): boolean {
     userMarkedAt = 0;
     console.log('[gps:user-mark-bypass] reconcile fix accepted, bypass cleared');
   }
-  // Rolling smoothing.
+  // Rolling INVERSE-ACCURACY-WEIGHTED smoothing. Each buffered fix is
+  // weighted by 1/accuracy (floored at 5m so a single 2m fix can't fully
+  // dominate; null accuracy treated as a weak 30m). Stronger fixes pull the
+  // smoothed position harder than weak ones — strictly better than the prior
+  // flat mean now that weak fixes (up to 90m) are kept rather than discarded.
   smoothingBuffer.push(raw);
   if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
-  const avgLat = smoothingBuffer.reduce((s, f) => s + f.lat, 0) / smoothingBuffer.length;
-  const avgLng = smoothingBuffer.reduce((s, f) => s + f.lng, 0) / smoothingBuffer.length;
+  let wLat = 0, wLng = 0, wSum = 0;
+  for (const f of smoothingBuffer) {
+    const w = 1 / Math.max(f.accuracy_m ?? 30, 5);
+    wLat += f.lat * w;
+    wLng += f.lng * w;
+    wSum += w;
+  }
   const fix: GpsFix = {
-    lat: avgLat,
-    lng: avgLng,
+    // wSum is always > 0 (buffer has >=1 fix, weights are positive).
+    lat: wLat / wSum,
+    lng: wLng / wSum,
+    // Report the CURRENT fix's accuracy (honest live quality), NOT the
+    // buffer's best — the accuracy pill must reflect signal right now.
     accuracy_m: raw.accuracy_m,
     speed: raw.speed,
     timestamp: raw.timestamp,
@@ -275,6 +314,7 @@ function processFix(raw: GpsFix): boolean {
     // consumers can rely on the source discriminator. Live ticks
     // (this path) write 'live'; setMarkedFix writes 'user_mark'.
     source: 'live',
+    confidence: confidenceFromAccuracy(raw.accuracy_m),
   };
   // Motion tracking — stationary -> walking on real motion.
   if (lastFix) {
@@ -360,6 +400,7 @@ export function setSimulatedFix(loc: { lat: number; lng: number }, accuracy_m = 
     // downstream consumers (harness testing relies on shot
     // detection firing on simulated movement).
     source: 'live',
+    confidence: confidenceFromAccuracy(accuracy_m),
   };
   lastTickAt = Date.now();
   // 2026-06-05 — arm the stale-clear so a sim fix doesn't hard-clear
@@ -407,6 +448,7 @@ export function setMarkedFix(lat: number, lng: number, accuracy_m: number | null
     speed: null,
     timestamp: Date.now(),
     source: 'user_mark' as const,
+    confidence: confidenceFromAccuracy(accuracy_m),
   };
   // 2026-06-06 — Mark a "user-marked" timestamp so the next 1-2 live
   // GPS ticks bypass the outlier-rejection gates in processFix. ONLY
@@ -608,6 +650,8 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
       accuracy_m: pos.coords.accuracy ?? null,
       speed: pos.coords.speed ?? null,
       timestamp: pos.timestamp,
+      source: 'live',
+      confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
     };
     lastFix = fresh;
     lastTickAt = Date.now();
@@ -903,6 +947,7 @@ export async function getOneShotFix(opts?: { maxAgeMs?: number }): Promise<GpsFi
       // genuine live GPS — mark as 'live' so the type discriminator
       // is consistent.
       source: 'live',
+      confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
     };
     lastFix = fix;
     // 2026-06-05 — arm stale-clear so explicit one-shot reads (e.g.
@@ -965,6 +1010,8 @@ export async function recalibrateGps(): Promise<GpsFix | null> {
       accuracy_m: pos.coords.accuracy ?? null,
       speed: pos.coords.speed ?? null,
       timestamp: pos.timestamp,
+      source: 'live',
+      confidence: confidenceFromAccuracy(pos.coords.accuracy ?? null),
     };
     lastFix = fresh;
     lastMotionAt = Date.now();
