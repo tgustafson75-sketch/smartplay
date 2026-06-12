@@ -962,6 +962,26 @@ check('Brain failure falls back to a real local answer (not a snag prompt)',
     !/Hit a snag on my end/.test(read('hooks/useKevin.ts')),
   'a failed brain call answers locally (on-course status) or a brief non-alarming line — never "hit a snag / no network"');
 
+check('Offline caddie Tier 1: local CLUB CALL + LAST SHOT, grounded + honest (2026-06-12)',
+  // Extends tryLocalReply (the single brain-failure hook used by useKevin /
+  // useVoiceCaddie / voiceCommandRouter), so it works on every fallback path with
+  // no native module — ships via OTA. The club call uses the player's REAL logged
+  // bag (bagDistances) + the GPS/green distance; NEVER a fabricated yardage.
+  (() => {
+    const s = read('services/localStatusResponder.ts');
+    return /import \{ bagDistances \} from '\.\/shotStrategy'/.test(s) &&
+      /clubRec:\s*\//.test(s) && /lastShot:\s*\//.test(s) &&            // the two new intents
+      /if \(RX\.clubRec\.test\(t\)\) \{\s*return clubCallReply/.test(s) &&
+      /if \(RX\.lastShot\.test\(t\)\) \{\s*return lastShotReply/.test(s) &&
+      // honesty: empty bag → say so (no generic chart numbers), and the call is built
+      // from the measured carry (best[1]) + GPS distance, not an invented figure.
+      /if \(bag\.length === 0\) \{\s*return \{ text: L\[lang\]\.noBag/.test(s) &&
+      /L\[lang\]\.clubCall\(dist, best\[0\], best\[1\]\)/.test(s) &&
+      // last shot reads the real logged shots array.
+      /const shots = round\.shots \?\? \[\]/.test(s);
+  })(),
+  'when the cloud brain is unreachable the caddie still CALLS A CLUB (real bag + GPS distance, honest when the bag is empty or GPS is weak) and recalls your LAST SHOT from logged round state — no fabricated numbers, no native module (OTA-able)');
+
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
   /version: 12/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),

@@ -38,6 +38,10 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getLastFix } from './gpsManager';
 import { haversineYards } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy } from './smartFinderService';
+// 2026-06-12 — Offline caddie Tier 1: the player's REAL logged bag distances, used to
+// CALL A CLUB locally when the cloud brain is unreachable. Honest by construction —
+// bagDistances() only returns clubs the player has actually tracked. [[offline-caddie-plan]]
+import { bagDistances } from './shotStrategy';
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
@@ -54,6 +58,8 @@ export type LocalReplyResult = {
     | 'tee_box'
     | 'course_name'
     | 'club_current'
+    | 'club_recommend'
+    | 'last_shot'
     | 'handicap'
     | 'course_memory'
     | 'no_round';
@@ -83,6 +89,15 @@ const L: Record<LocalReplyLanguage, {
   courseIs: (c: string) => string;
   clubIs: (c: string) => string;
   noClub: string;
+  // Offline caddie Tier 1 — club call + last shot.
+  clubCall: (dist: number, club: string, carry: number) => string;
+  clubCallMore: (dist: number, club: string, carry: number) => string;
+  clubCallEasy: (dist: number, club: string, carry: number) => string;
+  clubBeyond: (dist: number, club: string, carry: number) => string;
+  noBag: string;
+  clubIffy: string;
+  lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
+  noLastShot: string;
   handicapIs: (h: number) => string;
   noRound: string;
 }> = {
@@ -104,6 +119,20 @@ const L: Record<LocalReplyLanguage, {
     courseIs: (c) => `You're at ${c}.`,
     clubIs: (c) => `${c} in your hand.`,
     noClub: 'No club set yet.',
+    clubCall: (d, c, y) => `${d} to the middle — that's your ${c}, you carry it ${y}.`,
+    clubCallMore: (d, c, y) => `${d} to the middle — ${c} is the club (${y}), give it a touch extra.`,
+    clubCallEasy: (d, c, y) => `${d} to the middle — smooth ${c}, you carry it ${y}.`,
+    clubBeyond: (d, c, y) => `${d} to the middle — that's past your ${c} (${y}). Lay up and leave a wedge.`,
+    noBag: "I don't have your real club distances yet — track a few shots and I'll call the club.",
+    clubIffy: ' GPS is iffy right now, so treat that loosely.',
+    lastShot: (c, d, dir) => {
+      const where = dir === 'left' ? ' pulled left' : dir === 'right' ? ' out to the right' : dir === 'straight' ? ' dead straight' : '';
+      if (c && d != null) return `Your last one was a ${c}, ${d} yards${where}.`;
+      if (c) return `Your last one was a ${c}${where}.`;
+      if (d != null) return `Last shot went ${d} yards${where} — no club logged.`;
+      return where ? `Last shot${where} — I don't have the club or distance logged.` : "I have your last shot logged but no club or distance on it.";
+    },
+    noLastShot: "You haven't logged a shot yet this round.",
     handicapIs: (h) => `Your handicap is ${h}.`,
     noRound: 'No active round.',
   },
@@ -125,6 +154,20 @@ const L: Record<LocalReplyLanguage, {
     courseIs: (c) => `Estás en ${c}.`,
     clubIs: (c) => `Tienes el ${c}.`,
     noClub: 'Aún no has elegido palo.',
+    clubCall: (d, c, y) => `${d} al centro — ese es tu ${c}, lo llevas ${y}.`,
+    clubCallMore: (d, c, y) => `${d} al centro — el ${c} es el palo (${y}), pégale un poco más.`,
+    clubCallEasy: (d, c, y) => `${d} al centro — ${c} suave, lo llevas ${y}.`,
+    clubBeyond: (d, c, y) => `${d} al centro — pasa de tu ${c} (${y}). Pon en juego y deja un wedge.`,
+    noBag: 'Aún no tengo tus distancias reales — registra unos tiros y te canto el palo.',
+    clubIffy: ' El GPS no está fino ahora, así que tómalo a la ligera.',
+    lastShot: (c, d, dir) => {
+      const where = dir === 'left' ? ' a la izquierda' : dir === 'right' ? ' a la derecha' : dir === 'straight' ? ' recto' : '';
+      if (c && d != null) return `Tu último fue un ${c}, ${d} yardas${where}.`;
+      if (c) return `Tu último fue un ${c}${where}.`;
+      if (d != null) return `El último fue ${d} yardas${where} — sin palo registrado.`;
+      return where ? `Último tiro${where} — sin palo ni distancia.` : 'Tengo tu último tiro pero sin palo ni distancia.';
+    },
+    noLastShot: 'Aún no has registrado un tiro en esta ronda.',
     handicapIs: (h) => `Tu handicap es ${h}.`,
     noRound: 'No hay ronda activa.',
   },
@@ -146,6 +189,20 @@ const L: Record<LocalReplyLanguage, {
     courseIs: (c) => `你在${c}。`,
     clubIs: (c) => `手里是${c}。`,
     noClub: '还没有选球杆。',
+    clubCall: (d, c, y) => `到中心${d}码——用你的${c}，你能打${y}码。`,
+    clubCallMore: (d, c, y) => `到中心${d}码——${c}是合适的杆（${y}码），稍微多打一点。`,
+    clubCallEasy: (d, c, y) => `到中心${d}码——轻松一杆${c}，你能打${y}码。`,
+    clubBeyond: (d, c, y) => `到中心${d}码——超过你最远的${c}（${y}码）。先稳一杆，留个劈起距离。`,
+    noBag: '我还没有你真实的球杆距离——记录几杆我就能帮你选杆。',
+    clubIffy: '现在GPS信号不稳，这个数字仅供参考。',
+    lastShot: (c, d, dir) => {
+      const where = dir === 'left' ? '偏左' : dir === 'right' ? '偏右' : dir === 'straight' ? '很直' : '';
+      if (c && d != null) return `你上一杆是${c}，${d}码${where}。`;
+      if (c) return `你上一杆是${c}${where}。`;
+      if (d != null) return `上一杆${d}码${where}——没有记录球杆。`;
+      return where ? `上一杆${where}——没有球杆和距离记录。` : '有你上一杆的记录，但没有球杆和距离。';
+    },
+    noLastShot: '这回合你还没有记录任何一杆。',
     handicapIs: (h) => `你的差点是${h}。`,
     noRound: '没有进行中的回合。',
   },
@@ -170,6 +227,11 @@ const RX = {
   tee:        /\b(what\s+tee|which\s+tee|tee\s+box|what\s+tees?\s+(?:am\s+i|i'm)\s+playing)\b/i,
   course:     /\b(what\s+course|which\s+course|where\s+am\s+i\s+playing|what\s+(?:'s|s)?\s+the\s+course)\b/i,
   club:       /\b(what\s+club|club\s+(?:am\s+i|i'm)\s+(?:using|hitting)|what\s+(?:am\s+i|i'm)\s+hitting)\b/i,
+  // Offline caddie Tier 1 — the DECISION queries (distinct from "what club am I holding"):
+  // club RECOMMENDATION ("what club should I hit / club for this / what do I hit here")…
+  clubRec:    /\b(what|which)\s+club\s+(should|do|would)\s+i\b|\bclub\s+(for\s+this|from\s+here|do\s+i\s+(?:hit|need))\b|\bwhat\s+(?:should|do)\s+i\s+(?:hit|play)\s+(?:here|from\s+here|on\s+this)?\b|\bgive\s+me\s+a\s+club\b/i,
+  // …and LAST SHOT recall ("what did I just hit / how was that / my last shot").
+  lastShot:   /\b(last\s+shot|what\s+did\s+i\s+(?:just\s+)?hit|how\s+was\s+(?:that|my\s+last)|that\s+last\s+(?:one|shot)|my\s+last\s+(?:shot|swing))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
 };
 
@@ -199,6 +261,15 @@ export function tryLocalReply(
   // ── YARDAGE (must check first; "yards" appears in other phrases) ──
   if (RX.yardage.test(t)) {
     return yardageReply(t, lang);
+  }
+  // ── CLUB RECOMMENDATION (the caddie's offline decision — check before "what
+  //    club am I holding") ──
+  if (RX.clubRec.test(t)) {
+    return clubCallReply(lang);
+  }
+  // ── LAST SHOT recall ──
+  if (RX.lastShot.test(t)) {
+    return lastShotReply(lang);
   }
   // ── HOLE ──
   if (RX.hole.test(t)) {
@@ -317,6 +388,63 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
   if (queryType === 'yardage_front') return { text: L[lang].yardageFront(yards), queryType };
   if (queryType === 'yardage_back')  return { text: L[lang].yardageBack(yards), queryType };
   return { text: L[lang].yardageMiddle(yards), queryType };
+}
+
+// Offline caddie Tier 1 — CALL A CLUB. Distance from the same GPS/green path the
+// yardage reply uses; the club from the player's REAL logged bag (bagDistances()).
+// Every number is measured/logged — never a generated yardage. Honest when the bag
+// is empty (track shots first) or the distance is unavailable (GPS/green missing).
+function clubCallReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const round = useRoundStore.getState();
+  const bag = Object.entries(bagDistances()) as [string, number][];
+  if (bag.length === 0) {
+    return { text: L[lang].noBag, queryType: 'club_recommend' };
+  }
+  if (typeof round.currentHole !== 'number' || round.currentHole <= 0) {
+    return { text: L[lang].noFix, queryType: 'club_recommend' };
+  }
+  const green = resolveGreenCoords(round.currentHole);
+  const fix = getLastFix();
+  if (!green || !green.middle || !fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
+    return { text: green && !green.middle ? L[lang].noGreen : L[lang].noFix, queryType: 'club_recommend' };
+  }
+  const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
+  if (quality.level === 'none' || quality.level === 'stale') {
+    return { text: L[lang].noFix, queryType: 'club_recommend' };
+  }
+  const dist = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green.middle));
+
+  // Closest carry + the player's longest club (for the beyond-the-bag case).
+  let best = bag[0];
+  let longest = bag[0];
+  for (const e of bag) {
+    if (Math.abs(e[1] - dist) < Math.abs(best[1] - dist)) best = e;
+    if (e[1] > longest[1]) longest = e;
+  }
+  if (dist > longest[1] + 8) {
+    return { text: L[lang].clubBeyond(dist, longest[0], longest[1]), queryType: 'club_recommend' };
+  }
+  const gap = dist - best[1]; // + = need a touch more, − = stepping on it
+  let text = gap > 6 ? L[lang].clubCallMore(dist, best[0], best[1])
+    : gap < -6 ? L[lang].clubCallEasy(dist, best[0], best[1])
+    : L[lang].clubCall(dist, best[0], best[1]);
+  if (quality.level === 'weak') text += L[lang].clubIffy; // honest hedge on a sloppy fix
+  return { text, queryType: 'club_recommend' };
+}
+
+// Offline caddie Tier 1 — LAST SHOT recall, straight from the logged round state
+// (roundStore.shots). Honest about missing club/distance fields.
+function lastShotReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const round = useRoundStore.getState();
+  const shots = round.shots ?? [];
+  if (shots.length === 0) {
+    return { text: L[lang].noLastShot, queryType: 'last_shot' };
+  }
+  const s = shots[shots.length - 1];
+  const club = typeof s.club === 'string' && s.club.trim() ? s.club.trim() : null;
+  const dist = typeof s.distance_yards === 'number' ? s.distance_yards : null;
+  const dir = s.direction ?? null;
+  return { text: L[lang].lastShot(club, dist, dir), queryType: 'last_shot' };
 }
 
 function scoreReply(lang: LocalReplyLanguage): LocalReplyResult {
