@@ -149,6 +149,14 @@ const ICON_ENV = {
   course: require('../../assets/icons/smartmotion/env-course.png'),
 } as const;
 const ICON_CLUB = require('../../assets/icons/smartmotion/club-detect.png');
+// Ball/result metric badges for the LEFT rail (honest: tempo, ball speed, ball result
+// direction, + face INFERRED from ball start). Smash needs club speed we don't have.
+const ICON_METRIC = {
+  tempo: require('../../assets/icons/smartmotion/metric-tempo.png'),
+  ballspeed: require('../../assets/icons/smartmotion/metric-ballspeed.png'),
+  ballresult: require('../../assets/icons/smartmotion/metric-ballresult.png'),
+  face: require('../../assets/icons/smartmotion/metric-faceangle.png'),
+} as const;
 // Biomech RESULT badges (Tim — the dashed-line set for the body-analysis row).
 const ICON_BIOMECH = {
   sway: require('../../assets/icons/smartmotion/biomech-sway.png'),
@@ -685,6 +693,21 @@ export default function SmartMotion() {
     ],
     [analysis, biomech, metrics],
   );
+  // 2026-06-12 — LEFT rail: the ball/result metrics as custom badges (Tim). Honest +
+  // distinct: TEMPO (ratio), BALL SPEED (acoustic mph), BALL RESULT (the DTL trace's
+  // start direction). Each shows "—" until measured — no fabricated number. (Inferred
+  // FACE ≈ ball result, so it's not duplicated; SMASH needs club speed we don't have.)
+  const leftMetrics = useMemo(() => {
+    if (isPutt) return [];
+    const dir = ballTrace
+      ? (ballTrace.side === 'straight' ? 'ON LINE' : `${ballTrace.divergenceDeg}° ${ballTrace.side === 'left' ? 'L' : 'R'}`)
+      : null;
+    return [
+      { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
+      { key: 'speed', img: ICON_METRIC.ballspeed, value: ballSpeed?.ball_speed_mph != null ? `${Math.round(ballSpeed.ball_speed_mph)}` : null, unit: 'mph', label: 'BALL SPEED' },
+      { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
+    ];
+  }, [isPutt, tempo, ballSpeed, ballTrace]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
@@ -1941,17 +1964,22 @@ export default function SmartMotion() {
           ]}
         />
 
-        {/* TEMPO PILL — vertical data pill on the LEFT (review, swings). Tempo
-            is the headline metric; shown here so it's always visible without
-            blocking the ball box. Green when in the 2.8–3.4 window, else amber.
-            Only renders when a real ratio exists (honest — no fake number). */}
-        {isReview && showResults && !isPutt && tempo?.ratio != null ? (
-          <View style={[styles.tempoPill, { top: insets.top + 76 }]} pointerEvents="none">
-            <Text style={styles.tempoPillLabel}>TEMPO</Text>
-            <Text style={[styles.tempoPillValue, { color: tempo.ratio >= 2.8 && tempo.ratio <= 3.4 ? '#34d399' : '#f59e0b' }]}>
-              {tempo.ratio.toFixed(1)}
-            </Text>
-            <Text style={styles.tempoPillUnit}>: 1</Text>
+        {/* LEFT RAIL — ball/result metric badges (review): tempo · ball speed · ball
+            result. Mirrors the right rail so the metrics flank the video and the
+            centre stays clear (Tim). Honest "—" until measured. Hide-toggle gated. */}
+        {isReview && showResults && !isPutt ? (
+          <View style={[styles.leftRail, { top: insets.top + 60 }]} pointerEvents="none">
+            {leftMetrics.map((m) => (
+              <View key={m.key} style={styles.metricBadgeCard}>
+                <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
+                <View style={styles.metricBadgeText}>
+                  <Text style={styles.metricBadgeValue} numberOfLines={1}>
+                    {m.value ?? '—'}{m.value != null && m.unit ? <Text style={styles.metricBadgeUnit}> {m.unit}</Text> : null}
+                  </Text>
+                  <Text style={styles.metricBadgeLabel} numberOfLines={1}>{m.label}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -2634,6 +2662,13 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4 },
 
   rightRail: { position: 'absolute', right: 8, width: 118, gap: 8, zIndex: 4 },
+  leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },
+  metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.62)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.28)' },
+  metricBadgeImg: { width: 32, height: 32 },
+  metricBadgeText: { flex: 1, minWidth: 0 },
+  metricBadgeValue: { color: '#88F700', fontSize: 14, fontWeight: '900', letterSpacing: 0.2 },
+  metricBadgeUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '700' },
+  metricBadgeLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
 
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },

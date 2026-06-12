@@ -887,11 +887,16 @@ check('Universal control bar: record/play-pause/save/delete + slow-mo',
     /deleteSession/.test(smSrc) && /rate=\{playbackRate\}/.test(smSrc),
   'review bar with play/pause, slow-mo (rate prop), save, delete');
 
-check('Tempo pill on the left (review, swings, honest) + result-overlay hide toggle',
-  /tempoPill/.test(smSrc) && /isReview && showResults && !isPutt && tempo\?\.ratio != null/.test(smSrc) &&
+check('Tempo on the LEFT rail (badge, honest) + result-overlay hide toggle',
+  // Tempo moved from a standalone pill into the LEFT metric rail (tempo · ball speed
+  // · ball result), each a custom badge, honest "—" until measured.
+  /leftMetrics/.test(smSrc) && /ICON_METRIC\.tempo/.test(smSrc) &&
+    /tempo\?\.ratio != null \? `\$\{tempo\.ratio\.toFixed\(1\)\}`/.test(smSrc) &&
+    /styles\.leftRail/.test(smSrc) &&
+    /m\.value \?\? '—'/.test(smSrc) &&
     /const \[showResults, setShowResults\] = useState\(true\)/.test(smSrc) &&
     /setShowResults\(\(v\) => !v\)/.test(smSrc),
-  'headline tempo shown as a left pill, only when a real ratio exists — and gated (with every result overlay) on a showResults toggle so the player can clear the frame for a clean screenshot/share (Smart Capture)');
+  'tempo + ball speed + ball result render as custom badges on the LEFT rail (flanking the video, centre clear), honest "—" until measured, and every result overlay is gated on a showResults toggle for a clean Smart Capture frame');
 
 check('Face-on: NO launch/trace line on review (false from the front); framing guides both angles',
   // 2026-06-11 (cage test) — the slanted launch line is REMOVED from face-on
