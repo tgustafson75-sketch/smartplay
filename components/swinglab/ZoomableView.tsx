@@ -46,6 +46,11 @@ interface Props {
    *  surface a "zoomed Nx" badge or to lock native video controls
    *  when zoomed (they conflict with pan gestures). */
   onScaleChange?: (scale: number) => void;
+  /** 2026-06-11 — single-tap callback (e.g. tap-anywhere-to-play/pause). Composed
+   *  to WAIT for the double-tap-to-reset to fail, so a double-tap doesn't also fire
+   *  a single tap. Only wired when provided — other callers (Coach Mode) keep their
+   *  single-tap passing through to native controls. */
+  onSingleTap?: () => void;
 }
 
 export default function ZoomableView({
@@ -54,6 +59,7 @@ export default function ZoomableView({
   minScale = 1,
   maxScale = 4,
   onScaleChange,
+  onSingleTap,
 }: Props) {
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -66,6 +72,7 @@ export default function ZoomableView({
     (s: number) => { onScaleChange?.(s); },
     [onScaleChange],
   );
+  const fireSingleTap = React.useCallback(() => { onSingleTap?.(); }, [onSingleTap]);
 
   const pinch = Gesture.Pinch()
     .onUpdate(e => {
@@ -112,10 +119,20 @@ export default function ZoomableView({
       runOnJS(notify)(1);
     });
 
+  const singleTap = Gesture.Tap()
+    .numberOfTaps(1)
+    .maxDuration(250)
+    .onEnd((_e, success) => { if (success) runOnJS(fireSingleTap)(); });
+
   // Compose: pinch + pan are simultaneous; doubleTap is exclusive
-  // (otherwise the second tap of a double could fire a pan onUpdate).
+  // (otherwise the second tap of a double could fire a pan onUpdate). When a
+  // single-tap handler is wired, it sits between double-tap and the pinch/pan
+  // (Exclusive priority order) so a double-tap-to-reset still wins over a single
+  // tap, and a pinch/pan still beats a tap.
   const composed = Gesture.Simultaneous(pinch, pan);
-  const root = Gesture.Exclusive(doubleTap, composed);
+  const root = onSingleTap
+    ? Gesture.Exclusive(doubleTap, singleTap, composed)
+    : Gesture.Exclusive(doubleTap, composed);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

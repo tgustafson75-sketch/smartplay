@@ -7,7 +7,7 @@
  * the video to the detected moment.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
@@ -170,6 +170,15 @@ export default function SwingDetail() {
   // videoUpload.probeVideo is unreliable (it returns true for any video with
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [seekBarW, setSeekBarW] = useState(0);
+  // 2026-06-11 — tap the video to play/pause (Tim: intuitive, not hunting for the
+  // button below + catching it in time). Single-tap routes through ZoomableView
+  // (composed under double-tap-reset + pinch/pan), so zoom/annotation stay intact.
+  const togglePlayPause = useCallback(() => {
+    if (isPlaying) void videoRef.current?.pauseAsync().catch(() => {});
+    else void videoRef.current?.playAsync().catch(() => {});
+  }, [isPlaying]);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
 
@@ -366,6 +375,7 @@ export default function SwingDetail() {
     const s = status as AVPlaybackStatusSuccess;
     if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
     if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
+    setIsPlaying(s.isPlaying === true);
     // Auto-play once on open for the normal (non-watch) paths. The ?watch=1
     // route keeps its own shouldPlay + analyze-on-finish handling below, so we
     // skip it here. Fires a single time once the clip has a real duration;
@@ -874,13 +884,17 @@ export default function SwingDetail() {
                   impact, etc. Double-tap to reset. The Video stays
                   unchanged inside — native controls work when at 1×;
                   when zoomed, the pan gesture takes over. */}
-              <ZoomableView style={StyleSheet.absoluteFill}>
+              <ZoomableView style={StyleSheet.absoluteFill} onSingleTap={togglePlayPause}>
               <Video
                 ref={videoRef}
                 source={{ uri: shot.clipUri }}
                 style={styles.video}
                 resizeMode={ResizeMode.CONTAIN}
-                useNativeControls
+                // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
+                // (via ZoomableView) and a thin tap-to-seek bar replaces the native
+                // scrubber, so there's no native tap-handling competing with the
+                // tap-to-pause gesture. Slow-mo + frame-jump buttons unchanged.
+                useNativeControls={false}
                 // 2026-05-25 — Auto-play on ?watch=1 (Path A: watch-
                 // then-analyze for short uploads). User sees the swing
                 // play through; runPhaseKOnSession fires when the video
@@ -937,6 +951,33 @@ export default function SwingDetail() {
               >
                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{playbackRate}×</Text>
               </TouchableOpacity>
+              {/* 2026-06-11 — brief center play-icon when paused, so tap-to-play
+                  reads as a video control (fades out while playing). */}
+              {!isPlaying ? (
+                <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="play" size={28} color="#fff" />
+                  </View>
+                </View>
+              ) : null}
+              {/* Tap-to-seek bar — replaces the native scrubber. Tap anywhere on it
+                  to jump to that fraction of the clip. Thin, bottom edge, clear of
+                  the watermark; doesn't interfere with the tap-to-pause on the frame. */}
+              <Pressable
+                onPress={(e) => {
+                  if (!duration || duration <= 0 || seekBarW <= 0) return;
+                  const frac = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekBarW));
+                  void scrubTo(frac * duration);
+                }}
+                onLayout={(e) => setSeekBarW(e.nativeEvent.layout.width)}
+                style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 26, justifyContent: 'flex-end' }}
+                accessibilityRole="adjustable"
+                accessibilityLabel="Seek bar — tap to jump to a point in the swing"
+              >
+                <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.25)' }}>
+                  <View style={{ height: 4, width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%`, backgroundColor: '#34d399' }} />
+                </View>
+              </Pressable>
             </View>
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>

@@ -1864,6 +1864,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   // ─── SmartMotion cage-test fixes (face-on launch-line checked above) ──────
   const swingDetailSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf-8');
+  // 2026-06-11 — tap the video to play/pause (Tim: intuitive, not hunting for the
+  // button). Single-tap via ZoomableView, composed UNDER double-tap-reset + pinch/pan
+  // so zoom/annotation stay intact; native controls off, a tap-to-seek bar replaces
+  // the native scrubber so nothing competes with the tap gesture.
+  check('Swing Library: tap-to-play/pause without breaking zoom/scrub',
+    /onSingleTap\?: \(\) => void/.test(read('components/swinglab/ZoomableView.tsx')) &&
+      /Gesture\.Exclusive\(doubleTap, singleTap, composed\)/.test(read('components/swinglab/ZoomableView.tsx')) &&
+      /onSingleTap=\{togglePlayPause\}/.test(swingDetailSrc2) &&
+      /useNativeControls=\{false\}/.test(swingDetailSrc2) &&
+      /void scrubTo\(frac \* duration\)/.test(swingDetailSrc2),
+    'ZoomableView gains an optional single-tap (Exclusive: double-tap-reset wins, then single-tap, then pinch/pan), wired to play/pause; native controls off + a tap-to-seek bar replaces the scrubber so the tap-to-pause never fights native tap handling, and pinch-zoom + annotation are untouched');
+
   check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
     /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc2),
     'the biomech backfill is gated off cage/long clips — a ~60s multi-swing session is no longer watched whole as one swing in the library detail (Tim\'s 1-min stuck)');
