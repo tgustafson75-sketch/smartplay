@@ -1444,6 +1444,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // 2026-06-11 — geometry↔tempo/effort. The target's vertical distance above the
   // ball (vs the ball's room to the top) = declared effort; the read is graded
   // against that intended partial shot instead of a generic full swing.
+  // 2026-06-11 — periodic auto club detection. It was never auto-fired (manual/voice
+  // only despite the comment); now every 3rd cycle queues a SILENT scan for the next
+  // setup, gated off the hands-free auto-record so it can't race the camera, and it
+  // does NOT pop the club picker on a low-confidence auto read (only manual does).
+  check('SmartMotion: club detection auto-fires every 3 cycles, silent + non-racing',
+    /cycleCountRef\.current % 3 === 0\) clubScanDueRef\.current = true/.test(smSrc2) &&
+      /phase !== 'setup' \|\| !clubScanDueRef\.current \|\| scanningClub \|\| pendingStartRef\.current/.test(smSrc2) &&
+      /detectClubFromCamera\(\{ auto: true \}\)/.test(smSrc2) &&
+      /\} else if \(!auto\) \{[\s\S]{0,120}setClubMenuOpen\(true\)/.test(smSrc2),
+    'a completed recording bumps the cycle count; every 3rd queues a club scan fired silently the next time we settle in setup (NOT during the hands-free auto-record relaunch, so no camera race); a low-confidence AUTO read keeps the current club silently while a MANUAL scan still opens the picker');
+
   check('SmartMotion: geometry→effort grades the read against the intended shot',
     /Intended effort \(from geometry\)/.test(swingApiSrc) &&
       /DECLARED a ~\$\{effortPct\}% shot/.test(swingApiSrc) &&

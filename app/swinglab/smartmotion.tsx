@@ -297,6 +297,11 @@ export default function SmartMotion() {
   const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [scanningClub, setScanningClub] = useState(false);
+  // 2026-06-11 — periodic auto club detection (Tim: "every ~3 cycles"). A completed
+  // recording bumps cycleCountRef; every Nth cycle marks a scan due, fired silently
+  // once we settle back in setup (see the effect below detectClubFromCamera).
+  const cycleCountRef = useRef(0);
+  const clubScanDueRef = useRef(false);
   // Putt mode — EXPLICIT, per-recording state (NOT derived from the sticky
   // club). Deriving it from `club === 'PT'` meant a putter tagged once stayed
   // tagged in the persisted clubSelectionStore, so EVERY later recording routed
@@ -1348,6 +1353,10 @@ export default function SmartMotion() {
       // effect once both the clip and a ball spot are available (the ball spot
       // may be a pre-record draft or placed in review).
       firstStrikeMsRef.current = firstStrikeMs;
+      // 2026-06-11 — count the cycle; every Nth, queue a SILENT auto club scan for
+      // the next setup (the effect below detectClubFromCamera fires it).
+      cycleCountRef.current += 1;
+      if (cycleCountRef.current % 3 === 0) clubScanDueRef.current = true;
 
       // 2026-06-11 — RANGE: acoustics PROPOSE *when*, vision DISPOSES *which*. The
       // video locator finds the swings actually in YOUR frame (the spine — the
@@ -1435,20 +1444,26 @@ export default function SmartMotion() {
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
   stopRecordingRef.current = stopRecording;
 
-  // ── auto club detection (hands-free, between minutes) ──────────────────
-  // Point the camera at the club (or just keep playing); a scan grabs a frame,
-  // recognizes the club, and tags it. High/med confidence → set it + a spoken
-  // "Got it, 7-iron". Low confidence → open the picker so the user CONFIRMS
-  // (UI fallback). Club state is the shared store, so this updates the HUD,
-  // ball speed, etc. everywhere. Never blocks recording.
-  const detectClubFromCamera = useCallback(async () => {
+  // ── club detection (manual scan + periodic auto, hands-free) ───────────────
+  // A scan grabs a frame, recognizes the club, and tags it. High/med confidence →
+  // set it + a spoken "Got it, 7-iron". Club state is the shared store, so this
+  // updates the HUD, ball speed, etc. everywhere. Never blocks recording.
+  //
+  // `auto` distinguishes the PERIODIC scan (every few cycles) from a MANUAL/voice
+  // scan: on a low-confidence read a MANUAL scan opens the picker so the user can
+  // confirm, but the AUTO scan stays SILENT (keeps the current club) — popping the
+  // picker mid-session every few cycles would hijack the hands-free flow. (2026-06-11
+  // — auto path added; before this the "auto between minutes" comment was aspirational,
+  // the scan only ever fired from the tool-rail button or a voice "scan club".)
+  const detectClubFromCamera = useCallback(async (opts?: { auto?: boolean }) => {
     if (scanningClub) return;
+    const auto = opts?.auto === true;
     setScanningClub(true);
     try {
       const apiUrl = getApiBaseUrl();
       const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.5, skipProcessing: true });
       const b64 = pic?.base64;
-      if (!apiUrl || !b64) { setClubMenuOpen(true); return; }
+      if (!apiUrl || !b64) { if (!auto) setClubMenuOpen(true); return; }
       const res = await recognizeClubFromBase64(b64, apiUrl);
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
@@ -1458,13 +1473,14 @@ export default function SmartMotion() {
           await configureAudioForSpeech();
           await speak(`Got it — ${clubLabel(res.club_id)}.`, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
-      } else {
-        // Couldn't confirm — let the user confirm/correct in the picker.
+      } else if (!auto) {
+        // Manual scan couldn't confirm — let the user confirm/correct in the picker.
         setClubMenuOpen(true);
       }
+      // auto + low-confidence → stay silent, keep the current club.
     } catch (e) {
       console.log('[smartmotion] club scan failed:', e);
-      setClubMenuOpen(true);
+      if (!auto) setClubMenuOpen(true);
     } finally {
       setScanningClub(false);
     }
@@ -1490,6 +1506,17 @@ export default function SmartMotion() {
       void startRecording();
     }
   }, [phase, reset, startRecording]);
+
+  // 2026-06-11 — fire the queued periodic auto club scan once we're back in setup —
+  // but NOT during the hands-free auto-record relaunch (pendingStartRef), so it can
+  // never race the camera into the next recording. Silent (auto:true), and yields
+  // to/from the framing loop via scanningClub.
+  useEffect(() => {
+    if (phase !== 'setup' || !clubScanDueRef.current || scanningClub || pendingStartRef.current) return;
+    clubScanDueRef.current = false;
+    const t = setTimeout(() => { void detectClubFromCamera({ auto: true }); }, 500);
+    return () => clearTimeout(t);
+  }, [phase, scanningClub, detectClubFromCamera]);
 
   // Review video transport + keep/discard for the control bar.
   const togglePlay = useCallback(() => {
