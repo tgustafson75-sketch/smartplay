@@ -2119,23 +2119,32 @@ export default function SmartMotion() {
         ) : null}
 
         {/* DTL AIM READOUT (setup) — live as you drag the target: declared effort %
-            (geometry → tempo/length) + the start direction off the aim line. Updates
-            in real time so you SEE the geometry↔tempo connection (Tim). DTL only. */}
-        {phase === 'setup' && angle === 'down_the_line' && !isPutt && (effortRaw != null || aimRead) ? (
-          <View style={[styles.aimReadout, { top: insets.top + 70, left: 10 }]} pointerEvents="none">
-            {effortRaw != null ? (
-              <View style={styles.aimReadoutCol}>
-                <Text style={styles.aimReadoutValue}>{effortRaw}%</Text>
-                <Text style={styles.aimReadoutLabel}>EFFORT</Text>
-              </View>
-            ) : null}
-            {effortRaw != null && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
-            {aimRead ? (
-              <View style={styles.aimReadoutCol}>
-                <Text style={[styles.aimReadoutValue, { color: aimRead === 'STRAIGHT' ? '#34d399' : '#f5c451' }]}>{aimRead}</Text>
-                <Text style={styles.aimReadoutLabel}>AIM</Text>
-              </View>
-            ) : null}
+            + start direction. CENTERED, just UNDER the ball-area box (Tim) — the target
+            travels UP from the ball, so a readout below it can never collide on any
+            screen size. Clamped to stay above the bottom controls. DTL only. */}
+        {phase === 'setup' && angle === 'down_the_line' && !isPutt && liveBall && rootSize.h > 0 && (effortRaw != null || aimRead) ? (
+          <View
+            style={{
+              position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6,
+              top: Math.min(rootSize.h - 132, liveBall.y * rootSize.h + liveBall.r * rootSize.w * 1.5 + 14),
+            }}
+            pointerEvents="none"
+          >
+            <View style={styles.aimReadout}>
+              {effortRaw != null ? (
+                <View style={styles.aimReadoutCol}>
+                  <Text style={styles.aimReadoutValue}>{effortRaw}%</Text>
+                  <Text style={styles.aimReadoutLabel}>EFFORT</Text>
+                </View>
+              ) : null}
+              {effortRaw != null && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
+              {aimRead ? (
+                <View style={styles.aimReadoutCol}>
+                  <Text style={[styles.aimReadoutValue, { color: aimRead === 'STRAIGHT' ? '#34d399' : '#f5c451' }]}>{aimRead}</Text>
+                  <Text style={styles.aimReadoutLabel}>AIM</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
@@ -2575,11 +2584,11 @@ const styles = StyleSheet.create({
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  aimReadout: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 12, zIndex: 6, backgroundColor: 'rgba(6,15,9,0.72)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
+  aimReadout: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(6,15,9,0.74)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
   aimReadoutCol: { alignItems: 'center' },
-  aimReadoutValue: { color: '#7CE04F', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-  aimReadoutLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 8, fontWeight: '700', letterSpacing: 1 },
-  aimReadoutDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
+  aimReadoutValue: { color: '#7CE04F', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  aimReadoutLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 7, fontWeight: '700', letterSpacing: 1 },
+  aimReadoutDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
