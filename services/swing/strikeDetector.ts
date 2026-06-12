@@ -179,9 +179,16 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
 
   const strikes: DetectedStrike[] = debounced.map((s) => {
     const headroom = s.peakDb - floorDb;
+    // 2026-06-12 — confidence is also relative to the ADMISSION threshold (thresholdDb),
+    // not just absolute headroom. Chip mode lowers thresholdDb to ~18 to catch quiet
+    // pitch/chip strikes; with absolute-only bands every real chip (headroom 18–30) was
+    // forced to 'low'/amber and could read "0 swings". `margin` = how far above its own
+    // admission bar — a strike comfortably clear of threshold is at least medium. Normal
+    // mode (thresholdDb 30) is unchanged: headroom >= 30 still drives the medium path.
+    const margin = headroom - thresholdDb;
     let confidence: 'high' | 'medium' | 'low';
     if (headroom > 35 && s.attackMs < 60) confidence = 'high';
-    else if (headroom >= 30 && s.attackMs <= 100) confidence = 'medium';
+    else if ((headroom >= 30 || margin >= 8) && s.attackMs <= 100) confidence = 'medium';
     else confidence = 'low';
     return { timeMs: s.timeMs - startMs, peakDb: s.peakDb, attackMs: s.attackMs, confidence };
   });

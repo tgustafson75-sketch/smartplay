@@ -49,8 +49,11 @@ export function computeTraceDirection(
   // Aim vector: ball→target, or straight up the frame when no target is set.
   const avx = target ? target.x - ballCenter.x : 0;
   const avy = target ? target.y - ballCenter.y : -1;
-  // Angle measured with +x = right, up-the-frame = forward (so atan2(x, -y)).
-  const aimAng = Math.atan2(avx, -avy);
+  // Angle measured with +x = right, up-the-frame = forward (so atan2(x, -y)). Guard the
+  // degenerate case where the target sits essentially ON the ball (zero-length aim
+  // vector): atan2(0, -0) returns π and would flip the aim 180° down-frame. Fall back to
+  // straight-up (angle 0) so every shot doesn't read ~180° off. (2026-06-12)
+  const aimAng = Math.hypot(avx, avy) < 1e-4 ? 0 : Math.atan2(avx, -avy);
   const depAng = Math.atan2(dvx, -dvy);
   let rel = ((depAng - aimAng) * 180) / Math.PI;
   while (rel > 180) rel -= 360;
