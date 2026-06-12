@@ -45,7 +45,8 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
-import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets } from '../../components/swinglab/CageTargetingCard';
+import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -508,6 +509,22 @@ export default function SmartMotion() {
     const pct = Math.round(Math.max(0, Math.min(1, up / Math.max(0.001, ballArea.y))) * 100);
     return pct > 0 && pct < 85 ? pct : null; // only flag a genuinely PARTIAL shot
   }, [ballArea, targetPoint]);
+  // 2026-06-11 — DTL ball-trace. DOWN-THE-LINE ONLY (no flight to see face-on or in a
+  // putt). The real departure point (from ballDeparture, detected off the acoustic
+  // anchor) → the initial direction line measured against the ball→target aim line.
+  const ballTrace = useMemo(() => {
+    if (angle !== 'down_the_line' || isPutt) return null;
+    if (!ballDeparture?.departurePoint || !ballArea) return null;
+    return computeTraceDirection(ballArea, ballDeparture.departurePoint, targetPoint);
+  }, [angle, isPutt, ballDeparture, ballArea, targetPoint]);
+  // Green→red by how far off the aim line it started, dimmed by a weak strike (peakDb
+  // vs the session's strongest). Honest: divergence + real strike energy, no faked curve.
+  const ballTraceColor = useMemo(() => {
+    if (!ballTrace) return '#34d399';
+    const seg = segments[selectedSwing];
+    const refDb = segments.reduce((m, s) => Math.max(m, s.peakDb ?? 0), 0);
+    return traceColor(ballTrace.divergenceDeg, seg?.peakDb, refDb || undefined);
+  }, [ballTrace, segments, selectedSwing]);
 
   const metrics: SwingMetricSet = useMemo(
     () =>
@@ -1806,6 +1823,12 @@ export default function SmartMotion() {
             onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
             onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
           />
+        ) : null}
+
+        {/* DTL ball-trace — the real initial departure direction, green→red by how
+            far off the aim line it started. Down-the-line only (gated in ballTrace). */}
+        {isReview && ballTrace ? (
+          <BallTraceOverlay trace={ballTrace} color={ballTraceColor} />
         ) : null}
 
         {/* SETUP / RECORDING — the ball box is the SINGLE target origin: the

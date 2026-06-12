@@ -446,6 +446,52 @@ export function CageTargetingOverlay({
   );
 }
 
+/**
+ * 2026-06-11 — DTL ball-trace overlay. Draws the REAL initial departure-direction
+ * line from the ball (a straight line, not a fabricated arc), colored green→red by
+ * how far off the aim line it started. The caller gates DTL-only + supplies the
+ * computed direction (services/swing/ballTrace.computeTraceDirection) and color.
+ */
+export function BallTraceOverlay({
+  trace, color,
+}: {
+  trace: { from: { x: number; y: number }; to: { x: number; y: number }; side: 'left' | 'right' | 'straight'; divergenceDeg: number } | null;
+  color: string;
+}) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  if (!trace) return null;
+  const { w, h } = size;
+  const label = trace.side === 'straight' ? 'ON LINE' : `${trace.divergenceDeg}° ${trace.side.toUpperCase()}`;
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+    >
+      {w > 0 && (
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <SvgLine
+            x1={trace.from.x * w} y1={trace.from.y * h}
+            x2={trace.to.x * w} y2={trace.to.y * h}
+            stroke={color} strokeWidth={3} strokeLinecap="round" opacity={0.95}
+          />
+          <SvgCircle cx={trace.from.x * w} cy={trace.from.y * h} r={5} fill={color} />
+        </Svg>
+      )}
+      {w > 0 && (
+        <View style={[traceStyles.pill, { left: trace.to.x * w, top: trace.to.y * h - 14, backgroundColor: color }]}>
+          <Text style={traceStyles.pillText}>{label}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const traceStyles = StyleSheet.create({
+  pill: { position: 'absolute', transform: [{ translateX: -28 }], borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3, minWidth: 56, alignItems: 'center' },
+  pillText: { color: '#06281b', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+});
+
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 /**

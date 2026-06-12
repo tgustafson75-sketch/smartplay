@@ -40,6 +40,7 @@ import { detectStrikes, type MeterSample } from '../../services/swing/strikeDete
 import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
 import { evaluateFraming } from '../../services/swing/framingCheck';
+import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
@@ -1454,6 +1455,37 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /detectClubFromCamera\(\{ auto: true \}\)/.test(smSrc2) &&
       /\} else if \(!auto\) \{[\s\S]{0,120}setClubMenuOpen\(true\)/.test(smSrc2),
     'a completed recording bumps the cycle count; every 3rd queues a club scan fired silently the next time we settle in setup (NOT during the hands-free auto-record relaunch, so no camera race); a low-confidence AUTO read keeps the current club silently while a MANUAL scan still opens the picker');
+
+  // 2026-06-11 — DTL ball-trace direction + colour (the honest shot tracer).
+  {
+    const ball = { x: 0.5, y: 0.8 };
+    const target = { x: 0.5, y: 0.1 }; // aim straight up the frame
+    // Ball departs straight up the aim line → straight, ~0°.
+    const straight = computeTraceDirection(ball, { x: 0.5, y: 0.45 }, target);
+    // Ball departs up-and-LEFT of the aim line → left, meaningful divergence.
+    const left = computeTraceDirection(ball, { x: 0.38, y: 0.45 }, target);
+    // Ball departs up-and-RIGHT → right.
+    const right = computeTraceDirection(ball, { x: 0.62, y: 0.45 }, target);
+    // No visible movement → null (no honest direction).
+    const none = computeTraceDirection(ball, { x: 0.5, y: 0.795 }, target);
+    const greenish = traceColor(0);     // on line → green family (high G)
+    const reddish = traceColor(30);     // way off → red family (high R)
+    const gOk = parseInt(greenish.slice(3, 5), 16) > parseInt(greenish.slice(1, 3), 16); // G > R
+    const rOk = parseInt(reddish.slice(1, 3), 16) > parseInt(reddish.slice(3, 5), 16);    // R > G
+    check('SmartMotion: ball-trace reads departure direction vs the aim line + colours it',
+      straight?.side === 'straight' && left?.side === 'left' && right?.side === 'right' &&
+        (left?.divergenceDeg ?? 0) > 5 && none === null && gOk && rOk,
+      `straight departure → ON LINE (${straight?.divergenceDeg}°); left/right of the aim line → ${left?.side} ${left?.divergenceDeg}° / ${right?.side}; no visible movement → no line (honest); colour green when on-line (${greenish}) → red when way off (${reddish}). Real initial direction only — no fabricated arc`);
+  }
+
+  check('SmartMotion: ball-trace is DTL-only + wired to the real departure point + peakDb colour',
+    /angle !== 'down_the_line' \|\| isPutt\) return null/.test(smSrc2) &&
+      /ballDeparture\?\.departurePoint/.test(smSrc2) &&
+      /computeTraceDirection\(ballArea, ballDeparture\.departurePoint, targetPoint\)/.test(smSrc2) &&
+      /traceColor\(ballTrace\.divergenceDeg, seg\?\.peakDb/.test(smSrc2) &&
+      /ball_after_norm/.test(read('api/ball-departure.ts')) &&
+      /<BallTraceOverlay trace=\{ballTrace\}/.test(smSrc2),
+    'the trace runs DOWN-THE-LINE ONLY (never face-on/putt), off the real detected departure point (ball-departure server now returns ball_after_norm, mapped to full-frame), measured against the ball→target aim line and coloured by divergence + the segment peakDb — rendered only in review');
 
   check('SmartMotion: geometry→effort grades the read against the intended shot',
     /Intended effort \(from geometry\)/.test(swingApiSrc) &&

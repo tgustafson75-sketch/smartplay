@@ -30,6 +30,10 @@ export interface BallDepartureResult {
   ball_present_after: boolean;
   direction: 'left' | 'right' | 'toward' | 'unknown';
   confidence: 'high' | 'medium' | 'low';
+  /** 2026-06-11 — the departed ball's position in FULL-frame normalized coords
+   *  (0..1), mapped back from the wide after-frame crop. Feeds the DTL ball-trace
+   *  direction (services/swing/ballTrace.ts). Null when the ball wasn't seen. */
+  departurePoint?: { x: number; y: number } | null;
 }
 
 /** Normalized ball spot on the frame (0..1). r is a radius as a fraction of
@@ -49,11 +53,13 @@ async function frameAt(videoUri: string, timeMs: number): Promise<{ uri: string;
 
 /** Crop a frame to a box centered on the normalized ball spot. `scale`
  *  multiplies the base ROI size (1 = tight ball box, 3 = wide context). */
+interface CropBox { originX: number; originY: number; cw: number; ch: number; W: number; H: number }
+
 async function cropRoi(
   frame: { uri: string; width: number; height: number },
   ball: BallAreaNorm,
   scale: number,
-): Promise<string | null> {
+): Promise<{ base64: string; box: CropBox } | null> {
   try {
     const { width: W, height: H } = frame;
     const r = ball.r && ball.r > 0 ? ball.r : 0.06;
@@ -69,10 +75,19 @@ async function cropRoi(
       [{ crop: { originX, originY, width: cw, height: ch } }],
       { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
-    return manip.base64 ?? null;
+    if (!manip.base64) return null;
+    return { base64: manip.base64, box: { originX, originY, cw, ch, W, H } };
   } catch {
     return null;
   }
+}
+
+/** Map a position WITHIN a crop (0..1 of the crop) back to FULL-frame normalized. */
+function cropToFullNorm(pos: { x: number; y: number }, box: CropBox): { x: number; y: number } {
+  return {
+    x: (box.originX + pos.x * box.cw) / box.W,
+    y: (box.originY + pos.y * box.ch) / box.H,
+  };
 }
 
 /**
@@ -105,9 +120,9 @@ export async function detectBallDeparture(args: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        before_roi: beforeRoi,
-        after_roi: afterRoi,
-        after_wide: afterWide ?? undefined,
+        before_roi: beforeRoi.base64,
+        after_roi: afterRoi.base64,
+        after_wide: afterWide?.base64 ?? undefined,
         media_type: 'image/jpeg',
       }),
       // Bound the wait so a stalled server can't hang the swing flow; this is
@@ -115,9 +130,17 @@ export async function detectBallDeparture(args: {
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as Partial<BallDepartureResult> & { configured?: boolean };
+    const data = (await res.json()) as Partial<BallDepartureResult> & {
+      configured?: boolean;
+      ball_after_norm?: { x: number; y: number } | null;
+    };
     if (data.configured === false || typeof data.departed !== 'boolean') return null;
-    return data as BallDepartureResult;
+    // Map the ball's in-crop position (wide after-frame) → full-frame normalized.
+    let departurePoint: { x: number; y: number } | null = null;
+    if (data.ball_after_norm && afterWide) {
+      departurePoint = cropToFullNorm(data.ball_after_norm, afterWide.box);
+    }
+    return { ...(data as BallDepartureResult), departurePoint };
   } catch {
     return null;
   } finally {

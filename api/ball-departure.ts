@@ -39,6 +39,11 @@ interface BallDepartureResult {
    *  provided or not confidently visible. */
   direction: 'left' | 'right' | 'toward' | 'unknown';
   confidence: 'high' | 'medium' | 'low';
+  /** 2026-06-11 — the ball's normalized position WITHIN the wide after-frame
+   *  (image 3), 0..1, when it's clearly visible mid-flight. Lets the client draw
+   *  the REAL initial departure direction (mapped back to full-frame + measured
+   *  against the aim line), not just a left/right label. Null when not seen. */
+  ball_after_norm?: { x: number; y: number } | null;
 }
 
 const PROMPT = `You are verifying a golf ball strike from cropped video frames.
@@ -51,13 +56,15 @@ Return ONLY a JSON object, no prose:
   "ball_present_before": boolean,  // is a golf ball CLEARLY visible in image 1?
   "ball_present_after": boolean,   // is a golf ball still in that same spot in image 2?
   "direction": "left" | "right" | "toward" | "unknown",  // from image 3 if given; else "unknown"
-  "confidence": "high" | "medium" | "low"
+  "confidence": "high" | "medium" | "low",
+  "ball_after_norm": { "x": number, "y": number } | null  // see rules
 }
 
 Rules:
 - Report ONLY what you can actually see. Do not assume a strike happened.
 - If image 1 does NOT clearly show a golf ball, set ball_present_before=false and confidence="low".
-- "direction" is relative to the player's view: "left"/"right" of the original spot, or "toward" (up the frame, toward the target). Use "unknown" unless image 3 clearly shows where the ball went.`;
+- "direction" is relative to the player's view: "left"/"right" of the original spot, or "toward" (up the frame, toward the target). Use "unknown" unless image 3 clearly shows where the ball went.
+- "ball_after_norm": ONLY if image 3 is given AND you can clearly see the ball in flight, give its position as fractions of image 3 (x=0 left edge, x=1 right edge, y=0 top, y=1 bottom). If you can't clearly see the departed ball, set it to null. Do NOT guess a position.`;
 
 function parse(raw: string): BallDepartureResult | null {
   try {
@@ -73,12 +80,19 @@ function parse(raw: string): BallDepartureResult | null {
     // Honesty guard: a departure claim only means anything if we saw a ball
     // to begin with. No visible starting ball → not a confident verdict.
     const departed = before && !after;
+    const pos = p.ball_after_norm;
+    const ball_after_norm =
+      departed && pos && typeof pos.x === 'number' && typeof pos.y === 'number'
+        && pos.x >= 0 && pos.x <= 1 && pos.y >= 0 && pos.y <= 1
+        ? { x: pos.x, y: pos.y }
+        : null;
     return {
       departed,
       ball_present_before: before,
       ball_present_after: after,
       direction: departed ? direction : 'unknown',
       confidence: before ? confidence : 'low',
+      ball_after_norm,
     };
   } catch {
     return null;
