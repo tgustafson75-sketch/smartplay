@@ -40,6 +40,7 @@ import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { getCaddieName } from '../../lib/persona';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -134,6 +135,13 @@ export default function Dashboard() {
   // Coach Mode CTA below are hidden even if the user has a roster set
   // up. Toggle lives in the Caddie tab's expandable green-arrow row.
   const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
+  // 2026-06-12 — the AI-read card title must reflect the ACTIVE caddie, not always
+  // "Kevin" (Tank/Serena users saw Kevin's name). Keep the localized label for the
+  // default kevin case; use the caddie's name otherwise.
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const caddieReadLabel = caddiePersonality === 'kevin'
+    ? t('dashboard.kevins_read')
+    : `${getCaddieName(caddiePersonality)}'s Read`;
   const activeFamilyRoster = useMemo(
     () => familyMembers.filter(m => !m.archived),
     [familyMembers],
@@ -544,10 +552,10 @@ export default function Dashboard() {
           onPress={refreshKevinRead}
           style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
           accessibilityRole="button"
-          accessibilityLabel={`Kevin's Read. ${refreshingKevinRead ? 'Refreshing.' : 'Tap to refresh.'}`}
+          accessibilityLabel={`${caddieReadLabel}. ${refreshingKevinRead ? 'Refreshing.' : 'Tap to refresh.'}`}
         >
           <View style={styles.kevinReadHeader}>
-            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{t('dashboard.kevins_read')}</Text>
+            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{caddieReadLabel}</Text>
             {refreshingKevinRead ? (
               <Text style={[styles.kevinReadFooter, { color: colors.accent }]}>{t('dashboard.refreshing')}</Text>
             ) : null}
