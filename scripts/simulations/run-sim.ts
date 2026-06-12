@@ -888,17 +888,17 @@ check('Tempo pill on the left (review, swings, honest)',
   /tempoPill/.test(smSrc) && /isReview && !isPutt && tempo\?\.ratio != null/.test(smSrc),
   'headline tempo shown as a left pill, only when a real ratio exists');
 
-check('Face-on launch line on REVIEW only + correct mirrored direction; framing guides both angles',
-  /launchDir/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
-    /~ LAUNCH/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
-    // Review launch line: face-on, mirrored — RH golfer faces camera so target
-    // is the VIEWER's right ('right' for RH / 'left' for LH).
-    /launchDir=\{angle === 'face_on' \? \(swingerHandedness === 'left' \? 'left' : 'right'\) : null\}/.test(smSrc) &&
-    // No launch line during live capture (declutter line-up).
+check('Face-on: NO launch/trace line on review (false from the front); framing guides both angles',
+  // 2026-06-11 (cage test) — the slanted launch line is REMOVED from face-on
+  // review. From the front you cannot see ball flight, so it read as a false
+  // line (Tim flagged it). Review keeps the vertical target alignment only.
+  /<CageTargetingOverlay ballArea=\{ballArea\} target=\{targetPoint\} launchDir=\{null\}/.test(smSrc) &&
+    !/launchDir=\{angle === 'face_on'/.test(smSrc) &&
+    // No launch line during live capture either (declutter line-up).
     /<CageTargetingOverlay ballArea=\{draftBall\} target=\{null\} launchDir=\{null\}/.test(smSrc) &&
-    // Framing guides (incl. restored FO side lines) render for BOTH angles.
+    // Framing guides (incl. FO side lines) render for BOTH angles.
     /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
-  'launch line is a face-on REVIEW approximation pointing the correct (mirrored) way; live capture shows framing guides for both DTL and FO');
+  'face-on review shows the vertical target alignment only (no false launch line); live capture shows framing guides for both DTL and FO');
 
 // ─── 2026-06-09: acoustics-free swing localizer + honest networking ──────────
 const poseSrc = read('services/poseDetection.ts');
@@ -1685,17 +1685,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /playsLikeDistance\(actual, w, bearing, elevationDeltaFeet\)/.test(qsSrc),
     'the spoken plays-like answer includes uphill/downhill via the cached elevation service; 0/flat on any miss so it never blocks the answer');
 
-  // ─── SmartMotion cage-test fixes ─────────────────────────────────────────
-  const smSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
-  check('SmartMotion: no false launch/trace line in face-on (cage-test fix)',
-    /CageTargetingOverlay ballArea=\{ballArea\} target=\{targetPoint\} launchDir=\{null\}/.test(smSrc) &&
-      !/launchDir=\{angle === 'face_on'/.test(smSrc),
-    'the slanted launch line is removed from face-on (you cannot see ball flight from the front — it read as a false line); face-on keeps the vertical target alignment only');
-
-  const swingDetailSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf-8');
+  // ─── SmartMotion cage-test fixes (face-on launch-line checked above) ──────
+  const swingDetailSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf-8');
   check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
-    /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc),
+    /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc2),
     'the biomech backfill is gated off cage/long clips — a ~60s multi-swing session is no longer watched whole as one swing in the library detail (Tim\'s 1-min stuck)');
+}
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
