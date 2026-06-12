@@ -774,9 +774,11 @@ export default function PlayTab() {
             <Text style={styles.h1}>{t('play.course_discovery')}</Text>
             <Text style={styles.h1Sub}>{t('play.course_discovery_sub')}</Text>
           </View>
-          {/* 2026-06-11 (lazy-load) — one-tap GPS refresh to re-sort courses by
-              proximity. Replaces the auto-pull-on-focus; GPS only fires when the
-              user actually wants nearby courses. */}
+          {/* 2026-06-11 — one-tap GPS refresh: re-sort courses by proximity.
+              Replaces the SmartFinder shortcut that lived here — this header slot
+              was always meant to be the GPS/location action (SmartFinder stays
+              reachable from the Caddie tab + /smartfinder). GPS fires only on
+              tap; no auto-pull on focus. */}
           <TouchableOpacity
             style={styles.scopeBtn}
             onPress={() => void refreshLocation()}
@@ -784,14 +786,7 @@ export default function PlayTab() {
             accessibilityRole="button"
             accessibilityLabel="Refresh nearby courses from your current location"
           >
-            <AppIcon name={locating ? 'sync' : 'navigate-circle-outline'} size={20} color="#00C896" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.scopeBtn}
-            onPress={() => router.push('/smartfinder' as never)}
-            accessibilityLabel="Open SmartFinder"
-          >
-            <AppIcon name="locate-outline" size={20} color="#00C896" />
+            <AppIcon name={locating ? 'sync' : 'locate-outline'} size={20} color="#00C896" />
           </TouchableOpacity>
         </View>
 
