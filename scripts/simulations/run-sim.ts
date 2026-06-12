@@ -1495,6 +1495,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /styles\.effortPill/.test(smSrc2),
     'the server derives the declared effort from ball→target geometry (target near the top = full; halfway = ~half) and grades tempo + swing length against THAT partial shot — a deliberate half-swing is not flagged as a fault; the client shows an honest EFFORT % chip (measured, no faked carry)');
 
+  // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
+  // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).
+  check('SmartMotion: cycling mode badge + custom icon set wired',
+    /const cycleMode = \(\) => \{/.test(smSrc2) &&
+      /ICON_ANGLE\[isPutt \? 'putt' : angle\]/.test(smSrc2) &&        // current-stance icon on the badge
+      /showModeFade\('FACE-ON'\)/.test(smSrc2) &&                      // fade-away label on cycle
+      /source=\{ICON_ENV\[effectiveMode\]\}/.test(smSrc2) &&          // env scene icon on the toggle
+      /source=\{ICON_CLUB\}/.test(smSrc2) &&                          // club glyph on the scan button
+      !/ModeToggle/.test(smSrc2),                                     // old 3-chip toggle removed
+    'one golfer badge cycles DTL → Face-On → Putting with a fade-away label (replacing the 3-chip ModeToggle); the environment toggle shows the cage/range/course scene badge; the club-scan button shows the club-bag glyph instead of a plain box (assets are cropped + black-knocked-out from Tim\'s art)');
+
   check('SmartMotion: chip sensitivity — lower threshold + mode-aware acoustics + clear toggle',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
@@ -1535,7 +1546,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the hands-free "let the 60s run out" stop routes through a ref, so it uses current calibration/angle instead of a stale closure');
 
   check('SmartMotion: reset() restores the user\'s explicit angle after a putt (audit H3)',
-    /lastChosenAngleRef\.current = a/.test(smSrc2) && /setAngle\(lastChosenAngleRef\.current\)/.test(smSrc2),
+    /lastChosenAngleRef\.current = 'face_on'/.test(smSrc2) && /setAngle\(lastChosenAngleRef\.current\)/.test(smSrc2),
     'a putt forces down-the-line; reset() restores the last explicit angle so it does not bleed into the next full swing');
 
   const settingsSrc2 = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');

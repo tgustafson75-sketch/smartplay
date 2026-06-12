@@ -24,6 +24,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,7 +79,6 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import {
   SmartMotionHeader,
-  ModeToggle,
   CaptureGuides,
   MetricRail,
   SpeedStat,
@@ -122,6 +122,21 @@ const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
 // the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
 // so the few extra candidates it admits are harmless; range still vision-confirms).
 const CHIP_STRIKE_THRESHOLD_DB = 18;
+
+// 2026-06-12 — custom green-on-transparent icon set (Tim's ChatGPT art, cropped +
+// black knocked out). Golfer stances for the angle toggle, scene badges for the
+// environment toggle, a club-bag glyph for the scan button.
+const ICON_ANGLE = {
+  down_the_line: require('../../assets/icons/smartmotion/angle-dtl.png'),
+  face_on: require('../../assets/icons/smartmotion/angle-faceon.png'),
+  putt: require('../../assets/icons/smartmotion/angle-putt.png'),
+} as const;
+const ICON_ENV = {
+  cage: require('../../assets/icons/smartmotion/env-cage.png'),
+  range: require('../../assets/icons/smartmotion/env-range.png'),
+  course: require('../../assets/icons/smartmotion/env-course.png'),
+} as const;
+const ICON_CLUB = require('../../assets/icons/smartmotion/club-detect.png');
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -320,6 +335,24 @@ export default function SmartMotion() {
   const [feelReply, setFeelReply] = useState<string | null>(null);
   const [feelLoading, setFeelLoading] = useState(false);
   const setSessionFeel = useCageStore((s) => s.setSessionFeel);
+  // 2026-06-12 — cycling mode toggle: a quick fade-away label on each mode change
+  // (one golfer icon you tap to cycle DTL → FO → PUTT, keeping the screen clear).
+  const modeFadeOpacity = useRef(new Animated.Value(0)).current;
+  const [modeFadeText, setModeFadeText] = useState('');
+  const showModeFade = (label: string) => {
+    setModeFadeText(label);
+    modeFadeOpacity.setValue(1);
+    Animated.timing(modeFadeOpacity, { toValue: 0, duration: 1100, delay: 400, useNativeDriver: true }).start();
+  };
+  // One golfer badge you tap to cycle DTL → FACE-ON → PUTTING (then back), with a
+  // quick fade-away label. Putt forces down-the-line under the hood (same as the old
+  // PUTT chip). Keeps lastChosenAngleRef in sync so reset() restores the real angle.
+  const cycleMode = () => {
+    const cur = isPutt ? 'putt' : angle;
+    if (cur === 'down_the_line') { setAngle('face_on'); setPuttMode(false); lastChosenAngleRef.current = 'face_on'; showModeFade('FACE-ON'); }
+    else if (cur === 'face_on') { setPuttMode(true); setAngle('down_the_line'); showModeFade('PUTTING'); }
+    else { setPuttMode(false); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('DOWN THE LINE'); }
+  };
   // A club value is needed by detectBallSpeed (server key) at stop time;
   // keep a ref so the async stop path reads the current selection.
   const clubRef = useRef<ClubId | null>(club);
@@ -1941,7 +1974,9 @@ export default function SmartMotion() {
               accessibilityRole="button"
               accessibilityLabel="Scan club with camera"
             >
-              <Ionicons name={scanningClub ? 'sync' : 'scan-outline'} size={20} color={colors.accent} />
+              {scanningClub
+                ? <Ionicons name="sync" size={20} color={colors.accent} />
+                : <Image source={ICON_CLUB} style={styles.toolIconImg} resizeMode="contain" />}
             </Pressable>
             <Pressable
               onPress={() => setPlaceBallMode((v) => !v)}
@@ -1963,9 +1998,7 @@ export default function SmartMotion() {
               accessibilityRole="button"
               accessibilityLabel={isRoundActive ? 'Environment locked to course during a round' : `Environment mode: ${effectiveMode}. Tap to change.`}
             >
-              <Text style={{ color: colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>
-                {effectiveMode === 'cage' ? 'CAGE' : effectiveMode === 'range' ? 'RNGE' : 'CRSE'}
-              </Text>
+              <Image source={ICON_ENV[effectiveMode]} style={styles.toolIconImg} resizeMode="contain" />
             </Pressable>
             {/* 2026-06-11 — Selfie/front-camera toggle for face-on self-framing.
                 Recording stays un-mirrored (mirror={false} on the CameraView) so
@@ -2180,13 +2213,22 @@ export default function SmartMotion() {
 
           <View style={styles.controlsRow}>
             {!isReview ? (
-              <ModeToggle
-                value={angle}
-                onChange={(a) => { setAngle(a); setPuttMode(false); lastChosenAngleRef.current = a; }}
-                isPutt={isPutt}
-                onPutt={() => { setPuttMode(true); setAngle('down_the_line'); }}
-                compact
-              />
+              // 2026-06-12 — ONE golfer badge, tap to cycle DTL → Face-On → Putting,
+              // with a quick fade-away label (Tim's idea — clears the bottom bar vs
+              // the old 3-chip toggle). The current stance icon shows which mode you're in.
+              <View style={{ alignItems: 'center' }}>
+                <Pressable
+                  onPress={cycleMode}
+                  style={styles.modeCycleBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Camera mode: ${isPutt ? 'putting' : angle === 'face_on' ? 'face-on' : 'down the line'}. Tap to change.`}
+                >
+                  <Image source={ICON_ANGLE[isPutt ? 'putt' : angle]} style={styles.modeCycleImg} resizeMode="contain" />
+                </Pressable>
+                <Animated.Text style={[styles.modeFadeLabel, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none">
+                  {modeFadeText}
+                </Animated.Text>
+              </View>
             ) : null}
             <View style={{ flex: 1 }} />
             {actionBtn}
@@ -2469,6 +2511,10 @@ const styles = StyleSheet.create({
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
+  toolIconImg: { width: 40, height: 40 },
+  modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(124,224,79,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
+  modeCycleImg: { width: 48, height: 48 },
+  modeFadeLabel: { marginTop: 4, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
   recText: { color: '#fff', fontWeight: '800', fontSize: 13 },
