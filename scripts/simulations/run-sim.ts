@@ -1541,6 +1541,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /if \(text && text\.trim\(\)\) append\(text\.trim\(\)\)/.test(smSrc2),
     'COACH NOTES + HOW\'D IT FEEL? on page 2 each have a mic that records → transcribes → appends the text per-swing (no fabricated text on failure)');
 
+  check('SmartMotion: PAGE 3 shot map — DTL course + cage bullseye, honest (no fabricated dots)',
+    // 2026-06-12 (Tim) — a third page gated to down-the-line modes (putt/face-on get
+    // none). Full-swing plots from REAL effort→carry + the ball-trace direction; cage
+    // shows a bullseye + user-CONFIRMED geometry (canvas + camera-behind, persisted).
+    /const showShotMap = !isPutt && angle === 'down_the_line'/.test(smSrc2) &&
+      /const pageCount = showShotMap \? 3 : 2/.test(smSrc2) &&
+      /\{shotMapPage\}/.test(smSrc2) &&
+      /Array\.from\(\{ length: pageCount \}\)/.test(smSrc2) &&            // dots are dynamic
+      /cageCanvasFeet: number/.test(read('store/settingsStore.ts')) &&    // confirmed geometry persisted
+      /cameraBehindFeet: s\.cameraBehindFeet/.test(read('store/settingsStore.ts')) &&
+      // honest: course marker only when an effort-carry estimate exists; cage impact is preview-labeled.
+      /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      /est · preview/.test(read('components/smartmotion/ShotMapPage.tsx')),
+    'page 3 is a DTL-only shot map: full-swing course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
+
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).
   // 2026-06-12 — yardage estimate from club + effort %, reusing the app's club math

@@ -102,6 +102,7 @@ import { detectBallDeparture, type BallDepartureResult } from '../../services/sw
 import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
+import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 const RECORDING_MAX_SECONDS = 60; // cage / course — open window, player swings freely
@@ -317,6 +318,10 @@ export default function SmartMotion() {
   // (wind), GPS-side distance is the on-course caddie's job.
   const environmentMode = useSettingsStore((s) => s.environmentMode);
   const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
+  const cageCanvasFeet = useSettingsStore((s) => s.cageCanvasFeet);
+  const setCageCanvasFeet = useSettingsStore((s) => s.setCageCanvasFeet);
+  const cameraBehindFeet = useSettingsStore((s) => s.cameraBehindFeet);
+  const setCameraBehindFeet = useSettingsStore((s) => s.setCameraBehindFeet);
   const chipSensitivity = useSettingsStore((s) => s.chipSensitivity);
   const setChipSensitivity = useSettingsStore((s) => s.setChipSensitivity);
   // 2026-06-10 (phase 3) — a live round forces COURSE sensing (acoustics off,
@@ -1904,6 +1909,11 @@ export default function SmartMotion() {
       </View>
     ) : null;
 
+  // 2026-06-12 (Tim) — PAGE 3 (SHOT MAP) only exists for down-the-line modes, so the
+  // page/dot count is dynamic. Declared before hudPage because the dots read pageCount.
+  const showShotMap = !isPutt && angle === 'down_the_line';
+  const pageCount = showShotMap ? 3 : 2;
+
   // ── the HUD page (full-bleed camera/replay + floating data) ──
   const hudPage = (
     <View style={{ width: windowWidth, flex: 1 }}>
@@ -2086,7 +2096,7 @@ export default function SmartMotion() {
           <CaddieMicBadge size={36} />
           <SmartMotionHeader mode={angle} style={{ flex: 1, borderBottomWidth: 0, paddingVertical: 0, paddingHorizontal: 6 }} />
           <View style={styles.dotsRow}>
-            {[0, 1].map((i) => (
+            {Array.from({ length: pageCount }).map((_, i) => (
               <View key={i} style={[styles.dot, { backgroundColor: page === i ? colors.accent : 'rgba(255,255,255,0.35)' }]} />
             ))}
           </View>
@@ -2675,6 +2685,29 @@ export default function SmartMotion() {
     </ScrollView>
   );
 
+  // 2026-06-12 (Tim) — PAGE 3: the SHOT MAP (full swing → vertical course; cage →
+  // bullseye). Gated by showShotMap (declared above for the dot count).
+  const shotMapPage = showShotMap ? (
+    <ShotMapPage
+      key="shotmap"
+      mode={effectiveMode}
+      club={club}
+      handicap={profile.handicap ?? null}
+      learnedCarry={null}
+      estCarry={estCarry}
+      effortPct={effortPct}
+      trace={ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null}
+      canvasFeet={cageCanvasFeet}
+      cameraBehindFeet={cameraBehindFeet}
+      onChangeCanvasFeet={setCageCanvasFeet}
+      onChangeCameraBehindFeet={setCameraBehindFeet}
+      colors={colors}
+      topInset={insets.top}
+      onBack={() => pagerRef.current?.scrollTo({ x: 0, animated: true })}
+      width={windowWidth}
+    />
+  ) : null;
+
   return (
     <View style={[styles.root, { backgroundColor: '#000' }]}>
       <ScrollView
@@ -2688,6 +2721,7 @@ export default function SmartMotion() {
       >
         {hudPage}
         {analysisPage}
+        {shotMapPage}
       </ScrollView>
 
       {/* Smart Capture markup — fullscreen frozen frame + draw tools. */}

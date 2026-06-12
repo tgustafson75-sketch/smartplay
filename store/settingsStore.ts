@@ -267,6 +267,12 @@ interface SettingsState {
   // Replaces the scattered SpaceType label that was detected but never drove
   // behavior. Smart-defaulted at read time (course when a GPS round is active).
   environmentMode: 'cage' | 'range' | 'course';
+  // 2026-06-12 — CAGE geometry the user CONFIRMS (Tim): distance from the ball to the
+  // bullseye canvas, and how far the camera sits behind the player. Together they give
+  // the true ball→canvas throw distance the cage shot-map (page 3) reasons over, tied
+  // to the acoustic strike. User-entered + persisted (no fabricated geometry).
+  cageCanvasFeet: number;
+  cameraBehindFeet: number;
   // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half the energy
   // of a full strike (Tim's cage test: clear sound, but the detector missed it),
   // so when ON we drop the strike threshold so quiet pitch/chip strikes register.
@@ -348,6 +354,8 @@ interface SettingsState {
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
   setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
+  setCageCanvasFeet: (feet: number) => void;
+  setCameraBehindFeet: (feet: number) => void;
   setChipSensitivity: (on: boolean) => void;
   // 2026-05-22 — Ghost Rounds.
   setGhostAutoActivate: (v: boolean) => void;
@@ -451,6 +459,8 @@ export const useSettingsStore = create<SettingsState>()(
       cageAutoClubDetection: true,
       hasSeenAutoClubPrompt: false,
       environmentMode: 'cage' as const,
+      cageCanvasFeet: 14,
+      cameraBehindFeet: 7,
       chipSensitivity: false,
       cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
@@ -653,6 +663,8 @@ export const useSettingsStore = create<SettingsState>()(
       setHasSeenAutoClubPrompt: (v) => set({ hasSeenAutoClubPrompt: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
       setEnvironmentMode: (mode) => set({ environmentMode: mode }),
+      setCageCanvasFeet: (feet) => set({ cageCanvasFeet: Math.max(1, Math.round(feet)) }),
+      setCameraBehindFeet: (feet) => set({ cameraBehindFeet: Math.max(0, Math.round(feet)) }),
       setChipSensitivity: (on) => set({ chipSensitivity: on }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
@@ -859,6 +871,8 @@ export const useSettingsStore = create<SettingsState>()(
         cageAutoClubDetection: s.cageAutoClubDetection,
         hasSeenAutoClubPrompt: s.hasSeenAutoClubPrompt,
         environmentMode: s.environmentMode,
+        cageCanvasFeet: s.cageCanvasFeet,
+        cameraBehindFeet: s.cameraBehindFeet,
         chipSensitivity: s.chipSensitivity,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
