@@ -38,7 +38,12 @@ interface ThemeColors {
   accent: string;
 }
 
-const LIME = '#88F700';
+// 2026-06-12 — bright lime (#88F700) reads great on the dark camera overlay but WASHES
+// OUT on the light theme's near-white background (Tim). Use a darker, saturated green for
+// the light-mode strokes/values so the bullseye + numbers keep real contrast.
+const limeFor = (isDark: boolean) => (isDark ? '#88F700' : '#2f7d12');
+const ringFaintFor = (isDark: boolean) => (isDark ? 'rgba(136,247,0,0.4)' : 'rgba(47,125,18,0.5)');
+const crossFor = (isDark: boolean) => (isDark ? 'rgba(136,247,0,0.3)' : 'rgba(47,125,18,0.4)');
 
 export function ShotMapPage({
   mode,
@@ -53,6 +58,7 @@ export function ShotMapPage({
   onChangeCanvasFeet,
   onChangeCameraBehindFeet,
   colors,
+  isDark,
   topInset,
   onBack,
   width,
@@ -70,6 +76,7 @@ export function ShotMapPage({
   onChangeCanvasFeet: (n: number) => void;
   onChangeCameraBehindFeet: (n: number) => void;
   colors: ThemeColors;
+  isDark: boolean;
   topInset: number;
   onBack: () => void;
   width: number;
@@ -108,6 +115,7 @@ export function ShotMapPage({
           onChangeCanvasFeet={onChangeCanvasFeet}
           onChangeCameraBehindFeet={onChangeCameraBehindFeet}
           colors={colors}
+          isDark={isDark}
         />
       ) : (
         <CourseMap
@@ -199,7 +207,7 @@ function CourseMap({
 
 // ─── Cage bullseye + confirmable geometry ────────────────────────────
 function CageBullseye({
-  lateral, dirLabel, canvasFeet, cameraBehindFeet, onChangeCanvasFeet, onChangeCameraBehindFeet, colors,
+  lateral, dirLabel, canvasFeet, cameraBehindFeet, onChangeCanvasFeet, onChangeCameraBehindFeet, colors, isDark,
 }: {
   lateral: number;
   dirLabel: string | null;
@@ -208,9 +216,13 @@ function CageBullseye({
   onChangeCanvasFeet: (n: number) => void;
   onChangeCameraBehindFeet: (n: number) => void;
   colors: ThemeColors;
+  isDark: boolean;
 }) {
   const rings = [1, 0.74, 0.5, 0.28];
   const hasImpact = dirLabel != null;
+  const lime = limeFor(isDark);
+  const ringFaint = ringFaintFor(isDark);
+  const cross = crossFor(isDark);
   return (
     <View style={styles.body}>
       <View style={styles.bullseyeWrap}>
@@ -223,14 +235,14 @@ function CageBullseye({
                 {
                   width: `${r * 100}%`,
                   height: `${r * 100}%`,
-                  borderColor: i === rings.length - 1 ? LIME : 'rgba(136,247,0,0.4)',
+                  borderColor: i === rings.length - 1 ? lime : ringFaint,
                 },
               ]}
             />
           ))}
           {/* crosshair */}
-          <View style={styles.crossH} />
-          <View style={styles.crossV} />
+          <View style={[styles.crossH, { backgroundColor: cross }]} />
+          <View style={[styles.crossV, { backgroundColor: cross }]} />
           {/* estimated impact — lateral start only (depth/height need higher fps) */}
           {hasImpact ? (
             <View style={[styles.impact, { left: `${50 + lateral * 42}%` }]}>
@@ -309,12 +321,14 @@ const styles = StyleSheet.create({
   centerLine: { position: 'absolute', left: '50%', top: '4%', bottom: '6%', width: 1, marginLeft: -0.5, backgroundColor: 'rgba(255,255,255,0.18)' },
   tee: { position: 'absolute', bottom: '3%', left: '50%', marginLeft: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', opacity: 0.85 },
   ball: { position: 'absolute', alignItems: 'center', marginLeft: -6 },
-  ballDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: LIME, borderWidth: 2, borderColor: '#06281b' },
+  ballDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#88F700', borderWidth: 2, borderColor: '#06281b' },
   ballPill: { marginTop: 2, backgroundColor: 'rgba(6,15,9,0.85)', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
-  ballPillText: { color: LIME, fontSize: 10, fontWeight: '800' },
+  ballPillText: { color: '#88F700', fontSize: 10, fontWeight: '800' },
 
   readRow: { flexDirection: 'row', gap: 8 },
-  stat: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 9 },
+  // 2026-06-12 — soft shadow so cards separate from a LIGHT-mode near-white background
+  // (Tim: cards washed out). Subtle enough to be invisible on the dark theme.
+  stat: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 9, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   statTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statLabel: { fontSize: 8, fontWeight: '700', letterSpacing: 0.6, flexShrink: 1 },
   estChip: { fontSize: 7, fontWeight: '800', borderWidth: 1, borderRadius: 4, paddingHorizontal: 3, overflow: 'hidden' },
@@ -333,7 +347,7 @@ const styles = StyleSheet.create({
   impactLabel: { backgroundColor: 'rgba(6,15,9,0.85)', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   impactLabelText: { color: '#f5c451', fontSize: 10, fontWeight: '700' },
 
-  geoCard: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 4 },
+  geoCard: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 4, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   geoTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 4 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
   stepLabel: { fontSize: 13, fontWeight: '600' },

@@ -294,7 +294,7 @@ const railStyles = StyleSheet.create({
 
 export default function SmartMotion() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { clipUri: clipUriParam, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
@@ -2699,11 +2699,11 @@ export default function SmartMotion() {
           <View style={styles.comingRow}>
             <View style={styles.comingItem}>
               <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
-              <Text style={styles.comingItemLabel}>FACE ANGLE</Text>
+              <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>FACE ANGLE</Text>
             </View>
             <View style={styles.comingItem}>
               <Image source={ICON_METRIC.smash} style={styles.comingImg} resizeMode="contain" />
-              <Text style={styles.comingItemLabel}>SMASH FACTOR</Text>
+              <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>SMASH FACTOR</Text>
             </View>
           </View>
           <Text style={[styles.comingNote, { color: colors.text_muted }]}>
@@ -2731,6 +2731,7 @@ export default function SmartMotion() {
       onChangeCanvasFeet={setCageCanvasFeet}
       onChangeCameraBehindFeet={setCameraBehindFeet}
       colors={colors}
+      isDark={isDark}
       topInset={insets.top}
       onBack={() => pagerRef.current?.scrollTo({ x: 0, animated: true })}
       width={windowWidth}
@@ -2897,9 +2898,11 @@ const styles = StyleSheet.create({
   backChip: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   backChipText: { fontSize: 12, fontWeight: '700' },
   muted: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
-  insightCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
+  // 2026-06-12 — soft shadow so page-2 cards separate from a LIGHT-mode near-white
+  // background (Tim: cards washed out). Invisible on the dark theme.
+  insightCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   insightLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  comingCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, borderStyle: 'dashed' },
+  comingCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, borderStyle: 'dashed', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   comingRow: { flexDirection: 'row', gap: 20, justifyContent: 'center', paddingVertical: 4 },
   comingItem: { alignItems: 'center', gap: 4, opacity: 0.85 },
   comingImg: { width: 46, height: 46 },
@@ -2907,7 +2910,7 @@ const styles = StyleSheet.create({
   comingNote: { fontSize: 11, lineHeight: 16, textAlign: 'center' },
   insightHeadline: { fontSize: 17, fontWeight: '900', letterSpacing: 0.3 },
   insightConf: { fontSize: 11, fontWeight: '600' },
-  insightBody: { fontSize: 13, lineHeight: 19, fontWeight: '500', padding: 12, borderWidth: 1, borderRadius: 12 },
+  insightBody: { fontSize: 13, lineHeight: 19, fontWeight: '500', padding: 12, borderWidth: 1, borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   insightText: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   laymanToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   laymanToggleText: { fontSize: 12, fontWeight: '700' },

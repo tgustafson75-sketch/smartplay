@@ -44,6 +44,10 @@ export interface ThemeTokens {
   spacing: ThemeSpacing;
   typography: ThemeTypography;
   radii: ThemeRadii;
+  /** True when the active base palette is the dark theme. Lets components pick
+   *  contrast-safe colors (e.g. lime #88F700 washes out on light backgrounds, so
+   *  light mode needs a darker green). Always present (defaults true). */
+  isDark: boolean;
 }
 
 // ─── Spacing + Typography are mode-independent ────────────────────────────────
@@ -96,6 +100,7 @@ export const darkTheme: ThemeTokens = {
   spacing,
   typography,
   radii,
+  isDark: true,
 };
 
 // ─── Light theme ──────────────────────────────────────────────────────────────
@@ -121,6 +126,7 @@ export const lightTheme: ThemeTokens = {
   spacing,
   typography,
   radii,
+  isDark: false,
 };
 
 // ─── High-contrast variants ─────────────────────────────────────────────────
@@ -161,10 +167,11 @@ export function composeTheme(
   isDark: boolean,
   highContrast: boolean,
 ): ThemeTokens {
-  if (!highContrast) return base;
+  if (!highContrast) return { ...base, isDark };
   const overlay = isDark ? darkHighContrast : lightHighContrast;
   return {
     ...base,
+    isDark,
     colors: { ...base.colors, ...overlay },
   };
 }
