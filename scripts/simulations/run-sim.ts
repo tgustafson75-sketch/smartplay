@@ -887,9 +887,11 @@ check('Universal control bar: record/play-pause/save/delete + slow-mo',
     /deleteSession/.test(smSrc) && /rate=\{playbackRate\}/.test(smSrc),
   'review bar with play/pause, slow-mo (rate prop), save, delete');
 
-check('Tempo pill on the left (review, swings, honest)',
-  /tempoPill/.test(smSrc) && /isReview && !isPutt && tempo\?\.ratio != null/.test(smSrc),
-  'headline tempo shown as a left pill, only when a real ratio exists');
+check('Tempo pill on the left (review, swings, honest) + result-overlay hide toggle',
+  /tempoPill/.test(smSrc) && /isReview && showResults && !isPutt && tempo\?\.ratio != null/.test(smSrc) &&
+    /const \[showResults, setShowResults\] = useState\(true\)/.test(smSrc) &&
+    /setShowResults\(\(v\) => !v\)/.test(smSrc),
+  'headline tempo shown as a left pill, only when a real ratio exists — and gated (with every result overlay) on a showResults toggle so the player can clear the frame for a clean screenshot/share (Smart Capture)');
 
 check('Face-on: NO launch/trace line on review (false from the front); framing guides both angles',
   // 2026-06-11 (cage test) — the slanted launch line is REMOVED from face-on

@@ -551,6 +551,10 @@ export default function SmartMotion() {
   // clean video. Turning Motion on computes + shows the skeletal overlay, body
   // analysis, tempo and speed — so nothing fires all at once over the video.
   const [showSkeleton, setShowSkeleton] = useState(false);
+  // 2026-06-12 — master show/hide for the result overlays on the review video, so the
+  // player can grab a CLEAN frame (off) or an annotated one (on) for screenshot/share
+  // (Tim's Smart Capture), and to declutter the center video. Video + controls stay.
+  const [showResults, setShowResults] = useState(true);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
   // Cage targeting (ball + movable target) — reactive mirror of the
@@ -1941,7 +1945,7 @@ export default function SmartMotion() {
             is the headline metric; shown here so it's always visible without
             blocking the ball box. Green when in the 2.8–3.4 window, else amber.
             Only renders when a real ratio exists (honest — no fake number). */}
-        {isReview && !isPutt && tempo?.ratio != null ? (
+        {isReview && showResults && !isPutt && tempo?.ratio != null ? (
           <View style={[styles.tempoPill, { top: insets.top + 76 }]} pointerEvents="none">
             <Text style={styles.tempoPillLabel}>TEMPO</Text>
             <Text style={[styles.tempoPillValue, { color: tempo.ratio >= 2.8 && tempo.ratio <= 3.4 ? '#34d399' : '#f59e0b' }]}>
@@ -1954,7 +1958,7 @@ export default function SmartMotion() {
         {/* EFFORT chip — declared shot effort from ball→target geometry (a partial
             shot). Honest: directly measured, no faked carry. The read is graded
             against this intended effort, so a deliberate half-swing isn't a "fault". */}
-        {isReview && !isPutt && effortPct != null ? (
+        {isReview && showResults && !isPutt && effortPct != null ? (
           <View style={[styles.effortPill, { top: insets.top + 150 }]} pointerEvents="none">
             <Text style={styles.tempoPillLabel}>EFFORT</Text>
             <Text style={[styles.tempoPillValue, { color: '#88F700' }]}>{effortPct}%</Text>
@@ -1968,7 +1972,7 @@ export default function SmartMotion() {
         ) : null}
 
         {/* Attached skeletal overlay — real keypoints tracked to playback. */}
-        {isReview && showSkeleton && poseFrames && poseFrames.length > 0 ? (
+        {isReview && showResults && showSkeleton && poseFrames && poseFrames.length > 0 ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={false} resizeMode="cover" />
           </View>
@@ -1976,7 +1980,7 @@ export default function SmartMotion() {
 
         {/* Ball area + (movable) target overlay — reference markers placed
             via the targeting card on the analysis page. */}
-        {isReview && (ballArea || targetPoint) ? (
+        {isReview && showResults && (ballArea || targetPoint) ? (
           // 2026-06-11 — DRAGGABLE in review: the recorded clip's FOV is a tighter
           // crop than the live preview (Samsung video crop), so a box placed in
           // setup can land a bit off on playback. Review IS the actual recorded
@@ -1992,7 +1996,7 @@ export default function SmartMotion() {
 
         {/* DTL ball-trace — the real initial departure direction, green→red by how
             far off the aim line it started. Down-the-line only (gated in ballTrace). */}
-        {isReview && ballTrace ? (
+        {isReview && showResults && ballTrace ? (
           <BallTraceOverlay trace={ballTrace} color={ballTraceColor} />
         ) : null}
 
@@ -2188,10 +2192,23 @@ export default function SmartMotion() {
         ) : null}
 
         {/* RIGHT RAIL — floating metric cards (review) */}
-        {isReview && !isPutt ? (
+        {isReview && showResults && !isPutt ? (
           <View style={[styles.rightRail, { top: insets.top + 60 }]}>
             <MetricRail metrics={railMetrics} />
           </View>
+        ) : null}
+
+        {/* SHOW/HIDE RESULTS — clears every result overlay for a clean frame to
+            screenshot/share (Tim's Smart Capture), or declutter the center video. */}
+        {isReview ? (
+          <Pressable
+            onPress={() => setShowResults((v) => !v)}
+            style={[styles.overlayToggle, { top: insets.top + 8, backgroundColor: showResults ? 'rgba(6,15,9,0.7)' : 'rgba(124,224,79,0.9)' }]}
+            accessibilityRole="button"
+            accessibilityLabel={showResults ? 'Hide result overlays for a clean view' : 'Show result overlays'}
+          >
+            <Ionicons name={showResults ? 'eye-outline' : 'eye-off-outline'} size={20} color={showResults ? colors.accent : '#06281b'} />
+          </Pressable>
         ) : null}
 
         {/* RECORDING timer */}
@@ -2700,6 +2717,7 @@ const styles = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' },
+  overlayToggle: { position: 'absolute', right: 46, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', zIndex: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.5)' },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
   barRate: { fontSize: 15, fontWeight: '900' },
