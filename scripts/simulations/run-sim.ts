@@ -1599,6 +1599,23 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /function confidenceFromAccuracy/.test(gpsSrc) &&
       /accuracy_m < 5\) return 'high'/.test(gpsSrc) && /accuracy_m < 15\) return 'medium'/.test(gpsSrc),
     'confidence derived from accuracy at classifyAccuracy thresholds (5m/15m), no import cycle — set on every emit path');
+
+  // ─── On-course GPS dot (LiveGpsDot, Option A global mount) ───────────────
+  const liveDotSrc = fs.readFileSync(path.resolve(__dirname, '../../components/LiveGpsDot.tsx'), 'utf-8');
+  check('GPS dot: fed by REAL gpsManager data (no placeholder), gated on active round',
+    /subscribe, getLastFix.*from '\.\.\/services\/gpsManager'/.test(liveDotSrc) &&
+      /classifyAccuracy\(f\?\.accuracy_m/.test(liveDotSrc) &&
+      /if \(!isRoundActive\) return null/.test(liveDotSrc),
+    'the dot reads live fixes + classifyAccuracy off gpsManager and only renders during a round — never hardcoded/fake (no deferred-wiring placeholder)');
+
+  check('GPS dot: global overlay is non-blocking (pointerEvents none)',
+    /export function GlobalGpsDotOverlay/.test(liveDotSrc) && /pointerEvents="none"/.test(liveDotSrc),
+    'the root mount can never intercept a tap — purely visual, the answer to "the pill blocks things"');
+
+  const rootLayoutSrc = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+  check('GPS dot: mounted once in the root layout (persists across on-course screens)',
+    /<GlobalGpsDotOverlay \/>/.test(rootLayoutSrc) && /import \{ GlobalGpsDotOverlay \}/.test(rootLayoutSrc),
+    'single global mount inside SafeAreaProvider so the dot is the same on caddie / hole-view / smartfinder');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

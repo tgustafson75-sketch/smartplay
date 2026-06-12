@@ -67,6 +67,7 @@ import BatteryPrompt from '../components/battery/BatteryPrompt';
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { initTeamIntelligenceForSession } from '../services/teamIntelligence';
 import CaddieSuggestionCard from '../components/CaddieSuggestionCard';
+import { GlobalGpsDotOverlay } from '../components/LiveGpsDot';
 import GpsQualityOverlay from '../components/dev/GpsQualityOverlay';
 import CaptureOverlay from '../components/CaptureOverlay';
 import { UpdateAvailableBanner } from '../components/UpdateAvailableBanner';
@@ -1073,6 +1074,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AppNavigator />
+        {/* 2026-06-11 — Global non-blocking on-course GPS status dot. Renders
+            only during an active round; pointerEvents="none" so it can never
+            block a tap. See components/LiveGpsDot.tsx (Option A). */}
+        <GlobalGpsDotOverlay />
       </ThemeProvider>
     </SafeAreaProvider>
     </KevinPresenceProvider>
