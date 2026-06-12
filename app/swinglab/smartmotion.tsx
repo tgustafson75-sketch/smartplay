@@ -127,7 +127,12 @@ const CHIP_STRIKE_THRESHOLD_DB = 18;
 // 2026-06-12 — default DTL target: straight up the frame from the ball (full-ish
 // shot). Draggable in setup so the aim line + the live effort/direction readout
 // update as you move it (geometry ↔ tempo, made interactive). x=0.5 = on the line.
-const DEFAULT_TARGET = { x: 0.5, y: 0.16 };
+const DEFAULT_TARGET = { x: 0.5, y: 0.18 };
+// Topmost the DTL target can travel (kept below the header so it's reachable + not
+// jammed under the readout). This y is also the 100%-effort point: a target dragged
+// to the cap = a full shot, scaling down to 0% at the ball (Tim — couldn't reach the
+// top past the overlay; top should read ~100%).
+const EFFORT_TOP_CAP = 0.13;
 
 // 2026-06-12 — custom green-on-transparent icon set (Tim's ChatGPT art, cropped +
 // black knocked out). Golfer stances for the angle toggle, scene badges for the
@@ -603,7 +608,10 @@ export default function SmartMotion() {
     if (!liveBall || !liveTarget) return null;
     const up = liveBall.y - liveTarget.y;
     if (up <= 0.02) return null;
-    return Math.round(Math.max(0, Math.min(1, up / Math.max(0.001, liveBall.y))) * 100);
+    // Scale against the USABLE span (ball → the top cap), so a target at the cap reads
+    // ~100% and the ball reads 0% — not against the raw frame top (which is unreachable).
+    const span = Math.max(0.001, liveBall.y - EFFORT_TOP_CAP);
+    return Math.round(Math.max(0, Math.min(1, up / span)) * 100);
   }, [liveBall, liveTarget]);
   // Review EFFORT chip shows only a genuinely PARTIAL shot; the live setup readout
   // shows any value (incl. ~full) as you move the line.
@@ -1969,7 +1977,7 @@ export default function SmartMotion() {
             ballArea={draftBall}
             target={angle === 'down_the_line' && !isPutt ? draftTarget : null}
             onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
-            onChangeTarget={(t) => setDraftTarget(t)}
+            onChangeTarget={(t) => setDraftTarget({ x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
           />
         ) : phase === 'recording' && draftBall ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
@@ -2114,7 +2122,7 @@ export default function SmartMotion() {
             (geometry → tempo/length) + the start direction off the aim line. Updates
             in real time so you SEE the geometry↔tempo connection (Tim). DTL only. */}
         {phase === 'setup' && angle === 'down_the_line' && !isPutt && (effortRaw != null || aimRead) ? (
-          <View style={[styles.aimReadout, { top: insets.top + 54 }]} pointerEvents="none">
+          <View style={[styles.aimReadout, { top: insets.top + 70, left: 10 }]} pointerEvents="none">
             {effortRaw != null ? (
               <View style={styles.aimReadoutCol}>
                 <Text style={styles.aimReadoutValue}>{effortRaw}%</Text>
@@ -2567,11 +2575,11 @@ const styles = StyleSheet.create({
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  aimReadout: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 14, zIndex: 6, backgroundColor: 'rgba(6,15,9,0.7)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
+  aimReadout: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 12, zIndex: 6, backgroundColor: 'rgba(6,15,9,0.72)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
   aimReadoutCol: { alignItems: 'center' },
-  aimReadoutValue: { color: '#7CE04F', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  aimReadoutLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  aimReadoutDivider: { width: 1, height: 22, backgroundColor: 'rgba(255,255,255,0.2)' },
+  aimReadoutValue: { color: '#7CE04F', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  aimReadoutLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 8, fontWeight: '700', letterSpacing: 1 },
+  aimReadoutDivider: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },

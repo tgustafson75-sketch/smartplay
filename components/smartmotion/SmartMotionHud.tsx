@@ -62,8 +62,8 @@ export function SmartMotionHeader({
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>
-        <Text style={[styles.brandWordmark, { color: colors.text_primary }]}>SMARTMOTION</Text>
-        <Text style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
+        <Text numberOfLines={1} style={[styles.brandWordmark, { color: colors.text_primary }]}>SMARTMOTION</Text>
+        <Text numberOfLines={1} style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
       </View>
       {onSettings ? (
         <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings">
@@ -492,7 +492,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
-  headerBrand: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  // 2026-06-12 — stack wordmark over subtitle (was a row with no gap, so "SMARTMOTION"
+  // and "DOWN THE LINE ANALYSIS" ran together / overlapped — Tim). Column reads clean
+  // at any width (Fold open/closed + normal phones).
+  headerBrand: { flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 },
   brandWordmark: { fontSize: 13, fontWeight: '800', letterSpacing: 1.2 },
   brandSub: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, marginTop: 1 },
 

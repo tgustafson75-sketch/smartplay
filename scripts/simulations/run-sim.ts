@@ -1493,7 +1493,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /DECLARED a ~\$\{effortPct\}% shot/.test(swingApiSrc) &&
       /const effortRaw = useMemo/.test(smSrc2) &&                       // raw % from LIVE ball/target
       /const liveTarget = targetPoint \?\? draftTarget/.test(smSrc2) &&  // draft target in setup, session in review
-      /onChangeTarget=\{\(t\) => setDraftTarget\(t\)\}/.test(smSrc2) &&   // DTL target is draggable in setup
+      /setDraftTarget\(\{ x: t\.x, y: Math\.max\(EFFORT_TOP_CAP, t\.y\) \}\)/.test(smSrc2) && // draggable, capped below the header
+      /const span = Math\.max\(0\.001, liveBall\.y - EFFORT_TOP_CAP\)/.test(smSrc2) &&        // top cap = 100% effort
       /styles\.aimReadout/.test(smSrc2),                                // live effort% + aim direction readout
     'server grades against declared effort from ball→target geometry; the DTL target is now DRAGGABLE in setup (floating end) and a live readout shows the effort % + aim direction updating as you move the line — the interactive geometry↔tempo Tim expected, plus the review EFFORT chip');
 
