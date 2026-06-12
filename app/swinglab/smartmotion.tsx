@@ -2826,8 +2826,12 @@ const styles = StyleSheet.create({
   toolIconImg: { width: 36, height: 36 },
   // 2026-06-12 — bare rail button: the badge's OWN circle is the button (no border).
   // A faint green fill marks the active/on state (since there's no border to recolor).
-  toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.22)' },
+  // 2026-06-12 (Tim) — the green-circle icons washed out on BRIGHT live video. Give each
+  // a soft translucent-dark scrim + shadow so the lime pops on any background. It's a dark
+  // backing (a shadow, not a competing green ring), so it keeps the "icon's own circle is
+  // the button" look. Active state brightens to the lime fill.
+  toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.42)', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, elevation: 4 },
+  toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.30)' },
   toolIconFull: { width: 46, height: 46 },
   modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 44, height: 44 },

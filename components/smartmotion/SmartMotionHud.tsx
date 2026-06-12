@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   bodyWrap: { borderWidth: 1, borderRadius: 12, padding: 10 },
   bodyRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 6 },
   bodyItem: { flex: 1, alignItems: 'center', gap: 3 },
-  bodyBadge: { width: 30, height: 30 },
+  bodyBadge: { width: 44, height: 44 },
   bodyLabel: { fontSize: 10, fontWeight: '600' },
   bodyVerdict: { fontSize: 11, fontWeight: '800' },
 
