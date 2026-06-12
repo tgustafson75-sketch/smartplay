@@ -1950,7 +1950,7 @@ export default function SmartMotion() {
         {isReview && !isPutt && effortPct != null ? (
           <View style={[styles.effortPill, { top: insets.top + 150 }]} pointerEvents="none">
             <Text style={styles.tempoPillLabel}>EFFORT</Text>
-            <Text style={[styles.tempoPillValue, { color: '#7CE04F' }]}>{effortPct}%</Text>
+            <Text style={[styles.tempoPillValue, { color: '#88F700' }]}>{effortPct}%</Text>
             <Text style={styles.tempoPillUnit}>shot</Text>
           </View>
         ) : null}
@@ -2616,9 +2616,9 @@ const styles = StyleSheet.create({
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  aimReadout: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(6,15,9,0.74)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
+  aimReadout: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(6,15,9,0.74)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.4)' },
   aimReadoutCol: { alignItems: 'center' },
-  aimReadoutValue: { color: '#7CE04F', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  aimReadoutValue: { color: '#88F700', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
   aimReadoutLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 7, fontWeight: '700', letterSpacing: 1 },
   aimReadoutDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
@@ -2634,9 +2634,9 @@ const styles = StyleSheet.create({
   // 2026-06-12 — bare rail button: the badge's OWN circle is the button (no border).
   // A faint green fill marks the active/on state (since there's no border to recolor).
   toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  toolBtnBareActive: { backgroundColor: 'rgba(124,224,79,0.22)' },
+  toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.22)' },
   toolIconFull: { width: 46, height: 46 },
-  modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(124,224,79,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
+  modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 44, height: 44 },
   modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
   setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
@@ -2692,7 +2692,7 @@ const styles = StyleSheet.create({
   // Universal control bar — translucent icon buttons.
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#7CE04F' },
+  barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
   barRate: { fontSize: 15, fontWeight: '900' },

@@ -309,7 +309,7 @@ export function CageTargetingOverlay({
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
   const { w, h } = size;
-  const LIME = '#7CE04F';      // ball-area box (grass green, per design)
+  const LIME = '#88F700';      // ball-area box (grass green, per design)
   const WHITE = '#FFFFFF';     // target line + ring
 
   // Target geometry (pixels). 2026-06-11 — the aim line now ORIGINATES at the
@@ -590,7 +590,7 @@ export function EditableCageTargets({
           {...ballPan.panHandlers}
           style={[dragStyles.handle, { left: shownBall.x * w - HANDLE / 2, top: shownBall.y * h - HANDLE / 2 }]}
         >
-          <View style={[dragStyles.knob, { borderColor: '#7CE04F' }]} />
+          <View style={[dragStyles.knob, { borderColor: '#88F700' }]} />
         </View>
       )}
       {w > 0 && shownTarget && (
