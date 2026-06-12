@@ -45,7 +45,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
-import CageTargetingCard, { CageTargetingOverlay } from '../../components/swinglab/CageTargetingCard';
+import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets } from '../../components/swinglab/CageTargetingCard';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -1671,27 +1671,35 @@ export default function SmartMotion() {
         {/* Ball area + (movable) target overlay — reference markers placed
             via the targeting card on the analysis page. */}
         {isReview && (ballArea || targetPoint) ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* 2026-06-11 (cage test) — NO launch/trace line in face-on. From the
-                FRONT you can't see ball flight, so the slanted launch line is a
-                FALSE line that misleads (Tim flagged it). Face-on shows the ball
-                area + the vertical `target` alignment line only; the slanted
-                launch line was a face-on-only approximation that never read
-                right from this angle. Down-the-line uses the `target` aim line. */}
-            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={null} />
-          </View>
+          // 2026-06-11 — DRAGGABLE in review: the recorded clip's FOV is a tighter
+          // crop than the live preview (Samsung video crop), so a box placed in
+          // setup can land a bit off on playback. Review IS the actual recorded
+          // frame, so dragging here is guaranteed-faithful fine-tuning that sticks
+          // to the session. (No face-on launch line — you can't see flight head-on.)
+          <EditableCageTargets
+            ballArea={ballArea}
+            target={targetPoint}
+            onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
+            onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
+          />
         ) : null}
 
         {/* SETUP / RECORDING — the ball box is the SINGLE target origin: the
             target line runs straight up from the ball box (one unified anchor,
             no duplicate static box). Shown while lining up and while recording. */}
-        {(phase === 'setup' || phase === 'recording') && draftBall ? (
+        {phase === 'setup' && draftBall ? (
+          // SETUP — DRAG to anchor the ball box (Tim: "drag to anchor in setup, and
+          // that sticks and applies to review"). Persists to draftBall, which carries
+          // into the session at record time. CaptureGuides draws the angle framing.
+          <EditableCageTargets
+            ballArea={draftBall}
+            target={null}
+            onChangeBallArea={(a) => setDraftBall(a)}
+            onChangeTarget={() => {}}
+          />
+        ) : phase === 'recording' && draftBall ? (
+          // RECORDING — display only (you're swinging; no dragging mid-record).
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* Ball box only — CaptureGuides draws the angle-specific framing
-                lines (DTL center target line vs FO stance/target+ball lines).
-                NO launch line during LIVE capture: a launch direction is a
-                post-shot approximation, not a setup aid — it only clutters the
-                line-up. The launch line shows on REVIEW instead (above). */}
             <CageTargetingOverlay ballArea={draftBall} target={null} launchDir={null} />
           </View>
         ) : null}

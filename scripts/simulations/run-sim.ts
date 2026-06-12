@@ -892,13 +892,16 @@ check('Face-on: NO launch/trace line on review (false from the front); framing g
   // 2026-06-11 (cage test) — the slanted launch line is REMOVED from face-on
   // review. From the front you cannot see ball flight, so it read as a false
   // line (Tim flagged it). Review keeps the vertical target alignment only.
-  /<CageTargetingOverlay ballArea=\{ballArea\} target=\{targetPoint\} launchDir=\{null\}/.test(smSrc) &&
+  // Review now uses the DRAGGABLE EditableCageTargets, which renders the overlay
+  // with launchDir={null} internally (no false face-on launch line).
+  /<EditableCageTargets/.test(smSrc) &&
     !/launchDir=\{angle === 'face_on'/.test(smSrc) &&
+    /launchDir=\{null\}/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
     // No launch line during live capture either (declutter line-up).
     /<CageTargetingOverlay ballArea=\{draftBall\} target=\{null\} launchDir=\{null\}/.test(smSrc) &&
     // Framing guides (incl. FO side lines) render for BOTH angles.
     /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
-  'face-on review shows the vertical target alignment only (no false launch line); live capture shows framing guides for both DTL and FO');
+  'face-on review shows the vertical target alignment only (no false launch line — EditableCageTargets passes launchDir null); live capture shows framing guides for both DTL and FO');
 
 // ─── 2026-06-09: acoustics-free swing localizer + honest networking ──────────
 const poseSrc = read('services/poseDetection.ts');
@@ -1404,6 +1407,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // analysis now hands the analyzer the distinct faults already read this session,
   // and the server (on swing 2+) pushes for a genuinely distinct secondary fault.
   const swingApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
+  // 2026-06-11 — drag-to-anchor ball/target. The recorded clip's FOV is a tighter
+  // crop than the live preview (Samsung video crop), so a setup-placed box can land
+  // off on playback. Box is now draggable in setup AND review; review = the actual
+  // recorded frame, so dragging there is guaranteed-faithful and sticks to the session.
+  const targetingSrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/CageTargetingCard.tsx'), 'utf-8');
+  check('SmartMotion: ball/target are drag-to-anchor in setup + review (FOV-drift fix)',
+    /export function EditableCageTargets/.test(targetingSrc) &&
+      /PanResponder\.create/.test(targetingSrc) &&
+      /onChangeBallArea\(b\)/.test(targetingSrc) &&            // commit on release, not per-frame
+      /phase === 'setup' && draftBall \? \(/.test(smSrc2) &&    // draggable in setup
+      /<EditableCageTargets/.test(smSrc2) &&
+      /onChangeBallArea=\{\(a\) => \{ if \(sessionId\) setSessionBallArea\(sessionId, a\); \}\}/.test(smSrc2), // review commits to session
+    'EditableCageTargets drags each marker with a PanResponder, smooth via local state, committing to the session only on release; wired draggable in setup (draftBall) and review (session) — so a box the Samsung record-crop nudged off can be fixed on the real recorded frame and stick');
+
   check('SmartMotion: multi-swing reads vary — earlier-swing faults drive a distinct secondary read',
     /priorFaultSet\.add\(f\)/.test(smSrc2) &&
       /prior_issues: sessionPriorFaults\.length > 0 \? sessionPriorFaults : undefined/.test(smSrc2) &&

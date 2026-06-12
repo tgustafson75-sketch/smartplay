@@ -23,8 +23,8 @@
  * user can drag/replace.
  */
 
-import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions, PanResponder } from 'react-native';
 import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
@@ -445,6 +445,124 @@ export function CageTargetingOverlay({
     </View>
   );
 }
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/**
+ * 2026-06-11 — DRAG-TO-ANCHOR ball + target, over the live preview (setup) AND the
+ * review video. Why drag and not just tap: on Samsung the VIDEO record FOV is a
+ * tighter crop than the live PREVIEW, so a box placed against the preview lands too
+ * high on the recorded clip (Tim had to nudge it down every time). Our coordinates
+ * are consistent (same normalized basis) — the camera hands us two FOVs. So the box
+ * is draggable: anchor it in setup, and if the record-crop shifts it, nudge it on
+ * the REVIEW frame — which is the actual recorded video, so that placement can't
+ * drift. Smooth local drag; commits to the caller (session) on release, so we don't
+ * thrash the persisted store every frame.
+ */
+export function EditableCageTargets({
+  ballArea, target, onChangeBallArea, onChangeTarget,
+}: {
+  ballArea: BallArea | null;
+  target: TargetPoint | null;
+  onChangeBallArea: (b: BallArea) => void;
+  onChangeTarget: (t: TargetPoint) => void;
+}) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const sizeRef = useRef(size);
+  useEffect(() => { sizeRef.current = size; }, [size]);
+
+  // Latest committed values + callbacks, via refs so the PanResponders are created
+  // ONCE (recreating them mid-gesture would drop the drag).
+  const ballRef = useRef(ballArea);
+  const targetRef = useRef(target);
+  useEffect(() => { ballRef.current = ballArea; }, [ballArea]);
+  useEffect(() => { targetRef.current = target; }, [target]);
+  const cbRef = useRef({ onChangeBallArea, onChangeTarget });
+  useEffect(() => { cbRef.current = { onChangeBallArea, onChangeTarget }; }, [onChangeBallArea, onChangeTarget]);
+
+  // Live drag state (local → smooth, no per-frame store writes).
+  const [liveBall, setLiveBall] = useState<BallArea | null>(null);
+  const [liveTarget, setLiveTarget] = useState<TargetPoint | null>(null);
+  const ballStart = useRef<BallArea | null>(null);
+  const targetStart = useRef<TargetPoint | null>(null);
+
+  const ballPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { ballStart.current = ballRef.current; },
+    onPanResponderMove: (_e, g) => {
+      const s = ballStart.current; const { w, h } = sizeRef.current;
+      if (!s || w === 0 || h === 0) return;
+      setLiveBall({ x: clamp01(s.x + g.dx / w), y: clamp01(s.y + g.dy / h), r: s.r });
+    },
+    onPanResponderRelease: () => {
+      setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
+      ballStart.current = null;
+    },
+    onPanResponderTerminate: () => {
+      setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
+      ballStart.current = null;
+    },
+  })).current;
+
+  const targetPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: () => { targetStart.current = targetRef.current; },
+    onPanResponderMove: (_e, g) => {
+      const s = targetStart.current; const { w, h } = sizeRef.current;
+      if (!s || w === 0 || h === 0) return;
+      setLiveTarget({ x: clamp01(s.x + g.dx / w), y: clamp01(s.y + g.dy / h) });
+    },
+    onPanResponderRelease: () => {
+      setLiveTarget((t) => { if (t) cbRef.current.onChangeTarget(t); return null; });
+      targetStart.current = null;
+    },
+    onPanResponderTerminate: () => {
+      setLiveTarget((t) => { if (t) cbRef.current.onChangeTarget(t); return null; });
+      targetStart.current = null;
+    },
+  })).current;
+
+  const shownBall = liveBall ?? ballArea;
+  const shownTarget = liveTarget ?? target;
+  const { w, h } = size;
+  const HANDLE = 56; // generous touch target around each marker
+
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+    >
+      {/* Visual layer (non-interactive) — the same overlay used read-only. */}
+      <CageTargetingOverlay ballArea={shownBall} target={shownTarget} launchDir={null} />
+      {/* Drag handles — transparent touch targets centred on each marker. A small
+          ring hints they're grabbable; box-none lets taps elsewhere pass through. */}
+      {w > 0 && shownBall && (
+        <View
+          {...ballPan.panHandlers}
+          style={[dragStyles.handle, { left: shownBall.x * w - HANDLE / 2, top: shownBall.y * h - HANDLE / 2 }]}
+        >
+          <View style={[dragStyles.knob, { borderColor: '#7CE04F' }]} />
+        </View>
+      )}
+      {w > 0 && shownTarget && (
+        <View
+          {...targetPan.panHandlers}
+          style={[dragStyles.handle, { left: shownTarget.x * w - HANDLE / 2, top: shownTarget.y * h - HANDLE / 2 }]}
+        >
+          <View style={[dragStyles.knob, { borderColor: '#FFFFFF' }]} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+const dragStyles = StyleSheet.create({
+  handle: { position: 'absolute', width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
+  knob: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.12)' },
+});
 
 const PILL_BG = 'rgba(18,20,24,0.9)';
 const overlayStyles = StyleSheet.create({
