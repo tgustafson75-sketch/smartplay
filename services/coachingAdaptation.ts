@@ -17,7 +17,14 @@ export function deriveComplexityLevel(profile: CoachingProfileLike): CoachingCom
 export function hasMobilityFlag(profile: CoachingProfileLike): boolean {
   const note = (profile.physicalLimitation ?? '').toLowerCase();
   if (!note) return false;
-  return /back|hip|knee|shoulder|mobility|pain|stiff/.test(note);
+  // 2026-06-11 — broadened well beyond joint names. The prior regex
+  // (back|hip|knee|shoulder|mobility|pain|stiff) missed "sciatica" entirely —
+  // and nerve/disc/arthritis/surgery/injury phrasings — so the deterministic
+  // on-course voice adaptation (lieAnalysis, metaCourseIntelligence,
+  // smartAnalysisEngine) silently skipped real limitations the LLM path
+  // already respects via physicalLimitation context. Kept generous on purpose:
+  // a false positive just yields gentler, mobility-aware coaching, never harm.
+  return /back|hip|knee|shoulder|neck|ankle|elbow|wrist|spine|spinal|mobility|pain|stiff|sore|sciatic|nerve|disc|herniat|arthrit|surger|surgic|replace|fusion|tendon|rotator|meniscus|sprain|strain|plantar|fasciit|bursit|scolios|fibro|injur|recover/.test(note);
 }
 
 export function adaptOnCourseVoice(

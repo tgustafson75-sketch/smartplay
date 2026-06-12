@@ -41,6 +41,7 @@ import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections } from '../../services/swing/swingSegmentation';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
+import { hasMobilityFlag } from '../../services/coachingAdaptation';
 
 interface ScenarioResult {
   scenario: string;
@@ -1628,6 +1629,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('GPS: hole-view dropped the accuracy<55m cliff (no go-dark under canopy)',
     !/coords\.accuracy < 55/.test(holeViewSrc),
     'player marker + yardages no longer vanish above 55m; gpsManager already filters >90m + garbage, so any fix shown is usable — KEEP-and-FLAG, not hide');
+
+  // ─── Health-aware coaching: mobility flag catches sciatica (was joint-only) ──
+  check('Coaching: hasMobilityFlag catches sciatica + common conditions',
+    hasMobilityFlag({ physicalLimitation: 'sciatica' }) === true &&
+      hasMobilityFlag({ physicalLimitation: 'mild arthritis in left wrist' }) === true &&
+      hasMobilityFlag({ physicalLimitation: 'recovering from rotator cuff surgery' }) === true &&
+      hasMobilityFlag({ physicalLimitation: 'bad back' }) === true &&
+      hasMobilityFlag({ physicalLimitation: null }) === false &&
+      hasMobilityFlag({ physicalLimitation: '' }) === false,
+    'sciatica/arthritis/surgery/nerve now flag mobility-aware coaching in lieAnalysis + metaCourseIntelligence + smartAnalysisEngine — the deterministic path matches what the LLM already does via physicalLimitation context');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
