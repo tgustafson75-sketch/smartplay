@@ -70,26 +70,33 @@ export async function startMeteredRecording(
   });
 
   const recording = new Audio.Recording();
-  // We discard the audio file — only the metering callback matters.
-  // Using LOW quality keeps the temp file small. METERING_INTERVAL_MS
-  // controls how often we receive metering ticks.
-  await recording.prepareToRecordAsync(RECORDING_OPTIONS);
-  recording.setProgressUpdateInterval(METERING_INTERVAL_MS);
-
   const startedAt = Date.now();
   const samples: MeterSample[] = [];
+  // 2026-06-12 — prepare/start are wrapped: if either throws (documented iOS audio-mode
+  // race with the camera/caddie mic), a half-constructed Recording left un-unloaded
+  // WEDGES the audio session, silently killing metering for the rest of the Smart Motion
+  // session. On any failure, unload it and rethrow so the caller's catch can no-op cleanly.
+  try {
+    // We discard the audio file — only the metering callback matters. LOW quality keeps
+    // the temp file small; METERING_INTERVAL_MS controls the tick rate.
+    await recording.prepareToRecordAsync(RECORDING_OPTIONS);
+    recording.setProgressUpdateInterval(METERING_INTERVAL_MS);
 
-  recording.setOnRecordingStatusUpdate((status) => {
-    if (!status.isRecording || status.metering === undefined) return;
-    const sample: MeterSample = {
-      timeMs: status.durationMillis ?? Date.now() - startedAt,
-      dB: status.metering,
-    };
-    samples.push(sample);
-    onSample?.(sample);
-  });
+    recording.setOnRecordingStatusUpdate((status) => {
+      if (!status.isRecording || status.metering === undefined) return;
+      const sample: MeterSample = {
+        timeMs: status.durationMillis ?? Date.now() - startedAt,
+        dB: status.metering,
+      };
+      samples.push(sample);
+      onSample?.(sample);
+    });
 
-  await recording.startAsync();
+    await recording.startAsync();
+  } catch (e) {
+    try { await recording.stopAndUnloadAsync(); } catch { /* never prepared — nothing to unload */ }
+    throw e;
+  }
 
   // 2026-06-07 — idempotent teardown. Smart Motion can race stop() (user
   // taps Stop) against cancel() (screen unmount); a double

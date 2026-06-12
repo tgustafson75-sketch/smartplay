@@ -215,7 +215,7 @@ export function SpeedStat({
         {label}{estimate ? ' · est' : ''}
       </Text>
       <Text style={[styles.speedValue, { color: tone === 'neutral' ? colors.text_primary : toneColor(tone, colors) }]}>
-        {value ?? '—'}
+        {value != null ? `${estimate ? '~' : ''}${value}` : '—'}
       </Text>
       {value != null && unit ? <Text style={[styles.speedUnit, { color: colors.text_muted }]}>{unit}</Text> : null}
     </View>

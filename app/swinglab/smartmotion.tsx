@@ -670,11 +670,10 @@ export default function SmartMotion() {
   const ballTraceColor = useMemo(() => {
     if (!ballTrace) return '#34d399';
     const seg = segments[selectedSwing];
-    // 2026-06-12 — reference = the LOUDEST acoustic strike (peakDb is dBFS, negative;
-    // video-located segments are 0 and excluded). Old code seeded the max at 0, so the
-    // reference was always ≥ 0 and the weak-strike dim never fired. -Infinity → undefined
-    // = no dim when there's no acoustic reference.
-    const refDb = segments.reduce((m, s) => (typeof s.peakDb === 'number' && s.peakDb < 0 ? Math.max(m, s.peakDb) : m), -Infinity);
+    // 2026-06-12 — reference = the LOUDEST acoustic strike (max value = loudest whatever
+    // the metering sign). Video-located segments carry peakDb EXACTLY 0 and are excluded
+    // (non-zero only). No acoustic reference → undefined → no dim.
+    const refDb = segments.reduce((m, s) => (typeof s.peakDb === 'number' && s.peakDb !== 0 ? Math.max(m, s.peakDb) : m), -Infinity);
     return traceColor(ballTrace.divergenceDeg, seg?.peakDb, refDb === -Infinity ? undefined : refDb);
   }, [ballTrace, segments, selectedSwing]);
 
@@ -736,12 +735,15 @@ export default function SmartMotion() {
   // once the user opens Motion, so it never competes with the core read.
   useEffect(() => {
     if (!showSkeleton || !clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
-    // 2026-06-12 (reliability) — only verify departure off an ACOUSTIC impact anchor
-    // (peakDb > 0). A video-LOCATED swing time (range/upload, peakDb === 0) is only
-    // frame-accurate (~±1s); sampling the ±120/160ms departure window around it reads
-    // the wrong frames and can emit a false departed/direction. Mirror the tempo gate.
+    // 2026-06-12 (reliability) — only verify departure off an ACOUSTIC impact anchor.
+    // A video-LOCATED swing time (range/upload) is only ~±1s accurate; sampling the
+    // ±120/160ms departure window around it reads the wrong frames → false departed/
+    // direction. swingSegmentation sets video-located peakDb to EXACTLY 0; an acoustic
+    // strike carries the real (non-zero) metering reading. Test `=== 0` so it's correct
+    // regardless of the metering sign convention. [2026-06-12 bug fix: was `<= 0`, which
+    // also matched a negative acoustic peakDb and skipped EVERY real strike.]
     const seg = segments[selectedSwing];
-    if ((seg?.peakDb ?? 0) <= 0) return;
+    if ((seg?.peakDb ?? 0) === 0) return;
     let cancelled = false;
     void detectBallDeparture({ videoUri: clipUri, impactMs: firstStrikeMsRef.current, ballArea })
       .then((r) => { if (!cancelled && r) setBallDeparture(r); })
@@ -1044,13 +1046,15 @@ export default function SmartMotion() {
     // Tempo is the headline swing metric — compute it in review by default (it
     // surfaces in the left tempo pill). Skipped for putts (no swing tempo).
     // Heavier pose/body still wait for the Motion overlay.
-    // 2026-06-11 (audit) — only derive tempo from an ACOUSTIC impact anchor
-    // (cage; peakDb>0). For video-located segments (range/upload; peakDb===0) the
-    // impact time is only frame-spacing-accurate, and deriveSwingTempo trusts the
-    // passed impact directly (downswing = impact − top), so a number here would
-    // be dishonest — suppress it until impact is pose-anchored. Cage tempo (the
-    // headline metric) is unaffected.
-    if (!clipUri || isPutt || !seg || seg.strikeMs == null || (seg.peakDb ?? 0) <= 0) { setTempo(null); return; }
+    // 2026-06-11 (audit) — only derive tempo from an ACOUSTIC impact anchor (cage).
+    // A video-located segment (range/upload) has an impact time that's only frame-
+    // spacing-accurate, and deriveSwingTempo trusts the passed impact directly
+    // (downswing = impact − top), so a number there would be dishonest. swingSegmentation
+    // marks video-located segments with peakDb EXACTLY 0; an acoustic strike carries the
+    // real (non-zero) metering reading — so test `=== 0`, correct whatever the metering
+    // sign. [2026-06-12 bug fix: was `<= 0`, which ALSO matched negative acoustic peakDb
+    // and silently killed Tempo — the headline metric — on every cage swing.]
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null || (seg.peakDb ?? 0) === 0) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -1609,13 +1613,17 @@ export default function SmartMotion() {
             // Audit fix (2026-06-11) — ALWAYS seed the first-strike anchor from the
             // first segment (its strikeMs is always populated, acoustic or video time)
             // so camera strike-verification still runs for a VIDEO-ONLY first swing.
-            // Only the ball-SPEED call needs a real acoustic strike (peakDb > 0).
+            // Only the ball-SPEED call needs a real acoustic strike. video-located
+            // segments carry peakDb EXACTLY 0; an acoustic strike carries the real
+            // (non-zero) reading — test `!== 0`, correct whatever the metering sign.
+            // [2026-06-12 bug fix: was `> 0`, never true for a negative-dBFS strike, so
+            // acoustic ball speed never fired.]
             const s0 = segsForAnalysis[0];
             if (s0) {
               firstStrikeMs = s0.strikeMs;
               firstStrikeMsRef.current = s0.strikeMs;
             }
-            if (s0 && (s0.peakDb ?? 0) > 0) {
+            if (s0 && (s0.peakDb ?? 0) !== 0) {
               if (audioUriRef.current) {
                 try {
                   const speed = await detectBallSpeed({

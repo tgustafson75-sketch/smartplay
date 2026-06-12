@@ -264,7 +264,7 @@ function CageBullseye({
         <Stepper label="Camera behind you" value={cameraBehindFeet} unit="ft" onChange={onChangeCameraBehindFeet} min={0} colors={colors} />
         <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.totalLabel, { color: colors.text_secondary }]}>Throw distance</Text>
-          <Text style={[styles.totalValue, { color: colors.accent }]}>{canvasFeet + cameraBehindFeet} ft</Text>
+          <Text style={[styles.totalValue, { color: colors.accent }]}>{Math.max(1, canvasFeet + cameraBehindFeet)} ft</Text>
         </View>
       </View>
       <Text style={[styles.note, { color: colors.text_muted }]}>

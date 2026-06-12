@@ -674,9 +674,10 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
     /label=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
     /\[showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing\]/.test(smSrc) &&
-    // 2026-06-12 — departure only verifies off an ACOUSTIC anchor (peakDb > 0), never a
-    // video-located time (which is ~±1s and would read the wrong departure frames).
-    /const seg = segments\[selectedSwing\];\n\s*if \(\(seg\?\.peakDb \?\? 0\) <= 0\) return;/.test(smSrc),
+    // 2026-06-12 — departure only verifies off an ACOUSTIC anchor; video-located segments
+    // carry peakDb EXACTLY 0 (~±1s, would read the wrong departure frames). Sign-agnostic
+    // `=== 0` test (real acoustic peakDb is non-zero, sign convention aside).
+    /const seg = segments\[selectedSwing\];\n\s*if \(\(seg\?\.peakDb \?\? 0\) === 0\) return;/.test(smSrc),
   'default reference box + verifier runs under Motion (fast default) AND only off a precise acoustic impact anchor');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
@@ -1746,9 +1747,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /const watchdogMs = boundaries \? 30_000 : 70_000;/.test(smA),
     'course single-shot / single-swing uploads (which run an internal probe+locate before the fetch) no longer time out at 30s before the real read starts');
 
-  check('Swing analysis: tempo only from an acoustic impact anchor',
-    /\(seg\.peakDb \?\? 0\) <= 0\) \{ setTempo\(null\); return; \}/.test(smA),
-    'tempo is suppressed for video-located segments (range/upload, peakDb===0) whose impact time is too coarse to anchor the downswing — never shows a dishonest number');
+  check('Swing analysis: tempo only from an acoustic impact anchor (sign-agnostic gate)',
+    /\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      // 2026-06-12 HEADLINE BUG FIX: the gate was `<= 0`, which ALSO matched a negative
+      // dBFS acoustic peakDb and silently suppressed Tempo on every cage swing. The honest
+      // distinction is video-located === 0 vs acoustic !== 0 (correct whatever the sign).
+      !/\(seg\.peakDb \?\? 0\) <= 0\) \{ setTempo/.test(smA),
+    'tempo shows for acoustic strikes (peakDb !== 0) and is suppressed ONLY for video-located segments (exactly 0) whose impact time is too coarse — never silently killed by a sign-inverted gate');
 
   check('Swing analysis: club path not manufactured as a green NEUTRAL',
     !/else \{ value = 'NEUTRAL'; statusTone = 'good'; \}/.test(smA),

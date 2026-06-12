@@ -89,10 +89,12 @@ export function traceColor(divergenceDeg: number, peakDb?: number, peakDbRef?: n
     r = lerp(245, 239, u); g = lerp(158, 68, u); b = lerp(11, 68, u);
   }
   // Weak-strike dim: fade toward grey when THIS strike is well below the loudest
-  // (reference) strike. Both are dBFS (negative), so use the dB DIFFERENCE, not a
-  // ratio of negatives (which inverts: a louder strike would dim). At the reference
-  // level → full colour; ~25 dB quieter → fully dimmed. (2026-06-12 fix.)
-  if (typeof peakDb === 'number' && typeof peakDbRef === 'number' && peakDb < 0 && peakDbRef < 0) {
+  // (reference) strike. Use the dB DIFFERENCE from the reference, not a ratio (which
+  // inverts). The reference is the LOUDEST strike (max value) — `peakDb - peakDbRef`
+  // is ≤ 0 and grows more negative as this strike gets quieter, so the curve is correct
+  // whatever the metering SIGN convention (dBFS-negative or headroom-positive). Only
+  // applies to real acoustic strikes (non-zero); a video-located 0 keeps full colour.
+  if (typeof peakDb === 'number' && typeof peakDbRef === 'number' && peakDb !== 0 && peakDbRef !== 0) {
     const DIM_SPAN_DB = 25;
     const strength = Math.max(0.4, Math.min(1, 1 + (peakDb - peakDbRef) / DIM_SPAN_DB));
     r = lerp(110, r, strength); g = lerp(110, g, strength); b = lerp(110, b, strength);
