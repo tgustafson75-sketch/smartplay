@@ -312,13 +312,21 @@ export function CageTargetingOverlay({
   const LIME = '#7CE04F';      // ball-area box (grass green, per design)
   const WHITE = '#FFFFFF';     // target line + ring
 
-  // Target geometry (pixels).
-  let targetLine: { x: number; topY: number; ringY: number } | null = null;
+  // Target geometry (pixels). 2026-06-11 — the aim line now ORIGINATES at the
+  // ball-area CENTER and runs to the target, so it reads as a true ball→target
+  // aim vector (Tim: anchor the line origin to the ball — they were independent).
+  // This is the reference the down-the-line shot trace measures the ball against.
+  // Falls back to a vertical placement hint at the target when no ball is set yet.
+  let targetLine: { x1: number; y1: number; x2: number; y2: number; ringX: number; ringY: number } | null = null;
   if (target && w > 0) {
     const tx = target.x * w;
-    const ringY = target.y * h;
-    const topY = Math.max(0.04 * h, ringY - 0.30 * h);
-    targetLine = { x: tx, topY, ringY };
+    const ty = target.y * h;
+    if (ballArea) {
+      targetLine = { x1: ballArea.x * w, y1: ballArea.y * h, x2: tx, y2: ty, ringX: tx, ringY: ty };
+    } else {
+      const topY = Math.max(0.04 * h, ty - 0.30 * h);
+      targetLine = { x1: tx, y1: topY, x2: tx, y2: ty, ringX: tx, ringY: ty };
+    }
   }
 
   // Ball-area trapezoid (perspective ground quad), pixels.
@@ -369,13 +377,13 @@ export function CageTargetingOverlay({
           {targetLine && (
             <>
               <SvgLine
-                x1={targetLine.x} y1={targetLine.topY}
-                x2={targetLine.x} y2={targetLine.ringY}
+                x1={targetLine.x1} y1={targetLine.y1}
+                x2={targetLine.x2} y2={targetLine.y2}
                 stroke={WHITE} strokeWidth={2} strokeDasharray="7,6" opacity={0.95}
               />
-              {/* flat ring on the ground at the base of the aim line */}
+              {/* aim-point ring at the target end of the ball→target line */}
               <SvgEllipse
-                cx={targetLine.x} cy={targetLine.ringY}
+                cx={targetLine.ringX} cy={targetLine.ringY}
                 rx={Math.max(10, 0.06 * w)} ry={Math.max(4, 0.02 * w)}
                 stroke={WHITE} strokeWidth={1.6} fill="none" opacity={0.9}
               />
@@ -409,7 +417,7 @@ export function CageTargetingOverlay({
       )}
       {/* Pill labels with a downward caret (RN views — crisp text). */}
       {targetLine && (
-        <View style={[overlayStyles.pillWrap, { left: targetLine.x, top: targetLine.topY - 30 }]}>
+        <View style={[overlayStyles.pillWrap, { left: targetLine.x2, top: targetLine.y2 - 30 }]}>
           <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>TARGET</Text></View>
           <View style={overlayStyles.caret} />
         </View>
