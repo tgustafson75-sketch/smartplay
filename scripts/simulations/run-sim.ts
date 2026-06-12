@@ -1384,6 +1384,33 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length > 1/.test(smSrc2),
     'a re-analyzed upload (no acoustics) runs the video locator and shows all swings when >1 found; a genuine single-swing upload is unchanged');
 
+  // 2026-06-11 — cage-test fix: "NO READ — RECORD AGAIN" was flashing as a
+  // transient mid-pipeline state (bounded acoustic pass → whole-clip video re-scan)
+  // before the real read landed. Now keyed off phase so it's strictly terminal.
+  check('SmartMotion: NO-READ is terminal (phase-gated, not a mid-pipeline flash)',
+    /return deriveVerdict\(analysis, phase === 'analyzing'\)/.test(smSrc2) &&
+      /phase === 'review' && analysisError \? 'NO READ' : 'READING…'/.test(smSrc2),
+    'the verdict shows ANALYZING for every in-flight pass (including the video re-scan) and only says NO READ once a read has terminally finished in review — no more fail-state flash before the read lands');
+
+  // 2026-06-11 — cage-test fix: Save was a dead-end toast (deferred-wiring). The
+  // session auto-ingests + analysis attaches, so it persisted — but Save now
+  // confirms AND takes the user to the library (Tim: "didn't go to swing library").
+  check('SmartMotion: confirmSave flushes the coach note + navigates to the library',
+    /setSessionCoachNote\(sid, coachNote\)/.test(smSrc2) &&
+      /router\.push\('\/swinglab\/library' as never\)/.test(smSrc2),
+    'the explicit Save flushes any review-time coach note onto the already-persisted session and routes to the Swing Library so the saved swing is right there — no more silent no-op toast');
+
+  // 2026-06-11 — cage-test fix: 4 swings all returned the SAME fault. Per-swing
+  // analysis now hands the analyzer the distinct faults already read this session,
+  // and the server (on swing 2+) pushes for a genuinely distinct secondary fault.
+  const swingApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
+  check('SmartMotion: multi-swing reads vary — earlier-swing faults drive a distinct secondary read',
+    /priorFaultSet\.add\(f\)/.test(smSrc2) &&
+      /prior_issues: sessionPriorFaults\.length > 0 \? sessionPriorFaults : undefined/.test(smSrc2) &&
+      /ctx\.swing_number === 'number' && ctx\.swing_number > 1/.test(swingApiSrc) &&
+      /actively look for a genuinely distinct secondary fault/.test(swingApiSrc),
+    'swing 2+ passes the distinct faults already found this session; the server treats them (only when swing_number>1) as a "confirm a repeat only with clean evidence, else surface a distinct secondary fault" directive — so four swings stop echoing one identical fault, while swing 1 keeps the neutral cross-session prior');
+
   check('SmartMotion: auto-window-end calls the CURRENT stopRecording (audit H1)',
     /void stopRecordingRef\.current\(\)/.test(smSrc2) && /stopRecordingRef\.current = stopRecording/.test(smSrc2),
     'the hands-free "let the 60s run out" stop routes through a ref, so it uses current calibration/angle instead of a stale closure');

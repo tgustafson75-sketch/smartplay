@@ -459,10 +459,16 @@ export default function SmartMotion() {
   const verdict = useMemo(() => {
     if (isPutt) {
       if (puttAnalysis) return { text: 'PUTT READ', tone: 'good' as SmTone };
-      return { text: analysisError ? 'NO READ' : 'READING…', tone: 'neutral' as SmTone };
+      return { text: phase === 'review' && analysisError ? 'NO READ' : 'READING…', tone: 'neutral' as SmTone };
     }
-    return deriveVerdict(analysis, analysis == null && !analysisError);
-  }, [isPutt, puttAnalysis, analysis, analysisError]);
+    // 2026-06-11 — "NO READ — RECORD AGAIN" is a TERMINAL state, only in review.
+    // The cage's first read often runs a bounded acoustic window, THEN falls back
+    // to a whole-clip video re-scan + analysis; in that gap analysis is briefly
+    // null. Keying NO READ off `phase === 'analyzing'` (not the old null+no-error
+    // test) keeps every in-flight pass — including the re-scan — showing ANALYZING,
+    // so the read no longer flashes a fail state before it lands (cage findings).
+    return deriveVerdict(analysis, phase === 'analyzing');
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase]);
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;
@@ -964,6 +970,18 @@ export default function SmartMotion() {
       if (!seg || !clipUri) return null;
       const cachedHit = analysisCacheRef.current[idx];
       if (cachedHit) return cachedHit;
+      // 2026-06-11 — multi-swing variety: hand the analyzer the DISTINCT faults
+      // already read on this session's earlier swings (whatever's cached so far).
+      // The server treats this (on swing 2+) as a "don't just echo swing 1 — surface
+      // a real secondary fault unless the same one is clearly here" directive, so
+      // four swings stop returning one identical fault. Empty on swing 1.
+      const priorFaultSet = new Set<string>();
+      for (const [k, a] of Object.entries(analysisCacheRef.current)) {
+        if (Number(k) >= idx) continue;
+        const f = a?.primary_fault ?? a?.detected_issue ?? null;
+        if (f && f !== 'none' && f !== 'no_dominant_fault' && f !== 'inconclusive') priorFaultSet.add(f);
+      }
+      const sessionPriorFaults = Array.from(priorFaultSet);
       try {
         const r = await Promise.race([
           analyzeSwing(clipUri, {
@@ -973,6 +991,7 @@ export default function SmartMotion() {
             angle,
             handedness: swingerHandedness,
             language,
+            prior_issues: sessionPriorFaults.length > 0 ? sessionPriorFaults : undefined,
             player_context: {
               handicap: profile.handicap ?? null,
               dominant_miss: profile.dominantMiss ?? null,
@@ -1387,9 +1406,20 @@ export default function SmartMotion() {
       return next;
     });
   }, []);
+  // 2026-06-11 — was a dead-end toast (deferred-wiring placeholder). The session
+  // already auto-ingests at record time and the analysis/biomech attach to it, so
+  // the data IS persisted — but the user's explicit "Save" tap did nothing visible
+  // and never took them to the library (Tim's "reports didn't save / didn't go to
+  // the swing library"). Now it flushes any review-time coach note, confirms, and
+  // navigates to the library so the saved swing is right there.
   const confirmSave = useCallback(() => {
+    const sid = ingestedSessionIdRef.current;
+    if (sid && coachNote.trim()) {
+      try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
+    }
     useToastStore.getState().show('Saved to your Swing Library');
-  }, []);
+    router.push('/swinglab/library' as never);
+  }, [coachNote, router]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));

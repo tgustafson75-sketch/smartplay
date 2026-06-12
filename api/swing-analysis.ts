@@ -871,7 +871,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (ctx.swing_number != null) ctxLines.push(`Swing ${ctx.swing_number} of session`);
     if (ctx.prior_issues && Array.isArray(ctx.prior_issues) && ctx.prior_issues.length > 0) {
-      ctxLines.push(`Prior swings showed: ${(ctx.prior_issues as string[]).join(', ')}`);
+      const faults = (ctx.prior_issues as string[]).join(', ');
+      // 2026-06-11 — multi-swing variety. On swing 2+ of a session the prior list
+      // is the faults ALREADY reported on the earlier swings of THIS session; a
+      // golfer rarely repeats the exact same single fault every swing, so don't let
+      // the read default to echoing swing 1. Confirm a repeat ONLY with clean
+      // frame evidence; otherwise actively surface a genuinely DISTINCT secondary
+      // fault on this swing. On swing 1 (or no number) the list is cross-session
+      // learned tendencies → keep it a neutral prior, not a variety push. (Tim's
+      // cage finding: 4 swings all got the same fault.)
+      if (typeof ctx.swing_number === 'number' && ctx.swing_number > 1) {
+        ctxLines.push(
+          `Earlier swings THIS session already reported: ${faults}. These are SEPARATE swings. ` +
+          `If this swing clearly shows one of those same faults with frame-specific evidence, confirm it honestly — ` +
+          `but do NOT default to repeating an earlier name: actively look for a genuinely distinct secondary fault on THIS ` +
+          `swing and surface it when the evidence supports it. Repeat a prior fault only with clean evidence.`,
+        );
+      } else {
+        ctxLines.push(`Prior swings showed: ${faults}`);
+      }
     }
     // 2026-05-24 — Reanalyze "look for something else" directive. Set
     // by services/videoUpload.ts when the user re-fires analysis on a
