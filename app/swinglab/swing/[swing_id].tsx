@@ -153,6 +153,11 @@ export default function SwingDetail() {
     : null;
 
   const videoRef = useRef<Video>(null);
+  // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
+  // for swing review. The `rate` prop survives native play/pause; the corner
+  // button cycles 1× → ½× → ¼× → 1×.
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const cycleSlowMo = () => setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
   // 2026-06-10 — Auto-play the swing ONCE when the detail screen opens (library
   // + re-analyze paths). Previously only the ?watch=1 route auto-played, so
   // opening a swing from the library sat on a frozen first frame until you
@@ -886,6 +891,8 @@ export default function SwingDetail() {
                 // hear coach narration on uploaded videos). Other
                 // paths stay muted so library scrubbing doesn't blast.
                 isMuted={!shouldAutoplayThenAnalyze}
+                rate={playbackRate}
+                shouldCorrectPitch={false}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
               </ZoomableView>
@@ -914,6 +921,22 @@ export default function SwingDetail() {
                 target={session?.target_norm ?? null}
               />
               <VideoWatermark position="bottomRight" size={36} />
+              {/* 2026-06-11 — slow-mo toggle (1× → ½× → ¼×). Top-left corner so it
+                  clears the bottom-right watermark + the bottom native scrubber and
+                  doesn't intercept the pinch-zoom on the rest of the frame. Turns
+                  green when slowed so the state is obvious. */}
+              <TouchableOpacity
+                onPress={cycleSlowMo}
+                style={{
+                  position: 'absolute', top: 8, left: 8,
+                  paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+                  backgroundColor: playbackRate < 1 ? 'rgba(0,200,150,0.85)' : 'rgba(0,0,0,0.55)',
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Playback speed ${playbackRate} times; tap to change`}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{playbackRate}×</Text>
+              </TouchableOpacity>
             </View>
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
