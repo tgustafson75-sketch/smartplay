@@ -156,6 +156,7 @@ const ICON_METRIC = {
   ballspeed: require('../../assets/icons/smartmotion/metric-ballspeed.png'),
   ballresult: require('../../assets/icons/smartmotion/metric-ballresult.png'),
   face: require('../../assets/icons/smartmotion/metric-faceangle.png'),
+  smash: require('../../assets/icons/smartmotion/metric-smash.png'),
 } as const;
 // Biomech RESULT badges (Tim — the dashed-line set for the body-analysis row).
 const ICON_BIOMECH = {
@@ -2438,8 +2439,42 @@ export default function SmartMotion() {
         </View>
       ) : null}
 
+      {/* COMING SOON — face angle + smash are HONEST future metrics: they need
+          higher-frame-rate capture (240fps+) or an external camera source (e.g. a
+          GoPro feed) to measure reliably. Shown as roadmap, not faked (Tim). */}
+      {!isPutt ? (
+        <View style={[styles.comingCard, { borderColor: colors.border }]}>
+          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COMING SOON</Text>
+          <View style={styles.comingRow}>
+            <View style={styles.comingItem}>
+              <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
+              <Text style={styles.comingItemLabel}>FACE ANGLE</Text>
+            </View>
+            <View style={styles.comingItem}>
+              <Image source={ICON_METRIC.smash} style={styles.comingImg} resizeMode="contain" />
+              <Text style={styles.comingItemLabel}>SMASH FACTOR</Text>
+            </View>
+          </View>
+          <Text style={[styles.comingNote, { color: colors.text_muted }]}>
+            Unlocks with higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) — on the roadmap.
+          </Text>
+        </View>
+      ) : null}
+
       {!isReview ? (
-        <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to see your full breakdown, drill, and notes here.</Text>
+        // 2026-06-12 — PRE-SWING SCAFFOLD (Tim): show the breakdown STRUCTURE with
+        // empty "—" boxes so page 2 reads as a results page waiting to fill, not a
+        // blank black screen. The body-analysis badges + the insight cards, dimmed.
+        <>
+          <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to fill in your breakdown.</Text>
+          {!isPutt ? <BodyAnalysisRow items={bodyItems} style={{ opacity: 0.7 }} /> : null}
+          {['TOP FOCUS', 'WHY IT HAPPENS', 'THE FIX', 'RECOMMENDED DRILL'].map((lbl) => (
+            <View key={lbl} style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, opacity: 0.5 }]}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{lbl}</Text>
+              <Text style={[styles.insightText, { color: colors.text_muted }]}>—</Text>
+            </View>
+          ))}
+        </>
       ) : isPutt ? (
         // PUTT MODE — analyzed as a putt (green read + stroke), not a swing.
         puttAnalysis ? (
@@ -2765,6 +2800,12 @@ const styles = StyleSheet.create({
   muted: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   insightCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
   insightLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  comingCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, borderStyle: 'dashed' },
+  comingRow: { flexDirection: 'row', gap: 20, justifyContent: 'center', paddingVertical: 4 },
+  comingItem: { alignItems: 'center', gap: 4, opacity: 0.85 },
+  comingImg: { width: 46, height: 46 },
+  comingItemLabel: { color: '#88F700', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
+  comingNote: { fontSize: 11, lineHeight: 16, textAlign: 'center' },
   insightHeadline: { fontSize: 17, fontWeight: '900', letterSpacing: 0.3 },
   insightConf: { fontSize: 11, fontWeight: '600' },
   insightBody: { fontSize: 13, lineHeight: 19, fontWeight: '500', padding: 12, borderWidth: 1, borderRadius: 12 },
