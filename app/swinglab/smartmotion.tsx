@@ -319,6 +319,12 @@ export default function SmartMotion() {
   // the session on ingest for the strike verifier.
   const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
   const [placeBallMode, setPlaceBallMode] = useState(false);
+  // 2026-06-11 — Framing Coach. On-device pose on the LIVE preview tells us if the
+  // golfer is fully in frame (head + feet) before they swing — Tim's "Golf Fix knows
+  // when you're in frame" idea, now buildable with MediaPipe. Null = not yet checked.
+  const [framing, setFraming] = useState<import('../../services/swing/framingCheck').FramingResult | null>(null);
+  const framingSpokeRef = useRef(false);   // spoke the "framed" cue once per setup
+  const userMovedBallRef = useRef(false);   // don't auto-place the box once the user drags it
   const [videoPaused, setVideoPaused] = useState(false); // review play/pause
   const [playbackRate, setPlaybackRate] = useState(1); // review slow-mo (1 / .5 / .25)
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
@@ -336,6 +342,66 @@ export default function SmartMotion() {
   }, [statusPulse]);
   const draftBallRef = useRef<typeof draftBall>(null);
   useEffect(() => { draftBallRef.current = draftBall; }, [draftBall]);
+
+  // 2026-06-11 — Framing Coach loop. While lining up (SETUP), grab a preview frame
+  // every ~900ms, run ON-DEVICE pose, and evaluate whether the golfer is fully in
+  // frame (head + feet). Drives the framing pill + a one-time "you're framed" cue,
+  // and auto-anchors the ball box below the detected feet (until the user drags it).
+  // Best-effort + cancellable: every step is guarded, so it can NEVER throw or block
+  // recording. Stops the instant we leave setup. (If a device plays a shutter sound
+  // on takePictureAsync, widen the cadence / gate behind a toggle — confirm in cage.)
+  useEffect(() => {
+    if (phase !== 'setup') { setFraming(null); framingSpokeRef.current = false; return; }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        if (!scanningClub) {
+          const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.35, skipProcessing: true });
+          const b64 = pic?.base64;
+          if (b64 && !cancelled) {
+            const mp = await import('../../services/mediaPipePoseService');
+            const frame = await mp.detectPoseFromBase64(b64).catch(() => null);
+            if (frame && !cancelled) {
+              const { evaluateFraming } = await import('../../services/swing/framingCheck');
+              const res = evaluateFraming(frame.keypoints as { name: string; x: number; y: number; score: number }[]);
+              if (!cancelled) {
+                setFraming(res);
+                if (res.status === 'framed' && res.feetCenter) {
+                  // Auto-anchor the box below the feet ONCE, only while it's still the
+                  // default (never override a placement the user dragged).
+                  const placed = draftBallRef.current;
+                  const isDefault = !userMovedBallRef.current && (!placed
+                    || (Math.abs(placed.x - DEFAULT_BALL_BOX.x) < 0.001 && Math.abs(placed.y - DEFAULT_BALL_BOX.y) < 0.001));
+                  if (isDefault) {
+                    setDraftBall({ x: res.feetCenter.x, y: Math.min(0.92, res.feetCenter.y + 0.04), r: DEFAULT_BALL_BOX.r });
+                  }
+                  if (!framingSpokeRef.current) {
+                    framingSpokeRef.current = true;
+                    const s = useSettingsStore.getState();
+                    if (s.voiceEnabled) {
+                      void (async () => {
+                        try {
+                          await configureAudioForSpeech();
+                          await speak("You're framed up — start swinging when you're ready.", s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
+                        } catch { /* advisory only */ }
+                      })();
+                    }
+                  }
+                } else {
+                  framingSpokeRef.current = false; // re-arm the cue if they step out
+                }
+              }
+            }
+          }
+        }
+      } catch { /* non-fatal — just retry next tick */ }
+      if (!cancelled) timer = setTimeout(() => void tick(), 900);
+    };
+    timer = setTimeout(() => void tick(), 700); // let the camera settle first
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [phase, scanningClub]);
   // Acoustic impact time of the first swing — needed by the camera verifier,
   // which runs from an effect once the clip + ball spot are both available.
   const firstStrikeMsRef = useRef<number | null>(null);
@@ -1694,7 +1760,7 @@ export default function SmartMotion() {
           <EditableCageTargets
             ballArea={draftBall}
             target={null}
-            onChangeBallArea={(a) => setDraftBall(a)}
+            onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
             onChangeTarget={() => {}}
           />
         ) : phase === 'recording' && draftBall ? (
@@ -1709,6 +1775,7 @@ export default function SmartMotion() {
             onPress={(e) => {
               const { locationX, locationY } = e.nativeEvent;
               if (rootSize.w > 0 && rootSize.h > 0) {
+                userMovedBallRef.current = true;
                 setDraftBall({ x: locationX / rootSize.w, y: locationY / rootSize.h, r: 0.07 });
               }
               setPlaceBallMode(false);
@@ -1808,6 +1875,28 @@ export default function SmartMotion() {
           <View style={[styles.puttPill, { top: insets.top + 56 }]} pointerEvents="none">
             <Ionicons name="golf-outline" size={13} color="#06281b" />
             <Text style={styles.puttPillText}>PUTT MODE</Text>
+          </View>
+        ) : null}
+
+        {/* FRAMING COACH pill (setup) — on-device pose checks you're fully in frame
+            before you swing. Green = framed (head + feet); amber = a fix (step back,
+            tilt up, center). Bottom-center, clear of the right tool rail + ball box. */}
+        {phase === 'setup' && framing ? (
+          <View
+            style={[
+              styles.framingPill,
+              { bottom: insets.bottom + 96, backgroundColor: framing.status === 'framed' ? 'rgba(0,200,150,0.92)' : 'rgba(18,20,24,0.86)' },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={framing.status === 'framed' ? 'checkmark-circle' : framing.status === 'no_person' ? 'body-outline' : 'alert-circle-outline'}
+              size={15}
+              color={framing.status === 'framed' ? '#06281b' : '#f5c451'}
+            />
+            <Text style={[styles.framingPillText, { color: framing.status === 'framed' ? '#06281b' : '#fff' }]}>
+              {framing.message}
+            </Text>
           </View>
         ) : null}
 
@@ -2236,6 +2325,8 @@ const styles = StyleSheet.create({
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
+  framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },

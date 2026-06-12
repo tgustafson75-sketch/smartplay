@@ -39,6 +39,7 @@ import {
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
+import { evaluateFraming } from '../../services/swing/framingCheck';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
@@ -1412,6 +1413,39 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // off on playback. Box is now draggable in setup AND review; review = the actual
   // recorded frame, so dragging there is guaranteed-faithful and sticks to the session.
   const targetingSrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/CageTargetingCard.tsx'), 'utf-8');
+  // 2026-06-11 — Framing Coach (Tim's "Golf Fix knows when you're in frame" idea).
+  // On-device pose → evaluateFraming reads head+feet+centring from one frame.
+  {
+    const kp = (name: string, x: number, y: number, score = 0.9) => ({ name, x, y, score });
+    // Full body, centred, head + feet in frame → framed.
+    const framed = evaluateFraming([
+      kp('nose', 0.5, 0.12), kp('left_shoulder', 0.42, 0.3), kp('right_shoulder', 0.58, 0.3),
+      kp('left_hip', 0.45, 0.55), kp('right_hip', 0.55, 0.55),
+      kp('left_ankle', 0.46, 0.86), kp('right_ankle', 0.54, 0.86),
+    ]);
+    // Feet not detected (ankles low score) → partial / feet_cut.
+    const feetCut = evaluateFraming([
+      kp('nose', 0.5, 0.12), kp('left_shoulder', 0.42, 0.3), kp('right_shoulder', 0.58, 0.3),
+      kp('left_hip', 0.45, 0.55), kp('right_hip', 0.55, 0.55),
+      kp('left_ankle', 0.46, 0.99, 0.05), kp('right_ankle', 0.54, 0.99, 0.05),
+    ]);
+    // No torso → no_person.
+    const empty = evaluateFraming([kp('left_wrist', 0.5, 0.5, 0.4)]);
+    check('SmartMotion: Framing Coach reads head+feet+centring (framed / feet-cut / no-person)',
+      framed.status === 'framed' && !!framed.feetCenter &&
+        Math.abs((framed.feetCenter?.x ?? 0) - 0.5) < 0.01 &&
+        feetCut.status === 'partial' && feetCut.reason === 'feet_cut' &&
+        empty.status === 'no_person',
+      `a fully-in-frame golfer → framed (feetCenter ${framed.feetCenter?.x}); ankles at the bottom edge / low score → "step back, can't see your feet"; no torso → "step into frame". Drives the setup pill + the one-time "you're framed, start swinging" cue and the ball-box auto-anchor below the feet`);
+  }
+
+  check('SmartMotion: Framing Coach is wired into the setup loop (on-device pose, fail-safe)',
+    /detectPoseFromBase64\(b64\)/.test(smSrc2) &&
+      /evaluateFraming\(frame\.keypoints/.test(smSrc2) &&
+      /phase !== 'setup'.*setFraming\(null\)/.test(smSrc2) &&
+      /styles\.framingPill/.test(smSrc2),
+    'setup polls a preview frame, runs on-device pose, evaluates framing into a pill; every step is guarded so a missing native pose module just leaves framing null (no pill, no error) — degrades like biomech until the native build');
+
   check('SmartMotion: ball/target are drag-to-anchor in setup + review (FOV-drift fix)',
     /export function EditableCageTargets/.test(targetingSrc) &&
       /PanResponder\.create/.test(targetingSrc) &&
