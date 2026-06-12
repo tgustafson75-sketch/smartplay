@@ -36,6 +36,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { ThemeColors } from '../../theme/tokens';
 
+// 2026-06-12 — acoustic status badges (Tim's set) for the pickup card header.
+const ICON_ACOUSTIC = {
+  listening: require('../../assets/icons/smartmotion/acoustic-listening.png'),
+  strike: require('../../assets/icons/smartmotion/acoustic-strike.png'),
+  silent: require('../../assets/icons/smartmotion/acoustic-silent.png'),
+  confirmed: require('../../assets/icons/smartmotion/acoustic-confirmed.png'),
+};
+
 export type Angle = 'down_the_line' | 'face_on';
 export type SmTone = 'good' | 'warn' | 'bad' | 'neutral';
 
@@ -334,7 +342,12 @@ export function AcousticPickupCard({
   return (
     <View style={[styles.acousticCard, { backgroundColor: colors.surface_elevated, borderColor: active ? colors.accent : colors.border }, style]}>
       <View style={styles.acousticHead}>
-        <Ionicons name="pulse-outline" size={16} color={accent} />
+        {/* State badge: confirmed (strike found) → listening (mic live) → silent (idle). */}
+        <Image
+          source={detected ? ICON_ACOUSTIC.confirmed : listening ? ICON_ACOUSTIC.listening : ICON_ACOUSTIC.silent}
+          style={[styles.acousticBadge, !active && { opacity: 0.6 }]}
+          resizeMode="contain"
+        />
         <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>ACOUSTIC PICKUP</Text>
       </View>
       <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
@@ -545,6 +558,7 @@ const styles = StyleSheet.create({
 
   acousticCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   acousticHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  acousticBadge: { width: 26, height: 26 },
   acousticTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   meterTrack: { height: 10, borderRadius: 5, marginTop: 10, marginBottom: 2, overflow: 'visible', justifyContent: 'center' },
   meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 5 },
