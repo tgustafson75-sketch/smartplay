@@ -41,6 +41,7 @@ import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
 import { evaluateFraming } from '../../services/swing/framingCheck';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
+import { estimateCarryYards, fullCarryYards } from '../../services/swing/carryEstimate';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
@@ -1500,6 +1501,33 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).
+  // 2026-06-12 — yardage estimate from club + effort %, reusing the app's club math
+  // (industry table scaled by handicap), honest nulls for putter/unknown.
+  {
+    const full7i = fullCarryYards('7I', 18);        // 7-iron, handicap 18 → scaled industry
+    const half7i = estimateCarryYards('7I', 50, 18); // ~half-effort 7-iron
+    const scratch7i = fullCarryYards('7I', 0);       // scratch → full industry (longer)
+    const learned = fullCarryYards('7I', 18, 142);   // learned avg wins over the table
+    const putt = estimateCarryYards('PT', 80, 18);   // putter → null (no carry)
+    const noClub = estimateCarryYards(null, 80, 18);
+    check('SmartMotion: carry estimate = club × effort % (reuses club math, handicap-scaled)',
+      typeof full7i === 'number' && full7i > 100 && full7i < 150 &&     // high-handicap 7i ~125-130
+        half7i != null && Math.abs(half7i - Math.round(full7i * 0.5)) <= 1 &&
+        (scratch7i ?? 0) > full7i &&                                     // scratch carries farther
+        learned === 142 &&                                              // real learned avg wins
+        putt === null && noClub === null,                               // honest nulls
+      `7-iron full carry @hcp18 ~${full7i}y (high-handicap baseline from the industry table scaled by handicap); 50% effort ~${half7i}y; scratch carries farther (${scratch7i}y); a learned ${learned}y average overrides the table; putter/no-club → null (no fabricated yardage)`);
+  }
+
+  check('SmartMotion: DTL readout shows the carry estimate + cycling badge + icon set',
+    /estimateCarryYards\(club, effortRaw, profile\.handicap\)/.test(smSrc2) &&
+      /~\{estCarry\}y/.test(smSrc2) &&
+      />CARRY</.test(smSrc2) &&
+      /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
+      /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
+      /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)
+    'the live DTL readout adds a ~Ny CARRY column from the selected club × effort %; the rail uses its own green-circle badges (no double border, toolBtnBare) and the review controls use the matching record/play-pause/slow-mo/delete/save badges');
+
   check('SmartMotion: cycling mode badge + custom icon set wired',
     /const cycleMode = \(\) => \{/.test(smSrc2) &&
       /ICON_ANGLE\[isPutt \? 'putt' : angle\]/.test(smSrc2) &&        // current-stance icon on the badge

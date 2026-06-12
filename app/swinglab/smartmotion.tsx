@@ -50,6 +50,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
+import { estimateCarryYards } from '../../services/swing/carryEstimate';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -148,6 +149,22 @@ const ICON_ENV = {
   course: require('../../assets/icons/smartmotion/env-course.png'),
 } as const;
 const ICON_CLUB = require('../../assets/icons/smartmotion/club-detect.png');
+// 2026-06-12 — the rest of the rail as matching green-circle badges (Tim's art), so
+// every rail button uses its OWN circle (our button border dropped — no double circle).
+const ICON_RAIL = {
+  calibrate: require('../../assets/icons/smartmotion/rail-calibrate.png'),
+  ballbox: require('../../assets/icons/smartmotion/rail-ballbox.png'),
+  selfie: require('../../assets/icons/smartmotion/rail-selfie.png'),
+  chip: require('../../assets/icons/smartmotion/rail-chip.png'),
+} as const;
+// Review control bar as matching badges (record / play-pause / slow-mo / delete / save).
+const ICON_CTRL = {
+  record: require('../../assets/icons/smartmotion/ctrl-record.png'),
+  playpause: require('../../assets/icons/smartmotion/ctrl-playpause.png'),
+  slowmo: require('../../assets/icons/smartmotion/ctrl-slowmo.png'),
+  delete: require('../../assets/icons/smartmotion/ctrl-delete.png'),
+  save: require('../../assets/icons/smartmotion/ctrl-save.png'),
+} as const;
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -616,6 +633,9 @@ export default function SmartMotion() {
   // Review EFFORT chip shows only a genuinely PARTIAL shot; the live setup readout
   // shows any value (incl. ~full) as you move the line.
   const effortPct = effortRaw != null && effortRaw > 0 && effortRaw < 85 ? effortRaw : null;
+  // 2026-06-12 — yardage estimate from the SELECTED CLUB + effort % (Tim). Reuses the
+  // app's club carry table scaled by handicap; null when we can't honestly estimate.
+  const estCarry = useMemo(() => estimateCarryYards(club, effortRaw, profile.handicap), [club, effortRaw, profile.handicap]);
   // 2026-06-11 — DTL ball-trace. DOWN-THE-LINE ONLY (no flight to see face-on or in a
   // putt). The real departure point (from ballDeparture, detected off the acoustic
   // anchor) → the initial direction line measured against the ball→target aim line.
@@ -1761,26 +1781,30 @@ export default function SmartMotion() {
         <Ionicons name="stop" size={22} color="#fff" />
       </Pressable>
     ) : isReview ? (
+      // Review controls as matching green-circle badges (Tim's art): play/pause ·
+      // slow-mo · save · delete · record-again. Each uses its own circle (no border);
+      // slow-mo fills when slowed + keeps a tiny rate tag so ½/¼ stays visible.
       <View style={styles.barRow}>
-        <Pressable onPress={togglePlay} style={[styles.barBtn, styles.barGhost, { borderColor: colors.accent }]} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
-          <Ionicons name={videoPaused ? 'play' : 'pause'} size={20} color={colors.accent} />
+        <Pressable onPress={togglePlay} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
+          <Image source={ICON_CTRL.playpause} style={styles.toolIconFull} resizeMode="contain" />
         </Pressable>
-        <Pressable onPress={cycleSpeed} style={[styles.barBtn, styles.barGhost, { borderColor: playbackRate < 1 ? colors.accent : colors.border }]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
-          <Text style={[styles.barRate, { color: playbackRate < 1 ? colors.accent : colors.text_muted }]}>{playbackRate === 1 ? '1×' : playbackRate === 0.5 ? '½×' : '¼×'}</Text>
+        <Pressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
+          <Image source={ICON_CTRL.slowmo} style={styles.toolIconFull} resizeMode="contain" />
+          {playbackRate < 1 ? <Text style={styles.barRateTag}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
         </Pressable>
-        <Pressable onPress={confirmSave} style={[styles.barBtn, styles.barGhost, { borderColor: colors.success }]} accessibilityRole="button" accessibilityLabel="Save to library">
-          <Ionicons name="bookmark-outline" size={19} color={colors.success} />
+        <Pressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
+          <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
         </Pressable>
-        <Pressable onPress={discardSwing} style={[styles.barBtn, styles.barGhost, { borderColor: colors.error }]} accessibilityRole="button" accessibilityLabel="Delete swing">
-          <Ionicons name="trash-outline" size={19} color={colors.error} />
+        <Pressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Delete swing">
+          <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
         </Pressable>
-        <Pressable onPress={() => beginNextRecording()} style={[styles.barBtn, { backgroundColor: colors.accent }]} accessibilityRole="button" accessibilityLabel="Record again">
-          <Ionicons name="refresh" size={20} color="#06281b" />
+        <Pressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Record again">
+          <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
         </Pressable>
       </View>
     ) : phase === 'setup' ? (
-      <Pressable onPress={() => void startRecording()} style={[styles.barBtn, styles.barBtnRecord, { backgroundColor: colors.accent }]} accessibilityRole="button" accessibilityLabel="Record">
-        <Ionicons name="radio-button-on" size={26} color="#06281b" />
+      <Pressable onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel="Record">
+        <Image source={ICON_CTRL.record} style={{ width: 56, height: 56 }} resizeMode="contain" />
       </Pressable>
     ) : (
       <View style={styles.barBtn} />
@@ -2030,47 +2054,48 @@ export default function SmartMotion() {
             Same handlers as the old bars, just compact + out of the way. */}
         {phase === 'setup' ? (
           <View style={[styles.toolRail, { top: insets.top + 76 }]}>
-            {/* Each rail button flashes its label to the LEFT on tap (RailButton). */}
+            {/* Each rail button is its OWN green-circle badge (no extra border) and
+                flashes its label to the LEFT on tap. A faint fill marks the on state. */}
             <RailButton
               label={calibrated ? 'Re-calibrate' : 'Calibrate'}
               onPress={() => router.push('/swinglab/calibrate' as never)}
-              btnStyle={[styles.toolBtn, { borderColor: calibrated ? colors.success : colors.accent }]}
+              btnStyle={[styles.toolBtnBare, calibrated && styles.toolBtnBareActive]}
             >
-              <Ionicons name="pulse-outline" size={20} color={calibrated ? colors.success : colors.accent} />
+              <Image source={ICON_RAIL.calibrate} style={styles.toolIconFull} resizeMode="contain" />
             </RailButton>
             <RailButton
               label="Scan club"
               disabled={scanningClub}
               onPress={() => void detectClubFromCamera()}
-              btnStyle={[styles.toolBtn, { borderColor: colors.accent, opacity: scanningClub ? 0.5 : 1 }]}
+              btnStyle={[styles.toolBtnBare, { opacity: scanningClub ? 0.5 : 1 }]}
             >
               {scanningClub
-                ? <Ionicons name="sync" size={20} color={colors.accent} />
-                : <Image source={ICON_CLUB} style={styles.toolIconImg} resizeMode="contain" />}
+                ? <Ionicons name="sync" size={22} color={colors.accent} />
+                : <Image source={ICON_CLUB} style={styles.toolIconFull} resizeMode="contain" />}
             </RailButton>
             <RailButton
               label={placeBallMode ? 'Tap your ball' : 'Ball box'}
               onPress={() => setPlaceBallMode((v) => !v)}
-              btnStyle={[styles.toolBtn, { borderColor: placeBallMode ? colors.success : colors.accent }]}
+              btnStyle={[styles.toolBtnBare, placeBallMode && styles.toolBtnBareActive]}
             >
-              <Ionicons name={placeBallMode ? 'hand-left-outline' : 'golf-outline'} size={20} color={placeBallMode ? colors.success : colors.accent} />
+              <Image source={ICON_RAIL.ballbox} style={styles.toolIconFull} resizeMode="contain" />
             </RailButton>
-            {/* Environment toggle — cage → range → course (scene icon + flashed label). */}
+            {/* Environment toggle — cage → range → course (scene badge + flashed label). */}
             <RailButton
               label={isRoundActive ? 'Course (round)' : effectiveMode === 'cage' ? 'Cage' : effectiveMode === 'range' ? 'Range' : 'Course'}
               disabled={isRoundActive}
               onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
-              btnStyle={[styles.toolBtn, { borderColor: colors.accent, opacity: isRoundActive ? 0.6 : 1 }]}
+              btnStyle={[styles.toolBtnBare, { opacity: isRoundActive ? 0.6 : 1 }]}
             >
-              <Image source={ICON_ENV[effectiveMode]} style={styles.toolIconImg} resizeMode="contain" />
+              <Image source={ICON_ENV[effectiveMode]} style={styles.toolIconFull} resizeMode="contain" />
             </RailButton>
             {/* Selfie/front-camera toggle (recording stays un-mirrored). */}
             <RailButton
               label={facing === 'front' ? 'Selfie on' : 'Selfie'}
               onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-              btnStyle={[styles.toolBtn, { borderColor: facing === 'front' ? colors.success : colors.accent }]}
+              btnStyle={[styles.toolBtnBare, facing === 'front' && styles.toolBtnBareActive]}
             >
-              <Ionicons name="camera-reverse-outline" size={20} color={facing === 'front' ? colors.success : colors.accent} />
+              <Image source={ICON_RAIL.selfie} style={styles.toolIconFull} resizeMode="contain" />
             </RailButton>
             {/* Chip/short-game sensitivity — mode-aware (cage+course on, range off). */}
             <RailButton
@@ -2080,9 +2105,9 @@ export default function SmartMotion() {
                 setChipSensitivity(next);
                 useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
               }}
-              btnStyle={[styles.toolBtn, { borderColor: chipSensitivity ? colors.success : colors.accent, backgroundColor: chipSensitivity ? colors.success : 'rgba(6,15,9,0.55)' }]}
+              btnStyle={[styles.toolBtnBare, chipSensitivity && styles.toolBtnBareActive]}
             >
-              <Text style={{ color: chipSensitivity ? '#06281b' : colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>CHIP</Text>
+              <Image source={ICON_RAIL.chip} style={styles.toolIconFull} resizeMode="contain" />
             </RailButton>
           </View>
         ) : null}
@@ -2137,7 +2162,14 @@ export default function SmartMotion() {
                   <Text style={styles.aimReadoutLabel}>EFFORT</Text>
                 </View>
               ) : null}
-              {effortRaw != null && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
+              {effortRaw != null && estCarry != null ? <View style={styles.aimReadoutDivider} /> : null}
+              {estCarry != null ? (
+                <View style={styles.aimReadoutCol}>
+                  <Text style={styles.aimReadoutValue}>~{estCarry}y</Text>
+                  <Text style={styles.aimReadoutLabel}>CARRY</Text>
+                </View>
+              ) : null}
+              {(effortRaw != null || estCarry != null) && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
               {aimRead ? (
                 <View style={styles.aimReadoutCol}>
                   <Text style={[styles.aimReadoutValue, { color: aimRead === 'STRAIGHT' ? '#34d399' : '#f5c451' }]}>{aimRead}</Text>
@@ -2599,6 +2631,11 @@ const styles = StyleSheet.create({
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   toolIconImg: { width: 36, height: 36 },
+  // 2026-06-12 — bare rail button: the badge's OWN circle is the button (no border).
+  // A faint green fill marks the active/on state (since there's no border to recolor).
+  toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  toolBtnBareActive: { backgroundColor: 'rgba(124,224,79,0.22)' },
+  toolIconFull: { width: 46, height: 46 },
   modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(124,224,79,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 44, height: 44 },
   modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
@@ -2655,6 +2692,7 @@ const styles = StyleSheet.create({
   // Universal control bar — translucent icon buttons.
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#7CE04F' },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
   barRate: { fontSize: 15, fontWeight: '900' },
