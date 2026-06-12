@@ -267,7 +267,7 @@ export default function SwingDetail() {
         console.log('[swing-detail] pose backfill failed', e);
       }
     })();
-  }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec]);
+  }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
 
   useEffect(() => {
     if (analysisStatus === 'ok') {
