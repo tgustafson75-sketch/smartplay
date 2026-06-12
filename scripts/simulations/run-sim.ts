@@ -1684,7 +1684,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /getPlaysLikeElevationDeltaFeet\(here, green\)/.test(qsSrc) &&
       /playsLikeDistance\(actual, w, bearing, elevationDeltaFeet\)/.test(qsSrc),
     'the spoken plays-like answer includes uphill/downhill via the cached elevation service; 0/flat on any miss so it never blocks the answer');
-}
+
+  // ─── SmartMotion cage-test fixes ─────────────────────────────────────────
+  const smSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
+  check('SmartMotion: no false launch/trace line in face-on (cage-test fix)',
+    /CageTargetingOverlay ballArea=\{ballArea\} target=\{targetPoint\} launchDir=\{null\}/.test(smSrc) &&
+      !/launchDir=\{angle === 'face_on'/.test(smSrc),
+    'the slanted launch line is removed from face-on (you cannot see ball flight from the front — it read as a false line); face-on keeps the vertical target alignment only');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

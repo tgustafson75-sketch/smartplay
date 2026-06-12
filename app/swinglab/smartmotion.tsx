@@ -1582,11 +1582,13 @@ export default function SmartMotion() {
             via the targeting card on the analysis page. */}
         {isReview && (ballArea || targetPoint) ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {/* REVIEW launch line (approximation). Face-on only. Direction:
-                the player faces the camera, so it's MIRRORED — a right-handed
-                golfer's target is to THEIR left, which is the VIEWER's RIGHT.
-                (Was 'left' for RH = backwards; that's the wrong-way bug.) */}
-            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={angle === 'face_on' ? (swingerHandedness === 'left' ? 'left' : 'right') : null} />
+            {/* 2026-06-11 (cage test) — NO launch/trace line in face-on. From the
+                FRONT you can't see ball flight, so the slanted launch line is a
+                FALSE line that misleads (Tim flagged it). Face-on shows the ball
+                area + the vertical `target` alignment line only; the slanted
+                launch line was a face-on-only approximation that never read
+                right from this angle. Down-the-line uses the `target` aim line. */}
+            <CageTargetingOverlay ballArea={ballArea} target={targetPoint} launchDir={null} />
           </View>
         ) : null}
 
