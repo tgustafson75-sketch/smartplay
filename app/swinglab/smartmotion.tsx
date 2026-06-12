@@ -370,7 +370,10 @@ export default function SmartMotion() {
     const tick = async () => {
       if (cancelled) return;
       try {
-        if (!scanningClub) {
+        // Don't grab a still while a club scan is running OR while a recording is
+        // starting/active/stopping — a takePictureAsync overlapping recordAsync can
+        // throw or hiccup the video session on some devices (audit 2026-06-11).
+        if (!scanningClub && !recordingPromiseRef.current && !stoppingRef.current) {
           const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.35, skipProcessing: true });
           const b64 = pic?.base64;
           if (b64 && !cancelled) {
@@ -1405,12 +1408,16 @@ export default function SmartMotion() {
           if (segsForAnalysis.length > 0) {
             setSegments(segsForAnalysis);
             setSelectedSwing(0);
-            // When the first swing is acoustic-CONFIRMED (peakDb > 0), it carries a
-            // real impact anchor — wire it for camera strike-verification + ball speed.
+            // Audit fix (2026-06-11) — ALWAYS seed the first-strike anchor from the
+            // first segment (its strikeMs is always populated, acoustic or video time)
+            // so camera strike-verification still runs for a VIDEO-ONLY first swing.
+            // Only the ball-SPEED call needs a real acoustic strike (peakDb > 0).
             const s0 = segsForAnalysis[0];
-            if (s0 && (s0.peakDb ?? 0) > 0) {
+            if (s0) {
               firstStrikeMs = s0.strikeMs;
               firstStrikeMsRef.current = s0.strikeMs;
+            }
+            if (s0 && (s0.peakDb ?? 0) > 0) {
               if (audioUriRef.current) {
                 try {
                   const speed = await detectBallSpeed({
@@ -1475,6 +1482,10 @@ export default function SmartMotion() {
   const detectClubFromCamera = useCallback(async (opts?: { auto?: boolean }) => {
     if (scanningClub) return;
     const auto = opts?.auto === true;
+    // Don't grab a still mid-record (audit 2026-06-11) — a takePictureAsync overlapping
+    // recordAsync can hiccup the video session. The periodic auto scan especially must
+    // never fire into a recording the user just started.
+    if (recordingPromiseRef.current || stoppingRef.current) return;
     setScanningClub(true);
     try {
       const apiUrl = getApiBaseUrl();
@@ -1484,7 +1495,11 @@ export default function SmartMotion() {
       const res = await recognizeClubFromBase64(b64, apiUrl);
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
-        setPuttMode(res.club_id === 'PT');
+        // Manual/voice scan owns putt mode both ways; the SILENT auto scan only sets
+        // it ADDITIVELY (a confident putter → putt mode) and never CLEARS a putt mode
+        // the user set deliberately (audit 2026-06-11 — explicit per-recording intent).
+        if (auto) { if (res.club_id === 'PT') setPuttMode(true); }
+        else setPuttMode(res.club_id === 'PT');
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();

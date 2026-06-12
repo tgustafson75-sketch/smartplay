@@ -82,11 +82,13 @@ async function cropRoi(
   }
 }
 
-/** Map a position WITHIN a crop (0..1 of the crop) back to FULL-frame normalized. */
+/** Map a position WITHIN a crop (0..1 of the crop) back to FULL-frame normalized.
+ *  Clamped to [0,1] — a ball marked at the extreme frame edge can otherwise push the
+ *  mapped coord slightly past 1 via the min-crop-width floor (audit 2026-06-11). */
 function cropToFullNorm(pos: { x: number; y: number }, box: CropBox): { x: number; y: number } {
   return {
-    x: (box.originX + pos.x * box.cw) / box.W,
-    y: (box.originY + pos.y * box.ch) / box.H,
+    x: Math.max(0, Math.min(1, (box.originX + pos.x * box.cw) / box.W)),
+    y: Math.max(0, Math.min(1, (box.originY + pos.y * box.ch) / box.H)),
   };
 }
 

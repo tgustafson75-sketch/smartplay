@@ -175,10 +175,17 @@ export default function SwingDetail() {
   // 2026-06-11 — tap the video to play/pause (Tim: intuitive, not hunting for the
   // button below + catching it in time). Single-tap routes through ZoomableView
   // (composed under double-tap-reset + pinch/pan), so zoom/annotation stay intact.
-  const togglePlayPause = useCallback(() => {
-    if (isPlaying) void videoRef.current?.pauseAsync().catch(() => {});
-    else void videoRef.current?.playAsync().catch(() => {});
-  }, [isPlaying]);
+  const togglePlayPause = useCallback(async () => {
+    // Read LIVE status (not the closure `isPlaying`) so a tap is never stale —
+    // robust regardless of when the last status update landed (audit 2026-06-11).
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      const st = await v.getStatusAsync();
+      if (st.isLoaded && st.isPlaying) await v.pauseAsync();
+      else await v.playAsync();
+    } catch { /* best-effort */ }
+  }, []);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
 
