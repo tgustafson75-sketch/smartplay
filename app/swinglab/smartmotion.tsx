@@ -107,7 +107,15 @@ const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-
 // Default ball-box position (normalized). Lower-center of the frame, where a
 // teed/placed ball typically sits in a down-the-line or face-on setup. Shown
 // by default so the user just lines their ball up to it — confirmatory only.
-const DEFAULT_BALL_BOX = { x: 0.5, y: 0.6, r: 0.08 };
+// 2026-06-11 — lower-CENTER default on the DTL dashed center line. Grounded in Tim's
+// real cage clip (Downloads 7790): in his framing the ball at address sits ~mid-to-
+// lower frame (≈0.45–0.6 depending on how tight the DTL crop is), NOT at the very
+// bottom — a box "anchored to the bottom" (0.8) lands in the leaves below the mat,
+// further from the ball. So the static default is a sane lower-center; the REAL
+// normalize-the-start fix (planned with the ball-trace detector, which already has to
+// find the ball) is to snap the box onto the detected ball so the user doesn't hand-
+// move it. x stays 0.5 (center line).
+const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -1709,7 +1717,7 @@ export default function SmartMotion() {
                        face-on with no side guides at all.
             Suppressed in review and while analyzing. */}
         {phase !== 'analyzing' && !isReview
-          ? <CaptureGuides mode={angle} handedness={swingerHandedness} ball={draftBall} />
+          ? <CaptureGuides mode={angle} handedness={swingerHandedness} ball={draftBall} aspect={rootSize.h > 0 ? rootSize.w / rootSize.h : null} />
           : null}
 
         {/* TOP BAR (interactive) */}

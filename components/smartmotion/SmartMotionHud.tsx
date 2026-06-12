@@ -358,7 +358,7 @@ function GuideLabel({ text, color, bg }: { text: string; color: string; bg: stri
 }
 
 export function CaptureGuides({
-  mode, handedness = 'right', style,
+  mode, handedness = 'right', style, aspect = null,
 }: {
   mode: Angle;
   /** Swinger's hand — mirrors the face-on TARGET/BALL guides for lefties. */
@@ -367,11 +367,18 @@ export function CaptureGuides({
    *  longer drawn (foot-placement anchors removed 2026-06-10 — they read goofy
    *  and the swing analysis never depended on them). */
   ball?: { x: number; y: number; r: number } | null;
+  /** Viewport width/height. On the Galaxy Z Fold COVER screen (measured 0.40 from
+   *  Tim's 2026-06-11 cage shots) the face-on 32/68 columns crowd into the centre
+   *  ("tiny within the spine"); we spread them to 18/82 there. Threshold 0.45
+   *  cleanly separates the 0.40 cover from normal phones (~0.46+) and the unfolded
+   *  inner screen (~0.87), which stay at 32/68. */
+  aspect?: number | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
   const line = colors.accent;
   const labelBg = colors.overlay;
+  const narrow = aspect != null && aspect < 0.45;
   if (mode === 'down_the_line') {
     // Down-the-line is center-symmetric (target up, ball bottom-center) —
     // no handedness mirroring needed for the target line.
@@ -386,9 +393,12 @@ export function CaptureGuides({
     );
   }
   // Face-on: RH golfer aims target-line left, ball-line right. Lefty
-  // mirrors — swap the two columns.
-  const targetLeft = handedness === 'left' ? '68%' : '32%';
-  const ballLeft = handedness === 'left' ? '32%' : '68%';
+  // mirrors — swap the two columns. On the narrow Fold cover screen the columns
+  // spread to 18/82 so they don't crowd into the spine.
+  const near = narrow ? '18%' : '32%';
+  const far = narrow ? '82%' : '68%';
+  const targetLeft = handedness === 'left' ? far : near;
+  const ballLeft = handedness === 'left' ? near : far;
   return (
     <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
       <View style={[styles.guideVLine, { borderColor: line, left: targetLeft }]} />
