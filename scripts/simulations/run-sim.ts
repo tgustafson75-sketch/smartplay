@@ -1065,7 +1065,8 @@ check('Environment mode phase 1: range window + metering gating (cage+range on, 
   /environmentMode: 'cage' \| 'range' \| 'course'/.test(read('store/settingsStore.ts')) &&
     /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
     /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
-    /if \(captureMode === 'cage' \|\| captureMode === 'range'\) \{/.test(smEnvSrc) && // metering: cage+range, NOT course
+    /\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smEnvSrc) && // chip: cage+course (off-round)
+    /: \(captureMode === 'cage' \|\| captureMode === 'range'\)/.test(smEnvSrc) &&                       // default: cage+range
     /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc),                  // toggle cycles modes
   'range records up to 120s and now ALSO runs the metered audio track (its strikes are candidates the in-frame video confirms); ONLY course goes acoustics-off (wind, single shot); a setup-rail toggle cycles cage/range/course');
 
@@ -1122,7 +1123,7 @@ check('Environment mode phase 2: range acoustic↔video correlation (propose/dis
 check('Environment mode phase 3: course is acoustics-off single-shot; a live round forces course',
   /const effectiveMode.*isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) &&           // round forces course (reactive)
     /isRoundActive[\s\S]{0,30}\? 'course'[\s\S]{0,60}environmentMode/.test(smEnvSrc) &&           // and at capture time
-    /if \(captureMode === 'cage' \|\| captureMode === 'range'\) \{/.test(smEnvSrc) &&              // course is excluded from metering
+    /const useMetering = chipOnStart/.test(smEnvSrc) &&                                            // metering is mode+chip-aware; course off by default
     /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
   'course mode disables acoustics (wind) and is single-shot (skips multi-segmentation → single-swing localization); metering runs for cage+range but NOT course; a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
 
@@ -1494,11 +1495,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /styles\.effortPill/.test(smSrc2),
     'the server derives the declared effort from ball→target geometry (target near the top = full; halfway = ~half) and grades tempo + swing length against THAT partial shot — a deliberate half-swing is not flagged as a fault; the client shows an honest EFFORT % chip (measured, no faked carry)');
 
-  check('SmartMotion: chip sensitivity drops the strike threshold for quiet chips',
+  check('SmartMotion: chip sensitivity — lower threshold + mode-aware acoustics + clear toggle',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
-      /thresholdDb: chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2),
-    'a chip-sensitivity toggle (persisted setting) lowers the acoustic strike threshold to ~18dB above floor when on, so a quiet pitch/chip still segments — off keeps the strict calibrated/default threshold');
+      /thresholdDb: chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2) &&
+      // mode-aware: chip → cage+course (off-round), NOT range; default → cage+range
+      /chipOnStart\s*\n?\s*\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smSrc2) &&
+      // course+chip single-shot anchor
+      /else if \(meterMode === 'course'\) \{/.test(smSrc2) &&
+      // unmistakable toggle feedback: filled ON state + a toast
+      /show\(next \? 'Chip mode ON/.test(smSrc2),
+    'chip ON drops the strike threshold to ~18dB AND is mode-aware — acoustics for the quiet spots (cage + off-round course) and OFF for a noisy range (video-only); the toggle now fills green + fires a toast so a tap is never silent (Tim: "doesn\'t do anything")');
 
   check('SmartMotion: Framing Coach is wired into the setup loop (on-device pose, fail-safe)',
     /detectPoseFromBase64\(b64\)/.test(smSrc2) &&

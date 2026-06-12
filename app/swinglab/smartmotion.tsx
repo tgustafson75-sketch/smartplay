@@ -1227,11 +1227,19 @@ export default function SmartMotion() {
     // 2026-06-11 — range was video-only; now it keeps the metered track too so a
     // confirmed strike donates the precise impact instant + peakDb (honest tempo
     // + the ball-trace anchor). Course stays off (single shot, wind).
-    const captureMode = useRoundStore.getState().isRoundActive
-      ? 'course'
-      : useSettingsStore.getState().environmentMode;
+    const roundActive = useRoundStore.getState().isRoundActive;
+    const captureMode = roundActive ? 'course' : useSettingsStore.getState().environmentMode;
     const maxSec = captureMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
-    if (captureMode === 'cage' || captureMode === 'range') {
+    // 2026-06-11 — mode-aware metering (Tim): a chip's strike is too quiet to read over
+    // a noisy RANGE, so CHIP mode shuts range acoustics off (video-only) and instead
+    // enables them for the QUIET spots — cage + course (off-round; during a live round
+    // the mic belongs to voice listening, so course stays silent then). Default (no
+    // chip): cage (acoustic multi-swing) + range (acoustic candidates + vision).
+    const chipOnStart = useSettingsStore.getState().chipSensitivity;
+    const useMetering = chipOnStart
+      ? (captureMode === 'cage' || (captureMode === 'course' && !roundActive))
+      : (captureMode === 'cage' || captureMode === 'range');
+    if (useMetering) {
       // Parallel metered audio track for multi-strike detection.
       try {
         meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
@@ -1299,10 +1307,14 @@ export default function SmartMotion() {
         });
         if (res.kind === 'ok' && res.strikes.length > 0) {
           acousticStrikes = res.strikes;
-          // CAGE only: trust acoustics as the final segmentation here. RANGE waits
-          // for video confirmation (correlateStrikesWithVideo) in the clip branch.
+          // CAGE: trust acoustics as the final segmentation here. RANGE waits for
+          // video confirmation (correlateStrikesWithVideo) in the clip branch.
           if (meterMode === 'cage') {
             detectedSegments = segmentsFromStrikes(res.strikes, durationMs);
+            firstStrikeMs = res.strikes[0]?.timeMs ?? null;
+          } else if (meterMode === 'course') {
+            // CHIP on COURSE (off-round, single shot): no multi-segmentation — just
+            // take the chip's strike as the impact anchor for tempo / ball-departure.
             firstStrikeMs = res.strikes[0]?.timeMs ?? null;
           }
         }
@@ -1968,14 +1980,24 @@ export default function SmartMotion() {
             </Pressable>
             {/* 2026-06-11 — Chip/short-game sensitivity. A chip's impact is ~half a
                 full strike's energy; ON drops the acoustic threshold so quiet
-                pitch/chip strikes still segment (Tim's cage finding). */}
+                pitch/chip strikes still segment. Mode-aware: acoustics for cage +
+                course, OFF for range (Tim — too noisy at a range). Clear ON state +
+                a toast so the tap is never silent. */}
             <Pressable
-              onPress={() => setChipSensitivity(!chipSensitivity)}
-              style={[styles.toolBtn, { borderColor: chipSensitivity ? colors.success : colors.accent }]}
+              onPress={() => {
+                const next = !chipSensitivity;
+                setChipSensitivity(next);
+                useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
+              }}
+              style={[
+                styles.toolBtn,
+                { borderColor: chipSensitivity ? colors.success : colors.accent, backgroundColor: chipSensitivity ? colors.success : 'rgba(6,15,9,0.55)' },
+              ]}
               accessibilityRole="button"
+              accessibilityState={{ selected: chipSensitivity }}
               accessibilityLabel={chipSensitivity ? 'Chip sensitivity on — tap to turn off' : 'Chip sensitivity off — tap on for quiet chip/pitch strikes'}
             >
-              <Text style={{ color: chipSensitivity ? colors.success : colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>CHIP</Text>
+              <Text style={{ color: chipSensitivity ? '#06281b' : colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>CHIP</Text>
             </Pressable>
           </View>
         ) : null}
