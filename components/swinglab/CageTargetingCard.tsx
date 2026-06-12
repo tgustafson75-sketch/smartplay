@@ -293,7 +293,7 @@ function PlacementModal({
  *  Measures its own size so the trapezoid / ring render in real pixels
  *  (crisp strokes). Both points are user-placed — honest, no inferred flight. */
 export function CageTargetingOverlay({
-  ballArea, target, launchDir = null, puttLine = false,
+  ballArea, target, launchDir = null, puttLine = false, targetKind = 'aim',
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
@@ -305,6 +305,10 @@ export function CageTargetingOverlay({
    *  PIN marker at the top. Line up the PIN icon with the real pin to anchor
    *  the putt line (helps line + distance read). */
   puttLine?: boolean;
+  /** How the movable target end reads: 'aim' = the cage/range TARGET ring;
+   *  'cup' = a FLAG/cup marker for putt mode (Tim — drag the flag over the real
+   *  cup so the ball→cup line is the putt line). */
+  targetKind?: 'aim' | 'cup';
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
@@ -415,10 +419,18 @@ export function CageTargetingOverlay({
           )}
         </Svg>
       )}
-      {/* Pill labels with a downward caret (RN views — crisp text). */}
+      {/* Pill labels with a downward caret (RN views — crisp text). In putt mode the
+          target end is the CUP — a flag pill the user drags over the real hole. */}
       {targetLine && (
         <View style={[overlayStyles.pillWrap, { left: targetLine.x2, top: targetLine.y2 - 30 }]}>
-          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>TARGET</Text></View>
+          {targetKind === 'cup' ? (
+            <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
+              <Ionicons name="flag" size={12} color="#06281b" />
+              <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>CUP</Text>
+            </View>
+          ) : (
+            <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>TARGET</Text></View>
+          )}
           <View style={overlayStyles.caret} />
         </View>
       )}
@@ -506,12 +518,14 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
  * thrash the persisted store every frame.
  */
 export function EditableCageTargets({
-  ballArea, target, onChangeBallArea, onChangeTarget,
+  ballArea, target, onChangeBallArea, onChangeTarget, targetKind = 'aim',
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
   onChangeBallArea: (b: BallArea) => void;
   onChangeTarget: (t: TargetPoint) => void;
+  /** 'cup' renders the movable target as a putt FLAG/cup (Tim). Default 'aim'. */
+  targetKind?: 'aim' | 'cup';
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const sizeRef = useRef(size);
@@ -582,7 +596,7 @@ export function EditableCageTargets({
       onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
     >
       {/* Visual layer (non-interactive) — the same overlay used read-only. */}
-      <CageTargetingOverlay ballArea={shownBall} target={shownTarget} launchDir={null} />
+      <CageTargetingOverlay ballArea={shownBall} target={shownTarget} launchDir={null} targetKind={targetKind} />
       {/* Drag handles — transparent touch targets centred on each marker. A small
           ring hints they're grabbable; box-none lets taps elsewhere pass through. */}
       {w > 0 && shownBall && (

@@ -2002,6 +2002,7 @@ export default function SmartMotion() {
           <EditableCageTargets
             ballArea={ballArea}
             target={targetPoint}
+            targetKind={isPutt ? 'cup' : 'aim'}
             onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
             onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
           />
@@ -2023,14 +2024,18 @@ export default function SmartMotion() {
           // target face-on / in a putt (no flight to aim). Both carry into the session.
           <EditableCageTargets
             ballArea={draftBall}
-            target={angle === 'down_the_line' && !isPutt ? draftTarget : null}
+            // Putt sets angle to down_the_line too, so this enables BOTH the DTL aim
+            // target and the putt CUP flag; face-on has no on-floor target. The effort
+            // clamp is DTL-only (putt has no "effort" — the flag goes wherever the cup is).
+            target={angle === 'down_the_line' ? draftTarget : null}
+            targetKind={isPutt ? 'cup' : 'aim'}
             onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
-            onChangeTarget={(t) => setDraftTarget({ x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
+            onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
           />
         ) : phase === 'recording' && draftBall ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay ballArea={draftBall} target={angle === 'down_the_line' && !isPutt ? draftTarget : null} launchDir={null} />
+            <CageTargetingOverlay ballArea={draftBall} target={angle === 'down_the_line' ? draftTarget : null} launchDir={null} targetKind={isPutt ? 'cup' : 'aim'} />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -2136,14 +2141,10 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* PUTT MODE pill — confirms the clip is analyzed as a PUTT, not a
-            full swing. Shown whenever a putter is tagged. */}
-        {isPutt ? (
-          <View style={[styles.puttPill, { top: insets.top + 56 }]} pointerEvents="none">
-            <Ionicons name="golf-outline" size={13} color="#06281b" />
-            <Text style={styles.puttPillText}>PUTT MODE</Text>
-          </View>
-        ) : null}
+        {/* 2026-06-12 (Tim) — the persistent "PUTT MODE" pill is GONE. Mode changes
+            are announced by the transient fade label (showModeFade → "PUTTING"), which
+            disappears like every other mode transition; the standing putt indicator is
+            now the draggable FLAG/cup target the user lines up over the real cup. */}
 
         {/* FRAMING COACH pill (setup) — on-device pose checks you're fully in frame
             before you swing. Green = framed (head + feet); amber = a fix (step back,
@@ -2433,28 +2434,6 @@ export default function SmartMotion() {
         </View>
       ) : null}
 
-      {/* COMING SOON — face angle + smash are HONEST future metrics: they need
-          higher-frame-rate capture (240fps+) or an external camera source (e.g. a
-          GoPro feed) to measure reliably. Shown as roadmap, not faked (Tim). */}
-      {!isPutt ? (
-        <View style={[styles.comingCard, { borderColor: colors.border }]}>
-          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COMING SOON</Text>
-          <View style={styles.comingRow}>
-            <View style={styles.comingItem}>
-              <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
-              <Text style={styles.comingItemLabel}>FACE ANGLE</Text>
-            </View>
-            <View style={styles.comingItem}>
-              <Image source={ICON_METRIC.smash} style={styles.comingImg} resizeMode="contain" />
-              <Text style={styles.comingItemLabel}>SMASH FACTOR</Text>
-            </View>
-          </View>
-          <Text style={[styles.comingNote, { color: colors.text_muted }]}>
-            Unlocks with higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) — on the roadmap.
-          </Text>
-        </View>
-      ) : null}
-
       {!isReview ? (
         // 2026-06-12 — PRE-SWING SCAFFOLD (Tim): show the breakdown STRUCTURE with
         // empty "—" boxes so page 2 reads as a results page waiting to fill, not a
@@ -2632,6 +2611,29 @@ export default function SmartMotion() {
           ) : null}
         </View>
       ) : null}
+
+      {/* COMING SOON — face angle + smash are HONEST future metrics: they need
+          higher-frame-rate capture (240fps+) or an external camera source (e.g. a
+          GoPro feed) to measure reliably. Shown as roadmap, not faked — and kept at
+          the BOTTOM (Tim) so what we CAN'T do yet never sits above the real read. */}
+      {!isPutt ? (
+        <View style={[styles.comingCard, { borderColor: colors.border }]}>
+          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COMING SOON</Text>
+          <View style={styles.comingRow}>
+            <View style={styles.comingItem}>
+              <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
+              <Text style={styles.comingItemLabel}>FACE ANGLE</Text>
+            </View>
+            <View style={styles.comingItem}>
+              <Image source={ICON_METRIC.smash} style={styles.comingImg} resizeMode="contain" />
+              <Text style={styles.comingItemLabel}>SMASH FACTOR</Text>
+            </View>
+          </View>
+          <Text style={[styles.comingNote, { color: colors.text_muted }]}>
+            Unlocks with higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) — on the roadmap.
+          </Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 
@@ -2692,7 +2694,10 @@ const styles = StyleSheet.create({
 
   rightRail: { position: 'absolute', right: 8, width: 124, gap: 8, zIndex: 4 },
   leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },
-  metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.62)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.28)' },
+  // 2026-06-12 (Tim) — soft translucent shadow halo so the badges stay readable on
+  // bright range/cage backgrounds WITHOUT an ugly hard box. Slightly deeper card fill
+  // + a dark drop shadow (iOS) / elevation (Android) = clean lift off the video.
+  metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.72)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.28)', shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
   metricBadgeImg: { width: 32, height: 32 },
   metricBadgeText: { flex: 1, minWidth: 0 },
   metricBadgeValue: { color: '#88F700', fontSize: 14, fontWeight: '900', letterSpacing: 0.2 },
@@ -2700,8 +2705,6 @@ const styles = StyleSheet.create({
   metricBadgeLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
 
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
-  puttPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6, backgroundColor: '#34d399' },
-  puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   aimReadout: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(6,15,9,0.74)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.4)' },

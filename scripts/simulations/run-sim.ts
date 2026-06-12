@@ -907,8 +907,10 @@ check('Face-on: NO launch/trace line on review (false from the front); framing g
   /<EditableCageTargets/.test(smSrc) &&
     !/launchDir=\{angle === 'face_on'/.test(smSrc) &&
     /launchDir=\{null\}/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
-    // No launch line during live capture either (declutter line-up).
-    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{angle === 'down_the_line' && !isPutt \? draftTarget : null\} launchDir=\{null\}/.test(smSrc) &&
+    // No launch line during live capture either (declutter line-up). 2026-06-12 — putt
+    // now also shows a target (the CUP flag), so the gate dropped `&& !isPutt` and adds
+    // targetKind; still launchDir={null} (no false launch line in any mode).
+    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{angle === 'down_the_line' \? draftTarget : null\} launchDir=\{null\} targetKind=/.test(smSrc) &&
     // Framing guides (incl. FO side lines) render for BOTH angles.
     /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
   'face-on review shows the vertical target alignment only (no false launch line — EditableCageTargets passes launchDir null); live capture shows framing guides for both DTL and FO');
@@ -1501,10 +1503,27 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /DECLARED a ~\$\{effortPct\}% shot/.test(swingApiSrc) &&
       /const effortRaw = useMemo/.test(smSrc2) &&                       // raw % from LIVE ball/target
       /const liveTarget = targetPoint \?\? draftTarget/.test(smSrc2) &&  // draft target in setup, session in review
-      /setDraftTarget\(\{ x: t\.x, y: Math\.max\(EFFORT_TOP_CAP, t\.y\) \}\)/.test(smSrc2) && // draggable, capped below the header
+      /setDraftTarget\(isPutt \? \{ x: t\.x, y: t\.y \} : \{ x: t\.x, y: Math\.max\(EFFORT_TOP_CAP, t\.y\) \}\)/.test(smSrc2) && // DTL draggable + capped below header; putt = free CUP flag
       /const span = Math\.max\(0\.001, liveBall\.y - EFFORT_TOP_CAP\)/.test(smSrc2) &&        // top cap = 100% effort
       /styles\.aimReadout/.test(smSrc2),                                // live effort% + aim direction readout
     'server grades against declared effort from ball→target geometry; the DTL target is now DRAGGABLE in setup (floating end) and a live readout shows the effort % + aim direction updating as you move the line — the interactive geometry↔tempo Tim expected, plus the review EFFORT chip');
+
+  check('SmartMotion: putt CUP flag replaces the stuck PUTT MODE pill; future card sits at the bottom',
+    // 2026-06-12 (Tim) — (1) the persistent "PUTT MODE" pill is GONE (it never
+    // disappeared); mode changes ride the transient fade label only. (2) Putt mode
+    // gets a DRAGGABLE flag/cup target the user lines over the real cup (targetKind
+    // 'cup' → flag pill in the overlay). (3) the COMING SOON face/smash card moved
+    // BELOW the real read on page 2 so "what we can't do yet" never sits on top.
+    !/PUTT MODE<\/Text>/.test(smSrc2) &&
+      /targetKind=\{isPutt \? 'cup' : 'aim'\}/.test(smSrc2) &&
+      /targetKind\?: 'aim' \| 'cup'/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+      /targetKind === 'cup'/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+      // COMING SOON now appears AFTER the feels-engine block (bottom of the page),
+      // i.e. after "HOW'D IT FEEL?" in source order.
+      smSrc2.indexOf('>COMING SOON<') > smSrc2.indexOf('HOW&apos;D IT FEEL?') &&
+      // right-rail badges carry a shadow so they read on bright backgrounds.
+      /shadowColor: '#000', shadowOpacity: 0\.55/.test(smSrc2),
+    'the stuck PUTT MODE pill is removed; putt mode shows a draggable CUP flag (targetKind cup); the COMING SOON card moved to the bottom of page 2; rail badges get a shadow halo');
 
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).
