@@ -15,8 +15,14 @@ export function deriveComplexityLevel(profile: CoachingProfileLike): CoachingCom
 }
 
 export function hasMobilityFlag(profile: CoachingProfileLike): boolean {
-  const note = (profile.physicalLimitation ?? '').toLowerCase();
+  const note = (profile.physicalLimitation ?? '').toLowerCase().trim();
   if (!note) return false;
+  // 2026-06-11 (review finding) — negation/benign short-circuit. The broad
+  // positive match below would otherwise flag clearly-negated profiles
+  // ("no injuries", "no pain", "fully recovered", "none", "healthy") as
+  // limitations. Bail on those FIRST.
+  if (/^(none|n\/?a|healthy|fit|fine|good|nothing|no)\.?$/.test(note)) return false;
+  if (/\bno\s+(injur|pain|issue|problem|limitation|condition|mobility|stiff|surger)/.test(note)) return false;
   // 2026-06-11 — broadened well beyond joint names. The prior regex
   // (back|hip|knee|shoulder|mobility|pain|stiff) missed "sciatica" entirely —
   // and nerve/disc/arthritis/surgery/injury phrasings — so the deterministic
@@ -24,7 +30,8 @@ export function hasMobilityFlag(profile: CoachingProfileLike): boolean {
   // smartAnalysisEngine) silently skipped real limitations the LLM path
   // already respects via physicalLimitation context. Kept generous on purpose:
   // a false positive just yields gentler, mobility-aware coaching, never harm.
-  return /back|hip|knee|shoulder|neck|ankle|elbow|wrist|spine|spinal|mobility|pain|stiff|sore|sciatic|nerve|disc|herniat|arthrit|surger|surgic|replace|fusion|tendon|rotator|meniscus|sprain|strain|plantar|fasciit|bursit|scolios|fibro|injur|recover/.test(note);
+  // "recovering" (ongoing) flags; "recovered" (done) does not.
+  return /back|hip|knee|shoulder|neck|ankle|elbow|wrist|spine|spinal|mobility|pain|stiff|sore|sciatic|nerve|disc|herniat|arthrit|surger|surgic|replace|fusion|tendon|rotator|meniscus|sprain|strain|plantar|fasciit|bursit|scolios|fibro|injur|recovering/.test(note);
 }
 
 export function adaptOnCourseVoice(

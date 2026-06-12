@@ -1631,14 +1631,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'player marker + yardages no longer vanish above 55m; gpsManager already filters >90m + garbage, so any fix shown is usable — KEEP-and-FLAG, not hide');
 
   // ─── Health-aware coaching: mobility flag catches sciatica (was joint-only) ──
-  check('Coaching: hasMobilityFlag catches sciatica + common conditions',
+  check('Coaching: hasMobilityFlag catches sciatica + common conditions, ignores negations',
     hasMobilityFlag({ physicalLimitation: 'sciatica' }) === true &&
       hasMobilityFlag({ physicalLimitation: 'mild arthritis in left wrist' }) === true &&
       hasMobilityFlag({ physicalLimitation: 'recovering from rotator cuff surgery' }) === true &&
       hasMobilityFlag({ physicalLimitation: 'bad back' }) === true &&
       hasMobilityFlag({ physicalLimitation: null }) === false &&
-      hasMobilityFlag({ physicalLimitation: '' }) === false,
-    'sciatica/arthritis/surgery/nerve now flag mobility-aware coaching in lieAnalysis + metaCourseIntelligence + smartAnalysisEngine — the deterministic path matches what the LLM already does via physicalLimitation context');
+      hasMobilityFlag({ physicalLimitation: '' }) === false &&
+      // negation/benign must NOT flag (review finding)
+      hasMobilityFlag({ physicalLimitation: 'no injuries' }) === false &&
+      hasMobilityFlag({ physicalLimitation: 'no pain' }) === false &&
+      hasMobilityFlag({ physicalLimitation: 'fully recovered' }) === false &&
+      hasMobilityFlag({ physicalLimitation: 'none' }) === false &&
+      hasMobilityFlag({ physicalLimitation: 'healthy' }) === false,
+    'sciatica/arthritis/surgery/nerve flag mobility-aware coaching; "no injuries"/"no pain"/"fully recovered"/"none"/"healthy" correctly do NOT (the deterministic path matches the LLM via physicalLimitation context)');
 
   // ─── Elevation → plays-like (infra; call-site wiring is the next step) ──────
   const elevSrc = fs.readFileSync(path.resolve(__dirname, '../../services/elevationService.ts'), 'utf-8');
@@ -1672,6 +1678,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /useElevationDelta\(playerLoc, targetLoc\)/.test(sfSrc) &&
       /playsLikeDistance\(targetYards, weather, targetBearing \?\? shotBearingDeg, elevationDeltaFeet\)/.test(sfSrc),
     'the interactive aim-point plays-like passes the cached elevation delta — uphill/downhill is live (was always flat); other surfaces remain flat-safe follow-ups');
+
+  const qsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/queryStatusHandler.ts'), 'utf-8');
+  check('Elevation: voice "plays like" answer factors elevation (flat-safe)',
+    /getPlaysLikeElevationDeltaFeet\(here, green\)/.test(qsSrc) &&
+      /playsLikeDistance\(actual, w, bearing, elevationDeltaFeet\)/.test(qsSrc),
+    'the spoken plays-like answer includes uphill/downhill via the cached elevation service; 0/flat on any miss so it never blocks the answer');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────

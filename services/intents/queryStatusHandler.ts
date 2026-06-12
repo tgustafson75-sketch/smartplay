@@ -472,11 +472,13 @@ export const queryStatusHandler: IntentHandler = {
       case 'plays_like': {
         const here = await getCurrentLocation();
         const w = here ? (getCachedWeather(here) ?? await fetchWeatherAt(here)) : null;
+        // Green centroid: the default target when no explicit number is given,
+        // AND the elevation target for uphill/downhill below.
+        const green = getGreenCentroid(context.current_hole ?? round.currentHole);
         // Determine the actual yardage: explicit param > distance to green
         const param = intent.parameters.target_yards;
         let actual: number | null = typeof param === 'number' && param > 0 ? param : null;
         if (actual == null) {
-          const green = getGreenCentroid(context.current_hole ?? round.currentHole);
           if (here && green) actual = Math.round(haversineYards(here, green));
         }
         if (actual == null) {
@@ -496,7 +498,16 @@ export const queryStatusHandler: IntentHandler = {
           };
         }
         const bearing = currentShotBearingDeg(round, context.current_hole ?? round.currentHole);
-        const breakdown = playsLikeDistance(actual, w, bearing);
+        // 2026-06-11 — factor real uphill/downhill (target − player elevation),
+        // 0/flat on any miss so it never blocks the answer.
+        let elevationDeltaFeet = 0;
+        if (here && green) {
+          try {
+            const { getPlaysLikeElevationDeltaFeet } = await import('../elevationService');
+            elevationDeltaFeet = await getPlaysLikeElevationDeltaFeet(here, green);
+          } catch { /* flat */ }
+        }
+        const breakdown = playsLikeDistance(actual, w, bearing, elevationDeltaFeet);
         const phrase = playsLikePhrase(breakdown);
         return {
           success: true,
