@@ -775,7 +775,9 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
 
 // ─── 2026-06-09: SmartMotion unstack + workflow fixes ──────────────────────
 check('Motion data is unstacked (off by default, gated behind Motion step)',
-  /useState\(false\);[\s\S]{0,400}Motion overlay/.test(smSrc) &&
+  // showSkeleton defaults OFF (clean video) and gates the pose/tempo/stat compute+render.
+  /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
+    /Motion overlay/.test(smSrc) &&
     /!showSkeleton\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
   'pose/tempo/stat cards only compute + render when Motion is on (clean video default)');
 
@@ -1524,6 +1526,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // right-rail badges carry a shadow so they read on bright backgrounds.
       /shadowColor: '#000', shadowOpacity: 0\.55/.test(smSrc2),
     'the stuck PUTT MODE pill is removed; putt mode shows a draggable CUP flag (targetKind cup); the COMING SOON card moved to the bottom of page 2; rail badges get a shadow halo');
+
+  check('SmartMotion: page-2 notes + feel inputs have press-to-talk voice dictation',
+    // 2026-06-12 (Tim) — the player can SPEAK their note + how-it-felt; one-shot
+    // captureUtterance(/api/transcribe), safe because review unmounts the camera so
+    // the mic is free. Appends the real transcript (or leaves the field on failure —
+    // never fabricated text). Both the COACH NOTES + HOW'D IT FEEL? cards get the mic.
+    /captureUtterance, endCaptureEarly \} from '\.\.\/\.\.\/services\/voiceService'/.test(smSrc2) &&
+      /const dictate = useCallback\(async \(field: 'note' \| 'feel'/.test(smSrc2) &&
+      /await captureUtterance\(15000, getApiBaseUrl\(\), 'en'\)/.test(smSrc2) &&
+      /dictate\('note'/.test(smSrc2) &&
+      /dictate\('feel'/.test(smSrc2) &&
+      // honest: only append when transcription returned text.
+      /if \(text && text\.trim\(\)\) append\(text\.trim\(\)\)/.test(smSrc2),
+    'COACH NOTES + HOW\'D IT FEEL? on page 2 each have a mic that records → transcribes → appends the text per-swing (no fabricated text on failure)');
 
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).

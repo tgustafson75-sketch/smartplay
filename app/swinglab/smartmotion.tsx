@@ -95,7 +95,7 @@ import {
 } from '../../components/smartmotion/SmartMotionHud';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
@@ -531,6 +531,20 @@ export default function SmartMotion() {
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [showLayman, setShowLayman] = useState(false);
   const [coachNote, setCoachNote] = useState('');
+  // 2026-06-12 (Tim) — voice dictation for the page-2 note/feel inputs so the player
+  // can SPEAK how it felt (ingested per-swing). One-shot press-to-talk using the same
+  // captureUtterance(/api/transcribe) the caddie uses; safe here because review has the
+  // camera unmounted (replay <Video>), so the mic is free (no live-capture contention).
+  const [dictating, setDictating] = useState<null | 'note' | 'feel'>(null);
+  const dictate = useCallback(async (field: 'note' | 'feel', append: (text: string) => void) => {
+    if (dictating) { endCaptureEarly(); return; } // tapping the live mic ends it early
+    setDictating(field);
+    try {
+      const text = await captureUtterance(15000, getApiBaseUrl(), 'en');
+      if (text && text.trim()) append(text.trim());
+    } catch { /* transcription failed — leave the field as-is, no fake text */ }
+    finally { setDictating(null); }
+  }, [dictating]);
   const [playbackMs, setPlaybackMs] = useState(0);
   // 2026-06-09 — "Motion overlay" is now a SEPARATE on-demand step (off by
   // default). Default review = watch the swing + Kevin's feedback only, with a
@@ -2552,12 +2566,24 @@ export default function SmartMotion() {
           </Pressable>
 
           <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-            <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COACH NOTES</Text>
+            <View style={styles.noteHeadRow}>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COACH NOTES</Text>
+              <View style={{ flex: 1 }} />
+              <Pressable
+                onPress={() => dictate('note', (t) => setCoachNote((p) => (p ? `${p} ${t}` : t)))}
+                hitSlop={10}
+                style={[styles.micBtn, dictating === 'note' && styles.micBtnActive]}
+                accessibilityRole="button"
+                accessibilityLabel={dictating === 'note' ? 'Stop dictation' : 'Dictate a note'}
+              >
+                <Ionicons name={dictating === 'note' ? 'stop' : 'mic'} size={15} color={dictating === 'note' ? '#06281b' : colors.accent} />
+              </Pressable>
+            </View>
             <TextInput
               value={coachNote}
               onChangeText={setCoachNote}
               onBlur={saveCoachNote}
-              placeholder="Add a note for this swing…"
+              placeholder={dictating === 'note' ? 'Listening… speak your note' : 'Add a note for this swing…'}
               placeholderTextColor={colors.text_muted}
               multiline
               style={[styles.noteInput, { color: colors.text_primary, borderColor: colors.border }]}
@@ -2587,11 +2613,23 @@ export default function SmartMotion() {
           it reconciles your feel with the real read and coaches you back. */}
       {isReview ? (
         <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>HOW&apos;D IT FEEL?</Text>
+          <View style={styles.noteHeadRow}>
+            <Text style={[styles.insightLabel, { color: colors.text_muted }]}>HOW&apos;D IT FEEL?</Text>
+            <View style={{ flex: 1 }} />
+            <Pressable
+              onPress={() => dictate('feel', (t) => setFeelText((p) => (p ? `${p} ${t}` : t)))}
+              hitSlop={10}
+              style={[styles.micBtn, dictating === 'feel' && styles.micBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={dictating === 'feel' ? 'Stop dictation' : 'Dictate how it felt'}
+            >
+              <Ionicons name={dictating === 'feel' ? 'stop' : 'mic'} size={15} color={dictating === 'feel' ? '#06281b' : colors.accent} />
+            </Pressable>
+          </View>
           <TextInput
             value={feelText}
             onChangeText={setFeelText}
-            placeholder="e.g. felt like I came over the top · felt frustrated"
+            placeholder={dictating === 'feel' ? 'Listening… speak how it felt' : 'e.g. felt like I came over the top · felt frustrated'}
             placeholderTextColor={colors.text_muted}
             multiline
             style={[styles.noteInput, { color: colors.text_primary, borderColor: colors.border }]}
@@ -2813,6 +2851,9 @@ const styles = StyleSheet.create({
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingVertical: 11 },
   secondaryBtnText: { fontSize: 13, fontWeight: '800' },
   noteInput: { minHeight: 60, borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 13, textAlignVertical: 'top', marginTop: 6 },
+  noteHeadRow: { flexDirection: 'row', alignItems: 'center' },
+  micBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(0,200,150,0.5)' },
+  micBtnActive: { backgroundColor: '#88F700', borderColor: '#88F700' },
 
   // markup
   markupRoot: { flex: 1, backgroundColor: '#000' },
