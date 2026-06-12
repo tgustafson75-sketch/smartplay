@@ -265,6 +265,11 @@ export default function SwingDetail() {
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
+        // 2026-06-11 — mark the backfill ATTEMPTED (null, not undefined) so the
+        // slow full-clip analysis does NOT re-run on every re-open of a saved
+        // swing (Tim: "we only need it done once, then it's saved"). null trips
+        // the `biomechanics !== undefined` guard above on the next open.
+        try { useCageStore.getState().setSessionBiomechanics(swing_id, null); } catch { /* non-fatal */ }
       }
     })();
   }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
