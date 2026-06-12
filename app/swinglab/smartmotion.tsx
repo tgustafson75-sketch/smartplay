@@ -116,6 +116,11 @@ const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-
 // find the ball) is to snap the box onto the detected ball so the user doesn't hand-
 // move it. x stays 0.5 (center line).
 const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
+// 2026-06-11 — chip/short-game strike threshold (dB above the noise floor). A chip's
+// impact is ~half a full strike's energy, so the default ~30dB misses it; ~18dB lets
+// the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
+// so the few extra candidates it admits are harmless; range still vision-confirms).
+const CHIP_STRIKE_THRESHOLD_DB = 18;
 
 type Phase = 'setup' | 'recording' | 'analyzing' | 'review';
 
@@ -234,6 +239,8 @@ export default function SmartMotion() {
   // (wind), GPS-side distance is the on-course caddie's job.
   const environmentMode = useSettingsStore((s) => s.environmentMode);
   const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
+  const chipSensitivity = useSettingsStore((s) => s.chipSensitivity);
+  const setChipSensitivity = useSettingsStore((s) => s.setChipSensitivity);
   // 2026-06-10 (phase 3) — a live round forces COURSE sensing (acoustics off,
   // single shot) regardless of the practice toggle: you don't want neighbor/
   // wind acoustic detection on the course. Off-round, the toggle wins.
@@ -1244,8 +1251,10 @@ export default function SmartMotion() {
           : useSettingsStore.getState().environmentMode;
         // RANGE tolerates a louder floor (vision confirms every candidate, so a
         // noisy floor can't fabricate a swing); cage keeps the strict default.
+        // CHIP sensitivity drops the threshold so a quiet pitch/chip still registers.
+        const chipOn = useSettingsStore.getState().chipSensitivity;
         const res = detectStrikes(samples, {
-          thresholdDb: appliedCalibration?.transientThresholdDb,
+          thresholdDb: chipOn ? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration?.transientThresholdDb,
           noisyFloorDb: meterMode === 'range' ? 0 : undefined,
         });
         if (res.kind === 'ok' && res.strikes.length > 0) {
@@ -1865,6 +1874,17 @@ export default function SmartMotion() {
               accessibilityLabel={facing === 'front' ? 'Selfie camera on — tap for rear camera' : 'Flip to selfie camera for face-on self-framing'}
             >
               <Ionicons name="camera-reverse-outline" size={20} color={facing === 'front' ? colors.success : colors.accent} />
+            </Pressable>
+            {/* 2026-06-11 — Chip/short-game sensitivity. A chip's impact is ~half a
+                full strike's energy; ON drops the acoustic threshold so quiet
+                pitch/chip strikes still segment (Tim's cage finding). */}
+            <Pressable
+              onPress={() => setChipSensitivity(!chipSensitivity)}
+              style={[styles.toolBtn, { borderColor: chipSensitivity ? colors.success : colors.accent }]}
+              accessibilityRole="button"
+              accessibilityLabel={chipSensitivity ? 'Chip sensitivity on — tap to turn off' : 'Chip sensitivity off — tap on for quiet chip/pitch strikes'}
+            >
+              <Text style={{ color: chipSensitivity ? colors.success : colors.accent, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 }}>CHIP</Text>
             </Pressable>
           </View>
         ) : null}

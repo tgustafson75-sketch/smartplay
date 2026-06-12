@@ -1439,6 +1439,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       `a fully-in-frame golfer → framed (feetCenter ${framed.feetCenter?.x}); ankles at the bottom edge / low score → "step back, can't see your feet"; no torso → "step into frame". Drives the setup pill + the one-time "you're framed, start swinging" cue and the ball-box auto-anchor below the feet`);
   }
 
+  // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half energy, so
+  // the default ~30dB threshold missed it; ON drops it to ~18dB above floor.
+  check('SmartMotion: chip sensitivity drops the strike threshold for quiet chips',
+    /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
+      /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
+      /thresholdDb: chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2),
+    'a chip-sensitivity toggle (persisted setting) lowers the acoustic strike threshold to ~18dB above floor when on, so a quiet pitch/chip still segments — off keeps the strict calibrated/default threshold');
+
   check('SmartMotion: Framing Coach is wired into the setup loop (on-device pose, fail-safe)',
     /detectPoseFromBase64\(b64\)/.test(smSrc2) &&
       /evaluateFraming\(frame\.keypoints/.test(smSrc2) &&

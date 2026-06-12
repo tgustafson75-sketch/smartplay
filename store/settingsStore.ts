@@ -267,6 +267,11 @@ interface SettingsState {
   // Replaces the scattered SpaceType label that was detected but never drove
   // behavior. Smart-defaulted at read time (course when a GPS round is active).
   environmentMode: 'cage' | 'range' | 'course';
+  // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half the energy
+  // of a full strike (Tim's cage test: clear sound, but the detector missed it),
+  // so when ON we drop the strike threshold so quiet pitch/chip strikes register.
+  // Trades a few more false candidates for not missing the shot — fine in the cage.
+  chipSensitivity: boolean;
 
   // 2026-05-22 — Ghost Rounds as first-class. When true (DEFAULT), startRound
   // auto-activates the most-recent prior round on the same course so the
@@ -343,6 +348,7 @@ interface SettingsState {
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
   setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
+  setChipSensitivity: (on: boolean) => void;
   // 2026-05-22 — Ghost Rounds.
   setGhostAutoActivate: (v: boolean) => void;
 }
@@ -445,6 +451,7 @@ export const useSettingsStore = create<SettingsState>()(
       cageAutoClubDetection: true,
       hasSeenAutoClubPrompt: false,
       environmentMode: 'cage' as const,
+      chipSensitivity: false,
       cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
@@ -646,6 +653,7 @@ export const useSettingsStore = create<SettingsState>()(
       setHasSeenAutoClubPrompt: (v) => set({ hasSeenAutoClubPrompt: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
       setEnvironmentMode: (mode) => set({ environmentMode: mode }),
+      setChipSensitivity: (on) => set({ chipSensitivity: on }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
@@ -851,6 +859,7 @@ export const useSettingsStore = create<SettingsState>()(
         cageAutoClubDetection: s.cageAutoClubDetection,
         hasSeenAutoClubPrompt: s.hasSeenAutoClubPrompt,
         environmentMode: s.environmentMode,
+        chipSensitivity: s.chipSensitivity,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         // watchConnected / glassesConnected not persisted — rechecked on mount
