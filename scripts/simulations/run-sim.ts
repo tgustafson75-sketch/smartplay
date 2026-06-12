@@ -671,7 +671,7 @@ check('Ball/target overlay matches the design reference',
 
 check('Pre-record ball box: default box + verifier gated to Motion step',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
-    /Place ball box/.test(smSrc) &&
+    /label=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
     /\[showSkeleton, clipUri, ballArea, ballDeparture\]/.test(smSrc),
   'default reference box + verifier runs under Motion (keeps the default read fast)');
 
@@ -900,7 +900,7 @@ check('Face-on: NO launch/trace line on review (false from the front); framing g
     !/launchDir=\{angle === 'face_on'/.test(smSrc) &&
     /launchDir=\{null\}/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
     // No launch line during live capture either (declutter line-up).
-    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{null\} launchDir=\{null\}/.test(smSrc) &&
+    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{angle === 'down_the_line' && !isPutt \? draftTarget : null\} launchDir=\{null\}/.test(smSrc) &&
     // Framing guides (incl. FO side lines) render for BOTH angles.
     /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
   'face-on review shows the vertical target alignment only (no false launch line — EditableCageTargets passes launchDir null); live capture shows framing guides for both DTL and FO');
@@ -1488,12 +1488,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /<BallTraceOverlay trace=\{ballTrace\}/.test(smSrc2),
     'the trace runs DOWN-THE-LINE ONLY (never face-on/putt), off the real detected departure point (ball-departure server now returns ball_after_norm, mapped to full-frame), measured against the ball→target aim line and coloured by divergence + the segment peakDb — rendered only in review');
 
-  check('SmartMotion: geometry→effort grades the read against the intended shot',
+  check('SmartMotion: geometry→effort grades the read + LIVE interactive DTL readout',
     /Intended effort \(from geometry\)/.test(swingApiSrc) &&
       /DECLARED a ~\$\{effortPct\}% shot/.test(swingApiSrc) &&
-      /const effortPct = useMemo/.test(smSrc2) &&
-      /styles\.effortPill/.test(smSrc2),
-    'the server derives the declared effort from ball→target geometry (target near the top = full; halfway = ~half) and grades tempo + swing length against THAT partial shot — a deliberate half-swing is not flagged as a fault; the client shows an honest EFFORT % chip (measured, no faked carry)');
+      /const effortRaw = useMemo/.test(smSrc2) &&                       // raw % from LIVE ball/target
+      /const liveTarget = targetPoint \?\? draftTarget/.test(smSrc2) &&  // draft target in setup, session in review
+      /onChangeTarget=\{\(t\) => setDraftTarget\(t\)\}/.test(smSrc2) &&   // DTL target is draggable in setup
+      /styles\.aimReadout/.test(smSrc2),                                // live effort% + aim direction readout
+    'server grades against declared effort from ball→target geometry; the DTL target is now DRAGGABLE in setup (floating end) and a live readout shows the effort % + aim direction updating as you move the line — the interactive geometry↔tempo Tim expected, plus the review EFFORT chip');
 
   // 2026-06-12 — custom icon set wired: cycling golfer mode badge (DTL/FO/PUTT +
   // fade label), env scene icons, club glyph (Tim's ChatGPT art, cropped+transparent).

@@ -37,6 +37,8 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -122,6 +124,10 @@ const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
 // the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
 // so the few extra candidates it admits are harmless; range still vision-confirms).
 const CHIP_STRIKE_THRESHOLD_DB = 18;
+// 2026-06-12 — default DTL target: straight up the frame from the ball (full-ish
+// shot). Draggable in setup so the aim line + the live effort/direction readout
+// update as you move it (geometry ↔ tempo, made interactive). x=0.5 = on the line.
+const DEFAULT_TARGET = { x: 0.5, y: 0.16 };
 
 // 2026-06-12 — custom green-on-transparent icon set (Tim's ChatGPT art, cropped +
 // black knocked out). Golfer stances for the angle toggle, scene badges for the
@@ -226,6 +232,47 @@ function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: str
       : a.detected_issue;
   return { text: headline.replace(/_/g, ' ').toUpperCase(), tone: a.severity === 'significant' ? 'bad' : 'warn' };
 }
+
+// 2026-06-12 — RailButton: an icon-only setup-rail button that FLASHES a label to
+// its LEFT on tap (Tim — makes the icon-only rail self-explaining). The caller owns
+// the button look (btnStyle) + the icon (children); this adds the flash behavior.
+function RailButton({
+  label, disabled, onPress, btnStyle, children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onPress?: () => void;
+  btnStyle?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  const op = useRef(new Animated.Value(0)).current;
+  const flash = () => {
+    op.setValue(1);
+    Animated.timing(op, { toValue: 0, duration: 950, delay: 500, useNativeDriver: true }).start();
+  };
+  return (
+    <View style={railStyles.wrap}>
+      <Animated.Text style={[railStyles.flashLabel, { opacity: op, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
+        {label}
+      </Animated.Text>
+      <Pressable
+        onPress={() => { flash(); onPress?.(); }}
+        disabled={disabled}
+        style={btnStyle}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        {children}
+      </Pressable>
+    </View>
+  );
+}
+
+const railStyles = StyleSheet.create({
+  wrap: { justifyContent: 'center' },
+  flashLabel: { position: 'absolute', right: 54, width: 150, height: 46, textAlign: 'right', textAlignVertical: 'center', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+});
 
 // ─── screen ──────────────────────────────────────────────────────────
 
@@ -364,6 +411,12 @@ export default function SmartMotion() {
   // analysis. Tap to nudge it if their ball sits somewhere else. Persisted into
   // the session on ingest for the strike verifier.
   const [draftBall, setDraftBall] = useState<{ x: number; y: number; r: number } | null>(DEFAULT_BALL_BOX);
+  // 2026-06-12 — draft TARGET for DTL setup: a draggable aim point (the floating
+  // end of the ball→target line, like SmartVision). Shown only in DTL (no flight
+  // to aim face-on / in a putt). Carries into the session on ingest.
+  const [draftTarget, setDraftTarget] = useState<{ x: number; y: number } | null>(DEFAULT_TARGET);
+  const draftTargetRef = useRef<typeof draftTarget>(DEFAULT_TARGET);
+  useEffect(() => { draftTargetRef.current = draftTarget; }, [draftTarget]);
   const [placeBallMode, setPlaceBallMode] = useState(false);
   // 2026-06-11 — Framing Coach. On-device pose on the LIVE preview tells us if the
   // golfer is fully in frame (head + feet) before they swing — Tim's "Golf Fix knows
@@ -529,26 +582,32 @@ export default function SmartMotion() {
   // user-placed (no inferred ball flight). Foundation for target-aware
   // club/strategy logic.
   const engaged = ballArea != null && targetPoint != null;
+  // 2026-06-12 — LIVE ball/target: the SETUP draft in setup, the session marks in
+  // review. So the aim direction + effort readout update as the DTL target is dragged
+  // (interactive geometry ↔ tempo — Tim "the target's not moveable + no readout").
+  const liveBall = ballArea ?? draftBall;
+  const liveTarget = targetPoint ?? draftTarget;
   const aimRead = useMemo(() => {
-    if (!ballArea || !targetPoint) return null;
-    const dx = targetPoint.x - ballArea.x;
-    const dy = ballArea.y - targetPoint.y; // up the frame = positive (toward target)
+    if (!liveBall || !liveTarget) return null;
+    const dx = liveTarget.x - liveBall.x;
+    const dy = liveBall.y - liveTarget.y; // up the frame = positive (toward target)
     if (dy <= 0.02) return null; // target not meaningfully above the ball
     const deg = Math.round((Math.atan2(dx, dy) * 180) / Math.PI); // + right, - left
-    if (Math.abs(deg) <= 2) return 'straight';
-    return `${Math.abs(deg)}° ${deg > 0 ? 'right' : 'left'}`;
-  }, [ballArea, targetPoint]);
-  // 2026-06-11 — GEOMETRY ↔ EFFORT. How far up the frame the target sits from the
-  // ball (vs the ball's room to the top) = the declared shot effort: target near the
-  // top = a full swing; halfway = a ~half shot. Honest (directly measured, no faked
-  // carry number). The server grades tempo/length against this; here we just show it.
-  const effortPct = useMemo(() => {
-    if (!ballArea || !targetPoint) return null;
-    const up = ballArea.y - targetPoint.y;
+    if (Math.abs(deg) <= 2) return 'STRAIGHT';
+    return `${Math.abs(deg)}° ${deg > 0 ? 'RIGHT' : 'LEFT'}`;
+  }, [liveBall, liveTarget]);
+  // GEOMETRY ↔ EFFORT. How far up the frame the target sits from the ball (vs the
+  // ball's room to the top) = the declared shot effort: target near the top = a full
+  // swing; halfway = a ~half shot. Honest (directly measured, no faked carry number).
+  const effortRaw = useMemo(() => {
+    if (!liveBall || !liveTarget) return null;
+    const up = liveBall.y - liveTarget.y;
     if (up <= 0.02) return null;
-    const pct = Math.round(Math.max(0, Math.min(1, up / Math.max(0.001, ballArea.y))) * 100);
-    return pct > 0 && pct < 85 ? pct : null; // only flag a genuinely PARTIAL shot
-  }, [ballArea, targetPoint]);
+    return Math.round(Math.max(0, Math.min(1, up / Math.max(0.001, liveBall.y))) * 100);
+  }, [liveBall, liveTarget]);
+  // Review EFFORT chip shows only a genuinely PARTIAL shot; the live setup readout
+  // shows any value (incl. ~full) as you move the line.
+  const effortPct = effortRaw != null && effortRaw > 0 && effortRaw < 85 ? effortRaw : null;
   // 2026-06-11 — DTL ball-trace. DOWN-THE-LINE ONLY (no flight to see face-on or in a
   // putt). The real departure point (from ballDeparture, detected off the acoustic
   // anchor) → the initial direction line measured against the ball→target aim line.
@@ -701,10 +760,13 @@ export default function SmartMotion() {
         });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
-        // Carry a pre-record ball box into the session so the targeting
-        // overlay + camera strike-verification use it.
+        // Carry the pre-record ball box + (DTL) target into the session so the
+        // targeting overlay, ball-trace, and effort grading use them in review.
         if (draftBallRef.current) {
           setSessionBallArea(sessionId, draftBallRef.current);
+        }
+        if (angle === 'down_the_line' && !puttModeRef.current && draftTargetRef.current) {
+          setSessionTarget(sessionId, draftTargetRef.current);
         }
       } catch (e) {
         console.log('[smartmotion] library ingest failed (non-fatal):', e);
@@ -861,7 +923,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, videoDurationMs, swingerHandedness],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
@@ -1899,19 +1961,20 @@ export default function SmartMotion() {
             target line runs straight up from the ball box (one unified anchor,
             no duplicate static box). Shown while lining up and while recording. */}
         {phase === 'setup' && draftBall ? (
-          // SETUP — DRAG to anchor the ball box (Tim: "drag to anchor in setup, and
-          // that sticks and applies to review"). Persists to draftBall, which carries
-          // into the session at record time. CaptureGuides draws the angle framing.
+          // SETUP — DRAG to anchor the ball box AND (DTL only) the TARGET. The ball→
+          // target aim line + the live effort/direction readout update as you drag the
+          // floating target end (Tim: "the target's not moveable + no readout"). No
+          // target face-on / in a putt (no flight to aim). Both carry into the session.
           <EditableCageTargets
             ballArea={draftBall}
-            target={null}
+            target={angle === 'down_the_line' && !isPutt ? draftTarget : null}
             onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
-            onChangeTarget={() => {}}
+            onChangeTarget={(t) => setDraftTarget(t)}
           />
         ) : phase === 'recording' && draftBall ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <CageTargetingOverlay ballArea={draftBall} target={null} launchDir={null} />
+            <CageTargetingOverlay ballArea={draftBall} target={angle === 'down_the_line' && !isPutt ? draftTarget : null} launchDir={null} />
           </View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -1959,79 +2022,60 @@ export default function SmartMotion() {
             Same handlers as the old bars, just compact + out of the way. */}
         {phase === 'setup' ? (
           <View style={[styles.toolRail, { top: insets.top + 76 }]}>
-            <Pressable
+            {/* Each rail button flashes its label to the LEFT on tap (RailButton). */}
+            <RailButton
+              label={calibrated ? 'Re-calibrate' : 'Calibrate'}
               onPress={() => router.push('/swinglab/calibrate' as never)}
-              style={[styles.toolBtn, { borderColor: calibrated ? colors.success : colors.accent }]}
-              accessibilityRole="button"
-              accessibilityLabel={calibrated ? 'Re-calibrate acoustics' : 'Calibrate acoustics'}
+              btnStyle={[styles.toolBtn, { borderColor: calibrated ? colors.success : colors.accent }]}
             >
               <Ionicons name="pulse-outline" size={20} color={calibrated ? colors.success : colors.accent} />
-            </Pressable>
-            <Pressable
-              onPress={() => void detectClubFromCamera()}
+            </RailButton>
+            <RailButton
+              label="Scan club"
               disabled={scanningClub}
-              style={[styles.toolBtn, { borderColor: colors.accent, opacity: scanningClub ? 0.5 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Scan club with camera"
+              onPress={() => void detectClubFromCamera()}
+              btnStyle={[styles.toolBtn, { borderColor: colors.accent, opacity: scanningClub ? 0.5 : 1 }]}
             >
               {scanningClub
                 ? <Ionicons name="sync" size={20} color={colors.accent} />
                 : <Image source={ICON_CLUB} style={styles.toolIconImg} resizeMode="contain" />}
-            </Pressable>
-            <Pressable
+            </RailButton>
+            <RailButton
+              label={placeBallMode ? 'Tap your ball' : 'Ball box'}
               onPress={() => setPlaceBallMode((v) => !v)}
-              style={[styles.toolBtn, { borderColor: placeBallMode ? colors.success : colors.accent }]}
-              accessibilityRole="button"
-              accessibilityLabel="Place ball box"
+              btnStyle={[styles.toolBtn, { borderColor: placeBallMode ? colors.success : colors.accent }]}
             >
               <Ionicons name={placeBallMode ? 'hand-left-outline' : 'golf-outline'} size={20} color={placeBallMode ? colors.success : colors.accent} />
-            </Pressable>
-            {/* 2026-06-10 — Environment toggle. Cycles cage → range → course.
-                Cage = acoustic multi-swing. Range = 2-min video multi-swing,
-                acoustics off. Course = single shot, acoustics off. During a live
-                round it's LOCKED to course (acoustics off automatically) — the
-                label shows CRSE and tapping is disabled. */}
-            <Pressable
-              onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
+            </RailButton>
+            {/* Environment toggle — cage → range → course (scene icon + flashed label). */}
+            <RailButton
+              label={isRoundActive ? 'Course (round)' : effectiveMode === 'cage' ? 'Cage' : effectiveMode === 'range' ? 'Range' : 'Course'}
               disabled={isRoundActive}
-              style={[styles.toolBtn, { borderColor: colors.accent, opacity: isRoundActive ? 0.6 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel={isRoundActive ? 'Environment locked to course during a round' : `Environment mode: ${effectiveMode}. Tap to change.`}
+              onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
+              btnStyle={[styles.toolBtn, { borderColor: colors.accent, opacity: isRoundActive ? 0.6 : 1 }]}
             >
               <Image source={ICON_ENV[effectiveMode]} style={styles.toolIconImg} resizeMode="contain" />
-            </Pressable>
-            {/* 2026-06-11 — Selfie/front-camera toggle for face-on self-framing.
-                Recording stays un-mirrored (mirror={false} on the CameraView) so
-                analysis is unaffected. Setup-phase only (can't flip mid-record). */}
-            <Pressable
+            </RailButton>
+            {/* Selfie/front-camera toggle (recording stays un-mirrored). */}
+            <RailButton
+              label={facing === 'front' ? 'Selfie on' : 'Selfie'}
               onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-              style={[styles.toolBtn, { borderColor: facing === 'front' ? colors.success : colors.accent }]}
-              accessibilityRole="button"
-              accessibilityLabel={facing === 'front' ? 'Selfie camera on — tap for rear camera' : 'Flip to selfie camera for face-on self-framing'}
+              btnStyle={[styles.toolBtn, { borderColor: facing === 'front' ? colors.success : colors.accent }]}
             >
               <Ionicons name="camera-reverse-outline" size={20} color={facing === 'front' ? colors.success : colors.accent} />
-            </Pressable>
-            {/* 2026-06-11 — Chip/short-game sensitivity. A chip's impact is ~half a
-                full strike's energy; ON drops the acoustic threshold so quiet
-                pitch/chip strikes still segment. Mode-aware: acoustics for cage +
-                course, OFF for range (Tim — too noisy at a range). Clear ON state +
-                a toast so the tap is never silent. */}
-            <Pressable
+            </RailButton>
+            {/* Chip/short-game sensitivity — mode-aware (cage+course on, range off). */}
+            <RailButton
+              label={chipSensitivity ? 'Chip mode ON' : 'Chip mode'}
               onPress={() => {
                 const next = !chipSensitivity;
                 setChipSensitivity(next);
                 useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
               }}
-              style={[
-                styles.toolBtn,
-                { borderColor: chipSensitivity ? colors.success : colors.accent, backgroundColor: chipSensitivity ? colors.success : 'rgba(6,15,9,0.55)' },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: chipSensitivity }}
-              accessibilityLabel={chipSensitivity ? 'Chip sensitivity on — tap to turn off' : 'Chip sensitivity off — tap on for quiet chip/pitch strikes'}
+              btnStyle={[styles.toolBtn, { borderColor: chipSensitivity ? colors.success : colors.accent, backgroundColor: chipSensitivity ? colors.success : 'rgba(6,15,9,0.55)' }]}
             >
               <Text style={{ color: chipSensitivity ? '#06281b' : colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>CHIP</Text>
-            </Pressable>
+            </RailButton>
           </View>
         ) : null}
 
@@ -2063,6 +2107,27 @@ export default function SmartMotion() {
             <Text style={[styles.framingPillText, { color: framing.status === 'framed' ? '#06281b' : '#fff' }]}>
               {framing.message}
             </Text>
+          </View>
+        ) : null}
+
+        {/* DTL AIM READOUT (setup) — live as you drag the target: declared effort %
+            (geometry → tempo/length) + the start direction off the aim line. Updates
+            in real time so you SEE the geometry↔tempo connection (Tim). DTL only. */}
+        {phase === 'setup' && angle === 'down_the_line' && !isPutt && (effortRaw != null || aimRead) ? (
+          <View style={[styles.aimReadout, { top: insets.top + 54 }]} pointerEvents="none">
+            {effortRaw != null ? (
+              <View style={styles.aimReadoutCol}>
+                <Text style={styles.aimReadoutValue}>{effortRaw}%</Text>
+                <Text style={styles.aimReadoutLabel}>EFFORT</Text>
+              </View>
+            ) : null}
+            {effortRaw != null && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
+            {aimRead ? (
+              <View style={styles.aimReadoutCol}>
+                <Text style={[styles.aimReadoutValue, { color: aimRead === 'STRAIGHT' ? '#34d399' : '#f5c451' }]}>{aimRead}</Text>
+                <Text style={styles.aimReadoutLabel}>AIM</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -2216,7 +2281,10 @@ export default function SmartMotion() {
               // 2026-06-12 — ONE golfer badge, tap to cycle DTL → Face-On → Putting,
               // with a quick fade-away label (Tim's idea — clears the bottom bar vs
               // the old 3-chip toggle). The current stance icon shows which mode you're in.
-              <View style={{ alignItems: 'center' }}>
+              <View style={{ justifyContent: 'center' }}>
+                <Animated.Text style={[styles.modeFadeLabelLeft, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
+                  {modeFadeText}
+                </Animated.Text>
                 <Pressable
                   onPress={cycleMode}
                   style={styles.modeCycleBtn}
@@ -2225,9 +2293,6 @@ export default function SmartMotion() {
                 >
                   <Image source={ICON_ANGLE[isPutt ? 'putt' : angle]} style={styles.modeCycleImg} resizeMode="contain" />
                 </Pressable>
-                <Animated.Text style={[styles.modeFadeLabel, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none">
-                  {modeFadeText}
-                </Animated.Text>
               </View>
             ) : null}
             <View style={{ flex: 1 }} />
@@ -2502,6 +2567,11 @@ const styles = StyleSheet.create({
   puttPillText: { color: '#06281b', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  aimReadout: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 14, zIndex: 6, backgroundColor: 'rgba(6,15,9,0.7)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)' },
+  aimReadoutCol: { alignItems: 'center' },
+  aimReadoutValue: { color: '#7CE04F', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  aimReadoutLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  aimReadoutDivider: { width: 1, height: 22, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
@@ -2511,10 +2581,10 @@ const styles = StyleSheet.create({
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
   toolBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
-  toolIconImg: { width: 40, height: 40 },
+  toolIconImg: { width: 36, height: 36 },
   modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(124,224,79,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
-  modeCycleImg: { width: 48, height: 48 },
-  modeFadeLabel: { marginTop: 4, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  modeCycleImg: { width: 44, height: 44 },
+  modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
   setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
   recText: { color: '#fff', fontWeight: '800', fontSize: 13 },
