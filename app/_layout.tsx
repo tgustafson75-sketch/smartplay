@@ -77,6 +77,8 @@ import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
 import { BatterySaverPrompt } from '../components/battery/BatterySaverPrompt';
+import { RestModeOverlay } from '../components/round/RestModeOverlay';
+import { useRestModeStore } from '../store/restModeStore';
 // 2026-05-24 (Flow C) — Tap-to-undo banner for silent tee Marks
 // fired by the declare-hole cross-check. Reads from undoMarkStore;
 // hides itself after the visibility window. Sibling to GlobalToast.
@@ -844,6 +846,14 @@ function AppNavigator() {
           when the 30-second visibility window expires. */}
       <UndoMarkBanner />
       <RoundActiveDevIndicator />
+      {/* 2026-06-13 (Tim #8) — app-wide touch heartbeat for Round Rest mode.
+          The capture handler ALWAYS returns false, so it only OBSERVES the start
+          of a touch (resets the idle timer / wakes the rest screen) and never
+          intercepts it — gestures + taps behave exactly as before. */}
+      <View
+        style={{ flex: 1 }}
+        onStartShouldSetResponderCapture={() => { useRestModeStore.getState().noteActivity(); return false; }}
+      >
       <Stack
         screenOptions={{
           headerShown: false,
@@ -1057,6 +1067,11 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
       </Stack>
+      </View>
+      {/* 2026-06-13 (Tim #8) — Round Rest: near-black OLED overlay after 1 min
+          idle in a round. GPS/voice keep running; tap to wake. Mounted last so
+          it covers every screen + the data strip. */}
+      <RestModeOverlay />
     </>
   );
 }

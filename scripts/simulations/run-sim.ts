@@ -46,6 +46,7 @@ import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } fro
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
+import { useRestModeStore } from '../../store/restModeStore';
 
 interface ScenarioResult {
   scenario: string;
@@ -887,6 +888,31 @@ check('Layup planning wired into the hole view (smartvision) (#6)',
       /\{!targetOverride && \(\s*\n\s*<Marker\s*\n\s*kind="T"/.test(s); // T clears on capture
   })(),
   'hole view shows the two-line layup plan at 200y+ and drops the T once you capture');
+
+check('Round Rest mode: store toggles + OLED-black overlay wired globally (#8)',
+  // 2026-06-13 — Tim keeps auto-lock off so GPS never sleeps, leaving the OLED at
+  // full brightness all round (the real drain). Rest mode paints near-black after
+  // 1 min idle in a round — GPS/voice keep running, tap to wake.
+  (() => {
+    // Behavioral: enterRest activates; a touch (noteActivity) wakes + stamps time.
+    const st = useRestModeStore.getState();
+    st.enterRest();
+    const resting = useRestModeStore.getState().active === true;
+    st.noteActivity();
+    const woke = useRestModeStore.getState().active === false &&
+      typeof useRestModeStore.getState().lastActivityAt === 'number';
+    st.exitRest();
+    const ov = read('components/round/RestModeOverlay.tsx');
+    const lay = read('app/_layout.tsx');
+    return resting && woke &&
+      /IDLE_MS = 60_000/.test(ov) &&
+      /backgroundColor: '#000'/.test(ov) &&
+      /useKeepAwake\('round-rest'\)/.test(ov) &&
+      /if \(!active \|\| !isRoundActive\) return null/.test(ov) && // only dims in a round
+      /onStartShouldSetResponderCapture=\{\(\) => \{ useRestModeStore\.getState\(\)\.noteActivity\(\); return false; \}\}/.test(lay) &&
+      /<RestModeOverlay \/>/.test(lay);
+  })(),
+  'idle-in-round → near-black rest screen that keeps GPS alive; any touch wakes it, OTA-safe (no native dep)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
