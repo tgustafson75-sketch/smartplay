@@ -7,13 +7,15 @@
  * call these helpers without coupling to the store internals.
  */
 
-import { useCageStore, type CageSession, type SwingSource } from '../store/cageStore';
+import { useCageStore, type CageSession, type SwingSource, type CaptureKind } from '../store/cageStore';
 
 export type LibraryFilter = 'all' | 'uploads' | 'cage';
 
 export interface LibraryEntry {
   session: CageSession;
   source: SwingSource;
+  /** 2026-06-12 — which interface to render (smart_motion / coach / upload). */
+  captureKind: CaptureKind;
   date_ms: number;
   primary_issue_name: string | null;
   swing_count: number;
@@ -77,6 +79,15 @@ export function isPuttingSession(session: CageSession): boolean {
   return getAnalyzerKind(session) === 'putting';
 }
 
+/** 2026-06-12 (library reporting) — which capture interface the library should render.
+ *  Prefers the stored captureKind; falls back to inferring from `source` for legacy
+ *  sessions (uploaded_video → upload; everything else, incl. live_cage → smart_motion).
+ *  Coach sessions are only ever the explicit 'coach' kind. */
+export function getCaptureKind(session: CageSession): CaptureKind {
+  if (session.captureKind) return session.captureKind;
+  return session.source === 'uploaded_video' ? 'upload' : 'smart_motion';
+}
+
 function describe(session: CageSession): string {
   if (session.source === 'uploaded_video' && session.upload?.notes) {
     return session.upload.notes.slice(0, 60);
@@ -101,6 +112,7 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
       return {
         session,
         source: session.source ?? 'live_cage',
+        captureKind: getCaptureKind(session),
         date_ms: session.date,
         primary_issue_name: session.primary_issue?.name ?? null,
         swing_count: session.shots.length,

@@ -119,6 +119,11 @@ export interface ClubSegment {
 }
 
 export type SwingSource = 'live_cage' | 'uploaded_video';
+// 2026-06-12 — how a session was captured, used to pick the library interface/reporting.
+// Additive classifier layered ON TOP of `source` (not a replacement): smart_motion =
+// a SmartMotion capture (cage / range / course), coach = a Coach Mode lesson (gets the
+// instructor report), upload = a plain phone video. Legacy sessions infer it from source.
+export type CaptureKind = 'smart_motion' | 'coach' | 'upload';
 export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'putt' | 'chip' | 'other';
 
 export interface UploadMetadata {
@@ -179,6 +184,10 @@ export interface CageSession {
   // Phase K populates them.
   primary_issue?: PrimaryIssue | null;
   drill_recommendation?: DrillRecommendation | null;
+  // 2026-06-12 — additive capture classifier (smart_motion / coach / upload) that drives
+  // which interface the library renders. Undefined on legacy sessions → inferred from
+  // source via getCaptureKind. See [[smartmotion-shot-map]] / library reporting work.
+  captureKind?: CaptureKind;
   // Phase R — source kind. 'live_cage' is the original Phase J flow; an
   // 'uploaded_video' session wraps a single uploaded swing (one CageShot)
   // with upload metadata so it browses uniformly in the swing library.
@@ -418,6 +427,11 @@ interface CageState {
     club: string;
     upload: UploadMetadata;
     source?: SwingSource;
+    /** 2026-06-12 (Tim, library reporting) — how this session was captured, so the
+     *  library renders the matching interface: SmartMotion (cage/range/course capture),
+     *  a Coach Mode lesson, or a plain phone upload. Additive + non-destructive — the
+     *  existing `source` enum is untouched; legacy sessions infer it (getCaptureKind). */
+    captureKind?: CaptureKind;
   }) => string;
   /** Phase BW — ingest a live cage session with N detected swings, each
    *  with its own clip boundaries pointing into the master video.
@@ -808,8 +822,11 @@ export const useCageStore = create<CageState>()(
 
       getClubProfile: (club) => get().clubProfiles[club] ?? null,
 
-      ingestUploadedSwing: ({ clipUri, club, upload, source }) => {
+      ingestUploadedSwing: ({ clipUri, club, upload, source, captureKind }) => {
         const resolvedSource: SwingSource = source ?? 'uploaded_video';
+        // Default the capture classifier from the source when not given explicitly
+        // (live cage = SmartMotion; an upload = a plain phone video).
+        const resolvedCaptureKind: CaptureKind = captureKind ?? (resolvedSource === 'live_cage' ? 'smart_motion' : 'upload');
         // 2026-06-05 — Dedupe. Network glitches that retry the same
         // upload (or rapid double-tap on the "Analyze" button) used to
         // double-ingest, bloating the library with phantom duplicates
@@ -853,6 +870,7 @@ export const useCageStore = create<CageState>()(
           rootCause: null,
           summary: null,
           source: resolvedSource,
+          captureKind: resolvedCaptureKind,
           upload,
           analysis_status: 'pending',
           analysis_error: null,

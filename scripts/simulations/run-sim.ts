@@ -1767,6 +1767,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /if \(cached\) \{ setAnalysis\(cached\); setSwingAnalyzing\(false\); return; \}/.test(smA),
     'scrubbing to a cached swing while an earlier read is in flight clears swingAnalyzing on the cached hit — the spinner can no longer stick on forever');
 
+  check('Library phase 1: additive captureKind classifier (smart_motion / coach / upload)',
+    // 2026-06-12 (Tim) — foundation for the library carrying each session's matching
+    // interface. ADDITIVE: the source enum is untouched; captureKind is a new classifier,
+    // defaulted at ingest (live_cage → smart_motion, else upload) and inferred for legacy
+    // sessions via getCaptureKind. Phase 2 renders the interface off it.
+    /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload'/.test(read('store/cageStore.ts')) &&
+      /captureKind\?: CaptureKind;/.test(read('store/cageStore.ts')) &&
+      /const resolvedCaptureKind: CaptureKind = captureKind \?\? \(resolvedSource === 'live_cage' \? 'smart_motion' : 'upload'\)/.test(read('store/cageStore.ts')) &&
+      /captureKind: resolvedCaptureKind,/.test(read('store/cageStore.ts')) &&
+      /export function getCaptureKind\(session: CageSession\): CaptureKind/.test(read('services/swingLibrary.ts')) &&
+      /captureKind: getCaptureKind\(session\)/.test(read('services/swingLibrary.ts')),
+    'sessions carry an additive captureKind (SmartMotion captures default smart_motion, uploads default upload); legacy sessions infer it; the source enum + its consumers are unchanged');
+
   check('SmartMotion analysis SPEED fixes (2026-06-12 — first-try read + latency)',
     // The big one: a missed strike on a short cage clip no longer collapses to the slow
     // unbounded locate path. locateSwings is gated to long clips; a whole-clip bounded
