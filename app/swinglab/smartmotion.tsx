@@ -50,6 +50,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
+import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { SwingVisionCamera, type SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
@@ -775,11 +776,22 @@ export default function SmartMotion() {
   // heuristic, not truth-grade) — never shown as a hard measured number (honesty fix
   // 2026-06-12: the badge used to print a raw mph with no est marker). SMASH needs club
   // speed we don't have; inferred FACE ≈ ball result, so neither is duplicated here.
+  // SmartTrace confidence-tiered read: flight (departure seen) → direction; contact
+  // (no flight but a real acoustic strike) → "STRUCK" + honest flag; none → "—".
+  // Never dark — degrades instead of going blank (memory overstrict-gate-lens).
+  const smartTrace = useMemo(
+    () => composeSmartTrace({
+      isPutt,
+      isDownTheLine: angle === 'down_the_line',
+      direction: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
+      strikeDetected: (segments[selectedSwing]?.peakDb ?? 0) !== 0,
+      tempoRatio: tempo?.ratio ?? null,
+    }),
+    [isPutt, angle, ballTrace, segments, selectedSwing, tempo],
+  );
   const leftMetrics = useMemo(() => {
     if (isPutt) return [];
-    const dir = ballTrace
-      ? (ballTrace.side === 'straight' ? 'ON LINE' : `${ballTrace.divergenceDeg}° ${ballTrace.side === 'left' ? 'L' : 'R'}`)
-      : null;
+    const dir = smartTrace.badge;
     const bs = metrics.ball_speed;
     const bsEst = bs.value != null && !isTruthGrade(bs.source);
     return [
@@ -787,7 +799,7 @@ export default function SmartMotion() {
       { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${bsEst ? '~' : ''}${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
-  }, [isPutt, tempo, metrics, ballTrace]);
+  }, [isPutt, tempo, metrics, smartTrace]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +

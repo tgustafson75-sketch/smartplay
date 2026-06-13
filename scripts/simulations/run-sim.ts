@@ -47,6 +47,7 @@ import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferen
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { composeBagRecommendation } from '../../services/bagRecommendation';
+import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1362,6 +1363,25 @@ check('SmartTrace Stage 1 wiring — swing path gated on the flag, expo-camera p
     );
   })(),
   'smartmotion mounts the vision camera only when the runtime capture-engine toggle is on and keeps the expo-camera CameraView as the default-off path, both driven by the same cameraRef — one build A/B-tests both engines (SmartTrace Stage 1)');
+
+check('SmartTrace confidence-tiered read — degrades, never goes dark (Tim)',
+  // 2026-06-13 — the trace was binary (no departure → nothing). composeSmartTrace
+  // tiers it: ball seen → flight direction; no flight but a real strike → "STRUCK"
+  // + an honest flag; neither → an honest "no read". For beginners, not tour pros.
+  (() => {
+    const flight = composeSmartTrace({ isPutt: false, isDownTheLine: true, direction: { side: 'left', divergenceDeg: 12 }, strikeDetected: true, tempoRatio: 3.1 });
+    const contact = composeSmartTrace({ isPutt: false, isDownTheLine: true, direction: null, strikeDetected: true, tempoRatio: 3.0 });
+    const none = composeSmartTrace({ isPutt: false, isDownTheLine: true, direction: null, strikeDetected: false, tempoRatio: null });
+    const putt = composeSmartTrace({ isPutt: true, isDownTheLine: false, direction: null, strikeDetected: true, tempoRatio: null });
+    return (
+      flight.tier === 'flight' && flight.badge === '12° L' && flight.note === null &&   // full read, no false flag
+      contact.tier === 'contact' && contact.badge === 'STRUCK' && !!contact.note &&     // never dark: strike surfaced + flagged
+      contact.confidence < flight.confidence &&                                          // honestly less certain
+      none.tier === 'none' && none.badge === null && !!none.note &&                      // honest no-read, still a nudge
+      putt.tier === 'none' && putt.badge === null && putt.note === null                  // not this surface's job (no false flag)
+    );
+  })(),
+  'composeSmartTrace returns a flight read when the ball is seen, a flagged "STRUCK" contact read when only a strike fired, and an honest no-read otherwise — degrading instead of going dark (SmartTrace confidence tiers)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
