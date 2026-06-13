@@ -66,6 +66,14 @@
       "expo-screen-orientation",
       "expo-camera",
       [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "SmartPlay Caddie uses the camera to record and analyze your swing and ball flight.",
+          "enableMicrophonePermission": true,
+          "microphonePermissionText": "SmartPlay Caddie uses the microphone to detect ball-strike timing during a swing."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket.",

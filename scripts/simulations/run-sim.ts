@@ -1325,6 +1325,25 @@ check('Course bag optimizer Part B1 — gap detection + idle clubs (Tim)',
   })(),
   'for a played course, the brain flags idle clubs and the carry gaps you keep facing, suggesting the benched club that fills each gap — Part B1 of the bag optimizer');
 
+check('SmartTrace capture seam — vision-camera staged behind a default-off flag (Tim)',
+  // 2026-06-13 — Stage 0 of the expo-camera → vision-camera swap that feeds
+  // SmartTrace. Invariants that keep the swap SAFE: the flag is OFF by default (the
+  // working expo-camera path stays the default until a vision build is proven), the
+  // vision camera records VIDEO-ONLY so it never competes with the acoustic impact
+  // recording for the mic, and it prefers a HIGH frame rate for the launch window.
+  (() => {
+    const flags = read('services/capture/captureFlags.ts');
+    const cam = read('components/capture/SwingVisionCamera.tsx');
+    return (
+      /export const USE_VISION_CAMERA = false/.test(flags) &&        // default off = no regression
+      /PREFERRED_CAPTURE_FPS = \d+/.test(flags) &&                    // a real high-fps target
+      /audio=\{false\}/.test(cam) &&                                 // off the mic — protects the acoustic anchor
+      /recordAsync\(/.test(cam) && /stopRecording\(\)/.test(cam) &&  // mimics CameraView's ref API (drop-in)
+      /useCameraFormat/.test(cam)                                    // picks the device's high-fps format
+    );
+  })(),
+  'the vision-camera capture path is added behind a default-off flag, records video-only to keep the acoustic mic clean, and mirrors CameraView so the swing-path swap is a safe drop-in (SmartTrace Stage 0)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
