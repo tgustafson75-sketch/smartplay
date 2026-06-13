@@ -1214,6 +1214,22 @@ check('Club usage is COMPLETE — clubless shots inferred from distance (Tim)',
   })(),
   'every shot with a distance now counts in club usage (inferred club, marked ~est); the real bag model is untouched');
 
+check('Caddie round summary carries to the dashboard Recent Rounds (Tim)',
+  // 2026-06-13 — the recap (overall_kevin_summary) is stored per-round in
+  // planStorage; the dashboard loads it for the visible rounds so each row shows
+  // the caddie's read, not just the score. Recap generation has no completion gate
+  // (caddie endRound: just `if (roundId)`), so partial rounds get a summary too.
+  (() => {
+    const dash = read('app/(tabs)/dashboard.tsx');
+    return (
+      /import \{ loadRecap \} from '\.\.\/\.\.\/services\/planStorage'/.test(dash) &&
+      /rec\?\.overall_kevin_summary/.test(dash) &&
+      /setRecapSummaries/.test(dash) &&
+      /recapSummaries\[r\.id\] \?/.test(dash) // surfaced on the round row
+    );
+  })(),
+  'each Recent Rounds row shows the caddie summary (loaded from planStorage); partial rounds included (no completion gate)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

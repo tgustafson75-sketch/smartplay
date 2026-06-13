@@ -20,7 +20,7 @@
  * useCurrentWeather, services/kevinReadService.
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { getDrillEntry } from '../../data/drillCatalog';
+import { loadRecap } from '../../services/planStorage';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -88,6 +89,25 @@ export default function Dashboard() {
     () => Object.entries(practiceByDrill).sort((a, b) => b[1].points - a[1].points).slice(0, 4),
     [practiceByDrill],
   );
+
+  // 2026-06-13 (Tim) — carry the caddie's round summary to the dashboard. The recap
+  // (overall_kevin_summary) is stored per-round in planStorage; load it for the
+  // visible Recent Rounds rows so each shows the caddie's read, not just the score.
+  const [recapSummaries, setRecapSummaries] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const ids = [...roundHistory].reverse().slice(0, 6).map((r) => r.id);
+    void Promise.all(ids.map(async (id) => {
+      try { const rec = await loadRecap(id); return [id, rec?.overall_kevin_summary ?? ''] as const; }
+      catch { return [id, ''] as const; }
+    })).then((pairs) => {
+      if (cancelled) return;
+      const map: Record<string, string> = {};
+      for (const [id, s] of pairs) if (s) map[id] = s;
+      setRecapSummaries(map);
+    });
+    return () => { cancelled = true; };
+  }, [roundHistory]);
 
   // Phase U — pattern shift surfacing.
   const patternShift = useMemo(
@@ -563,6 +583,11 @@ export default function Dashboard() {
                       <Text style={[styles.roundMeta, { color: colors.text_muted }]}>
                         {dateStr} · {r.holesPlayed} holes{r.isCompetition ? ' · competition' : ''}
                       </Text>
+                      {recapSummaries[r.id] ? (
+                        <Text style={[styles.roundSummary, { color: colors.text_secondary }]} numberOfLines={2}>
+                          {recapSummaries[r.id]}
+                        </Text>
+                      ) : null}
                     </View>
                     <View style={styles.roundScoreCol}>
                       <Text style={[styles.roundScore, { color: colors.text_primary }]}>{r.totalScore || '—'}</Text>
@@ -936,6 +961,7 @@ const styles = StyleSheet.create({
   roundRowLeft: { flex: 1, marginRight: 12 },
   roundCourse: { fontSize: 15, fontWeight: '800' },
   roundMeta: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  roundSummary: { fontSize: 12, fontWeight: '500', marginTop: 5, lineHeight: 16, fontStyle: 'italic' },
   roundScoreCol: { alignItems: 'flex-end' },
   roundScore: { fontSize: 20, fontWeight: '900' },
   roundVsPar: { fontSize: 13, fontWeight: '800', marginTop: 1 },
