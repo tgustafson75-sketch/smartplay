@@ -51,6 +51,19 @@ const intent = (
 // generic "what" patterns so "yardage to front" → green_front,
 // not query_status:hole.
 const PATTERNS: Pattern[] = [
+  // ── GROUND-TRUTH GREEN MARK (must beat the yardage patterns below, since
+  //    "I'm on the MIDDLE of the green" otherwise matches green_middle) ──────
+  // 2026-06-13 — Tim's on-course flow: "I'm on the center of the green" /
+  // "mark the green/pin/flag" / "I'm at the pin" → WRITE the green override at
+  // the current GPS. Deterministic + OFFLINE — works with NO signal, exactly
+  // when his Lakes round needed it (the cloud classifier was unreachable).
+  // Routes to open_tool → the voice-direct in-place mark in openToolHandler.
+  // Plain "I'm on the green" (no center/middle/pin qualifier) is intentionally
+  // NOT matched here — it stays a position_declaration via the cloud parse.
+  {
+    rx: /\b(?:mark\s+(?:the\s+)?(?:green|pin|flag)|(?:i'?m|im|i\s+am|we'?re|we\s+are)\s+(?:on|at)\s+(?:the\s+)?(?:center|middle)\s+of\s+the\s+green|(?:i'?m|im|i\s+am)\s+(?:on|at)\s+(?:the\s+)?(?:pin|flag))\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'mark_green' }),
+  },
   // ── DISTANCE / YARDAGE (most specific first) ──────────────
   {
     rx: /\b(front\s+(?:edge|of)|to\s+the\s+front|yards?\s+to\s+(?:the\s+)?front)\b/i,

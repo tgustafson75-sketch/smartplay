@@ -47,6 +47,7 @@ import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferen
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { useRestModeStore } from '../../store/restModeStore';
+import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 
 interface ScenarioResult {
   scenario: string;
@@ -970,6 +971,34 @@ check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not 
     );
   })(),
   'a failed/timed-out/offline TTS fetch now speaks on the device instead of leaving the caddie silent');
+
+check('Intent fix: "on the center of the green" marks it — offline + routed (Lakes log)',
+  // 2026-06-13 — Tim's flow: "I'm on the center of the green on hole 6, Lakes" must
+  // logically MARK the green at GPS, even with NO signal. (a) localIntentPrecheck
+  // matches it deterministically/offline → open_tool/mark_green; (b) the router
+  // aliases a tool-name intent_type to open_tool so the cloud path also fires.
+  (() => {
+    // (a) behavioral: the offline precheck classifies the mark phrasings...
+    const onGreen = precheckLocalIntent("I'm on the center of the green on hole 6 lakes");
+    const markPin = precheckLocalIntent('mark the pin');
+    const atPin = precheckLocalIntent("I'm at the pin");
+    // ...but NOT plain position ("I'm on the green") or a yardage query.
+    const plain = precheckLocalIntent("I'm on the green");
+    const yards = precheckLocalIntent('how far to the middle of the green');
+    const okPrecheck =
+      onGreen?.intent_type === 'open_tool' && onGreen?.parameters?.tool_name === 'mark_green' &&
+      markPin?.intent_type === 'open_tool' && markPin?.parameters?.tool_name === 'mark_green' &&
+      atPin?.intent_type === 'open_tool' &&
+      !(plain?.intent_type === 'open_tool') &&            // plain "on the green" stays position_declaration
+      yards?.parameters?.query_topic === 'green_middle';  // yardage query unaffected
+    // (b) source: the router alias for a tool-name intent_type
+    const r = read('services/voiceCommandRouter.ts');
+    const okRouter = /const OPEN_TOOL_ALIAS_INTENTS = new Set<string>\(\[/.test(r) &&
+      /if \(!handler && OPEN_TOOL_ALIAS_INTENTS\.has\(intent\.intent_type\)\)/.test(r) &&
+      /tool_name: intent\.intent_type/.test(r);
+    return okPrecheck && okRouter;
+  })(),
+  '"on the center of the green" / "mark the pin" marks the green offline; the cloud path is aliased too; plain position + yardage queries untouched');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&

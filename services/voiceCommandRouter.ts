@@ -11,6 +11,19 @@ export interface RoutingLog {
   result: IntentResult;
 }
 
+// 2026-06-13 — Classifier alias. The intent classifier sometimes emits an
+// open_tool TOOL NAME as the top-level intent_type (e.g. "mark_green" for odd
+// phrasings like "Yes, mark that I'm on the center of the green") instead of
+// intent_type:'open_tool' + tool_name. The router only has a handler keyed on
+// 'open_tool', so those fell through to "no handler wired" — Tim's Lakes round
+// couldn't mark the green. Re-route any of these intent_types to open_tool with
+// the tool_name set, so they actually fire.
+const OPEN_TOOL_ALIAS_INTENTS = new Set<string>([
+  'mark_green', 'markgreen', 'mark_tee', 'marktee', 'mark_tee_box',
+  'smartvision', 'smartfinder', 'swinglab', 'scorecard', 'smartmotion',
+  'coach_mode', 'coachmode', 'issue_log', 'issuelog',
+]);
+
 export class VoiceCommandRouter {
   private handlers: Map<string, IntentHandler> = new Map();
   private history: RoutingLog[] = [];
@@ -126,7 +139,17 @@ export class VoiceCommandRouter {
       };
     }
 
-    const handler = this.handlers.get(intent.intent_type);
+    let handler = this.handlers.get(intent.intent_type);
+    // Alias a tool-name intent_type to the open_tool handler (see note above).
+    if (!handler && OPEN_TOOL_ALIAS_INTENTS.has(intent.intent_type)) {
+      const openTool = this.handlers.get('open_tool');
+      if (openTool) {
+        handler = openTool;
+        if (!intent.parameters.tool_name) {
+          intent.parameters = { ...intent.parameters, tool_name: intent.intent_type };
+        }
+      }
+    }
     if (!handler) {
       logVoiceMiss({
         transcript: intent.raw_text,
