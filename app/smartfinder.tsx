@@ -29,6 +29,8 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
+import { composeShotRead } from '../services/cnsShotRead';
+import { bagDistances } from '../services/shotStrategy';
 import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
 import {
   refreshFix,
@@ -1347,6 +1349,24 @@ function TargetCameraOverlay({
     return stepDownClub(recommendedClub) ?? recommendedClub;
   }, [hazardIntel, landing, recommendedClub]);
 
+  // 2026-06-13 — THE MOAT: the Caddie Brain's composed read. SmartFinder doesn't
+  // calculate the recommendation; it hands the live signals to the CNS composer
+  // (composeShotRead) and renders the answer-first result. Pure + offline-safe, so
+  // it works with no signal. Past-performance only surfaces in a competitive round.
+  const isCompetition = useRoundStore(s => s.isRoundActive && s.isCompetition);
+  const shotRead = useMemo(() => composeShotRead({
+    rawYards: targetYards,
+    weather,
+    shotBearingDeg: targetBearing ?? shotBearingDeg,
+    elevationDeltaFeet,
+    bag: bagDistances(),
+    dominantMiss,
+    holeLineNote: null,
+    nearestHazard: hazardSummary?.nearest ?? null,
+    isCompetition,
+    pastScoreNote: null,
+  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, hazardSummary, isCompetition]);
+
   return (
     <View style={StyleSheet.absoluteFill}>
       <TargetingOverlay
@@ -1368,6 +1388,32 @@ function TargetCameraOverlay({
           </Text>
         )}
         <View style={styles.targetIntelCard}>
+          {/* 2026-06-13 — THE MOAT: the brain's answer-first read leads the card.
+              Club + plays-like big; one compact "why" line; tendency light;
+              past-performance only in a competitive round. The detailed breakdown
+              stays below for depth, but the answer comes first (Tim was
+              "overwhelmed" by the old data-dump). */}
+          {shotRead?.club ? (
+            <View style={styles.brainRead}>
+              <View style={styles.brainReadHeadline}>
+                <Text style={styles.brainReadClub}>{shotRead.club}</Text>
+                <Text style={styles.brainReadNums}>
+                  {shotRead.deltaYards !== 0
+                    ? `${shotRead.rawYards} · plays ${shotRead.playsLikeYards}`
+                    : `${shotRead.rawYards} yds`}
+                </Text>
+              </View>
+              {shotRead.why.length > 0 && (
+                <Text style={styles.brainReadWhy} numberOfLines={2}>{shotRead.why.join('  ·  ')}</Text>
+              )}
+              {shotRead.tendencyNote && (
+                <Text style={styles.brainReadTend} numberOfLines={1}>↳ {shotRead.tendencyNote}</Text>
+              )}
+              {shotRead.pastPerfNote && (
+                <Text style={styles.brainReadPast} numberOfLines={1}>◆ {shotRead.pastPerfNote}</Text>
+              )}
+            </View>
+          ) : null}
           <View style={styles.targetIntelTopRow}>
             <View style={styles.targetIntelMetric}>
               <Text style={styles.targetIntelLabel}>RAW</Text>
@@ -1935,6 +1981,19 @@ return StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 8,
   },
+  // 2026-06-13 — the brain read headline (answer-first).
+  brainRead: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.14)',
+    paddingBottom: 7,
+    marginBottom: 7,
+  },
+  brainReadHeadline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  brainReadClub: { color: '#00C896', fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
+  brainReadNums: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+  brainReadWhy: { color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: '600', marginTop: 3 },
+  brainReadTend: { color: '#F0C030', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  brainReadPast: { color: '#7CC0FF', fontSize: 12, fontWeight: '700', marginTop: 2 },
   targetIntelTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

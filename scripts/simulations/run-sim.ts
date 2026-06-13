@@ -48,6 +48,7 @@ import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
+import { composeShotRead } from '../../services/cnsShotRead';
 
 interface ScenarioResult {
   scenario: string;
@@ -1001,6 +1002,41 @@ check('Intent fix: "on the center of the green" marks it — offline + routed (L
     return okPrecheck && okRouter;
   })(),
   '"on the center of the green" / "mark the pin" marks the green offline; the cloud path is aliased too; plain position + yardage queries untouched');
+
+check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
+  // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
+  // distance + wind/elevation (plays-like) + the player's real bag + tendency +
+  // hazard into ONE read. Pure + offline-safe; past-perf gated to competitive.
+  (() => {
+    const calm = { wind_speed_mph: 0, wind_direction_deg: null, temp_f: 70 } as never;
+    // headwind from the south (180°) on a shot aimed north (0°) → plays longer
+    const headwind = { wind_speed_mph: 15, wind_direction_deg: 0, temp_f: 70 } as never;
+    // 1) real bag picks the closest club + a learned-carry "why" line
+    const a = composeShotRead({
+      rawYards: 165, weather: calm, shotBearingDeg: 0,
+      bag: { '7 Iron': 165, '8 Iron': 150 }, dominantMiss: 'right',
+      nearestHazard: { label: 'Bunker', yards: 150 }, isCompetition: false,
+    });
+    // 2) headwind into the face → plays-like LONGER than raw; a "wind" why line
+    const b = composeShotRead({
+      rawYards: 150, weather: headwind, shotBearingDeg: 0, bag: {},
+    });
+    // 3) elevation works with NO weather (offline) — uphill plays longer
+    const c = composeShotRead({ rawYards: 150, weather: null, shotBearingDeg: null, elevationDeltaFeet: 30, bag: {} });
+    // 4) past-perf only when competitive
+    const casual = composeShotRead({ rawYards: 150, weather: calm, shotBearingDeg: 0, bag: {}, isCompetition: false, pastScoreNote: 'bogey last 2' });
+    const comp = composeShotRead({ rawYards: 150, weather: calm, shotBearingDeg: 0, bag: {}, isCompetition: true, pastScoreNote: 'bogey last 2' });
+    const nul = composeShotRead({ rawYards: null, weather: calm, shotBearingDeg: 0, bag: {} });
+    return (
+      a?.club === '7 Iron' && a?.why.some(w => /carries ~165/.test(w)) &&
+        a?.tendencyNote === 'you miss right — favor the safe side' && a?.hazardNote === 'Bunker 150y' &&
+      b != null && b.playsLikeYards != null && b.rawYards != null && b.playsLikeYards > b.rawYards && b.why.some(w => /into the wind/.test(w)) &&
+      c != null && c.playsLikeYards === 160 && c.why.some(w => /uphill/.test(w)) && // 30ft/3 = +10y
+      casual?.pastPerfNote === null && comp?.pastPerfNote === 'bogey last 2' &&
+      nul === null
+    );
+  })(),
+  'one composed read: real-bag club + plays-like + wind/slope why + tendency + hazard; offline-safe; competitive-gated past-perf');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
