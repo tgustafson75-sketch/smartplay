@@ -1242,6 +1242,27 @@ check('Offline caddie: the MOAT read (plays-like + club) answers LOCALLY, no net
   })(),
   'plays-like composes the club + wind-adjusted distance locally (composeShotRead + cached weather); routed before raw yardage; offline-safe');
 
+check('Offline caddie: wind status answers locally (head/tail/cross from cached weather)',
+  // 2026-06-13 — another offline-mute fix: "what's the wind / how's the wind / windy"
+  // answers locally from cached weather, described relative to the shot (into your
+  // face / at your back / cross) via the playsLike wind decomposition. Routed AFTER
+  // plays-like so "with the wind" still goes to the distance read. Honest no-reading.
+  (() => {
+    const src = read('services/localStatusResponder.ts');
+    return (
+      /import \{ playsLikeDistance \} from '\.\.\/utils\/playsLike'/.test(src) &&
+      /wind:\s*\/\\b\(wind\|windy/.test(src) &&                 // the wind matcher
+      /if \(RX\.wind\.test\(t\)\) \{\s*\n\s*return windReply\(lang\);/.test(src) &&
+      /function windReply/.test(src) &&
+      /along_wind_mph/.test(src) && /cross_wind_mph/.test(src) && // relative components
+      /queryType: 'wind'/.test(src) &&
+      // plays-like routed BEFORE wind (so "with the wind" → distance, not wind status)
+      src.indexOf('RX.playsLike.test(t)') < src.indexOf('RX.wind.test(t)') &&
+      /mph < 3/.test(src)                                       // calm path
+    );
+  })(),
+  'wind status composes locally from cached weather + shot bearing (head/tail/cross); routed after plays-like; offline-safe');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

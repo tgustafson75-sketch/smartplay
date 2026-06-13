@@ -48,6 +48,7 @@ import { bagDistances } from './shotStrategy';
 // is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
 import { composeShotRead } from './cnsShotRead';
 import { getCachedWeatherEvenIfStale } from './weatherService';
+import { playsLikeDistance } from '../utils/playsLike';
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
@@ -66,6 +67,7 @@ export type LocalReplyResult = {
     | 'club_current'
     | 'club_recommend'
     | 'plays_like'
+    | 'wind'
     | 'last_shot'
     | 'handicap'
     | 'course_memory'
@@ -106,6 +108,11 @@ const L: Record<LocalReplyLanguage, {
   noBag: string;
   clubIffy: string;
   playsLike: (raw: number, plays: number, club: string | null, why: string) => string;
+  windCalm: (mph: number) => string;
+  windRelative: (mph: number, desc: string) => string;
+  windPlain: (mph: number) => string;
+  windInto: string; windHelp: string; windL2R: string; windR2L: string;
+  noWind: string;
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
   handicapIs: (h: number) => string;
@@ -144,6 +151,12 @@ const L: Record<LocalReplyLanguage, {
       const clubLine = club ? ` That's your ${club}.` : '';
       return `${head}${reason}.${clubLine}`;
     },
+    windCalm: (mph) => mph <= 1 ? 'Dead calm right now.' : `Pretty calm — ${mph} mile an hour.`,
+    windRelative: (mph, desc) => `${mph} miles an hour, ${desc}.`,
+    windPlain: (mph) => `${mph} miles an hour.`,
+    windInto: 'into your face', windHelp: 'at your back',
+    windL2R: 'a left-to-right cross', windR2L: 'a right-to-left cross',
+    noWind: "I don't have a wind reading right now.",
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' pulled left' : dir === 'right' ? ' out to the right' : dir === 'straight' ? ' dead straight' : '';
       if (c && d != null) return `Your last one was a ${c}, ${d} yards${where}.`;
@@ -187,6 +200,12 @@ const L: Record<LocalReplyLanguage, {
       const clubLine = club ? ` Es tu ${club}.` : '';
       return `${head}.${clubLine}`;
     },
+    windCalm: (mph) => mph <= 1 ? 'Sin viento ahora mismo.' : `Bastante calmo — ${mph} millas por hora.`,
+    windRelative: (mph, desc) => `${mph} millas por hora, ${desc}.`,
+    windPlain: (mph) => `${mph} millas por hora.`,
+    windInto: 'de frente', windHelp: 'a favor',
+    windL2R: 'cruzado de izquierda a derecha', windR2L: 'cruzado de derecha a izquierda',
+    noWind: 'No tengo lectura de viento ahora mismo.',
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' a la izquierda' : dir === 'right' ? ' a la derecha' : dir === 'straight' ? ' recto' : '';
       if (c && d != null) return `Tu último fue un ${c}, ${d} yardas${where}.`;
@@ -230,6 +249,12 @@ const L: Record<LocalReplyLanguage, {
       const clubLine = club ? ` 用你的${club}。` : '';
       return `${head}。${clubLine}`;
     },
+    windCalm: (mph) => mph <= 1 ? '现在几乎无风。' : `比较平静——每小时${mph}英里。`,
+    windRelative: (mph, desc) => `每小时${mph}英里，${desc}。`,
+    windPlain: (mph) => `每小时${mph}英里。`,
+    windInto: '迎风', windHelp: '顺风',
+    windL2R: '从左到右的侧风', windR2L: '从右到左的侧风',
+    noWind: '现在没有风力读数。',
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? '偏左' : dir === 'right' ? '偏右' : dir === 'straight' ? '很直' : '';
       if (c && d != null) return `你上一杆是${c}，${d}码${where}。`;
@@ -273,6 +298,9 @@ const RX = {
   // PLAYS-LIKE — the composed read (distance adjusted for wind/elevation). Check
   // BEFORE yardage since "how far does it play" also contains "how far".
   playsLike:  /\b(plays?\s+like|playing\s+(?:distance|like)|how\s+far\s+does\s+it\s+play|with\s+the\s+wind|into\s+the\s+wind|adjusted?\s+(?:for\s+)?(?:wind|elevation)|effective\s+(?:distance|yardage))\b/i,
+  // WIND status ("what's the wind / how's the wind / windy / breeze"). Checked AFTER
+  // plays-like so "with/into the wind" routes to the distance read, not here.
+  wind:       /\b(wind|windy|breeze|breezy|gust(?:s|ing|y)?|how(?:'s|s)?\s+(?:the\s+)?wind)\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
   // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
   // gate). Save = the stretches the caddie just gave (from the conversation log);
@@ -325,6 +353,10 @@ export function tryLocalReply(
   // ── PLAYS-LIKE (the composed moat read — check before plain yardage) ──
   if (RX.playsLike.test(t)) {
     return composedReadReply(lang);
+  }
+  // ── WIND (cached weather → head/tail/cross relative to the shot) ──
+  if (RX.wind.test(t)) {
+    return windReply(lang);
   }
   // ── YARDAGE (must check first; "yards" appears in other phrases) ──
   if (RX.yardage.test(t)) {
@@ -537,6 +569,41 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
   let text = L[lang].playsLike(read.rawYards ?? rawYards, read.playsLikeYards, read.club, why);
   if (quality.level === 'weak') text += L[lang].clubIffy;
   return { text, queryType: 'plays_like' };
+}
+
+// Offline caddie — WIND status from cached weather. When the green + GPS give a
+// shot bearing, describe it relative to the shot (into your face / at your back /
+// cross); otherwise just the speed. Honest "no reading" when no cached weather.
+function windReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const fix = getLastFix();
+  if (!fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
+    return { text: L[lang].noWind, queryType: 'wind' };
+  }
+  const weather = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
+  if (!weather) {
+    return { text: L[lang].noWind, queryType: 'wind' };
+  }
+  const mph = Math.round(weather.wind_speed_mph ?? 0);
+  if (mph < 3) {
+    return { text: L[lang].windCalm(mph), queryType: 'wind' };
+  }
+  // Relative to the shot, when we can derive a bearing to the green.
+  const round = useRoundStore.getState();
+  const green = typeof round.currentHole === 'number' && round.currentHole > 0
+    ? resolveGreenCoords(round.currentHole) : null;
+  if (green?.middle) {
+    const bearing = bearingDegrees({ lat: fix.lat, lng: fix.lng }, green.middle);
+    const b = playsLikeDistance(150, weather, bearing); // distance is a dummy — we only read the components
+    const along = b.along_wind_mph; // + tailwind, − headwind
+    const cross = b.cross_wind_mph; // + left-to-right, − right-to-left
+    if (along != null && cross != null) {
+      const desc = Math.abs(along) >= Math.abs(cross)
+        ? (along < 0 ? L[lang].windInto : L[lang].windHelp)
+        : (cross > 0 ? L[lang].windL2R : L[lang].windR2L);
+      return { text: L[lang].windRelative(mph, desc), queryType: 'wind' };
+    }
+  }
+  return { text: L[lang].windPlain(mph), queryType: 'wind' };
 }
 
 // Offline caddie Tier 1 — LAST SHOT recall, straight from the logged round state
