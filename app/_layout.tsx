@@ -987,6 +987,11 @@ function AppNavigator() {
           name="practice/smartplan"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — Ball Fit: the brain matches a ball to your game (CNS). */}
+        <Stack.Screen
+          name="ball-fit"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}

@@ -2854,6 +2854,11 @@ export default function CaddieTab() {
                 onPress={() => { setToolsExpanded(false); router.push('/practice/smartplan' as never); }}
               />
               <ToolFabIcon
+                icon="golf-outline"
+                label="Ball Fit"
+                onPress={() => { setToolsExpanded(false); router.push('/ball-fit' as never); }}
+              />
+              <ToolFabIcon
                 icon="library-outline"
                 label="Drills"
                 onPress={() => { setToolsExpanded(false); router.push('/drills' as never); }}

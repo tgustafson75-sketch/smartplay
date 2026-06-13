@@ -55,6 +55,7 @@ import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan'
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
+import { composeBallFit } from '../../services/cnsBallFitting';
 
 interface ScenarioResult {
   scenario: string;
@@ -1052,6 +1053,36 @@ check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe
     );
   })(),
   'one composed read: real-bag club + plays-like + wind/slope why + tendency + hazard; offline-safe; competitive-gated past-perf');
+
+check('Ball Fit MOAT: brain matches a ball to the game from CNS signals (offline-safe)',
+  // 2026-06-13 — "we are the answer." composeBallFit fuses handicap + driver-carry
+  // speed band + miss + wedge use + stated goal into ONE answer-first profile +
+  // representative balls. Pure + offline-safe; why-lines built only from real signals;
+  // honest caveat (game-data match, not a launch-monitor fit) always present.
+  (() => {
+    // 1) low handicap + fast carry + wedge work → tour
+    const tour = composeBallFit({ handicap: 4, driverCarryYards: 265, shortGameWedgeSamples: 12, missType: null });
+    // 2) slower swing + mid handicap → soft, low-compression
+    const soft = composeBallFit({ handicap: 15, driverCarryYards: 190 });
+    // 3) slice + higher handicap → distance (lower-spin reduces curve, honestly)
+    const slicer = composeBallFit({ handicap: 22, missType: 'slice', driverCarryYards: 210 });
+    // 4) budget goal → value
+    const value = composeBallFit({ handicap: 26, goal: 'just want to stop losing balls and save money', experience: 'starting' });
+    // 5) zero signal → never throws, low confidence, still a complete read + caveat
+    const empty = composeBallFit({});
+    return (
+      tour.profile === 'tour' && tour.examples.length >= 2 && tour.why.length >= 1 &&
+        tour.why.some(w => /spin|control|wedge|compress/i.test(w)) && tour.confidence === 'high' &&
+      soft.profile === 'soft-feel' && soft.why.some(w => /compression|easier|feel|forgiv/i.test(w)) &&
+      slicer.profile === 'distance' && slicer.why.some(w => /slice/i.test(w) && /won't fix|reduces/i.test(w)) &&
+      value.profile === 'value' &&
+      // honesty: every result carries the not-a-monitor-fit caveat
+      [tour, soft, slicer, value, empty].every(r => /not a launch-monitor/i.test(r.caveat)) &&
+      // offline-safe: empty input still returns a complete, low-confidence read
+      empty.confidence === 'low' && empty.examples.length >= 2 && empty.why.length >= 1
+    );
+  })(),
+  'one composed read: profile + measured why + real example balls; offline-safe; honest no-spin-measured caveat always present');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
