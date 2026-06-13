@@ -208,6 +208,11 @@ export interface RoundRecord {
   scores: Record<number, number>;
   putts: Record<number, number>;
   shots: ShotResult[];
+  // 2026-06-13 (Tim) — short caddie summary shown on the dashboard Recent Rounds.
+  // For new rounds the rich LLM recap (planStorage) is preferred; this is a
+  // deterministic baseline, also backfilled onto past in-app rounds that predate
+  // the recap feature (see backfillRoundSummaries).
+  summary?: string;
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
   // 2026-05-17 — Phase 413 — wearable / health-data round enrichment.
@@ -390,6 +395,9 @@ interface RoundState {
    * recomputes handicap_index when course rating/slope are available.
    */
   endRound: () => string;
+  /** 2026-06-13 — backfill a deterministic caddie summary onto past IN-APP rounds
+   *  that lack one (Golfshot imports excluded). Idempotent; no-op if nothing to do. */
+  backfillRoundSummaries: () => void;
   /**
    * 2026-05-17 — Phase 413 — attach a health-data snapshot to the most
    * recently saved RoundRecord. Called by the round-end flow AFTER
@@ -986,6 +994,26 @@ export const useRoundStore = create<RoundState>()(
           steps: health.totalSteps,
           dist: health.distanceMeters,
           hr_avg: health.heartRateAvg,
+        });
+      },
+
+      backfillRoundSummaries: () => {
+        set(s => {
+          let changed = false;
+          const updated = s.roundHistory.map(r => {
+            // Skip rounds that already have a summary, and Golfshot imports
+            // (id prefixed 'imported_' — score-only, no in-app shots to read).
+            if (r.summary || r.id.startsWith('imported_')) return r;
+            changed = true;
+            const vs = r.scoreVsPar;
+            const vsStr = vs === 0 ? 'even par' : vs > 0 ? `+${vs}` : `${vs}`;
+            const where = r.courseName ? ` at ${r.courseName}` : '';
+            const summary = r.holesPlayed > 0
+              ? `${r.totalScore > 0 ? `${r.totalScore}, ` : ''}${vsStr} through ${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}${where}.`
+              : `Round${where}.`;
+            return { ...r, summary };
+          });
+          return changed ? { roundHistory: updated } : {};
         });
       },
 

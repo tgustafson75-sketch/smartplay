@@ -1256,6 +1256,26 @@ check('Highlight swings: star an on-course SM swing → shows on the round score
   })(),
   'on-course swing → star it → it appears on that round\'s scorecard as a highlight, tap opens the full review');
 
+check('Retro: backfill caddie summaries onto past IN-APP rounds (not Golfshot imports)',
+  // 2026-06-13 — Tim: retro the caddie summary for rounds played in the app, not
+  // the Golfshot imports. backfillRoundSummaries sets a deterministic baseline on
+  // in-app rounds lacking one; imports (id 'imported_…') are skipped; idempotent.
+  (() => {
+    const rs = read('store/roundStore.ts');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    return (
+      /backfillRoundSummaries: \(\) =>/.test(rs) &&
+      /r\.summary \|\| r\.id\.startsWith\('imported_'\)/.test(rs) && // skip done + imports
+      /through \$\{r\.holesPlayed\} hole/.test(rs) &&                // deterministic from saved record
+      /return changed \? \{ roundHistory: updated \} : \{\}/.test(rs) && // idempotent (no churn)
+      /summary\?: string/.test(rs) &&                                // RoundRecord field
+      // dashboard runs it once + shows record summary as the fallback
+      /useRoundStore\.getState\(\)\.backfillRoundSummaries\(\)/.test(dash) &&
+      /recapSummaries\[r\.id\] \|\| r\.summary/.test(dash)
+    );
+  })(),
+  'past in-app rounds get a deterministic caddie summary on the dashboard; Golfshot imports excluded; idempotent');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

@@ -90,6 +90,11 @@ export default function Dashboard() {
     [practiceByDrill],
   );
 
+  // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
+  // IN-APP rounds that predate the recap feature (Golfshot imports excluded).
+  // Idempotent; no-op once every in-app round has a summary.
+  useEffect(() => { useRoundStore.getState().backfillRoundSummaries(); }, []);
+
   // 2026-06-13 (Tim) — carry the caddie's round summary to the dashboard. The recap
   // (overall_kevin_summary) is stored per-round in planStorage; load it for the
   // visible Recent Rounds rows so each shows the caddie's read, not just the score.
@@ -583,9 +588,9 @@ export default function Dashboard() {
                       <Text style={[styles.roundMeta, { color: colors.text_muted }]}>
                         {dateStr} · {r.holesPlayed} holes{r.isCompetition ? ' · competition' : ''}
                       </Text>
-                      {recapSummaries[r.id] ? (
+                      {(recapSummaries[r.id] || r.summary) ? (
                         <Text style={[styles.roundSummary, { color: colors.text_secondary }]} numberOfLines={2}>
-                          {recapSummaries[r.id]}
+                          {recapSummaries[r.id] || r.summary}
                         </Text>
                       ) : null}
                     </View>
