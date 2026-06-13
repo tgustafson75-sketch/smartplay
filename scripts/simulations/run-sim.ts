@@ -1038,6 +1038,23 @@ check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe
   })(),
   'one composed read: real-bag club + plays-like + wind/slope why + tendency + hazard; offline-safe; competitive-gated past-perf');
 
+check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
+  // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
+  // pinging the cloud less. A persisted counter tags every query local vs cloud at
+  // the router fork; the local hit-rate (shown on the owner surface) should climb.
+  (() => {
+    const store = read('store/agentBrainStats.ts');
+    const router = read('services/voiceCommandRouter.ts');
+    const ui = read('app/voice-misses.tsx');
+    return /export const useAgentBrainStats = create/.test(store) &&
+      /localAnswered:/.test(store) && /cloudEscalated:/.test(store) &&
+      /localHitRate: \(\) =>/.test(store) && /persist\(/.test(store) && // accumulates across rounds
+      /if \(localIntent\) useAgentBrainStats\.getState\(\)\.noteLocal\(\)/.test(router) &&
+      /else useAgentBrainStats\.getState\(\)\.noteCloud\(\)/.test(router) &&
+      /BRAIN SELF-SUFFICIENCY/.test(ui);
+  })(),
+  'every voice query is tagged local-answered vs cloud-escalated, persisted + surfaced — the agent-growth health metric');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

@@ -22,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useVoiceMissStore, type VoiceMissEntry, type VoiceMissType } from '../store/voiceMissStore';
+import { useAgentBrainStats } from '../store/agentBrainStats';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
 
 function formatTimestamp(ms: number): string {
@@ -49,6 +50,12 @@ export default function VoiceMissesScreen() {
   const entries = useVoiceMissStore(s => s.entries);
   const clearAll = useVoiceMissStore(s => s.clearAll);
   const remove = useVoiceMissStore(s => s.remove);
+  // Self-growing-agent health metric: how much the brain answers locally (0 tokens)
+  // vs escalating to the cloud. Should trend UP as the CNS grows.
+  const localAnswered = useAgentBrainStats(s => s.localAnswered);
+  const cloudEscalated = useAgentBrainStats(s => s.cloudEscalated);
+  const brainTotal = localAnswered + cloudEscalated;
+  const brainRate = brainTotal > 0 ? Math.round((localAnswered / brainTotal) * 100) : 0;
   const ownerEmail = usePlayerProfileStore(s => s.email);
   const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
 
@@ -114,6 +121,18 @@ export default function VoiceMissesScreen() {
             color={entries.length === 0 ? colors.text_muted : colors.accent}
           />
         </TouchableOpacity>
+      </View>
+
+      {/* 2026-06-13 — Self-growing-agent health: local-answered vs cloud-escalated.
+          The whole thesis is this number climbing over time. */}
+      <View style={[styles.brainStat, { borderColor: colors.border }]}>
+        <Text style={[styles.brainStatLabel, { color: colors.text_muted }]}>BRAIN SELF-SUFFICIENCY</Text>
+        <Text style={[styles.brainStatValue, { color: colors.accent }]}>
+          {brainTotal > 0 ? `${brainRate}% answered locally` : 'no queries yet'}
+        </Text>
+        <Text style={[styles.brainStatSub, { color: colors.text_muted }]}>
+          {localAnswered} local · {cloudEscalated} cloud — should climb as the brain grows
+        </Text>
       </View>
 
       {entries.length === 0 ? (
@@ -245,6 +264,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 },
+  brainStat: {
+    marginHorizontal: 16, marginTop: 4, marginBottom: 8,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderRadius: 12,
+  },
+  brainStatLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  brainStatValue: { fontSize: 18, fontWeight: '900', marginTop: 3 },
+  brainStatSub: { fontSize: 11, fontWeight: '600', marginTop: 3 },
   list: { padding: 12, gap: 8 },
   entry: {
     padding: 12,

@@ -3,6 +3,7 @@ import { parseVoiceIntent } from './voiceCommandParser';
 import { useVoiceMissStore, type VoiceMissType } from '../store/voiceMissStore';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
+import { useAgentBrainStats } from '../store/agentBrainStats';
 
 export interface RoutingLog {
   timestamp: number;
@@ -62,6 +63,13 @@ export class VoiceCommandRouter {
     // if precheck is wrong, the handler still produces a correct
     // local answer (Phase 3 localStatusResponder proved the patterns).
     const localIntent = precheckLocalIntent(text);
+    // Self-growing-agent telemetry: precheck match = answered locally (0 tokens);
+    // a miss escalates to the cloud classifier. The local hit-rate should climb
+    // as the brain grows. (self-growing-agent-architecture)
+    try {
+      if (localIntent) useAgentBrainStats.getState().noteLocal();
+      else useAgentBrainStats.getState().noteCloud();
+    } catch { /* telemetry is best-effort, never blocks routing */ }
     const intent = localIntent ?? await this.parse(text, context, apiUrl);
     const result = await this.dispatch(intent, context);
     this.recordHistory(intent, result);
