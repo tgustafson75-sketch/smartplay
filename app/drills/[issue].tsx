@@ -147,6 +147,31 @@ export default function DrillDetail() {
             >
               <Text style={[styles.drillName, { color: colors.text_primary }]}>{drill.name}</Text>
               <Text style={[styles.drillSteps, { color: colors.text_muted }]}>{drill.steps}</Text>
+              {/* 2026-06-13 (#5) — drills with a practice descriptor open Smart
+                  Motion in DRILL mode: a 3–5 shot session that reads this drill
+                  and reports only its focus metric. */}
+              {drill.practice && (
+                <Pressable
+                  onPress={() => router.push({
+                    pathname: '/swinglab/smartmotion',
+                    params: {
+                      drillId: entry.id,
+                      drillName: drill.name,
+                      drillShots: String(drill.practice!.shotCount),
+                      drillFocus: drill.practice!.focus,
+                      drillShotType: drill.practice!.shotType,
+                    },
+                  })}
+                  style={[styles.practiceBtn, { backgroundColor: colors.accent }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Practice ${drill.name} in Smart Motion`}
+                >
+                  <Ionicons name="videocam-outline" size={16} color="#06140b" />
+                  <Text style={styles.practiceBtnText}>
+                    {`Practice this drill · ${drill.practice.shotCount} shots`}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </View>
@@ -360,6 +385,11 @@ const styles = StyleSheet.create({
   },
   drillName: { fontSize: 17, fontWeight: '800', marginBottom: 6 },
   drillSteps: { fontSize: 13, lineHeight: 19 },
+  practiceBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    marginTop: 12, paddingVertical: 11, borderRadius: 10,
+  },
+  practiceBtnText: { color: '#06140b', fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
   watchCard: {
     flexDirection: 'row',
     alignItems: 'center',

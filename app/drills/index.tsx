@@ -58,6 +58,12 @@ export default function DrillsIndex() {
     return [...pinned, ...rest];
   }, []);
 
+  // 2026-06-13 (Tim) — Tank gets his own FULL-WIDTH hero card at the top, pulled
+  // out of the grid. That keeps the 2-col grid below in clean pairs (removing
+  // Tank, +adding the new Tempo card nets even) and gives Tank top billing.
+  const tankEntry = orderedEntries.find(e => e.id === 'tank_caddie_practice');
+  const gridEntries = orderedEntries.filter(e => e.id !== 'tank_caddie_practice');
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       {/* HEADER */}
@@ -90,10 +96,22 @@ export default function DrillsIndex() {
           video links. Tap to dive in.
         </Text>
 
-        {/* 2-COL GRID — render rows of 2 cards. Order is Tank → Randy
-            → rest of catalog (see PINNED_DRILL_ORDER above). */}
+        {/* TANK HERO — full-width card at the top (Tim: "Tank gets his own
+            full-size card"), so the grid below stays in clean twos. */}
+        {tankEntry && (
+          <DrillCard
+            key={tankEntry.id}
+            entry={tankEntry}
+            colors={colors}
+            oneCol={true}
+            onPress={() => router.push(`/drills/${tankEntry.id}` as never)}
+          />
+        )}
+
+        {/* 2-COL GRID — the rest of the catalog in pairs (Randy → faults →
+            Tempo). Tank is the hero above; even count keeps clean rows. */}
         <View style={styles.grid}>
-          {orderedEntries.map((entry) => (
+          {gridEntries.map((entry) => (
             <DrillCard
               key={entry.id}
               entry={entry}

@@ -123,7 +123,7 @@ export type SwingSource = 'live_cage' | 'uploaded_video';
 // Additive classifier layered ON TOP of `source` (not a replacement): smart_motion =
 // a SmartMotion capture (cage / range / course), coach = a Coach Mode lesson (gets the
 // instructor report), upload = a plain phone video. Legacy sessions infer it from source.
-export type CaptureKind = 'smart_motion' | 'coach' | 'upload';
+export type CaptureKind = 'smart_motion' | 'coach' | 'upload' | 'drill';
 export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'putt' | 'chip' | 'other';
 
 export interface UploadMetadata {
@@ -443,13 +443,15 @@ interface CageState {
     masterVideoPath: string;
     club: string;
     upload: UploadMetadata;
-    shots: Array<{
+    shots: {
       correlationId: string;
       detectionOffsetSeconds: number;
       clipStartSeconds: number;
       clipEndSeconds: number;
       detectionMethod: 'audio_transient' | 'manual';
-    }>;
+    }[];
+    /** 2026-06-13 — 'drill' when this session was launched from a drill card. */
+    captureKind?: CaptureKind;
   }) => string;
   /** Phase BW — store the per-shot Phase K analysis result so the review
    *  UI can render per-swing cards for multi-swing sessions. */
@@ -883,7 +885,7 @@ export const useCageStore = create<CageState>()(
         return sessionId;
       },
 
-      ingestLiveCageSession: ({ masterVideoPath, club, upload, shots }) => {
+      ingestLiveCageSession: ({ masterVideoPath, club, upload, shots, captureKind }) => {
         // 2026-06-05 — Dedupe. Same shape as ingestUploadedSwing.
         // Live cage uniqueness = masterVideoPath + first shot
         // correlationId (correlationId is per-detection-event, so
@@ -937,7 +939,7 @@ export const useCageStore = create<CageState>()(
           rootCause: null,
           summary: null,
           source: 'live_cage',
-          captureKind: 'smart_motion',
+          captureKind: captureKind ?? 'smart_motion',
           upload,
           analysis_status: 'pending',
           analysis_error: null,

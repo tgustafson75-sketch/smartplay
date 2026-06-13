@@ -337,7 +337,15 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { clipUri: clipUriParam, angle: angleParam } = useLocalSearchParams<{ clipUri?: string; angle?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string }>();
+  // 2026-06-13 (#5) — DRILL mode. When launched from a drill card, Smart Motion
+  // reads the drill: it labels the capture, caps the session at the drill's shot
+  // count (3–5), tags the session captureKind 'drill', and (focus) names the one
+  // metric this drill is about. A normal Smart Motion launch leaves all of these
+  // undefined and behaves exactly as before.
+  const isDrill = typeof drillId === 'string' && drillId.length > 0;
+  const drillShotCount = isDrill ? Math.max(1, Math.min(5, Number(drillShots) || 3)) : null;
 
   const profile = usePlayerProfileStore();
   // Swinger's handedness — the active family member when recording someone
@@ -909,13 +917,14 @@ export default function SmartMotion() {
                 // a real acoustic strike carries a non-zero peakDb; a video-located swing is 0
                 detectionMethod: (s.peakDb ?? 0) !== 0 ? 'audio_transient' as const : 'manual' as const,
               })),
+              captureKind: isDrill ? 'drill' : 'smart_motion',
             })
           : useCageStore.getState().ingestUploadedSwing({
               clipUri: uri,
               club: 'unknown',
               upload: uploadMeta,
               source: 'live_cage',
-              captureKind: 'smart_motion',
+              captureKind: isDrill ? 'drill' : 'smart_motion',
             });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
@@ -1093,7 +1102,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
@@ -2254,6 +2263,20 @@ export default function SmartMotion() {
           </View>
         </View>
 
+        {/* 2026-06-13 (#5) — DRILL banner. When Smart Motion was opened from a
+            drill card, name the drill + its shot count over the live view so the
+            session reads as "practicing THIS drill," not a generic capture. */}
+        {isDrill && (phase === 'setup' || phase === 'recording') ? (
+          <View style={[styles.drillBannerWrap, { top: insets.top + 46 }]} pointerEvents="none">
+            <View style={styles.drillBanner}>
+              <Ionicons name="barbell-outline" size={13} color="#06140b" />
+              <Text style={styles.drillBannerText} numberOfLines={1}>
+                {`DRILL · ${drillName ?? 'Practice'} · ${drillShotCount} shots`}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* SETUP TOOL RAIL — translucent icon buttons on the right edge so the
             bottom + ball box stay clear. Calibrate · scan club · place ball.
             Same handlers as the old bars, just compact + out of the way. */}
@@ -2917,6 +2940,12 @@ const styles = StyleSheet.create({
   },
   dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
+  drillBannerWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
+  drillBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#7CE04F', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 13,
+  },
+  drillBannerText: { color: '#06140b', fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
 
   rightRail: { position: 'absolute', right: 8, width: 124, gap: 8, zIndex: 4 },
   leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },

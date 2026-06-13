@@ -914,6 +914,40 @@ check('Round Rest mode: store toggles + OLED-black overlay wired globally (#8)',
   })(),
   'idle-in-round → near-black rest screen that keeps GPS alive; any touch wakes it, OTA-safe (no native dep)');
 
+check('Drill engine: drill card → Smart Motion drill session (#5)',
+  // 2026-06-13 — Tim's reframe: a link + an engine, not an overlay rebuild. A drill
+  // with a practice descriptor opens Smart Motion in DRILL mode (3-5 shots, labeled,
+  // captureKind 'drill'). Flagship = Tempo × Swing %.
+  (() => {
+    const cat = read('data/drillCatalog.ts');
+    const detail = read('app/drills/[issue].tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const store = read('store/cageStore.ts');
+    const lib = read('app/swinglab/swing/[swing_id].tsx');
+    const idx = read('app/drills/index.tsx');
+    return (
+      // descriptor + flagship tempo drill
+      /export type DrillPractice = \{/.test(cat) &&
+      /id: 'tempo_consistency'/.test(cat) &&
+      /practice: \{ shotCount: 5, shotType: 'full', focus: 'tempo', swingPercents: \[50, 75, 100\] \}/.test(cat) &&
+      // 'drill' is a real capture kind, threaded through ingest
+      /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload' \| 'drill'/.test(store) &&
+      /captureKind: captureKind \?\? 'smart_motion'/.test(store) &&
+      // drill card launches Smart Motion with the drill params
+      /drill\.practice &&/.test(detail) && /pathname: '\/swinglab\/smartmotion'/.test(detail) &&
+      /drillShots: String\(drill\.practice!\.shotCount\)/.test(detail) &&
+      // Smart Motion reads the drill, caps 3-5, tags the session
+      /const isDrill = typeof drillId === 'string'/.test(sm) &&
+      /Math\.max\(1, Math\.min\(5, Number\(drillShots\)/.test(sm) &&
+      /captureKind: isDrill \? 'drill' : 'smart_motion'/.test(sm) &&
+      /DRILL · \$\{drillName \?\? 'Practice'\} · \$\{drillShotCount\} shots/.test(sm) &&
+      // library badge knows 'drill'; Tank is the full-width hero
+      /drill:\s*\{ label: 'Drill'/.test(lib) &&
+      /const tankEntry = orderedEntries\.find/.test(idx) && /oneCol=\{true\}/.test(idx)
+    );
+  })(),
+  'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank is the hero, grid stays in twos');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
@@ -1906,8 +1940,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const segs = segmentsRef\.current;/.test(smA) &&
       /segs\.length > 1[\s\S]{0,120}ingestLiveCageSession\(\{/.test(smA) &&
       /clipStartSeconds: s\.startMs \/ 1000,/.test(smA) &&
-      /captureKind: 'smart_motion',/.test(read('store/cageStore.ts')),
-    'a multi-swing cage reel ingests as N per-swing shots with clip boundaries (library shows all swings, each scrubbing its window); single swings keep the simple path; both tagged smart_motion');
+      // live-cage session defaults to smart_motion, or 'drill' when a drill passes it through (#5)
+      /captureKind: captureKind \?\? 'smart_motion',/.test(read('store/cageStore.ts')),
+    'a multi-swing cage reel ingests as N per-swing shots with clip boundaries (library shows all swings, each scrubbing its window); single swings keep the simple path; smart_motion by default, drill when launched from a drill');
 
   check('Custom caddie always has a voice (male/female default → Kevin/Serena)',
     // 2026-06-12 (Tim) — custom keeps its generated face but speaks with a real default

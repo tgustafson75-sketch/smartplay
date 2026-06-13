@@ -37,11 +37,31 @@ export type CanonicalIssue =
   // observation — six prior + chipping + tank_caddie = eight, two
   // clean rows of four).
   | 'chipping_inconsistent'
-  | 'tank_caddie_practice';
+  | 'tank_caddie_practice'
+  // 2026-06-13 (#5) — Tempo isn't a fault, it's the flagship practice drill:
+  // tie tempo to swing %. Lives on the Drills surface like the rest.
+  | 'tempo_consistency';
+
+// 2026-06-13 (#5) — optional "practice in Smart Motion" descriptor. When set, the
+// drill detail screen shows a "Practice this drill" button that opens Smart Motion
+// in DRILL mode: it reads this descriptor to cap the session at shotCount swings
+// (3–5), label the capture, and surface only the metric the drill is about.
+export type DrillFocus = 'tempo' | 'contact' | 'path';
+export type DrillShotType = 'chip' | 'pitch' | 'full';
+export type DrillPractice = {
+  /** Swings to record for this drill. Tim's rule: keep drills to 3–5. */
+  shotCount: number;
+  shotType: DrillShotType;
+  /** The single thing the engine reports for this drill — kept honest. */
+  focus: DrillFocus;
+  /** Tempo drill only: the swing efforts to work through (e.g. 50/75/100). */
+  swingPercents?: readonly number[];
+};
 
 export type Drill = {
   name: string;
   steps: string;
+  practice?: DrillPractice;
 };
 
 export type DrillEntry = {
@@ -70,7 +90,6 @@ const CARD_POSTURE = require('../assets/drills/posture.png');
 const CARD_WEIGHT_TRANSFER = require('../assets/drills/weight-transfer.png');
 const CARD_BALL_POSITION = require('../assets/drills/ball-position.png');
 const CARD_TEMPO = require('../assets/drills/tempo.png');
-void CARD_TEMPO; // Reserved for future tempo-related drill additions.
 
 export const DRILL_CATALOG: readonly DrillEntry[] = [
   {
@@ -301,6 +320,30 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     // as a dedicated tap-to-zoom section on the drill detail screen
     // (text is dense — the modal is the right place to read it).
     tipsImage: require('../assets/tank-tips/early-extension.png'),
+  },
+  // 2026-06-13 (#5) — Flagship practice drill: Tempo × Swing %. Not a fault —
+  // the first drill wired to the Smart Motion drill engine. Reuses the honest
+  // tempo read + the effort% estimate already in the app; nothing fabricated.
+  {
+    id: 'tempo_consistency',
+    title: 'Tempo',
+    primary: 'Smooth, repeatable tempo — the same rhythm whether you swing easy or hard.',
+    commonFaults: [
+      'Backswing rushes the moment you try to hit it harder',
+      'Quick from the top — no transition pause',
+      'Tempo drifts from club to club',
+    ],
+    missPattern: 'Inconsistent strike + dispersion',
+    drills: [
+      {
+        name: 'Tempo × Swing %',
+        steps:
+          'Pick an effort — 50%, then 75%, then 100%. Hit 3–5 balls and hold the SAME rhythm at every level. Your tempo ratio should barely move even as the power climbs. Most players rush the backswing when they go after it — this makes that visible.',
+        practice: { shotCount: 5, shotType: 'full', focus: 'tempo', swingPercents: [50, 75, 100] },
+      },
+    ],
+    videoCategory: 'tempo',
+    cardImage: CARD_TEMPO,
   },
 ];
 

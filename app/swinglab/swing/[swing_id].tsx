@@ -614,6 +614,7 @@ export default function SwingDetail() {
     smart_motion: { label: isMultiSwing ? 'Smart Motion · Session' : 'Smart Motion', icon: 'flash-outline' as const, tint: colors.accent },
     coach:        { label: 'Coach Lesson', icon: 'school-outline' as const, tint: '#F0C030' },
     upload:       { label: 'Upload', icon: 'cloud-upload-outline' as const, tint: colors.text_muted },
+    drill:        { label: 'Drill', icon: 'barbell-outline' as const, tint: colors.accent },
   }[captureKind];
 
   // Phase V.7 — Re-run Phase K on this session with the post-V.6 pipeline.
