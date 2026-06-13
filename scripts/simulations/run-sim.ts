@@ -778,12 +778,29 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
   'gradient fade + glass cards + panel hidden while placing the ball box');
 
 // ─── 2026-06-09: SmartMotion unstack + workflow fixes ──────────────────────
-check('Motion data is unstacked (off by default, gated behind Motion step)',
-  // showSkeleton defaults OFF (clean video) and gates the pose/tempo/stat compute+render.
-  /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
+check('Motion ON by default (async overlay) — toggle still gates compute/render',
+  // 2026-06-13 — Tim: skeleton ON by default. The video plays immediately and the
+  // pose overlay draws async, so default-on never slows the replay; the Motion chip
+  // still toggles it OFF (and the !showSkeleton/showSkeleton gates still hold) so a
+  // clean frame is one tap away.
+  /const \[showSkeleton, setShowSkeleton\] = useState\(true\)/.test(smSrc) &&
     /Motion overlay/.test(smSrc) &&
     /!showSkeleton\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
-  'pose/tempo/stat cards only compute + render when Motion is on (clean video default)');
+  'skeleton/tempo/stat overlay defaults on but is fully toggle-gated for a clean frame');
+
+check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressable)',
+  // 2026-06-13 — Tim: every Smart Motion icon should buzz + wobble on tap. A single
+  // TactilePressable (light/medium haptic + scale 1→0.9→overshoot spring) backs the
+  // setup rail (via RailButton), the record/stop + review toolbar, the Motion chip,
+  // the position-scrub chips and the cycling mode badge. Haptic fails silently if off.
+  /import \* as Haptics from 'expo-haptics'/.test(smSrc) &&
+    /function TactilePressable\(/.test(smSrc) &&
+    /Haptics\.impactAsync\(/.test(smSrc) &&
+    /Animated\.spring\(scale,.*toValue: 0\.9/.test(smSrc) &&
+    /bounciness: 14/.test(smSrc) && // the release overshoot = the "wobble"
+    // RailButton (the whole setup-icon rail) routes through it, not a bare Pressable.
+    /<TactilePressable\b[\s\S]*?flash\(\); onPress\?\.\(\)/.test(smSrc),
+  'one shared tactile wrapper gives every icon a light buzz + clean press-bounce, OS-safe');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&

@@ -52,6 +52,7 @@ import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTrace
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
@@ -249,6 +250,45 @@ function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: str
   return { text: headline.replace(/_/g, ' ').toUpperCase(), tone: a.severity === 'significant' ? 'bad' : 'warn' };
 }
 
+// 2026-06-13 — TactilePressable: drop-in <Pressable> that makes every Smart Motion
+// icon FEEL tapped — a light haptic tick + a quick spring "wobble" (scale 1 → 0.9 →
+// overshoot back). Non-breaking: forwards all Pressable props, supports both static
+// and function styles, and the haptic fails silently if the OS/user has it disabled
+// (Tim — "even if it's hard, it should wobble a little when you touch it. Clean.").
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+function TactilePressable({
+  onPress, onPressIn, onPressOut, style, children, haptic = 'light', ...rest
+}: React.ComponentProps<typeof Pressable> & { haptic?: 'light' | 'medium' | 'none' }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const transform = { transform: [{ scale }] };
+  return (
+    <AnimatedPressable
+      {...rest}
+      style={typeof style === 'function'
+        ? (state) => [style(state) as ViewStyle, transform]
+        : [style as ViewStyle, transform]}
+      onPressIn={(e) => {
+        Animated.spring(scale, { toValue: 0.9, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 14 }).start();
+        onPressOut?.(e);
+      }}
+      onPress={(e) => {
+        if (haptic !== 'none') {
+          Haptics.impactAsync(
+            haptic === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+          ).catch(() => {});
+        }
+        onPress?.(e);
+      }}
+    >
+      {children}
+    </AnimatedPressable>
+  );
+}
+
 // 2026-06-12 — RailButton: an icon-only setup-rail button that FLASHES a label to
 // its LEFT on tap (Tim — makes the icon-only rail self-explaining). The caller owns
 // the button look (btnStyle) + the icon (children); this adds the flash behavior.
@@ -272,7 +312,7 @@ function RailButton({
       <Animated.Text style={[railStyles.flashLabel, { opacity: op, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
         {label}
       </Animated.Text>
-      <Pressable
+      <TactilePressable
         onPress={() => { flash(); onPress?.(); }}
         disabled={disabled}
         style={btnStyle}
@@ -280,7 +320,7 @@ function RailButton({
         accessibilityLabel={label}
       >
         {children}
-      </Pressable>
+      </TactilePressable>
     </View>
   );
 }
@@ -565,7 +605,10 @@ export default function SmartMotion() {
   // default). Default review = watch the swing + Kevin's feedback only, with a
   // clean video. Turning Motion on computes + shows the skeletal overlay, body
   // analysis, tempo and speed — so nothing fires all at once over the video.
-  const [showSkeleton, setShowSkeleton] = useState(false);
+  // 2026-06-13 — Tim: skeleton ON by default. The pose overlay draws async and
+  // the video plays immediately, so it never slows the replay; the Motion chip
+  // still toggles it OFF for a clean frame.
+  const [showSkeleton, setShowSkeleton] = useState(true);
   // 2026-06-12 — master show/hide for the result overlays on the review video, so the
   // player can grab a CLEAN frame (off) or an annotated one (on) for screenshot/share
   // (Tim's Smart Capture), and to declutter the center video. Video + controls stay.
@@ -1920,35 +1963,35 @@ export default function SmartMotion() {
     phase === 'recording' ? (
       // Stop as the matching green-circle badge (Tim's set), with a faint red fill so
       // "recording — tap to stop" still reads as live/urgent against the rest of the bar.
-      <Pressable onPress={() => void stopRecording()} style={[styles.toolBtnBare, styles.barBtnStop]} accessibilityRole="button" accessibilityLabel="Stop recording">
+      <TactilePressable haptic="medium" onPress={() => void stopRecording()} style={[styles.toolBtnBare, styles.barBtnStop]} accessibilityRole="button" accessibilityLabel="Stop recording">
         <Image source={ICON_CTRL.stop} style={{ width: 56, height: 56 }} resizeMode="contain" />
-      </Pressable>
+      </TactilePressable>
     ) : isReview ? (
       // Review controls as matching green-circle badges (Tim's art): play/pause ·
       // slow-mo · save · delete · record-again. Each uses its own circle (no border);
       // slow-mo fills when slowed + keeps a tiny rate tag so ½/¼ stays visible.
       <View style={styles.barRow}>
-        <Pressable onPress={togglePlay} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
+        <TactilePressable onPress={togglePlay} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
           <Image source={ICON_CTRL.playpause} style={styles.toolIconFull} resizeMode="contain" />
-        </Pressable>
-        <Pressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
+        </TactilePressable>
+        <TactilePressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
           <Image source={ICON_CTRL.slowmo} style={styles.toolIconFull} resizeMode="contain" />
           {playbackRate < 1 ? <Text style={styles.barRateTag}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
-        </Pressable>
-        <Pressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
+        </TactilePressable>
+        <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
           <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
-        </Pressable>
-        <Pressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Delete swing">
+        </TactilePressable>
+        <TactilePressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Delete swing">
           <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
-        </Pressable>
-        <Pressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Record again">
+        </TactilePressable>
+        <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Record again">
           <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
-        </Pressable>
+        </TactilePressable>
       </View>
     ) : phase === 'setup' ? (
-      <Pressable onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel="Record">
+      <TactilePressable haptic="medium" onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel="Record">
         <Image source={ICON_CTRL.record} style={{ width: 56, height: 56 }} resizeMode="contain" />
-      </Pressable>
+      </TactilePressable>
     ) : (
       <View style={styles.barBtn} />
     );
@@ -1974,7 +2017,7 @@ export default function SmartMotion() {
   const skeletonRow =
     isReview ? (
       <View style={styles.skelRow}>
-        <Pressable
+        <TactilePressable
           onPress={() => setShowSkeleton((v) => !v)}
           style={[styles.skelToggle, { borderColor: showSkeleton ? colors.accent : 'rgba(255,255,255,0.3)', backgroundColor: showSkeleton ? colors.accent_muted : 'rgba(0,0,0,0.4)' }]}
         >
@@ -1982,11 +2025,11 @@ export default function SmartMotion() {
           <Text style={[styles.skelToggleText, { color: showSkeleton ? colors.accent : '#fff' }]}>
             {showSkeleton ? (poseReady ? 'Motion ✓' : 'Reading motion…') : 'Motion'}
           </Text>
-        </Pressable>
+        </TactilePressable>
         {showSkeleton && poseReady ? P_SCRUB.map((p) => (
-          <Pressable key={p.key} onPress={() => seekToPosition(p.key)} style={styles.scrubChip}>
+          <TactilePressable key={p.key} onPress={() => seekToPosition(p.key)} style={styles.scrubChip}>
             <Text style={styles.scrubChipText}>{p.label}</Text>
-          </Pressable>
+          </TactilePressable>
         )) : null}
       </View>
     ) : null;
@@ -2511,14 +2554,15 @@ export default function SmartMotion() {
                 <Animated.Text style={[styles.modeFadeLabelLeft, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
                   {modeFadeText}
                 </Animated.Text>
-                <Pressable
+                <TactilePressable
+                  haptic="medium"
                   onPress={cycleMode}
                   style={styles.modeCycleBtn}
                   accessibilityRole="button"
                   accessibilityLabel={`Camera mode: ${isPutt ? 'putting' : angle === 'face_on' ? 'face-on' : 'down the line'}. Tap to change.`}
                 >
                   <Image source={ICON_ANGLE[isPutt ? 'putt' : angle]} style={styles.modeCycleImg} resizeMode="contain" />
-                </Pressable>
+                </TactilePressable>
               </View>
             ) : null}
             <View style={{ flex: 1 }} />
