@@ -536,6 +536,45 @@ export default function Dashboard() {
           <ShotTimeline maxRows={5} />
         )}
 
+        {/* 2026-06-13 (Tim) — ROUND HISTORY. Completed rounds were persisted to
+            roundHistory but never surfaced as a browsable list — "didn't appear to
+            go anywhere." Golfshot-style: date · course · score · vs-par, tap → recap. */}
+        {roundHistory.length > 0 && (
+          <>
+            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>Recent Rounds</Text>
+            <View style={styles.roundHistoryList}>
+              {[...roundHistory].reverse().slice(0, 6).map((r) => {
+                const d = new Date(r.endedAt || r.startedAt);
+                const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                const vsPar = r.scoreVsPar === 0 ? 'E' : r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
+                const vsParColor = r.scoreVsPar > 0 ? '#E5484D' : r.scoreVsPar < 0 ? '#30A46C' : colors.text_muted;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    onPress={() => router.push(`/recap/${r.id}` as never)}
+                    style={[styles.roundRow, { borderColor: colors.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Round at ${r.courseName ?? 'course'} on ${dateStr}, ${r.totalScore} strokes`}
+                  >
+                    <View style={styles.roundRowLeft}>
+                      <Text style={[styles.roundCourse, { color: colors.text_primary }]} numberOfLines={1}>
+                        {r.courseName ?? 'Round'}
+                      </Text>
+                      <Text style={[styles.roundMeta, { color: colors.text_muted }]}>
+                        {dateStr} · {r.holesPlayed} holes{r.isCompetition ? ' · competition' : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.roundScoreCol}>
+                      <Text style={[styles.roundScore, { color: colors.text_primary }]}>{r.totalScore || '—'}</Text>
+                      <Text style={[styles.roundVsPar, { color: vsParColor }]}>{vsPar}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
+
         {/* 2026-06-04 — Quick Actions row removed. SmartFinder / SmartVision
             / Settings are reachable via the ⋯ pill (GlobalToolsMenu) in the
             top-right of every screen, so duplicating them here was clutter. */}
@@ -889,6 +928,17 @@ const styles = StyleSheet.create({
   practiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
   practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
   practiceDrillPts: { fontSize: 12, fontWeight: '600' },
+  roundHistoryList: { paddingHorizontal: 12, gap: 8 },
+  roundRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+  },
+  roundRowLeft: { flex: 1, marginRight: 12 },
+  roundCourse: { fontSize: 15, fontWeight: '800' },
+  roundMeta: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+  roundScoreCol: { alignItems: 'flex-end' },
+  roundScore: { fontSize: 20, fontWeight: '900' },
+  roundVsPar: { fontSize: 13, fontWeight: '800', marginTop: 1 },
   statTile: {
     flex: 1,
     borderWidth: 1,

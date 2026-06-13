@@ -1162,6 +1162,22 @@ check('Conversation ingestion → CNS foundation + save-routine unblocked',
   })(),
   'every caddie/user turn is logged (bounded); "save those stretches as my routine" stores the last caddie line + recalls it, on or off the course');
 
+check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")',
+  // 2026-06-13 — endRound already persisted a full RoundRecord to roundHistory,
+  // but nothing rendered it as a browsable list. Golfshot-style: date · course ·
+  // score · vs-par, tap → recap. The data was sound; this is the missing UI.
+  (() => {
+    const dash = read('app/(tabs)/dashboard.tsx');
+    return (
+      /Recent Rounds/.test(dash) &&
+      /\[\.\.\.roundHistory\]\.reverse\(\)\.slice\(0, 6\)/.test(dash) &&
+      /router\.push\(`\/recap\/\$\{r\.id\}`/.test(dash) &&      // tap → recap
+      /r\.scoreVsPar === 0 \? 'E'/.test(dash) &&                // vs-par display
+      /r\.courseName \?\? 'Round'/.test(dash) && /r\.holesPlayed/.test(dash)
+    );
+  })(),
+  'completed rounds now show on the dashboard by date (course/score/vs-par), tappable into the recap — the persisted history finally has a home');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
