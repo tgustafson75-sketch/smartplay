@@ -1597,6 +1597,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /if \(sid && feelText\.trim\(\)\) \{[\s\S]*?setSessionFeel\(sid, feelText\.trim\(\)\)/.test(smSrc2),
     'library thumbnails backfill + persist; ball-speed badge shows ~est from the SwingMetric (no raw mph); feel saved on Save');
 
+  check('Scorecard + round-end fixes from Tim\'s round (2026-06-12)',
+    // (a) scoring chips open INLINE under the tapped hole (any hole, incl. a missed one),
+    // not in one bottom panel you had to scroll to; the row tap doesn't move the hole.
+    /const renderInlineChips = \(hole: number, par: number\)/.test(read('app/(tabs)/scorecard.tsx')) &&
+      /const \[expandedHole, setExpandedHole\]/.test(read('app/(tabs)/scorecard.tsx')) &&
+      /\{isExpanded && renderInlineChips\(h\.hole, h\.par\)\}/.test(read('app/(tabs)/scorecard.tsx')) &&
+      !/stickyChipPanel/.test(read('app/(tabs)/scorecard.tsx')) &&
+      // (b) ending the round from the Caddie tab now opens the recap (partial rounds too).
+      /const roundId = endRound\(\);[\s\S]{0,260}router\.push\(`\/recap\/\$\{roundId\}`/.test(read('app/(tabs)/caddie.tsx')),
+    'inline per-hole scoring chips (no scroll-to-bottom, any hole scorable incl. missed) + the Caddie End Round opens the recap so a partial 9-of-18 round still summarizes');
+
   check('Battery saver: the low-battery prompt is actually RENDERED (was dead-wired)',
     // 2026-06-12 (Tim's round) — batteryMonitor fired promptVisible at ≤20% but ONLY the
     // debug screen rendered it, so the offer never showed in the real app and rounds

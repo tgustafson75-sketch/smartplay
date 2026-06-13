@@ -3306,10 +3306,16 @@ export default function CaddieTab() {
                     vspar: getScoreVsPar(),
                     played: getHolesPlayed(),
                   };
-                  endRound();
+                  // 2026-06-12 (Tim) — ending from the Caddie tab spoke a line but never
+                  // opened the recap screen (only play.tsx did), so a round — partial or
+                  // full — "didn't summarize". Capture the id and open the recap, matching
+                  // play.tsx. endRound builds the RoundRecord from whatever holes were
+                  // played, so a 9-of-18 round recaps fine.
+                  const roundId = endRound();
                   clearShotPending();
                   setShowShotCard(false);
                   await generateRoundSummary(snapshot);
+                  if (roundId) router.push(`/recap/${roundId}` as never);
                 }}
               >
                 <Text style={styles.endRoundText}>End Round</Text>
@@ -3448,8 +3454,9 @@ export default function CaddieTab() {
                     vspar: getScoreVsPar(),
                     played: getHolesPlayed(),
                   };
-                  endRound();
+                  const roundId = endRound();
                   await generateRoundSummary(snapshot);
+                  if (roundId) router.push(`/recap/${roundId}` as never);
                 },
               }] : []),
               { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => { setShowMoreMenu(false); setCastMode(!castMode); } },

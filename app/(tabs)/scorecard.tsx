@@ -253,6 +253,11 @@ export default function Scorecard() {
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [recapLoaded, setRecapLoaded] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  // 2026-06-12 (Tim) — which hole's inline scoring chips are open. Tapping a row toggles
+  // it; the chips render directly UNDER that row (not in one bottom panel you had to
+  // scroll to), and ANY hole can be opened — including a missed/skipped hole with no
+  // score yet. Does NOT move the round's current-hole pointer (preserves the Phase 5 fix).
+  const [expandedHole, setExpandedHole] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     if (!viewingRoundId) { setRecap(null); setRecapLoaded(true); return; }
@@ -352,6 +357,7 @@ export default function Scorecard() {
       logShot(placeholder);
     }
     logScore(hole, score);
+    setExpandedHole(null); // collapse the inline chips once a score is picked
     // 2026-06-11 (audit) — do NOT fabricate putts on a bare score tap. The old
     // hardcoded 2-putt write fed the GIR proxy (strokesToGreen = score minus
     // putts) and avg-putts/hole with fiction, and persisted into roundHistory.
@@ -369,6 +375,38 @@ export default function Scorecard() {
     else router.replace('/(tabs)/caddie' as never);
   };
 
+  // Inline quick-score chips for a single hole — rendered directly under its row when
+  // expanded. Works for any hole (score it, or re-score / fix a missed one).
+  const renderInlineChips = (hole: number, par: number) => (
+    <View style={[styles.inlineChipPanel, { backgroundColor: c.surface_elevated, borderColor: c.accent }]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+        {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
+          const s = par + diff;
+          if (s < 1) return null;
+          const fill = SCORE_FILL(diff);
+          const label =
+            diff <= -2 ? t('scorecard.eagle') :
+            diff === -1 ? t('scorecard.birdie') :
+            diff === 0 ? t('scorecard.par_label') :
+            diff === 1 ? t('scorecard.bogey') :
+            diff === 2 ? t('scorecard.double') :
+            diff === 3 ? t('scorecard.triple') : ('+' + diff);
+          return (
+            <TouchableOpacity
+              key={diff}
+              style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
+              onPress={() => handleQuickScore(hole, s)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.scoreChipScore}>{s}</Text>
+              <Text style={styles.scoreChipLabel}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+
   const renderHoleRow = (h: typeof viewCourseHoles[number]) => {
     const score = (viewScores as Record<number, number>)[h.hole] ?? 0;
     const holePutts = (viewPutts as Record<number, number>)[h.hole] ?? 0;
@@ -376,24 +414,19 @@ export default function Scorecard() {
     const hasScore = score > 0;
     const diff = hasScore ? score - h.par : 0;
     const fill = hasScore ? SCORE_FILL(diff) : 'transparent';
+    // The current hole's chips auto-open when it has no score (score it in one tap);
+    // tapping any other row overrides. Only interactive during an active round.
+    const autoExpand = isRoundActive && !(viewScores as Record<number, number>)[currentHole] ? currentHole : null;
+    const isExpanded = isRoundActive && (expandedHole ?? autoExpand) === h.hole;
 
+    // Phase 5 (2026-06-06): a row tap must NOT change the round's current-hole pointer or
+    // fire the hole-transition speak (that felt like "scoring drove the hole change"). It
+    // now only toggles this hole's inline scoring chips (local UI state). The +/- steppers
+    // stopPropagation and call logScore directly. Navigate via cockpit/data-strip/voice.
     return (
-      // 2026-06-06 — Phase 5 of on-course resilience sprint. Removed
-      // the row-tap navigation (was: onPress → setCurrentHole(h.hole)).
-      // Tim's perception: tapping a scorecard row "felt like scoring
-      // drove the hole change" because the row tap fires the hole-
-      // transition speak ("Hole 5. Par 4..."). Now scorecard is a
-      // pure VIEWING surface: row press shows visual feedback (still
-      // a touchable for accessibility / future score-detail expansion)
-      // but doesn't change the round's current-hole pointer. The
-      // border-left accent on the current row reflects the ACTUAL
-      // round state, not which row the user just tapped. Score
-      // editing (+/-) is unaffected — those have e.stopPropagation
-      // and call logScore directly. To navigate, use the cockpit
-      // stepper, DataStrip arrows, or voice "I'm on hole N".
+      <React.Fragment key={h.hole}>
       <TouchableOpacity
-        key={h.hole}
-        onPress={() => {}}
+        onPress={isRoundActive ? () => setExpandedHole(isExpanded ? null : h.hole) : undefined}
         activeOpacity={isRoundActive ? 0.85 : 1}
         style={[
           styles.holeRow,
@@ -445,13 +478,17 @@ export default function Scorecard() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : isCurrent ? (
-            <Text style={[styles.tapToScore, { color: c.accent }]}>{t('scorecard.tap_to_score')}</Text>
+          ) : isRoundActive ? (
+            // Any unscored hole invites a tap during the round — including a missed/
+            // skipped one (current hole in accent, others muted).
+            <Text style={[styles.tapToScore, { color: isCurrent ? c.accent : c.text_muted }]}>{t('scorecard.tap_to_score')}</Text>
           ) : (
             <Text style={[styles.scoreEmpty, { color: c.text_muted }]}>—</Text>
           )}
         </View>
       </TouchableOpacity>
+      {isExpanded && renderInlineChips(h.hole, h.par)}
+      </React.Fragment>
     );
   };
 
@@ -465,13 +502,10 @@ export default function Scorecard() {
     </View>
   );
 
-  // Sticky bottom chip panel — renders ONCE at the bottom of the
-  // ScrollView footer when the current hole has no score. Replaces the
-  // prior inline-per-row attempt that confusingly made chips appear
-  // under multiple holes when the user tapped around. One panel, one
-  // hole label, no surprises.
-  const stickyChipHole = isRoundActive && !scores[currentHole] ? currentHole : null;
-  const stickyChipPar = stickyChipHole != null ? (viewCourseHoles.find(h => h.hole === stickyChipHole)?.par ?? 4) : 4;
+  // 2026-06-12 (Tim) — the sticky bottom chip panel (which forced a scroll to the bottom
+  // to score, and only worked for the current hole) is replaced by per-row inline chips
+  // that open directly under the tapped hole (renderInlineChips above) and work for ANY
+  // hole, including a missed one. No more scroll-to-bottom, no more "can't score that hole".
 
   const hasAnythingToShow = isRoundActive || lastCompletedRound != null;
   const front9 = viewCourseHoles.filter(h => h.hole <= 9);
@@ -625,42 +659,6 @@ export default function Scorecard() {
           </View>
         )}
 
-        {/* Single sticky chip panel — only shows when round is active AND
-            current hole has no score yet. Renders ONCE under the totals,
-            with a clear "HOLE X" label so the user knows what they're
-            scoring. No inline-per-row rendering, no popping around. */}
-        {stickyChipHole != null && (
-          <View style={[styles.stickyChipPanel, { backgroundColor: c.surface_elevated, borderColor: c.accent }]}>
-            <Text style={[styles.sectionLabel, { color: c.accent, marginBottom: 8 }]}>
-              {t('scorecard.hole_tap', { hole: stickyChipHole })}
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-              {([-2, -1, 0, 1, 2, 3, 4] as const).map(diff => {
-                const score = stickyChipPar + diff;
-                if (score < 1) return null;
-                const fill = SCORE_FILL(diff);
-                const label =
-                  diff <= -2 ? t('scorecard.eagle') :
-                  diff === -1 ? t('scorecard.birdie') :
-                  diff === 0 ? t('scorecard.par_label') :
-                  diff === 1 ? t('scorecard.bogey') :
-                  diff === 2 ? t('scorecard.double') :
-                  diff === 3 ? t('scorecard.triple') : ('+' + diff);
-                return (
-                  <TouchableOpacity
-                    key={diff}
-                    style={[styles.scoreChip, { backgroundColor: fill, borderColor: fill }]}
-                    onPress={() => handleQuickScore(stickyChipHole, score)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.scoreChipScore}>{score}</Text>
-                    <Text style={styles.scoreChipLabel}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
 
         {/* TOTAL CARD */}
         {hasAnythingToShow && holesPlayed > 0 && (
@@ -861,9 +859,11 @@ const styles = StyleSheet.create({
 
   // Quick score chips (filled, high contrast)
   chipsRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
-  stickyChipPanel: {
-    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
-    padding: 14, borderRadius: 12, borderWidth: 1,
+  // Inline scoring chips, rendered flush under the tapped hole row (inside the hole list).
+  // A left accent bar + bottom divider tie it to the row above.
+  inlineChipPanel: {
+    paddingVertical: 10, paddingHorizontal: 12,
+    borderBottomWidth: 1, borderLeftWidth: 3,
   },
   scoreChip: {
     alignItems: 'center',
