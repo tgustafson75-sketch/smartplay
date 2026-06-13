@@ -1225,7 +1225,7 @@ check('Caddie round summary carries to the dashboard Recent Rounds (Tim)',
       /import \{ loadRecap \} from '\.\.\/\.\.\/services\/planStorage'/.test(dash) &&
       /rec\?\.overall_kevin_summary/.test(dash) &&
       /setRecapSummaries/.test(dash) &&
-      /recapSummaries\[r\.id\] \?/.test(dash) // surfaced on the round row
+      /\(recapSummaries\[r\.id\] \|\| r\.summary\)/.test(dash) // surfaced on the row (recap or record summary)
     );
   })(),
   'each Recent Rounds row shows the caddie summary (loaded from planStorage); partial rounds included (no completion gate)');
