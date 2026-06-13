@@ -1219,6 +1219,29 @@ check('Cage rig: handedness default framing + ball/line move as one element (Tim
   })(),
   'handedness default puts player 2/3 + ball/line in outer 1/3 (mirrored); ball drag moves the rig rigidly; clamped on-frame');
 
+check('Offline caddie: the MOAT read (plays-like + club) answers LOCALLY, no network',
+  // 2026-06-13 — the Lakes "caddie goes mute on network loss" fix extends to the
+  // composed read: "how far does it play / plays like" now composes locally via
+  // composeShotRead (GPS distance + cached weather wind + bag), so the plays-like
+  // answer survives offline. Routed BEFORE plain yardage; honest when GPS/green missing.
+  (() => {
+    const src = read('services/localStatusResponder.ts');
+    return (
+      /import \{ composeShotRead \} from '\.\/cnsShotRead'/.test(src) &&
+      /getCachedWeatherEvenIfStale/.test(src) &&            // cached weather feeds wind offline
+      /playsLike:\s*\/\\b\(plays\?/.test(src) &&            // the plays-like matcher exists
+      /if \(RX\.playsLike\.test\(t\)\) \{\s*\n\s*return composedReadReply\(lang\);/.test(src) &&
+      /\bcomposedReadReply\(t?lang?\)?/.test(src) &&
+      /function composedReadReply/.test(src) &&
+      /queryType: 'plays_like'/.test(src) &&
+      // routed BEFORE plain yardage (so "how far does it play" doesn't fall to raw distance)
+      src.indexOf('RX.playsLike.test(t)') < src.indexOf('RX.yardage.test(t)') &&
+      // honest: drops the learned-carry "why" line so it isn't redundant with the club
+      /filter\(\(w\) => !\/\^your\\s\/i\.test\(w\)\)/.test(src)
+    );
+  })(),
+  'plays-like composes the club + wind-adjusted distance locally (composeShotRead + cached weather); routed before raw yardage; offline-safe');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

@@ -37,12 +37,17 @@ import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
 import { getLastFix } from './gpsManager';
-import { haversineYards } from '../utils/geoDistance';
+import { haversineYards, bearingDegrees } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy } from './smartFinderService';
 // 2026-06-12 — Offline caddie Tier 1: the player's REAL logged bag distances, used to
 // CALL A CLUB locally when the cloud brain is unreachable. Honest by construction —
 // bagDistances() only returns clubs the player has actually tracked. [[offline-caddie-plan]]
 import { bagDistances } from './shotStrategy';
+// 2026-06-13 — Offline caddie: the MOAT read (club + plays-like + why) composed
+// locally so "how far does it play / plays like" works with NO network. composeShotRead
+// is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
+import { composeShotRead } from './cnsShotRead';
+import { getCachedWeatherEvenIfStale } from './weatherService';
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
@@ -60,6 +65,7 @@ export type LocalReplyResult = {
     | 'course_name'
     | 'club_current'
     | 'club_recommend'
+    | 'plays_like'
     | 'last_shot'
     | 'handicap'
     | 'course_memory'
@@ -99,6 +105,7 @@ const L: Record<LocalReplyLanguage, {
   clubBeyond: (dist: number, club: string, carry: number) => string;
   noBag: string;
   clubIffy: string;
+  playsLike: (raw: number, plays: number, club: string | null, why: string) => string;
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
   handicapIs: (h: number) => string;
@@ -131,6 +138,12 @@ const L: Record<LocalReplyLanguage, {
     clubBeyond: (d, c, y) => `${d} to the middle — that's past your ${c} (${y}). Lay up and leave a wedge.`,
     noBag: "I don't have your real club distances yet — track a few shots and I'll call the club.",
     clubIffy: ' GPS is iffy right now, so treat that loosely.',
+    playsLike: (raw, plays, club, why) => {
+      const head = plays === raw ? `${raw} to the middle, plays straight` : `${raw} to the middle, plays like ${plays}`;
+      const reason = why ? ` — ${why}` : '';
+      const clubLine = club ? ` That's your ${club}.` : '';
+      return `${head}${reason}.${clubLine}`;
+    },
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' pulled left' : dir === 'right' ? ' out to the right' : dir === 'straight' ? ' dead straight' : '';
       if (c && d != null) return `Your last one was a ${c}, ${d} yards${where}.`;
@@ -169,6 +182,11 @@ const L: Record<LocalReplyLanguage, {
     clubBeyond: (d, c, y) => `${d} al centro — pasa de tu ${c} (${y}). Pon en juego y deja un wedge.`,
     noBag: 'Aún no tengo tus distancias reales — registra unos tiros y te canto el palo.',
     clubIffy: ' El GPS no está fino ahora, así que tómalo a la ligera.',
+    playsLike: (raw, plays, club) => {
+      const head = plays === raw ? `${raw} al centro, juega derecho` : `${raw} al centro, juega como ${plays}`;
+      const clubLine = club ? ` Es tu ${club}.` : '';
+      return `${head}.${clubLine}`;
+    },
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' a la izquierda' : dir === 'right' ? ' a la derecha' : dir === 'straight' ? ' recto' : '';
       if (c && d != null) return `Tu último fue un ${c}, ${d} yardas${where}.`;
@@ -207,6 +225,11 @@ const L: Record<LocalReplyLanguage, {
     clubBeyond: (d, c, y) => `到中心${d}码——超过你最远的${c}（${y}码）。先稳一杆，留个劈起距离。`,
     noBag: '我还没有你真实的球杆距离——记录几杆我就能帮你选杆。',
     clubIffy: '现在GPS信号不稳，这个数字仅供参考。',
+    playsLike: (raw, plays, club) => {
+      const head = plays === raw ? `到中央${raw}码，实际就打${raw}码` : `到中央${raw}码，实际打约${plays}码`;
+      const clubLine = club ? ` 用你的${club}。` : '';
+      return `${head}。${clubLine}`;
+    },
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? '偏左' : dir === 'right' ? '偏右' : dir === 'straight' ? '很直' : '';
       if (c && d != null) return `你上一杆是${c}，${d}码${where}。`;
@@ -247,6 +270,9 @@ const RX = {
   clubRec:    /\b(what|which)\s+club\s+(should|do|would)\s+i\b|\bclub\s+(for\s+this|from\s+here|do\s+i\s+(?:hit|need))\b|\bwhat\s+(?:should|do)\s+i\s+(?:hit|play)\s+(?:here|from\s+here|on\s+this)?\b|\bgive\s+me\s+a\s+club\b/i,
   // …and LAST SHOT recall ("what did I just hit / how was that / my last shot").
   lastShot:   /\b(last\s+shot|what\s+did\s+i\s+(?:just\s+)?hit|how\s+was\s+(?:that|my\s+last)|that\s+last\s+(?:one|shot)|my\s+last\s+(?:shot|swing))\b/i,
+  // PLAYS-LIKE — the composed read (distance adjusted for wind/elevation). Check
+  // BEFORE yardage since "how far does it play" also contains "how far".
+  playsLike:  /\b(plays?\s+like|playing\s+(?:distance|like)|how\s+far\s+does\s+it\s+play|with\s+the\s+wind|into\s+the\s+wind|adjusted?\s+(?:for\s+)?(?:wind|elevation)|effective\s+(?:distance|yardage))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
   // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
   // gate). Save = the stretches the caddie just gave (from the conversation log);
@@ -296,6 +322,10 @@ export function tryLocalReply(
     return null;
   }
 
+  // ── PLAYS-LIKE (the composed moat read — check before plain yardage) ──
+  if (RX.playsLike.test(t)) {
+    return composedReadReply(lang);
+  }
   // ── YARDAGE (must check first; "yards" appears in other phrases) ──
   if (RX.yardage.test(t)) {
     return yardageReply(t, lang);
@@ -468,6 +498,45 @@ function clubCallReply(lang: LocalReplyLanguage): LocalReplyResult {
     : L[lang].clubCall(dist, best[0], best[1]);
   if (quality.level === 'weak') text += L[lang].clubIffy; // honest hedge on a sloppy fix
   return { text, queryType: 'club_recommend' };
+}
+
+// Offline caddie — the MOAT read composed LOCALLY: GPS distance to the green,
+// adjusted for wind (cached weather) into a plays-like number + the player's club,
+// with a short "why". Pure/offline-safe via composeShotRead. Same GPS/green guards
+// as clubCallReply — honest when distance/green is unavailable.
+function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const round = useRoundStore.getState();
+  if (typeof round.currentHole !== 'number' || round.currentHole <= 0) {
+    return { text: L[lang].noFix, queryType: 'plays_like' };
+  }
+  const green = resolveGreenCoords(round.currentHole);
+  const fix = getLastFix();
+  if (!green || !green.middle || !fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
+    return { text: green && !green.middle ? L[lang].noGreen : L[lang].noFix, queryType: 'plays_like' };
+  }
+  const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
+  if (quality.level === 'none' || quality.level === 'stale') {
+    return { text: L[lang].noFix, queryType: 'plays_like' };
+  }
+  const playerLoc = { lat: fix.lat, lng: fix.lng };
+  const rawYards = Math.round(haversineYards(playerLoc, green.middle));
+  const read = composeShotRead({
+    rawYards,
+    weather: getCachedWeatherEvenIfStale(playerLoc),
+    shotBearingDeg: bearingDegrees(playerLoc, green.middle),
+    bag: bagDistances(),
+    dominantMiss: usePlayerProfileStore.getState().dominantMiss,
+    isCompetition: round.isCompetition,
+  });
+  if (!read || read.playsLikeYards == null) {
+    return { text: L[lang].noFix, queryType: 'plays_like' };
+  }
+  // For the spoken line use the wind/slope "why" (drop the learned-carry line,
+  // which would be redundant with "that's your <club>").
+  const why = (read.why ?? []).filter((w) => !/^your\s/i.test(w)).slice(0, 2).join(', ');
+  let text = L[lang].playsLike(read.rawYards ?? rawYards, read.playsLikeYards, read.club, why);
+  if (quality.level === 'weak') text += L[lang].clubIffy;
+  return { text, queryType: 'plays_like' };
 }
 
 // Offline caddie Tier 1 — LAST SHOT recall, straight from the logged round state
