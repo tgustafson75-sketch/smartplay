@@ -192,7 +192,16 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     let pctAlong: number | null = null;
     let yardsToGreen: number | null = null;
     if (fix && teeLatLng) {
-      const total = haversineYards(teeLatLng.tee, teeLatLng.green);
+      let total = haversineYards(teeLatLng.tee, teeLatLng.green);
+      // 2026-06-12 (Tim's Lakes round) — sanity-check the GPS tee→green against the
+      // BUNDLED hole distance. A bad tee MARK (GPS off, or marking the wrong hole's tee)
+      // produced a 548y "total" on a 134y par-3, which threw the player-dot position.
+      // When the trusted bundled distance disagrees wildly (>1.6× or <0.55×), trust it.
+      const bundledDist = holeRecord?.distance;
+      if (typeof bundledDist === 'number' && bundledDist > 0 && total > 0 &&
+          (total > bundledDist * 1.6 || total < bundledDist * 0.55)) {
+        total = bundledDist;
+      }
       const fromPlayer = haversineYards(fix.location, teeLatLng.green);
       // 2026-05-19 — Sanity guard. If the player is more than 1500y
       // from the green, it's not a real position — usually means a
@@ -307,7 +316,17 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     );
   }
 
-  const axisYards = haversineYards(geometry.tee, geometry.green);
+  let axisYards = haversineYards(geometry.tee, geometry.green);
+  // 2026-06-12 (Tim's Lakes round) — same bundled-distance sanity guard as the photo
+  // path: a bad tee mark made axisYards read 548y on a 134y par-3 (the satellite/aerial
+  // view's hole total + dot scale). Trust the bundled distance when GPS disagrees wildly.
+  {
+    const bundledDist = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole)?.distance;
+    if (typeof bundledDist === 'number' && bundledDist > 0 && axisYards > 0 &&
+        (axisYards > bundledDist * 1.6 || axisYards < bundledDist * 0.55)) {
+      axisYards = bundledDist;
+    }
+  }
   if (axisYards <= 0) {
     return (
       <View style={[styles.wrap, styles.placeholder]}>
