@@ -903,7 +903,11 @@ export default function SmartMotion() {
         // shots (each scrubbing its own window into the master clip), so the session lands
         // in the library AS the N swings it was — not collapsed to one. Single-swing clips
         // keep the simple upload path. Both tag captureKind 'smart_motion'.
-        const segs = segmentsRef.current;
+        // 2026-06-13 (#5) — DRILL shot cap. A drill says "take 3-5"; keep the
+        // library reel to exactly that many swings (the first N detected). Safe
+        // post-hoc cap on the carve — the live recording loop is untouched.
+        const allSegs = segmentsRef.current;
+        const segs = isDrill && drillShotCount ? allSegs.slice(0, drillShotCount) : allSegs;
         const sessionId = segs.length > 1
           ? useCageStore.getState().ingestLiveCageSession({
               masterVideoPath: uri,
@@ -1102,7 +1106,7 @@ export default function SmartMotion() {
 
       setPhase('review');
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).

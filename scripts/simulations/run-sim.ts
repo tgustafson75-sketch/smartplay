@@ -942,6 +942,8 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
       /Math\.max\(1, Math\.min\(5, Number\(drillShots\)/.test(sm) &&
       /captureKind: isDrill \? 'drill' : 'smart_motion'/.test(sm) &&
       /DRILL · \$\{drillName \?\? 'Practice'\} · \$\{drillShotCount\} shots/.test(sm) &&
+      // shot cap: a drill keeps only its 3-5 swings (post-hoc carve cap, safe)
+      /const segs = isDrill && drillShotCount \? allSegs\.slice\(0, drillShotCount\) : allSegs/.test(sm) &&
       // library badge knows 'drill'; Tank is the full-width hero
       /drill:\s*\{ label: 'Drill'/.test(lib) &&
       /const tankEntry = orderedEntries\.find/.test(idx) && /oneCol=\{true\}/.test(idx)
@@ -1989,7 +1991,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // segmentsRef is synced synchronously so the carve sees the final set (not a stale one).
     /const segmentsRef = useRef<SwingSegment\[\]>\(\[\]\)/.test(smA) &&
       /segmentsRef\.current = segsForAnalysis;/.test(smA) &&
-      /const segs = segmentsRef\.current;/.test(smA) &&
+      /const allSegs = segmentsRef\.current;/.test(smA) &&
       /segs\.length > 1[\s\S]{0,120}ingestLiveCageSession\(\{/.test(smA) &&
       /clipStartSeconds: s\.startMs \/ 1000,/.test(smA) &&
       // live-cage session defaults to smart_motion, or 'drill' when a drill passes it through (#5)
