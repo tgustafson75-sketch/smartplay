@@ -105,7 +105,34 @@ plane.** Two tiers:
 and tap the hole once. Say go / auto-start on stillness → it records the roll →
 analysis. One screen, two taps, no menus.
 
-## Open questions for Tim
+## Decisions (Tim, 2026-06-13) — LOCKED
+
+1. **Surface** → Smart Motion **putt mode** (env = green), reuse the engine.
+2. **Precision** → **relative read first** (degrees off line, curve fraction,
+   slow/med/fast). Metric inches + stimp = v2.
+3. **Hole input** → **tap the hole once** on the setup frame.
+4. **Heat map** → **yes, log every roll per green** (data moat from day one).
+
+## Built — Increment 1 (2026-06-13, OTA'd)
+
+The honest, pure, tested CORE is shipped (no fake UI — per the no-deferred-wiring rule):
+- `services/putting/puttRoll.ts` — `analyzePuttRoll(path, aim, hole)` →
+  start-direction (reuses ballTrace) + break (curvature after a straight start) +
+  pace (decel) + **attribution (start% vs slope%)** + a relative one-line read.
+  Pure, deterministic, returns null when unreadable. Relative, never metric.
+- `store/greenRollStore.ts` — logs each roll per course+hole, bounded, persisted;
+  `summarizeGreen` → dominant break / pace / make-rate (honest 'mixed' when no
+  majority). The heat-map data moat.
+- 2 sims (Putt roll decomposition; Green heat-map log).
+
+**Still to build (Increment 2 — needs real footage + the vision build):**
+- The CV roll-tracker: extend `api/ball-departure` (single point) → a full
+  centroid path. This is what produces the `path` puttRoll consumes; it gets
+  tuned on real 60fps tripod footage — same pure-core/CV-tuning split as ballTrace.
+- Smart Motion putt-mode capture UI (tap hole → record → feed puttRoll → render
+  the relative read). Gated on the tracker producing REAL data — no placeholder UI.
+
+## Original open questions (now answered above)
 
 1. **First surface** — does this live as a Smart Motion **putt mode** (env =
    green), or its own "Putt Lab" entry? (Leaning: Smart Motion putt mode, reuse

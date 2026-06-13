@@ -56,6 +56,7 @@ import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
+import { analyzePuttRoll } from '../../services/putting/puttRoll';
 
 interface ScenarioResult {
   scenario: string;
@@ -1083,6 +1084,68 @@ check('Ball Fit MOAT: brain matches a ball to the game from CNS signals (offline
     );
   })(),
   'one composed read: profile + measured why + real example balls; offline-safe; honest no-spin-measured caveat always present');
+
+check('Putt roll: decomposes start-line vs green vs speed from a measured path (relative, honest)',
+  // 2026-06-13 — the tripod watch-the-roll core. analyzePuttRoll takes the ball's
+  // tracked path + aim + hole and reports start direction, break (curvature after a
+  // straight start), pace (from decel), and attribution (start% vs slope%). RELATIVE
+  // not metric (no fabricated inches); returns null when the path is too short.
+  (() => {
+    // A right-to-left breaking putt aimed STRAIGHT at the hole (hole directly above
+    // the ball): the ball leaves on the aim line, then the green curves it left, so
+    // it misses left. Frame coords: x right, y DOWN, so "up the line" is -y.
+    const hole = { x: 0.50, y: 0.25 };
+    const breakingLeft: { x: number; y: number; t: number }[] = [
+      { x: 0.500, y: 0.90, t: 0 },
+      { x: 0.500, y: 0.78, t: 1 },  // straight start
+      { x: 0.498, y: 0.66, t: 2 },
+      { x: 0.492, y: 0.55, t: 3 },
+      { x: 0.480, y: 0.45, t: 4 },
+      { x: 0.462, y: 0.37, t: 5 },
+      { x: 0.440, y: 0.31, t: 6 },
+      { x: 0.420, y: 0.27, t: 7 },  // decelerating + ends LEFT of the hole
+    ];
+    const a = analyzePuttRoll({ path: breakingLeft, aim: hole, hole, trackedFraction: 0.9 });
+    // A dead-straight, holed putt.
+    const straight = analyzePuttRoll({
+      path: [
+        { x: 0.5, y: 0.9, t: 0 }, { x: 0.5, y: 0.7, t: 1 },
+        { x: 0.5, y: 0.5, t: 2 }, { x: 0.5, y: 0.31, t: 3 }, { x: 0.5, y: 0.26, t: 4 },
+      ],
+      aim: { x: 0.5, y: 0.25 }, hole: { x: 0.5, y: 0.25 }, trackedFraction: 0.85,
+    });
+    // Too short to read → null, never a guess.
+    const tooShort = analyzePuttRoll({ path: [{ x: 0.5, y: 0.5, t: 0 }, { x: 0.5, y: 0.49, t: 1 }] });
+    if (a == null) return false;
+    return (
+      a.startDirection.side === 'straight' &&            // left ON the aim line
+      a.break.side === 'left' && a.break.magnitude !== 'flat' &&  // curved left = the green acting
+      a.outcome.result === 'missed' && a.outcome.missSide === 'left' &&
+      a.attribution.startPct + a.attribution.slopePct === 100 &&
+      a.attribution.slopePct >= 90 &&                    // straight start → the miss was the green
+      /broke/.test(a.relativeRead) && /the green/.test(a.relativeRead) &&
+      straight != null && straight.break.side === 'straight' && straight.outcome.result === 'made' &&
+      tooShort === null
+    );
+  })(),
+  'measured path → start dir + break side + pace + start%/slope% attribution; null when unreadable; relative not metric');
+
+check('Green heat-map log: rolls accumulate per green into an honest summary (data moat)',
+  // 2026-06-13 — every measured roll logs per course+hole; over time it summarizes
+  // into dominant break / pace / make-rate — the data behind a future heat map.
+  // Honest: dominant only when it's a real majority, else 'mixed'.
+  (() => {
+    const store = read('store/greenRollStore.ts');
+    return (
+      /export const useGreenRollStore = create/.test(store) &&
+      /logRoll:/.test(store) && /summarizeGreen:/.test(store) &&
+      /dominantBreak/.test(store) && /makeRate/.test(store) &&
+      /slice\(-MAX_PER_GREEN\)/.test(store) &&            // bounded per green
+      /bestN > values\.length \/ 2 \? best : mixedLabel/.test(store) && // honest majority
+      /persist\(/.test(store) && /green-rolls-v1/.test(store)
+    );
+  })(),
+  'measured rolls persist per course+hole; summary reports dominant break/pace/make-rate, honest mixed when no majority, bounded');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
