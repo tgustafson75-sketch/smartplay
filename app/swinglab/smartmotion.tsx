@@ -338,7 +338,10 @@ export default function SmartMotion() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string }>();
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string }>();
+  // Note: drillFocus + drillShotType are carried on the route for the next
+  // increment (per-focus metric surfacing); typed here so the drill contract is
+  // complete even though this increment only consumes drillId/drillName/drillShots.
   // 2026-06-13 (#5) — DRILL mode. When launched from a drill card, Smart Motion
   // reads the drill: it labels the capture, caps the session at the drill's shot
   // count (3–5), tags the session captureKind 'drill', and (focus) names the one
