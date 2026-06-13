@@ -2835,12 +2835,18 @@ export default function CaddieTab() {
                 label="SmartMotion"
                 onPress={() => { setToolsExpanded(false); router.push('/swinglab/smartmotion' as never); }}
               />
-              {/* 2026-06-13 — Open Range (Practice Engine, Tank's mode): the honest
-                  mash-quantifier. Sessions tally swings recorded in SmartMotion. */}
+              {/* 2026-06-13 — Practice Engine (Tank's mode): Open Range = honest
+                  mash-quantifier; Focus = structured interleaved session. Both
+                  tally swings recorded in SmartMotion. */}
               <ToolFabIcon
                 icon="golf-outline"
                 label="Open Range"
                 onPress={() => { setToolsExpanded(false); router.push('/practice/open-range' as never); }}
+              />
+              <ToolFabIcon
+                icon="list-outline"
+                label="Focus"
+                onPress={() => { setToolsExpanded(false); router.push('/practice/session' as never); }}
               />
               <ToolFabIcon
                 icon="library-outline"

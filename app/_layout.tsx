@@ -976,6 +976,12 @@ function AppNavigator() {
           name="practice/open-range"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — Practice Engine: structured Session Runner (focus +
+            interleaving). Walks an interleaved plan; swings stamp from Smart Motion. */}
+        <Stack.Screen
+          name="practice/session"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}

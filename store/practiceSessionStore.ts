@@ -41,6 +41,9 @@ export interface PracticeSession {
   focus: string | null;
   /** cage / range / course — where the session is happening. */
   environment: string | null;
+  /** Target rep count for a 'focus' session (the Session Runner walks the plan to
+   *  this length). null for open-ended 'open_range'. */
+  targetReps: number | null;
   startedAt: number;
   endedAt: number | null;
   swings: PracticeSwing[];
@@ -49,6 +52,7 @@ export interface PracticeSession {
 interface StartOpts {
   focus?: string | null;
   environment?: string | null;
+  targetReps?: number | null;
 }
 
 interface PracticeSessionState {
@@ -81,6 +85,7 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
             kind,
             focus: opts?.focus ?? null,
             environment: opts?.environment ?? null,
+            targetReps: opts?.targetReps ?? null,
             startedAt: Date.now(),
             endedAt: null,
             swings: [],

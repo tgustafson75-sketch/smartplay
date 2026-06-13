@@ -1494,6 +1494,26 @@ check('Open Range surface wired — Smart Motion stamps, screen + entry point ex
   })(),
   'smartmotion stamps each analyzed swing into the active practice session (exactly-once, inert outside practice), and the Open Range screen + tools-menu entry surface the live honest read (Practice Engine surface wired, OTA-able)');
 
+check('Structured Session Runner UI — focus picker + auto-advancing interleaved run (Tim)',
+  // 2026-06-13 — pick a focus → a 'focus' session with a targetReps plan; the runner
+  // shows the current rep (club + cue) and AUTO-ADVANCES as swings stamp in
+  // (currentRep = swings recorded), completing at targetReps. Pure JS, OTA-able.
+  (() => {
+    const screen = read('app/practice/session.tsx');
+    const layout = read('app/_layout.tsx');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const store = read('store/practiceSessionStore.ts');
+    return (
+      /buildInterleavedPlan\(focus, total\)/.test(screen) &&        // builds the interleaved plan
+      /plan\[done\]/.test(screen) &&                                // current rep = swings recorded (auto-advance)
+      /startSession\('focus'/.test(screen) &&                       // focus session
+      /targetReps/.test(store) && /targetReps/.test(screen) &&      // plan length carried on the session
+      /name="practice\/session"/.test(layout) &&                    // route registered
+      /\/practice\/session/.test(caddie)                            // reachable from the tools menu
+    );
+  })(),
+  'the structured Session Runner lets you pick a focus and walks an interleaved plan that auto-advances as Smart Motion swings stamp in, completing at the target rep count (Practice Engine Session Runner UI)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
