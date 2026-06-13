@@ -1085,6 +1085,30 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
   })(),
   'failed read → re-analyze the saved clip; OTA auto-applies on launch (not mid-round), no manual tap');
 
+check('Practice points: conservative, per-drill, awarded on drill save → dashboard',
+  // 2026-06-13 — Tim: conservative points per completed drill, on the dashboard,
+  // no socials. Each captureKind:'drill' save awards points; the data is the
+  // practice side of the future practice→course-improvement ledger.
+  (() => {
+    const store = read('store/practicePointsStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    return (
+      /export const usePracticePointsStore = create/.test(store) &&
+      /awardDrill: \(drillId, swings, now\)/.test(store) &&
+      /const BASE_PER_DRILL = 5/.test(store) && /MAX_SWINGS_COUNTED = 5/.test(store) && // conservative + no farming
+      /persist\(/.test(store) && // accumulates
+      // awarded only on a DRILL save
+      /if \(sid && isDrill && drillId\)/.test(sm) &&
+      /usePracticePointsStore\.getState\(\)\.awardDrill\(drillId, swings/.test(sm) &&
+      // surfaced on the dashboard, per-drill, hidden until earned
+      /practiceTotal > 0 &&/.test(dash) &&
+      /PRACTICE POINTS/.test(dash) &&
+      /getDrillEntry\(id\)\?\.title/.test(dash)
+    );
+  })(),
+  'conservative per-drill points awarded on each drill save, shown on the dashboard, hidden until earned');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

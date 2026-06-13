@@ -78,6 +78,7 @@ import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import {
@@ -1923,9 +1924,20 @@ export default function SmartMotion() {
     if (sid && feelText.trim()) {
       try { useCageStore.getState().setSessionFeel(sid, feelText.trim()); } catch { /* non-fatal */ }
     }
-    useToastStore.getState().show('Saved to your Swing Library');
+    // 2026-06-13 (Tim) — award CONSERVATIVE practice points for a completed drill
+    // session (a captureKind:'drill' save). Surfaces on the dashboard; the data is
+    // the practice side of the future practice→on-course-improvement ledger.
+    let savedMsg = 'Saved to your Swing Library';
+    if (sid && isDrill && drillId) {
+      try {
+        const swings = Math.max(1, segmentsRef.current.length || drillShotCount || 1);
+        const pts = usePracticePointsStore.getState().awardDrill(drillId, swings, Date.now());
+        savedMsg = `Saved · +${pts} practice points`;
+      } catch { /* non-fatal */ }
+    }
+    useToastStore.getState().show(savedMsg);
     router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillShotCount]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));

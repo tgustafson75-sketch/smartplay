@@ -35,6 +35,8 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore } from '../../store/roundStore';
+import { usePracticePointsStore } from '../../store/practicePointsStore';
+import { getDrillEntry } from '../../data/drillCatalog';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -78,6 +80,14 @@ export default function Dashboard() {
   );
   const roundHistory = useRoundStore((s) => s.roundHistory);
   const allShots = useRoundStore((s) => s.shots);
+  // Conservative practice points (per-drill), surfaced here. The data is the
+  // practice side of the future practice→on-course-improvement ledger.
+  const practiceTotal = usePracticePointsStore((s) => s.total);
+  const practiceByDrill = usePracticePointsStore((s) => s.byDrill);
+  const topDrills = useMemo(
+    () => Object.entries(practiceByDrill).sort((a, b) => b[1].points - a[1].points).slice(0, 4),
+    [practiceByDrill],
+  );
 
   // Phase U — pattern shift surfacing.
   const patternShift = useMemo(
@@ -490,6 +500,27 @@ export default function Dashboard() {
           />
         </View>
 
+        {/* ─── PRACTICE POINTS (Tim) — conservative, per-drill. Only shows once
+            you've banked some, so the dashboard isn't cluttered for new users. */}
+        {practiceTotal > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.practiceHeader}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>PRACTICE POINTS</Text>
+              <Text style={[styles.practiceTotal, { color: colors.accent }]}>{practiceTotal}</Text>
+            </View>
+            {topDrills.map(([id, rec]) => (
+              <View key={id} style={styles.practiceRow}>
+                <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>
+                  {getDrillEntry(id)?.title ?? id}
+                </Text>
+                <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
+                  {rec.points} pts · {rec.sessions}×
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* ─── 7. RECENT SHOTS ─────────────────────────────────────────
             2026-05-25 — Fix X: swapped the plain text list for the new
             ShotTimeline component (icons + outcome chips + distance).
@@ -848,6 +879,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 6,
   },
+  practiceCard: {
+    marginHorizontal: 12, marginTop: 8, marginBottom: 6,
+    borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  practiceHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
+  practiceLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  practiceTotal: { fontSize: 26, fontWeight: '900' },
+  practiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
+  practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
+  practiceDrillPts: { fontSize: 12, fontWeight: '600' },
   statTile: {
     flex: 1,
     borderWidth: 1,
