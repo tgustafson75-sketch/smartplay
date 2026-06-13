@@ -57,6 +57,7 @@ import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
+import { evaluateTeeGoal, describeTeeGoal } from '../../services/goals/teeScoreGoal';
 
 interface ScenarioResult {
   scenario: string;
@@ -1146,6 +1147,48 @@ check('Green heat-map log: rolls accumulate per green into an honest summary (da
     );
   })(),
   'measured rolls persist per course+hole; summary reports dominant break/pace/make-rate, honest mixed when no majority, bounded');
+
+check('Tee Goals: "break X from the Y tees" evaluated honestly vs round history',
+  // 2026-06-13 — round-side sibling of SmartPlan. evaluateTeeGoal counts ONLY
+  // rounds matching the tee + holes (+ optional course), reports best/attempts/
+  // gap/achieved, and surfaces rounds skipped for a missing tee (the nudge). A
+  // tee-specific goal does NOT silently count untagged rounds.
+  (() => {
+    const mk = (over: Partial<any>): any => ({
+      id: String(Math.random()), roundNumber: 1, courseName: 'X', courseId: 'c1',
+      startedAt: 1, endedAt: 1, holesPlayed: 18, totalScore: 95, scoreVsPar: 23,
+      isCompetition: false, nineHoleMode: false, mode: 'free_play', scores: {}, putts: {}, shots: [],
+      selectedTee: 'red', ...over,
+    });
+    const history = [
+      mk({ totalScore: 95, endedAt: 10, selectedTee: 'red' }),
+      mk({ totalScore: 88, endedAt: 20, selectedTee: 'red' }),   // best red, breaks 90
+      mk({ totalScore: 84, endedAt: 30, selectedTee: 'white' }), // different tee — excluded from a red goal
+      mk({ totalScore: 91, endedAt: 40, selectedTee: 'unspecified' }), // untagged — skipped for a red goal
+      mk({ totalScore: 47, endedAt: 50, selectedTee: 'red', nineHoleMode: true, holesPlayed: 9, scoreVsPar: 11 }),
+    ];
+    const break90Red = evaluateTeeGoal(
+      { id: 'g1', tee: 'red', targetScore: 90, beatPar: false, nine: false, createdAt: 0 }, history);
+    const break80Red = evaluateTeeGoal(
+      { id: 'g2', tee: 'red', targetScore: 80, beatPar: false, nine: false, createdAt: 0 }, history);
+    const anyTee = evaluateTeeGoal(
+      { id: 'g3', tee: 'unspecified', targetScore: 90, beatPar: false, nine: false, createdAt: 0 }, history);
+    const nineRed = evaluateTeeGoal(
+      { id: 'g4', tee: 'red', targetScore: 50, beatPar: false, nine: true, createdAt: 0 }, history);
+    return (
+      // break 90 from reds: 2 red 18h rounds (95, 88); best 88 < 90 = achieved; white + untagged excluded
+      break90Red.attempts === 2 && break90Red.best === 88 && break90Red.achieved === true &&
+        break90Red.skippedNoTee === 1 && /not counted/.test(break90Red.note) &&
+      // break 80 from reds: same 2 attempts, best 88, NOT achieved, gap reported
+      break80Red.achieved === false && break80Red.gap != null && break80Red.gap > 0 &&
+      // any-tee 18h goal counts all 18-hole rounds (red+white+untagged = 4), best 84
+      anyTee.attempts === 4 && anyTee.best === 84 && anyTee.skippedNoTee === 0 &&
+      // 9-hole red goal isolates the single nine (47 < 50 = achieved)
+      nineRed.attempts === 1 && nineRed.best === 47 && nineRed.achieved === true &&
+      /from the reds/.test(describeTeeGoal(break90Red.goal))
+    );
+  })(),
+  'tee+holes filter; achieved/best/gap; honest skipped-no-tee count; any-tee counts all; 9-hole isolates the nine');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

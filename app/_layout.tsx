@@ -992,6 +992,11 @@ function AppNavigator() {
           name="ball-fit"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — Tee Goals: "break X from the Y tees" round challenges. */}
+        <Stack.Screen
+          name="tee-goals"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}

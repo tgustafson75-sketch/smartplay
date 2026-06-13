@@ -208,6 +208,10 @@ export interface RoundRecord {
   scores: Record<number, number>;
   putts: Record<number, number>;
   shots: ShotResult[];
+  // 2026-06-13 — tee played, persisted onto the record so tee-box score goals
+  // (services/goals/teeScoreGoal) can evaluate "break 90 from the reds" honestly.
+  // Optional: rounds that predate this (and imports) read as 'unspecified' = untagged.
+  selectedTee?: TeeColor;
   // 2026-06-13 (Tim) — short caddie summary shown on the dashboard Recent Rounds.
   // For new rounds the rich LLM recap (planStorage) is preferred; this is a
   // deterministic baseline, also backfilled onto past in-app rounds that predate
@@ -1133,6 +1137,7 @@ export const useRoundStore = create<RoundState>()(
           scores: { ...s.scores },
           putts: { ...s.putts },
           shots: [...s.shots],
+          selectedTee: s.selectedTee,
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
         // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
