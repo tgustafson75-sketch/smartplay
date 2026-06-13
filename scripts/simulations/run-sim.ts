@@ -1334,8 +1334,10 @@ check('SmartTrace capture seam — vision-camera staged behind a default-off fla
   (() => {
     const flags = read('services/capture/captureFlags.ts');
     const cam = read('components/capture/SwingVisionCamera.tsx');
+    const store = read('store/captureEngineStore.ts');
     return (
-      /export const USE_VISION_CAMERA = false/.test(flags) &&        // default off = no regression
+      /export const DEFAULT_USE_VISION_CAMERA = false/.test(flags) && // default off = no regression
+      /useVisionCamera: DEFAULT_USE_VISION_CAMERA/.test(store) &&     // runtime toggle seeds from the off default
       /PREFERRED_CAPTURE_FPS = \d+/.test(flags) &&                    // a real high-fps target
       /audio=\{false\}/.test(cam) &&                                 // off the mic — protects the acoustic anchor
       /recordAsync\(/.test(cam) && /stopRecording\(\)/.test(cam) &&  // mimics CameraView's ref API (drop-in)
@@ -1352,14 +1354,14 @@ check('SmartTrace Stage 1 wiring — swing path gated on the flag, expo-camera p
   (() => {
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      /import \{ USE_VISION_CAMERA \} from '\.\.\/\.\.\/services\/capture\/captureFlags'/.test(sm) &&
-      /USE_VISION_CAMERA \? \(/.test(sm) &&                  // the flag-gated branch
+      /useCaptureEngineStore/.test(sm) &&                    // reads the runtime toggle
+      /useVisionCamera \? \(/.test(sm) &&                    // the flag-gated branch
       /<SwingVisionCamera/.test(sm) &&                       // vision path mounted when on
       /<CameraView/.test(sm) &&                              // expo-camera path still present when off
       /ref=\{cameraRef/.test(sm)                             // one ref drives both engines
     );
   })(),
-  'smartmotion mounts the vision camera only when USE_VISION_CAMERA is on and keeps the expo-camera CameraView as the default-off path, both driven by the same cameraRef — one build validates regression-free swap (SmartTrace Stage 1)');
+  'smartmotion mounts the vision camera only when the runtime capture-engine toggle is on and keeps the expo-camera CameraView as the default-off path, both driven by the same cameraRef — one build A/B-tests both engines (SmartTrace Stage 1)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&

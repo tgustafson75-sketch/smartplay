@@ -20,12 +20,12 @@
  */
 
 /**
- * Master switch for the vision-camera swing/cage capture path. Default OFF so
- * every build behaves exactly like today until the vision path is validated on a
- * device. Flip to true (in a vision-camera build) to route the swing camera
- * through react-native-vision-camera.
+ * Compile-time DEFAULT for the vision-camera swing/cage capture path. OFF so every
+ * build behaves exactly like today until the vision path is validated on a device.
+ * The live value is a persisted runtime toggle (store/captureEngineStore) the owner
+ * flips on the native-modules-debug screen — so one build A/B-tests both engines.
  */
-export const USE_VISION_CAMERA = false;
+export const DEFAULT_USE_VISION_CAMERA = false;
 
 /**
  * Preferred capture frame rate (fps) for swing video. SmartTrace reads the ball's

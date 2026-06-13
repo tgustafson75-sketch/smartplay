@@ -51,7 +51,7 @@ import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { SwingVisionCamera, type SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
-import { USE_VISION_CAMERA } from '../../services/capture/captureFlags';
+import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as Haptics from 'expo-haptics';
@@ -646,6 +646,9 @@ export default function SmartMotion() {
   // coords are all unaffected — zero analysis changes. (A mirrored selfie preview
   // would feel natural but flip every direction read, so we deliberately don't.)
   const [facing, setFacing] = useState<'back' | 'front'>('back');
+  // SmartTrace: runtime capture-engine toggle (default expo-camera). Flipped on the
+  // native-modules-debug screen so one build A/B-tests vision-camera vs expo-camera.
+  const useVisionCamera = useCaptureEngineStore((s) => s.useVisionCamera);
   const videoRef = useRef<Video>(null);
   const pagerRef = useRef<ScrollView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
@@ -2162,7 +2165,7 @@ export default function SmartMotion() {
           // auto-snapshot) is absent on the vision handle → those `?.` calls no-op
           // and ball-area falls back to manual anchoring until the vision photo path
           // lands (Stage 1 follow-up). Default OFF → this is dead, CameraView runs.
-          USE_VISION_CAMERA ? (
+          useVisionCamera ? (
             <SwingVisionCamera
               ref={cameraRef as unknown as React.Ref<SwingCameraHandle>}
               style={StyleSheet.absoluteFill}

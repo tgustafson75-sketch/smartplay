@@ -16,11 +16,13 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Share } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Share, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCaptureEngineStore } from '../store/captureEngineStore';
+import { PREFERRED_CAPTURE_FPS } from '../services/capture/captureFlags';
 import {
   getAllNativeModuleHealth,
   recordNativeModuleHealth,
@@ -35,6 +37,8 @@ export default function NativeModulesDebug() {
   // module-level so we just bump a counter to re-pull.
   const [_, setBump] = useState(0);
   const records = getAllNativeModuleHealth();
+  const useVisionCamera = useCaptureEngineStore((s) => s.useVisionCamera);
+  const setUseVisionCamera = useCaptureEngineStore((s) => s.setUseVisionCamera);
 
   const refresh = () => {
     // Re-probe each known native module so lazy loaders that landed
@@ -68,6 +72,25 @@ export default function NativeModulesDebug() {
           pose, voice-only glasses). Tap a row to copy details. Share
           icon top-right exports the full snapshot.
         </Text>
+
+        {/* SmartTrace capture-engine A/B toggle — flip the swing camera between
+            expo-camera and vision-camera (high-fps) live, to compare on a real
+            phone within ONE build. Only effective in a vision-camera build. */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.cardHeader}>
+            <View style={[styles.dot, { backgroundColor: useVisionCamera ? '#22c55e' : colors.text_muted }]} />
+            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>Swing capture engine</Text>
+            <Switch value={useVisionCamera} onValueChange={setUseVisionCamera} />
+          </View>
+          <Text style={[styles.cardMeta, { color: colors.text_muted }]}>
+            {useVisionCamera
+              ? `Vision-camera (SmartTrace, up to ${PREFERRED_CAPTURE_FPS}fps) · video-only, acoustic mic untouched`
+              : 'Expo-camera (default, ~30fps) · the proven path'}
+          </Text>
+          <Text style={[styles.cardReason, { color: colors.text_secondary }]}>
+            Only effective in a build that linked vision-camera. Record a swing on each, compare, confirm strike detection still fires.
+          </Text>
+        </View>
 
         {records.length === 0 ? (
           <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
