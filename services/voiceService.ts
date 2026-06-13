@@ -1019,8 +1019,18 @@ export const speak = async (
     // Read from settings store at request time (dynamic require avoids a
     // module-load cycle since voiceService is imported very early).
     let persona: string | null = null;
+    let effectiveGender = gender;
     try {
       persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+      // 2026-06-12 (Tim) — the CUSTOM caddie keeps its generated face but speaks with a
+      // real default voice for any unrecorded line: the user's male/female toggle maps to
+      // Kevin's onyx / Serena's nova on the server (which falls back on `gender` for the
+      // 'custom' persona). So a custom caddie always has a voice, never silence.
+      if (persona === 'custom') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const g = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieGender;
+        if (g === 'male' || g === 'female') effectiveGender = g;
+      }
     } catch { /* ignore */ }
     // 2026-05-27 — Fix EX: snapshot the playback volume + rate NOW so
     // the TTS request, log, first createAsync, retry createAsync, and
@@ -1055,7 +1065,7 @@ export const speak = async (
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: preprocessTtsText(text, language), gender, language, persona, model_id: ttsModel }),
+      body: JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
 

@@ -60,6 +60,8 @@ export default function CustomCaddieScreen() {
     customCaddieName,
     setUseCustomCaddie,
     setCustomCaddieName,
+    customCaddieGender,
+    setCustomCaddieGender,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
     // 2026-05-27 — Fix ED: default to {} so users hydrating from a
     // persist snapshot that pre-dates Fix DY can't crash this UI on
@@ -628,6 +630,29 @@ export default function CustomCaddieScreen() {
               your recording for any phrase you record and the AI voice
               for everything else. {recordedCount > 0 ? `${recordedCount} recorded.` : 'None recorded yet.'}
             </Text>
+          </View>
+
+          {/* 2026-06-12 (Tim) — default AI voice for any UNRECORDED line. Custom keeps its
+              generated face but always speaks: male → Kevin's voice, female → Serena's. */}
+          <Text style={styles.recorderHelp}>Default voice (for lines you don&apos;t record):</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, marginBottom: 4 }}>
+            {(['male', 'female'] as const).map(g => {
+              const on = (customCaddieGender ?? 'male') === g;
+              return (
+                <TouchableOpacity
+                  key={g}
+                  onPress={() => setCustomCaddieGender(g)}
+                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: on ? '#00C896' : '#374151', backgroundColor: on ? 'rgba(0,200,150,0.14)' : 'transparent' }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Ionicons name={g === 'male' ? 'man-outline' : 'woman-outline'} size={16} color={on ? '#00C896' : '#9ca3af'} />
+                  <Text style={{ color: on ? '#00C896' : '#9ca3af', fontWeight: '700', fontSize: 13 }}>
+                    {g === 'male' ? 'Male · Kevin' : 'Female · Serena'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {(['greeting', 'reaction', 'encouragement', 'closing'] as const).map(cat => {

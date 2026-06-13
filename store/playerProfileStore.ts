@@ -104,6 +104,11 @@ interface PlayerProfileState {
   selfieB64: string | null;
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
+  // 2026-06-12 (Tim) — the custom caddie keeps its generated FACE but uses a real voice:
+  // this toggle picks the default fallback voice (male → Kevin's onyx, female → Serena's
+  // nova) for any line the user hasn't personally recorded. So a custom caddie always
+  // speaks even with zero recorded clips. Default male.
+  customCaddieGender: 'male' | 'female';
 
   // 2026-06-06 — User-chosen NAME for the custom caddie. Drives the
   // display label everywhere the cycler shows 'Custom' as the 5th
@@ -201,6 +206,7 @@ interface PlayerProfileState {
   // source and are nulled once migrateFromProfile() runs. Write via the media
   // store's setSelfieB64 / setCustomCaddiePortraitB64.
   setUseCustomCaddie: (on: boolean) => void;
+  setCustomCaddieGender: (g: 'male' | 'female') => void;
   setCustomCaddieName: (name: string | null) => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
@@ -260,6 +266,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       selfieB64: null,
       customCaddiePortraitB64: null,
       useCustomCaddie: false,
+      customCaddieGender: 'male',
       // 2026-05-26 — Fix DY default: empty map (no clips recorded yet).
       customCaddieClips: {},
       // 2026-06-06 — Custom caddie name default null → UI falls back to
@@ -331,6 +338,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setPersistentPatterns: (p) =>
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
+      setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });

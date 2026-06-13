@@ -1767,6 +1767,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /if \(cached\) \{ setAnalysis\(cached\); setSwingAnalyzing\(false\); return; \}/.test(smA),
     'scrubbing to a cached swing while an earlier read is in flight clears swingAnalyzing on the cached hit — the spinner can no longer stick on forever');
 
+  check('Custom caddie always has a voice (male/female default → Kevin/Serena)',
+    // 2026-06-12 (Tim) — custom keeps its generated face but speaks with a real default
+    // voice for any unrecorded line, picked by a male/female toggle. The server falls back
+    // on `gender` for the 'custom' persona, so the client sends customCaddieGender there.
+    /customCaddieGender: 'male' \| 'female'/.test(read('store/playerProfileStore.ts')) &&
+      /setCustomCaddieGender: \(g\) =>/.test(read('store/playerProfileStore.ts')) &&
+      /if \(persona === 'custom'\)/.test(read('services/voiceService.ts')) &&
+      /effectiveGender = g/.test(read('services/voiceService.ts')) &&
+      /gender: effectiveGender/.test(read('services/voiceService.ts')) &&
+      /setCustomCaddieGender\(g\)/.test(read('app/profile/custom-caddie.tsx')),
+    'custom caddie maps its male/female toggle to Kevin (onyx) / Serena (nova) for unrecorded lines — never silent, even with zero recorded clips');
+
   check('Library phase 1: additive captureKind classifier (smart_motion / coach / upload)',
     // 2026-06-12 (Tim) — foundation for the library carrying each session's matching
     // interface. ADDITIVE: the source enum is untouched; captureKind is a new classifier,
