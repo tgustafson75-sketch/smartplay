@@ -1597,6 +1597,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /if \(sid && feelText\.trim\(\)\) \{[\s\S]*?setSessionFeel\(sid, feelText\.trim\(\)\)/.test(smSrc2),
     'library thumbnails backfill + persist; ball-speed badge shows ~est from the SwingMetric (no raw mph); feel saved on Save');
 
+  check('Battery saver: the low-battery prompt is actually RENDERED (was dead-wired)',
+    // 2026-06-12 (Tim's round) — batteryMonitor fired promptVisible at ≤20% but ONLY the
+    // debug screen rendered it, so the offer never showed in the real app and rounds
+    // drained. The prompt is now mounted globally in _layout, and a round that STARTS
+    // already low (≤30%) gets offered up front instead of waiting to hit 20%.
+    /<BatterySaverPrompt \/>/.test(read('app/_layout.tsx')) &&
+      /import \{ BatterySaverPrompt \}/.test(read('app/_layout.tsx')) &&
+      /subscribeBattery/.test(read('components/battery/BatterySaverPrompt.tsx')) &&
+      /if \(!bs\?\.promptVisible\) return null/.test(read('components/battery/BatterySaverPrompt.tsx')) &&
+      /ROUND_START_THRESHOLD = 0\.30/.test(read('services/batteryMonitor.ts')) &&
+      /evaluatePrompt\(state\.level, ROUND_START_THRESHOLD\)/.test(read('services/batteryMonitor.ts')),
+    'the battery-saver offer renders in the real app (not just the debug screen) and fires at round start when already low — so a low-battery round can actually ease GPS');
+
   check('CNS fix: [LAST SHOT] reads roundStore.shots (not the phantom recentShots)',
     /const shots = round\.shots \?\? \[\]/.test(read('services/unifiedVisionContext.ts')) &&
       !/as unknown as \{ recentShots/.test(read('services/unifiedVisionContext.ts')),

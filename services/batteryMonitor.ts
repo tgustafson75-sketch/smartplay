@@ -15,6 +15,10 @@ import { useRoundStore } from '../store/roundStore';
 import { setBatterySaverFloor } from './gpsManager';
 
 const PROMPT_THRESHOLD = 0.20;
+// 2026-06-12 — if a round STARTS already low, offer the saver immediately instead of
+// waiting to drain to 20% mid-round. Tim showed up at 24% on a power-hungry Z Fold and
+// never got the offer because it only fired at ≤20%. 30% gives real runway to decide.
+const ROUND_START_THRESHOLD = 0.30;
 
 type Listener = (state: BatteryState) => void;
 
@@ -48,13 +52,14 @@ function breadcrumb(message: string, data?: Record<string, unknown>) {
   } catch {}
 }
 
-function evaluatePrompt(level: number): void {
+function evaluatePrompt(level: number, threshold: number = PROMPT_THRESHOLD): void {
   const round = useRoundStore.getState();
   if (!round.isRoundActive) return;
   if (state.alreadyPromptedThisRound) return;
-  if (level > PROMPT_THRESHOLD) return;
+  if (state.saverActive) return; // already on — don't nag
+  if (level > threshold) return;
   state = { ...state, promptVisible: true, alreadyPromptedThisRound: true };
-  breadcrumb('prompt_shown', { level });
+  breadcrumb('prompt_shown', { level, threshold });
   emit();
 }
 
@@ -124,12 +129,15 @@ export function initBatteryMonitor(): void {
   });
   unsubBattery = () => { try { sub.remove(); } catch {} };
 
-  // Reset per-round state on round transitions.
+  // Reset per-round state on round end; offer the saver up front on round START if the
+  // battery is already low (so a player who tees off low isn't stuck at full-power GPS
+  // until it drains to 20%).
   let active = useRoundStore.getState().isRoundActive;
   roundUnsub = useRoundStore.subscribe((s) => {
     if (s.isRoundActive === active) return;
     active = s.isRoundActive;
-    if (!active) resetForNewRound();
+    if (!active) { resetForNewRound(); return; }
+    if (state.level != null) evaluatePrompt(state.level, ROUND_START_THRESHOLD);
   });
 }
 

@@ -76,6 +76,7 @@ import NativeFallbackBanner from '../components/NativeFallbackBanner';
 import CaptionStrip from '../components/CaptionStrip';
 import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
+import { BatterySaverPrompt } from '../components/battery/BatterySaverPrompt';
 // 2026-05-24 (Flow C) — Tap-to-undo banner for silent tee Marks
 // fired by the declare-hole cross-check. Reads from undoMarkStore;
 // hides itself after the visibility window. Sibling to GlobalToast.
@@ -833,6 +834,11 @@ function AppNavigator() {
       <GlobalToolsMenu />
       {/* Tiny snackbar for one-shot confirmations (mode change, etc.). */}
       <GlobalToast />
+      {/* 2026-06-12 — battery-saver prompt at ≤20% during a round. The monitor was
+          firing promptVisible into the void (only the debug screen rendered it), so
+          the offer never appeared in the real app and rounds drained. Mounted here so
+          it shows anywhere. */}
+      <BatterySaverPrompt />
       {/* 2026-05-24 (Flow C) — Tap-to-undo affordance for silent
           tee Marks fired by the declare-hole cross-check. Auto-hides
           when the 30-second visibility window expires. */}
