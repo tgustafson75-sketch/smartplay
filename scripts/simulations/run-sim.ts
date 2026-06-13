@@ -1537,7 +1537,7 @@ const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
   /angle\?: 'down_the_line' \| 'face_on' \| 'glasses_pov' \| null/.test(poseApiSrc) &&
     /if \(angle === 'down_the_line'\) \{\s*\n\s*hipTurnDeg = null;\s*\n\s*shoulderTurnDeg = null;\s*\n\s*weightShiftPct = null;/.test(poseApiSrc) &&
-    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle\)/.test(smSrc),
+    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true\)/.test(smSrc),
   'down-the-line nulls the width-foreshortening turn + lateral weight metrics (invalid from behind) instead of reporting wrong numbers; angle threaded end-to-end');
 
 // 2026-06-10 — Caddie CNS Phase 1: memory store + writers (additive, honest).
@@ -2302,7 +2302,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // ─── On-device pose: analyzePoseFromUri → existing MediaPipe service ──────
   const poseApiSrc = fs.readFileSync(path.resolve(__dirname, '../../services/poseAnalysisApi.ts'), 'utf-8');
   check('Pose: analyzePoseFromUri runs on-device MediaPipe BEFORE the cloud proxy',
-    /import\('\.\/mediaPipePoseService'\)[\s\S]*?detectPoseFromUri\(imageUri, undefined, timestampMs\)[\s\S]*?if \(onDevice\) return onDevice;[\s\S]*?await fetch\(`\$\{apiUrl\(\)\}\/api\/pose-analysis`/.test(poseApiSrc),
+    /import\('\.\/mediaPipePoseService'\)[\s\S]*?detectPoseFromUri\(imageUri, undefined, timestampMs\)[\s\S]*?if \(onDevice\) \{[\s\S]*?return onDevice;[\s\S]*?await fetch\(`\$\{apiUrl\(\)\}\/api\/pose-analysis`/.test(poseApiSrc),
     'the choke point SmartMotion tempo/biomech use directly now routes to the already-built MediaPipe module first (model + native ship via withMediaPipePose), cloud only as fallback');
 
   check('Pose: no redundant ML Kit module left behind (reuse MediaPipe, not a 2nd engine)',
