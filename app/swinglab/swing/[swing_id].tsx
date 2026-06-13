@@ -23,6 +23,7 @@ import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
 import { exportCoachReport } from '../../../services/coachReport';
+import { getCaptureKind } from '../../../services/swingLibrary';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -601,6 +602,20 @@ export default function SwingDetail() {
 
   const issueTimestamps = shot.detected_issue_timestamps_sec ?? [];
 
+  // 2026-06-13 (Phase 2) — capture-kind identity. Every library entry now wears a
+  // badge that says WHAT it is — a live Smart Motion capture, an uploaded Coach
+  // lesson, or a plain video upload — so the detail view reads as the matching
+  // interface for its source instead of one generic screen. Drives the badge under
+  // the title; the multi-swing reel + metric HUD already key off the carved shots.
+  const captureKind = getCaptureKind(session);
+  const isMultiSwing = session.shots.length > 1
+    || session.shots.some(s => s.perShotAnalysis || s.clipStartSeconds != null);
+  const KIND_BADGE = {
+    smart_motion: { label: isMultiSwing ? 'Smart Motion · Session' : 'Smart Motion', icon: 'flash-outline' as const, tint: colors.accent },
+    coach:        { label: 'Coach Lesson', icon: 'school-outline' as const, tint: '#F0C030' },
+    upload:       { label: 'Upload', icon: 'cloud-upload-outline' as const, tint: colors.text_muted },
+  }[captureKind];
+
   // Phase V.7 — Re-run Phase K on this session with the post-V.6 pipeline.
   // Status transitions inside runPhaseKOnSession drive the existing analyzing
   // card automatically. Reset spokenForRef so Kevin re-narrates on completion.
@@ -754,9 +769,18 @@ export default function SwingDetail() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={1}>
-            {session.upload?.notes ?? `${session.club} swing`}
-          </Text>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={[styles.title, { color: colors.text_primary, flex: 0, maxWidth: '100%' }]} numberOfLines={1}>
+              {session.upload?.notes ?? `${session.club} swing`}
+            </Text>
+            {/* Phase 2 — capture-kind badge: the entry identifies its own source. */}
+            <View style={[styles.kindBadge, { borderColor: KIND_BADGE.tint }]}>
+              <Ionicons name={KIND_BADGE.icon} size={11} color={KIND_BADGE.tint} />
+              <Text style={[styles.kindBadgeText, { color: KIND_BADGE.tint }]} numberOfLines={1}>
+                {KIND_BADGE.label}
+              </Text>
+            </View>
+          </View>
           <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>
             {/* 2026-05-27 — Fix EP: send-to-Tank icon. Sits next to
                 the existing share icon. Sends this swing's video to
@@ -1910,6 +1934,11 @@ const styles = StyleSheet.create({
   },
   back: { fontSize: 16, fontWeight: '600', width: 60 },
   title: { fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },
+  kindBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1,
+  },
+  kindBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
   // 2026-05-17 — bumped from maxHeight 460 to 640 so the video reads as
   // the hero of the screen instead of a postage stamp. Tim's "video takes
   // half the screen in Pro vs V3 full screen" feedback.

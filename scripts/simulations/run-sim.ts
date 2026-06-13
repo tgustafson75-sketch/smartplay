@@ -823,6 +823,21 @@ check('Caddie report-read lag: warmVoice prewarm + speakChunked fast-first-word'
     /warmVoice\(getApiBaseUrl\(\)\)/.test(smSrc), // smartmotion warms at analysis start
   'report reads start near-instantly: hot endpoint + first sentence plays without waiting for the whole clip');
 
+check('Phase 2: library detail wears a capture-kind badge (Smart Motion / Coach / Upload)',
+  // 2026-06-13 — Every library entry identifies its own source so the detail view
+  // reads as the matching interface, not one generic screen. getCaptureKind drives
+  // a badge under the title; the multi-swing label keys off carved shots.
+  (() => {
+    const s = read('app/swinglab/swing/[swing_id].tsx');
+    return /import \{ getCaptureKind \} from '\.\.\/\.\.\/\.\.\/services\/swingLibrary'/.test(s) &&
+      /const captureKind = getCaptureKind\(session\)/.test(s) &&
+      /smart_motion:\s*\{ label:/.test(s) && /coach:\s*\{ label: 'Coach Lesson'/.test(s) &&
+      /upload:\s*\{ label: 'Upload'/.test(s) &&
+      /isMultiSwing \? 'Smart Motion · Session' : 'Smart Motion'/.test(s) &&
+      /styles\.kindBadge/.test(s) && /name=\{KIND_BADGE\.icon\}/.test(s);
+  })(),
+  'the detail header names what each entry IS — live session vs coach lesson vs plain upload');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
