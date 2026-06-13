@@ -1195,6 +1195,25 @@ check('Scorecard clears to empty on save (Tim: "when saved, clear it")',
   })(),
   'finished round → saved to history + scorecard clears to empty (review lives in dashboard Recent Rounds / recap)');
 
+check('Club usage is COMPLETE — clubless shots inferred from distance (Tim)',
+  // 2026-06-13 — a shot with no tagged club used to be skipped, so any shot where
+  // the club wasn't changed/stated never showed. Now the usage view infers the
+  // club from the shot distance (display-only; the real bag stays confirmed-only)
+  // and flags those rows ~est. Shots with neither club nor distance are skipped.
+  (() => {
+    const sc = read('app/(tabs)/scorecard.tsx');
+    return (
+      /clubStats\.inferClub\(d\)/.test(sc) &&                       // infer from distance
+      /else return; \/\/ no club \+ no distance/.test(sc) &&        // honest skip when no signal
+      /estimated: v\.estCount > 0 && v\.estCount === v\.count/.test(sc) && // flag fully-inferred clubs
+      /item\.estimated \?/.test(sc) &&                              // surfaced ~est in the row
+      /useClubStatsStore/.test(sc) &&
+      // does NOT write back to the shot/bag — purely the usage aggregation
+      !/setClub\(|recordShot\(/.test(sc)
+    );
+  })(),
+  'every shot with a distance now counts in club usage (inferred club, marked ~est); the real bag model is untouched');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

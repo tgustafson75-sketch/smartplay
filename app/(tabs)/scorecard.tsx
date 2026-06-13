@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
+import { useClubStatsStore } from '../../store/clubStatsStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
@@ -222,21 +223,39 @@ export default function Scorecard() {
 
   // Club usage aggregation — pure helper, memoized so dep arrays are
   // stable and the lint rule is satisfied without disable directives.
-  type ClubAgg = { club: string; count: number; avg: number | null };
+  type ClubAgg = { club: string; count: number; avg: number | null; estimated: boolean };
   const aggregateClubs = useCallback((shots: ShotResult[]): ClubAgg[] => {
-    const map = new Map<string, { count: number; distSum: number; distCount: number }>();
+    // 2026-06-13 (Tim) — COMPLETE the club-usage view. Previously a shot with no
+    // tagged club was skipped, so any shot where the club wasn't changed/stated
+    // never showed — an incomplete picture. Now a clubless shot is attributed by
+    // INFERRING the club from its distance (carry / to-rest). Display-only: this
+    // does NOT write back to the shot or the real bag model (which stays
+    // confirmed-clubs-only for honest recommendations) — it just gives the usage
+    // table the full picture. Inferred shots are flagged `estimated` so the UI can
+    // mark them honestly. Shots with neither a club nor a distance are still
+    // skipped (no signal to attribute).
+    const clubStats = useClubStatsStore.getState();
+    const map = new Map<string, { count: number; distSum: number; distCount: number; estCount: number }>();
     shots.forEach(s => {
-      if (!s.club) return;
-      const cur = map.get(s.club) ?? { count: 0, distSum: 0, distCount: 0 };
+      const d = (s as ShotResult & { distance_yards?: number | null }).distance_yards
+        ?? (s as ShotResult & { carry_distance?: number | null }).carry_distance ?? null;
+      let club = s.club;
+      let inferred = false;
+      if (!club) {
+        if (typeof d === 'number' && d > 0) { club = clubStats.inferClub(d); inferred = true; }
+        else return; // no club + no distance → nothing to attribute
+      }
+      const cur = map.get(club) ?? { count: 0, distSum: 0, distCount: 0, estCount: 0 };
       cur.count += 1;
-      const d = (s as ShotResult & { distance_yards?: number | null }).distance_yards;
+      if (inferred) cur.estCount += 1;
       if (typeof d === 'number' && d > 0) { cur.distSum += d; cur.distCount += 1; }
-      map.set(s.club, cur);
+      map.set(club, cur);
     });
     return Array.from(map.entries())
       .map(([club, v]) => ({
         club, count: v.count,
         avg: v.distCount > 0 ? Math.round(v.distSum / v.distCount) : null,
+        estimated: v.estCount > 0 && v.estCount === v.count, // every shot for this club was inferred
       }))
       .sort((a, b) => b.count - a.count);
   }, []);
@@ -713,7 +732,9 @@ export default function Scorecard() {
               </View>
               {clubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
-                  <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>{item.club}</Text>
+                  <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>
+                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> ~est</Text> : null}
+                  </Text>
                   <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
                   <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>
                     {item.avg != null ? item.avg : '—'}
