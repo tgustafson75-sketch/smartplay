@@ -114,6 +114,40 @@ const CARDS: LauncherCardSpec[] = [
   },
 ];
 
+// 2026-06-13 (Tim) — surface the Practice Engine on the practice tab where it
+// belongs (it was buried in the caddie Tools menu — discoverability gap, see memory
+// practice-engine-smartmotion). All run THROUGH Smart Motion. Copy from the spec
+// (no i18n keys yet — LauncherCard falls back to spec.title/sub).
+const PRACTICE_CARDS: LauncherCardSpec[] = [
+  {
+    key: 'open-range',
+    icon: 'infinite-outline',
+    title: 'Open Range',
+    sub: 'Quantify the mash — balls, flight-seen, on-line rate, per club',
+    route: '/practice/open-range',
+    accent: '#22d3ee',
+    tag: 'RANGE',
+  },
+  {
+    key: 'focus-session',
+    icon: 'list-outline',
+    title: 'Focus Session',
+    sub: 'Interleaved practice for one focus — auto-advances as you swing',
+    route: '/practice/session',
+    accent: '#fb7185',
+    tag: 'FOCUS',
+  },
+  {
+    key: 'smartplan',
+    icon: 'calendar-outline',
+    title: 'SmartPlan',
+    sub: 'A weighted weekly plan from your goal · tap a day to run it',
+    route: '/practice/smartplan',
+    accent: '#a3e635',
+    tag: 'PLAN',
+  },
+];
+
 /** Fade a hex color to an rgba string (for tinted icon boxes + tag chips). */
 function hexFade(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -165,6 +199,21 @@ export default function SwingLab() {
             }}
           />
         ))}
+
+        {/* PRACTICE ENGINE — goal-driven practice that runs through Smart Motion. */}
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
+          {t('swinglab.practice_engine', { defaultValue: 'PRACTICE ENGINE' })}
+        </Text>
+        {PRACTICE_CARDS.map((card) => (
+          <LauncherCard
+            key={card.key}
+            spec={card}
+            colors={colors}
+            onPress={() => {
+              if (card.route) router.push(card.route as never);
+            }}
+          />
+        ))}
        </View>
       </ScrollView>
       <QuickTutorial
@@ -189,8 +238,10 @@ interface LauncherCardProps {
 
 function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
-  const title = t('swinglab.card_' + spec.key + '_title');
-  const sub = t('swinglab.card_' + spec.key + '_sub');
+  // Localized when a key exists; falls back to the spec copy otherwise (so new
+  // cards — e.g. the Practice Engine section — need no i18n churn to ship).
+  const title = t('swinglab.card_' + spec.key + '_title', { defaultValue: spec.title });
+  const sub = t('swinglab.card_' + spec.key + '_sub', { defaultValue: spec.sub });
   const accent = spec.accent;
   return (
     <Pressable
