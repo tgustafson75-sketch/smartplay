@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useClubStatsStore } from '../../store/clubStatsStore';
+import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
@@ -90,6 +91,15 @@ export default function Scorecard() {
     [isRoundActive, shots, lastCompletedRound],
   );
   const viewCourseName = isRoundActive ? activeCourse : (lastCompletedRound?.courseName ?? null);
+
+  // 2026-06-13 (Tim) — highlight swings: Smart Motion swings captured on-course and
+  // starred for THIS round (roundId stamped at capture). Surfaced on the scorecard,
+  // tap → the swing's full review.
+  const cageSessions = useCageStore(s => s.sessionHistory);
+  const highlightSwings = useMemo(
+    () => (viewingRoundId ? cageSessions.filter(x => x.starred && x.roundId === viewingRoundId) : []),
+    [cageSessions, viewingRoundId],
+  );
 
   // 2026-06-06 — Phase 6.2 fix: effective nine-hole mode reads from the
   // ROUND BEING VIEWED, not the live store. After endRound, store
@@ -720,6 +730,36 @@ export default function Scorecard() {
           </View>
         )}
 
+        {/* 2026-06-13 (Tim) — HIGHLIGHT SWINGS: on-course Smart Motion swings the
+            player starred this round. Tap → the full swing review. */}
+        {highlightSwings.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>★ {t('scorecard.highlight_swings', { defaultValue: 'Highlight Swings' })}</Text>
+            <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
+              {highlightSwings.map(sw => (
+                <TouchableOpacity
+                  key={sw.id}
+                  onPress={() => router.push(`/swinglab/swing/${sw.id}` as never)}
+                  style={[styles.highlightRow, { borderBottomColor: c.border }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Highlight swing${sw.roundHole ? `, hole ${sw.roundHole}` : ''} — open review`}
+                >
+                  <AppIcon name="star" size={16} color="#F5A623" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.highlightClub, { color: c.text_primary }]} numberOfLines={1}>
+                      {sw.club || 'Swing'}{sw.roundHole ? ` · hole ${sw.roundHole}` : ''}
+                    </Text>
+                    {sw.primary_issue?.name ? (
+                      <Text style={[styles.highlightSub, { color: c.text_muted }]} numberOfLines={1}>{sw.primary_issue.name}</Text>
+                    ) : null}
+                  </View>
+                  <AppIcon name="chevron-forward" size={18} color={c.text_muted} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* CLUB USAGE */}
         {hasAnythingToShow && clubUsage.length > 0 && (
           <View style={styles.section}>
@@ -830,6 +870,9 @@ const styles = StyleSheet.create({
   },
   emptyRoundTitle: { fontSize: 17, fontWeight: '800' },
   emptyRoundBody: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 19 },
+  highlightRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  highlightClub: { fontSize: 14, fontWeight: '800' },
+  highlightSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
 
   summary: {
     flexDirection: 'row',

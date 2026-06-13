@@ -834,6 +834,17 @@ export default function SwingDetail() {
                 <Ionicons name="paper-plane-outline" size={20} color="#F0C030" />
               </TouchableOpacity>
             )}
+            {/* 2026-06-13 (Tim) — star a swing as a round highlight. When it was
+                captured on-course (carries a roundId), starring saves it to that
+                round's scorecard + recap. */}
+            <TouchableOpacity
+              onPress={() => { useCageStore.getState().toggleSessionStarred(session.id); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel={session.starred ? 'Unstar this swing' : 'Star this swing — saves it to the round scorecard'}
+            >
+              <Ionicons name={session.starred ? 'star' : 'star-outline'} size={21} color={session.starred ? '#F5A623' : colors.accent} />
+            </TouchableOpacity>
             {isInstructor ? (
               <TouchableOpacity
                 onPress={handleExportReport}

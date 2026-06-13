@@ -188,6 +188,14 @@ export interface CageSession {
   // which interface the library renders. Undefined on legacy sessions → inferred from
   // source via getCaptureKind. See [[smartmotion-shot-map]] / library reporting work.
   captureKind?: CaptureKind;
+  // 2026-06-13 (Tim) — on-course HIGHLIGHT swings. When a Smart Motion swing is
+  // captured during an active round, the round context is stamped so the
+  // scorecard/recap for that round can surface it; `starred` = the user saved it
+  // to that round's scorecard ("put a star on it"). All null/false off-course.
+  roundId?: string | null;
+  roundCourseId?: string | null;
+  roundHole?: number | null;
+  starred?: boolean;
   // Phase R — source kind. 'live_cage' is the original Phase J flow; an
   // 'uploaded_video' session wraps a single uploaded swing (one CageShot)
   // with upload metadata so it browses uniformly in the swing library.
@@ -503,6 +511,8 @@ interface CageState {
    *  AI analysis path — both display side-by-side on the swing
    *  detail screen. Pass empty string or null to clear. */
   setSessionCoachNote: (sessionId: string, note: string | null) => void;
+  /** 2026-06-13 — toggle a swing as a saved highlight (star) for its round's scorecard. */
+  toggleSessionStarred: (sessionId: string) => void;
   /** Feels engine — store the player's stated feel on the session. */
   setSessionFeel: (sessionId: string, note: string | null) => void;
   /** 2026-06-12 — Persist a lazily-generated library thumbnail (representative
@@ -616,6 +626,21 @@ export function derivePlayerId(): string {
     if (email && email.trim().length > 0) return email.trim().toLowerCase();
   } catch { /* no-op — profile store unavailable */ }
   return 'account_holder';
+}
+
+// 2026-06-13 (Tim) — stamp the active-round context onto a Smart Motion capture so
+// the scorecard/recap for that round can surface it as a highlight swing. Dynamic
+// require avoids a roundStore↔cageStore import cycle. All-null off-course.
+function roundContextStamp(): { roundId: string | null; roundCourseId: string | null; roundHole: number | null } {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useRoundStore } = require('./roundStore') as typeof import('./roundStore');
+    const r = useRoundStore.getState();
+    if (r.isRoundActive) {
+      return { roundId: r.currentRoundId ?? null, roundCourseId: r.activeCourseId ?? null, roundHole: r.currentHole ?? null };
+    }
+  } catch { /* non-fatal — off-course or store unavailable */ }
+  return { roundId: null, roundCourseId: null, roundHole: null };
 }
 
 // ─── STORE ────────────────────────────────
@@ -873,6 +898,7 @@ export const useCageStore = create<CageState>()(
           summary: null,
           source: resolvedSource,
           captureKind: resolvedCaptureKind,
+          ...roundContextStamp(),
           upload,
           analysis_status: 'pending',
           analysis_error: null,
@@ -940,6 +966,7 @@ export const useCageStore = create<CageState>()(
           summary: null,
           source: 'live_cage',
           captureKind: captureKind ?? 'smart_motion',
+          ...roundContextStamp(),
           upload,
           analysis_status: 'pending',
           analysis_error: null,
@@ -1128,6 +1155,13 @@ export const useCageStore = create<CageState>()(
               ...session,
               coach_note: note && note.trim().length > 0 ? note.trim() : null,
             }
+          ),
+        })),
+
+      toggleSessionStarred: (sessionId) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, starred: !session.starred }
           ),
         })),
 

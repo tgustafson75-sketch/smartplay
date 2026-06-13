@@ -1230,6 +1230,32 @@ check('Caddie round summary carries to the dashboard Recent Rounds (Tim)',
   })(),
   'each Recent Rounds row shows the caddie summary (loaded from planStorage); partial rounds included (no completion gate)');
 
+check('Highlight swings: star an on-course SM swing → shows on the round scorecard (Tim)',
+  // 2026-06-13 — full chain. (1) cageStore stamps the active-round context onto a
+  // capture + has a starred flag + toggle. (2) the swing detail has a star toggle.
+  // (3) the scorecard surfaces starred swings stamped with THIS round → tap → review.
+  (() => {
+    const store = read('store/cageStore.ts');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const sc = read('app/(tabs)/scorecard.tsx');
+    return (
+      // foundation: round context stamped at ingest + starred + toggle
+      /function roundContextStamp\(\)/.test(store) &&
+      /roundId: r\.currentRoundId/.test(store) &&
+      (store.match(/\.\.\.roundContextStamp\(\)/g) || []).length >= 2 && // both ingest paths
+      /starred\?: boolean/.test(store) &&
+      /toggleSessionStarred: \(sessionId\) =>/.test(store) && /starred: !session\.starred/.test(store) &&
+      // star toggle on the swing detail
+      /toggleSessionStarred\(session\.id\)/.test(detail) &&
+      /session\.starred \? 'star' : 'star-outline'/.test(detail) &&
+      // scorecard surfaces starred swings for THIS round, tap → review
+      /x\.starred && x\.roundId === viewingRoundId/.test(sc) &&
+      /highlightSwings\.length > 0 &&/.test(sc) &&
+      /router\.push\(`\/swinglab\/swing\/\$\{sw\.id\}`/.test(sc)
+    );
+  })(),
+  'on-course swing → star it → it appears on that round\'s scorecard as a highlight, tap opens the full review');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
