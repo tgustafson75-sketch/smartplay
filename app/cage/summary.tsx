@@ -15,7 +15,7 @@ import { useWatchStore } from '../../store/watchStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { analyzeSession } from '../../services/patternEngine';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speak, speakChunked, warmVoice, configureAudioForSpeech } from '../../services/voiceService';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import PrimaryIssueCard from '../../components/swinglab/PrimaryIssueCard';
 import DrillCard from '../../components/swinglab/DrillCard';
@@ -69,9 +69,10 @@ export default function CageSummary() {
       mechanical: primaryIssue.mechanical_breakdown,
       feel: primaryIssue.feel_cue,
     });
+    warmVoice(apiUrl); // hot by the time the 800ms timer fires the read
     setTimeout(async () => {
       await configureAudioForSpeech();
-      await speak(text, voiceGender, language, apiUrl);
+      await speakChunked(text, voiceGender, language, apiUrl);
     }, 800);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [primaryIssue]);
@@ -188,9 +189,10 @@ export default function CageSummary() {
       const improveMsg = pattern.improvement
         ? "You got better as the session went on. That's how it works."
         : null;
+      warmVoice(apiUrl); // hot by the time the 800ms timer fires the read
       const t = setTimeout(async () => {
         await configureAudioForSpeech();
-        await speak(summaryText, voiceGender, language, apiUrl);
+        await speakChunked(summaryText, voiceGender, language, apiUrl);
         if (improveMsg) {
           await speak(improveMsg, voiceGender, language, apiUrl);
         }

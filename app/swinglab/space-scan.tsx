@@ -24,7 +24,7 @@ import {
   type SpaceType,
 } from '../../services/spaceAssessment';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
 import { safeBack } from '../../services/safeBack';
 import { getApiBaseUrl } from '../../services/apiBase';
 
@@ -88,7 +88,7 @@ export default function SpaceScanScreen() {
         if (voiceEnabled && result.assessment.summary) {
           void (async () => {
             await configureAudioForSpeech();
-            await speak(result.assessment.summary, voiceGender, language, apiUrl);
+            await speakChunked(result.assessment.summary, voiceGender, language, apiUrl);
           })();
         }
         return;

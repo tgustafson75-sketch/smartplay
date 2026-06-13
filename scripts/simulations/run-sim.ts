@@ -802,6 +802,27 @@ check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressab
     /<TactilePressable\b[\s\S]*?flash\(\); onPress\?\.\(\)/.test(smSrc),
   'one shared tactile wrapper gives every icon a light buzz + clean press-bounce, OS-safe');
 
+check('Caddie report-read lag: warmVoice prewarm + speakChunked fast-first-word',
+  // 2026-06-13 — Tim: "delay between getting a report and the caddie reading it."
+  // gpt-4o-mini-tts emits nothing until the whole clip renders, so a cold function
+  // + long text = seconds of silence. Two fixes in voiceService: warmVoice() spins
+  // the endpoint the moment a read is imminent (throttled, breaker-guarded, audio
+  // discarded), and speakChunked() speaks the first sentence on its own so the read
+  // STARTS fast, with short text delegated straight to speak() unchanged.
+  /export const warmVoice = \(apiUrl: string\): void =>/.test(voiceSrc) &&
+    /lastVoiceWarmAt < 45_000/.test(voiceSrc) &&
+    /export const speakChunked = async/.test(voiceSrc) &&
+    /trimmed\.length <= CHUNK_MIN_CHARS/.test(voiceSrc) && // short text → single shot
+    /speakGeneration !== startGen\) break/.test(voiceSrc) && // barge-in cancels the rest
+    // Wired at the report-read flows: swing detail + scorecard recap + cage summary.
+    /warmVoice\(apiUrl\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+    /speakChunked\(/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+    /warmVoice\(apiUrl\)/.test(read('app/(tabs)/scorecard.tsx')) &&
+    /speakChunked\(recap\.overall_kevin_summary/.test(read('app/(tabs)/scorecard.tsx')) &&
+    /speakChunked\(/.test(read('app/cage/summary.tsx')) &&
+    /warmVoice\(getApiBaseUrl\(\)\)/.test(smSrc), // smartmotion warms at analysis start
+  'report reads start near-instantly: hot endpoint + first sentence plays without waiting for the whole clip');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

@@ -1311,3 +1311,76 @@ export const speak = async (
     }
   }
 });
+
+// 2026-06-13 — warmVoice: fire a tiny, throttled prewarm at the /api/voice
+// serverless function the moment a spoken read becomes IMMINENT (analysis /
+// recap / summary generation START). gpt-4o-mini-tts returns nothing until the
+// WHOLE clip is generated, so a COLD function adds a multi-second tax on TOP of
+// generation — exactly Tim's "delay between getting a report and the caddie
+// reading it." Warming WHILE the report text is still being produced means the
+// function is hot when the real speak() fires. Fire-and-forget, never throws,
+// self-throttled (45s) so back-to-back triggers don't spam the endpoint. The
+// audio is drained and discarded — never played, never touches the speak queue.
+let lastVoiceWarmAt = 0;
+export const warmVoice = (apiUrl: string): void => {
+  const now = Date.now();
+  if (now - lastVoiceWarmAt < 45_000) return; // already warm recently
+  if (cbIsDegraded('voice')) return;          // don't poke a known-down endpoint
+  lastVoiceWarmAt = now;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 8000);
+  fetch(apiUrl + '/api/voice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // Single char: spins the function + OpenAI TTS connection at ~zero cost.
+    body: JSON.stringify({ text: '.', gender: 'male', language: 'en' }),
+    signal: ctrl.signal,
+  })
+    .then((res) => { void res.arrayBuffer().catch(() => {}); }) // drain + drop, never play
+    .catch(() => { /* best-effort; warmth failures are silent */ })
+    .finally(() => clearTimeout(t));
+};
+
+// 2026-06-13 — speakChunked: cut TIME-TO-FIRST-WORD on long reads (swing reports,
+// round recaps, cage summaries). Because gpt-4o-mini-tts emits nothing until the
+// ENTIRE clip is generated, a paragraph makes the caddie sit silent for seconds.
+// For long text we split on sentence boundaries and speak the FIRST sentence on
+// its own (short → fast first audio), then the remainder in ~2-sentence groups —
+// so the read STARTS quickly instead of after the whole thing renders. Short text
+// (the common case — a hole number, a one-liner) is delegated straight to speak()
+// unchanged, preserving the proven single path for everything already snappy.
+// Sequential via the existing speak() queue, so ordering is automatic; a barge-in
+// (stopSpeaking bumps speakGeneration) cancels the REST of the report, not just
+// the current sentence.
+const CHUNK_MIN_CHARS = 180; // below this a single shot is already fast — don't chunk
+export const speakChunked = async (
+  text: string,
+  gender: 'male' | 'female',
+  language: 'en' | 'es' | 'zh' = 'en',
+  apiUrl: string,
+  opts?: SpeakOpts,
+): Promise<void> => {
+  const trimmed = (text ?? '').trim();
+  if (trimmed.length <= CHUNK_MIN_CHARS) {
+    return speak(trimmed, gender, language, apiUrl, opts);
+  }
+  // Split into sentences, keeping terminal punctuation + any trailing quote/bracket.
+  const sentences = trimmed
+    .match(/[^.!?]+[.!?]+(?:["')\]]+)?\s*|[^.!?]+$/g)
+    ?.map((s) => s.trim())
+    .filter(Boolean) ?? [trimmed];
+  if (sentences.length <= 1) {
+    return speak(trimmed, gender, language, apiUrl, opts); // run-on with no boundary
+  }
+  // First chunk = first sentence alone (fast first word); remainder batched in
+  // pairs so we don't pay a fetch per sentence.
+  const chunks: string[] = [sentences[0]];
+  for (let i = 1; i < sentences.length; i += 2) {
+    chunks.push(sentences.slice(i, i + 2).join(' '));
+  }
+  const startGen = speakGeneration; // snapshot — a barge-in (stopSpeaking) moves this
+  for (let i = 0; i < chunks.length; i++) {
+    if (i > 0 && speakGeneration !== startGen) break; // interrupted → stop the report
+    await speak(chunks[i], gender, language, apiUrl, opts);
+  }
+};

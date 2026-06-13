@@ -13,7 +13,7 @@ import { getReviewSession } from '../../services/cageReview';
 import { getCurrentProfile } from '../../services/vocabularyProfile';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech } from '../../services/voiceService';
+import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
 import type { VocabularyProfile } from '../../types/vocabulary';
 import type { ReviewLabels } from '../../store/cageStore';
@@ -44,7 +44,7 @@ export default function CageReviewSummary() {
       if (voiceEnabled && p?.kevin_summary) {
         setTimeout(async () => {
           await configureAudioForSpeech();
-          speak(p.kevin_summary, voiceGender, language, apiUrl).catch(() => {});
+          speakChunked(p.kevin_summary, voiceGender, language, apiUrl).catch(() => {});
         }, 600);
       }
     };

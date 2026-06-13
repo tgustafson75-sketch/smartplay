@@ -21,7 +21,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
-import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
+import { speakChunked, warmVoice, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import type { ShotResult } from '../../store/roundStore';
@@ -265,20 +265,26 @@ export default function Scorecard() {
     void (async () => {
       try {
         const r = await loadRecap(viewingRoundId);
-        if (!cancelled) { setRecap(r); setRecapLoaded(true); }
+        if (!cancelled) {
+          setRecap(r);
+          setRecapLoaded(true);
+          // Prewarm the TTS function the moment a readable recap lands, so
+          // tapping "read" starts near-instantly instead of paying cold-start.
+          if (r?.overall_kevin_summary) warmVoice(apiUrl);
+        }
       } catch {
         if (!cancelled) { setRecap(null); setRecapLoaded(true); }
       }
     })();
     return () => { cancelled = true; };
-  }, [viewingRoundId]);
+  }, [viewingRoundId, apiUrl]);
 
   const onSpeakRecap = useCallback(async () => {
     if (!recap?.overall_kevin_summary) return;
     if (isSpeaking()) { void stopSpeaking(); setSpeaking(false); return; }
     setSpeaking(true);
     try {
-      await speak(recap.overall_kevin_summary, voiceGender, language, apiUrl, { userInitiated: true });
+      await speakChunked(recap.overall_kevin_summary, voiceGender, language, apiUrl, { userInitiated: true });
     } finally { setSpeaking(false); }
   }, [recap, voiceGender, language, apiUrl]);
 

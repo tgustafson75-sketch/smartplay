@@ -26,7 +26,7 @@ import { exportCoachReport } from '../../../services/coachReport';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { speak, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
+import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession } from '../../../services/videoUpload';
 // 2026-05-28 — Fix FI: presence fill when analysis fails. Instead of
 // leaving the user staring at "Couldn't analyze this one" with no
@@ -302,6 +302,21 @@ export default function SwingDetail() {
     })();
   }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
 
+  // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
+  // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
+  // of generation (Tim's report-read lag). Throttled inside warmVoice; no-op if
+  // voice is off or this user is trust-1 (which never auto-narrates).
+  const warmedRef = useRef(false);
+  useEffect(() => {
+    if (warmedRef.current) return;
+    const inProgress = analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose'
+      || analysisStatus === 'analyzing_pattern' || analysisStatus === 'pending';
+    if (inProgress && voiceEnabled && trustLevel !== 1) {
+      warmedRef.current = true;
+      warmVoice(apiUrl);
+    }
+  }, [analysisStatus, voiceEnabled, trustLevel, apiUrl]);
+
   useEffect(() => {
     if (analysisStatus === 'ok') {
       Animated.timing(cardsFade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
@@ -315,7 +330,7 @@ export default function SwingDetail() {
     const text = `Okay, I watched it. Your primary issue is ${issue.name.toLowerCase()}. ${issue.mechanical_breakdown} ${issue.feel_cue}`;
     void (async () => {
       await configureAudioForSpeech();
-      await speak(text, voiceGender, language, apiUrl);
+      await speakChunked(text, voiceGender, language, apiUrl);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, swing_id, session?.primary_issue?.issue_id]);
@@ -718,7 +733,7 @@ export default function SwingDetail() {
         if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
           const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
-          await speak(result.voice_summary || headline, voiceGender, language, apiUrl);
+          await speakChunked(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
       } catch (e) {
         console.log('[swing-detail] compare-to-select failed:', e);

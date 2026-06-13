@@ -59,7 +59,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking } from '../../services/voiceService';
+import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -1407,7 +1407,7 @@ export default function CaddieTab() {
         }
       }
       if (!playedBestroundClip) {
-        await speak(summary, voiceGender, language, apiUrl);
+        await speakChunked(summary, voiceGender, language, apiUrl);
       }
     }
 

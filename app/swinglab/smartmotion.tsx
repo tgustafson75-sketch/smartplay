@@ -96,7 +96,7 @@ import {
 } from '../../components/smartmotion/SmartMotionHud';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
-import { speak, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
+import { speak, warmVoice, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
@@ -839,6 +839,10 @@ export default function SmartMotion() {
   const runAnalysis = useCallback(
     async (rawUri: string, segment?: SwingSegment) => {
       setPhase('analyzing');
+      // Prewarm the TTS function NOW (analysis takes seconds) so the spoken
+      // verdict that follows fires hot, not cold (Tim's report-read lag).
+      // Throttled + breaker-guarded inside warmVoice, so this is ~free.
+      warmVoice(getApiBaseUrl());
       setAnalysis(null);
       setAnalysisError(null);
       setPoseFrames(null);
