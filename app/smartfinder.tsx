@@ -1386,25 +1386,24 @@ function TargetCameraOverlay({
               <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
             </View>
           </View>
+          {/* 2026-06-12 (Tim) — DECLUTTERED. The target panel read as a data dump (he was
+              "overwhelmed"). Cut the two worst offenders: the "Elevation: unavailable"
+              noise line, and the verbose per-hazard front/center/back/carry/runout
+              breakdown (it duplicated the nearest-hazard line). Kept the numbers row, wind,
+              a compact landing line, the nearest-hazard + safe-miss, and the two plans. */}
           {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
-          <Text style={styles.targetIntelLine}>Elevation: unavailable · distance remains primary.</Text>
           {landing && (
             <Text style={styles.targetIntelLine}>
-              Landing Zone{landing.baseline ? ' (est.)' : ''}: carry {landing.carry} · total {landing.total} · dispersion ±{dispersion.yards}y ({dispersion.band})
-              {landing.baseline ? ' · tour-average baseline — log practice to personalize' : ''}
+              Landing: carry {landing.carry} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
             </Text>
           )}
-          {hazardSummary?.nearest && (
+          {hazardSummary?.nearest ? (
             <Text style={styles.targetIntelLine}>
-              Hazard: {hazardSummary.nearest.label} at {hazardSummary.nearest.yards}y · risk {hazardSummary.risk}. {hazardSummary.safeMiss}
+              {hazardSummary.nearest.label} {hazardSummary.nearest.yards}y · {hazardSummary.safeMiss}
             </Text>
+          ) : (
+            <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
           )}
-          {hazardIntel && (
-            <Text style={styles.targetIntelLine}>
-              {hazardIntel.kind.toUpperCase()} ({hazardIntel.side}): {hazardIntel.label} · front {hazardIntel.front} · center {hazardIntel.center} · back {hazardIntel.back} · carry clear {hazardIntel.carryToClear} · runout {hazardIntel.runoutDistance}
-            </Text>
-          )}
-          <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
           <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
           <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
         </View>
