@@ -49,6 +49,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import { defaultDtlRig } from '../../services/cage/targetRig';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
@@ -513,6 +514,21 @@ export default function SmartMotion() {
   const [framing, setFraming] = useState<import('../../services/swing/framingCheck').FramingResult | null>(null);
   const framingSpokeRef = useRef(false);   // spoke the "framed" cue once per setup
   const userMovedBallRef = useRef(false);   // don't auto-place the box once the user drags it
+
+  // 2026-06-13 (Tim) — handedness-aware DTL default framing: the player fills ~2/3
+  // of the frame and the ball + target line sit in the OUTER 1/3 (RH → right, LH →
+  // left) instead of dead-center. Applied once for down-the-line, only until the
+  // user drags the box (userMovedBallRef) or pose auto-anchors it to the feet. This
+  // partition (player 2/3 vs ball 1/3) is what lets analysis scope golfer vs ball.
+  const dtlDefaultAppliedRef = useRef(false);
+  useEffect(() => {
+    if (dtlDefaultAppliedRef.current || userMovedBallRef.current) return;
+    if (angle !== 'down_the_line') return;
+    const rig = defaultDtlRig(swingerHandedness);
+    setDraftBall(rig.ball);
+    setDraftTarget(isPutt ? { x: rig.target.x, y: rig.target.y } : { x: rig.target.x, y: Math.max(EFFORT_TOP_CAP, rig.target.y) });
+    dtlDefaultAppliedRef.current = true;
+  }, [angle, swingerHandedness, isPutt]);
   const [videoPaused, setVideoPaused] = useState(false); // review play/pause
   const [playbackRate, setPlaybackRate] = useState(1); // review slow-mo (1 / .5 / .25)
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
@@ -566,9 +582,10 @@ export default function SmartMotion() {
                 if (res.status === 'framed' && res.feetCenter) {
                   // Auto-anchor the box below the feet ONCE, only while it's still the
                   // default (never override a placement the user dragged).
-                  const placed = draftBallRef.current;
-                  const isDefault = !userMovedBallRef.current && (!placed
-                    || (Math.abs(placed.x - DEFAULT_BALL_BOX.x) < 0.001 && Math.abs(placed.y - DEFAULT_BALL_BOX.y) < 0.001));
+                  // "Still default" = the user hasn't manually dragged the box.
+                  // (userMovedBallRef is the real signal; this also recognizes the
+                  // handedness-aware DTL default, not just the legacy center box.)
+                  const isDefault = !userMovedBallRef.current;
                   if (isDefault) {
                     setDraftBall({ x: res.feetCenter.x, y: Math.min(0.92, res.feetCenter.y + 0.04), r: DEFAULT_BALL_BOX.r });
                   }

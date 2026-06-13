@@ -58,6 +58,7 @@ import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
 import { evaluateTeeGoal, describeTeeGoal } from '../../services/goals/teeScoreGoal';
+import { defaultDtlRig, translateRig } from '../../services/cage/targetRig';
 
 interface ScenarioResult {
   scenario: string;
@@ -1189,6 +1190,32 @@ check('Tee Goals: "break X from the Y tees" evaluated honestly vs round history'
     );
   })(),
   'tee+holes filter; achieved/best/gap; honest skipped-no-tee count; any-tee counts all; 9-hole isolates the nine');
+
+check('Cage rig: handedness default framing + ball/line move as one element (Tim)',
+  // 2026-06-13 — DTL setup is ONE element: player fills ~2/3, ball + target line in
+  // the outer 1/3 (RH right, LH left). Dragging the ball moves the WHOLE rig (ball +
+  // target) rigidly; the target END moves on its own (free-float). Pure geometry.
+  (() => {
+    const rh = defaultDtlRig('right');
+    const lh = defaultDtlRig('left');
+    // RH ball in the right third, LH mirrored to the left third; target straight above.
+    const framing = rh.ball.x > 0.6 && lh.ball.x < 0.4 &&
+      Math.abs(rh.ball.x - (1 - lh.ball.x)) < 1e-9 &&   // mirrored
+      rh.target.x === rh.ball.x && rh.target.y < rh.ball.y; // line runs straight up
+    // Rigid move: ball + target shift by the SAME delta (offset preserved).
+    const moved = translateRig(rh.ball, rh.target, -0.1, 0.05);
+    const offsetBefore = { dx: rh.target.x - rh.ball.x, dy: rh.target.y - rh.ball.y };
+    const offsetAfter = { dx: moved.target.x - moved.ball.x, dy: moved.target.y - moved.ball.y };
+    const rigid = Math.abs(offsetAfter.dx - offsetBefore.dx) < 1e-9 &&
+      Math.abs(offsetAfter.dy - offsetBefore.dy) < 1e-9 &&
+      Math.abs(moved.ball.x - (rh.ball.x - 0.1)) < 1e-9;
+    // Delta clamped so neither point leaves the frame (huge drag → offset still kept).
+    const clamped = translateRig({ x: 0.9, y: 0.9, r: 0.08 }, { x: 0.9, y: 0.2 }, 0.5, 0.5);
+    const inBounds = clamped.ball.x <= 1 && clamped.target.x <= 1 &&
+      Math.abs((clamped.target.x - clamped.ball.x) - 0) < 1e-9; // offset (0) preserved at the edge
+    return framing && rigid && inBounds;
+  })(),
+  'handedness default puts player 2/3 + ball/line in outer 1/3 (mirrored); ball drag moves the rig rigidly; clamped on-frame');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

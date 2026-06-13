@@ -26,6 +26,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions, PanResponder } from 'react-native';
 import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon } from 'react-native-svg';
+import { translateRig } from '../../services/cage/targetRig';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
 
@@ -540,34 +541,50 @@ export function EditableCageTargets({
   const cbRef = useRef({ onChangeBallArea, onChangeTarget });
   useEffect(() => { cbRef.current = { onChangeBallArea, onChangeTarget }; }, [onChangeBallArea, onChangeTarget]);
 
+  // Lock/unlock — EXPLICIT (Tim): setup opens UNLOCKED so you can grab and place
+  // the rig immediately; lock freezes it so it can't be nudged ("Locked in").
+  // Optional — never blocks recording (caddie-failsafe / no-walls rule).
+  const [locked, setLocked] = useState(false);
+  const lockedRef = useRef(locked);
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
+
   // Live drag state (local → smooth, no per-frame store writes).
   const [liveBall, setLiveBall] = useState<BallArea | null>(null);
   const [liveTarget, setLiveTarget] = useState<TargetPoint | null>(null);
   const ballStart = useRef<BallArea | null>(null);
   const targetStart = useRef<TargetPoint | null>(null);
 
+  // Ball / body drag = move the WHOLE rig (ball + aim line + target) together —
+  // "one element" (Tim). The target END stays independently draggable below
+  // (free-float: aim side-to-side + depth). Locked → no drag.
   const ballPan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { ballStart.current = ballRef.current; },
+    onStartShouldSetPanResponder: () => !lockedRef.current,
+    onMoveShouldSetPanResponder: () => !lockedRef.current,
+    onPanResponderGrant: () => { ballStart.current = ballRef.current; targetStart.current = targetRef.current; },
     onPanResponderMove: (_e, g) => {
       const s = ballStart.current; const { w, h } = sizeRef.current;
       if (!s || w === 0 || h === 0) return;
-      setLiveBall({ x: clamp01(s.x + g.dx / w), y: clamp01(s.y + g.dy / h), r: s.r });
+      const rig = translateRig(s, targetStart.current, g.dx / w, g.dy / h);
+      setLiveBall(rig.ball);
+      if (targetStart.current) setLiveTarget(rig.target);
     },
     onPanResponderRelease: () => {
+      const hadTarget = !!targetStart.current;
       setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
-      ballStart.current = null;
+      setLiveTarget((t) => { if (t && hadTarget) cbRef.current.onChangeTarget(t); return null; });
+      ballStart.current = null; targetStart.current = null;
     },
     onPanResponderTerminate: () => {
+      const hadTarget = !!targetStart.current;
       setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
-      ballStart.current = null;
+      setLiveTarget((t) => { if (t && hadTarget) cbRef.current.onChangeTarget(t); return null; });
+      ballStart.current = null; targetStart.current = null;
     },
   })).current;
 
   const targetPan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponder: () => !lockedRef.current,
+    onMoveShouldSetPanResponder: () => !lockedRef.current,
     onPanResponderGrant: () => { targetStart.current = targetRef.current; },
     onPanResponderMove: (_e, g) => {
       const s = targetStart.current; const { w, h } = sizeRef.current;
@@ -597,9 +614,10 @@ export function EditableCageTargets({
     >
       {/* Visual layer (non-interactive) — the same overlay used read-only. */}
       <CageTargetingOverlay ballArea={shownBall} target={shownTarget} launchDir={null} targetKind={targetKind} />
-      {/* Drag handles — transparent touch targets centred on each marker. A small
-          ring hints they're grabbable; box-none lets taps elsewhere pass through. */}
-      {w > 0 && shownBall && (
+      {/* Drag handles — only when UNLOCKED. Drag the BALL knob to move the whole rig
+          (ball + line + target) together; drag the TARGET knob to aim/depth on its
+          own. box-none lets taps elsewhere pass through. */}
+      {!locked && w > 0 && shownBall && (
         <View
           {...ballPan.panHandlers}
           style={[dragStyles.handle, { left: shownBall.x * w - HANDLE / 2, top: shownBall.y * h - HANDLE / 2 }]}
@@ -607,13 +625,27 @@ export function EditableCageTargets({
           <View style={[dragStyles.knob, { borderColor: '#88F700' }]} />
         </View>
       )}
-      {w > 0 && shownTarget && (
+      {!locked && w > 0 && shownTarget && (
         <View
           {...targetPan.panHandlers}
           style={[dragStyles.handle, { left: shownTarget.x * w - HANDLE / 2, top: shownTarget.y * h - HANDLE / 2 }]}
         >
           <View style={[dragStyles.knob, { borderColor: '#FFFFFF' }]} />
         </View>
+      )}
+      {/* Explicit Lock / Unlock toggle (Tim) — replaces the implicit auto-lock. */}
+      {w > 0 && (shownBall || shownTarget) && (
+        <Pressable
+          onPress={() => setLocked((v) => !v)}
+          style={[dragStyles.lockPill, { borderColor: locked ? '#88F700' : 'rgba(255,255,255,0.5)' }]}
+          accessibilityRole="button"
+          accessibilityLabel={locked ? 'Unlock targets to adjust' : 'Lock targets in'}
+        >
+          <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={13} color={locked ? '#88F700' : '#FFFFFF'} />
+          <Text style={[dragStyles.lockText, { color: locked ? '#88F700' : '#FFFFFF' }]}>
+            {locked ? 'LOCKED' : 'ADJUSTING'}
+          </Text>
+        </Pressable>
       )}
     </View>
   );
@@ -622,6 +654,12 @@ export function EditableCageTargets({
 const dragStyles = StyleSheet.create({
   handle: { position: 'absolute', width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   knob: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.12)' },
+  lockPill: {
+    position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1.5,
+    backgroundColor: 'rgba(10,16,12,0.78)',
+  },
+  lockText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
 });
 
 const PILL_BG = 'rgba(18,20,24,0.9)';
