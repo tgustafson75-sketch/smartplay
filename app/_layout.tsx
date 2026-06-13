@@ -982,6 +982,11 @@ function AppNavigator() {
           name="practice/session"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — SmartPlan: goal -> weighted weekly practice plan (Tank). */}
+        <Stack.Screen
+          name="practice/smartplan"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}

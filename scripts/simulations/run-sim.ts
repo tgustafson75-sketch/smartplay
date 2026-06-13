@@ -1536,6 +1536,24 @@ check('Goal planner (SmartPlan) — weights to where strokes live + adapts to lo
   })(),
   'buildGoalPlan turns a goal + days/week + minutes + location into a weighted weekly plan — scoring goals lean on short game and putting, home filters to putting/chipping, distance-at-home returns an honest "needs full swings" instead of a fake plan, and it never promises an outcome (SmartPlan goal planner)');
 
+check('SmartPlan UI — goal+constraints picker that runs a day through the Session Runner (Tim)',
+  // 2026-06-13 — the SmartPlan brain reaches the user: pick goal/days/minutes/where,
+  // see the weighted weekly plan, tap a day to launch it as a focus session. Pure JS,
+  // OTA-able. Simplified Sophistication: chip rows + a plan, depth in the brain.
+  (() => {
+    const screen = read('app/practice/smartplan.tsx');
+    const layout = read('app/_layout.tsx');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    return (
+      /buildGoalPlan\(\{ goal, daysPerWeek: days, minutesPerSession: minutes, location \}\)/.test(screen) &&
+      /startSession\('focus', \{ focus: focusKey, targetReps: reps/.test(screen) && // tap a day → run it
+      /\/practice\/session/.test(screen) &&                        // launches the Session Runner
+      /name="practice\/smartplan"/.test(layout) &&                 // route registered
+      /\/practice\/smartplan/.test(caddie)                         // reachable from the tools menu
+    );
+  })(),
+  'the SmartPlan screen lets you set goal + days/week + minutes + location, shows the weighted weekly plan, and launches any day through the Session Runner as a focus session (SmartPlan UI, OTA-able)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
