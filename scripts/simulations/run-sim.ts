@@ -49,6 +49,7 @@ import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/
 import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
+import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1411,6 +1412,35 @@ check('Open Range quantifier — makes the mash visible + flags blocked practice
     );
   })(),
   'summarizeOpenRange quantifies a range session honestly (line only where flight was seen, tempo repeatability) and flags one-club blocked practice with a switch-clubs nudge, while leaving varied practice unflagged (Open Range quantifier)');
+
+check('Practice-session primitive — stamps Smart Motion swings, no-ops when inactive (Tim)',
+  // 2026-06-13 — the container the Practice Engine rides on: swings carry a
+  // practiceSessionId (roundContextStamp pattern). The stamp helper no-ops with no
+  // active session, so Smart Motion calls it unconditionally; active → it tallies.
+  (() => {
+    const store = usePracticeSessionStore.getState();
+    // No session → stamp is a safe no-op.
+    recordPracticeSwingIfActive({ club: '7I', tier: 'flight', tempoRatio: 3.0, divergenceDeg: 4 });
+    const noneYet = usePracticeSessionStore.getState().active;
+
+    store.startSession('open_range', { environment: 'range' });
+    recordPracticeSwingIfActive({ club: '7I', tier: 'flight', tempoRatio: 3.0, divergenceDeg: 3 });
+    recordPracticeSwingIfActive({ club: '7I', tier: 'contact', tempoRatio: 3.1, divergenceDeg: null });
+    const live = usePracticeSessionStore.getState().activeSummary();
+
+    usePracticeSessionStore.getState().endSession();
+    const after = usePracticeSessionStore.getState();
+    const ok = (
+      noneYet === null &&                                  // stamp before start did nothing
+      !!live && live.total === 2 && live.flightSeen === 1 && // tallied only the in-session swings
+      after.active === null &&                              // ended
+      after.history.length >= 1 && after.history[0].swings.length === 2 // archived with its swings
+    );
+    // Reset so the persisted store doesn't leak into other scenarios.
+    usePracticeSessionStore.setState({ active: null, history: [] });
+    return ok;
+  })(),
+  'a practice session stamps each analyzed Smart Motion swing into the active session and aggregates a live read, the stamp helper no-ops when no session is running, and ending archives the session to history (practice-session primitive)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
