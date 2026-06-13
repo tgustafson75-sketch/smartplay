@@ -838,6 +838,18 @@ check('Phase 2: library detail wears a capture-kind badge (Smart Motion / Coach 
   })(),
   'the detail header names what each entry IS — live session vs coach lesson vs plain upload');
 
+check('Bottom-strip hole nav is finger-sized (Tim: arrows too small on course)',
+  // 2026-06-13 — bigger ◀/▶ glyphs (24 grid / 22 horizontal), ~36px touch targets,
+  // and a larger hole value, so changing holes mid-round is an easy tap.
+  (() => {
+    const s = read('components/CaddieDataStrip.tsx');
+    return /size=\{24\}/.test(s) && /size=\{22\}/.test(s) &&
+      /hitSlop=\{14\}/.test(s) &&
+      /paddingHorizontal: 8,\s*\n\s*paddingVertical: 7/.test(s) && // holeNavBtn target
+      !/size=\{16\}/.test(s) && !/size=\{14\}/.test(s);            // old tiny glyphs gone
+  })(),
+  'hole back/forward arrows are now comfortably tappable, not pinpoint');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

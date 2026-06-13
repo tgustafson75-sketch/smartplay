@@ -248,29 +248,29 @@ export default function CaddieDataStrip({
                 <Pressable
                   onPress={handleHolePrev}
                   disabled={hole.current <= 1}
-                  hitSlop={10}
+                  hitSlop={14}
                   accessibilityRole="button"
                   accessibilityLabel="Previous hole"
                   style={styles.holeNavBtn}
                 >
                   <Ionicons
                     name="chevron-back"
-                    size={16}
+                    size={24}
                     color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                   />
                 </Pressable>
-                <Text style={[styles.cellValue, { fontSize: 20 }]}>{`${hole.current}/${hole.total}`}</Text>
+                <Text style={[styles.cellValue, { fontSize: 24 }]}>{`${hole.current}/${hole.total}`}</Text>
                 <Pressable
                   onPress={handleHoleNext}
                   disabled={hole.current >= hole.total}
-                  hitSlop={10}
+                  hitSlop={14}
                   accessibilityRole="button"
                   accessibilityLabel="Next hole"
                   style={styles.holeNavBtn}
                 >
                   <Ionicons
                     name="chevron-forward"
-                    size={16}
+                    size={24}
                     color={hole.current >= hole.total ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                   />
                 </Pressable>
@@ -359,29 +359,29 @@ export default function CaddieDataStrip({
               <Pressable
                 onPress={handleHolePrev}
                 disabled={hole.current <= 1}
-                hitSlop={10}
+                hitSlop={14}
                 accessibilityRole="button"
                 accessibilityLabel="Previous hole"
                 style={styles.holeNavBtn}
               >
                 <Ionicons
                   name="chevron-back"
-                  size={14}
+                  size={22}
                   color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
-              <Text style={[styles.cellValue, { fontSize: 18 }]}>{`${hole.current}/${hole.total}`}</Text>
+              <Text style={[styles.cellValue, { fontSize: 22 }]}>{`${hole.current}/${hole.total}`}</Text>
               <Pressable
                 onPress={handleHoleNext}
                 disabled={hole.current >= hole.total}
-                hitSlop={10}
+                hitSlop={14}
                 accessibilityRole="button"
                 accessibilityLabel="Next hole"
                 style={styles.holeNavBtn}
               >
                 <Ionicons
                   name="chevron-forward"
-                  size={14}
+                  size={22}
                   color={hole.current >= hole.total ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
@@ -545,11 +545,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 10,
   },
+  // 2026-06-13 (Tim) — the bottom-strip hole arrows were too small to hit on the
+  // course. Bigger glyphs (below) + a real ~36px touch target here.
   holeNavBtn: {
-    paddingHorizontal: 2,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
