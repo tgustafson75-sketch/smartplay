@@ -948,6 +948,29 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
   })(),
   'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank is the hero, grid stays in twos');
 
+check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not APK)',
+  // 2026-06-13 — Tim's Lakes round went MUTE (~18 speak_catch "Network request
+  // failed"). expo-speech is already in the binary, so the fallback ships OTA. The
+  // old crash was a dynamic require + a catch-path timer — both avoided here.
+  (() => {
+    const v = read('services/voiceService.ts');
+    const pkg = read('package.json');
+    return (
+      /"expo-speech":/.test(pkg) &&                               // already bundled → OTA
+      /import \* as Speech from 'expo-speech'/.test(v) &&         // STATIC import (not require)
+      /function deviceSpeakFallback\(/.test(v) &&
+      /Speech\.speak\(text, \{/.test(v) &&
+      !/=\s*require\('expo-speech'\)/.test(v) &&                  // no crashy DYNAMIC require (static import only)
+      // wired into every failure path that used to go silent:
+      (v.match(/deviceSpeakFallback\(text, language, myId\)/g) || []).length >= 4 &&
+      // breaker-open (offline) path no longer just returns silent
+      /Breaker open = we're offline\. Don't go mute/.test(v) &&
+      // stopSpeaking cancels the device voice too
+      /if \(usingDeviceFallback\) \{\s*\n\s*try \{ Speech\.stop\(\); \}/.test(v)
+    );
+  })(),
+  'a failed/timed-out/offline TTS fetch now speaks on the device instead of leaving the caddie silent');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

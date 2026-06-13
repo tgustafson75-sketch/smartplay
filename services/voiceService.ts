@@ -1,4 +1,5 @@
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
@@ -636,13 +637,47 @@ export const stopSpeaking = async (): Promise<void> => {
     } catch {}
     currentSound = null;
   }
-  // 2026-06-06 EMERGENCY REVERT — removed Phase 1 device-TTS stop
-  // path. Reverted to original d06e37f-shape stopSpeaking.
+  // 2026-06-13 — cancel the device-TTS fallback too (re-added safely: a plain
+  // Speech.stop() with no timer, unlike the crash-y reverted version).
+  if (usingDeviceFallback) {
+    try { Speech.stop(); } catch {}
+    usingDeviceFallback = false;
+  }
   notifySpeaking(false);
   notifyCaption(null);
 };
 
 export const isSpeaking = (): boolean => currentSound !== null;
+
+// 2026-06-13 — OFFLINE / network-fail spoken fallback (Tim's Lakes round went
+// MUTE on weak signal — ~18 speak_catch "Network request failed"). When /api/voice
+// can't be reached, speak the line on the DEVICE so the caddie isn't a dead void.
+// expo-speech is ALREADY in the binary (~14.0.8) so this ships OTA — the earlier
+// revert was a dynamic-require + a 6s catch-path timer crashing, BOTH avoided here
+// (static import at top, no timers, clean handlers). The device voice is robotic,
+// but spoken-and-useful beats silent. Best-effort: never throws.
+const SPEECH_LANG: Record<'en' | 'es' | 'zh', string> = { en: 'en-US', es: 'es-ES', zh: 'zh-CN' };
+let usingDeviceFallback = false;
+function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number): void {
+  if (!text || myId !== currentSpeechId) return;
+  try {
+    Speech.stop(); // cancel any prior device utterance before starting a new one
+    usingDeviceFallback = true;
+    notifySpeaking(true);
+    notifyCaption(text);
+    console.log('[voice] device-TTS fallback speaking (server unreachable) —', text.slice(0, 60));
+    Speech.speak(text, {
+      language: SPEECH_LANG[language] ?? 'en-US',
+      onDone: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
+      onStopped: () => { usingDeviceFallback = false; },
+      onError: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
+    });
+  } catch (e) {
+    usingDeviceFallback = false;
+    if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); }
+    console.log('[voice] device-TTS fallback failed:', e);
+  }
+}
 
 // ─── PLAY LOCAL FILE (filler clips) ──────
 // Same singleton semantics as speak/speakFromBase64 — naturally cancelled
@@ -1057,8 +1092,8 @@ export const speak = async (
       clearTimeout(voiceTimeout);
       currentAbortController = null;
       logVoiceSilentFail('speak_circuit_degraded', { speechId: myId, textHead: text.slice(0, 60) });
-      notifyCaption(null);
-      notifySpeaking(false);
+      // Breaker open = we're offline. Don't go mute — speak it on the device.
+      deviceSpeakFallback(text, language, myId);
       return;
     }
 
@@ -1092,8 +1127,8 @@ export const speak = async (
       console.log('[voice] speak API error:', response.status, response.statusText, '— body:', errBody.slice(0, 300));
       logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
       cbRecordFailure('voice');
-      notifyCaption(null);
-      notifySpeaking(false);
+      // Server TTS errored (quota / 5xx) — fall back to the device voice.
+      deviceSpeakFallback(text, language, myId);
       return;
     }
     // Got bytes from the server → online; clear the breaker window.
@@ -1123,13 +1158,8 @@ export const speak = async (
         text_head: text.slice(0, 40),
       });
       logVoiceSilentFail('speak_small_payload', { speechId: myId, bytes: arrayBuffer.byteLength, language, textHead: text.slice(0, 40) });
-      // 2026-05-27 — Fix EH: also clear the caption. Without this, the
-      // text caption stayed on screen for the full TTL even though the
-      // utterance silently failed — exact match for Tim's recurring
-      // "text shows but no audio" report. notifySpeaking(false) alone
-      // cleared the talking-state badge but the caption text lingered.
-      notifyCaption(null);
-      notifySpeaking(false);
+      // Bad/empty audio blob — fall back to the device voice instead of going silent.
+      deviceSpeakFallback(text, language, myId);
       return;
     }
 
@@ -1308,6 +1338,10 @@ export const speak = async (
       const emsg = err instanceof Error ? err.message : String(err);
       cbRecordFailure('voice');
       if (/network|abort|timeout|fetch/i.test(emsg)) cbReportNetworkFailure();
+      // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
+      // mute — speak the line on the device instead. (AbortError = a newer
+      // utterance preempted us; that correctly stays silent.)
+      deviceSpeakFallback(text, language, myId);
     }
   }
 });
