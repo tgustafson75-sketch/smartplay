@@ -51,6 +51,7 @@ import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
 import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from '../../services/practice/sessionPlan';
+import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1513,6 +1514,27 @@ check('Structured Session Runner UI — focus picker + auto-advancing interleave
     );
   })(),
   'the structured Session Runner lets you pick a focus and walks an interleaved plan that auto-advances as Smart Motion swings stamp in, completing at the target rep count (Practice Engine Session Runner UI)');
+
+check('Goal planner (SmartPlan) — weights to where strokes live + adapts to location (Tank)',
+  // 2026-06-13 — Tank's "break 90 in 60 days, N days/week, range or carpet+glass at
+  // home → break it down." Weights focuses to where strokes are (scoring goals →
+  // short game + putting), filters by LOCATION (home = putting/chipping only), never
+  // promises an outcome, and returns an honest note when a goal can't be done there.
+  (() => {
+    const b90 = buildGoalPlan({ goal: 'break_90', daysPerWeek: 3, minutesPerSession: 60, location: 'full', deadlineDays: 60 });
+    const home = buildGoalPlan({ goal: 'break_90', daysPerWeek: 4, minutesPerSession: 20, location: 'home' });
+    const distHome = buildGoalPlan({ goal: 'more_distance', daysPerWeek: 3, minutesPerSession: 30, location: 'home' });
+    const scoringFocus = b90.sessions.map((s) => s.focusKey);
+    return (
+      PRACTICE_GOALS.length >= 5 &&
+      b90.sessions.length === 3 &&
+      scoringFocus.includes('short_game') && scoringFocus.includes('putting') && // scoring zone weighted
+      b90.notes.some((n) => /days out|no promises|stroke/i.test(n)) &&            // honest framing, no guarantee
+      home.sessions.length === 4 && home.sessions.every((s) => s.focusKey === 'putting' || s.focusKey === 'short_game') && // location-filtered
+      distHome.sessions.length === 0 && distHome.notes.some((n) => /full swings/.test(n)) // can't be done at home → honest, not a fake plan
+    );
+  })(),
+  'buildGoalPlan turns a goal + days/week + minutes + location into a weighted weekly plan — scoring goals lean on short game and putting, home filters to putting/chipping, distance-at-home returns an honest "needs full swings" instead of a fake plan, and it never promises an outcome (SmartPlan goal planner)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
