@@ -50,6 +50,8 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
+import { SwingVisionCamera, type SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
+import { USE_VISION_CAMERA } from '../../services/capture/captureFlags';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as Haptics from 'expo-haptics';
@@ -2151,19 +2153,40 @@ export default function SmartMotion() {
           // collide and silently kill metering (→ no strikes/segments/tempo).
           // We never use the clip's audio (playback is muted), so muting the
           // camera is lossless and removes the contention.
-          <CameraView
-            ref={cameraRef}
-            style={StyleSheet.absoluteFill}
-            facing={facing}
-            mirror={false}
-            mode="video"
-            mute
-            onCameraReady={() => {
-              // Auto-start a voice-requested recording once the camera (re)mounts
-              // coming out of review — completes the hands-free loop.
-              if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
-            }}
-          />
+          // SmartTrace migration: behind USE_VISION_CAMERA (default OFF, native
+          // build only) the swing path records via react-native-vision-camera at a
+          // high frame rate for a dense ball-departure launch window. The vision
+          // component mimics CameraView's recordAsync()/stopRecording() ref API, so
+          // every cameraRef call below works unchanged; it records video-only (the
+          // acoustic Audio.Recording owns the mic). takePictureAsync (ball-area
+          // auto-snapshot) is absent on the vision handle → those `?.` calls no-op
+          // and ball-area falls back to manual anchoring until the vision photo path
+          // lands (Stage 1 follow-up). Default OFF → this is dead, CameraView runs.
+          USE_VISION_CAMERA ? (
+            <SwingVisionCamera
+              ref={cameraRef as unknown as React.Ref<SwingCameraHandle>}
+              style={StyleSheet.absoluteFill}
+              facing={facing}
+              isActive
+              onCameraReady={() => {
+                if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
+              }}
+            />
+          ) : (
+            <CameraView
+              ref={cameraRef}
+              style={StyleSheet.absoluteFill}
+              facing={facing}
+              mirror={false}
+              mode="video"
+              mute
+              onCameraReady={() => {
+                // Auto-start a voice-requested recording once the camera (re)mounts
+                // coming out of review — completes the hands-free loop.
+                if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
+              }}
+            />
+          )
         )}
 
         {/* STATUS PERIMETER — thin pulsing border tied to the analysis phase:

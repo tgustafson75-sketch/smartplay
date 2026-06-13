@@ -1344,6 +1344,23 @@ check('SmartTrace capture seam — vision-camera staged behind a default-off fla
   })(),
   'the vision-camera capture path is added behind a default-off flag, records video-only to keep the acoustic mic clean, and mirrors CameraView so the swing-path swap is a safe drop-in (SmartTrace Stage 0)');
 
+check('SmartTrace Stage 1 wiring — swing path gated on the flag, expo-camera preserved (Tim)',
+  // The swing camera in smartmotion now branches on USE_VISION_CAMERA: flag ON →
+  // SwingVisionCamera (same cameraRef), flag OFF → the unchanged expo-camera
+  // CameraView. So one build tests both: default-off = zero regression, dev-on =
+  // vision recording. The same cameraRef drives both (recordAsync/stopRecording).
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /import \{ USE_VISION_CAMERA \} from '\.\.\/\.\.\/services\/capture\/captureFlags'/.test(sm) &&
+      /USE_VISION_CAMERA \? \(/.test(sm) &&                  // the flag-gated branch
+      /<SwingVisionCamera/.test(sm) &&                       // vision path mounted when on
+      /<CameraView/.test(sm) &&                              // expo-camera path still present when off
+      /ref=\{cameraRef/.test(sm)                             // one ref drives both engines
+    );
+  })(),
+  'smartmotion mounts the vision camera only when USE_VISION_CAMERA is on and keeps the expo-camera CameraView as the default-off path, both driven by the same cameraRef — one build validates regression-free swap (SmartTrace Stage 1)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
