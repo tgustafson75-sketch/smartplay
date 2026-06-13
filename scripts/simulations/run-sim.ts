@@ -686,7 +686,9 @@ check('Ball/target overlay matches the design reference',
 
 check('Pre-record ball box: default box + verifier gated to Motion step + acoustic anchor',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
-    /label=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
+    // 2026-06-13 — ball box now lives as a labeled row in the collapsible setup
+    // tools CARD (single tools icon → card), not the old right-edge rail button.
+    /title=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
     /\[showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing\]/.test(smSrc) &&
     // 2026-06-12 — departure only verifies off an ACOUSTIC anchor; video-located segments
     // carry peakDb EXACTLY 0 (~±1s, would read the wrong departure frames). Sign-agnostic
@@ -805,15 +807,15 @@ check('Motion ON by default (async overlay) — toggle still gates compute/rende
 check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressable)',
   // 2026-06-13 — Tim: every Smart Motion icon should buzz + wobble on tap. A single
   // TactilePressable (light/medium haptic + scale 1→0.9→overshoot spring) backs the
-  // setup rail (via RailButton), the record/stop + review toolbar, the Motion chip,
+  // setup tools card rows, the record/stop + review toolbar, the Motion chip,
   // the position-scrub chips and the cycling mode badge. Haptic fails silently if off.
   /import \* as Haptics from 'expo-haptics'/.test(smSrc) &&
     /function TactilePressable\(/.test(smSrc) &&
     /Haptics\.impactAsync\(/.test(smSrc) &&
     /Animated\.spring\(scale,.*toValue: 0\.9/.test(smSrc) &&
     /bounciness: 14/.test(smSrc) && // the release overshoot = the "wobble"
-    // RailButton (the whole setup-icon rail) routes through it, not a bare Pressable.
-    /<TactilePressable\b[\s\S]*?flash\(\); onPress\?\.\(\)/.test(smSrc),
+    // The setup tools card rows route through it (ToolCardRow), not a bare Pressable.
+    /function ToolCardRow\([\s\S]*?<TactilePressable\b[\s\S]*?onPress=\{onPress\}/.test(smSrc),
   'one shared tactile wrapper gives every icon a light buzz + clean press-bounce, OS-safe');
 
 check('Caddie report-read lag: warmVoice prewarm + speakChunked fast-first-word',

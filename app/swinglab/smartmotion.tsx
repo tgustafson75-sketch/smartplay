@@ -37,7 +37,6 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
-  type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -298,45 +297,41 @@ function TactilePressable({
   );
 }
 
-// 2026-06-12 — RailButton: an icon-only setup-rail button that FLASHES a label to
-// its LEFT on tap (Tim — makes the icon-only rail self-explaining). The caller owns
-// the button look (btnStyle) + the icon (children); this adds the flash behavior.
-function RailButton({
-  label, disabled, onPress, btnStyle, children,
-}: {
-  label: string;
+// 2026-06-13 (Tim) — a labeled row inside the setup tools CARD: icon + what it does,
+// so the icons are self-explaining while people learn them. Active toggles get a tick.
+// Uses the shared TactilePressable so every row buzzes + wobbles on tap.
+function ToolCardRow({ icon, title, desc, active, disabled, onPress }: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  active?: boolean;
   disabled?: boolean;
-  onPress?: () => void;
-  btnStyle?: StyleProp<ViewStyle>;
-  children: React.ReactNode;
+  onPress: () => void;
 }) {
-  const { colors } = useTheme();
-  const op = useRef(new Animated.Value(0)).current;
-  const flash = () => {
-    op.setValue(1);
-    Animated.timing(op, { toValue: 0, duration: 950, delay: 500, useNativeDriver: true }).start();
-  };
   return (
-    <View style={railStyles.wrap}>
-      <Animated.Text style={[railStyles.flashLabel, { opacity: op, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
-        {label}
-      </Animated.Text>
-      <TactilePressable
-        onPress={() => { flash(); onPress?.(); }}
-        disabled={disabled}
-        style={btnStyle}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-      >
-        {children}
-      </TactilePressable>
-    </View>
+    <TactilePressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[toolCardStyles.row, active ? toolCardStyles.rowActive : null, { opacity: disabled ? 0.5 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${desc}`}
+    >
+      <View style={toolCardStyles.iconWrap}>{icon}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={toolCardStyles.title}>{title}</Text>
+        <Text style={toolCardStyles.desc}>{desc}</Text>
+      </View>
+      {active ? <Ionicons name="checkmark-circle" size={16} color="#88F700" /> : null}
+    </TactilePressable>
   );
 }
 
-const railStyles = StyleSheet.create({
-  wrap: { justifyContent: 'center' },
-  flashLabel: { position: 'absolute', right: 54, width: 150, height: 46, textAlign: 'right', textAlignVertical: 'center', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+const toolCardStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 10 },
+  rowActive: { backgroundColor: 'rgba(136,247,0,0.12)' },
+  iconWrap: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  title: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
+  desc: { color: 'rgba(255,255,255,0.62)', fontSize: 11, marginTop: 1 },
 });
 
 // ─── screen ──────────────────────────────────────────────────────────
@@ -514,6 +509,10 @@ export default function SmartMotion() {
   const [framing, setFraming] = useState<import('../../services/swing/framingCheck').FramingResult | null>(null);
   const framingSpokeRef = useRef(false);   // spoke the "framed" cue once per setup
   const userMovedBallRef = useRef(false);   // don't auto-place the box once the user drags it
+
+  // 2026-06-13 (Tim) — setup tool rail collapses to a chevron by default so the
+  // right third stays clear for framing; tap to pop it down over a darker scrim.
+  const [railExpanded, setRailExpanded] = useState(false);
 
   // 2026-06-13 (Tim) — handedness-aware DTL default framing: the player fills ~2/3
   // of the frame and the ball + target line sit in the OUTER 1/3 (RH → right, LH →
@@ -2418,66 +2417,72 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* SETUP TOOL RAIL — translucent icon buttons on the right edge so the
-            bottom + ball box stay clear. Calibrate · scan club · place ball.
-            Same handlers as the old bars, just compact + out of the way. */}
+        {/* SETUP TOOLS — 2026-06-13 (Tim): collapsed to a single chevron by default
+            so the right third stays CLEAR for framing. Tap to pop a labeled CARD
+            (icon + what it does) over a dark scrim, so people learn the icons.
+            Refine the copy later. Same handlers as the old rail. */}
         {phase === 'setup' ? (
-          <View style={[styles.toolRail, { top: insets.top + 76 }]}>
-            {/* Each rail button is its OWN green-circle badge (no extra border) and
-                flashes its label to the LEFT on tap. A faint fill marks the on state. */}
-            <RailButton
-              label={calibrated ? 'Re-calibrate' : 'Calibrate'}
-              onPress={() => router.push('/swinglab/calibrate' as never)}
-              btnStyle={[styles.toolBtnBare, calibrated && styles.toolBtnBareActive]}
+          <View style={[styles.toolRail, { top: insets.top + 76, alignItems: 'flex-end' }]}>
+            <TactilePressable
+              onPress={() => setRailExpanded((v) => !v)}
+              style={styles.railChevron}
+              accessibilityRole="button"
+              accessibilityLabel={railExpanded ? 'Hide setup tools' : 'Show setup tools'}
             >
-              <Image source={ICON_RAIL.calibrate} style={styles.toolIconFull} resizeMode="contain" />
-            </RailButton>
-            <RailButton
-              label="Scan club"
-              disabled={scanningClub}
-              onPress={() => void detectClubFromCamera()}
-              btnStyle={[styles.toolBtnBare, { opacity: scanningClub ? 0.5 : 1 }]}
-            >
-              {scanningClub
-                ? <Ionicons name="sync" size={22} color={colors.accent} />
-                : <Image source={ICON_CLUB} style={styles.toolIconFull} resizeMode="contain" />}
-            </RailButton>
-            <RailButton
-              label={placeBallMode ? 'Tap your ball' : 'Ball box'}
-              onPress={() => setPlaceBallMode((v) => !v)}
-              btnStyle={[styles.toolBtnBare, placeBallMode && styles.toolBtnBareActive]}
-            >
-              <Image source={ICON_RAIL.ballbox} style={styles.toolIconFull} resizeMode="contain" />
-            </RailButton>
-            {/* Environment toggle — cage → range → course (scene badge + flashed label). */}
-            <RailButton
-              label={isRoundActive ? 'Course (round)' : effectiveMode === 'cage' ? 'Cage' : effectiveMode === 'range' ? 'Range' : 'Course'}
-              disabled={isRoundActive}
-              onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
-              btnStyle={[styles.toolBtnBare, { opacity: isRoundActive ? 0.6 : 1 }]}
-            >
-              <Image source={ICON_ENV[effectiveMode]} style={styles.toolIconFull} resizeMode="contain" />
-            </RailButton>
-            {/* Selfie/front-camera toggle (recording stays un-mirrored). */}
-            <RailButton
-              label={facing === 'front' ? 'Selfie on' : 'Selfie'}
-              onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-              btnStyle={[styles.toolBtnBare, facing === 'front' && styles.toolBtnBareActive]}
-            >
-              <Image source={ICON_RAIL.selfie} style={styles.toolIconFull} resizeMode="contain" />
-            </RailButton>
-            {/* Chip/short-game sensitivity — mode-aware (cage+course on, range off). */}
-            <RailButton
-              label={chipSensitivity ? 'Chip mode ON' : 'Chip mode'}
-              onPress={() => {
-                const next = !chipSensitivity;
-                setChipSensitivity(next);
-                useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
-              }}
-              btnStyle={[styles.toolBtnBare, chipSensitivity && styles.toolBtnBareActive]}
-            >
-              <Image source={ICON_RAIL.chip} style={styles.toolIconFull} resizeMode="contain" />
-            </RailButton>
+              <Ionicons name="options-outline" size={18} color={colors.accent} />
+              <Ionicons name={railExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.accent} />
+            </TactilePressable>
+            {railExpanded ? (
+              <View style={styles.toolCard}>
+                <Text style={styles.toolCardHeader}>SETUP TOOLS</Text>
+                <ToolCardRow
+                  icon={<Image source={ICON_RAIL.calibrate} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={calibrated ? 'Re-calibrate' : 'Calibrate'}
+                  desc="Set the distance reference"
+                  active={calibrated}
+                  onPress={() => { setRailExpanded(false); router.push('/swinglab/calibrate' as never); }}
+                />
+                <ToolCardRow
+                  icon={scanningClub ? <Ionicons name="sync" size={26} color={colors.accent} /> : <Image source={ICON_CLUB} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title="Scan club"
+                  desc="Detect the club you're hitting"
+                  disabled={scanningClub}
+                  onPress={() => void detectClubFromCamera()}
+                />
+                <ToolCardRow
+                  icon={<Image source={ICON_RAIL.ballbox} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={placeBallMode ? 'Tap your ball' : 'Ball box'}
+                  desc="Place the ball marker on the frame"
+                  active={placeBallMode}
+                  onPress={() => { setPlaceBallMode((v) => !v); setRailExpanded(false); }}
+                />
+                <ToolCardRow
+                  icon={<Image source={ICON_ENV[effectiveMode]} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={isRoundActive ? 'Course (round)' : effectiveMode === 'cage' ? 'Cage' : effectiveMode === 'range' ? 'Range' : 'Course'}
+                  desc={isRoundActive ? 'Locked to your live round' : 'Where you are — tap to switch'}
+                  disabled={isRoundActive}
+                  onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
+                />
+                <ToolCardRow
+                  icon={<Image source={ICON_RAIL.selfie} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={facing === 'front' ? 'Selfie on' : 'Selfie'}
+                  desc="Front camera for face-on framing"
+                  active={facing === 'front'}
+                  onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+                />
+                <ToolCardRow
+                  icon={<Image source={ICON_RAIL.chip} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={chipSensitivity ? 'Chip mode on' : 'Chip mode'}
+                  desc="Listen for soft chip strikes"
+                  active={chipSensitivity}
+                  onPress={() => {
+                    const next = !chipSensitivity;
+                    setChipSensitivity(next);
+                    useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
+                  }}
+                />
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -3127,6 +3132,19 @@ const styles = StyleSheet.create({
   toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.42)', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, elevation: 4 },
   toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.30)' },
   toolIconFull: { width: 46, height: 46 },
+  // 2026-06-13 (Tim) — single tools icon → labeled card. Collapsed = just this pill
+  // (clears the right third); expanded = the card below over a dark scrim.
+  railChevron: {
+    flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 11, paddingRight: 9, paddingVertical: 9,
+    borderRadius: 999, backgroundColor: 'rgba(6,15,9,0.72)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.55)',
+  },
+  toolCard: {
+    marginTop: 10, width: 232, backgroundColor: 'rgba(8,13,10,0.95)', borderRadius: 16, borderWidth: 1,
+    borderColor: 'rgba(136,247,0,0.22)', padding: 10, gap: 2,
+    shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 10,
+  },
+  toolCardHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 4, marginLeft: 4 },
+  toolCardIcon: { width: 34, height: 34 },
   modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 44, height: 44 },
   modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },

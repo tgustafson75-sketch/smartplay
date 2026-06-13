@@ -400,17 +400,13 @@ export function CaptureGuides({
   const labelBg = colors.overlay;
   const narrow = aspect != null && aspect < 0.45;
   if (mode === 'down_the_line') {
-    // Down-the-line is center-symmetric (target up, ball bottom-center) —
-    // no handedness mirroring needed for the target line.
-    return (
-      <View style={[StyleSheet.absoluteFill, styles.guideRoot, style]} pointerEvents="none">
-        <View style={styles.guideTopCenter}>
-          <GuideLabel text="TARGET" color={colors.text_primary} bg={labelBg} />
-        </View>
-        <View style={[styles.guideVLine, { borderColor: line, left: '50%' }]} />
-        {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
-      </View>
-    );
+    // 2026-06-13 (Tim) — the down-the-line TARGET is now the ANCHORED, draggable
+    // ball→target rig (EditableCageTargets / CageTargetingOverlay), which sits in
+    // the outer third per handedness. The old static center line + "TARGET" label
+    // here were a leftover that drew a second dashed line down the MIDDLE — pure
+    // duplication (this guide never sensed anything). Removed so the only target
+    // line is the anchored one. Face-on still uses its own guides below.
+    return null;
   }
   // Face-on: RH golfer aims target-line left, ball-line right. Lefty
   // mirrors — swap the two columns. On the narrow Fold cover screen the columns
