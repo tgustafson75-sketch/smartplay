@@ -928,16 +928,25 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
     const lib = read('app/swinglab/swing/[swing_id].tsx');
     const idx = read('app/drills/index.tsx');
     return (
-      // descriptor + flagship tempo drill
+      // descriptor (entry-level) + flagship tempo drill with view angle
       /export type DrillPractice = \{/.test(cat) &&
+      /angle: 'face_on' \| 'down_the_line'/.test(cat) &&
       /id: 'tempo_consistency'/.test(cat) &&
-      /practice: \{ shotCount: 5, shotType: 'full', focus: 'tempo', swingPercents: \[50, 75, 100\] \}/.test(cat) &&
+      /practice: \{ shotCount: 5, shotType: 'full', focus: 'tempo', angle: 'face_on', swingPercents: \[50, 75, 100\] \}/.test(cat) &&
+      // EVERY mechanic fault card now has a practice action (Tim: connection was
+      // only visible on Tempo). Spot-check the honest per-focus views:
+      /id: 'over_the_top',\s*\n\s*practice: \{ shotCount: 5, shotType: 'full', focus: 'path', angle: 'down_the_line' \}/.test(cat) &&
+      /id: 'club_face_open',\s*\n\s*practice: \{ shotCount: 3, shotType: 'full', focus: 'grip', angle: 'face_on' \}/.test(cat) &&
+      /id: 'early_extension',\s*\n\s*practice: \{ shotCount: 5, shotType: 'full', focus: 'posture', angle: 'down_the_line' \}/.test(cat) &&
+      /id: 'chicken_wing',\s*\n\s*practice: \{ shotCount: 5, shotType: 'full', focus: 'connection', angle: 'face_on' \}/.test(cat) &&
+      /id: 'chipping_inconsistent',\s*\n\s*practice: \{ shotCount: 5, shotType: 'chip', focus: 'contact', angle: 'face_on' \}/.test(cat) &&
       // 'drill' is a real capture kind, threaded through ingest
       /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload' \| 'drill'/.test(store) &&
       /captureKind: captureKind \?\? 'smart_motion'/.test(store) &&
-      // drill card launches Smart Motion with the drill params
-      /drill\.practice &&/.test(detail) && /pathname: '\/swinglab\/smartmotion'/.test(detail) &&
-      /drillShots: String\(drill\.practice!\.shotCount\)/.test(detail) &&
+      // drill card launches Smart Motion with the drill params + the view angle
+      /entry\.practice &&/.test(detail) && /pathname: '\/swinglab\/smartmotion'/.test(detail) &&
+      /drillShots: String\(entry\.practice!\.shotCount\)/.test(detail) &&
+      /angle: entry\.practice!\.angle/.test(detail) &&
       // Smart Motion reads the drill, caps 3-5, tags the session
       /const isDrill = typeof drillId === 'string'/.test(sm) &&
       /Math\.max\(1, Math\.min\(5, Number\(drillShots\)/.test(sm) &&

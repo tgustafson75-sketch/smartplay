@@ -46,7 +46,15 @@ export type CanonicalIssue =
 // drill detail screen shows a "Practice this drill" button that opens Smart Motion
 // in DRILL mode: it reads this descriptor to cap the session at shotCount swings
 // (3–5), label the capture, and surface only the metric the drill is about.
-export type DrillFocus = 'tempo' | 'contact' | 'path';
+// The ONE thing the camera + pose can honestly observe for this drill. Each maps
+// to a capture view and an honest, pose-derivable read (no fabricated metrics):
+//   tempo      — backswing:downswing rhythm (timing)
+//   path       — over-the-top / in-to-out plane (DTL)
+//   grip       — face-on SLOW look at the grip + lead wrist (cupped/flat/bowed)
+//   posture    — hip depth / standing-up / spine tilt (early extension, reverse pivot)
+//   connection — lead-arm extension / chicken-wing, towel-under-arm connection
+//   contact    — descending strike, hands-ahead (chipping)
+export type DrillFocus = 'tempo' | 'path' | 'grip' | 'posture' | 'connection' | 'contact';
 export type DrillShotType = 'chip' | 'pitch' | 'full';
 export type DrillPractice = {
   /** Swings to record for this drill. Tim's rule: keep drills to 3–5. */
@@ -54,6 +62,8 @@ export type DrillPractice = {
   shotType: DrillShotType;
   /** The single thing the engine reports for this drill — kept honest. */
   focus: DrillFocus;
+  /** Which view Smart Motion opens in — the angle that actually shows the focus. */
+  angle: 'face_on' | 'down_the_line';
   /** Tempo drill only: the swing efforts to work through (e.g. 50/75/100). */
   swingPercents?: readonly number[];
 };
@@ -61,7 +71,6 @@ export type DrillPractice = {
 export type Drill = {
   name: string;
   steps: string;
-  practice?: DrillPractice;
 };
 
 export type DrillEntry = {
@@ -71,6 +80,12 @@ export type DrillEntry = {
   commonFaults: readonly string[];
   missPattern: string;
   drills: readonly Drill[];
+  // 2026-06-13 (#5) — when set, the card shows a "Practice in Smart Motion" action
+  // that opens a drill-aware capture (right view + 3–5 swings + honest focus read).
+  // Entry-level so there's ONE clear practice action per fault. Also the hook for a
+  // future practice-POINTS system: each captureKind:'drill' session is a countable,
+  // attributable completion that points can attach to.
+  practice?: DrillPractice;
   videoCategory: IssueCategory;
   cardImage?: ImageSourcePropType;
   // 2026-05-27 — Fix EF: optional "Tank's Tips" infographic. Full-page
@@ -94,6 +109,7 @@ const CARD_TEMPO = require('../assets/drills/tempo.png');
 export const DRILL_CATALOG: readonly DrillEntry[] = [
   {
     id: 'over_the_top',
+    practice: { shotCount: 5, shotType: 'full', focus: 'path', angle: 'down_the_line' },
     title: 'Over the Top',
     primary: 'Club is thrown outside the target line in transition, cutting across the ball at impact.',
     commonFaults: [
@@ -112,6 +128,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'swing_path_outside_in',
+    practice: { shotCount: 5, shotType: 'full', focus: 'path', angle: 'down_the_line' },
     title: 'Outside-In Path',
     primary: 'Club approaches the ball from outside the target line and exits inside.',
     commonFaults: [
@@ -129,6 +146,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'swing_path_inside_out',
+    practice: { shotCount: 5, shotType: 'full', focus: 'path', angle: 'down_the_line' },
     title: 'Inside-Out Path',
     primary: 'Club approaches from too far inside, leaving the face open relative to path.',
     commonFaults: [
@@ -146,6 +164,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'club_face_open',
+    practice: { shotCount: 3, shotType: 'full', focus: 'grip', angle: 'face_on' },
     title: 'Open Clubface',
     primary: 'Face is pointing right of target at impact (right-handed).',
     commonFaults: [
@@ -163,6 +182,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'club_face_closed',
+    practice: { shotCount: 3, shotType: 'full', focus: 'grip', angle: 'face_on' },
     title: 'Closed Clubface',
     primary: 'Face is pointing left of target at impact (right-handed).',
     commonFaults: [
@@ -180,6 +200,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'early_extension',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'down_the_line' },
     title: 'Early Extension',
     primary: 'Hips push toward the ball in the downswing, standing up out of posture.',
     commonFaults: [
@@ -197,6 +218,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'attack_angle_steep',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'down_the_line' },
     title: 'Steep Attack',
     primary: 'Club approaches the ball too vertically, deep divots and high spin.',
     commonFaults: [
@@ -214,6 +236,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'attack_angle_shallow',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'down_the_line' },
     title: 'Shallow Attack',
     primary: 'Club approaches too horizontally, thin contact and weak spin.',
     commonFaults: [
@@ -231,6 +254,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'chicken_wing',
+    practice: { shotCount: 5, shotType: 'full', focus: 'connection', angle: 'face_on' },
     title: 'Chicken Wing',
     primary: 'Lead arm bends and breaks down through impact — short, weak release.',
     commonFaults: [
@@ -248,6 +272,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   },
   {
     id: 'reverse_pivot',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'face_on' },
     title: 'Reverse Pivot',
     primary: 'Weight shifts toward the lead side on the backswing and trail side on the downswing — opposite of a sound move.',
     commonFaults: [
@@ -269,6 +294,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   // falls back to the title + video thumbnail.
   {
     id: 'chipping_inconsistent',
+    practice: { shotCount: 5, shotType: 'chip', focus: 'contact', angle: 'face_on' },
     title: 'Inconsistent Chipping',
     primary: 'Strike inconsistent around the green — sometimes thin, sometimes fat, distance unpredictable.',
     commonFaults: [
@@ -326,6 +352,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   // tempo read + the effort% estimate already in the app; nothing fabricated.
   {
     id: 'tempo_consistency',
+    practice: { shotCount: 5, shotType: 'full', focus: 'tempo', angle: 'face_on', swingPercents: [50, 75, 100] },
     title: 'Tempo',
     primary: 'Smooth, repeatable tempo — the same rhythm whether you swing easy or hard.',
     commonFaults: [
@@ -339,7 +366,6 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
         name: 'Tempo × Swing %',
         steps:
           'Pick an effort — 50%, then 75%, then 100%. Hit 3–5 balls and hold the SAME rhythm at every level. Your tempo ratio should barely move even as the power climbs. Most players rush the backswing when they go after it — this makes that visible.',
-        practice: { shotCount: 5, shotType: 'full', focus: 'tempo', swingPercents: [50, 75, 100] },
       },
     ],
     videoCategory: 'tempo',
