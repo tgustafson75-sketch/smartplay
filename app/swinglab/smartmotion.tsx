@@ -933,39 +933,50 @@ export default function SmartMotion() {
         // probe(≤8s)+locate(≤25s) BEFORE the analysis fetch — 30s would fire
         // before the real read even starts and discard it — so give them ~70s.
         // (audit 2026-06-11)
-        const watchdogMs = boundaries ? 30_000 : 70_000;
-        const result = await Promise.race([
-          analyzeSwing(uri, {
-            // Thread the tagged club so the analyst has club context (a driver
-            // vs wedge fault read differs); 'unknown' only when truly untagged.
-            club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
-            swing_number: segment?.index ?? 1,
-            caddie_name: caddiePersonality,
-            angle,
-            // Handedness pretext so direction-dependent faults read correctly.
-            handedness: swingerHandedness,
-            language,
-            // CNS recent faults as prior context (server: "Prior swings showed…").
-            prior_issues: cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined,
-            player_context: {
-              handicap: profile.handicap ?? null,
-              // Prefer the LEARNED dominant miss (from real swings) over the
-              // static profile value when we have it.
-              dominant_miss: cnsTend.dominantMiss ?? profile.dominantMiss ?? null,
-              first_name: profile.firstName ?? null,
-            },
-            tier: 'quick',
-            // Ball/stand anchor — where the ball sits (and by extension where the
-            // golfer stands). The analyzer uses it as a strong prior: "ball is at
-            // (x,y); impact is the frame it leaves that area." Wires the set ball
-            // area into the SWING read (was only wired to the putt read before).
-            ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
-            target_norm: targetPointRef.current ?? null,
-          }, boundaries),
-          new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
-            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), watchdogMs),
-          ),
-        ]);
+        // 2026-06-12 (analysis speed) — BOUNDED clips (the live cage demo path) skip
+        // analyzeSwing's internal locate, so a warm Haiku quick read is ~2-6s. Fail FAST
+        // at 15s and auto-retry ONCE rather than making the user stare at "Analyzing…"
+        // for 30-70s before a NO READ forces a re-record — the retry hits a now-warm
+        // Lambda and usually succeeds. UNBOUNDED clips still get the 70s ceiling + 1 try.
+        const watchdogMs = boundaries ? 15_000 : 70_000;
+        const maxAttempts = boundaries ? 2 : 1;
+        const analyzeOpts = {
+          // Thread the tagged club so the analyst has club context (a driver
+          // vs wedge fault read differs); 'unknown' only when truly untagged.
+          club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
+          swing_number: segment?.index ?? 1,
+          caddie_name: caddiePersonality,
+          angle,
+          // Handedness pretext so direction-dependent faults read correctly.
+          handedness: swingerHandedness,
+          language,
+          // CNS recent faults as prior context (server: "Prior swings showed…").
+          prior_issues: cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined,
+          player_context: {
+            handicap: profile.handicap ?? null,
+            // Prefer the LEARNED dominant miss (from real swings) over the
+            // static profile value when we have it.
+            dominant_miss: cnsTend.dominantMiss ?? profile.dominantMiss ?? null,
+            first_name: profile.firstName ?? null,
+          },
+          tier: 'quick' as const,
+          // Ball/stand anchor — where the ball sits (and by extension where the
+          // golfer stands). The analyzer uses it as a strong prior: "ball is at
+          // (x,y); impact is the frame it leaves that area." Wires the set ball
+          // area into the SWING read (was only wired to the putt read before).
+          ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
+          target_norm: targetPointRef.current ?? null,
+        };
+        let result: Awaited<ReturnType<typeof analyzeSwing>> = { kind: 'error', message: 'Analysis timed out' };
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          result = await Promise.race([
+            analyzeSwing(uri, analyzeOpts, boundaries),
+            new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
+              setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), watchdogMs),
+            ),
+          ]);
+          if (result.kind === 'ok') break; // success — don't retry
+        }
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
@@ -1381,6 +1392,12 @@ export default function SmartMotion() {
         return;
       }
     }
+    // 2026-06-12 (analysis speed) — warm the fault-read Lambda the MOMENT recording starts.
+    // The open record window (up to 60s) is free warm time, so the first swing's read lands
+    // on a HOT Lambda instead of eating a cold start → no more cold-first-swing NO READ.
+    // The mount warmup often loses the race (user records within a few seconds of opening).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    try { require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true }); } catch { /* non-fatal */ }
     setBallSpeed(null);
     setBallDeparture(null);
     // Clear the prior swing's results so the next minute starts clean (the
@@ -1475,10 +1492,15 @@ export default function SmartMotion() {
     // mic can't separate a neighbour — only the in-frame video can).
     let acousticStrikes: DetectedStrike[] = [];
     let firstStrikeMs: number | null = null;
+    // 2026-06-12 (analysis speed) — the metered recorder already knows the clip duration;
+    // capture it here so the fallback/analysis never re-probes it (probeDurationMs is a
+    // ≤8s Audio.Sound + thumbnail load that was running up to 3× per swing).
+    let meteredDurationMs: number | null = null;
     try {
       if (meteringRef.current) {
         const { samples, uri, durationMs } = await meteringRef.current.stop();
         meteringRef.current = null;
+        meteredDurationMs = durationMs ?? null;
         audioUriRef.current = uri;
         const meterMode = useRoundStore.getState().isRoundActive
           ? 'course'
@@ -1538,16 +1560,16 @@ export default function SmartMotion() {
       }
     }
 
-    // Best-effort ball speed for the first swing.
+    // Best-effort ball speed for the first swing. 2026-06-12 (analysis speed) —
+    // FIRE-AND-FORGET: the fault-read doesn't depend on ball speed, so don't make the
+    // user wait 1-3s for this network call before the analysis even starts. It resolves
+    // in parallel and fills the badge whenever it lands.
     if (audioUriRef.current && firstStrikeMs != null) {
-      try {
-        const speed = await detectBallSpeed({
-          audioUri: audioUriRef.current,
-          impact_ms: firstStrikeMs,
-          club: clubIdToServerKey(clubRef.current),
-        });
-        if (speed) setBallSpeed(speed);
-      } catch { /* non-fatal */ }
+      void detectBallSpeed({
+        audioUri: audioUriRef.current,
+        impact_ms: firstStrikeMs,
+        club: clubIdToServerKey(clubRef.current),
+      }).then((speed) => { if (speed) setBallSpeed(speed); }).catch(() => { /* non-fatal */ });
     }
 
     try {
@@ -1642,11 +1664,15 @@ export default function SmartMotion() {
       } else if (stopMode === 'cage' && detectedSegments.length <= 1) {
         try {
           const pose = await import('../../services/poseDetection');
-          const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
-          // cage with exactly 1 strike: only cross-check on a LONG clip — a short
-          // single-strike clip is a legit single swing, don't override it with a
-          // possibly-noisier video read. cage-0 always tries (nothing to lose).
-          const worthVideo = detectedSegments.length === 0 || durMs > 20_000;
+          // Use the metered duration (no re-probe); only probe as a last resort.
+          const durMs = meteredDurationMs ?? await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          // 2026-06-12 (analysis speed) — locateSwings is a cold-Lambda network call
+          // (≤30s). It's only worth it on a LONG clip where the swing's position is
+          // genuinely unknown. A SHORT cage clip basically IS the swing — skip the locate
+          // and let the synthesized whole-clip window (below) drive a fast BOUNDED read.
+          // This is the single biggest first-try-NO-READ fix: a missed strike used to
+          // collapse the fast path into locateSwings + an unbounded re-locate (30-70s).
+          const worthVideo = durMs > 12_000 && (detectedSegments.length === 0 || durMs > 20_000);
           if (worthVideo) {
             const swings = await pose.locateSwings(recorded.uri, durMs);
             // Use the video segments only if they found MORE swings than acoustics
@@ -1661,9 +1687,22 @@ export default function SmartMotion() {
           console.log('[smartmotion] cage video fallback failed (non-fatal):', e);
         }
       }
+      // 2026-06-12 (analysis speed) — NEVER send a short clip down the UNBOUNDED analysis
+      // path (which re-probes the duration AND runs locateSwingWindow, another ≤25s cold
+      // call → 30-70s → watchdog → NO READ → forced re-record). If no real segment was
+      // found, synthesize a bounded WHOLE-CLIP window so analyzeSwing goes bounded + fast;
+      // extractKeyFrames samples across the short clip, which is the swing. peakDb 0 keeps
+      // tempo/departure honestly off (no acoustic anchor), but the fault read lands fast.
+      let firstSeg = segsForAnalysis[0];
+      if (!firstSeg) {
+        const durMs = meteredDurationMs ?? 0;
+        if (durMs > 0 && durMs <= 12_000) {
+          firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false };
+        }
+      }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
-      void runAnalysis(recorded.uri, segsForAnalysis[0]);
+      void runAnalysis(recorded.uri, firstSeg);
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;

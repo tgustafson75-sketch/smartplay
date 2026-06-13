@@ -1767,9 +1767,32 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /if \(cached\) \{ setAnalysis\(cached\); setSwingAnalyzing\(false\); return; \}/.test(smA),
     'scrubbing to a cached swing while an earlier read is in flight clears swingAnalyzing on the cached hit — the spinner can no longer stick on forever');
 
-  check('Swing analysis: unbounded clips get a longer analyze watchdog',
-    /const watchdogMs = boundaries \? 30_000 : 70_000;/.test(smA),
-    'course single-shot / single-swing uploads (which run an internal probe+locate before the fetch) no longer time out at 30s before the real read starts');
+  check('SmartMotion analysis SPEED fixes (2026-06-12 — first-try read + latency)',
+    // The big one: a missed strike on a short cage clip no longer collapses to the slow
+    // unbounded locate path. locateSwings is gated to long clips; a whole-clip bounded
+    // window is synthesized so analyzeSwing goes bounded + fast.
+    /const worthVideo = durMs > 12_000 && \(detectedSegments\.length === 0 \|\| durMs > 20_000\)/.test(smA) &&
+      /firstSeg = \{ index: 1, strikeMs: Math\.round\(durMs \* 0\.6\), startMs: 0, endMs: durMs/.test(smA) &&
+      /void runAnalysis\(recorded\.uri, firstSeg\)/.test(smA) &&
+      // duration is reused from the metered recorder (no 2-3x re-probe)
+      /let meteredDurationMs: number \| null = null;/.test(smA) &&
+      /const durMs = meteredDurationMs \?\? await pose\.probeDurationMs/.test(smA) &&
+      // Lambda warmed at record-start (60s window = free warm time), and ball speed is
+      // off the critical path.
+      /warm the fault-read Lambda the MOMENT recording starts/.test(smA) &&
+      /void detectBallSpeed\(\{[\s\S]{0,200}\}\)\.then\(\(speed\) => \{ if \(speed\) setBallSpeed/.test(smA),
+    'short cage clips take the fast BOUNDED path (no cold locate), duration is reused (no re-probe), the Lambda is warmed at record-start, and ball speed runs in parallel — kills the 30-70s first-try NO READ');
+
+  check('Swing analysis: bounded clips fail FAST (15s) + auto-retry; unbounded keep the 70s ceiling',
+    // 2026-06-12 (analysis speed) — a bounded cage read on a warm Lambda is ~2-6s, so it
+    // fails fast at 15s and silently retries ONCE (now-warm) instead of a 30-70s dead wait
+    // → NO READ → forced re-record. Unbounded (course/upload, internal probe+locate) keeps
+    // the 70s ceiling and a single attempt.
+    /const watchdogMs = boundaries \? 15_000 : 70_000;/.test(smA) &&
+      /const maxAttempts = boundaries \? 2 : 1;/.test(smA) &&
+      /for \(let attempt = 0; attempt < maxAttempts; attempt\+\+\)/.test(smA) &&
+      /if \(result\.kind === 'ok'\) break;/.test(smA),
+    'bounded reads fail fast + auto-retry once on the warm Lambda; unbounded reads still get the 70s ceiling — no more 30-70s stare-then-NO-READ that forced re-records');
 
   check('Swing analysis: tempo only from an acoustic impact anchor (sign-agnostic gate)',
     /\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
