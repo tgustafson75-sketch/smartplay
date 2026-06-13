@@ -50,6 +50,7 @@ import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
+import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from '../../services/practice/sessionPlan';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1441,6 +1442,36 @@ check('Practice-session primitive — stamps Smart Motion swings, no-ops when in
     return ok;
   })(),
   'a practice session stamps each analyzed Smart Motion swing into the active session and aggregates a live read, the stamp helper no-ops when no session is running, and ending archives the session to history (practice-session primitive)');
+
+check('Session Runner planner — interleaves instead of a blocked grind (Tim+Tank)',
+  // 2026-06-13 — a focus knows what today is (irons/short game/driver/...) and the
+  // planner lays out an INTERLEAVED sequence: multi-club focuses rotate clubs in
+  // small blocks; single-club focuses rotate the TARGET. Never one long one-club
+  // grind — the structure that actually transfers (the opposite of the mash).
+  (() => {
+    const irons = getFocus('irons');
+    const driverSpeed = getFocus('driver_speed');
+    if (!irons || !driverSpeed) return false;
+
+    const ironPlan = buildInterleavedPlan(irons, 8);
+    const ironClubs = ironPlan.map((r) => r.club);
+    const rotatesClubs = new Set(ironClubs).size > 1;            // not a one-club grind
+    const blocksOfTwo = ironClubs[0] === ironClubs[1] && ironClubs[1] !== ironClubs[2]; // blockSize 2
+    const switchCount = ironPlan.filter((r) => r.switchClub).length;
+
+    const drvPlan = buildInterleavedPlan(driverSpeed, 6);
+    const oneClub = new Set(drvPlan.map((r) => r.club)).size === 1; // single-club focus
+    const variedTargets = new Set(drvPlan.map((r) => r.targetCue)).size > 1; // ...but targets rotate
+
+    return (
+      PRACTICE_FOCUSES.length >= 6 &&                            // irons/short game/driver x2/hands/putting
+      ironPlan.length === 8 && rotatesClubs && blocksOfTwo && switchCount >= 3 &&
+      isInterleaved(ironPlan, irons) &&
+      oneClub && variedTargets && isInterleaved(drvPlan, driverSpeed) &&
+      buildInterleavedPlan(irons, 0).length === 0               // empty-safe
+    );
+  })(),
+  'the Session Runner offers focus presets and builds an interleaved plan — multi-club focuses rotate clubs in small blocks, single-club focuses rotate targets — never a blocked one-club grind (Practice Engine session planner)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
