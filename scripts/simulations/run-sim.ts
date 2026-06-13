@@ -48,6 +48,7 @@ import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
+import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1382,6 +1383,34 @@ check('SmartTrace confidence-tiered read — degrades, never goes dark (Tim)',
     );
   })(),
   'composeSmartTrace returns a flight read when the ball is seen, a flagged "STRUCK" contact read when only a strike fired, and an honest no-read otherwise — degrading instead of going dark (SmartTrace confidence tiers)');
+
+check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
+  // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on
+  // swings where flight was seen (honest), reports tempo REPEATABILITY (not a
+  // fabricated grade), and flags the blocked-practice anti-pattern (one club
+  // dominating a long session) — the differentiator a range bucket can't give.
+  (() => {
+    // 40-ball mash: 32 with the 7I (blocked), flight seen on 10 (5 on line), then a
+    // varied session that must NOT trip the blocked-practice flag.
+    const mash: any[] = [];
+    for (let i = 0; i < 32; i++) mash.push({ club: '7I', tier: i < 10 ? 'flight' : 'contact', tempoRatio: 3.0, divergenceDeg: i < 10 ? (i % 2 ? 3 : 14) : null });
+    for (let i = 0; i < 8; i++) mash.push({ club: 'PW', tier: 'contact', tempoRatio: 3.1, divergenceDeg: null });
+    const m = summarizeOpenRange(mash);
+
+    const varied = ['7I', 'PW', 'Driver', '9I', '5I'].flatMap((c) =>
+      Array.from({ length: 3 }, () => ({ club: c, tier: 'flight' as const, tempoRatio: 3.0, divergenceDeg: 4 })));
+    const v = summarizeOpenRange(varied);
+
+    return (
+      m.total === 40 && m.flightSeen === 10 && m.onLine === 5 &&        // line judged only among seen flights
+      m.onLinePct === 0.5 &&
+      !!m.blockedPractice && m.blockedPractice.club === '7I' && m.blockedPractice.pct === 80 && // anti-pattern flagged
+      m.insights.some((x) => /transfers worst|switch clubs/.test(x)) && // Tank's nudge surfaces
+      v.blockedPractice === null &&                                     // varied practice NOT flagged
+      summarizeOpenRange([]).total === 0                                // empty-safe
+    );
+  })(),
+  'summarizeOpenRange quantifies a range session honestly (line only where flight was seen, tempo repeatability) and flags one-club blocked practice with a switch-clubs nudge, while leaving varied practice unflagged (Open Range quantifier)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
