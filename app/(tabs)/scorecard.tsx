@@ -23,6 +23,7 @@ import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
+import { recommendBagForCourse } from '../../services/bagRecommendation';
 import { speakChunked, warmVoice, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -294,6 +295,17 @@ export default function Scorecard() {
   const courseClubUsage: ClubAgg[] = useMemo(
     () => aggregateClubs(courseRounds.flatMap(r => (Array.isArray(r.shots) ? r.shots : [])) as ShotResult[]),
     [courseRounds, aggregateClubs],
+  );
+  // 2026-06-13 (Tim) — Part B1: the caddie-brain recommendation built ON the
+  // per-course usage. It answers the moat question for a course you've PLAYED:
+  // which clubs sit idle here (swap candidates) and where are the distance GAPS
+  // you keep facing with no club that fits ("30y gap → put your hybrid back in").
+  // Composition lives in the brain (services/bagRecommendation); this is display.
+  const bagRec = useMemo(
+    () => (activeCourseId ? recommendBagForCourse(activeCourseId) : null),
+    // courseRounds is the data the rec reads (via the store), so recompute with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCourseId, courseRounds],
   );
 
   // Kevin's recap
@@ -825,6 +837,17 @@ export default function Scorecard() {
                   </Text>
                 </View>
               ))}
+              {/* Part B1 — the caddie's read on this bag: idle clubs + distance
+                  gaps to fill. Confident lines only once enough rounds exist;
+                  while forming we keep it to the usage above (no shaky advice). */}
+              {bagRec && !bagRec.forming && (bagRec.idle.length > 0 || bagRec.gaps.length > 0) && (
+                <View style={[styles.bagRecBox, { borderTopColor: c.border }]}>
+                  <Text style={[styles.bagRecHeadline, { color: c.text_primary }]}>{bagRec.headline}</Text>
+                  {bagRec.rationale.map((line, i) => (
+                    <Text key={i} style={[styles.bagRecLine, { color: c.text_secondary }]}>• {line}</Text>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -918,6 +941,9 @@ const styles = StyleSheet.create({
   highlightClub: { fontSize: 14, fontWeight: '800' },
   highlightSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
   courseBagNote: { fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingVertical: 9, fontStyle: 'italic' },
+  bagRecBox: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, borderTopWidth: 1, marginTop: 2 },
+  bagRecHeadline: { fontSize: 13, fontWeight: '800', marginBottom: 6 },
+  bagRecLine: { fontSize: 12, fontWeight: '500', lineHeight: 17, marginBottom: 3 },
 
   summary: {
     flexDirection: 'row',

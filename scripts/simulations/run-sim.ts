@@ -46,6 +46,7 @@ import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } fro
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
+import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -1291,6 +1292,38 @@ check('Course bag optimizer Part A — per-course club usage (Tim)',
     );
   })(),
   'a "Your bag · <course>" section shows the clubs you actually use at the active course, forming until 2+ rounds — the spine for course-specific bag planning');
+
+check('Course bag optimizer Part B1 — gap detection + idle clubs (Tim)',
+  // 2026-06-13 — the brain read built ON Part A: for a course you've PLAYED,
+  // flag clubs that sit idle (swap candidates) and the distance GAPS you keep
+  // facing with no club that fits ("put your hybrid back in"). Pure/offline.
+  (() => {
+    // Two rounds at "Menifee": player uses Driver(250), 7I(150), PW(110) — leaving
+    // a wide hole between the 7I and the Driver, and never touching the 4H they own.
+    const shots = [
+      { club: 'Driver', distance_yards: 250, hole: 1, timestamp: 1, feel: null, direction: null, shape: null, acousticContact: null },
+      { club: '7I', distance_yards: 150, hole: 2, timestamp: 2, feel: null, direction: null, shape: null, acousticContact: null },
+      { club: 'PW', distance_yards: 110, hole: 3, timestamp: 3, feel: null, direction: null, shape: null, acousticContact: null },
+      { club: '7I', distance_yards: 152, hole: 4, timestamp: 4, feel: null, direction: null, shape: null, acousticContact: null },
+    ] as any[];
+    const rec = composeBagRecommendation({
+      courseName: 'Menifee',
+      shots,
+      roundsPlayed: 2,                       // past the forming threshold
+      clubDistances: { Driver: 250, '4H': 180, '7I': 150, PW: 110 },
+      ownedClubs: ['Driver', '4H', '7I', 'PW', 'Putter'],
+      inferClub: (y: number) => (y > 200 ? 'Driver' : y > 130 ? '7I' : 'PW'),
+    });
+    const gap100 = rec.gaps.find(g => g.lowClub === '7I' && g.highClub === 'Driver');
+    return (
+      rec.forming === false &&                                   // 2 rounds = confident
+      rec.idle.includes('4H') &&                                 // owned but never used here
+      !!gap100 && gap100.gapYards === 99 &&                      // 250 − 151 (7I avg of 150/152)
+      /4H/.test(gap100.suggestion) &&                            // suggests the benched 4H (closest to ~200y centre)
+      rec.headline.includes('Menifee')                          // answer-first, names the course
+    );
+  })(),
+  'for a played course, the brain flags idle clubs and the carry gaps you keep facing, suggesting the benched club that fills each gap — Part B1 of the bag optimizer');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
