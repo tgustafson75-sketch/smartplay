@@ -181,12 +181,23 @@ export default function SwingLibrary() {
           if (!thumbOk && videoOk && clipUri) {
             try {
               const VT = await import('expo-video-thumbnails');
-              const { uri: tmp } = await VT.getThumbnailAsync(clipUri, { time: 500, quality: 0.7 });
-              let finalUri = tmp;
-              const dest = `${FS.documentDirectory}swing-thumb-${entry.session.id}.jpg`;
-              try { await FS.copyAsync({ from: tmp, to: dest }); finalUri = dest; } catch { /* keep tmp */ }
-              useCageStore.getState().setSessionThumbnail(entry.session.id, finalUri);
-              thumbOk = true;
+              // 2026-06-12 — robust for LARGE 60fps clips (Tim's are ~180MB): the first
+              // frame (time 0) is the cheapest/most reliable to decode; only fall back to
+              // a mid-clip frame if t=0 fails. Lower quality keeps the decode fast.
+              let tmp: string | null = null;
+              for (const time of [0, 600]) {
+                try {
+                  const r = await VT.getThumbnailAsync(clipUri, { time, quality: 0.6 });
+                  tmp = r.uri; break;
+                } catch { /* try next time offset */ }
+              }
+              if (tmp) {
+                let finalUri = tmp;
+                const dest = `${FS.documentDirectory}swing-thumb-${entry.session.id}.jpg`;
+                try { await FS.copyAsync({ from: tmp, to: dest }); finalUri = dest; } catch { /* keep tmp */ }
+                useCageStore.getState().setSessionThumbnail(entry.session.id, finalUri);
+                thumbOk = true;
+              }
             } catch { /* generation failed — card shows the placeholder, no crash */ }
           }
           next.set(entry.session.id, { video: videoOk, thumb: thumbOk });
