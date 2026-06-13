@@ -937,6 +937,7 @@ export const useCageStore = create<CageState>()(
           rootCause: null,
           summary: null,
           source: 'live_cage',
+          captureKind: 'smart_motion',
           upload,
           analysis_status: 'pending',
           analysis_error: null,

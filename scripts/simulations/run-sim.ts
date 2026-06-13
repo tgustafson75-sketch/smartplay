@@ -1767,6 +1767,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /if \(cached\) \{ setAnalysis\(cached\); setSwingAnalyzing\(false\); return; \}/.test(smA),
     'scrubbing to a cached swing while an earlier read is in flight clears swingAnalyzing on the cached hit — the spinner can no longer stick on forever');
 
+  check('Library phase 1b: a multi-swing cage reel carves into N per-swing shots',
+    // 2026-06-12 (Tim) — a cage session with N detected swings now lands in the library AS
+    // N shots (each scrubbing its window into the master clip) via ingestLiveCageSession,
+    // instead of collapsing to shots[0]. Single-swing clips keep the simple upload path.
+    // segmentsRef is synced synchronously so the carve sees the final set (not a stale one).
+    /const segmentsRef = useRef<SwingSegment\[\]>\(\[\]\)/.test(smA) &&
+      /segmentsRef\.current = segsForAnalysis;/.test(smA) &&
+      /const segs = segmentsRef\.current;/.test(smA) &&
+      /segs\.length > 1[\s\S]{0,120}ingestLiveCageSession\(\{/.test(smA) &&
+      /clipStartSeconds: s\.startMs \/ 1000,/.test(smA) &&
+      /captureKind: 'smart_motion',/.test(read('store/cageStore.ts')),
+    'a multi-swing cage reel ingests as N per-swing shots with clip boundaries (library shows all swings, each scrubbing its window); single swings keep the simple path; both tagged smart_motion');
+
   check('Custom caddie always has a voice (male/female default → Kevin/Serena)',
     // 2026-06-12 (Tim) — custom keeps its generated face but speaks with a real default
     // voice for any unrecorded line, picked by a male/female toggle. The server falls back

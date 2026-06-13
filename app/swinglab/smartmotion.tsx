@@ -368,6 +368,11 @@ export default function SmartMotion() {
   // or chip mode on a range) and no mic is running.
   const [meteringActive, setMeteringActive] = useState(false);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
+  // 2026-06-12 (phase 1b) — mirror so runAnalysis (a useCallback) can read the FULL set
+  // of detected swings without a stale closure, to carve a multi-swing cage clip into N
+  // per-swing library shots instead of collapsing it to one.
+  const segmentsRef = useRef<SwingSegment[]>([]);
+  useEffect(() => { segmentsRef.current = segments; }, [segments]);
   const [selectedSwing, setSelectedSwing] = useState(0);
   // 2026-06-11 (audit) — mirror selectedSwing in a ref so an async per-swing
   // analysis can detect when its result is STALE (the user scrubbed the reel to
@@ -829,21 +834,42 @@ export default function SmartMotion() {
           : null;
         const swinger = activeMember?.firstName ?? profile.firstName ?? null;
         const perspective: 'pov_self' | 'watching_someone' = activeMember ? 'watching_someone' : 'pov_self';
-        const sessionId = useCageStore.getState().ingestUploadedSwing({
-          clipUri: uri,
-          club: 'unknown',
-          upload: {
-            uploaded_at: Date.now(),
-            notes: `Smart Motion ${angle === 'face_on' ? 'face-on' : 'down-the-line'} swing`,
-            duration_sec: null,
-            has_audio: true,
-            source_device: 'phone',
-            tag: null,
-            swinger,
-            perspective,
-          },
-          source: 'live_cage',
-        });
+        const uploadMeta = {
+          uploaded_at: Date.now(),
+          notes: `Smart Motion ${angle === 'face_on' ? 'face-on' : 'down-the-line'} swing`,
+          duration_sec: null,
+          has_audio: true,
+          source_device: 'phone' as const,
+          tag: null,
+          swinger,
+          perspective,
+        };
+        // 2026-06-12 (phase 1b) — CARVE a multi-swing cage reel into N per-swing library
+        // shots (each scrubbing its own window into the master clip), so the session lands
+        // in the library AS the N swings it was — not collapsed to one. Single-swing clips
+        // keep the simple upload path. Both tag captureKind 'smart_motion'.
+        const segs = segmentsRef.current;
+        const sessionId = segs.length > 1
+          ? useCageStore.getState().ingestLiveCageSession({
+              masterVideoPath: uri,
+              club: 'unknown',
+              upload: uploadMeta,
+              shots: segs.map((s, i) => ({
+                correlationId: `sm_${i}_${s.strikeMs}`,
+                detectionOffsetSeconds: s.strikeMs / 1000,
+                clipStartSeconds: s.startMs / 1000,
+                clipEndSeconds: s.endMs / 1000,
+                // a real acoustic strike carries a non-zero peakDb; a video-located swing is 0
+                detectionMethod: (s.peakDb ?? 0) !== 0 ? 'audio_transient' as const : 'manual' as const,
+              })),
+            })
+          : useCageStore.getState().ingestUploadedSwing({
+              clipUri: uri,
+              club: 'unknown',
+              upload: uploadMeta,
+              source: 'live_cage',
+              captureKind: 'smart_motion',
+            });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
         // Carry the pre-record ball box + (DTL) target into the session so the
@@ -1700,6 +1726,9 @@ export default function SmartMotion() {
           firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false };
         }
       }
+      // Sync the ref SYNCHRONOUSLY (the state-mirror effect hasn't run yet this tick) so
+      // runAnalysis's multi-swing carve sees the final segment set, not a stale one.
+      segmentsRef.current = segsForAnalysis;
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, firstSeg);
