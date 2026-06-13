@@ -49,7 +49,7 @@ import SmartVisionLiveStrategy from '../components/SmartVisionLiveStrategy';
 import { useTheme } from '../contexts/ThemeContext';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG } from 'react-native-svg';
+import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG, Circle as SvgCircle } from 'react-native-svg';
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -80,6 +80,7 @@ import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // liability (three copies across this file, hole-view.tsx, and utils).
 // Single source of truth now lives in utils/geoDistance.ts.
 import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
+import { planAimLines, layupFraction } from '../utils/layupPlan';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -990,6 +991,25 @@ export default function SmartVisionScreen() {
     // user re-marks or drags the cart.
   }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor]);
 
+  // 2026-06-13 (Tim #6) — Golfshot-style layup planning. The hole's playing
+  // distance (tee→green) decides whether the view shows one direct line or a
+  // two-segment layup plan; the waypoint rides the tee→pin axis at the layup
+  // carry point so par-5s read strategically instead of pretending one shot gets
+  // home. Pure planner (utils/layupPlan) keeps the decision out of this render.
+  const approachYards = useMemo(() => {
+    const h = courseHoles.find(x => x.hole === holeIndex);
+    return h?.distance ?? yardages.middle ?? null;
+  }, [courseHoles, holeIndex, yardages.middle]);
+  const aimPlan = useMemo(() => planAimLines(approachYards), [approachYards]);
+  const layupCanvas = useMemo(() => {
+    const f = layupFraction(aimPlan, approachYards);
+    if (f == null) return null;
+    return {
+      x: teeCanvas.x + f * (pinCanvas.x - teeCanvas.x),
+      y: teeCanvas.y + f * (pinCanvas.y - teeCanvas.y),
+    };
+  }, [aimPlan, approachYards, teeCanvas, pinCanvas]);
+
   // Carry distance — yards from tee to current yellow target. GPS path
   // uses haversine; pixel-fallback path interpolates against the bundled
   // hole distance so the carry label still updates in curated mode.
@@ -1566,6 +1586,30 @@ export default function SmartVisionScreen() {
               fontWeight="900"
             >{yardages.middle}</SvgText>
           )}
+          {/* 2026-06-13 (Tim #6) — layup waypoint. Only drawn when the green is
+              200y+ away (the two-line plan); under 200y the view stays a single
+              direct line. The "leaves Ny" label = the approach you set up. */}
+          {layupCanvas && aimPlan.mode === 'layup' && aimPlan.leaveYards != null && (
+            <>
+              <SvgCircle
+                cx={layupCanvas.x}
+                cy={layupCanvas.y}
+                r={7}
+                fill="#f97316"
+                stroke="#ffffff"
+                strokeWidth={2}
+              />
+              <SvgText
+                x={layupCanvas.x + 12}
+                y={layupCanvas.y - 9}
+                fill="#f97316"
+                stroke="#000"
+                strokeWidth={3}
+                fontSize={13}
+                fontWeight="900"
+              >{`LAY UP · ${aimPlan.leaveYards} in`}</SvgText>
+            </>
+          )}
         </Svg>
 
         {/* Markers — direct canvas coords. */}
@@ -1584,14 +1628,19 @@ export default function SmartVisionScreen() {
             at their final positions once the image + geometry load. */}
         {!loading && (
           <>
-            <Marker
-              kind="T"
-              x={teeCanvas.x}
-              y={teeCanvas.y}
-              draggable
-              onDrag={onTeeDrag}
-              onDragEnd={() => { teeDragStartRef.current = null; }}
-            />
+            {/* 2026-06-13 (Tim #6) — the T clears once you CAPTURE your spot
+                (place/drag the Y target). Before capture it's draggable to
+                re-anchor the tee; after, the view is just your line(s) + pin. */}
+            {!targetOverride && (
+              <Marker
+                kind="T"
+                x={teeCanvas.x}
+                y={teeCanvas.y}
+                draggable
+                onDrag={onTeeDrag}
+                onDragEnd={() => { teeDragStartRef.current = null; }}
+              />
+            )}
             <Marker
               kind="P"
               x={pinCanvas.x}

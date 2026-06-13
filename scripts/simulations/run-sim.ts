@@ -45,6 +45,7 @@ import { estimateCarryYards, fullCarryYards } from '../../services/swing/carryEs
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
+import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 
 interface ScenarioResult {
   scenario: string;
@@ -849,6 +850,43 @@ check('Bottom-strip hole nav is finger-sized (Tim: arrows too small on course)',
       !/size=\{16\}/.test(s) && !/size=\{14\}/.test(s);            // old tiny glyphs gone
   })(),
   'hole back/forward arrows are now comfortably tappable, not pinpoint');
+
+check('Layup planning: planAimLines is direct <200y, layup at 200y+ (#6)',
+  // 2026-06-13 — pure planner unit test. Under 200y = one direct line; 200y+ =
+  // a layup plan that leaves a sane approach and never asks for an unreal carry.
+  (() => {
+    const short = planAimLines(150);
+    const edge = planAimLines(LAYUP_THRESHOLD_YARDS - 1);
+    const at = planAimLines(LAYUP_THRESHOLD_YARDS);
+    const mid = planAimLines(230);   // reachable-ish → leave a wedge
+    const long = planAimLines(500);  // par-5 from the tee → cap the layup carry
+    const none = planAimLines(null);
+    return short.mode === 'direct' && short.leaveYards === null &&
+      edge.mode === 'direct' &&
+      at.mode === 'layup' && at.leaveYards != null &&
+      mid.mode === 'layup' && mid.leaveYards === 100 && mid.layupCarryYards === 130 &&
+      long.mode === 'layup' && long.layupCarryYards === 250 && long.leaveYards === 250 &&
+      none.mode === 'direct' && // unknown distance → safe non-committal default
+      // fraction is 0..1 along player→green, null in direct mode
+      layupFraction(mid, 230) === Math.max(0, Math.min(1, 130 / 230)) &&
+      layupFraction(short, 150) === null;
+  })(),
+  'distance-driven aim lines: par-5s lay up, short approaches go direct, junk inputs stay safe');
+
+check('Layup planning wired into the hole view (smartvision) (#6)',
+  // The planner drives an additive layup waypoint + leave label, and the T
+  // marker clears once the player captures (places the Y target). Existing
+  // tee→target→pin lines + projection math are untouched.
+  (() => {
+    const s = read('app/smartvision.tsx');
+    return /import \{ planAimLines, layupFraction \} from '\.\.\/utils\/layupPlan'/.test(s) &&
+      /const aimPlan = useMemo\(\(\) => planAimLines\(approachYards\)/.test(s) &&
+      /const layupCanvas = useMemo/.test(s) &&
+      /layupCanvas && aimPlan\.mode === 'layup'/.test(s) &&
+      /LAY UP · \$\{aimPlan\.leaveYards\} in/.test(s) &&
+      /\{!targetOverride && \(\s*\n\s*<Marker\s*\n\s*kind="T"/.test(s); // T clears on capture
+  })(),
+  'hole view shows the two-line layup plan at 200y+ and drops the T once you capture');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
