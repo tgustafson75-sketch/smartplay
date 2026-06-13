@@ -1276,6 +1276,22 @@ check('Retro: backfill caddie summaries onto past IN-APP rounds (not Golfshot im
   })(),
   'past in-app rounds get a deterministic caddie summary on the dashboard; Golfshot imports excluded; idempotent');
 
+check('Course bag optimizer Part A — per-course club usage (Tim)',
+  // 2026-06-13 — which clubs you actually use AT THIS COURSE, across past in-app
+  // rounds there (Golfshot imports excluded). The Menifee insight + the spine for
+  // the future recommend-a-bag-for-this-course brain function. "Forming" until 2+.
+  (() => {
+    const sc = read('app/(tabs)/scorecard.tsx');
+    return (
+      /r\.courseId === activeCourseId && !r\.id\.startsWith\('imported_'\)/.test(sc) && // by course, no imports
+      /const courseClubUsage: ClubAgg\[\] = useMemo/.test(sc) &&
+      /YOUR BAG · \{activeCourse\.toUpperCase\(\)\}/.test(sc) &&
+      /see action here/.test(sc) &&
+      /pattern still forming/.test(sc) // honest until enough rounds
+    );
+  })(),
+  'a "Your bag · <course>" section shows the clubs you actually use at the active course, forming until 2+ rounds — the spine for course-specific bag planning');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

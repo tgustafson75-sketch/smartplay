@@ -56,6 +56,7 @@ export default function Scorecard() {
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const activeCourse = useRoundStore(s => s.activeCourse);
+  const activeCourseId = useRoundStore(s => s.activeCourseId);
   const courseHoles = useRoundStore(s => s.courseHoles);
   const scores = useRoundStore(s => s.scores);
   const putts = useRoundStore(s => s.putts);
@@ -279,6 +280,21 @@ export default function Scorecard() {
     roundHistory.forEach(r => { if (Array.isArray(r.shots)) allShots.push(...r.shots); });
     return aggregateClubs(allShots);
   }, [roundHistory, aggregateClubs]);
+
+  // 2026-06-13 (Tim) — Part A of the course-specific bag optimizer: which clubs you
+  // actually use AT THIS COURSE, across your past in-app rounds here (Golfshot
+  // imports excluded — they carry no shots). The spine for the future
+  // recommend-a-bag-for-this-course brain function. "Forming" until 2+ rounds.
+  const courseRounds = useMemo(
+    () => (activeCourseId
+      ? roundHistory.filter(r => r.courseId === activeCourseId && !r.id.startsWith('imported_'))
+      : []),
+    [roundHistory, activeCourseId],
+  );
+  const courseClubUsage: ClubAgg[] = useMemo(
+    () => aggregateClubs(courseRounds.flatMap(r => (Array.isArray(r.shots) ? r.shots : [])) as ShotResult[]),
+    [courseRounds, aggregateClubs],
+  );
 
   // Kevin's recap
   const [recap, setRecap] = useState<RoundRecap | null>(null);
@@ -785,6 +801,34 @@ export default function Scorecard() {
           </View>
         )}
 
+        {/* 2026-06-13 (Tim) — Part A, course-specific bag: which clubs you actually
+            use AT THIS COURSE across your past in-app rounds here. The Menifee
+            insight ("7 clubs cover this course") + the spine for the future
+            recommend-a-bag-for-this-course brain function. */}
+        {isRoundActive && activeCourse && courseClubUsage.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>YOUR BAG · {activeCourse.toUpperCase()}</Text>
+            <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <Text style={[styles.courseBagNote, { color: c.text_muted }]}>
+                {courseClubUsage.length} club{courseClubUsage.length === 1 ? '' : 's'} see action here
+                {courseRounds.length > 0 ? ` over ${courseRounds.length} round${courseRounds.length === 1 ? '' : 's'}` : ''}
+                {courseRounds.length < 2 ? ' · pattern still forming' : ''}
+              </Text>
+              {courseClubUsage.map(item => (
+                <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
+                  <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>
+                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> ~est</Text> : null}
+                  </Text>
+                  <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
+                  <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>
+                    {item.avg != null ? item.avg : '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Lifetime club usage — across every round in roundHistory.
             Helps the player pick the right bag for the next session
             and feeds the caddie's club-pattern memory (the same shots
@@ -873,6 +917,7 @@ const styles = StyleSheet.create({
   highlightRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   highlightClub: { fontSize: 14, fontWeight: '800' },
   highlightSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
+  courseBagNote: { fontSize: 12, fontWeight: '600', paddingHorizontal: 14, paddingVertical: 9, fontStyle: 'italic' },
 
   summary: {
     flexDirection: 'row',
