@@ -1964,17 +1964,23 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /<GlobalGpsDotOverlay \/>/.test(rootLayoutSrc) && /import \{ GlobalGpsDotOverlay \}/.test(rootLayoutSrc),
     'single global mount inside SafeAreaProvider so the dot is the same on caddie / hole-view / smartfinder');
 
-  // ─── hole-view unified onto the canonical GPS pipeline (over-strict gate fix) ──
-  const holeViewSrc = fs.readFileSync(path.resolve(__dirname, '../../app/hole-view.tsx'), 'utf-8');
-  check('GPS: hole-view sources from gpsManager, not a private Location.watch',
-    !/watchPositionAsync/.test(holeViewSrc) &&
-      /import\('\.\.\/services\/gpsManager'\)/.test(holeViewSrc) &&
-      /gps\.subscribe\(/.test(holeViewSrc) && /gps\.getLastFix\(\)/.test(holeViewSrc),
-    'the hole map now rides the smoothed / 90m-tolerant / confidence pipeline — no rogue second watch (single GPS source)');
+  // ─── SmartVision consolidation: the redundant legacy hole-view is retired (2026-06-12) ──
+  check('Consolidation: legacy hole-view retired; Play "View" opens SmartVision instead',
+    // hole-view was ~90% duplicated by smartvision.tsx and orphaned from the daily flow.
+    // It + its exclusive render components are deleted; the one entry point (Play-tab "View")
+    // now opens SmartVision, which resolves the course from previewCourseId.
+    !fs.existsSync(path.resolve(__dirname, '../../app/hole-view.tsx')) &&
+      !fs.existsSync(path.resolve(__dirname, '../../components/smartvision/GolfshotHoleView.tsx')) &&
+      !fs.existsSync(path.resolve(__dirname, '../../components/smartvision/VectorHoleView.tsx')) &&
+      !fs.existsSync(path.resolve(__dirname, '../../components/smartvision/ShotPlotLayer.tsx')) &&
+      /setPreviewCourse\(selected\.id\);[\s\S]{0,160}router\.push\('\/smartvision'/.test(read('app/(tabs)/play.tsx')) &&
+      !/name="hole-view"/.test(read('app/_layout.tsx')),
+    'the redundant hole-view screen + its exclusive deps are deleted, the Play-tab preview opens SmartVision (via previewCourseId), and the orphaned route registration is gone — one canonical map surface');
 
-  check('GPS: hole-view dropped the accuracy<55m cliff (no go-dark under canopy)',
-    !/coords\.accuracy < 55/.test(holeViewSrc),
-    'player marker + yardages no longer vanish above 55m; gpsManager already filters >90m + garbage, so any fix shown is usable — KEEP-and-FLAG, not hide');
+  check('GPS: the canonical SmartVision map sources from gpsManager, not a private watch',
+    !/Location\.watchPositionAsync/.test(read('app/smartvision.tsx')) &&
+      /getLastFix, subscribeFixChange/.test(read('app/smartvision.tsx')),
+    'the surviving map surface rides the smoothed / 90m-tolerant / confidence pipeline via getLastFix/subscribeFixChange — single GPS source, no rogue second watch');
 
   // ─── Health-aware coaching: mobility flag catches sciatica (was joint-only) ──
   check('Coaching: hasMobilityFlag catches sciatica + common conditions, ignores negations',

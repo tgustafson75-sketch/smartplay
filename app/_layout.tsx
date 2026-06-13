@@ -909,10 +909,6 @@ function AppNavigator() {
         <Stack.Screen name="swing-analysis-debug" options={{ headerShown: false }} />
         {/* 2026-06-10 — Caddie Clip Test removed (owner tool + route + screen). */}
         <Stack.Screen
-          name="hole-view"
-          options={{ animation: 'slide_from_bottom' }}
-        />
-        <Stack.Screen
           name="settings"
           options={{ animation: 'slide_from_right' }}
         />

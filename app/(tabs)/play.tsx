@@ -663,25 +663,11 @@ export default function PlayTab() {
 
   const handleHoleMap = () => {
     if (!selected) return;
-    const tee = selected.tees[0];
-    const h1 = tee?.holes[0];
-    const geom = h1 ? getHoleGeometry(selected.id, 1) : null;
-    router.push({
-      pathname: '/hole-view',
-      params: {
-        hole: '1',
-        par: String(h1?.par ?? 4),
-        distance: String(h1?.yardage ?? 0),
-        courseName: selected.club_name,
-        // Phase AG followup — courseId enables anchor-capture override.
-        courseId: String(selected.id ?? ''),
-        teeLat: String(geom?.tee?.lat ?? 0),
-        teeLng: String(geom?.tee?.lng ?? 0),
-        middleLat: String(geom?.green?.lat ?? 0),
-        middleLng: String(geom?.green?.lng ?? 0),
-        front: '0', back: '0',
-      },
-    } as never);
+    // 2026-06-12 — the legacy hole-view screen was retired (it was ~90% duplicated by
+    // SmartVision). Preview the selected course's hole map in SmartVision, which resolves
+    // the course from previewCourseId — set here so it's guaranteed before navigation.
+    useRoundStore.getState().setPreviewCourse(selected.id);
+    router.push('/smartvision' as never);
   };
 
   const handleRangeBook = () => {
