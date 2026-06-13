@@ -51,7 +51,11 @@ import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
-import { SwingVisionCamera, type SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
+import { recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
+// Type-only — erased at runtime, so it never loads the vision-camera native module.
+// The component is lazy-required ONLY when the runtime toggle is on (a vision build),
+// keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
+import type { SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 import * as VideoThumbnails from 'expo-video-thumbnails';
@@ -650,6 +654,22 @@ export default function SmartMotion() {
   // SmartTrace: runtime capture-engine toggle (default expo-camera). Flipped on the
   // native-modules-debug screen so one build A/B-tests vision-camera vs expo-camera.
   const useVisionCamera = useCaptureEngineStore((s) => s.useVisionCamera);
+  // Lazy-load the vision component ONLY when the toggle is on — which can only be
+  // meaningfully true in a build that linked react-native-vision-camera. On any
+  // other build the require never runs, so the native module is never touched and
+  // this screen's JS ships safely over OTA. (require, not import, is the point.)
+  const SwingVisionCamera = useMemo(() => {
+    if (!useVisionCamera) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require('../../components/capture/SwingVisionCamera').SwingVisionCamera as typeof import('../../components/capture/SwingVisionCamera').SwingVisionCamera;
+    } catch {
+      // Toggle flipped on a build that didn't link vision-camera → fall back to
+      // expo-camera instead of crashing. (Belt-and-suspenders with the OTA-safe
+      // lazy require above.)
+      return null;
+    }
+  }, [useVisionCamera]);
   const videoRef = useRef<Video>(null);
   const pagerRef = useRef<ScrollView>(null);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
@@ -800,6 +820,28 @@ export default function SmartMotion() {
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
   }, [isPutt, tempo, metrics, smartTrace]);
+
+  // Practice Engine — stamp this analyzed swing into the active practice session.
+  // recordPracticeSwingIfActive NO-OPS unless a session is running, so this is inert
+  // outside practice (zero blast radius). Exactly-once per recording via a clipUri
+  // dedup set. The tier is captured from the best-known read at review time; a late
+  // async departure upgrade isn't retro-applied — conservative (never over-claims
+  // flight). Divergence is signed (L negative) so the session's spread is directional.
+  const stampedClipsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (phase !== 'review' || !clipUri || analysis == null) return;
+    if (stampedClipsRef.current.has(clipUri)) return;
+    stampedClipsRef.current.add(clipUri);
+    const signedDiv = ballTrace
+      ? (ballTrace.side === 'left' ? -1 : 1) * ballTrace.divergenceDeg
+      : null;
+    recordPracticeSwingIfActive({
+      club,
+      tier: smartTrace.tier,
+      tempoRatio: tempo?.ratio ?? null,
+      divergenceDeg: signedDiv,
+    });
+  }, [phase, clipUri, analysis, smartTrace, ballTrace, club, tempo]);
 
   // Camera strike-verification — did the ball actually leave its spot at
   // impact? Honest false-positive guard (TV/clap can't move YOUR ball) +
@@ -2177,7 +2219,7 @@ export default function SmartMotion() {
           // auto-snapshot) is absent on the vision handle → those `?.` calls no-op
           // and ball-area falls back to manual anchoring until the vision photo path
           // lands (Stage 1 follow-up). Default OFF → this is dead, CameraView runs.
-          useVisionCamera ? (
+          useVisionCamera && SwingVisionCamera ? (
             <SwingVisionCamera
               ref={cameraRef as unknown as React.Ref<SwingCameraHandle>}
               style={StyleSheet.absoluteFill}

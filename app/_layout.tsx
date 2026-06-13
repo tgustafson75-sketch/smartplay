@@ -970,6 +970,12 @@ function AppNavigator() {
           name="swinglab/coach-mode"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — Practice Engine: Open Range (Tank's mode). The honest
+            mash-quantifier; sessions tally swings recorded in Smart Motion. */}
+        <Stack.Screen
+          name="practice/open-range"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
         <Stack.Screen
           name="cage-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}

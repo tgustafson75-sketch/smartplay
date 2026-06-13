@@ -2835,8 +2835,13 @@ export default function CaddieTab() {
                 label="SmartMotion"
                 onPress={() => { setToolsExpanded(false); router.push('/swinglab/smartmotion' as never); }}
               />
-              {/* 2026-05-25 — Range Mode retired. Cage Mode + SmartMotion
-                  cover the use cases. */}
+              {/* 2026-06-13 — Open Range (Practice Engine, Tank's mode): the honest
+                  mash-quantifier. Sessions tally swings recorded in SmartMotion. */}
+              <ToolFabIcon
+                icon="golf-outline"
+                label="Open Range"
+                onPress={() => { setToolsExpanded(false); router.push('/practice/open-range' as never); }}
+              />
               <ToolFabIcon
                 icon="library-outline"
                 label="Drills"

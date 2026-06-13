@@ -1359,7 +1359,8 @@ check('SmartTrace Stage 1 wiring — swing path gated on the flag, expo-camera p
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       /useCaptureEngineStore/.test(sm) &&                    // reads the runtime toggle
-      /useVisionCamera \? \(/.test(sm) &&                    // the flag-gated branch
+      /useVisionCamera && SwingVisionCamera \? \(/.test(sm) && // flag-gated branch (lazy, OTA-safe)
+      /require\('\.\.\/\.\.\/components\/capture\/SwingVisionCamera'\)/.test(sm) && // lazy require, not static import
       /<SwingVisionCamera/.test(sm) &&                       // vision path mounted when on
       /<CameraView/.test(sm) &&                              // expo-camera path still present when off
       /ref=\{cameraRef/.test(sm)                             // one ref drives both engines
@@ -1472,6 +1473,26 @@ check('Session Runner planner — interleaves instead of a blocked grind (Tim+Ta
     );
   })(),
   'the Session Runner offers focus presets and builds an interleaved plan — multi-club focuses rotate clubs in small blocks, single-club focuses rotate targets — never a blocked one-club grind (Practice Engine session planner)');
+
+check('Open Range surface wired — Smart Motion stamps, screen + entry point exist (Tim)',
+  // 2026-06-13 — the Practice Engine reaches the user: smartmotion stamps each
+  // analyzed swing into the active session (no-op outside practice), the Open Range
+  // screen shows the live read, and there's a tools-menu entry to reach it. Pure
+  // JS so it ships OTA over any build.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const screen = read('app/practice/open-range.tsx');
+    const layout = read('app/_layout.tsx');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    return (
+      /recordPracticeSwingIfActive\(\{/.test(sm) &&                 // smartmotion stamps swings
+      /stampedClipsRef\.current\.has\(clipUri\)/.test(sm) &&        // exactly-once per clip
+      /summarizeOpenRange\(active\.swings\)/.test(screen) &&        // screen shows the live read
+      /name="practice\/open-range"/.test(layout) &&                // route registered
+      /\/practice\/open-range/.test(caddie)                        // reachable from the tools menu
+    );
+  })(),
+  'smartmotion stamps each analyzed swing into the active practice session (exactly-once, inert outside practice), and the Open Range screen + tools-menu entry surface the live honest read (Practice Engine surface wired, OTA-able)');
 
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
