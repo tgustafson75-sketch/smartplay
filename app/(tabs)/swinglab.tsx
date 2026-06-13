@@ -39,6 +39,10 @@ interface LauncherCardSpec {
   sub: string;
   /** Route to push on tap. */
   route: string;
+  /** 2026-06-13 (Tim) — visual dressing: per-card accent + a short role tag so the
+   *  cards read at a glance and are sequenced/colored by alignment to the north star. */
+  accent: string;
+  tag: string;
 }
 
 // 2026-05-19 — Reordered per Tim: SmartMotion first (the marquee
@@ -51,42 +55,42 @@ interface LauncherCardSpec {
 // /arena/practice 404'd (no app/arena/ directory) and was a user-
 // visible launch blocker on the SwingLab tab. Pulled the card
 // entirely rather than building a stub.
+// 2026-06-13 (Tim) — sequenced by alignment to the north star (phone sensors + AI
+// = the wow). The capture/AI core leads; coaching-others trails. Each card carries
+// an accent + a one-word role tag for at-a-glance scanning.
+//   1 Smart Motion  — THE wow: AI capture + analysis (CORE)
+//   2 Drills        — goal-driven practice THROUGH Smart Motion (PRACTICE)
+//   3 Tempo Trainer — the headline metric, trained directly (TEMPO)
+//   4 Swing Library — the payoff: your AI-analyzed swings (REVIEW)
+//   5 Coach Mode    — analyze someone ELSE (secondary to the solo wow) (COACH)
 const CARDS: LauncherCardSpec[] = [
-  // 2026-06-07 — Rebuild: Smart Motion is now THE go-to capture surface.
-  // Cage Mode + quick-record are being merged into it (open ~1-min
-  // window, acoustic multi-swing segmentation, clean redesign). The
-  // standalone Cage Mode card was removed here; its capability lives in
-  // Smart Motion. Coach Mode stays separate (instructor tool). See
-  // memory smartmotion-rebuild.
   {
     key: 'smartmotion',
     icon: 'camera-outline',
     title: 'Smart Motion',
     sub: 'AI swing analysis · acoustic swing detection · body mechanics',
     route: '/swinglab/smartmotion',
+    accent: '#88F700',
+    tag: 'CORE',
   },
-  // 2026-05-23 — Coach Mode (Fix #8). Wrapper for "watching someone
-  // else swing" — pro picks/adds a student, captures their swing
-  // (glasses or phone), gets full Phase K swing analysis routed
-  // correctly via Fix #7's perspective threading, adds coach notes.
-  // For Tank (real golf instructor) — also handles parent-coaching-
-  // kid via the family roster.
-  {
-    key: 'coach-mode',
-    icon: 'school-outline',
-    title: 'Coach Mode',
-    sub: 'Watch + analyze someone else\'s swing · player roster · coach notes',
-    route: '/swinglab/coach-mode',
-  },
-  // 2026-05-25 — Range Mode retired. Cage Mode handles multi-shot
-  // sessions; SmartMotion handles single-swing capture. Range was the
-  // redundant middle option.
   {
     key: 'drills',
-    icon: 'library-outline',
+    icon: 'golf-outline',
     title: 'Drills',
     sub: 'Primary Issue · Common Faults · pro instructor videos',
     route: '/drills',
+    accent: '#3b9eff',
+    tag: 'PRACTICE',
+  },
+  // 2026-06-11 — Tempo Trainer (Tour Tempo): tick takeaway · tick top · tock strike, 3:1.
+  {
+    key: 'tempo',
+    icon: 'musical-notes-outline',
+    title: 'Tempo Trainer',
+    sub: 'Swing to the beat · Tour-Tempo 3:1 · tick·tick·tock',
+    route: '/swinglab/tempo-trainer',
+    accent: '#f5a623',
+    tag: 'TEMPO',
   },
   {
     key: 'library',
@@ -94,17 +98,30 @@ const CARDS: LauncherCardSpec[] = [
     title: 'Swing Library',
     sub: 'Captured swings, uploads from camera roll',
     route: '/swinglab/library',
+    accent: '#a78bfa',
+    tag: 'REVIEW',
   },
-  // 2026-06-11 — Tempo Trainer (Tour Tempo). Standalone audio metronome you
-  // swing to (tick takeaway · tick top · tock strike, 3:1). See tempo-trainer.tsx.
+  // 2026-05-23 — Coach Mode: watch + analyze someone else's swing (player roster +
+  // coach notes). For Tank (instructor) + parent-coaching-kid via the family roster.
   {
-    key: 'tempo',
-    icon: 'musical-notes-outline',
-    title: 'Tempo Trainer',
-    sub: 'Swing to the beat · Tour-Tempo 3:1 · tick·tick·tock',
-    route: '/swinglab/tempo-trainer',
+    key: 'coach-mode',
+    icon: 'school-outline',
+    title: 'Coach Mode',
+    sub: 'Watch + analyze someone else\'s swing · player roster · coach notes',
+    route: '/swinglab/coach-mode',
+    accent: '#34d399',
+    tag: 'COACH',
   },
 ];
+
+/** Fade a hex color to an rgba string (for tinted icon boxes + tag chips). */
+function hexFade(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function SwingLab() {
   const router = useRouter();
@@ -174,6 +191,7 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
   const title = t('swinglab.card_' + spec.key + '_title');
   const sub = t('swinglab.card_' + spec.key + '_sub');
+  const accent = spec.accent;
   return (
     <Pressable
       onPress={onPress}
@@ -183,16 +201,23 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
         styles.card,
         {
           backgroundColor: colors.surface_elevated,
-          borderColor: colors.border,
-          opacity: pressed ? 0.85 : 1,
+          borderColor: pressed ? accent : colors.border,
+          opacity: pressed ? 0.9 : 1,
         },
       ]}
     >
-      <View style={[styles.iconBox, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
-        <Ionicons name={spec.icon} size={26} color={colors.accent} />
+      {/* Accent spine — a slim colored bar so each card reads distinctly at a glance. */}
+      <View style={[styles.accentSpine, { backgroundColor: accent }]} />
+      <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
+        <Ionicons name={spec.icon} size={26} color={accent} />
       </View>
       <View style={styles.cardText}>
-        <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{title}</Text>
+          <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+          </View>
+        </View>
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
           {sub}
         </Text>
@@ -238,6 +263,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
+    paddingLeft: 18, // room for the accent spine
+    overflow: 'hidden',
+  },
+  accentSpine: {
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0,
+    width: 5,
   },
   iconBox: {
     width: 56,
@@ -248,6 +280,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardText: { flex: 1, minWidth: 0 },
-  cardTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cardTitle: { fontSize: 17, fontWeight: '800' },
+  tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
 });
