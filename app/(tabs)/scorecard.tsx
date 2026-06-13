@@ -68,10 +68,12 @@ export default function Scorecard() {
   const clearQuickScorePlaceholders = useRoundStore(s => s.clearQuickScorePlaceholders);
   const heroMoments = useRelationshipStore(s => s.heroMoments);
 
-  const lastCompletedRound = useMemo(() => {
-    if (isRoundActive) return null;
-    return roundHistory.length > 0 ? roundHistory[roundHistory.length - 1] : null;
-  }, [isRoundActive, roundHistory]);
+  // 2026-06-13 (Tim) — the scorecard no longer LINGERS on the last completed round.
+  // On End Round the round is saved to history (dashboard Recent Rounds → recap) and
+  // the scorecard CLEARS to an empty state. It shows ONLY the active round now;
+  // past rounds live in history. (Kept as a typed null so the view derivations +
+  // saved-chip below compile unchanged.)
+  const lastCompletedRound = useMemo<(typeof roundHistory)[number] | null>(() => null, []);
 
   const viewingRoundId = isRoundActive ? currentRoundId : lastCompletedRound?.id ?? null;
   const viewScores = useMemo(
@@ -558,6 +560,19 @@ export default function Scorecard() {
           </TouchableOpacity>
         </View>
 
+        {/* 2026-06-13 (Tim) — cleared empty state. With no active round the
+            scorecard shows this instead of lingering on the last round; finished
+            rounds live in dashboard Recent Rounds → recap. */}
+        {!isRoundActive && (
+          <View style={[styles.emptyRound, { borderColor: c.border, backgroundColor: c.surface }]}>
+            <AppIcon name="golf-outline" size={34} color={c.text_muted} />
+            <Text style={[styles.emptyRoundTitle, { color: c.text_primary }]}>No round in progress</Text>
+            <Text style={[styles.emptyRoundBody, { color: c.text_muted }]}>
+              Your finished rounds are saved. See <Text style={{ fontWeight: '800', color: c.accent }}>Recent Rounds</Text> on the dashboard to review any of them.
+            </Text>
+          </View>
+        )}
+
         {/* COURSE */}
         {viewCourseName && (
           <Text style={[styles.courseName, { color: c.text_secondary }]}>{viewCourseName}</Text>
@@ -788,6 +803,12 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   chipText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   courseName: { fontSize: 14, fontWeight: '500', paddingHorizontal: 20, marginBottom: 12 },
+  emptyRound: {
+    marginHorizontal: 20, marginTop: 24, alignItems: 'center',
+    borderWidth: 1, borderRadius: 16, paddingHorizontal: 22, paddingVertical: 28, gap: 10,
+  },
+  emptyRoundTitle: { fontSize: 17, fontWeight: '800' },
+  emptyRoundBody: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 19 },
 
   summary: {
     flexDirection: 'row',

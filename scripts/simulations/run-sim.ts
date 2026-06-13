@@ -1178,6 +1178,23 @@ check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")'
   })(),
   'completed rounds now show on the dashboard by date (course/score/vs-par), tappable into the recap — the persisted history finally has a home');
 
+check('Scorecard clears to empty on save (Tim: "when saved, clear it")',
+  // 2026-06-13 — the scorecard no longer lingers on the last completed round. It
+  // shows ONLY the active round; with none active it renders a clean empty state
+  // and points to dashboard Recent Rounds. endRound already saves + clears state.
+  (() => {
+    const sc = read('app/(tabs)/scorecard.tsx');
+    return (
+      // no auto-show of the last round (typed null)
+      /const lastCompletedRound = useMemo<\(typeof roundHistory\)\[number\] \| null>\(\(\) => null, \[\]\)/.test(sc) &&
+      // empty state when no active round, pointing to Recent Rounds
+      /!isRoundActive && \(/.test(sc) &&
+      /No round in progress/.test(sc) &&
+      /Recent Rounds/.test(sc)
+    );
+  })(),
+  'finished round → saved to history + scorecard clears to empty (review lives in dashboard Recent Rounds / recap)');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
