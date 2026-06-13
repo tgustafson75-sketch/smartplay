@@ -1109,6 +1109,28 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
   })(),
   'conservative per-drill points awarded on each drill save, shown on the dashboard, hidden until earned');
 
+check('Speed pass: skip the pose reprobe on a trusted duration + on-device telemetry',
+  // 2026-06-13 — speed without losing accuracy. (a) The Motion path passes the
+  // video player's real onLoad duration, so the pose extractor skips the ~2-8s
+  // reprobe (the probe only ever overrode the 3000ms upload default / >50% gap —
+  // a trusted value triggers neither). (b) on-device pose latency is logged so we
+  // can confirm the APK unlock (native ~100-300ms vs cloud 5-15s/frame).
+  (() => {
+    const pose = read('services/poseAnalysisApi.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /extractPoseFramesFromVideo\(videoUri: string, durationMs: number, trustDuration = false\)/.test(pose) &&
+      /const canTrust = trustDuration && durationMs >= 500/.test(pose) &&
+      /if \(!canTrust\) \{/.test(pose) && // probe only runs when NOT trusted
+      /analyzeSwingFromVideo\([\s\S]*?trustDuration = false/.test(pose) &&
+      /\[pose\] on-device hit/.test(pose) && // latency telemetry
+      // Motion path trusts the player's real duration
+      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true\)/.test(sm) &&
+      /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true\)/.test(sm)
+    );
+  })(),
+  'trusted real duration skips the reprobe (2-8s saved on Motion); on-device pose latency is measurable');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

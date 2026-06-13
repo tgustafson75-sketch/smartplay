@@ -185,8 +185,14 @@ export async function analyzePoseFromUri(imageUri: string, timestampMs = 0): Pro
   // pose was found → we fall through to the cloud proxy below.
   try {
     const mp = await import('./mediaPipePoseService');
+    const t0 = Date.now();
     const onDevice = await mp.detectPoseFromUri(imageUri, undefined, timestampMs);
-    if (onDevice) return onDevice;
+    if (onDevice) {
+      // SPEED telemetry — confirm the on-device path is live + measure it.
+      // On-device ~100-300ms vs cloud 5-15s/frame; this proves the APK unlock.
+      console.log('[pose] on-device hit', Date.now() - t0, 'ms');
+      return onDevice;
+    }
   } catch {
     // fall through to cloud
   }
@@ -554,8 +560,9 @@ export async function analyzeSwingFromVideo(
   videoUri: string,
   durationMs: number,
   angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null,
+  trustDuration = false,
 ): Promise<SwingBiomechanics | null> {
-  const frames = await extractPoseFramesFromVideo(videoUri, durationMs);
+  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration);
   if (!frames) return null;
   return computeBiomechanics(frames, angle);
 }
@@ -571,27 +578,34 @@ export async function analyzeSwingFromVideo(
  *  pose detection (caller falls back to StubSkeletonOverlay so there's
  *  no regression vs the existing behavior).
  */
-export async function extractPoseFramesFromVideo(videoUri: string, durationMs: number): Promise<PoseFrame[] | null> {
+export async function extractPoseFramesFromVideo(videoUri: string, durationMs: number, trustDuration = false): Promise<PoseFrame[] | null> {
   // 2026-05-28 — Fix FO: caller-supplied durationMs is unreliable on
   // library uploads (the swing detail backfill passes 3000 when
   // session.upload.duration_sec is null — typical for camera-roll
   // uploads). Probe the real duration first; if probing yields a
   // meaningfully different number, use it.
   let effectiveDurationMs = durationMs;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
-    const probed = await probeDurationMs(videoUri);
-    if (probed && probed >= 500) {
-      // Trust the probe when caller-supplied was the suspicious
-      // 3000ms default OR when the probe disagrees by > 50%.
-      if (durationMs === 3000 || Math.abs(probed - durationMs) / Math.max(probed, durationMs) > 0.5) {
-        console.log('[pose] duration probe correction', { caller_ms: durationMs, probed_ms: probed });
-        effectiveDurationMs = probed;
+  // 2026-06-13 (SPEED) — skip the ~2-8s reprobe when the caller passes a TRUSTED
+  // real duration (e.g. the video player's onLoad durationMillis). The probe only
+  // ever overrode the unreliable 3000ms upload default or a >50% disagreement; a
+  // trusted value triggers neither, so the probe was pure cost on the Motion path.
+  const canTrust = trustDuration && durationMs >= 500;
+  if (!canTrust) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
+      const probed = await probeDurationMs(videoUri);
+      if (probed && probed >= 500) {
+        // Trust the probe when caller-supplied was the suspicious
+        // 3000ms default OR when the probe disagrees by > 50%.
+        if (durationMs === 3000 || Math.abs(probed - durationMs) / Math.max(probed, durationMs) > 0.5) {
+          console.log('[pose] duration probe correction', { caller_ms: durationMs, probed_ms: probed });
+          effectiveDurationMs = probed;
+        }
       }
+    } catch (e) {
+      console.log('[pose] duration probe failed (non-fatal, using caller value)', e);
     }
-  } catch (e) {
-    console.log('[pose] duration probe failed (non-fatal, using caller value)', e);
   }
 
   if (effectiveDurationMs < 500) {

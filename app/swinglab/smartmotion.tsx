@@ -1121,9 +1121,11 @@ export default function SmartMotion() {
     let cancelled = false;
     void (async () => {
       try {
-        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs);
+        // trustDuration=true: videoDurationMs is the player's real onLoad
+        // durationMillis, so skip the ~2-8s reprobe inside the pose path (SPEED).
+        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true);
         if (!cancelled) setPoseFrames(frames);
-        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle);
+        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle, true);
         if (!cancelled && bio) {
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
