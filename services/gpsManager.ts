@@ -98,6 +98,11 @@ const OUTLIER_JUMP_WINDOW_MS = 5_000;
 // strong fixes dominate while the weak ones still contribute a little; a wider
 // window steadies it without adding much lag at golf walking speed.
 const SMOOTHING_WINDOW = 5;
+// 2026-06-12 — after a SIGNAL GAP this long, the resumed fix is NOT blended with the
+// pre-gap buffer (which would drag the smoothed point backward and lag yardages for
+// several ticks — Tim noticed this when signal came back). 30s is well beyond the normal
+// walking (10s) / stationary (20s) tick cadence, so it never fires in steady state.
+const SMOOTHING_GAP_MS = 30_000;
 
 // Phase 400-followup — if no fix has arrived for this long while the watch
 // is supposedly running, assume the OS killed the subscription during
@@ -292,6 +297,12 @@ function processFix(raw: GpsFix): boolean {
   // dominate; null accuracy treated as a weak 30m). Stronger fixes pull the
   // smoothed position harder than weak ones — strictly better than the prior
   // flat mean now that weak fixes (up to 90m) are kept rather than discarded.
+  // Drop the pre-gap buffer if signal just resumed after a long silence — otherwise the
+  // resumed position is averaged with where the player WAS before the gap and lags.
+  const lastBuffered = smoothingBuffer[smoothingBuffer.length - 1];
+  if (lastBuffered && raw.timestamp - lastBuffered.timestamp > SMOOTHING_GAP_MS) {
+    smoothingBuffer = [];
+  }
   smoothingBuffer.push(raw);
   if (smoothingBuffer.length > SMOOTHING_WINDOW) smoothingBuffer.shift();
   let wLat = 0, wLng = 0, wSum = 0;
