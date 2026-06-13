@@ -1131,6 +1131,37 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); on-device pose latency is measurable');
 
+check('Conversation ingestion → CNS foundation + save-routine unblocked',
+  // 2026-06-13 — Tim: "ingest what the caddie says and the back-and-forth to learn."
+  // The conversation log captures every caddie + user turn (the learning input),
+  // and its lastCaddieText() is exactly what unblocks "save those stretches as my
+  // routine" (there was no history to capture from before).
+  (() => {
+    const log = read('store/conversationLogStore.ts');
+    const voice = read('services/voiceService.ts');
+    const resp = read('services/localStatusResponder.ts');
+    const prof = read('store/playerProfileStore.ts');
+    return (
+      // capture store: bounded turns + the join-the-last-caddie-run recall
+      /export const useConversationLog = create/.test(log) &&
+      /logCaddie:/.test(log) && /logUser:/.test(log) && /lastCaddieText:/.test(log) &&
+      /MAX_TURNS = 60/.test(log) && /run\.join\(' '\)/.test(log) &&
+      // both capture points hooked, best-effort
+      /useConversationLog\.getState\(\)\.logCaddie\(text, Date\.now\(\)\)/.test(voice) &&
+      /useConversationLog\.getState\(\)\.logUser\(text, Date\.now\(\)\)/.test(voice) &&
+      // save/recall routine: round-INDEPENDENT (before the round gate), local+offline
+      /if \(RX\.saveRoutine\.test\(t\)\)/.test(resp) &&
+      /useConversationLog\.getState\(\)\.lastCaddieText\(\)/.test(resp) &&
+      /setPreRoundRoutine\(last\)/.test(resp) &&
+      /if \(RX\.recallRoutine\.test\(t\)\)/.test(resp) &&
+      // the routine handlers sit ABOVE the "!round.isRoundActive" gate
+      /RX\.recallRoutine[\s\S]*?if \(!round\.isRoundActive\)/.test(resp) &&
+      // store field + setter
+      /preRoundRoutine: string \| null/.test(prof) && /setPreRoundRoutine:/.test(prof)
+    );
+  })(),
+  'every caddie/user turn is logged (bounded); "save those stretches as my routine" stores the last caddie line + recalls it, on or off the course');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

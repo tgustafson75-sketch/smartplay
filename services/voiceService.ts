@@ -8,6 +8,7 @@ import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceEr
 // then going silent. Feeds the reactive connectivity signal too.
 import { isDegraded as cbIsDegraded, recordSuccess as cbRecordSuccess, recordFailure as cbRecordFailure } from './voiceCircuitBreaker';
 import { reportOnline as cbReportOnline, reportNetworkFailure as cbReportNetworkFailure } from '../store/connectivityStore';
+import { useConversationLog } from '../store/conversationLogStore';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -332,6 +333,9 @@ export const captureUtterance = async (
     }
     const data = await res.json() as { text?: string };
     const text = (data.text ?? '').trim();
+    // 2026-06-13 — ingest the user's turn into the conversation log (learning
+    // input + recall). Best-effort, never blocks the transcript return.
+    if (text) { try { useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ } }
     return text || null;
   } catch (err) {
     console.log('[voice] captureUtterance error:', err);
@@ -935,6 +939,10 @@ export const speak = async (
 ): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — shared guard (formerly inlined here).
   if (!isVoiceAllowed(opts)) return;
+  // 2026-06-13 — ingest the caddie's line into the conversation log (learning
+  // input + the "save those stretches" recall target). speakChunked feeds full
+  // sentences through here; lastCaddieText() rejoins a chunked run. Best-effort.
+  try { useConversationLog.getState().logCaddie(text, Date.now()); } catch { /* non-fatal */ }
 
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;

@@ -35,6 +35,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useConversationLog } from '../store/conversationLogStore';
 import { getLastFix } from './gpsManager';
 import { haversineYards } from '../utils/geoDistance';
 import { resolveGreenCoords, classifyAccuracy } from './smartFinderService';
@@ -62,6 +63,8 @@ export type LocalReplyResult = {
     | 'last_shot'
     | 'handicap'
     | 'course_memory'
+    | 'routine_saved'
+    | 'routine_recall'
     | 'no_round';
 };
 
@@ -99,6 +102,9 @@ const L: Record<LocalReplyLanguage, {
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
   handicapIs: (h: number) => string;
+  routineSaved: string;
+  routineNothingToSave: string;
+  routineNone: string;
   noRound: string;
 }> = {
   en: {
@@ -134,6 +140,9 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: "You haven't logged a shot yet this round.",
     handicapIs: (h) => `Your handicap is ${h}.`,
+    routineSaved: "Saved — that's your pre-round routine now. Ask for it any time.",
+    routineNothingToSave: "I don't have a routine to save yet — ask me for a pre-round stretch first, then say save it.",
+    routineNone: "You haven't saved a pre-round routine yet. Ask me for a stretch, then say 'save that as my routine.'",
     noRound: 'No active round.',
   },
   es: {
@@ -169,6 +178,9 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: 'Aún no has registrado un tiro en esta ronda.',
     handicapIs: (h) => `Tu handicap es ${h}.`,
+    routineSaved: 'Guardado — esa es tu rutina previa. Pídemela cuando quieras.',
+    routineNothingToSave: 'Aún no tengo una rutina para guardar — pídeme un estiramiento primero y luego di que lo guarde.',
+    routineNone: 'Todavía no has guardado una rutina previa. Pídeme un estiramiento y di "guarda eso como mi rutina".',
     noRound: 'No hay ronda activa.',
   },
   zh: {
@@ -204,6 +216,9 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: '这回合你还没有记录任何一杆。',
     handicapIs: (h) => `你的差点是${h}。`,
+    routineSaved: '已保存——这就是你的赛前热身routine。随时可以问我。',
+    routineNothingToSave: '我还没有可保存的routine——先让我给你一个赛前拉伸，然后说保存。',
+    routineNone: '你还没有保存赛前routine。先让我给你一个拉伸，然后说"把它保存为我的routine"。',
     noRound: '没有进行中的回合。',
   },
 };
@@ -233,6 +248,12 @@ const RX = {
   // …and LAST SHOT recall ("what did I just hit / how was that / my last shot").
   lastShot:   /\b(last\s+shot|what\s+did\s+i\s+(?:just\s+)?hit|how\s+was\s+(?:that|my\s+last)|that\s+last\s+(?:one|shot)|my\s+last\s+(?:shot|swing))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
+  // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
+  // gate). Save = the stretches the caddie just gave (from the conversation log);
+  // recall = read them back. "save those stretches as my routine" / "what's my
+  // pre-round routine".
+  saveRoutine:   /\b(save|remember|keep)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
+  recallRoutine: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
 };
 
 /**
@@ -249,6 +270,23 @@ export function tryLocalReply(
   const t = transcript.trim();
   if (!t) return null;
   const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
+
+  // 2026-06-13 — Pre-round routine is round-INDEPENDENT (you save/recall it off the
+  // course), so handle it BEFORE the round-active gate. Save points at the last
+  // thing the caddie said (the stretches), captured by the conversation log —
+  // this is exactly what conversation ingestion unblocks. Local + offline.
+  if (RX.saveRoutine.test(t)) {
+    const last = useConversationLog.getState().lastCaddieText();
+    if (last) {
+      usePlayerProfileStore.getState().setPreRoundRoutine(last);
+      return { text: L[lang].routineSaved, queryType: 'routine_saved' };
+    }
+    return { text: L[lang].routineNothingToSave, queryType: 'routine_saved' };
+  }
+  if (RX.recallRoutine.test(t)) {
+    const r = usePlayerProfileStore.getState().preRoundRoutine;
+    return { text: r ?? L[lang].routineNone, queryType: 'routine_recall' };
+  }
 
   const round = useRoundStore.getState();
   if (!round.isRoundActive) {

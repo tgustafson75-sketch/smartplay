@@ -109,6 +109,9 @@ interface PlayerProfileState {
   // nova) for any line the user hasn't personally recorded. So a custom caddie always
   // speaks even with zero recorded clips. Default male.
   customCaddieGender: 'male' | 'female';
+  // 2026-06-13 — saved pre-round routine (the stretches the caddie gave, captured
+  // from the conversation log). Recalled by voice pre-round; null until saved.
+  preRoundRoutine: string | null;
 
   // 2026-06-06 — User-chosen NAME for the custom caddie. Drives the
   // display label everywhere the cycler shows 'Custom' as the 5th
@@ -207,6 +210,7 @@ interface PlayerProfileState {
   // store's setSelfieB64 / setCustomCaddiePortraitB64.
   setUseCustomCaddie: (on: boolean) => void;
   setCustomCaddieGender: (g: 'male' | 'female') => void;
+  setPreRoundRoutine: (r: string | null) => void;
   setCustomCaddieName: (name: string | null) => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
@@ -267,6 +271,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       customCaddiePortraitB64: null,
       useCustomCaddie: false,
       customCaddieGender: 'male',
+      preRoundRoutine: null,
       // 2026-05-26 — Fix DY default: empty map (no clips recorded yet).
       customCaddieClips: {},
       // 2026-06-06 — Custom caddie name default null → UI falls back to
@@ -339,6 +344,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
       setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
+      setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });
