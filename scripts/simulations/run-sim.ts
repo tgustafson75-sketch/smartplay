@@ -1064,6 +1064,27 @@ check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   })(),
   'every voice query is tagged local-answered vs cloud-escalated, persisted + surfaced — the agent-growth health metric');
 
+check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)',
+  // 2026-06-13 — (a) a NO-READ no longer forces a re-record: a re-analyze action
+  // re-runs analysis on the SAME saved clip (quick, never wastes the swing).
+  // (b) OTA auto-applies on cold start (no "Update" tap); manual only mid-session.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const upd = read('components/UpdateAvailableBanner.tsx');
+    return (
+      // re-analyze the existing clip (not re-record)
+      /const reanalyze = useCallback\(\(\) => \{/.test(sm) &&
+      /void runAnalysis\(clipUri, segmentsRef\.current\[0\]\)/.test(sm) &&
+      /onPress=\{reanalyze\}/.test(sm) &&
+      /accessibilityLabel="Re-analyze this swing"/.test(sm) &&
+      // auto-apply OTA on cold start, manual only later
+      /autoAppliedRef\.current = true;\s*\n\s*void applyUpdate\(\)/.test(upd) &&
+      /sinceLaunchMs < 20_000/.test(upd) &&
+      /!inRound && !voiceActive/.test(upd)
+    );
+  })(),
+  'failed read → re-analyze the saved clip; OTA auto-applies on launch (not mid-round), no manual tap');
+
 check('Verdict no longer claims ANALYZING forever',
   /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),

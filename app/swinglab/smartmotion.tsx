@@ -1876,6 +1876,16 @@ export default function SmartMotion() {
     }
   }, [phase, reset, startRecording]);
 
+  // 2026-06-13 (Tim) — RE-ANALYZE the clip you already hit, instead of forcing a
+  // re-record on a failed read. The clip is saved + persistent and analysis
+  // failures are usually transient (cold endpoint, a missed locate), so re-running
+  // on the SAME clip is quick and never wastes the swing. runAnalysis resets its
+  // own state + races its watchdog/auto-retry; we just point it at the kept clip.
+  const reanalyze = useCallback(() => {
+    if (!clipUri || phase === 'analyzing') return;
+    void runAnalysis(clipUri, segmentsRef.current[0]);
+  }, [clipUri, phase, runAnalysis]);
+
   // 2026-06-11 — fire the queued periodic auto club scan once we're back in setup —
   // but NOT during the hands-free auto-record relaunch (pendingStartRef), so it can
   // never race the camera into the next recording. Silent (auto:true), and yields
@@ -1997,6 +2007,12 @@ export default function SmartMotion() {
         <TactilePressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
           <Image source={ICON_CTRL.slowmo} style={styles.toolIconFull} resizeMode="contain" />
           {playbackRate < 1 ? <Text style={styles.barRateTag}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
+        </TactilePressable>
+        {/* 2026-06-13 (Tim) — RE-ANALYZE the kept clip instead of re-recording.
+            Glows on a NO-READ so the failure state points you here, not at a
+            wasted re-swing. */}
+        <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel="Re-analyze this swing">
+          <Ionicons name="refresh" size={24} color={analysisError ? colors.accent : '#fff'} />
         </TactilePressable>
         <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
           <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />

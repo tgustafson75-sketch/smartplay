@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,8 +38,26 @@ export function UpdateAvailableBanner() {
     return subscribeToUpdates((s) => setStatus(s));
   }, []);
 
+  // 2026-06-13 (Tim) — AUTO-apply on COLD START: if an update is ready within the
+  // launch window AND we're not mid-round / mid-voice, just reload straight into
+  // it — no "Update" tap. The manual banner below is ONLY for updates that land
+  // LATER (mid-session / mid-round), where a silent reload would yank the user off
+  // what they're doing. (fallbackToCacheTimeout handles the instant case at the
+  // native layer; this catches the download that lands a beat after launch.)
+  const mountedAtRef = useRef(Date.now());
+  const autoAppliedRef = useRef(false);
+  useEffect(() => {
+    if (autoAppliedRef.current) return;
+    const sinceLaunchMs = Date.now() - mountedAtRef.current;
+    if (status?.ready && !inRound && !voiceActive && sinceLaunchMs < 20_000) {
+      autoAppliedRef.current = true;
+      void applyUpdate(); // reloads into the new bundle
+    }
+  }, [status, inRound, voiceActive]);
+
   const slide = useState(() => new Animated.Value(-120))[0];
-  const visible = status?.ready === true && !dismissed && !inRound && !voiceActive;
+  // Don't flash the manual banner during the cold-start auto-apply window.
+  const visible = status?.ready === true && !dismissed && !inRound && !voiceActive && !autoAppliedRef.current;
 
   useEffect(() => {
     Animated.spring(slide, {
