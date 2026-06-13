@@ -1246,7 +1246,14 @@ export default function SmartMotion() {
         const pose = await import('../../services/poseDetection');
         const durMs = await pose.probeDurationMs(clipUriParam).catch(() => 0);
         const swings = durMs > 0 ? await pose.locateSwings(clipUriParam, durMs) : [];
-        if (!cancelled && swings.length > 1) {
+        // 2026-06-13 (SPEED) — >= 1, not > 1. When the upload locate already
+        // found the swing(s), pass the located window as boundaries so
+        // runAnalysis is BOUNDED and analyzeSwing SKIPS its own second
+        // locateSwingWindow (~25s) — the redundant double-locate that made
+        // single-swing uploads crawl. A single swing → 1 segment (no reel, same
+        // as before), but reusing the window we already paid for. swings.length
+        // === 0 still falls through to analyzeSwing's own locate (no regression).
+        if (!cancelled && swings.length >= 1) {
           const segs = segmentsFromVideoSwings(swings, durMs);
           setSegments(segs);
           setSelectedSwing(0);

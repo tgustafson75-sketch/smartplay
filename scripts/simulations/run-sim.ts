@@ -1772,9 +1772,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /worthVideo/.test(smSrc2),
     'cage acoustics that zero out (loud bay) OR find ≤1 strike in a long clip (cage mode at an open range) cross-check the video locator and use it when it finds more — working multi-strike acoustic captures are untouched');
 
-  check('SmartMotion: uploaded/library clips segment multi-swing from video (the "6 swings, 1 of 1" bug)',
-    /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length > 1/.test(smSrc2),
-    'a re-analyzed upload (no acoustics) runs the video locator and shows all swings when >1 found; a genuine single-swing upload is unchanged');
+  check('SmartMotion: uploaded clips reuse the located window (skip the redundant 2nd locate)',
+    // 2026-06-13 (SPEED) — >= 1 (was > 1): when the upload locate finds the swing,
+    // pass it as boundaries so analyzeSwing skips its own ~25s locateSwingWindow.
+    // Multi-swing still shows the reel (segs.length > 1); single swing → 1 segment;
+    // swings.length === 0 still falls through to analyzeSwing's own locate.
+    /pose\.locateSwings\(clipUriParam/.test(smSrc2) && /swings\.length >= 1/.test(smSrc2),
+    'a re-analyzed upload runs the video locator once and reuses that window — no redundant double-locate; multi-swing reel + single-swing both work, 0-found still falls through');
 
   // 2026-06-11 — cage-test fix: "NO READ — RECORD AGAIN" was flashing as a
   // transient mid-pipeline state (bounded acoustic pass → whole-clip video re-scan)
