@@ -36,7 +36,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
-import { speak } from '../services/voiceService';
+import { speak, stopSpeaking, setTutorialNarrating } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 
 const API_URL = getApiBaseUrl();
@@ -90,14 +90,24 @@ export function QuickTutorial({
     }
   };
 
-  // Speak the spokenText when the modal becomes visible. userInitiated:
-  // false because the entry is a navigation event (auto-fire) — silent
-  // at L1 by design, which is fine; written copy still renders.
+  // While the tutorial is up it OWNS the audio — flag it so page-entry announcers
+  // (e.g. the Caddie opener) don't talk over the instructions (Tim: "read the quick
+  // instructions, not a separate page announcement"). Cleared when it closes/unmounts.
+  useEffect(() => {
+    setTutorialNarrating(open);
+    return () => setTutorialNarrating(false);
+  }, [open]);
+
+  // Speak the spokenText when the modal becomes visible. Cut any in-flight page
+  // announcement first so the instructions are the single voice. userInitiated:
+  // false because the entry is a navigation event (auto-fire).
   useEffect(() => {
     if (!open) return;
     if (!voiceEnabled) return;
     if (!spokenText) return;
-    speak(spokenText, voiceGender, language, API_URL).catch(() => { /* non-fatal */ });
+    void stopSpeaking()
+      .catch(() => undefined)
+      .then(() => speak(spokenText, voiceGender, language, API_URL).catch(() => { /* non-fatal */ }));
   }, [open, voiceEnabled, voiceGender, language, spokenText]);
 
   if (!open) return null;

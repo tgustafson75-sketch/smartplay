@@ -654,6 +654,13 @@ export const stopSpeaking = async (): Promise<void> => {
 
 export const isSpeaking = (): boolean => currentSound !== null;
 
+// 2026-06-13 (Tim) — a QuickTutorial modal owns the audio while it's up: its narration
+// IS the page voice, so page-entry announcements (e.g. the Caddie opener) must NOT play
+// over it. The tutorial sets this true on open / false on close; auto-announcers check it.
+let _tutorialNarrating = false;
+export const setTutorialNarrating = (v: boolean): void => { _tutorialNarrating = v; };
+export const isTutorialNarrating = (): boolean => _tutorialNarrating;
+
 // 2026-06-13 — OFFLINE / network-fail spoken fallback (Tim's Lakes round went
 // MUTE on weak signal — ~18 speak_catch "Network request failed"). When /api/voice
 // can't be reached, speak the line on the DEVICE so the caddie isn't a dead void.

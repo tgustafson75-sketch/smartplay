@@ -1581,6 +1581,23 @@ check('Gyro-parallax wow v1: tilt floats the SmartVision hole image (presentatio
   })(),
   'ParallaxTilt pans the hole image by gyro tilt behind fixed overlays (depth illusion); applied to SmartVision preview; static w/o sensor; presentation-only');
 
+check('No voice clash: quick instructions own the audio; page opener steps aside',
+  // 2026-06-13 (Tim) — the QuickTutorial narration was clashing with the Caddie page
+  // opener. Now the tutorial flags itself as narrating + cuts in-flight speech, and the
+  // opener skips while a tutorial is up. The instructions are the single page voice.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const tut = read('components/QuickTutorial.tsx');
+    const cad = read('app/(tabs)/caddie.tsx');
+    return (
+      /export const setTutorialNarrating/.test(vs) && /export const isTutorialNarrating/.test(vs) &&
+      /setTutorialNarrating\(open\)/.test(tut) &&                 // flag set while open
+      /stopSpeaking\(\)[\s\S]*?\.then\(\(\) => speak\(spokenText/.test(tut) && // cut in-flight, then speak
+      /if \(isTutorialNarrating\(\)\) \{/.test(cad)               // opener steps aside
+    );
+  })(),
+  'tutorial narration claims the audio (flag + stop-in-flight) and the page opener skips while it is up — one voice, the instructions');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
