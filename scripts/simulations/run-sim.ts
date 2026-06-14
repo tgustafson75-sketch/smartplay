@@ -2500,6 +2500,32 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (course book — imagery) — bundled courses carry 0,0 placeholder hole
+// coords; the old `!input.green` check let those through and built a Mapbox satellite
+// tile centered on 0°,0° (ocean off Africa) → the "parking lots / houses" thumbnails.
+// getHoleImageryUrl now coord-guards (rejects 0,0/near-zero/out-of-range green; degrades
+// an invalid tee to null), so those holes return null → filtered → the grid shows the
+// bundled photo (which wins first) or its clean "coming soon" placeholder, never garbage.
+check('Course book: hole imagery rejects 0,0 placeholder coords (no garbage thumbnails)',
+  (() => {
+    const m = read('services/mapboxImagery.ts');
+    const cg = read('utils/coordGuard.ts');
+    const grid = read('components/course/HolePhotosGrid.tsx');
+    return (
+      /import \{ isValidGolfCoord \} from '\.\.\/utils\/coordGuard'/.test(m) &&
+      /const green = input\.green && isValidGolfCoord\(input\.green\.lat, input\.green\.lng\) \? input\.green : null;/.test(m) &&
+      /if \(!green\) return null;/.test(m) &&
+      /const tee = input\.tee && isValidGolfCoord\(input\.tee\.lat, input\.tee\.lng\) \? input\.tee : null;/.test(m) &&
+      // the cache-key path mirrors the same guard (no permanent cache miss)
+      /const green = input\.green && isValidGolfCoord[\s\S]{0,200}const fit = green \? computeFitView/.test(m) &&
+      // coordGuard rejects 0,0 + near-zero
+      /if \(lat === 0 && lng === 0\) return false;/.test(cg) &&
+      // grid degrades to a clean placeholder when no valid photos
+      /if \(photos\.length === 0\)/.test(grid)
+    );
+  })(),
+  'a hole with 0,0 placeholder coords no longer builds a satellite tile pointed at the ocean — getHoleImageryUrl coord-guards the inputs so the course-book grid shows the bundled photo or a clean placeholder instead of parking-lot/house imagery');
+
 // 2026-06-14 (audit P1 — hot-path serialization) — setLocationContext is the ONLY
 // roundStore setter fired on every GPS tick. It used set((s)=>...return {}), but a
 // zustand set() always re-serializes the persisted blob (shots + full roundHistory)

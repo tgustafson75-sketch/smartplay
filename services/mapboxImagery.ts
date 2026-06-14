@@ -31,6 +31,7 @@
 
 import { File, Paths } from 'expo-file-system';
 import { haversineMeters, bearingDegrees } from '../utils/geoDistance';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const MAPBOX_STYLE = 'mapbox/satellite-v9';
@@ -162,7 +163,15 @@ export function getHoleImageryUrl(
   options: HoleImageryOptions = {},
 ): string | null {
   if (!MAPBOX_TOKEN) return null;
-  if (!input.green) return null;
+  // 2026-06-14 — coord-guard the inputs. Several bundled courses carry 0,0
+  // placeholder hole coords; the old `!input.green` check let those through and
+  // built a satellite tile centered on 0°,0° (ocean off West Africa) — the
+  // "parking lots / houses" thumbnails. Require a VALID green (rejects 0,0 /
+  // near-zero / out-of-range), and degrade an invalid tee to null so we center
+  // on the green at default zoom instead of computing a view from a 0,0 tee.
+  const green = input.green && isValidGolfCoord(input.green.lat, input.green.lng) ? input.green : null;
+  if (!green) return null;
+  const tee = input.tee && isValidGolfCoord(input.tee.lat, input.tee.lng) ? input.tee : null;
 
   const width = Math.min(options.width ?? 600, 1280);
   const height = Math.min(options.height ?? 500, 1280);
@@ -173,8 +182,8 @@ export function getHoleImageryUrl(
   // tee→green midpoint (symmetric margin), and bearing-rotates so the
   // hole renders vertically. Caller can still override any of the three
   // via options.{centerOverride, zoomOverride, bearingOverride}.
-  const fit = computeFitView({ tee: input.tee, green: input.green, width, height });
-  const center = options.centerOverride ?? fit?.center ?? input.green;
+  const fit = computeFitView({ tee, green, width, height });
+  const center = options.centerOverride ?? fit?.center ?? green;
   const bearing = options.bearingOverride ?? fit?.bearing ?? 0;
   const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
 
@@ -214,11 +223,12 @@ export async function fetchHoleImagery(
   // produce. Falling back to autoZoom only when fit cannot be computed.
   const w = Math.min(options.width ?? 600, 1280);
   const h = Math.min(options.height ?? 500, 1280);
-  // url is non-null only if input.green is non-null (see getHoleImageryUrl
-  // early-return); narrow the type for computeFitView's signature.
-  const fit = input.green
-    ? computeFitView({ tee: input.tee, green: input.green, width: w, height: h })
-    : null;
+  // Mirror getHoleImageryUrl's coord-guard so the cache-key zoom matches the
+  // URL's actual zoom (an invalid 0,0 tee degrades to null → green-centered
+  // default zoom — otherwise the cache key would never match and we'd re-fetch).
+  const green = input.green && isValidGolfCoord(input.green.lat, input.green.lng) ? input.green : null;
+  const tee = input.tee && isValidGolfCoord(input.tee.lat, input.tee.lng) ? input.tee : null;
+  const fit = green ? computeFitView({ tee, green, width: w, height: h }) : null;
   const zoom = options.zoom ?? fit?.zoom ?? autoZoom(input.yardage, input.par);
   const cacheFile = cacheFileFor(input.courseId, input.holeNumber, zoom, w, h);
 
