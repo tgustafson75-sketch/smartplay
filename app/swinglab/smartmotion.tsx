@@ -538,6 +538,9 @@ export default function SmartMotion() {
     dtlDefaultAppliedRef.current = true;
   }, [angle, swingerHandedness, isPutt]);
   const [videoPaused, setVideoPaused] = useState(false); // review play/pause
+  // 2026-06-14 — guards the windowed-loop re-seek so a burst of playback-status
+  // ticks past a swing's endMs only fires one setPositionAsync (no seek spam/stutter).
+  const loopSeekGuardRef = useRef(false);
   const [playbackRate, setPlaybackRate] = useState(1); // review slow-mo (1 / .5 / .25)
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
   // Status-perimeter pulse — a thin border around the video that ties to the
@@ -1531,8 +1534,15 @@ export default function SmartMotion() {
       const seg = segments[idx];
       if (!seg) return;
       setSelectedSwing(idx);
-      videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
-      videoRef.current?.playAsync().catch(() => undefined);
+      // 2026-06-14 (Tim) — AWAIT the seek before playing. setPositionAsync +
+      // playAsync fired back-to-back race: play often started before the seek
+      // landed, so the clip played from its current spot (frame 0 = the setup,
+      // "bending to place the ball") instead of the swing. Await fixes that.
+      const v = videoRef.current;
+      if (v) {
+        try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ }
+        void v.playAsync().catch(() => undefined);
+      }
       setVideoPaused(false); // keep state in sync with the imperative play (avoid desync)
 
       const cached = analysisCacheRef.current[idx];
@@ -2143,13 +2153,17 @@ export default function SmartMotion() {
     );
 
   // ── pause / scrub to a swing position (skeleton attached) ──
-  const seekToPosition = (pos: NonNullable<PoseFrame['position']>) => {
+  const seekToPosition = async (pos: NonNullable<PoseFrame['position']>) => {
     const f = poseFrames?.find((p) => p.position === pos);
     if (f) {
-      videoRef.current?.setPositionAsync(f.timestampMs).catch(() => undefined);
-      videoRef.current?.pauseAsync().catch(() => undefined);
-      // 2026-06-14 (Tim) — keep declarative state in sync with the imperative pause, or
-      // shouldPlay desyncs and the next Play tap becomes a no-op (the "won't play" bug).
+      const v = videoRef.current;
+      // 2026-06-14 (Tim) — pause FIRST, then await the seek, so the frame lands
+      // and holds on the requested phase (un-awaited seek+pause raced: pause could
+      // fire before the seek, drifting off the phase frame).
+      try { await v?.pauseAsync(); } catch { /* ignore */ }
+      try { await v?.setPositionAsync(f.timestampMs); } catch { /* ignore */ }
+      // keep declarative state in sync with the imperative pause, or shouldPlay
+      // desyncs and the next Play tap becomes a no-op (the "won't play" bug).
       setVideoPaused(true);
     }
   };
@@ -2176,7 +2190,7 @@ export default function SmartMotion() {
           </Text>
         </TactilePressable>
         {showSkeleton && poseReady ? P_SCRUB.map((p) => (
-          <TactilePressable key={p.key} onPress={() => seekToPosition(p.key)} style={styles.scrubChip}>
+          <TactilePressable key={p.key} onPress={() => void seekToPosition(p.key)} style={styles.scrubChip}>
             <Text style={styles.scrubChipText}>{p.label}</Text>
           </TactilePressable>
         )) : null}
@@ -2233,14 +2247,39 @@ export default function SmartMotion() {
             // feedback"; it adds nothing to silent skeleton/speed analysis.
             isMuted
             useNativeControls={false}
-            onLoad={(s) => {
+            onLoad={async (s) => {
               if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
-              // 2026-06-14 (Tim) — expo-av often ignores the shouldPlay PROP on first
-              // load, leaving the clip frozen on frame 0 (the "address / bending to place
-              // the ball" frame that wouldn't play). Kick playback explicitly here.
-              if (!videoPaused) videoRef.current?.playAsync().catch(() => undefined);
+              const v = videoRef.current;
+              if (!v) return;
+              // 2026-06-14 (Tim) — start at the SELECTED swing's window, not frame 0.
+              // Frame 0 is usually the pre-swing setup ("bending to place the ball")
+              // the user saw replay; seek to the swing first so review opens on the
+              // actual swing. Awaited so the kick-play below starts at the swing.
+              const seg = segments[selectedSwing];
+              if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
+              // expo-av often ignores the shouldPlay PROP on first load, leaving the
+              // clip frozen; kick playback explicitly.
+              if (!videoPaused) v.playAsync().catch(() => undefined);
             }}
-            onPlaybackStatusUpdate={(s) => { if (showSkeleton && 'positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
+            onPlaybackStatusUpdate={(s) => {
+              if (showSkeleton && 'positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis);
+              // 2026-06-14 (Tim) — WINDOW the loop to the selected swing so it stops
+              // replaying the whole clip (the setup the user reported). isLooping loops
+              // the entire file; when this swing is a real sub-window (endMs < clip end)
+              // we re-seek to its start once playback runs past endMs. The whole-clip
+              // synthetic segment has endMs ≈ duration, so this is a no-op there.
+              if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
+                const seg = segments[selectedSwing];
+                const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
+                const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
+                if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
+                  loopSeekGuardRef.current = true;
+                  void videoRef.current?.setPositionAsync(seg.startMs)
+                    .catch(() => undefined)
+                    .finally(() => { loopSeekGuardRef.current = false; });
+                }
+              }
+            }}
           />
         ) : (
           // 2026-06-09 — `mute` disables the camera's own audio track. We run a

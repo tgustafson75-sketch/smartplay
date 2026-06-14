@@ -1652,12 +1652,12 @@ check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on
   (() => {
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      // explicit kick on load when not paused
-      /onLoad=\{\(s\) => \{[\s\S]*?if \(!videoPaused\) videoRef\.current\?\.playAsync\(\)/.test(sm) &&
-      // moment-tap pause syncs state
-      /pauseAsync\(\)\.catch\(\(\) => undefined\);\s*\n\s*\/\/[\s\S]*?setVideoPaused\(true\)/.test(sm) &&
+      // explicit kick on load when not paused (now async so the swing-window seek awaits first)
+      /onLoad=\{async \(s\) => \{[\s\S]*?if \(!videoPaused\) v\.playAsync\(\)/.test(sm) &&
+      // moment-tap (phase scrub) pauses then syncs state
+      /try \{ await v\?\.pauseAsync\(\); \} catch[\s\S]*?setVideoPaused\(true\)/.test(sm) &&
       // seg-select play syncs state
-      /playAsync\(\)\.catch\(\(\) => undefined\);\s*\n\s*setVideoPaused\(false\)/.test(sm)
+      /void v\.playAsync\(\)\.catch\(\(\) => undefined\);\s*\n\s*\}\s*\n\s*setVideoPaused\(false\)/.test(sm)
     );
   })(),
   'review video kicks playback on load + every imperative seek keeps videoPaused in sync — no more frozen-frame / dead Play tap');
@@ -3557,6 +3557,28 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
     /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc2),
     'the biomech backfill is gated off cage/long clips — a ~60s multi-swing session is no longer watched whole as one swing in the library detail (Tim\'s 1-min stuck)');
+
+  // 2026-06-14 (Tim) — Smart Motion REVIEW playback: "shows them bending to place
+  // the ball / won't play / replaced the whole video." Three fixes: (1) AWAIT the
+  // seek before play so it lands on the swing, not frame 0; (2) onLoad seeks to the
+  // selected swing window first; (3) loop is WINDOWED to the swing so it stops
+  // replaying the pre-swing setup. Guarded re-seek prevents status-tick seek spam.
+  check('Smart Motion review: video seeks to the swing window + windowed loop (no setup replay)',
+    (() => {
+      const sm = read('app/swinglab/smartmotion.tsx');
+      return (
+        // selectSwing awaits the seek before playing
+        /try \{ await v\.setPositionAsync\(seg\.startMs\); \} catch/.test(sm) &&
+        // onLoad seeks to the selected swing window before kicking play
+        /const seg = segments\[selectedSwing\];\s*\n\s*if \(seg && seg\.startMs > 0\) \{ try \{ await v\.setPositionAsync\(seg\.startMs\)/.test(sm) &&
+        // looped playback re-seeks to the swing start once it runs past endMs (windowed)
+        /const windowed = seg && seg\.endMs > seg\.startMs && \(dur === 0 \|\| seg\.endMs < dur - 250\)/.test(sm) &&
+        /loopSeekGuardRef\.current/.test(sm) &&
+        // phase scrub pauses then awaits the seek so it holds on the phase frame
+        /try \{ await v\?\.pauseAsync\(\); \} catch[\s\S]{0,80}try \{ await v\?\.setPositionAsync\(f\.timestampMs\); \}/.test(sm)
+      );
+    })(),
+    'review playback opens on the actual swing (not the bend-to-place-the-ball setup frame), the loop stays windowed to the swing instead of replaying the whole clip, and seeks are awaited so they land — the "won\'t play / replaced the whole video" report');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
