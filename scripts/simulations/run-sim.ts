@@ -1442,6 +1442,23 @@ check('CNS G2: brain bag falls back to the shot-tracking bag when CNS is thin (c
   })(),
   'brain bag fills from clubStatsStore only where the CNS bag is thin/empty; CNS wins where present (conservative reconcile)');
 
+check('Voice: persona switch never leaks the old voice for a turn (live-persona gender)',
+  // 2026-06-13 — wrong-voice-for-a-turn fix. speak() read persona LIVE but defaulted the
+  // voice gender to the caller's param (a stale closure value after a mid-flight persona
+  // switch), so the in-flight answer spoke the OLD voice once. Now gender is derived from
+  // the LIVE persona too (serena=female; kevin/harry/tank=male; custom keeps its toggle).
+  (() => {
+    const v = read('services/voiceService.ts');
+    return (
+      /persona = require\('\.\.\/store\/settingsStore'\)\.useSettingsStore\.getState\(\)\.caddiePersonality/.test(v) &&
+      /if \(persona === 'serena'\) effectiveGender = 'female'/.test(v) &&
+      /else if \(persona === 'kevin' \|\| persona === 'harry' \|\| persona === 'tank'\) effectiveGender = 'male'/.test(v) &&
+      /else if \(persona === 'custom'\)/.test(v) &&        // custom still uses its own toggle
+      /gender: effectiveGender/.test(v)                     // the live-derived gender is what's sent
+    );
+  })(),
+  'voice gender derives from the LIVE persona (not a stale param), so a mid-flight caddie switch never speaks the old voice for a turn');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

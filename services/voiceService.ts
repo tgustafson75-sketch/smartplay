@@ -1066,11 +1066,18 @@ export const speak = async (
     let effectiveGender = gender;
     try {
       persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+      // 2026-06-13 (Tim) — WRONG-VOICE-FOR-A-TURN fix. Persona is the source of truth and
+      // is read LIVE here, but `gender` was the caller's param — a stale closure value when
+      // the user switched caddie mid-flight, so the in-flight answer spoke the OLD voice for
+      // one turn (ElevenLabs used live persona; the OpenAI-fallback + server voice keyed off
+      // the stale gender). Derive gender from the LIVE persona so both agree on the switch.
+      if (persona === 'serena') effectiveGender = 'female';
+      else if (persona === 'kevin' || persona === 'harry' || persona === 'tank') effectiveGender = 'male';
       // 2026-06-12 (Tim) — the CUSTOM caddie keeps its generated face but speaks with a
       // real default voice for any unrecorded line: the user's male/female toggle maps to
       // Kevin's onyx / Serena's nova on the server (which falls back on `gender` for the
       // 'custom' persona). So a custom caddie always has a voice, never silence.
-      if (persona === 'custom') {
+      else if (persona === 'custom') {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const g = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieGender;
         if (g === 'male' || g === 'female') effectiveGender = g;
