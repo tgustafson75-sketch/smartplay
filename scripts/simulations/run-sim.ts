@@ -2353,6 +2353,34 @@ check('Offline caddie Tier 1: local CLUB CALL + LAST SHOT, grounded + honest (20
   })(),
   'when the cloud brain is unreachable the caddie still CALLS A CLUB (real bag + GPS distance, honest when the bag is empty or GPS is weak) and recalls your LAST SHOT from logged round state — no fabricated numbers, no native module (OTA-able)');
 
+// 2026-06-14 (Tim) — "every golfer wants to know what their drive did." The ask
+// resolves the LAST DRIVER shot specifically, and its distance is auto-computed
+// from GPS (tee→ball) the moment the player reaches their ball — the most reliable
+// drive-distance source (no acoustics/pose). Honest by construction: GPS only fills
+// distance_yards when nothing measured it, never clobbering a real value.
+check('Drive distance: "what did my driver do" finds the driver shot + GPS auto-calc',
+  (() => {
+    const r = read('services/localStatusResponder.ts');
+    const askFindsDriver =
+      /wantsDriver = \/\\b\(driver\|drive\|tee shot\|off the tee\)\\b\//.test(r) &&
+      /\[\.\.\.shots\]\.reverse\(\)\.find\(\(x\) => typeof x\.club === 'string' && \/driv\/i\.test\(x\.club\)\)/.test(r) &&
+      /L\[lang\]\.noClubShot\('driver'\)/.test(r) &&
+      // distance falls back measured → GPS tee→ball → carry, never invents one.
+      /gps_distance_yards === 'number' \? s\.gps_distance_yards/.test(r);
+    const store = read('store/roundStore.ts');
+    const gpsBackfill =
+      /gps_distance_yards\?: number \| null/.test(store) &&
+      // computed in the end_location back-fill via haversine, jitter-floored.
+      /haversineYards\(x\.start_location, incomingStart\)/.test(store) &&
+      /d >= 5 && d <= 500/.test(store) &&
+      // never clobbers a measured distance_yards.
+      /typeof x\.distance_yards === 'number' \? x\.distance_yards : gpsYds/.test(store) &&
+      // a GPS-completed driver still updates longestDrive + the CNS bag model.
+      /gpsCompleted/.test(store);
+    return askFindsDriver && gpsBackfill;
+  })(),
+  'asking "how far was my drive" returns the last DRIVER shot; its distance is auto-filled from the GPS tee→ball total at back-fill time (jitter-floored, never overwriting a measured value) and that GPS drive feeds longestDrive + the learned bag');
+
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
   /version: 12/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),

@@ -683,7 +683,14 @@ function lastShotReply(transcript: string, lang: LocalReplyLanguage): LocalReply
     else return { text: L[lang].noClubShot('driver'), queryType: 'last_shot' };
   }
   const club = typeof s.club === 'string' && s.club.trim() ? s.club.trim() : null;
-  const dist = typeof s.distance_yards === 'number' ? s.distance_yards : null;
+  // Prefer a measured distance; fall back to the honest GPS tee→ball total
+  // (logShot back-fills gps_distance_yards once the player moves to their ball).
+  // carry_distance is airtime-only, so it's the last resort for "how far".
+  const dist =
+    typeof s.distance_yards === 'number' ? s.distance_yards
+    : typeof s.gps_distance_yards === 'number' ? s.gps_distance_yards
+    : typeof s.carry_distance === 'number' ? s.carry_distance
+    : null;
   const dir = s.direction ?? null;
   return { text: L[lang].lastShot(club, dist, dir), queryType: 'last_shot' };
 }
