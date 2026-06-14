@@ -2498,6 +2498,61 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — lifecycle/audio) — recordings/cameras left running on abrupt
+// unmount kept the iOS audio session in record mode (muting later TTS) or left the
+// camera recording. Both now clean up on unmount; the cage overlay reads a live
+// phaseRef so the []-dep unmount sees the CURRENT phase, not the stale first render.
+check('Lifecycle: cage-review + cage-overlay release mic/camera on unmount',
+  (() => {
+    const cr = read('app/cage-review/[review_session_id].tsx');
+    const co = read('components/CageSessionOverlay.tsx');
+    return (
+      // cage-review: []-effect stops+unloads the in-flight recording and hands the
+      // audio session back to playback so the next caddie line isn't silent.
+      /return \(\) => \{[\s\S]{0,200}rec\.stopAndUnloadAsync\(\)[\s\S]{0,120}configureAudioForSpeech\(\)/.test(cr) &&
+      // cage-overlay: live phaseRef + cleanup reads it (no stale 'requesting' closure)
+      /const phaseRef = useRef\(phase\);\s*\n\s*phaseRef\.current = phase;/.test(co) &&
+      /if \(phaseRef\.current === 'recording'\) \{\s*\n\s*cameraRef\.current\?\.stopRecording\(\)/.test(co)
+    );
+  })(),
+  'navigating away mid-answer/mid-record stops the recorder + camera and restores the speech audio session — no more muted caddie or orphaned camera after an abrupt exit');
+
+// 2026-06-14 (audit — VAD races) — the listen loop could run two recorders fighting
+// for the mic (restart racing a manual start) and the silence poller re-fired the
+// stop every 200ms with a floating promise. Now: re-entrancy guard + cancel token,
+// and the silence interval clears itself before firing exactly once.
+check('Lifecycle: VAD start is single-flight + silence poller fires once',
+  (() => {
+    const v = read('hooks/useVoiceActivityDetection.ts');
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      /if \(startingRef\.current \|\| recordingRef\.current\) return;/.test(v) &&   // no double-start
+      /stopTokenRef\.current \+= 1;/.test(v) &&                                       // stop cancels in-flight start
+      /if \(stopTokenRef\.current !== myToken \|\| !enabledRef\.current\)/.test(v) &&  // bail if cancelled mid-create
+      // useVoiceCaddie silence poller clears itself then voids the promise (fires once)
+      /clearInterval\(silenceVadTimer\.current\); silenceVadTimer\.current = null; \}\s*\n\s*void handleMicPress\(\)\.catch/.test(vc)
+    );
+  })(),
+  'the auto-listen loop never runs two competing recorders, a stop/disable mid-acquire cancels cleanly, and the silence detector fires the stop exactly once instead of every 200ms');
+
+// 2026-06-14 (audit — GPS refresh) — concurrent forceRefreshGps calls tore down each
+// other's watch + raced the poll; a thrown/timed-out refresh still showed a confident
+// "confirmed hole" toast off stale data. Now: single-flight refresh + honest toast.
+check('Lifecycle: GPS force-refresh is single-flight + honest on failure',
+  (() => {
+    const g = read('services/gpsManager.ts');
+    const a = read('services/refreshGpsAction.ts');
+    return (
+      /let refreshInFlight: Promise<GpsFix \| null> \| null = null;/.test(g) &&
+      /if \(refreshInFlight\) return refreshInFlight;/.test(g) &&
+      /} finally \{\s*\n\s*refreshInFlight = null;/.test(g) &&
+      // honest toast: a confident confirmation only when a FRESH fix actually came back
+      /else if \(freshFix\) \{[\s\S]{0,200}Confirmed hole/.test(a) &&
+      /Still searching for a strong GPS signal/.test(a)
+    );
+  })(),
+  'tapping Refresh GPS twice coalesces onto one fresh-fix attempt, and a timeout/failure says "still searching" instead of masking it with a confident confirmation off a stale fix');
+
 // 2026-06-10 — Brain works the FIRST ask: minimal-body retry + warm-on-open.
 const voiceCaddieSrc = read('hooks/useVoiceCaddie.ts');
 check('Brain has a minimal-body fail-safe retry (survives context throw / 413)',

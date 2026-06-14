@@ -89,8 +89,17 @@ export function useVoiceActivityDetection({
   // could re-acquire the mic with a stale `true` after Auto-Listen was off.
   const enabledRef = useRef(enabled);
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  // 2026-06-14 (audit — lifecycle races) — guard concurrent starts (the
+  // finishRecording→startRecording restart racing a manual start) and give
+  // stopRecording a cancel token so a start in flight when stop/disable lands
+  // doesn't end up owning the mic with a second, orphaned recorder.
+  const startingRef = useRef(false);
+  const stopTokenRef = useRef(0);
 
   const startRecording = async (): Promise<void> => {
+    if (startingRef.current || recordingRef.current) return;
+    startingRef.current = true;
+    const myToken = stopTokenRef.current;
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
@@ -113,6 +122,13 @@ export function useVoiceActivityDetection({
       });
 
       const { recording } = await Audio.Recording.createAsync(VAD_RECORDING_OPTIONS);
+      // A stop()/disable landed while we were acquiring the recorder → don't keep
+      // the mic. Unload this one and bail so we never run two recorders. (audit)
+      if (stopTokenRef.current !== myToken || !enabledRef.current) {
+        try { await recording.stopAndUnloadAsync(); } catch { /* noop */ }
+        setIsListening(false);
+        return;
+      }
       recording.setProgressUpdateInterval(100);
       recording.setOnRecordingStatusUpdate((status) => {
         if (!status.isRecording) return;
@@ -168,6 +184,8 @@ export function useVoiceActivityDetection({
     } catch (err) {
       console.log('[VAD] startRecording error:', err);
       setIsListening(false);
+    } finally {
+      startingRef.current = false;
     }
   };
 
@@ -196,6 +214,7 @@ export function useVoiceActivityDetection({
   };
 
   const stopRecording = async (): Promise<void> => {
+    stopTokenRef.current += 1; // cancel any startRecording in flight (audit)
     const rec = recordingRef.current;
     recordingRef.current = null;
     vadStateRef.current = 'IDLE';

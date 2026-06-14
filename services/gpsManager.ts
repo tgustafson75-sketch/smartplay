@@ -731,32 +731,46 @@ export function subscribePoorSignal(cb: PoorSignalListener): () => void {
  * fix (or null after a 12s timeout) so the caller can speak ack with
  * the new yardage.
  */
-export async function forceRefreshGps(): Promise<GpsFix | null> {
-  if (subscription) {
-    try { subscription.remove(); } catch {}
-    subscription = null;
-  }
-  mode = 'active';
-  lastMotionAt = Date.now();
-  lastTickAt = 0;
-  await startWatchInternal();
-  breadcrumb('manager_force_refresh');
+let refreshInFlight: Promise<GpsFix | null> | null = null;
 
-  // Wait for the FIRST fresh fix (timestamp newer than now) or 12s
-  // timeout. The subscription will populate lastFix on first callback.
-  const startedAt = Date.now();
-  return new Promise<GpsFix | null>((resolve) => {
-    const timer = setInterval(() => {
-      const fx = getLastFix();
-      if (fx && fx.timestamp >= startedAt) {
-        clearInterval(timer);
-        resolve(fx);
-      } else if (Date.now() - startedAt > 12_000) {
-        clearInterval(timer);
-        resolve(null);
-      }
-    }, 200);
-  });
+export async function forceRefreshGps(): Promise<GpsFix | null> {
+  // 2026-06-14 (audit) — re-entrancy guard. A second concurrent call would
+  // remove() the subscription the first is awaiting and both would race the same
+  // lastFix poll (with a poll timer that wasn't cleared on re-entry). Coalesce
+  // concurrent callers onto one in-flight refresh.
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async (): Promise<GpsFix | null> => {
+    if (subscription) {
+      try { subscription.remove(); } catch {}
+      subscription = null;
+    }
+    mode = 'active';
+    lastMotionAt = Date.now();
+    lastTickAt = 0;
+    await startWatchInternal();
+    breadcrumb('manager_force_refresh');
+
+    // Wait for the FIRST fresh fix (timestamp newer than now) or 12s
+    // timeout. The subscription will populate lastFix on first callback.
+    const startedAt = Date.now();
+    return await new Promise<GpsFix | null>((resolve) => {
+      const timer = setInterval(() => {
+        const fx = getLastFix();
+        if (fx && fx.timestamp >= startedAt) {
+          clearInterval(timer);
+          resolve(fx);
+        } else if (Date.now() - startedAt > 12_000) {
+          clearInterval(timer);
+          resolve(null);
+        }
+      }, 200);
+    });
+  })();
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
 }
 
 export async function startGpsManager(): Promise<void> {

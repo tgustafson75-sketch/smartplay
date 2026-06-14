@@ -1881,14 +1881,20 @@ export const useVoiceCaddie = ({
       silenceVadTimer.current = setInterval(() => {
         if (!recordingRef.current) return;
         if (micHasSpoken && Date.now() - micLastLoudAt >= MIC_SILENCE_TIMEOUT_MS) {
-          handleMicPress();
+          // 2026-06-14 (audit) — clear the interval BEFORE firing so the stop runs
+          // exactly once. Previously it kept firing handleMicPress() every 200ms
+          // while the condition stayed true (e.g. handleMicPress early-returned on
+          // the in-flight guard), and the promise floated uncaught.
+          if (silenceVadTimer.current) { clearInterval(silenceVadTimer.current); silenceVadTimer.current = null; }
+          void handleMicPress().catch(() => undefined);
         }
       }, 200);
 
       // Auto-stop after AUTO_STOP_MS (hard cap / wandered-away backstop)
       autoStopTimer.current = setTimeout(() => {
+        autoStopTimer.current = null;
         if (recordingRef.current) {
-          handleMicPress();
+          void handleMicPress().catch(() => undefined);
         }
       }, AUTO_STOP_MS);
 

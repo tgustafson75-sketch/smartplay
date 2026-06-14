@@ -100,6 +100,22 @@ export default function CageReviewInterview() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review_session_id]);
 
+  // 2026-06-14 (audit — lifecycle/audio) — if the user navigates away mid-answer,
+  // the in-flight Audio.Recording was never stopped, leaving the iOS audio session
+  // in record mode (allowsRecordingIOS) → the caddie's NEXT TTS came out silent.
+  // Stop + unload on unmount and hand the session back to playback. Best-effort.
+  useEffect(() => {
+    return () => {
+      const rec = recordingRef.current;
+      recordingRef.current = null;
+      if (rec) {
+        void rec.stopAndUnloadAsync().catch(() => undefined).finally(() => {
+          void configureAudioForSpeech().catch(() => undefined);
+        });
+      }
+    };
+  }, []);
+
   // ── Mic pulse animation ───────────────────────────────────────────────────
 
   useEffect(() => {

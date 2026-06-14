@@ -51,7 +51,12 @@ export async function refreshGpsAndReconcile(): Promise<RefreshGpsResult> {
   try {
     const gps = await import('./gpsManager');
     freshFix = await gps.forceRefreshGps();
-  } catch { /* non-fatal */ }
+  } catch (e) {
+    // 2026-06-14 (audit) — don't silently swallow. A thrown refresh means GPS
+    // genuinely failed; log it and leave freshFix null so the toast below tells
+    // the truth ("still searching") instead of a confident confirmation.
+    console.log('[refreshGps] forceRefreshGps failed:', e instanceof Error ? e.message : String(e));
+  }
 
   const result = useRoundStore.getState().reconcileHole();
 
@@ -79,11 +84,15 @@ export async function refreshGpsAndReconcile(): Promise<RefreshGpsResult> {
   } else if (result.applied) {
     toast_text = `Snapped to hole ${result.hole_number} · ${result.confidence}% confidence`;
   } else if (freshFix) {
-    toast_text = `Fresh fix locked${freshFix.accuracy_m != null ? ` (${Math.round(freshFix.accuracy_m)}m)` : ''}.`;
-  } else if (result.confidence > 0) {
-    toast_text = `Confirmed hole ${result.hole_number} · ${result.confidence}% confidence`;
+    // We got a genuinely fresh fix → confirm honestly (incl. confirming the hole).
+    toast_text = result.confidence > 0
+      ? `Confirmed hole ${result.hole_number} · ${result.confidence}% confidence`
+      : `Fresh fix locked${freshFix.accuracy_m != null ? ` (${Math.round(freshFix.accuracy_m)}m)` : ''}.`;
   } else {
-    toast_text = result.reason;
+    // 2026-06-14 (audit) — no fresh fix came back (timeout/failure) and no hole
+    // change. Don't imply success off a stale read; tell the truth so the honest
+    // next action is to step into open sky, not assume the refresh worked.
+    toast_text = 'Still searching for a strong GPS signal — give it a few seconds in open sky.';
   }
 
   try {

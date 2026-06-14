@@ -119,6 +119,11 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   const [meterAvailable, setMeterAvailable] = useState(true);
 
   const cameraRef = useRef<CameraView>(null);
+  // 2026-06-14 (audit — lifecycle) — live mirror of `phase` so the []-dep unmount
+  // cleanup reads the CURRENT phase, not the stale 'requesting' it closed over at
+  // first render (which meant a mid-record unmount never stopped the camera).
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const sessionRef = useRef<CageSession | null>(null);
   const sessionStartRef = useRef<number>(0);
   const videoPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
@@ -460,10 +465,12 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   const cleanup = useCallback(async () => {
     if (timerRef.current) clearInterval(timerRef.current);
     await stopMetering();
-    if (phase === 'recording') {
+    // Read the live phase via the ref — the unmount path captures this callback
+    // once ([] deps), so closing over `phase` would use a stale value. (audit)
+    if (phaseRef.current === 'recording') {
       cameraRef.current?.stopRecording();
     }
-  }, [phase, stopMetering]);
+  }, [stopMetering]);
 
   // ─── Formatting ────────────────────────────────────────────────────────────
 
