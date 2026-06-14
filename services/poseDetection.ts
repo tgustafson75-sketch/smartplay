@@ -200,7 +200,12 @@ const V6 = (msg: string, data?: Record<string, unknown>): void => {
 const FRAME_TIME_FRACTIONS = [0.08, 0.40, 0.60, 0.75, 0.88];
 const FALLBACK_DURATION_MS = 2000;
 
-export type Frame = { b64: string; media_type: string; time_sec: number };
+// 2026-06-14 (audit #3 — honesty) — `fraction` is the REAL position this frame was
+// sampled at within the swing window (0 = window start, 1 = window end). Carried so
+// the fault-frame fraction reported to the user reflects the actual sampling array
+// used (quick 3-frame / full 5-frame / long-clip even spread) instead of blindly
+// indexing the full-tier FRAME_TIME_FRACTIONS array.
+export type Frame = { b64: string; media_type: string; time_sec: number; fraction?: number };
 
 // 2026-05-28 — Fix FO: exported so poseAnalysisApi.ts can reuse the
 // same duration-probe path (Audio.Sound primary, VT.getThumbnailAsync
@@ -463,7 +468,7 @@ export async function extractKeyFrames(
             raw_uri_tail: r.uri.slice(-30), raw_size: rawSize,
             b64_kb: Math.round(m.base64.length / 1024),
           });
-          return { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 };
+          return { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000, fraction: t } as Frame;
         } catch (err) {
           perFrameOutcomes.push({ idx: i, t_ms: timeMs, ok: false, error: err instanceof Error ? err.message : String(err) });
           return null;
@@ -1056,11 +1061,12 @@ export async function analyzeSwing(
             await FS.deleteAsync(displayUri, { idempotent: true }).catch(() => {});
             await FS.copyAsync({ from: r.uri, to: displayUri });
             faultFrameDisplayUri = displayUri;
-            // Source-clip fraction. FRAME_TIME_FRACTIONS is the
-            // canonical sampling array — using the index directly
-            // gives the most-meaningful fraction value regardless
-            // of whether the clip used a bounded window.
-            faultFrameFraction = FRAME_TIME_FRACTIONS[idx] ?? null;
+            // 2026-06-14 (audit #3 — honesty) — use the REAL fraction this frame
+            // was sampled at (carried on the Frame), not FRAME_TIME_FRACTIONS[idx].
+            // The old code always indexed the full-tier 5-frame array, so a
+            // quick-tier (3-frame) or long-clip (even-spread) read reported a
+            // fault-position that didn't match where the frame actually came from.
+            faultFrameFraction = frames[idx].fraction ?? null;
             V6('STAGE 4 — fault frame persisted (display quality)', {
               uri_tail: displayUri.slice(-40),
               fraction: faultFrameFraction,

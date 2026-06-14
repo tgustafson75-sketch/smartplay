@@ -85,6 +85,14 @@ export interface JuniorSwingAnalysis {
   } | null;
 
   overallScore: number;       // 0-100, age-relative
+  /**
+   * 2026-06-14 (audit #4 — honesty) — true when overallScore was a DEFAULT
+   * (the server omitted it), not a real graded score. A progress delta
+   * (vs_previous) is only computed when BOTH this swing and the prior one
+   * had real scores, so a child is never told "Up N points — real progress"
+   * off two placeholder 70s. Optional for back-compat with stored swings.
+   */
+  scoreEstimated?: boolean;
   /** Warm spoken summary in the active caddie's voice + age band. */
   coachComment: string;
 }
@@ -251,6 +259,8 @@ function normalize(
   input: JuniorSwingAnalyzeInput,
 ): JuniorSwingAnalysis {
   const fundamentals = (data.fundamentals ?? {}) as Partial<JuniorSwingAnalysis['fundamentals']>;
+  // 2026-06-14 (audit #4) — was the score REAL (server-graded) or a default?
+  const scoreEstimated = typeof data.overallScore !== 'number';
   const overall = clamp(data.overallScore, 70);
   return {
     swingId: data.swingId ?? newSwingId(member.id),
@@ -268,14 +278,19 @@ function normalize(
     wins: cleanStringList(data.wins, 3),
     next_focus: trimString(data.next_focus),
     fun_drill: trimString(data.fun_drill),
-    vs_previous: data.vs_previous ?? autoVsPrevious(overall, prior),
+    vs_previous: data.vs_previous ?? autoVsPrevious(overall, scoreEstimated, prior),
     overallScore: overall,
+    scoreEstimated,
     coachComment: trimString(data.coachComment) ?? defaultCoachComment(member, band, persona, overall),
   };
 }
 
-function autoVsPrevious(overall: number, prior: JuniorSwingAnalysis | null): JuniorSwingAnalysis['vs_previous'] {
+function autoVsPrevious(overall: number, scoreEstimated: boolean, prior: JuniorSwingAnalysis | null): JuniorSwingAnalysis['vs_previous'] {
   if (!prior) return null;
+  // 2026-06-14 (audit #4 — honesty) — never claim progress off a placeholder
+  // score. If EITHER this swing's or the prior swing's score was a default
+  // (not server-graded), don't fabricate a points delta — show no chip.
+  if (scoreEstimated || prior.scoreEstimated) return null;
   const diff = overall - prior.overallScore;
   if (Math.abs(diff) < 3) return { direction: 'same', summary: 'About the same as last time.' };
   if (diff > 0) {
@@ -313,8 +328,10 @@ async function persistFallback(
     wins: ['You stepped up and took a swing — that\'s the first big win.'],
     next_focus: null,
     fun_drill: null,
-    vs_previous: prior ? autoVsPrevious(50, prior) : null,
+    // Fallback score is a placeholder, so never claim a progress delta (audit #4).
+    vs_previous: null,
     overallScore: 50,
+    scoreEstimated: true,
     coachComment: defaultCoachComment(member, band, persona, 50, true),
   };
   // Don't persist the fallback — we don't want a transient network blip

@@ -2458,6 +2458,41 @@ check('Persist: AsyncStorage write failures surface (no more silent round loss)'
   })(),
   'every persisted store now routes through a guarded storage that logs setItem failures (with the store key) to the owner issue log instead of silently losing the write — a lost round leaves a breadcrumb');
 
+// 2026-06-14 (audit #3 — honesty) — the reported "fault at X% of swing" used
+// FRAME_TIME_FRACTIONS[idx] (the full-tier 5-frame array) regardless of which
+// sampling array actually produced the frame. Quick-tier (3-frame) and long-clip
+// (even-spread) reads therefore reported a wrong position. Each Frame now carries
+// its REAL sampled fraction, read back by index.
+check('Analysis honesty: fault-frame fraction uses the frame\'s real sampled position',
+  (() => {
+    const p = read('services/poseDetection.ts');
+    return (
+      /export type Frame = \{ b64: string; media_type: string; time_sec: number; fraction\?: number \}/.test(p) &&
+      /time_sec: timeMs \/ 1000, fraction: t \} as Frame/.test(p) &&          // real fraction stamped at extraction
+      /faultFrameFraction = frames\[idx\]\.fraction \?\? null/.test(p) &&       // read back the real one
+      !/faultFrameFraction = FRAME_TIME_FRACTIONS\[idx\]/.test(p)              // the wrong index is gone
+    );
+  })(),
+  'the fault-frame fraction surfaced to the user is the actual position the fault frame was sampled at (quick/full/long-clip aware), not a blind index into the full-tier fraction array');
+
+// 2026-06-14 (audit #4 — honesty) — a missing server score defaulted to 70, then a
+// kid was told "Up N points — real progress" off two placeholder 70s. The delta is
+// now only computed when BOTH this swing and the prior had REAL (server-graded)
+// scores; otherwise no progress chip.
+check('Analysis honesty: kids\' progress delta only when both scores are real',
+  (() => {
+    const j = read('services/juniorSwingAnalyzer.ts');
+    return (
+      /scoreEstimated\?: boolean/.test(j) &&
+      /const scoreEstimated = typeof data\.overallScore !== 'number'/.test(j) &&
+      /function autoVsPrevious\(overall: number, scoreEstimated: boolean, prior:/.test(j) &&
+      /if \(scoreEstimated \|\| prior\.scoreEstimated\) return null;/.test(j) &&
+      // the network fallback (placeholder 50) never claims progress either
+      /\/\/ Fallback score is a placeholder, so never claim a progress delta[\s\S]{0,40}vs_previous: null/.test(j)
+    );
+  })(),
+  'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
+
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
   /version: 12/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
