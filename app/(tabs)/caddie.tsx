@@ -59,7 +59,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, isTutorialNarrating } from '../../services/voiceService';
+import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -995,12 +995,6 @@ export default function CaddieTab() {
       // the opener — don't double-speak.
       if (isSpeaking()) {
         console.log('[caddie] opener skipped: audio already in flight');
-        return;
-      }
-      // 2026-06-13 (Tim) — a QuickTutorial is up and narrating the quick instructions;
-      // the instructions ARE the page voice, so don't play a separate opener over them.
-      if (isTutorialNarrating()) {
-        console.log('[caddie] opener skipped: quick-instructions tutorial is narrating');
         return;
       }
       try {

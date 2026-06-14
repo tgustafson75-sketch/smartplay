@@ -1576,27 +1576,25 @@ check('Gyro-parallax wow v1: tilt floats the SmartVision hole image (presentatio
       /never feeds analysis|presentation illusion|never feeds/i.test(c) &&  // honesty noted
       // applied to the hole preview, image as the parallax background, overlays as children
       /import \{ ParallaxTilt \} from '\.\.\/ParallaxTilt'/.test(prev) &&
-      /<ParallaxTilt[\s\S]*?background=\{<Image source=\{curatedImage\}/.test(prev)
+      /<ParallaxTilt[\s\S]*?background=\{<Image source=\{(?:curatedImage|heroImageSource)\}/.test(prev)
     );
   })(),
   'ParallaxTilt pans the hole image by gyro tilt behind fixed overlays (depth illusion); applied to SmartVision preview; static w/o sensor; presentation-only');
 
-check('No voice clash: quick instructions own the audio; page opener steps aside',
-  // 2026-06-13 (Tim) — the QuickTutorial narration was clashing with the Caddie page
-  // opener. Now the tutorial flags itself as narrating + cuts in-flight speech, and the
-  // opener skips while a tutorial is up. The instructions are the single page voice.
+check('Quick instructions are SILENT — out of the voice path (no clash)',
+  // 2026-06-14 (Tim) — quick instructions are pop-up cards only: NO voice element, kept
+  // out of the voice path so they can never clash with the caddie's normal voice
+  // (opener/greeting/brain). The user reads + skips; nothing speaks.
   (() => {
-    const vs = read('services/voiceService.ts');
     const tut = read('components/QuickTutorial.tsx');
-    const cad = read('app/(tabs)/caddie.tsx');
     return (
-      /export const setTutorialNarrating/.test(vs) && /export const isTutorialNarrating/.test(vs) &&
-      /setTutorialNarrating\(open\)/.test(tut) &&                 // flag set while open
-      /stopSpeaking\(\)[\s\S]*?\.then\(\(\) => speak\(spokenText/.test(tut) && // cut in-flight, then speak
-      /if \(isTutorialNarrating\(\)\) \{/.test(cad)               // opener steps aside
+      !/\bspeak\(/.test(tut) &&                 // no narration at all
+      !/setTutorialNarrating/.test(tut) &&      // no audio-ownership hack
+      /quick instructions are SILENT/i.test(tut) &&
+      /import React, \{ useState \} from 'react'/.test(tut) // useEffect/voice imports removed
     );
   })(),
-  'tutorial narration claims the audio (flag + stop-in-flight) and the page opener skips while it is up — one voice, the instructions');
+  'QuickTutorial has no speak() and no audio-ownership — silent cards only, out of the voice path');
 
 check('Course-data bootstrap: SmartFinder capture ingests → previews use your real shot',
   // 2026-06-14 (Tim) — every SmartFinder photo/video tags to course/hole/GPS and builds

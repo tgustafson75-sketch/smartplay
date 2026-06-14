@@ -32,14 +32,12 @@
  * is fire-and-forget and silent on failure).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
-import { speak, stopSpeaking, setTutorialNarrating } from '../services/voiceService';
-import { getApiBaseUrl } from '../services/apiBase';
-
-const API_URL = getApiBaseUrl();
+// 2026-06-14 (Tim) — quick instructions are SILENT pop-up cards: no voice element, kept
+// OUT of the voice path. The caddie's normal voice (opener/greeting/brain) is unchanged.
 
 interface QuickTutorialProps {
   /** Persisted-seen key. Matches Coach Mode's COACH_TUTORIAL_KEY pattern. */
@@ -62,16 +60,12 @@ export function QuickTutorial({
   slug,
   title,
   lines,
-  spokenText,
   visible,
   onDismiss,
   iconName = 'school-outline',
 }: QuickTutorialProps) {
   const tutorialsSeen = useSettingsStore(s => s.tutorialsSeen);
   const markTutorialSeen = useSettingsStore(s => s.markTutorialSeen);
-  const voiceEnabled = useSettingsStore(s => s.voiceEnabled);
-  const voiceGender = useSettingsStore(s => s.voiceGender);
-  const language = useSettingsStore(s => s.language);
 
   // Self-managed visibility — open on first mount when the slug hasn't
   // been marked seen. Parent override (visible prop) wins when defined.
@@ -90,26 +84,8 @@ export function QuickTutorial({
     }
   };
 
-  // While the tutorial is up it OWNS the audio — flag it so page-entry announcers
-  // (e.g. the Caddie opener) don't talk over the instructions (Tim: "read the quick
-  // instructions, not a separate page announcement"). Cleared when it closes/unmounts.
-  useEffect(() => {
-    setTutorialNarrating(open);
-    return () => setTutorialNarrating(false);
-  }, [open]);
-
-  // Speak the spokenText when the modal becomes visible. Cut any in-flight page
-  // announcement first so the instructions are the single voice. userInitiated:
-  // false because the entry is a navigation event (auto-fire).
-  useEffect(() => {
-    if (!open) return;
-    if (!voiceEnabled) return;
-    if (!spokenText) return;
-    void stopSpeaking()
-      .catch(() => undefined)
-      .then(() => speak(spokenText, voiceGender, language, API_URL).catch(() => { /* non-fatal */ }));
-  }, [open, voiceEnabled, voiceGender, language, spokenText]);
-
+  // No voice: quick instructions are silent cards (Tim) — the caddie's normal voice
+  // path is untouched. Nothing speaks here; the user reads + skips.
   if (!open) return null;
 
   return (
