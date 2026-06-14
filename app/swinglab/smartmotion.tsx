@@ -1527,6 +1527,7 @@ export default function SmartMotion() {
       setSelectedSwing(idx);
       videoRef.current?.setPositionAsync(seg.startMs).catch(() => undefined);
       videoRef.current?.playAsync().catch(() => undefined);
+      setVideoPaused(false); // keep state in sync with the imperative play (avoid desync)
 
       const cached = analysisCacheRef.current[idx];
       // 2026-06-11 (audit fix) — clear the analyzing spinner on a cached hit too.
@@ -2141,6 +2142,9 @@ export default function SmartMotion() {
     if (f) {
       videoRef.current?.setPositionAsync(f.timestampMs).catch(() => undefined);
       videoRef.current?.pauseAsync().catch(() => undefined);
+      // 2026-06-14 (Tim) — keep declarative state in sync with the imperative pause, or
+      // shouldPlay desyncs and the next Play tap becomes a no-op (the "won't play" bug).
+      setVideoPaused(true);
     }
   };
   const P_SCRUB: { key: NonNullable<PoseFrame['position']>; label: string }[] = [
@@ -2223,7 +2227,13 @@ export default function SmartMotion() {
             // feedback"; it adds nothing to silent skeleton/speed analysis.
             isMuted
             useNativeControls={false}
-            onLoad={(s) => { if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis); }}
+            onLoad={(s) => {
+              if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
+              // 2026-06-14 (Tim) — expo-av often ignores the shouldPlay PROP on first
+              // load, leaving the clip frozen on frame 0 (the "address / bending to place
+              // the ball" frame that wouldn't play). Kick playback explicitly here.
+              if (!videoPaused) videoRef.current?.playAsync().catch(() => undefined);
+            }}
             onPlaybackStatusUpdate={(s) => { if (showSkeleton && 'positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis); }}
           />
         ) : (

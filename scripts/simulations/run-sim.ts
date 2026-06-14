@@ -1621,6 +1621,24 @@ check('Course-data bootstrap: SmartFinder capture ingests → previews use your 
   })(),
   'SmartFinder photo→single / video→pano ingest tagged to course/hole/GPS (bounded, persisted); hole preview prefers the captured shot');
 
+check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on address frame)',
+  // 2026-06-14 — the review clip froze on frame 0 (the "bending to place the ball"
+  // address frame) and the Play tap was a no-op. Cause: expo-av ignores shouldPlay on
+  // first load + seeks called pause/play imperatively without updating videoPaused.
+  // Fix: explicit playAsync on load + every imperative seek syncs videoPaused.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      // explicit kick on load when not paused
+      /onLoad=\{\(s\) => \{[\s\S]*?if \(!videoPaused\) videoRef\.current\?\.playAsync\(\)/.test(sm) &&
+      // moment-tap pause syncs state
+      /pauseAsync\(\)\.catch\(\(\) => undefined\);\s*\n\s*\/\/[\s\S]*?setVideoPaused\(true\)/.test(sm) &&
+      // seg-select play syncs state
+      /playAsync\(\)\.catch\(\(\) => undefined\);\s*\n\s*setVideoPaused\(false\)/.test(sm)
+    );
+  })(),
+  'review video kicks playback on load + every imperative seek keeps videoPaused in sync — no more frozen-frame / dead Play tap');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
