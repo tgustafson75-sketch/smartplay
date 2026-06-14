@@ -101,6 +101,41 @@ async function writePersisted(courseId: string, content: CourseContent): Promise
  * AsyncStorage; falls back to a network call. On network failure returns the
  * stale persisted copy when available, else null.
  */
+/**
+ * 2026-06-14 (Tim — course book) — anchor the per-hole static knowledge (notes +
+ * descriptions + course tips/about) into the CNS course book so it's persisted,
+ * OFFLINE-available, and fed into the brain + offline responder. Best-effort,
+ * additive (merge), never throws. Called whenever we obtain content — fresh fetch
+ * OR a persisted cache hit — so a course visited once is described even with no signal.
+ */
+function anchorCourseBook(courseId: string, content: CourseContent, name?: string | null): void {
+  try {
+    const byHole = new Map<number, { hole: number; note?: string | null; description?: string | null }>();
+    for (const n of content.hole_notes ?? []) {
+      if (typeof n.hole_number === 'number') byHole.set(n.hole_number, { hole: n.hole_number, note: n.note });
+    }
+    for (const d of content.hole_descriptions ?? []) {
+      if (typeof d.hole_number === 'number') {
+        const e = byHole.get(d.hole_number) ?? { hole: d.hole_number };
+        e.description = d.description;
+        byHole.set(d.hole_number, e);
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
+    mem.useCaddieMemoryStore.getState().saveCourseBook({
+      course_id: courseId,
+      name: name ?? null,
+      holes: Array.from(byHole.values()),
+      tips: content.caddie_tips ?? [],
+      about: content.about ?? null,
+      nowMs: Date.now(),
+    });
+  } catch (e) {
+    console.warn('[courseContent] course-book anchor failed (non-fatal):', e);
+  }
+}
+
 export async function fetchCourseContent(input: CourseContentInput): Promise<CourseContent | null> {
   const courseId = input.courseId;
   if (!courseId) return null;
@@ -111,6 +146,7 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
   const persisted = await readPersisted(courseId);
   if (persisted) {
     memCache.set(courseId, persisted);
+    anchorCourseBook(courseId, persisted, input.courseName); // keep the book warm offline
     if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
   }
 
@@ -161,6 +197,7 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     const content: CourseContent = { ...data, fetched_at: Date.now() };
     memCache.set(courseId, content);
     await writePersisted(courseId, content);
+    anchorCourseBook(courseId, content, input.courseName); // → CNS course book (offline + brain)
     return content;
   } catch (e) {
     console.warn('[courseContent] fetch exception:', e);

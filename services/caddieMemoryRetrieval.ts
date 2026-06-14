@@ -137,6 +137,21 @@ export function getCaddieContext(input: {
       if (course.greenBehavior) parts.push(`green: ${course.greenBehavior}`);
       if (parts.length > 0) lines.push(`Course memory — ${parts.join('; ')}.`);
     }
+    // 2026-06-14 (Tim — course book) — STATIC course knowledge anchored offline
+    // (hole note + hazards). Unlike learned memory, this is available on hole 1 of
+    // a course you've never played, and with no signal. Hole-specific only here to
+    // keep the prompt tight.
+    if (input.courseId && input.hole != null) {
+      try {
+        const sh = useCaddieMemoryStore.getState().getStaticHole(input.courseId, input.hole);
+        if (sh) {
+          const sParts: string[] = [];
+          if (sh.note) sParts.push(sh.note);
+          if (sh.hazards && sh.hazards.length > 0) sParts.push(`watch: ${sh.hazards.slice(0, 3).join(', ')}`);
+          if (sParts.length > 0) lines.push(`Hole notes (course book) — ${sParts.join('; ')}.`);
+        }
+      } catch { /* book optional */ }
+    }
     if (tendencies) lines.push(tendencies);
     if (recentReflection) lines.push(`Last round takeaway: ${recentReflection}`);
 

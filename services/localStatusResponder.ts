@@ -49,6 +49,10 @@ import { bagDistances } from './shotStrategy';
 import { composeShotRead } from './cnsShotRead';
 import { getCachedWeatherEvenIfStale } from './weatherService';
 import { playsLikeDistance } from '../utils/playsLike';
+// 2026-06-14 (Tim — course book) — STATIC per-hole knowledge (note/description/
+// hazards) anchored into the CNS, so "what's this hole / what do I watch for" answers
+// OFFLINE from the persisted book, not a network fetch. [[course-book-cns]]
+import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
@@ -72,6 +76,7 @@ export type LocalReplyResult = {
     | 'last_shot'
     | 'handicap'
     | 'course_memory'
+    | 'hole_info'
     | 'routine_saved'
     | 'routine_recall'
     | 'no_round';
@@ -120,6 +125,8 @@ const L: Record<LocalReplyLanguage, {
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
   noClubShot: (club: string) => string;
+  noHoleInfo: string;
+  watchFor: (hazards: string[]) => string;
   handicapIs: (h: number) => string;
   routineSaved: string;
   routineNothingToSave: string;
@@ -174,6 +181,8 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: "You haven't logged a shot yet this round.",
     noClubShot: (c) => `I don't have a ${c} shot logged this round yet.`,
+    noHoleInfo: "I don't have notes on this hole yet — play it as you see it.",
+    watchFor: (h) => `Watch out for ${h.join(', ')}.`,
     handicapIs: (h) => `Your handicap is ${h}.`,
     routineSaved: "Saved — that's your pre-round routine now. Ask for it any time.",
     routineNothingToSave: "I don't have a routine to save yet — ask me for a pre-round stretch first, then say save it.",
@@ -227,6 +236,8 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: 'Aún no has registrado un tiro en esta ronda.',
     noClubShot: (c) => `Aún no tengo un tiro con ${c} registrado en esta ronda.`,
+    noHoleInfo: 'Aún no tengo notas de este hoyo — juégalo como lo veas.',
+    watchFor: (h) => `Cuidado con ${h.join(', ')}.`,
     handicapIs: (h) => `Tu handicap es ${h}.`,
     routineSaved: 'Guardado — esa es tu rutina previa. Pídemela cuando quieras.',
     routineNothingToSave: 'Aún no tengo una rutina para guardar — pídeme un estiramiento primero y luego di que lo guarde.',
@@ -280,6 +291,8 @@ const L: Record<LocalReplyLanguage, {
     },
     noLastShot: '这回合你还没有记录任何一杆。',
     noClubShot: (c) => `这回合还没有记录${c}的击球。`,
+    noHoleInfo: '我还没有这个洞的笔记——看着打吧。',
+    watchFor: (h) => `注意${h.join('、')}。`,
     handicapIs: (h) => `你的差点是${h}。`,
     routineSaved: '已保存——这就是你的赛前热身routine。随时可以问我。',
     routineNothingToSave: '我还没有可保存的routine——先让我给你一个赛前拉伸，然后说保存。',
@@ -321,6 +334,11 @@ const RX = {
   // REACH feasibility — "can I reach / get there / get home / carry it / enough club".
   reach:      /\b(can\s+i\s+(?:reach|get\s+(?:there|home|to\s+the\s+green))|(?:will|can)\s+i\s+(?:make|carry)\s+(?:it|the\s+green)|do\s+i\s+have\s+(?:enough\s+club|the\s+club)|enough\s+club|reach\s+(?:the\s+green|it|in))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
+  // 2026-06-14 (course book) — HOLE CHARACTERISTICS ("what's this hole like / play",
+  // "what do I watch for", "any hazards/trouble/water here", "describe this hole",
+  // "what's the play here"). Distinct from RX.hole ("what hole am I on") — routed
+  // BEFORE it. Answered offline from the anchored static course book.
+  holeInfo:   /\b(what(?:'s|s)?\s+(?:this|the)\s+hole\s+(?:like|play|about)|how\s+does\s+this\s+hole\s+play|what\s+(?:do|should)\s+i\s+(?:watch|look)\s+(?:out\s+)?for|(?:any\s+)?(?:hazards?|trouble|water|bunkers?)\s+(?:here|on\s+this(?:\s+hole)?)|describe\s+(?:this\s+)?hole|tell\s+me\s+about\s+(?:this\s+)?hole|what(?:'s|s)?\s+the\s+play\s+(?:here|on\s+this))\b/i,
   // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
   // gate). Save = the stretches the caddie just gave (from the conversation log);
   // recall = read them back. "save those stretches as my routine" / "what's my
@@ -393,6 +411,10 @@ export function tryLocalReply(
   // ── LAST SHOT recall ──
   if (RX.lastShot.test(t)) {
     return lastShotReply(t, lang);
+  }
+  // ── HOLE CHARACTERISTICS (course book) — before "what hole am I on" ──
+  if (RX.holeInfo.test(t)) {
+    return holeInfoReply(lang);
   }
   // ── HOLE ──
   if (RX.hole.test(t)) {
@@ -693,6 +715,36 @@ function lastShotReply(transcript: string, lang: LocalReplyLanguage): LocalReply
     : null;
   const dir = s.direction ?? null;
   return { text: L[lang].lastShot(club, dist, dir), queryType: 'last_shot' };
+}
+
+// 2026-06-14 (Tim — course book) — "what's this hole like / what do I watch for".
+// Answered OFFLINE from the anchored static course book (description/note + hazards),
+// supplemented by learned per-hole guidance (line/green) when the book is thin. Honest:
+// says it has no notes rather than inventing characteristics.
+function holeInfoReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const round = useRoundStore.getState();
+  const courseId = round.activeCourseId;
+  const hole = round.currentHole;
+  if (!courseId || typeof hole !== 'number' || hole <= 0) {
+    return { text: L[lang].noHoleInfo, queryType: 'hole_info' };
+  }
+  const sh = useCaddieMemoryStore.getState().getStaticHole(courseId, hole);
+  const parts: string[] = [];
+  if (sh?.description) parts.push(sh.description);
+  else if (sh?.note) parts.push(sh.note);
+  if (sh?.hazards && sh.hazards.length > 0) parts.push(L[lang].watchFor(sh.hazards.slice(0, 3)));
+  // Supplement with LEARNED guidance (your typical line / green read) when the static
+  // book has nothing — keeps the answer useful on courses with no fetched content.
+  if (parts.length === 0) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
+      const g = mod.getCourseHoleGuidance({ courseId, hole });
+      if (g?.text) parts.push(g.text);
+    } catch { /* learned guidance optional */ }
+  }
+  if (parts.length === 0) return { text: L[lang].noHoleInfo, queryType: 'hole_info' };
+  return { text: parts.join(' '), queryType: 'hole_info' };
 }
 
 function scoreReply(lang: LocalReplyLanguage): LocalReplyResult {

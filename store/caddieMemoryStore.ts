@@ -79,6 +79,37 @@ export interface PlayerMemory {
   updated_at: number;
 }
 
+// ─── Course Book (static, player-INDEPENDENT course knowledge) ───────────────
+// 2026-06-14 (Tim — "range book") — the static characteristics of a course/hole
+// (one-liner note, description, hazards, course tips, booking metadata). Anchored
+// ONCE when /api/course-content (and Places, Step 3) resolve, then it's persisted,
+// OFFLINE-available, and fed into the brain + the offline responder so the caddie can
+// describe a hole / its hazards with no signal. Distinct from the LEARNED, per-player
+// HoleMemory above (this is the same for everyone; learned memory grows per player).
+
+export interface StaticHoleKnowledge {
+  /** 6-12 word one-liner (from course-content hole_notes). */
+  note: string | null;
+  /** 2-3 sentence preview (from course-content hole_descriptions). */
+  description: string | null;
+  /** Hazard labels ("water left", "fairway bunker"), from geometry/content. */
+  hazards: string[];
+}
+
+export interface CourseBookEntry {
+  course_id: string;
+  name: string | null;
+  holes: Record<number, StaticHoleKnowledge>;
+  /** Course-wide strategic tips (course-content caddie_tips). */
+  tips: string[];
+  about: string | null;
+  // Step 3 — course metadata from Google Places (booking + offline phone-to-call).
+  website: string | null;
+  phone: string | null;
+  bookingUrl: string | null;
+  savedAt: number;
+}
+
 // ─── Bounds (keep the persisted blob small) ──────────────────────────────────
 
 const MIN_SAMPLES = 5;          // distances stay null until this many real shots
@@ -87,6 +118,8 @@ const MAX_REFLECTIONS = 10;
 const MAX_COURSE_NOTES = 12;
 const MAX_RECENT_FAULTS = 8;
 const MAX_TROUBLE = 6;
+const MAX_COURSE_TIPS = 8;        // course-wide caddie tips kept per course book entry
+const MAX_HOLE_HAZARDS = 6;       // hazard labels kept per hole
 
 // ─── Defaults (null-safe) ────────────────────────────────────────────────────
 
@@ -114,9 +147,31 @@ function emptyHole(hole: number): HoleMemory {
 
 interface CaddieMemoryState {
   players: Record<string, PlayerMemory>;
+  /** Static, player-independent course knowledge (the "range book"). */
+  courseBook: Record<string, CourseBookEntry>;
 
   /** Null-safe read — always returns a complete PlayerMemory (empty if new). */
   getPlayer: (playerId?: string) => PlayerMemory;
+
+  /** Null-safe reads for the course book (offline + brain consumers). */
+  getCourseBook: (courseId: string) => CourseBookEntry | null;
+  getStaticHole: (courseId: string, hole: number) => StaticHoleKnowledge | null;
+  /**
+   * Anchor static course knowledge into the book (best-effort, additive, merge).
+   * Only non-empty fields overwrite; absent fields preserve what's already saved
+   * so a later partial source (e.g. Places metadata) can't wipe earlier content.
+   */
+  saveCourseBook: (input: {
+    course_id: string;
+    name?: string | null;
+    holes?: { hole: number; note?: string | null; description?: string | null; hazards?: string[] }[];
+    tips?: string[];
+    about?: string | null;
+    website?: string | null;
+    phone?: string | null;
+    bookingUrl?: string | null;
+    nowMs: number;
+  }) => void;
 
   // Writers (all additive, best-effort). `playerId` defaults to the derived id.
   recordShot: (input: { club: string; carryYds: number | null; nowMs: number; playerId?: string }) => void;
@@ -142,10 +197,59 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
   persist(
     (set, get) => ({
       players: {},
+      courseBook: {},
 
       getPlayer: (playerId) => {
         const id = pid(playerId);
         return get().players[id] ?? emptyPlayer(id);
+      },
+
+      getCourseBook: (courseId) => {
+        if (!courseId) return null;
+        return get().courseBook?.[courseId] ?? null;
+      },
+
+      getStaticHole: (courseId, hole) => {
+        const book = get().courseBook?.[courseId];
+        return book?.holes?.[hole] ?? null;
+      },
+
+      saveCourseBook: ({ course_id, name, holes, tips, about, website, phone, bookingUrl, nowMs }) => {
+        if (!course_id) return;
+        set((s) => {
+          const prev: CourseBookEntry = s.courseBook?.[course_id] ?? {
+            course_id, name: name ?? null, holes: {}, tips: [], about: null,
+            website: null, phone: null, bookingUrl: null, savedAt: 0,
+          };
+          // Merge holes: only overwrite a field when the incoming value is present,
+          // so a hazards-only or note-only source can't wipe an existing description.
+          const holesMap: Record<number, StaticHoleKnowledge> = { ...prev.holes };
+          for (const h of holes ?? []) {
+            if (typeof h.hole !== 'number') continue;
+            const ph = holesMap[h.hole] ?? { note: null, description: null, hazards: [] };
+            holesMap[h.hole] = {
+              note: (h.note && h.note.trim()) ? h.note.trim() : ph.note,
+              description: (h.description && h.description.trim()) ? h.description.trim() : ph.description,
+              hazards: (h.hazards && h.hazards.length > 0)
+                ? Array.from(new Set(h.hazards.filter((x) => typeof x === 'string' && x.trim()))).slice(0, MAX_HOLE_HAZARDS)
+                : ph.hazards,
+            };
+          }
+          const next: CourseBookEntry = {
+            course_id,
+            name: (name && name.trim()) ? name.trim() : prev.name,
+            holes: holesMap,
+            tips: (tips && tips.length > 0)
+              ? Array.from(new Set(tips.filter((x) => typeof x === 'string' && x.trim()))).slice(0, MAX_COURSE_TIPS)
+              : prev.tips,
+            about: (about && about.trim()) ? about.trim() : prev.about,
+            website: (website && website.trim()) ? website.trim() : prev.website,
+            phone: (phone && phone.trim()) ? phone.trim() : prev.phone,
+            bookingUrl: (bookingUrl && bookingUrl.trim()) ? bookingUrl.trim() : prev.bookingUrl,
+            savedAt: nowMs,
+          };
+          return { courseBook: { ...s.courseBook, [course_id]: next } };
+        });
       },
 
       recordShot: ({ club, carryYds, nowMs, playerId }) => {
@@ -261,11 +365,16 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
     }),
     {
       name: 'caddie-memory-v1',
-      version: 1,
+      // 2026-06-14 — v2 adds the static `courseBook`. Migrate preserves all learned
+      // player memory and seeds an empty book; never throws, never wipes.
+      version: 2,
       storage: createJSONStorage(() => getPersistStorage()),
-      // Only `players` persists. Seed empty on a missing/old blob; never throw.
-      partialize: (s) => ({ players: s.players }),
-      migrate: (persisted) => (persisted ?? { players: {} }) as { players: Record<string, PlayerMemory> },
+      // `players` (learned, per-player) + `courseBook` (static, shared) both persist.
+      partialize: (s) => ({ players: s.players, courseBook: s.courseBook }),
+      migrate: (persisted) => {
+        const p = (persisted ?? {}) as Partial<{ players: Record<string, PlayerMemory>; courseBook: Record<string, CourseBookEntry> }>;
+        return { players: p.players ?? {}, courseBook: p.courseBook ?? {} };
+      },
     },
   ),
 );

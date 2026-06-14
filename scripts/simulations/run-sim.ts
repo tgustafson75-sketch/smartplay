@@ -2500,6 +2500,42 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — course book) — static per-hole knowledge (notes/hazards/tips) is
+// anchored ONCE into the CNS so it's persisted, OFFLINE-available, and fed into both the
+// brain context and the offline responder — the "range book" that backs no-signal play.
+check('Course book: per-hole knowledge anchored into CNS (offline + brain + offline-responder)',
+  (() => {
+    const store = read('store/caddieMemoryStore.ts');
+    const content = read('services/courseContentService.ts');
+    const retrieval = read('services/caddieMemoryRetrieval.ts');
+    const local = read('services/localStatusResponder.ts');
+    const storeOk =
+      /export interface CourseBookEntry/.test(store) &&
+      /courseBook: Record<string, CourseBookEntry>/.test(store) &&
+      /saveCourseBook: \(input:/.test(store) &&
+      /getStaticHole: \(courseId: string, hole: number\) => StaticHoleKnowledge \| null/.test(store) &&
+      // persisted (v2 migrate preserves players + seeds book)
+      /version: 2/.test(store) &&
+      /partialize: \(s\) => \(\{ players: s\.players, courseBook: s\.courseBook \}\)/.test(store) &&
+      /players: p\.players \?\? \{\}, courseBook: p\.courseBook \?\? \{\}/.test(store);
+    // writer: course-content anchors on BOTH fresh fetch and persisted-cache hit
+    const writerOk =
+      /function anchorCourseBook\(/.test(content) &&
+      (content.match(/anchorCourseBook\(courseId,/g) || []).length >= 2 &&
+      /saveCourseBook\(\{/.test(content);
+    // brain context surfaces the static hole note/hazards
+    const brainOk = /getStaticHole\(input\.courseId, input\.hole\)/.test(retrieval) &&
+      /Hole notes \(course book\)/.test(retrieval);
+    // offline responder answers "what's this hole / what do I watch for" from the book
+    const offlineOk =
+      /holeInfo:\s*\//.test(local) &&
+      /if \(RX\.holeInfo\.test\(t\)\) \{\s*\n\s*return holeInfoReply\(lang\)/.test(local) &&
+      /useCaddieMemoryStore\.getState\(\)\.getStaticHole\(courseId, hole\)/.test(local) &&
+      /queryType: 'hole_info'/.test(local);
+    return storeOk && writerOk && brainOk && offlineOk;
+  })(),
+  'static course knowledge (hole notes/descriptions/hazards/tips) is saved into a persisted, player-independent CNS course book the moment /api/course-content resolves (fresh OR cached), surfaced to the brain prompt, and answerable OFFLINE via a "what\'s this hole / hazards" intent — the range book that works with no signal');
+
 // 2026-06-14 (course book — imagery) — bundled courses carry 0,0 placeholder hole
 // coords; the old `!input.green` check let those through and built a Mapbox satellite
 // tile centered on 0°,0° (ocean off Africa) → the "parking lots / houses" thumbnails.
