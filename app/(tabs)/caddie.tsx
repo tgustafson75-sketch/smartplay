@@ -2012,10 +2012,14 @@ export default function CaddieTab() {
         // typical phone widths (~390-430px) in the stacked layout.
         const isWide = W >= 540;
         const cellTop = insets.top + 100;
-        // Phase AU — embedded SmartFinder card removed. Cells now only
-        // need to clear the green-arrow dropdown row (bottom: 92 + ib,
-        // height 52 → top at H − 144 − ib) plus a small buffer.
-        const cellMaxBottom = H - (150 + insets.bottom);
+        // Phase AU — embedded SmartFinder card removed. Cells need to clear the
+        // green-arrow dropdown row (bottom 92 + ib, height 52).
+        // 2026-06-13 (Tim) — they ALSO must clear the greeting/response BUBBLE so the
+        // SmartVision preview and the text never overlap. The bubble sits at
+        // bottom (isRoundActive ? 168 : 108) + ib and is up to 3 lines (~104px) tall;
+        // end the cells above it (never tighter than the prior 150 dropdown clearance).
+        const bubbleClearance = (isRoundActive ? 168 : 108) + insets.bottom + 104;
+        const cellMaxBottom = H - Math.max(150 + insets.bottom, bubbleClearance);
         if (isWide) {
           const cellW = (W - 36) / 2;
           const cellH = Math.min(360, cellMaxBottom - cellTop);
