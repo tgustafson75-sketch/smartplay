@@ -64,6 +64,7 @@ import { Ionicons } from '@expo/vector-icons';
 // 2026-05-27 — Fix EQ: toast feedback for capture results.
 import { useToastStore } from '../store/toastStore';
 import { getApiBaseUrl } from '../services/apiBase';
+import { ingestCapture } from '../services/courseCaptureIngest';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -704,6 +705,10 @@ function CameraSmartFinder({
                 const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
                 setRecording(false);
                 if (result?.uri) {
+                  // 2026-06-13 (Tim) — INGEST: a turn-while-recording clip is this hole's
+                  // panorama source → builds the course's spatial data as you play.
+                  void ingestCapture({ sourceUri: result.uri, kind: 'pano', hole: currentHole })
+                    .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
                   const Sharing = await import('expo-sharing');
                   const can = await Sharing.isAvailableAsync().catch(() => false);
                   if (can) {
@@ -724,6 +729,10 @@ function CameraSmartFinder({
             try {
               const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
               if (photo?.uri) {
+                // 2026-06-13 (Tim) — INGEST: every SmartFinder photo bootstraps this
+                // hole's real player's-eye imagery (course-data self-build).
+                void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole })
+                  .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
                 const Sharing = await import('expo-sharing');
                 const can = await Sharing.isAvailableAsync().catch(() => false);
                 if (can) {

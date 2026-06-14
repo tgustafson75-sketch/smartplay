@@ -16,6 +16,7 @@ import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
 import { ParallaxTilt } from '../ParallaxTilt';
+import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -87,6 +88,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [, setTick] = useState(0);
+  // 2026-06-13 (Tim) — course-data bootstrap: prefer a real captured shot of THIS hole
+  // (snapped in SmartFinder) over the generic Mapbox tile. Self-built course imagery.
+  const captured = useCourseCaptureStore(s => s.bestForward(activeCourseId, currentHole));
+  const capturedUri = captured?.kind === 'single' ? captured.uri : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +190,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     getLocalHoleImageById(activeCourseId, currentHole) ??
     getLocalHoleImage(activeCourse, currentHole);
 
-  if (curatedImage) {
+  // Prefer the player's own captured shot; fall back to the curated bundle. A captured
+  // shot (uri) and a curated require() are both valid Image sources.
+  const heroImageSource = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? null);
+
+  if (heroImageSource) {
     const fix = getLastFix();
     const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
     // Prefer the seeded geometry's tee/green if available; fall back to
@@ -239,7 +248,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
         <ParallaxTilt
           style={[styles.wrap, wrapDims]}
           radius={10}
-          background={<Image source={curatedImage} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+          background={<Image source={heroImageSource} style={StyleSheet.absoluteFill} resizeMode="cover" />}
         >
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>

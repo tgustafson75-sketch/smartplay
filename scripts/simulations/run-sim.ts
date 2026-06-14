@@ -1598,6 +1598,31 @@ check('No voice clash: quick instructions own the audio; page opener steps aside
   })(),
   'tutorial narration claims the audio (flag + stop-in-flight) and the page opener skips while it is up — one voice, the instructions');
 
+check('Course-data bootstrap: SmartFinder capture ingests → previews use your real shot',
+  // 2026-06-14 (Tim) — every SmartFinder photo/video tags to course/hole/GPS and builds
+  // that course's own imagery; the hole preview then prefers YOUR captured shot over the
+  // generic Mapbox tile. The 3D/Google-Earth SmartVision substrate, self-built as you play.
+  (() => {
+    const store = read('store/courseCaptureStore.ts');
+    const ingest = read('services/courseCaptureIngest.ts');
+    const sf = read('app/smartfinder.tsx');
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    return (
+      /export const useCourseCaptureStore = create/.test(store) && /bestForward:/.test(store) &&
+      /slice\(-MAX_PER_HOLE\)/.test(store) && /persist\(/.test(store) &&
+      // ingest copies the file to a persistent dir + tags course/hole/GPS
+      /FileSystem\.copyAsync/.test(ingest) && /addCapture\(courseId, input\.hole/.test(ingest) &&
+      /activeCourseId \?\? r\.previewCourseId/.test(ingest) &&
+      // wired into BOTH SmartFinder capture paths
+      /ingestCapture\(\{ sourceUri: photo\.uri, kind: 'single'/.test(sf) &&
+      /ingestCapture\(\{ sourceUri: result\.uri, kind: 'pano'/.test(sf) &&
+      // preview prefers the captured shot
+      /const capturedUri = captured\?\.kind === 'single'/.test(prev) &&
+      /capturedUri \? \(\{ uri: capturedUri \}/.test(prev)
+    );
+  })(),
+  'SmartFinder photo→single / video→pano ingest tagged to course/hole/GPS (bounded, persisted); hole preview prefers the captured shot');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
