@@ -519,13 +519,16 @@ export default function SmartMotion() {
   // left) instead of dead-center. Applied once for down-the-line, only until the
   // user drags the box (userMovedBallRef) or pose auto-anchors it to the feet. This
   // partition (player 2/3 vs ball 1/3) is what lets analysis scope golfer vs ball.
+  // NOT for putt mode — a putt is a ball→hole view, not a 2/3-player swing frame, so
+  // it keeps the centered default (DEFAULT_BALL_BOX), not the outer-third rig.
   const dtlDefaultAppliedRef = useRef(false);
   useEffect(() => {
     if (dtlDefaultAppliedRef.current || userMovedBallRef.current) return;
-    if (angle !== 'down_the_line') return;
+    if (angle !== 'down_the_line' || isPutt) return;
     const rig = defaultDtlRig(swingerHandedness);
     setDraftBall(rig.ball);
-    setDraftTarget(isPutt ? { x: rig.target.x, y: rig.target.y } : { x: rig.target.x, y: Math.max(EFFORT_TOP_CAP, rig.target.y) });
+    // (putt mode returned above) — DTL swing target sits up the frame, effort-capped.
+    setDraftTarget({ x: rig.target.x, y: Math.max(EFFORT_TOP_CAP, rig.target.y) });
     dtlDefaultAppliedRef.current = true;
   }, [angle, swingerHandedness, isPutt]);
   const [videoPaused, setVideoPaused] = useState(false); // review play/pause
