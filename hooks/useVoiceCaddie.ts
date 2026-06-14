@@ -629,6 +629,15 @@ export const useVoiceCaddie = ({
   // ── SEND TO BRAIN ─────────────────────────
 
   const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
+    // 2026-06-13 (Cecily) — if the player asked the caddie to SING, reshape the brain
+    // message into a playful "attempt to sing" prompt so the caddie gives it a go
+    // (charming, brief, kid-friendly) instead of answering flat or refusing.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
+      const sing = sa.detectSingRequest(message);
+      if (sing) message = sa.buildSingMessage(sing.song);
+    } catch { /* non-fatal — fall back to the literal message */ }
     try {
       const topObs = getTopObservations();
       // 2026-05-17 — record the use AFTER we read, so the bump

@@ -61,6 +61,7 @@ import { evaluateTeeGoal, describeTeeGoal } from '../../services/goals/teeScoreG
 import { defaultDtlRig, translateRig } from '../../services/cage/targetRig';
 import { distillConversation } from '../../services/conversationDistill';
 import { synthesizeRecapFromRecord } from '../../services/recapSynth';
+import { detectSingRequest, buildSingMessage } from '../../services/singAttempt';
 
 interface ScenarioResult {
   scenario: string;
@@ -1458,6 +1459,30 @@ check('Voice: persona switch never leaks the old voice for a turn (live-persona 
     );
   })(),
   'voice gender derives from the LIVE persona (not a stale param), so a mid-flight caddie switch never speaks the old voice for a turn');
+
+check('Caddie sings: a "sing X" request becomes a playful attempt prompt (Cecily)',
+  // 2026-06-13 — Cecily asked if the caddie can sing. TTS can't truly sing, but a sing
+  // request is reshaped into a brain prompt that makes the caddie give a charming,
+  // brief, kid-friendly ATTEMPT. Detection is narrow (no false positives on golf qs).
+  (() => {
+    const hit = detectSingRequest('can you sing let it go');
+    const named = detectSingRequest('Sing Baby Shark please');
+    const vague = detectSingRequest('sing a song');
+    const golf = detectSingRequest('what club for 150');
+    const praises = detectSingRequest('she was singing my praises');
+    const msg = hit ? buildSingMessage(hit.song) : '';
+    const wired = /detectSingRequest\(message\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      /message = sa\.buildSingMessage\(sing\.song\)/.test(read('hooks/useVoiceCaddie.ts'));
+    return (
+      hit?.song === 'let it go' &&
+      named?.song === 'Baby Shark' &&            // "please" stripped
+      vague?.song === null &&                    // "sing a song" → caddie picks
+      golf === null && praises === null &&       // no false positives
+      /SING REQUEST/.test(msg) && /Do NOT refuse/.test(msg) && /playful/i.test(msg) &&
+      wired
+    );
+  })(),
+  'sing requests reshape into a playful "give it a go" brain prompt (kid-friendly, never refuse); narrow detection; wired into the voice brain path');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
