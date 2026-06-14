@@ -2414,11 +2414,49 @@ check('Drive distance: "what did my driver do" finds the driver shot + GPS auto-
       /d >= 5 && d <= 500/.test(store) &&
       // never clobbers a measured distance_yards.
       /typeof x\.distance_yards === 'number' \? x\.distance_yards : gpsYds/.test(store) &&
-      // a GPS-completed driver still updates longestDrive + the CNS bag model.
-      /gpsCompleted/.test(store);
+      // 2026-06-14 (audit #5) — GPS distance DISPLAYS but does NOT train the bag:
+      // learning uses measuredCarry, which excludes a GPS-sourced distance_yards.
+      /const measuredCarry = \(sh: ShotResult\): number \| null =>/.test(store) &&
+      /sh\.distance_yards !== sh\.gps_distance_yards/.test(store) &&
+      /const driverYards = enriched\.club === 'Driver' \? measuredCarry\(enriched\) : null/.test(store) &&
+      !/gpsCompleted/.test(store); // the GPS-feeds-learning path was removed
     return askFindsDriver && gpsBackfill;
   })(),
-  'asking "how far was my drive" returns the last DRIVER shot; its distance is auto-filled from the GPS tee→ball total at back-fill time (jitter-floored, never overwriting a measured value) and that GPS drive feeds longestDrive + the learned bag');
+  'asking "how far was my drive" returns the last DRIVER shot; its distance is auto-filled from the GPS tee→ball total (jitter-floored, never overwriting a measured value) for DISPLAY only — the learned bag/longestDrive train on measuredCarry, never the GPS estimate (audit #5 honesty)');
+
+// 2026-06-14 (audit #1 — data loss) — endRound snapshotted `s = get()` then called
+// closeHoleEndLocation (which set()s shots), but built the record from the STALE
+// s.shots — so every saved round dropped the final-hole green-close + its distance.
+// Now the record reads the post-close shots.
+check('Round save: final-hole end_location persists (record built after closeHoleEndLocation)',
+  (() => {
+    const store = read('store/roundStore.ts');
+    return (
+      /const persistedShots = get\(\)\.shots;/.test(store) &&
+      /shots: \[\.\.\.persistedShots\]/.test(store) &&
+      !/shots: \[\.\.\.s\.shots\],/.test(store) // the stale-snapshot build is gone
+    );
+  })(),
+  'endRound rebuilds the saved record from the live post-close shots, so the final hole\'s green-close (and GPS distance) is no longer lost from every round');
+
+// 2026-06-14 (audit #2 — silent round-save loss) — zustand persist→AsyncStorage
+// swallowed setItem rejections, so a quota/disk failure lost a round with NO
+// breadcrumb (the documented round killer). The shared storage now logs every
+// write failure to the owner issue log (guarded against recursing on its own key).
+check('Persist: AsyncStorage write failures surface (no more silent round loss)',
+  (() => {
+    const s = read('services/ssrSafeStorage.ts');
+    return (
+      /const guardedStorage: StateStorage = \{/.test(s) &&
+      /reportPersistFailure\(name, err\)/.test(s) &&
+      /throw err;/.test(s) &&                                  // zustand still sees the rejection
+      /addAppEvent\('persist_write_failed'/.test(s) &&
+      /if \(key === ISSUE_LOG_KEY\) return;/.test(s) &&        // no write→fail→log→write loop
+      /const ISSUE_LOG_KEY = 'issue-log-v1'/.test(s) &&
+      /getPersistStorage\(\)[\s\S]{0,80}guardedStorage/.test(s)
+    );
+  })(),
+  'every persisted store now routes through a guarded storage that logs setItem failures (with the store key) to the owner issue log instead of silently losing the write — a lost round leaves a breadcrumb');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
   /version: 12/.test(read('store/settingsStore.ts')) &&

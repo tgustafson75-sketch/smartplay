@@ -1133,6 +1133,11 @@ export const useRoundStore = create<RoundState>()(
             if (green) get().closeHoleEndLocation(finalHole, green);
           }
         }
+        // 2026-06-14 (audit fix) — closeHoleEndLocation above mutates `shots`
+        // via set(), but the snapshot `s` was taken BEFORE it ran, so building
+        // the record from `s.shots` dropped the final-hole green-close (and its
+        // GPS distance) from every saved round. Re-read the live shots now.
+        const persistedShots = get().shots;
 
         // 2026-05-17 — gate on score > 0 to match getScoreVsPar()'s
         // semantics. Previously this counted 0-scores against par
@@ -1162,7 +1167,7 @@ export const useRoundStore = create<RoundState>()(
           mode: s.mode,
           scores: { ...s.scores },
           putts: { ...s.putts },
-          shots: [...s.shots],
+          shots: [...persistedShots],
           selectedTee: s.selectedTee,
           transportMode: s.transportMode,
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
@@ -1798,11 +1803,6 @@ export const useRoundStore = create<RoundState>()(
             lie_analysis: shot.lie_analysis ?? s.pendingLieAnalysis ?? null,
           };
           let backfilled = s.shots;
-          // Captures a shot whose GPS tee→ball distance we just computed during
-          // back-fill, so the longestDrive / CNS-bag updates below can learn from
-          // it (those normally only see the freshly-logged shot, which has no
-          // end_location yet — a driver's real number arrives one shot later).
-          let gpsCompleted: ShotResult | null = null;
           if (incomingStart) {
             // Find last shot on the same hole that lacks end_location and patch it.
             const lastOnHoleIdx = (() => {
@@ -1834,8 +1834,6 @@ export const useRoundStore = create<RoundState>()(
                   distance_yards:
                     typeof x.distance_yards === 'number' ? x.distance_yards : gpsYds,
                 };
-                // Learn from it below only if GPS actually contributed a number.
-                if (gpsYds != null) gpsCompleted = patched;
                 return patched;
               });
             }
@@ -1845,24 +1843,24 @@ export const useRoundStore = create<RoundState>()(
           // round, setPendingLieAnalysis writes a fresh one. This
           // prevents a stale lie from haunting multiple shots.
 
-          // 2026-06-04 — Auto-update longestDrive when a Driver shot
-          // with a real distance beats the player's current best.
-          // Profile store is dynamic-required to avoid a module cycle
-          // (playerProfileStore doesn't import roundStore today, but
-          // this side-channel update is a single fire-and-forget hop).
-          const driverYards = (() => {
-            // Consider both the freshly-logged shot AND a shot whose GPS
-            // tee→ball total we just back-filled (a driver's real number lands
-            // one shot later, when the player reaches the ball).
-            const candidates = [enriched, gpsCompleted].filter(Boolean) as ShotResult[];
-            let best: number | null = null;
-            for (const c of candidates) {
-              if (c.club !== 'Driver') continue;
-              const y = c.carry_distance ?? c.distance_yards ?? c.gps_distance_yards ?? null;
-              if (typeof y === 'number' && y > 0 && (best == null || y > best)) best = y;
-            }
-            return best;
-          })();
+          // 2026-06-14 (audit #5 — honesty) — the LEARNING signal for the bag/
+          // longestDrive. Airtime carry (acoustic/pose) or a MEASURED total only —
+          // NEVER the GPS tee→ball estimate. GPS has no per-fix accuracy here, so a
+          // weak fix could otherwise train a wrong yardage into the model and corrupt
+          // every future club call. GPS stays a DISPLAY value (it answers "what did my
+          // driver do"); it just doesn't teach the brain. distance_yards is treated as
+          // GPS-sourced (excluded) exactly when it equals gps_distance_yards.
+          const measuredCarry = (sh: ShotResult): number | null => {
+            if (typeof sh.carry_distance === 'number' && sh.carry_distance > 0) return sh.carry_distance;
+            if (typeof sh.distance_yards === 'number' && sh.distance_yards > 0 && sh.distance_yards !== sh.gps_distance_yards) return sh.distance_yards;
+            return null;
+          };
+
+          // 2026-06-04 — Auto-update longestDrive when a Driver shot with a real
+          // (measured) distance beats the player's current best. Profile store is
+          // dynamic-required to avoid a module cycle (playerProfileStore doesn't
+          // import roundStore today, but this side-channel update is a single hop).
+          const driverYards = enriched.club === 'Driver' ? measuredCarry(enriched) : null;
           if (driverYards != null) {
             try {
               // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1879,19 +1877,14 @@ export const useRoundStore = create<RoundState>()(
           // 2026-06-10 — Caddie CNS Phase 1: feed real carries into the learning
           // bag model. Additive + best-effort; nothing reads it yet (Phase 2).
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
-            const record = (sh: ShotResult) => {
-              const carry = sh.carry_distance ?? sh.distance_yards ?? sh.gps_distance_yards ?? null;
-              if (sh.club && typeof carry === 'number' && carry > 0) {
-                mem.useCaddieMemoryStore.getState().recordShot({ club: sh.club, carryYds: carry, nowMs: sh.timestamp ?? 0 });
-              }
-            };
-            record(enriched);
-            // The just-completed shot only had a distance once GPS back-filled it,
-            // so it was skipped at its own logShot — record it now (first time, no
-            // double-count: its carry/distance were null when it was logged).
-            if (gpsCompleted) record(gpsCompleted);
+            // 2026-06-14 (audit #5) — train the bag ONLY on a measured carry, never a
+            // GPS estimate (see measuredCarry above). Keeps the learned model honest.
+            const carry = measuredCarry(enriched);
+            if (enriched.club && carry != null) {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
+              mem.useCaddieMemoryStore.getState().recordShot({ club: enriched.club, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
+            }
           } catch (e) {
             console.log('[roundStore] caddie-memory recordShot failed (non-fatal):', e);
           }
