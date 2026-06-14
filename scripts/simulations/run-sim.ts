@@ -992,8 +992,8 @@ check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not 
       /function deviceSpeakFallback\(/.test(v) &&
       /Speech\.speak\(text, \{/.test(v) &&
       !/=\s*require\('expo-speech'\)/.test(v) &&                  // no crashy DYNAMIC require (static import only)
-      // wired into every failure path that used to go silent:
-      (v.match(/deviceSpeakFallback\(text, language, myId\)/g) || []).length >= 4 &&
+      // wired into every failure path that used to go silent (now gender-aware):
+      (v.match(/deviceSpeakFallback\(text, language, myId, effectiveGender\)/g) || []).length >= 4 &&
       // breaker-open (offline) path no longer just returns silent
       /Breaker open = we're offline\. Don't go mute/.test(v) &&
       // stopSpeaking cancels the device voice too
@@ -1001,6 +1001,29 @@ check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not 
     );
   })(),
   'a failed/timed-out/offline TTS fetch now speaks on the device instead of leaving the caddie silent');
+
+// 2026-06-14 (Tim) — the device-TTS fallback used the OS DEFAULT voice (often female),
+// so a male caddie (Kevin/Harry/Tank) read a finding in a jarring "robotic female"
+// voice. The fallback is now GENDER-AWARE: it derives gender from the LIVE persona
+// (above the outer try so the catch agrees too), tries to pick a matching device voice,
+// and deepens the pitch when a male voice is wanted but unmatchable.
+check('Device-TTS fallback respects caddie gender (no more "robotic female" Kevin)',
+  (() => {
+    const v = read('services/voiceService.ts');
+    return (
+      // signature carries gender, defaulted male so an old caller can't go female-by-default
+      /function deviceSpeakFallback\(text: string, language: 'en' \| 'es' \| 'zh', myId: number, gender: 'male' \| 'female' = 'male'\)/.test(v) &&
+      // tries a gender+language-matched device voice, then falls back to pitch deepening
+      /function pickDeviceVoice\(gender:/.test(v) &&
+      /const voiceId = pickDeviceVoice\(gender, language\)/.test(v) &&
+      /gender === 'male' \? 0\.85 : 1\.0/.test(v) &&
+      /Speech\.getAvailableVoicesAsync\(\)/.test(v) &&
+      // persona-derived gender is computed ABOVE the outer try so the network-fail
+      // catch speaks the right gender, not the stale caller param.
+      /Declared\s*\n\s*\/\/ ABOVE the outer try so the catch's device-TTS fallback/.test(v)
+    );
+  })(),
+  'when the server voice fails, the device fallback matches the caddie persona\'s gender (voice match or pitch-deepen) instead of defaulting to a robotic female OS voice');
 
 check('Intent fix: "on the center of the green" marks it — offline + routed (Lakes log)',
   // 2026-06-13 — Tim's flow: "I'm on the center of the green on hole 6, Lakes" must

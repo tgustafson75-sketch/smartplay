@@ -663,16 +663,62 @@ export const isSpeaking = (): boolean => currentSound !== null;
 // but spoken-and-useful beats silent. Best-effort: never throws.
 const SPEECH_LANG: Record<'en' | 'es' | 'zh', string> = { en: 'en-US', es: 'es-ES', zh: 'zh-CN' };
 let usingDeviceFallback = false;
-function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number): void {
+
+// 2026-06-14 (Tim — "robotic FEMALE voice that wasn't Kevin") — the device-TTS
+// fallback used the OS DEFAULT voice, which on many phones is female. So when the
+// server voice failed, a male caddie (Kevin/Harry/Tank) suddenly spoke in a
+// wrong-gender robotic voice. expo-speech has no gender API, but it DOES accept a
+// specific `voice` identifier + a `pitch`. We (a) try to pick a voice whose
+// name/identifier matches the requested gender for the language, and (b) deepen
+// the pitch when a male voice is wanted but none was matchable — so even the
+// default voice lands closer to the persona instead of jarringly female.
+const MALE_VOICE_TOKENS = ['male', 'daniel', 'arthur', 'aaron', 'fred', 'rishi', 'gordon', 'oliver', 'alex', 'tom', 'reed', 'rocko', 'eddy', 'diego', 'jorge', 'juan', 'carlos'];
+const FEMALE_VOICE_TOKENS = ['female', 'samantha', 'karen', 'moira', 'tessa', 'victoria', 'susan', 'allison', 'ava', 'zoe', 'nicky', 'fiona', 'monica', 'paulina', 'marisol', 'tingting', 'sinji'];
+let cachedDeviceVoices: { identifier?: string; name?: string; language?: string }[] | null = null;
+let deviceVoicesLoading: Promise<void> | null = null;
+function ensureDeviceVoicesLoaded(): void {
+  if (cachedDeviceVoices !== null || deviceVoicesLoading) return;
+  deviceVoicesLoading = (async () => {
+    try {
+      const v = await Speech.getAvailableVoicesAsync();
+      cachedDeviceVoices = Array.isArray(v) ? v : [];
+    } catch { cachedDeviceVoices = []; }
+  })();
+}
+/** Best-effort: a voice identifier whose name matches `gender` for `language`, or undefined. */
+function pickDeviceVoice(gender: 'male' | 'female', language: 'en' | 'es' | 'zh'): string | undefined {
+  if (!cachedDeviceVoices || cachedDeviceVoices.length === 0) return undefined;
+  const langPrefix = language; // expo Voice.language is e.g. 'en-US' / 'es-ES' / 'zh-CN'
+  const wanted = gender === 'male' ? MALE_VOICE_TOKENS : FEMALE_VOICE_TOKENS;
+  const avoid = gender === 'male' ? FEMALE_VOICE_TOKENS : MALE_VOICE_TOKENS;
+  const inLang = cachedDeviceVoices.filter(v => (v.language ?? '').toLowerCase().startsWith(langPrefix));
+  const pool = inLang.length ? inLang : cachedDeviceVoices;
+  // Prefer a voice whose name/identifier clearly matches the wanted gender and
+  // doesn't contain an opposite-gender token.
+  const match = pool.find(v => {
+    const hay = `${v.name ?? ''} ${v.identifier ?? ''}`.toLowerCase();
+    return wanted.some(t => hay.includes(t)) && !avoid.some(t => hay.includes(t));
+  });
+  return match?.identifier;
+}
+
+function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male'): void {
   if (!text || myId !== currentSpeechId) return;
+  ensureDeviceVoicesLoaded();
   try {
     Speech.stop(); // cancel any prior device utterance before starting a new one
     usingDeviceFallback = true;
     notifySpeaking(true);
     notifyCaption(text);
-    console.log('[voice] device-TTS fallback speaking (server unreachable) —', text.slice(0, 60));
+    const voiceId = pickDeviceVoice(gender, language);
+    // Deepen a wanted-male voice when we couldn't match an actual male voice, so a
+    // default female OS voice doesn't read a male caddie's line. Neutral otherwise.
+    const pitch = voiceId ? 1.0 : (gender === 'male' ? 0.85 : 1.0);
+    console.log('[voice] device-TTS fallback speaking (server unreachable) —', gender, voiceId ? `voice=${voiceId}` : `pitch=${pitch}`, '—', text.slice(0, 60));
     Speech.speak(text, {
       language: SPEECH_LANG[language] ?? 'en-US',
+      ...(voiceId ? { voice: voiceId } : {}),
+      pitch,
       onDone: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
       onStopped: () => { usingDeviceFallback = false; },
       onError: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
@@ -1050,6 +1096,24 @@ export const speak = async (
     return;
   }
 
+  // Persona is the source-of-truth selector for ElevenLabs voice routing.
+  // Read from settings store at request time (dynamic require avoids a
+  // module-load cycle since voiceService is imported very early). Declared
+  // ABOVE the outer try so the catch's device-TTS fallback speaks the SAME
+  // persona-derived gender (not the stale caller param) on a network failure.
+  let persona: string | null = null;
+  let effectiveGender = gender;
+  try {
+    persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
+    if (persona === 'serena') effectiveGender = 'female';
+    else if (persona === 'kevin' || persona === 'harry' || persona === 'tank') effectiveGender = 'male';
+    else if (persona === 'custom') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const g = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieGender;
+      if (g === 'male' || g === 'female') effectiveGender = g;
+    }
+  } catch { /* ignore */ }
+
   try {
     const abortController = new AbortController();
     currentAbortController = abortController;
@@ -1059,30 +1123,8 @@ export const speak = async (
     // A silent handoff/greeting was the visible symptom. 20s matches transcribe.
     const voiceTimeout = setTimeout(() => abortController.abort(), 20_000);
 
-    // Persona is the source-of-truth selector for ElevenLabs voice routing.
-    // Read from settings store at request time (dynamic require avoids a
-    // module-load cycle since voiceService is imported very early).
-    let persona: string | null = null;
-    let effectiveGender = gender;
-    try {
-      persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
-      // 2026-06-13 (Tim) — WRONG-VOICE-FOR-A-TURN fix. Persona is the source of truth and
-      // is read LIVE here, but `gender` was the caller's param — a stale closure value when
-      // the user switched caddie mid-flight, so the in-flight answer spoke the OLD voice for
-      // one turn (ElevenLabs used live persona; the OpenAI-fallback + server voice keyed off
-      // the stale gender). Derive gender from the LIVE persona so both agree on the switch.
-      if (persona === 'serena') effectiveGender = 'female';
-      else if (persona === 'kevin' || persona === 'harry' || persona === 'tank') effectiveGender = 'male';
-      // 2026-06-12 (Tim) — the CUSTOM caddie keeps its generated face but speaks with a
-      // real default voice for any unrecorded line: the user's male/female toggle maps to
-      // Kevin's onyx / Serena's nova on the server (which falls back on `gender` for the
-      // 'custom' persona). So a custom caddie always has a voice, never silence.
-      else if (persona === 'custom') {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const g = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieGender;
-        if (g === 'male' || g === 'female') effectiveGender = g;
-      }
-    } catch { /* ignore */ }
+    // (persona + effectiveGender already derived above so the catch's device-TTS
+    //  fallback agrees. WRONG-VOICE-FOR-A-TURN fix: live persona, not stale param.)
     // 2026-05-27 — Fix EX: snapshot the playback volume + rate NOW so
     // the TTS request, log, first createAsync, retry createAsync, and
     // applyRate all use the SAME persona's intensity dial. Prior code
@@ -1109,7 +1151,7 @@ export const speak = async (
       currentAbortController = null;
       logVoiceSilentFail('speak_circuit_degraded', { speechId: myId, textHead: text.slice(0, 60) });
       // Breaker open = we're offline. Don't go mute — speak it on the device.
-      deviceSpeakFallback(text, language, myId);
+      deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1144,7 +1186,7 @@ export const speak = async (
       logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
       cbRecordFailure('voice');
       // Server TTS errored (quota / 5xx) — fall back to the device voice.
-      deviceSpeakFallback(text, language, myId);
+      deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
     // Got bytes from the server → online; clear the breaker window.
@@ -1175,7 +1217,7 @@ export const speak = async (
       });
       logVoiceSilentFail('speak_small_payload', { speechId: myId, bytes: arrayBuffer.byteLength, language, textHead: text.slice(0, 40) });
       // Bad/empty audio blob — fall back to the device voice instead of going silent.
-      deviceSpeakFallback(text, language, myId);
+      deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1357,7 +1399,7 @@ export const speak = async (
       // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
       // mute — speak the line on the device instead. (AbortError = a newer
       // utterance preempted us; that correctly stays silent.)
-      deviceSpeakFallback(text, language, myId);
+      deviceSpeakFallback(text, language, myId, effectiveGender);
     }
   }
 });
