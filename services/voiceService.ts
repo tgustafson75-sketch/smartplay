@@ -132,12 +132,13 @@ export const RECORDING_OPTIONS: Audio.RecordingOptions = {
 // has spoken at least once (so we don't auto-stop on dead silence
 // before they start), end the recording early.
 const SILENCE_DB_THRESHOLD = -40;
-// 2026-06-04 — Bumped 2500 → 4000 (within Tim's "3-5s after user stops
-// speaking" target). 2.5s was cutting users off mid-thought when they
-// paused to choose a word; 4s gives natural breathing room without
-// crossing into "user wandered off" territory. All captureUtterance
-// callers inherit. Earlier 3000 → 2500 trim is reverted.
-const SILENCE_TIMEOUT_MS = 4000;
+// 2026-06-13 (Tim) — SNAP on silence. 4000ms made the caddie feel slow to react
+// ("doesn't snap silence well") vs an instant-feeling reference app. Dropped to
+// 1200ms so it endpoints quickly when you stop talking — still ~3-4x a normal
+// inter-word gap, so it doesn't cut a brief word-search pause. This is the single
+// snap knob: lower (~900) = snappier/risk cutting slow pausers; higher (~1800) =
+// safer/laggier. All captureUtterance callers inherit.
+const SILENCE_TIMEOUT_MS = 1200;
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 /**
