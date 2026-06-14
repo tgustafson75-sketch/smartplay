@@ -1426,6 +1426,22 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
   })(),
   'reflection learns course-less rounds; course memory gets real approach/trouble; voice brain sends merged live+CNS context');
 
+check('CNS G2: brain bag falls back to the shot-tracking bag when CNS is thin (conservative)',
+  // 2026-06-13 — the brain reads the CNS bag; ball-fit/scorecard/strategy read
+  // clubStatsStore. getCaddieContext now falls back to getLearnedClubDistances where
+  // the CNS bag lacks a club / is empty, so the brain isn't blind / divergent. CNS
+  // carry always wins where it exists (conservative — no override of real CNS data).
+  (() => {
+    const r = read('services/caddieMemoryRetrieval.ts');
+    return (
+      /getLearnedClubDistances\(\)/.test(r) &&
+      /statsBag\[input\.club\]/.test(r) &&                    // per-club fallback
+      /CNS carry always WINS where it exists/.test(r) &&      // conservative intent documented
+      /} else \{[\s\S]*?CNS bag empty[\s\S]*?Learned bag:/.test(r) // bag-line fallback only when CNS empty
+    );
+  })(),
+  'brain bag fills from clubStatsStore only where the CNS bag is thin/empty; CNS wins where present (conservative reconcile)');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

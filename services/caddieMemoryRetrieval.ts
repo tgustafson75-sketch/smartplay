@@ -88,6 +88,19 @@ export function getCaddieContext(input: {
       : null;
     const recentReflection = p.reflections[0]?.summary ?? null;
 
+    // 2026-06-13 (audit G2) — reconcile the two learned-bag models. clubStatsStore is
+    // the shot-tracking bag the rest of the app (ball-fit / scorecard / strategy) reads;
+    // the brain reads this CNS bag. Pull clubStats lazily so the brain can FALL BACK to
+    // it where the CNS bag is thin — so it never quotes a different (or no) yardage than
+    // the rest of the app. Conservative: the CNS carry always WINS where it exists;
+    // clubStats only fills gaps. getLearnedClubDistances returns real tracked clubs only.
+    let statsBag: Record<string, number> = {};
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cs = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+      statsBag = cs.getLearnedClubDistances();
+    } catch { /* clubStats optional */ }
+
     // promptBlock — built from the most decision-relevant facts, empties omitted.
     const lines: string[] = [];
     if (input.club) {
@@ -98,10 +111,21 @@ export function getCaddieContext(input: {
           (cm.dispersionYds != null ? ` (±${cm.dispersionYds}y)` : '') +
           ` from ${cm.samples} tracked shots.`,
         );
+      } else if (typeof statsBag[input.club] === 'number' && statsBag[input.club] > 0) {
+        // CNS hasn't learned this club yet — use the tracked carry the rest of the app uses.
+        lines.push(`Your learned ${input.club} carry: ~${Math.round(statsBag[input.club])}y (tracked).`);
       }
     }
     if (bag.length > 0) {
       lines.push(`Learned bag: ${bag.slice(0, 6).map((c) => `${c.club} ~${c.avgCarryYds}y`).join(', ')}.`);
+    } else {
+      // CNS bag empty — don't leave the brain blind when the app already knows the bag.
+      const entries = Object.entries(statsBag)
+        .filter(([, y]) => typeof y === 'number' && y > 0)
+        .sort((a, b) => b[1] - a[1]);
+      if (entries.length > 0) {
+        lines.push(`Learned bag: ${entries.slice(0, 6).map(([c, y]) => `${c} ~${Math.round(y)}y`).join(', ')}.`);
+      }
     }
     if (course) {
       const parts: string[] = [];
