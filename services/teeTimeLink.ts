@@ -46,11 +46,28 @@ function findDirectBookingUrl(courseName: string): string | null {
 
 /**
  * Open the course's tee-time booking flow. Strategy:
- *   1. If we have a curated direct-booking URL for this course → open it.
- *   2. Otherwise → Google search crafted to put the official booking
- *      page at the top of results.
+ *   1. The course book's anchored website/booking URL (from Google Places,
+ *      step 3) — the course's OWN site where its booking widget lives.
+ *   2. A curated direct-booking URL for this course.
+ *   3. Google search crafted to put the official booking page at the top.
  */
-export async function openTeeTimeSearch(courseName: string, locationHint?: string | null): Promise<void> {
+export async function openTeeTimeSearch(courseName: string, locationHint?: string | null, courseId?: string | null): Promise<void> {
+  // 1. Course book (Places-anchored) — the real site, if we've looked it up.
+  if (courseId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
+      const book = mem.useCaddieMemoryStore.getState().getCourseBook(courseId);
+      const url = book?.bookingUrl ?? book?.website ?? null;
+      if (url) {
+        console.log('[teeTimeLink] course-book site →', url);
+        await Linking.openURL(url);
+        return;
+      }
+    } catch (e) {
+      console.log('[teeTimeLink] course-book lookup failed, continuing:', e);
+    }
+  }
   const direct = findDirectBookingUrl(courseName);
   if (direct) {
     try {

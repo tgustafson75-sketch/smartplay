@@ -2500,6 +2500,36 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — course book, step 3) — Golf Course API has no website/booking, so
+// Google Places (name + coords → official website + phone) bridges it. Anchored into the
+// book → "Book Tee Time" deep-links the real site + offline phone-to-call. Client-side
+// (one fewer hop, OTA-able), degrades to the existing search if Places isn't enabled.
+check('Course book: Places lookup anchors website/phone; booking prefers the real site',
+  (() => {
+    const cp = read('services/coursePlaces.ts');
+    const tt = read('services/teeTimeLink.ts');
+    const screen = read('app/course/[course_id].tsx');
+    const lookupOk =
+      /export async function lookupCoursePlaces\(/.test(cp) &&
+      /findplacefromtext\/json/.test(cp) &&
+      /place\/details\/json/.test(cp) &&
+      // honest degrade when Places isn't enabled
+      /findData\.status === 'REQUEST_DENIED'/.test(cp) &&
+      // anchors into the persisted book + caches (skips re-query when known)
+      /saveCourseBook\(\{/.test(cp) &&
+      /if \(existing && \(existing\.website \|\| existing\.phone\)\)/.test(cp) &&
+      // direct third-party call (Google host), not our API spine
+      /https:\/\/maps\.googleapis\.com/.test(cp);
+    const bookingOk =
+      /export async function openTeeTimeSearch\(courseName: string, locationHint\?: string \| null, courseId\?: string \| null\)/.test(tt) &&
+      /const url = book\?\.bookingUrl \?\? book\?\.website \?\? null;/.test(tt);
+    const screenOk =
+      /lookupCoursePlaces\(\{/.test(screen) &&
+      /openTeeTimeSearch\(displayClubName \|\| course\.club_name, loc, course\.id\)/.test(screen);
+    return lookupOk && bookingOk && screenOk;
+  })(),
+  'a course\'s website/phone are looked up once via Google Places (name+coords from the Golf Course API), anchored into the persisted course book, and "Book Tee Time" opens the course\'s OWN site when known (falling back to the search); degrades cleanly when Places isn\'t enabled');
+
 // 2026-06-14 (Tim — course book) — static per-hole knowledge (notes/hazards/tips) is
 // anchored ONCE into the CNS so it's persisted, OFFLINE-available, and fed into both the
 // brain context and the offline responder — the "range book" that backs no-signal play.

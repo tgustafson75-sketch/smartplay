@@ -25,6 +25,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
+import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 
@@ -257,6 +258,16 @@ export default function CourseDetailScreen() {
     const loadTimeout = setTimeout(() => {
       if (!cancelled) setContentLoading(false);
     }, 15_000);
+    // 2026-06-14 (step 3) — anchor the course's website/phone into the book via
+    // Google Places (best-effort, one lookup per course, no-ops if Places isn't
+    // enabled on the key). Powers a real "Book Tee Time" deep-link + offline
+    // phone-to-call. Fire-and-forget; never blocks the screen.
+    void lookupCoursePlaces({
+      courseId: course.id,
+      name: localFriendlyName ?? course.club_name,
+      lat: course.location.latitude ?? null,
+      lng: course.location.longitude ?? null,
+    }).catch(() => undefined);
     fetchCourseContent({
       courseId: course.id,
       courseName: localFriendlyName ?? course.club_name,
@@ -383,7 +394,9 @@ export default function CourseDetailScreen() {
   const handleBookTeeTime = () => {
     if (!course) return;
     const loc = [course.location.city, course.location.state].filter(Boolean).join(', ');
-    void openTeeTimeSearch(displayClubName || course.club_name, loc);
+    // Pass courseId so the booking flow can open the course's OWN site when the
+    // course book has it (Places-anchored), before falling back to a search.
+    void openTeeTimeSearch(displayClubName || course.club_name, loc, course.id);
   };
 
   if (loading || !course) {
