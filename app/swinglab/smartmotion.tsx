@@ -49,6 +49,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { defaultDtlRig } from '../../services/cage/targetRig';
+import { warmSwingAnalysis } from '../../services/analysisWarmup';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
@@ -405,6 +406,11 @@ export default function SmartMotion() {
   const stopRecordingRef = useRef<() => void>(() => {});
 
   const [phase, setPhase] = useState<Phase>(clipUriParam ? 'analyzing' : 'setup');
+  // 2026-06-14 (Tim — speed) — warm the analysis lambda the moment we're in setup/
+  // recording, so the first swing's analysis lands HOT (no cold-start wait). Throttled.
+  useEffect(() => {
+    if (phase === 'setup' || phase === 'recording') warmSwingAnalysis();
+  }, [phase]);
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
   const [recordedSeconds, setRecordedSeconds] = useState(0);
 

@@ -1639,6 +1639,21 @@ check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on
   })(),
   'review video kicks playback on load + every imperative seek keeps videoPaused in sync — no more frozen-frame / dead Play tap');
 
+check('Analysis speed: pre-warm the lambda on record entry (kills cold-start)',
+  // 2026-06-14 (Tim) — the headline read already runs tier:quick (3 frames, Haiku, no
+  // Sonnet); the remaining delay is a cold Vercel function. Warm it on setup/recording
+  // entry (empty frames → fast no_frames path → no LLM cost). Throttled, best-effort.
+  (() => {
+    const w = read('services/analysisWarmup.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /export function warmSwingAnalysis/.test(w) && /\/api\/swing-analysis/.test(w) &&
+      /frames_base64: \[\]/.test(w) && /WARM_THROTTLE_MS/.test(w) &&
+      /if \(phase === 'setup' \|\| phase === 'recording'\) warmSwingAnalysis\(\)/.test(sm)
+    );
+  })(),
+  'swing-analysis lambda pre-warmed on record entry (empty-frames fast path, throttled) so the first real analysis lands hot');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
