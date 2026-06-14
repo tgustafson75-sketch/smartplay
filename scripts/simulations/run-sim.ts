@@ -2498,6 +2498,22 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — perf) — the live acoustic meter callback fired ~every 50ms and
+// piped each tick straight into setLiveDb, re-rendering the whole ~3300-line Smart
+// Motion component up to 20×/s while recording. Throttle the display state to ~120ms;
+// strike detection is unaffected (it runs inside startMeteredRecording).
+check('Perf: Smart Motion live meter state is throttled (no 20x/s full re-render)',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /const lastDbSetAtRef = useRef\(0\);/.test(sm) &&
+      /if \(now - lastDbSetAtRef\.current >= 120\) \{\s*\n\s*lastDbSetAtRef\.current = now;\s*\n\s*setLiveDb\(s\.dB\);/.test(sm) &&
+      // the raw every-tick setLiveDb(s.dB) callback form is gone
+      !/startMeteredRecording\(\(s\) => setLiveDb\(s\.dB\)\)/.test(sm)
+    );
+  })(),
+  'the live meter pipes the ~50ms acoustic callback into React state at most ~8×/s instead of ~20×/s, so recording no longer re-renders the whole Smart Motion screen every meter tick; detection (inside startMeteredRecording) is untouched');
+
 // 2026-06-14 (audit — store hygiene) — 4 persisted stores had no version+migrate, so
 // a future shape bump would silently wipe their state (zustand discards behind-version
 // state with no migrate). All four now carry version:1 + a passthrough migrate.

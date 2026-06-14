@@ -423,6 +423,9 @@ export default function SmartMotion() {
   // Camera cross-check of the acoustic strike (ball there → gone at impact).
   const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
   const [liveDb, setLiveDb] = useState<number | null>(null);
+  // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
+  // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
+  const lastDbSetAtRef = useRef(0);
   // 2026-06-12 (honesty) — true ONLY while a metered mic track is actually capturing
   // (cage / range / off-round course). The AcousticPickupCard's "Listening" badge gates
   // on this so we never claim to be listening when metering is off (course-in-round,
@@ -1637,7 +1640,18 @@ export default function SmartMotion() {
     if (useMetering) {
       // Parallel metered audio track for multi-strike detection.
       try {
-        meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
+        // 2026-06-14 (audit — perf) — the meter callback fires ~every 50ms; piping
+        // each tick straight into setLiveDb re-rendered the whole (~3300-line)
+        // component up to 20×/s. Throttle the React state to ~120ms (still smooth
+        // for the meter bar) — detection is unaffected (it runs inside
+        // startMeteredRecording, not off this display state).
+        meteringRef.current = await startMeteredRecording((s) => {
+          const now = Date.now();
+          if (now - lastDbSetAtRef.current >= 120) {
+            lastDbSetAtRef.current = now;
+            setLiveDb(s.dB);
+          }
+        });
       } catch {
         meteringRef.current = null;
       }
