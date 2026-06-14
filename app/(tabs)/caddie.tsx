@@ -713,6 +713,12 @@ export default function CaddieTab() {
   // icons. Replaces the giant full-width green pill Tim flagged as
   // "fucking giant ass button".
   const [toolsExpanded, setToolsExpanded] = useState(false);
+  // 2026-06-13 (Tim) — HIDE the pre-round quick-tools FAB. It accreted so many
+  // shortcuts it became harder to scan than the canonical ••• Tools menu (which is
+  // also easy to lose on small screens — see the accented pill in the top nav). The
+  // 3-dot menu is now the single tools entry. Block kept (flagged off) for an easy
+  // revert; symbols below stay referenced so there's no unused-var churn.
+  const SHOW_QUICK_TOOLS_FAB = false;
   // Phase 109-followup — Quick Log Shot modal visibility.
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [selectedPickedCourse, setSelectedPickedCourse] = useState<PickedCourse | null>(
@@ -2263,17 +2269,25 @@ export default function CaddieTab() {
               tools pill is ALWAYS in upper right"). At L4 the green-arrow
               dropdown also contains a Tools entry as a convenience, but
               this corner pill remains the canonical anchor. */}
+          {/* 2026-06-13 (Tim) — ACCENTED Tools pill: now the single tools entry (the
+              crowded quick-tools FAB is retired). Accent ring + label so it doesn't
+              get lost on small screens. */}
           <TouchableOpacity
-            style={styles.navBtn}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              paddingHorizontal: 11, height: 34, borderRadius: 17,
+              borderWidth: 1.5, borderColor: '#00C896',
+              backgroundColor: 'rgba(0,200,150,0.12)',
+            }}
             // 2026-05-15 — universal Tools menu. Opens the same
-            // sectioned GlobalToolsMenu the ••• pill on every other tab
-            // uses. The local showMoreMenu modal below stays mounted
-            // for now but no longer opens (zero-risk migration; will
-            // be removed in a follow-up once we've tested the global).
+            // sectioned GlobalToolsMenu the ••• pill on every other tab uses.
             onPress={() => useToolsMenuStore.getState().open()}
+            accessibilityRole="button"
+            accessibilityLabel="Open the Tools menu"
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="ellipsis-horizontal" size={24} color="#6b7d72" />
+            <Ionicons name="ellipsis-horizontal" size={20} color="#00C896" />
+            <Text style={{ color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 0.8 }}>TOOLS</Text>
           </TouchableOpacity>
           {/* Phase AT follow-up — FREE PLAY mode badge removed from main
               view per Tim "we can see that in upper right tools dropdown".
@@ -2770,8 +2784,10 @@ export default function CaddieTab() {
       {/* 2026-05-20 — Pre-round Tools FAB. Small right-side green
           chevron; tapping expands a row of tool icons to the LEFT.
           Replaces the prior full-width green pill (rejected: "fucking
-          giant ass button"). Renders only when no round is active. */}
-      {!isRoundActive ? (
+          giant ass button"). Renders only when no round is active.
+          2026-06-13 — HIDDEN (SHOW_QUICK_TOOLS_FAB=false): the ••• Tools menu is the
+          canonical entry now; this shortcut got too crowded to be useful. */}
+      {SHOW_QUICK_TOOLS_FAB && !isRoundActive ? (
         <View
           style={{
             position: 'absolute',
