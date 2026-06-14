@@ -857,30 +857,22 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
   notifySpeaking(true);
   await configureAudioForSpeech();
 
+  // 2026-06-14 (audit — perf) — write the base64 audio straight to disk with
+  // NATIVE base64 decoding (expo-file-system) instead of the old atob()+charCodeAt
+  // byte-loop, which ran on the JS thread right before playback (jank scaling with
+  // response length). Same proven path as poseDetection's frame persist.
+  const FS = await import('expo-file-system/legacy');
+  const uri = `${FS.cacheDirectory}kevin_voice_${Date.now()}.mp3`;
   try {
-    // Decode base64 → Uint8Array
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-
-    const audioFile = new File(Paths.cache, `kevin_voice_${Date.now()}.mp3`);
-    // Audit follow-up (2026-05-13) — expo-file-system's File.write() is
-    // synchronous (returns void), so the old `Promise.resolve(write())`
-    // wrapper was a no-op. On some Android devices the audio subsystem
-    // can briefly see a stale filesystem view if we read immediately
-    // after writing, producing the "[voice] speak timeout" symptom
-    // (empty/truncated playback). Yielding to a macrotask boundary
-    // gives the OS file system a tick to settle before createAsync
-    // reads via URI.
-    audioFile.write(bytes);
+    await FS.writeAsStringAsync(uri, base64, { encoding: FS.EncodingType.Base64 });
+    // Yield a macrotask so the OS filesystem view settles before createAsync reads
+    // the URI — prevents the rare stale-read "[voice] timeout" on some Android devices.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     if (myId !== currentSpeechId) return;
 
     const { sound, status } = await Audio.Sound.createAsync(
-      { uri: audioFile.uri },
+      { uri },
       { shouldPlay: true, volume: currentPlaybackVolume() },
     );
 
@@ -902,7 +894,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
         sound.setOnPlaybackStatusUpdate((s) => {
           if (!s.isLoaded) {
             // Externally unloaded (stopSpeaking) — release the queue.
-            try { audioFile.delete(); } catch {}
+            void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
@@ -912,7 +904,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
           }
           if (s.didJustFinish) {
             sound.unloadAsync().catch(() => {});
-            try { audioFile.delete(); } catch {}
+            void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);

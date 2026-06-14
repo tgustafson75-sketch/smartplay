@@ -2500,6 +2500,23 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — perf) — speakFromBase64 (the primary Kevin-voice path) decoded
+// the TTS base64 with an atob()+charCodeAt byte-loop on the JS thread right before
+// playback. Now it writes straight to disk with native base64 decoding (expo-file-system).
+check('Perf: Kevin voice base64 decodes natively to disk (no JS byte-loop)',
+  (() => {
+    const v = read('services/voiceService.ts');
+    return (
+      /writeAsStringAsync\(uri, base64, \{ encoding: FS\.EncodingType\.Base64 \}\)/.test(v) &&
+      // the JS byte-loop decode is gone
+      !/const binaryStr = atob\(base64\)/.test(v) &&
+      !/bytes\[i\] = binaryStr\.charCodeAt\(i\)/.test(v) &&
+      // cleanup uses the uri (deleteAsync) on the base64 path
+      /void FS\.deleteAsync\(uri, \{ idempotent: true \}\)/.test(v)
+    );
+  })(),
+  'speakFromBase64 writes the TTS audio to disk via native base64 decoding instead of an atob+charCodeAt loop on the JS thread before playback — removes per-response decode jank on the main caddie-voice path');
+
 // 2026-06-14 (audit — perf) — the live acoustic meter callback fired ~every 50ms and
 // piped each tick straight into setLiveDb, re-rendering the whole ~3300-line Smart
 // Motion component up to 20×/s while recording. Throttle the display state to ~120ms;
