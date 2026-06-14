@@ -1797,7 +1797,11 @@ export default function SmartMotion() {
       if (stopMode === 'range') {
         try {
           const pose = await import('../../services/poseDetection');
-          const durMs = await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          // 2026-06-13 (analysis speed) — reuse the duration metered FREE during
+          // recording; only probe as a last resort. The probe is an ≤8s Audio.Sound +
+          // thumbnail call, and RANGE was paying it on every swing despite having the
+          // number already (the cage branch below already reuses meteredDurationMs).
+          const durMs = meteredDurationMs ?? await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
           const swings = await pose.locateSwings(recorded.uri, durMs);
           if (swings.length > 0 && acousticStrikes.length > 0) {
             segsForAnalysis = correlateStrikesWithVideo(acousticStrikes, swings, durMs);
