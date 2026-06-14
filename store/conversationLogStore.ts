@@ -67,6 +67,10 @@ export const useConversationLog = create<ConversationLogState>()(
     {
       name: 'conversation-log',
       storage: createJSONStorage(() => getPersistStorage()),
+      // 2026-06-14 (audit — store hygiene) — explicit version + passthrough migrate
+      // so a future shape bump upgrades cleanly instead of wiping persisted state.
+      version: 1,
+      migrate: (s) => s as never,
     },
   ),
 );

@@ -566,6 +566,17 @@ interface RoundState {
 
 // ─── STORE ────────────────────────────────
 
+// 2026-06-14 (audit — store hygiene) — backstop cap on persisted roundHistory.
+// Each record carries its full shots[], and the whole history re-serializes on
+// every persist write, so unbounded growth (or a runaway-append bug) bloats the
+// AsyncStorage blob. 1000 rounds preserves every realistic user's full history
+// (years of play) while bounding the worst case. The deeper per-tick-serialization
+// win (relocating past-round shots off the hot blob) is a separate refactor that
+// wants device verification — see audit-backlog.
+const MAX_ROUND_HISTORY = 1000;
+const capHistory = (h: RoundRecord[]): RoundRecord[] =>
+  h.length > MAX_ROUND_HISTORY ? h.slice(-MAX_ROUND_HISTORY) : h;
+
 export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({
@@ -954,7 +965,7 @@ export const useRoundStore = create<RoundState>()(
           console.log(`[roundStore] addImportedRound dedupe: skipping duplicate ${dupKey} (existing ${dup.id})`);
           return dup.id;
         }
-        set(s => ({ roundHistory: [...s.roundHistory, record] }));
+        set(s => ({ roundHistory: capHistory([...s.roundHistory, record]) }));
 
         // 2026-06-11 (audit) — let the caller suppress per-round handicap math.
         // The bulk importer passes updateHandicap:false and runs ONE rebuild
@@ -1255,7 +1266,7 @@ export const useRoundStore = create<RoundState>()(
         //       recentCourseIds (locator UX context).
         set(state => ({
           isRoundActive: false,
-          roundHistory: [...state.roundHistory, record],
+          roundHistory: capHistory([...state.roundHistory, record]),
           currentHole: 1,
           currentYardage: null,
           userStatedYardage: null,

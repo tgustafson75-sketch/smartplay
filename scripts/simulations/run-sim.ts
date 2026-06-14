@@ -2498,6 +2498,35 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — store hygiene) — 4 persisted stores had no version+migrate, so
+// a future shape bump would silently wipe their state (zustand discards behind-version
+// state with no migrate). All four now carry version:1 + a passthrough migrate.
+check('Store hygiene: previously-unversioned stores carry version + migrate',
+  (() => {
+    const files = ['agentBrainStats', 'conversationLogStore', 'clubSelectionStore', 'practicePointsStore'];
+    return files.every(f => {
+      const s = read(`store/${f}.ts`);
+      return /version: 1,/.test(s) && /migrate: \(s\) => s as never,/.test(s);
+    });
+  })(),
+  'agentBrainStats / conversationLog / clubSelection / practicePoints all have an explicit version + passthrough migrate, so a future bump upgrades instead of wiping persisted state');
+
+// 2026-06-14 (audit — store hygiene) — roundHistory grew unbounded (each record
+// carries its full shots[] and the whole blob re-serializes on every persist write).
+// A generous backstop cap bounds the worst case at both append sites without dropping
+// realistic users' history.
+check('Store hygiene: roundHistory has a bounded-growth backstop cap',
+  (() => {
+    const s = read('store/roundStore.ts');
+    return (
+      /const MAX_ROUND_HISTORY = 1000;/.test(s) &&
+      /const capHistory = \(h: RoundRecord\[\]\): RoundRecord\[\] =>/.test(s) &&
+      /roundHistory: capHistory\(\[\.\.\.s\.roundHistory, record\]\)/.test(s) &&    // addImportedRound
+      /roundHistory: capHistory\(\[\.\.\.state\.roundHistory, record\]\)/.test(s)   // endRound
+    );
+  })(),
+  'roundHistory appends run through capHistory (max 1000) at both endRound and addImportedRound, bounding the persisted blob against runaway growth while preserving every realistic user\'s full history');
+
 // 2026-06-14 (audit — MED honesty) — two surfaces presented rough/placeholder
 // numbers as if real. SmartFinder putt distance (uncalibrated pixels→feet) now reads
 // "~N" + "FEET (EST)"; the course-detail generic placeholder layout (18×par-4×380y for

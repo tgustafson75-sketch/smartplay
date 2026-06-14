@@ -58,6 +58,11 @@ export const useAgentBrainStats = create<AgentBrainStatsState>()(
     {
       name: 'agent-brain-stats',
       storage: createJSONStorage(() => getPersistStorage()),
+      // 2026-06-14 (audit — store hygiene) — explicit version + passthrough migrate
+      // so a future shape bump has a safe upgrade path instead of silently wiping
+      // persisted state (zustand discards state whose version is behind with no migrate).
+      version: 1,
+      migrate: (s) => s as never,
     },
   ),
 );
