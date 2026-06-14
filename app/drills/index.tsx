@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
+import { QuickTutorial } from '../../components/QuickTutorial';
+import { SCREEN_HELP } from '../../services/screenHelp';
 
 // 2026-05-27 — Fix EF: pin Tank's drill first, Randy's drill second.
 // Tank's first video covers early extension (the most common diagnosis
@@ -122,6 +124,14 @@ export default function DrillsIndex() {
           ))}
         </View>
       </ScrollView>
+      {/* 2026-06-13 (Tim) — first-time drill orientation (text + caddie narration). */}
+      <QuickTutorial
+        slug="drills_intro"
+        title={SCREEN_HELP.drills.title}
+        iconName={SCREEN_HELP.drills.icon as never}
+        lines={SCREEN_HELP.drills.lines}
+        spokenText={SCREEN_HELP.drills.spoken}
+      />
     </SafeAreaView>
   );
 }

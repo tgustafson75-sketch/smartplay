@@ -56,6 +56,8 @@ import {
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
+import { QuickTutorial } from '../../components/QuickTutorial';
+import { SCREEN_HELP } from '../../services/screenHelp';
 import type { Course } from '../../types/course';
 import { getApiBaseUrl } from '../../services/apiBase';
 
@@ -1165,6 +1167,15 @@ export default function PlayTab() {
        </View>
       </ScrollView>
       </KeyboardAvoidingView>
+      {/* 2026-06-13 (Tim) — first-time quick orientation (text + caddie narration),
+          copy from the shared SCREEN_HELP source so it matches "how do I use this?". */}
+      <QuickTutorial
+        slug="play_intro"
+        title={SCREEN_HELP.play.title}
+        iconName={SCREEN_HELP.play.icon as never}
+        lines={SCREEN_HELP.play.lines}
+        spokenText={SCREEN_HELP.play.spoken}
+      />
     </SafeAreaView>
   );
 }

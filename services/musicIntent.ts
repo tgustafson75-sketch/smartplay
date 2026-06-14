@@ -10,6 +10,8 @@
 export function detectPlaySongRequest(raw: string): { query: string } | null {
   const t = (raw ?? '').trim();
   if (!t || !/\b(play|put\s+on)\b/i.test(t)) return null;
+  // "how do I play this / how to play …" is a HELP question, not a song request.
+  if (/\bhow\s+(?:do\s+i|to|can\s+i|should\s+i|does\s+(?:this|it))\s+play\b/i.test(t)) return null;
   // Exclude golf / app "play" phrases so we don't hijack on-course speech.
   if (/\bplay\s+(?:a\s+|the\s+)?(?:round|golf|nine|18|eighteen|hole|through|it\s+safe|safe|again|on|smart|the\s+\d)\b/i.test(t)) return null;
   if (/\blet'?s\s+play\b/i.test(t) && !/\bsong\b/i.test(t)) return null;

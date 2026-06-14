@@ -27,6 +27,8 @@ import { recommendBagForCourse } from '../../services/bagRecommendation';
 import { speakChunked, warmVoice, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
+import { QuickTutorial } from '../../components/QuickTutorial';
+import { SCREEN_HELP } from '../../services/screenHelp';
 import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -915,6 +917,15 @@ export default function Scorecard() {
         )}
 
       </ScrollView>
+      {/* 2026-06-13 (Tim) — the ONE scorecard exception: a first-time highlight of how
+          scoring works here (text + caddie narration). One-time, then it's out of the way. */}
+      <QuickTutorial
+        slug="scorecard_scoring"
+        title={SCREEN_HELP.scorecard.title}
+        iconName={SCREEN_HELP.scorecard.icon as never}
+        lines={SCREEN_HELP.scorecard.lines}
+        spokenText={SCREEN_HELP.scorecard.spoken}
+      />
     </SafeAreaView>
   );
 }

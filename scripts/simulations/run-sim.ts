@@ -63,6 +63,7 @@ import { distillConversation } from '../../services/conversationDistill';
 import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 import { detectSingRequest, buildSingMessage } from '../../services/singAttempt';
 import { detectPlaySongRequest } from '../../services/musicIntent';
+import { SCREEN_HELP, detectHelpRequest as detectScreenHelp } from '../../services/screenHelp';
 
 interface ScenarioResult {
   scenario: string;
@@ -1514,6 +1515,30 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
     );
   })(),
   'play-song searches the kid-safe server endpoint and opens the clean player; OTA-safe webview fallback; golf "play" phrases excluded');
+
+check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share one source',
+  // 2026-06-13 (Tim) — quick orientation (text + caddie narration) on the doing surfaces,
+  // from ONE SCREEN_HELP source so the first-time overlay and the on-demand answer match.
+  (() => {
+    // runtime: the shared source + detectors
+    const hasKeys = ['play', 'drills', 'scorecard', 'smartmotion', 'swinglab']
+      .every((k) => SCREEN_HELP[k]?.lines?.length >= 1 && SCREEN_HELP[k].spoken.length > 0 && SCREEN_HELP[k].lines.length <= 4);
+    const help = detectScreenHelp('how does the scorecard work')?.key === 'scorecard'
+      && detectScreenHelp('how do you use drills')?.key === 'drills'
+      && detectScreenHelp('how do I use this')?.key === 'swinglab'   // "this" → default overview
+      && detectScreenHelp('what club for 150') === null;             // no false positive
+    // wired: tutorials on Play/Drills/Scorecard pull from SCREEN_HELP; help in the voice path
+    const play = read('app/(tabs)/play.tsx');
+    const drills = read('app/drills/index.tsx');
+    const score = read('app/(tabs)/scorecard.tsx');
+    const voice = read('hooks/useVoiceCaddie.ts');
+    const wired = /slug="play_intro"[\s\S]*?SCREEN_HELP\.play\.spoken/.test(play) &&
+      /slug="drills_intro"[\s\S]*?SCREEN_HELP\.drills/.test(drills) &&
+      /slug="scorecard_scoring"[\s\S]*?SCREEN_HELP\.scorecard/.test(score) &&
+      /detectHelpRequest\(message\)/.test(voice) && /getScreenHelp\(help\.key\)/.test(voice);
+    return hasKeys && help && wired;
+  })(),
+  'one SCREEN_HELP source powers the first-time QuickTutorials (Play/Drills/Scorecard, ≤4 lines + narration) AND the on-demand "how do I use X" voice answer');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

@@ -632,6 +632,18 @@ export const useVoiceCaddie = ({
     // 2026-06-13 (Cecily) — if the player asked the caddie to SING, reshape the brain
     // message into a playful "attempt to sing" prompt so the caddie gives it a go
     // (charming, brief, kid-friendly) instead of answering flat or refusing.
+    // 2026-06-13 (Tim) — "how do I use this / how does X work" → speak the quick how-to
+    // for that feature (shared SCREEN_HELP copy, same as the first-time tutorials).
+    // Checked first so "how do I play this" is help, not a song request.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
+      const help = sh.detectHelpRequest(message);
+      if (help) {
+        const h = sh.getScreenHelp(help.key);
+        if (h) return { text: h.spoken, audioBase64: null, toolAction: null };
+      }
+    } catch { /* non-fatal */ }
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
