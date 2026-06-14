@@ -26,6 +26,7 @@
     { "src": "/api/preround",     "dest": "/api/preround.ts" },
     { "src": "/api/smartmotion",  "dest": "/api/smartmotion.ts" },
     { "src": "/api/kevin",        "dest": "/api/kevin.ts" },
+    { "src": "/api/youtube-search", "dest": "/api/youtube-search.ts" },
     { "src": "/api/briefing",     "dest": "/api/briefing.ts" },
     { "src": "/api/recap",        "dest": "/api/recap.ts" },
     { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },

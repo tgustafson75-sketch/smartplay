@@ -2754,7 +2754,10 @@ export default function CaddieTab() {
           pointerEvents="none"
         >
           <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
-          <Text style={styles.bubbleText} numberOfLines={3}>
+          {/* 2026-06-13 (Tim) — 3 lines let the bubble top ride up over the caddie's
+              mouth on the big-avatar view. 2 lines keeps it just above the shirt line.
+              (If it still rides up, lower the bubble `bottom` offset — single knob.) */}
+          <Text style={styles.bubbleText} numberOfLines={2}>
             {isRoundActive ? caddieResponse : shownText}
           </Text>
         </Animated.View>

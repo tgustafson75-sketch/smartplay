@@ -987,6 +987,11 @@ function AppNavigator() {
           name="practice/smartplan"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* 2026-06-13 — Jukebox: clean in-app YouTube song player (Tim/Cecily). */}
+        <Stack.Screen
+          name="jukebox"
+          options={{ animation: 'slide_from_bottom', headerShown: false }}
+        />
         {/* 2026-06-13 — Ball Fit: the brain matches a ball to your game (CNS). */}
         <Stack.Screen
           name="ball-fit"

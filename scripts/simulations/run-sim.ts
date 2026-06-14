@@ -62,6 +62,7 @@ import { defaultDtlRig, translateRig } from '../../services/cage/targetRig';
 import { distillConversation } from '../../services/conversationDistill';
 import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 import { detectSingRequest, buildSingMessage } from '../../services/singAttempt';
+import { detectPlaySongRequest } from '../../services/musicIntent';
 
 interface ScenarioResult {
   scenario: string;
@@ -1483,6 +1484,36 @@ check('Caddie sings: a "sing X" request becomes a playful attempt prompt (Cecily
     );
   })(),
   'sing requests reshape into a playful "give it a go" brain prompt (kid-friendly, never refuse); narrow detection; wired into the voice brain path');
+
+check('Music portal: "play [song]" → kid-safe search → clean in-app player (OTA-safe)',
+  // 2026-06-13 (Tim/Cecily) — "play X" searches the SERVER endpoint (key server-side,
+  // safeSearch=strict, embeddable only) and opens just that song in the clean player
+  // (embedded WebView on the native build; in-app browser fallback on older builds).
+  // Detection is narrow — golf "play" phrases never hijack it.
+  (() => {
+    const song = detectPlaySongRequest('can you play baby shark');
+    const golf = detectPlaySongRequest('play a round');
+    const safe = detectPlaySongRequest('play it safe');
+    const api = read('api/youtube-search.ts');
+    const svc = read('services/songPortal.ts');
+    const screen = read('app/jukebox.tsx');
+    const voice = read('hooks/useVoiceCaddie.ts');
+    const vercel = read('vercel.json');
+    return (
+      song?.query === 'baby shark' && golf === null && safe === null &&
+      // server: key stays server-side + kid-safe + embeddable
+      /process\.env\.YOUTUBE_API_KEY/.test(api) && /safeSearch:\s*'strict'/.test(api) &&
+      /videoEmbeddable:\s*'true'/.test(api) && /\/api\/youtube-search/.test(vercel) &&
+      // client search via the spine
+      /getApiBaseUrl\(\)\}\/api\/youtube-search\?q=/.test(svc) &&
+      // player is OTA-safe: native webview when present, in-app browser fallback otherwise
+      /UIManager\.getViewManagerConfig\?\.\('RNCWebView'\)/.test(screen) &&
+      /WebBrowser\.openBrowserAsync/.test(screen) &&
+      // wired into the voice path (short-circuits the brain with a spoken confirm)
+      /tryPlaySong\(message\)/.test(voice)
+    );
+  })(),
+  'play-song searches the kid-safe server endpoint and opens the clean player; OTA-safe webview fallback; golf "play" phrases excluded');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

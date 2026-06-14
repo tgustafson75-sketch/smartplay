@@ -638,6 +638,14 @@ export const useVoiceCaddie = ({
       const sing = sa.detectSingRequest(message);
       if (sing) message = sa.buildSingMessage(sing.song);
     } catch { /* non-fatal — fall back to the literal message */ }
+    // 2026-06-13 (Tim/Cecily) — "play [song]" → search the kid-safe portal and open the
+    // clean in-app player, short-circuiting the brain with a spoken confirmation.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
+      const handled = await ps.tryPlaySong(message);
+      if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null };
+    } catch { /* non-fatal — fall through to the brain */ }
     try {
       const topObs = getTopObservations();
       // 2026-05-17 — record the use AFTER we read, so the bump
