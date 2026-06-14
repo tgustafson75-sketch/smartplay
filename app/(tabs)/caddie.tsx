@@ -2277,13 +2277,13 @@ export default function CaddieTab() {
               tools pill is ALWAYS in upper right"). At L4 the green-arrow
               dropdown also contains a Tools entry as a convenience, but
               this corner pill remains the canonical anchor. */}
-          {/* 2026-06-13 (Tim) — ACCENTED Tools pill: now the single tools entry (the
-              crowded quick-tools FAB is retired). Accent ring + label so it doesn't
-              get lost on small screens. */}
+          {/* 2026-06-13 (Tim) — single tools entry (crowded quick-tools FAB retired).
+              Just the accented three-dot circle — no label needed, people know the
+              dots; the accent ring keeps it from getting lost on small screens. */}
           <TouchableOpacity
             style={{
-              flexDirection: 'row', alignItems: 'center', gap: 5,
-              paddingHorizontal: 11, height: 34, borderRadius: 17,
+              width: 30, height: 30, borderRadius: 15,
+              alignItems: 'center', justifyContent: 'center',
               borderWidth: 1.5, borderColor: '#00C896',
               backgroundColor: 'rgba(0,200,150,0.12)',
             }}
@@ -2292,10 +2292,9 @@ export default function CaddieTab() {
             onPress={() => useToolsMenuStore.getState().open()}
             accessibilityRole="button"
             accessibilityLabel="Open the Tools menu"
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color="#00C896" />
-            <Text style={{ color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 0.8 }}>TOOLS</Text>
+            <Ionicons name="ellipsis-horizontal" size={18} color="#00C896" />
           </TouchableOpacity>
           {/* Phase AT follow-up — FREE PLAY mode badge removed from main
               view per Tim "we can see that in upper right tools dropdown".
