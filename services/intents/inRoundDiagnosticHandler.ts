@@ -85,6 +85,25 @@ export const inRoundDiagnosticHandler: IntentHandler = {
       // The brain's stateful conversation buffer (Phase AR) carries
       // recent shot context across turns so the diagnostic call has
       // grounding from the prior caddie chatter.
+      // 2026-06-13 (audit G5) — the diagnostic ("why am I slicing") is exactly where
+      // learned tendencies + bag + live geometry help, yet it sent NO context. Compose
+      // the SAME merged live+CNS block the chat/voice paths send. Best-effort.
+      let unified_context_block: string | null = null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const retr = require('../caddieMemoryRetrieval') as typeof import('../caddieMemoryRetrieval');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const uv = require('../unifiedVisionContext') as typeof import('../unifiedVisionContext');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const rs = require('../../store/roundStore') as typeof import('../../store/roundStore');
+        const round = rs.useRoundStore.getState();
+        const live = (await uv.getUnifiedVisionContext()).promptBlock;
+        unified_context_block = retr.mergeMemoryIntoContext(
+          live,
+          retr.getCaddieContext({ courseId: round.activeCourseId, hole: round.currentHole, club: round.club }).promptBlock,
+        );
+      } catch { /* context optional — diagnostic still answers without it */ }
+
       const payload = {
         message: patternText,
         language: ctx.language ?? 'en',
@@ -96,6 +115,7 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         persona,
         personaIntensity,
         tankSoftIntro,
+        unified_context_block,
       };
       const res = await fetch(`${apiUrl}/api/kevin`, {
         method: 'POST',

@@ -1414,10 +1414,14 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
     const g3 = /const approachShot = \[\.\.\.holeShots\]\.reverse\(\)\.find/.test(rs) &&
       /approachClub = approachShot\?\.club \?\? null/.test(rs) &&
       /score - par >= 2 \? \['played 2\+ over'\] : \[\]/.test(rs);
-    // G5: voice path fetches the live block and MERGES it with the CNS block
+    // G5: voice path fetches the live block and MERGES it with the CNS block; the
+    // reasoning-heavy diagnostic handler (was sending NO context) now sends it too.
+    const diag = read('services/intents/inRoundDiagnosticHandler.ts');
     const g5 = /import \{ getCaddieContext, mergeMemoryIntoContext \}/.test(voice) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voice) &&
-      /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voice);
+      /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voice) &&
+      /unified_context_block = retr\.mergeMemoryIntoContext\(/.test(diag) &&
+      /unified_context_block,/.test(diag); // added to the diagnostic payload
     return g1 && g3 && g5;
   })(),
   'reflection learns course-less rounds; course memory gets real approach/trouble; voice brain sends merged live+CNS context');
