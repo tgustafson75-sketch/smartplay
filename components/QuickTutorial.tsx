@@ -75,7 +75,11 @@ export function QuickTutorial({
 
   // Self-managed visibility — open on first mount when the slug hasn't
   // been marked seen. Parent override (visible prop) wins when defined.
-  const [selfOpen, setSelfOpen] = useState<boolean>(() => !tutorialsSeen?.[slug]);
+  // 2026-06-13 (Tim) — TESTING: keep quick instructions defaulted ON + skippable so we
+  // feel the flow and don't miss them. While true they show on EVERY entry (ignore the
+  // seen flag) but stay one-tap skippable. Flip to false to restore once-only behavior.
+  const FORCE_SHOW_DURING_TESTING = true;
+  const [selfOpen, setSelfOpen] = useState<boolean>(() => FORCE_SHOW_DURING_TESTING || !tutorialsSeen?.[slug]);
   const open = typeof visible === 'boolean' ? visible : selfOpen;
 
   const handleDismiss = () => {

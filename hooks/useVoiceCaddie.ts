@@ -658,6 +658,13 @@ export const useVoiceCaddie = ({
       const handled = await ps.tryPlaySong(message);
       if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null };
     } catch { /* non-fatal — fall through to the brain */ }
+    // 2026-06-13 (Tim) — plain-speak: if the user asked for it simple (or signals they're
+    // new), reshape so the brain answers short, jargon-free, and conversational.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
+      if (pl.detectPlainSpeakRequest(message)) message = pl.buildPlainSpeakPrefix() + message;
+    } catch { /* non-fatal */ }
     try {
       const topObs = getTopObservations();
       // 2026-05-17 — record the use AFTER we read, so the bump

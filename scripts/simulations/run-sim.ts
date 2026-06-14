@@ -64,6 +64,7 @@ import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 import { detectSingRequest, buildSingMessage } from '../../services/singAttempt';
 import { detectPlaySongRequest } from '../../services/musicIntent';
 import { SCREEN_HELP, detectHelpRequest as detectScreenHelp } from '../../services/screenHelp';
+import { detectPlainSpeakRequest } from '../../services/plainSpeak';
 
 interface ScenarioResult {
   scenario: string;
@@ -1539,6 +1540,28 @@ check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share
     return hasKeys && help && wired;
   })(),
   'one SCREEN_HELP source powers the first-time QuickTutorials (Play/Drills/Scorecard, ≤4 lines + narration) AND the on-demand "how do I use X" voice answer');
+
+check('Voice polish: in-app "play" stays in-app · plain-speak mode · tutorials default-on',
+  // 2026-06-13 (Tim) — (a) the word "play" must not break things: in-app playback never
+  // routes to YouTube. (b) plain-english signals → shorter conversational brain reply
+  // (not a global dumb-down). (c) quick instructions stay ON + skippable during testing.
+  (() => {
+    // (a) in-app playback never becomes a YouTube song; real songs still do.
+    const inAppSafe = ['play my last swing', 'play that back', 'replay my swing', 'play the clip', 'play my round']
+      .every((q) => detectPlaySongRequest(q) === null) &&
+      detectPlaySongRequest('play despacito')?.query === 'despacito';
+    // (b) plain-speak detection + wiring (reshapes the brain message, doesn't dumb-down all)
+    const plain = detectPlainSpeakRequest('explain that simply') && detectPlainSpeakRequest('how do I learn golf') &&
+      !detectPlainSpeakRequest('what club for 150');
+    const voice = read('hooks/useVoiceCaddie.ts');
+    const wired = /detectPlainSpeakRequest\(message\)/.test(voice) && /buildPlainSpeakPrefix\(\) \+ message/.test(voice);
+    // (c) tutorials forced on during testing, still skippable
+    const tut = read('components/QuickTutorial.tsx');
+    const forced = /FORCE_SHOW_DURING_TESTING = true/.test(tut) &&
+      /FORCE_SHOW_DURING_TESTING \|\| !tutorialsSeen/.test(tut);
+    return inAppSafe && plain && wired && forced;
+  })(),
+  'in-app play never hits YouTube; plain-speak reshapes only on signal; quick instructions default-on + skippable for testing');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
