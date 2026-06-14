@@ -293,6 +293,9 @@ export default function PlayTab() {
   // back doesn't lose the selection.
   const setupTee = useRoundStore(s => s.selectedTee);
   const setSetupTee = useRoundStore(s => s.setSelectedTee);
+  // 2026-06-13 (Tim) — walking vs cart for this round.
+  const setupTransport = useRoundStore(s => s.transportMode);
+  const setSetupTransport = useRoundStore(s => s.setTransportMode);
 
   const [searchKind, setSearchKind] = useState<SearchKind>('courses');
   const [query, setQuery] = useState('');
@@ -1041,6 +1044,30 @@ export default function PlayTab() {
               >
                 <AppIcon name="trophy" size={13} color="#00C896" />
                 <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.tournament')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 2026-06-13 (Tim) — Getting around: walking vs cart. Stored on
+                roundStore.transportMode + persisted onto the round record. */}
+            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.getting_around', { defaultValue: 'GETTING AROUND' })}</Text>
+            <View style={styles.factorRow}>
+              <TouchableOpacity
+                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'walking' && styles.chipActive]}
+                onPress={() => setSetupTransport('walking')}
+                accessibilityRole="button"
+                accessibilityLabel="Walking this round"
+              >
+                <AppIcon name="walk" size={14} color={setupTransport === 'walking' ? '#0a1410' : '#00C896'} />
+                <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'walking' && styles.chipTextActive]}>{t('play.walking', { defaultValue: 'Walking' })}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'cart' && styles.chipActive]}
+                onPress={() => setSetupTransport('cart')}
+                accessibilityRole="button"
+                accessibilityLabel="Riding a cart this round"
+              >
+                <AppIcon name="car-sport" size={14} color={setupTransport === 'cart' ? '#0a1410' : '#00C896'} />
+                <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'cart' && styles.chipTextActive]}>{t('play.cart', { defaultValue: 'Cart' })}</Text>
               </TouchableOpacity>
             </View>
 

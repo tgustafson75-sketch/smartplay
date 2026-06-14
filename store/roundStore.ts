@@ -90,6 +90,12 @@ export type ExternalContext = {
 // added without a schema change.
 export type TeeColor = 'unspecified' | 'gold' | 'blue' | 'white' | 'red';
 
+// 2026-06-13 (Tim) — how the player is getting around this round. Set on the Play
+// tab; persisted on the round record. Informational today (recorded per round, fed to
+// caddie/recap context), and the hook for future cart-mark GPS fallback + walking
+// fatigue/pace awareness + honest step/distance interpretation (cart ≠ walked).
+export type TransportMode = 'walking' | 'cart';
+
 /**
  * Phase Q.5b Component 3 — single-source-of-truth green centroid lookup.
  * Reads courseGeometryService first (the authoritative paid-tier data
@@ -212,6 +218,8 @@ export interface RoundRecord {
   // (services/goals/teeScoreGoal) can evaluate "break 90 from the reds" honestly.
   // Optional: rounds that predate this (and imports) read as 'unspecified' = untagged.
   selectedTee?: TeeColor;
+  // 2026-06-13 — walking vs cart (Play tab). Optional; older rounds omit it.
+  transportMode?: TransportMode;
   // 2026-06-13 (Tim) — short caddie summary shown on the dashboard Recent Rounds.
   // For new rounds the rich LLM recap (planStorage) is preferred; this is a
   // deterministic baseline, also backfilled onto past in-app rounds that predate
@@ -304,6 +312,8 @@ interface RoundState {
   // default until a UI surface forces a choice. The recap layer
   // shows the played tee so the user's score is contextual.
   selectedTee: TeeColor;
+  // 2026-06-13 — walking vs cart for this round (Play tab setup).
+  transportMode: TransportMode;
 
   // Phase 409 — TightLie pending result. The lie analysis completes
   // BEFORE the player hits the shot, so it can't be attached to a
@@ -380,9 +390,11 @@ interface RoundState {
       // today (per-tee coordinates aren't wired into SmartFinder math
       // yet). Defaults to 'white' when omitted.
       selectedTee?: TeeColor;
+      transportMode?: TransportMode;
     },
   ) => void;
   setSelectedTee: (color: TeeColor) => void;
+  setTransportMode: (m: TransportMode) => void;
 
   // Phase 409 — TightLie pending lie analysis.
   setPendingLieAnalysis: (analysis: import('../services/lieAnalysisService').LieAnalysis | null) => void;
@@ -590,12 +602,15 @@ export const useRoundStore = create<RoundState>()(
       active_ghost: null,
       // Phase 405 wave 3 — tee box selection. 'unspecified' until user picks.
       selectedTee: 'unspecified',
+      // 2026-06-13 — walking vs cart; default walking (the engaged/health default).
+      transportMode: 'walking',
 
       // Phase 409 — TightLie pending lie analysis. Cleared when a shot is
       // logged (its value is copied onto the shot.lie_analysis).
       pendingLieAnalysis: null,
 
       setSelectedTee: (color) => set({ selectedTee: color }),
+      setTransportMode: (m) => set({ transportMode: m }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
 
@@ -692,6 +707,7 @@ export const useRoundStore = create<RoundState>()(
           // the prior selection (if user picked one on the Play tab),
           // else 'unspecified' for back-compat with callers predating wave 3.
           selectedTee: options.selectedTee ?? prev.selectedTee ?? 'unspecified',
+          transportMode: options.transportMode ?? prev.transportMode ?? 'walking',
           currentHole: 1,
           holeNotes: {},
           currentYardage: holes[0]?.distance ?? null,
@@ -1043,6 +1059,7 @@ export const useRoundStore = create<RoundState>()(
           emotionalLog: [],
           pendingLieAnalysis: null,
           selectedTee: 'unspecified',
+          transportMode: 'walking',
           nineHoleMode: false,
           isCompetition: false,
           roundNotes: '',
@@ -1138,6 +1155,7 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts },
           shots: [...s.shots],
           selectedTee: s.selectedTee,
+          transportMode: s.transportMode,
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
         };
         // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
@@ -1234,6 +1252,7 @@ export const useRoundStore = create<RoundState>()(
           emotionalLog: [],
           pendingLieAnalysis: null,
           selectedTee: 'unspecified',
+          transportMode: 'walking',
           nineHoleMode: false,
           isCompetition: false,
           roundNotes: '',

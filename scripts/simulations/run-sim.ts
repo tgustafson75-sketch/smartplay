@@ -1377,6 +1377,27 @@ check('Recap speed: stored round renders INSTANTLY from the record (no 30s spin)
   })(),
   'synthesizeRecapFromRecord builds a renderable recap from the stored round; screen shows it instantly, no 30s poll for stored rounds');
 
+check('Play tab: walking vs cart setting persisted on the round (Tim)',
+  // 2026-06-13 — transportMode (walking/cart) set on the Play tab, stored on roundStore
+  // + persisted onto the round record (mirrors selectedTee). Honest data capture; the
+  // hook for future cart-GPS / fatigue-aware caddie / honest step interpretation.
+  (() => {
+    const rs = read('store/roundStore.ts');
+    const play = read('app/(tabs)/play.tsx');
+    return (
+      /export type TransportMode = 'walking' \| 'cart'/.test(rs) &&
+      /transportMode: TransportMode;/.test(rs) &&             // state field
+      /setTransportMode: \(m: TransportMode\) => void;/.test(rs) &&
+      /setTransportMode: \(m\) => set\(\{ transportMode: m \}\)/.test(rs) &&
+      /transportMode: s\.transportMode,/.test(rs) &&          // persisted on the record
+      /transportMode: options\.transportMode \?\? prev\.transportMode \?\? 'walking'/.test(rs) &&
+      // Play tab chips wired to the store
+      /useRoundStore\(s => s\.transportMode\)/.test(play) &&
+      /setSetupTransport\('walking'\)/.test(play) && /setSetupTransport\('cart'\)/.test(play)
+    );
+  })(),
+  'walking/cart set on Play tab → roundStore.transportMode → persisted on the round record (like selectedTee)');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
