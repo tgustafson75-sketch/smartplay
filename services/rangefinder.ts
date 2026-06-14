@@ -1,4 +1,5 @@
 import type { RangefinderLock } from '../types/smartfinder';
+import { destinationPoint } from '../utils/geoDistance';
 
 function makeId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -40,33 +41,9 @@ function degToRad(d: number): number {
   return (d * Math.PI) / 180;
 }
 
-function projectPosition(
-  lat: number,
-  lng: number,
-  headingDeg: number,
-  distanceM: number,
-): { lat: number; lng: number } {
-  const R = 6371000;
-  const latR = degToRad(lat);
-  const headR = degToRad(headingDeg);
-  const dR = distanceM / R;
-
-  const newLatR = Math.asin(
-    Math.sin(latR) * Math.cos(dR) +
-      Math.cos(latR) * Math.sin(dR) * Math.cos(headR),
-  );
-  const newLngR =
-    degToRad(lng) +
-    Math.atan2(
-      Math.sin(headR) * Math.sin(dR) * Math.cos(latR),
-      Math.cos(dR) - Math.sin(latR) * Math.sin(newLatR),
-    );
-
-  return {
-    lat: (newLatR * 180) / Math.PI,
-    lng: (newLngR * 180) / Math.PI,
-  };
-}
+// 2026-06-14 (audit — dedup) — the local spherical destination-point projection was
+// identical math to utils/geoDistance.destinationPoint (same R, same asin/atan2). Use
+// the shared one; it takes yards (we already compute distYards from clampedM).
 
 export function computeDistance(input: DistanceComputeInput): DistanceComputeOutput {
   const {
@@ -123,11 +100,10 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
   const headingOffsetDeg = (tap_x_normalized - 0.5) * CAMERA_HFOV_DEG;
   const projectedHeading = ((compass_heading + headingOffsetDeg) % 360 + 360) % 360;
 
-  const target = projectPosition(
-    user_position.lat,
-    user_position.lng,
+  const target = destinationPoint(
+    { lat: user_position.lat, lng: user_position.lng },
     projectedHeading,
-    clampedM,
+    distYards,
   );
 
   return {

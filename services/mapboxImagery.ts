@@ -30,7 +30,7 @@
  */
 
 import { File, Paths } from 'expo-file-system';
-import { haversineMeters } from '../utils/geoDistance';
+import { haversineMeters, bearingDegrees } from '../utils/geoDistance';
 
 const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
 const MAPBOX_STYLE = 'mapbox/satellite-v9';
@@ -63,14 +63,6 @@ export function isMapboxConfigured(): boolean {
   return MAPBOX_TOKEN.length > 0;
 }
 
-function bearingDegrees(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const φ1 = a.lat * Math.PI / 180;
-  const φ2 = b.lat * Math.PI / 180;
-  const y = Math.sin(dLng) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dLng);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
 
 function autoZoom(yardage: number, par: number): number {
   // Tighter view on short holes, wider on long.

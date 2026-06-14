@@ -1665,17 +1665,19 @@ check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on
 check('Analysis speed: pre-warm the lambda on record entry (kills cold-start)',
   // 2026-06-14 (Tim) — the headline read already runs tier:quick (3 frames, Haiku, no
   // Sonnet); the remaining delay is a cold Vercel function. Warm it on setup/recording
-  // entry (empty frames → fast no_frames path → no LLM cost). Throttled, best-effort.
+  // entry. 2026-06-14 (audit dedup) — consolidated onto the established
+  // prewarmSwingAnalysis ({mode:'warmup'}, server-supported, throttled + force option);
+  // the duplicate analysisWarmup.ts (warmSwingAnalysis) was removed.
   (() => {
-    const w = read('services/analysisWarmup.ts');
+    const w = read('services/swingAnalysisWarmup.ts');
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      /export function warmSwingAnalysis/.test(w) && /\/api\/swing-analysis/.test(w) &&
-      /frames_base64: \[\]/.test(w) && /WARM_THROTTLE_MS/.test(w) &&
-      /if \(phase === 'setup' \|\| phase === 'recording'\) warmSwingAnalysis\(\)/.test(sm)
+      /export function prewarmSwingAnalysis/.test(w) && /\/api\/swing-analysis/.test(w) &&
+      /mode: 'warmup'/.test(w) && /WARMUP_DEDUPE_MS/.test(w) &&
+      /if \(phase === 'setup' \|\| phase === 'recording'\) prewarmSwingAnalysis\(\)/.test(sm)
     );
   })(),
-  'swing-analysis lambda pre-warmed on record entry (empty-frames fast path, throttled) so the first real analysis lands hot');
+  'swing-analysis lambda pre-warmed on record entry via the single consolidated prewarmSwingAnalysis (mode:warmup fast path, throttled) so the first real analysis lands hot');
 
 // 2026-06-14 (Tim) — quick-tier payload: 3 frames at 512px (down from 640) shrinks the
 // per-frame base64 ~36% so the UPLOAD leg lands faster on weak cellular, without losing
