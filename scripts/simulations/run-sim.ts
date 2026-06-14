@@ -1323,6 +1323,31 @@ check('Self-growing agent: local hit-rate counts memory-backed local answers (G4
   })(),
   'memory-backed local answers reclassify cloud→local so localHitRate reflects CNS growth, not just the regex precheck');
 
+check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA-safe, honest)',
+  // 2026-06-13 — Tim's "mind-blown" moment: snap the view, the multimodal brain reads
+  // the scene meta (water/trees/sky/leaves) GROUNDED in the measured wind/temp/distance,
+  // and ties it to how to play + think. v1 reuses /api/kevin (no server deploy). Honest:
+  // camera = qualitative scene; weather service = the wind number (brain told NOT to
+  // estimate wind from pixels).
+  (() => {
+    const svc = read('services/sceneReadService.ts');
+    const ctx = read('services/sceneReadContext.ts');
+    const sf = read('app/smartfinder.tsx');
+    return (
+      // service reuses the existing multimodal brain pipe via the spine
+      /getApiBaseUrl\(\)\}\/api\/kevin/.test(svc) && /image_base64: input\.imageBase64/.test(svc) &&
+      /image_media_type/.test(svc) && /unified_context_block: ctx\.block/.test(svc) &&
+      /use that wind number/i.test(svc) &&                      // honesty in the instruction
+      // sensor truth uses MEASURED weather, hands the brain the number, never fabricates
+      /getCachedWeatherEvenIfStale/.test(ctx) && /use THIS number — do not estimate wind from the image/.test(ctx) &&
+      /SENSOR TRUTH \(measured/.test(ctx) &&
+      // wired into Smart Finder: capture → resize → readScene → result card
+      /import\('\.\.\/services\/sceneReadService'\)/.test(sf) && /readScene\(\{ imageBase64/.test(sf) &&
+      /Read the scene/i.test(sf) && /SCENE READ/.test(sf)
+    );
+  })(),
+  'scene read snaps the view, grounds it in measured wind/temp via /api/kevin multimodal, renders + speaks the mental approach; no fabricated wind; OTA-safe');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

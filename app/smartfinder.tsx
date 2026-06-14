@@ -412,6 +412,12 @@ function CameraSmartFinder({
   // second tap stops it cleanly.
   const [captureMode, setCaptureMode] = useState<'picture' | 'video'>('picture');
   const [recording, setRecording] = useState(false);
+  // 2026-06-13 — Scene Read (Tim's "mind-blown" moment): snap the view, the
+  // multimodal brain reads the meta scene (water/trees/sky/leaves) grounded in the
+  // MEASURED wind/temp/distance, and ties it to how to play + think. OTA-safe (reuses
+  // /api/kevin); honest (camera = qualitative scene, weather = the wind number).
+  const [sceneReading, setSceneReading] = useState(false);
+  const [sceneResult, setSceneResult] = useState<string | null>(null);
   // Mic permission is required for video audio. Reusing the existing
   // pattern from cage-mode / quick-record (request on demand, not at
   // screen mount — keeps the GPS-only photo flow from prompting for
@@ -572,6 +578,56 @@ function CameraSmartFinder({
         style={{ position: 'absolute', right: 16, bottom: insets.bottom + 110, gap: 12, alignItems: 'center' }}
         pointerEvents="box-none"
       >
+        {/* 2026-06-13 — READ THE SCENE: snap → multimodal brain reads the meta scene
+            + measured wind/temp → how to play it + how to think. Standard/target only
+            (not putt). */}
+        {(mode === 'standard' || mode === 'target') && (
+          <TouchableOpacity
+            onPress={async () => {
+              if (sceneReading || !cameraRef.current) return;
+              setSceneReading(true);
+              setSceneResult(null);
+              try {
+                const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
+                if (!photo?.uri) throw new Error('no photo');
+                const IM = await import('expo-image-manipulator');
+                const manip = await IM.manipulateAsync(
+                  photo.uri,
+                  [{ resize: { width: 1024 } }],
+                  { compress: 0.7, format: IM.SaveFormat.JPEG, base64: true },
+                );
+                if (!manip.base64) throw new Error('no base64');
+                const svc = await import('../services/sceneReadService');
+                const result = await svc.readScene({ imageBase64: manip.base64 });
+                if (result) {
+                  setSceneResult(result.text);
+                  try {
+                    const s = useSettingsStore.getState();
+                    void speak(result.text, s.voiceGender, s.language ?? 'en', getApiBaseUrl(), { userInitiated: true })
+                      ?.catch?.(() => undefined);
+                  } catch { /* spoken is best-effort */ }
+                } else {
+                  useToastStore.getState().show('Scene read unavailable — check your signal.');
+                }
+              } catch (e) {
+                console.log('[smartfinder] scene read failed', e);
+                useToastStore.getState().show('Scene read failed — try again.');
+              } finally {
+                setSceneReading(false);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Read the scene"
+            style={{
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: sceneReading ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.55)',
+              borderWidth: 1.5, borderColor: '#88F700',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={sceneReading ? 'sync' : 'eye'} size={20} color="#88F700" />
+          </TouchableOpacity>
+        )}
         {mode === 'target' && (
           <TouchableOpacity
             onPress={() => setLocked(v => !v)}
@@ -729,6 +785,30 @@ function CameraSmartFinder({
       <View style={[styles.cameraToggleWrap, { top: insets.top + 70 }]} pointerEvents="box-none">
         <SmartFinderModeToggle mode={mode} onChange={onModeChange} />
       </View>
+
+      {/* SCENE READ result — the caddie's meta read + mental approach, over a dark
+          card so it's legible against the bright frame. Tap to dismiss. */}
+      {sceneResult != null && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setSceneResult(null)}
+          style={{
+            position: 'absolute', left: 16, right: 16, bottom: insets.bottom + 110,
+            backgroundColor: 'rgba(8,13,10,0.94)', borderRadius: 16, borderWidth: 1,
+            borderColor: 'rgba(136,247,0,0.35)', padding: 16,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Scene read. Tap to dismiss."
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <Ionicons name="eye" size={14} color="#88F700" />
+            <Text style={{ color: '#88F700', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 }}>SCENE READ</Text>
+            <View style={{ flex: 1 }} />
+            <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
+          </View>
+          <Text style={{ color: '#ffffff', fontSize: 14, lineHeight: 20 }}>{sceneResult}</Text>
+        </TouchableOpacity>
+      )}
     </GestureHandlerRootView>
   );
 }
