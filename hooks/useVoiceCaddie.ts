@@ -18,7 +18,7 @@ import {
 } from '../services/voiceService';
 import { initFillerLibrary } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
-import { getCaddieContext } from '../services/caddieMemoryRetrieval';
+import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
@@ -731,6 +731,16 @@ export const useVoiceCaddie = ({
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
 
+      // 2026-06-13 (audit G5) — the voice path was sending ONLY the CNS memory slice;
+      // the LIVE context block (GPS/geometry/hazards/recent shots) the chat path sends
+      // was missing. Fetch it and MERGE (same as hooks/useKevin) so the in-round voice
+      // brain sees everything. Best-effort; null on failure → unchanged behavior.
+      let liveBlock: string | null = null;
+      try {
+        const uv = await import('../services/unifiedVisionContext');
+        liveBlock = (await uv.getUnifiedVisionContext()).promptBlock;
+      } catch { /* live context optional */ }
+
       const res = await fetch(apiUrl + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -762,9 +772,12 @@ export const useVoiceCaddie = ({
           courseContext,
           courseIntelligence,
           // 2026-06-10 — CNS Phase 2: learned-memory slice (bag, course/hole
-          // history, tendencies) via the block the server already pastes.
-          // Additive + sync + never-throws; empty memory → null → unchanged.
-          unified_context_block: getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock || null,
+          // history, tendencies). 2026-06-13 (audit G5): now MERGED with the live
+          // context block above (was CNS-only) so the voice brain matches the chat path.
+          unified_context_block: mergeMemoryIntoContext(
+            liveBlock,
+            getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock,
+          ),
           roundMode,
           patternInsights,
           ghostContext,

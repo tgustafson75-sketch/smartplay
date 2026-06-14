@@ -1163,17 +1163,27 @@ export const useRoundStore = create<RoundState>()(
         // + best-effort; nothing reads it yet (Phase 2 retrieval). Reuses the
         // record we just built so it's consistent with roundHistory.
         try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
+          // Build per-hole data ONCE (course-independent). 2026-06-13 (audit G3):
+          // feed REAL approachClub (last clubbed shot that isn't the tee shot) +
+          // trouble (hole played 2+ over par) into memory instead of null/[].
+          const holesData = Object.entries(s.scores)
+            .filter(([, sc]) => typeof sc === 'number' && sc > 0)
+            .map(([holeStr, sc]) => {
+              const hole = Number(holeStr);
+              const par = s.courseHoles.find(h => h.hole === hole)?.par ?? null;
+              const holeShots = s.shots.filter(x => x.hole === hole);
+              const teeClub = holeShots[0]?.club ?? null;
+              const approachShot = [...holeShots].reverse().find(x => !!x.club && x !== holeShots[0]);
+              const approachClub = approachShot?.club ?? null;
+              const score = sc as number;
+              const trouble = par != null && score - par >= 2 ? ['played 2+ over'] : [];
+              return { hole, par, score, teeClub, approachClub, trouble };
+            });
+
+          // Per-COURSE memory — only when we know the course.
           if (s.activeCourseId) {
-            const holesData = Object.entries(s.scores)
-              .filter(([, sc]) => typeof sc === 'number' && sc > 0)
-              .map(([holeStr, sc]) => {
-                const hole = Number(holeStr);
-                const par = s.courseHoles.find(h => h.hole === hole)?.par ?? null;
-                const teeClub = s.shots.find(x => x.hole === hole)?.club ?? null;
-                return { hole, par, score: sc as number, teeClub, approachClub: null, trouble: [] as string[] };
-              });
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
             mem.useCaddieMemoryStore.getState().recordRoundEnd({
               round_id: record.id,
               course_id: s.activeCourseId,
@@ -1181,43 +1191,40 @@ export const useRoundStore = create<RoundState>()(
               nowMs: Date.now(),
               holes: holesData,
             });
-            // CNS Phase 3 — capture a durable, HONEST BASELINE reflection of
-            // this round (deterministic from real scores; the recap's LLM
-            // summary enriches it later via recordReflection). Phase 2 retrieval
-            // surfaces the most-recent reflection back to the brain ("last
-            // round you...").
-            const holesPlayed = holesData.length;
-            if (holesPlayed > 0) {
-              const scoreLine = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
-              const summary = `${scoreLine} through ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}${s.activeCourse ? ` at ${s.activeCourse}` : ''}.`;
-              const takeaways: string[] = [];
-              const trouble = holesData
-                .filter(h => h.par != null && (h.score - (h.par as number)) >= 2)
-                .map(h => `hole ${h.hole}`);
-              if (trouble.length > 0) takeaways.push(`Trouble holes: ${trouble.slice(0, 3).join(', ')}.`);
-              // 2026-06-13 — CNS ingestion (audit G1): distill what the player SAID
-              // this round into durable takeaways so the dialogue actually feeds the
-              // brain (it was captured but stranded). Honest/narrow — only
-              // high-confidence stated signals; [] when nothing matched.
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const convo = require('./conversationLogStore') as typeof import('./conversationLogStore');
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const distill = require('../services/conversationDistill') as typeof import('../services/conversationDistill');
-                const startedAt = s.roundStartTime ?? 0;
-                const roundTurns = convo.useConversationLog.getState().turns.filter(t => t.at >= startedAt);
-                for (const note of distill.distillConversation(roundTurns)) takeaways.push(note);
-              } catch (e) {
-                console.log('[roundStore] conversation distill failed (non-fatal):', e);
-              }
-              mem.useCaddieMemoryStore.getState().recordReflection({
-                round_id: record.id,
-                course_id: s.activeCourseId,
-                summary,
-                keyTakeaways: takeaways,
-                nowMs: Date.now(),
-              });
+          }
+
+          // Player-level REFLECTION — 2026-06-13 (audit G1 bug): runs REGARDLESS of
+          // course. The player's stated miss/focus/carry + score are course-independent
+          // facts; gating this on activeCourseId meant local/manual rounds never learned
+          // anything. course_id is null for those — the reflection is still kept.
+          const holesPlayed = holesData.length;
+          if (holesPlayed > 0) {
+            const scoreLine = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
+            const summary = `${scoreLine} through ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}${s.activeCourse ? ` at ${s.activeCourse}` : ''}.`;
+            const takeaways: string[] = [];
+            const troubleHoles = holesData.filter(h => h.trouble.length > 0).map(h => `hole ${h.hole}`);
+            if (troubleHoles.length > 0) takeaways.push(`Trouble holes: ${troubleHoles.slice(0, 3).join(', ')}.`);
+            // CNS ingestion (audit G1): distill what the player SAID this round into
+            // durable takeaways so the dialogue feeds the brain. Honest/narrow — only
+            // high-confidence stated signals; [] when nothing matched.
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const convo = require('./conversationLogStore') as typeof import('./conversationLogStore');
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const distill = require('../services/conversationDistill') as typeof import('../services/conversationDistill');
+              const startedAt = s.roundStartTime ?? 0;
+              const roundTurns = convo.useConversationLog.getState().turns.filter(t => t.at >= startedAt);
+              for (const note of distill.distillConversation(roundTurns)) takeaways.push(note);
+            } catch (e) {
+              console.log('[roundStore] conversation distill failed (non-fatal):', e);
             }
+            mem.useCaddieMemoryStore.getState().recordReflection({
+              round_id: record.id,
+              course_id: s.activeCourseId ?? null,
+              summary,
+              keyTakeaways: takeaways,
+              nowMs: Date.now(),
+            });
           }
         } catch (e) {
           console.log('[roundStore] caddie-memory recordRoundEnd failed (non-fatal):', e);

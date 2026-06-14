@@ -1398,6 +1398,30 @@ check('Play tab: walking vs cart setting persisted on the round (Tim)',
   })(),
   'walking/cart set on Play tab → roundStore.transportMode → persisted on the round record (like selectedTee)');
 
+check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/trouble (G3) + voice context merge (G5)',
+  // 2026-06-13 — re-audit pass. G1 bug: the reflection/distill was nested under
+  // if(activeCourseId), so local/manual rounds never learned. G3: course memory got
+  // approachClub:null / trouble:[]. G5: the voice brain path sent only the CNS slice,
+  // not the merged live context (chat path already merged).
+  (() => {
+    const rs = read('store/roundStore.ts');
+    const voice = read('hooks/useVoiceCaddie.ts');
+    // G1: reflection persists course-less (nullable course_id) and isn't gated on activeCourseId
+    const g1 = /course_id: s\.activeCourseId \?\? null,/.test(rs) &&
+      /Player-level REFLECTION/.test(rs) &&
+      /runs REGARDLESS of/.test(rs);
+    // G3: real approach club (last clubbed non-tee shot) + trouble (2+ over) fed to memory
+    const g3 = /const approachShot = \[\.\.\.holeShots\]\.reverse\(\)\.find/.test(rs) &&
+      /approachClub = approachShot\?\.club \?\? null/.test(rs) &&
+      /score - par >= 2 \? \['played 2\+ over'\] : \[\]/.test(rs);
+    // G5: voice path fetches the live block and MERGES it with the CNS block
+    const g5 = /import \{ getCaddieContext, mergeMemoryIntoContext \}/.test(voice) &&
+      /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voice) &&
+      /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voice);
+    return g1 && g3 && g5;
+  })(),
+  'reflection learns course-less rounds; course memory gets real approach/trouble; voice brain sends merged live+CNS context');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
@@ -2336,20 +2360,25 @@ check('Caddie CNS Phase 2: retrieval is sync, never-throws, gated, honest',
     /live GPS still wins/.test(retrievalSrc),
   'getCaddieContext returns a compact null-safe slice, can never throw, is flag-gated, and tells the brain memory is a prior (GPS still wins live)');
 
-check('Caddie CNS Phase 2 wired into BOTH brain paths (additive, server-pasted block)',
+check('Caddie CNS Phase 2 wired into BOTH brain paths (live + memory merged)',
+  // 2026-06-13 (audit G5) — voice path upgraded: it now MERGES the live context block
+  // with the CNS slice (was CNS-only), matching useKevin. Both paths send the merged
+  // unified_context_block the server pastes — no server change.
   /mergeMemoryIntoContext\(\s*\n?\s*unifiedPromptBlock/.test(kevinHookSrc) &&
-    /unified_context_block: getCaddieContext\(\{ courseId: activeCourseId, hole: currentHole, club \}\)\.promptBlock/.test(voiceHookSrc),
-  'typed-chat (useKevin) and voice (useVoiceCaddie) both fold the memory slice into unified_context_block — the field the server already pastes — so no server change and live builders stay as fallback');
+    /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voiceHookSrc) &&
+    /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voiceHookSrc),
+  'typed-chat (useKevin) AND voice (useVoiceCaddie) both merge the LIVE context block with the CNS memory slice into unified_context_block — the field the server already pastes');
 
 // 2026-06-10 — CNS Phase 3 (reflection loop) + Phase 4 (signal-independence).
 const memStoreSrc = read('store/caddieMemoryStore.ts');
 const retrSrc = read('services/caddieMemoryRetrieval.ts');
 check('Caddie CNS Phase 3: durable round reflections (baseline + recap enrichment, deduped)',
-  /CNS Phase 3 — capture a durable, HONEST BASELINE reflection/.test(roundSrc) &&
+  // 2026-06-13 (audit G1 fix) — the baseline reflection now runs course-LESS too.
+  /Player-level REFLECTION/.test(roundSrc) &&
     /recordReflection\(\{/.test(roundSrc) &&
     /CNS Phase 3 — enrich the round's durable reflection/.test(read('services/recapGenerator.ts')) &&
     /p\.reflections\.filter\(\(r\) => r\.round_id !== round_id\)/.test(memStoreSrc),
-  'round end writes an honest baseline reflection; the recap LLM summary enriches it; recordReflection dedupes by round so one round = one reflection');
+  'round end writes an honest baseline reflection (course-less rounds too); the recap LLM summary enriches it; recordReflection dedupes by round');
 
 check('Caddie CNS Phase 4: signal-independence (answer from course memory when GPS weak)',
   /export function getCourseHoleGuidance\(/.test(retrSrc) &&
