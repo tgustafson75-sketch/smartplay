@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   PanResponder,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 /**
  * SmartFinder TARGET-mode draggable target overlay. Ported from V3
@@ -38,13 +39,34 @@ export default function TargetingOverlay({
 }: Props) {
   const { width, height } = useWindowDimensions();
 
-  const [targetX, setTargetX] = useState(width / 2);
-  const [targetY, setTargetY] = useState(height / 2);
+  // 2026-06-14 (audit — perf) — the reticle POSITION lives on reanimated shared
+  // values, so dragging moves the crosshair/brackets/bubble via the UI thread
+  // without re-rendering the component tree on every pixel (the prior setTargetX/Y
+  // re-rendered the whole overlay ×4 brackets per drag pixel). React state is kept
+  // only for the low-frequency bits that genuinely need it: isCenter (bubble copy),
+  // updated on a throttled cadence alongside the parent yardage-recompute callback.
+  const tx = useSharedValue(width / 2);
+  const ty = useSharedValue(height / 2);
+  const [isCenter, setIsCenter] = useState(true);
+  const lastReportAtRef = useRef(0);
+
   const reportPoint = useCallback((x: number, y: number) => {
     const xNorm = Math.max(0, Math.min(1, x / Math.max(1, width)));
     const yNorm = Math.max(0, Math.min(1, y / Math.max(1, height)));
     onTargetPointNormalized?.({ xNorm, yNorm });
+    setIsCenter(Math.abs(x - width / 2) < 12 && Math.abs(y - height / 2) < 12);
   }, [height, onTargetPointNormalized, width]);
+
+  // Throttle the parent recompute (yardage/geometry) to ~30fps during a drag so a
+  // fast finger doesn't fire a recompute per pixel; the visual reticle stays smooth
+  // because its position is driven by the shared values, not this callback.
+  const reportThrottled = useCallback((x: number, y: number) => {
+    const now = Date.now();
+    if (now - lastReportAtRef.current >= 33) {
+      lastReportAtRef.current = now;
+      reportPoint(x, y);
+    }
+  }, [reportPoint]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -53,25 +75,34 @@ export default function TargetingOverlay({
       onPanResponderMove: (evt) => {
         const x = evt.nativeEvent.locationX;
         const y = evt.nativeEvent.locationY;
-        setTargetX(x);
-        setTargetY(y);
-        reportPoint(x, y);
+        tx.value = x;
+        ty.value = y;
+        reportThrottled(x, y);
       },
       onPanResponderRelease: (evt) => {
         const x = evt.nativeEvent.locationX;
         const y = evt.nativeEvent.locationY;
-        setTargetX(x);
-        setTargetY(y);
-        reportPoint(x, y);
+        tx.value = x;
+        ty.value = y;
+        reportPoint(x, y); // always report the final resting point
       },
     }),
   ).current;
 
+  // Initial center report (parent computes the center yardage on mount).
   useEffect(() => {
-    reportPoint(targetX, targetY);
-  }, [reportPoint, targetX, targetY]);
+    reportPoint(tx.value, ty.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const isCenter = Math.abs(targetX - width / 2) < 12 && Math.abs(targetY - height / 2) < 12;
+  const crosshairStyle = useAnimatedStyle(() => ({
+    left: tx.value - CROSS_SIZE / 2,
+    top: ty.value - CROSS_SIZE / 2,
+  }));
+  const bubbleStyle = useAnimatedStyle(() => ({
+    left: tx.value - 56,
+    top: ty.value - CROSS_SIZE / 2 - 44,
+  }));
 
   return (
     <View
@@ -83,12 +114,9 @@ export default function TargetingOverlay({
       // 'box-only' keeps the prior drag-anywhere-to-aim behavior.
       pointerEvents={locked ? 'none' : 'box-only'}
     >
-      <View
+      <Animated.View
         pointerEvents="none"
-        style={[
-          styles.crosshairWrap,
-          { left: targetX - CROSS_SIZE / 2, top: targetY - CROSS_SIZE / 2 },
-        ]}
+        style={[styles.crosshairWrap, crosshairStyle]}
       >
         <View style={styles.crossH} />
         <View style={styles.crossV} />
@@ -97,19 +125,16 @@ export default function TargetingOverlay({
         <CornerBracket pos="tr" />
         <CornerBracket pos="bl" />
         <CornerBracket pos="br" />
-      </View>
+      </Animated.View>
       {targetYards != null && (
-        <View
+        <Animated.View
           pointerEvents="none"
-          style={[
-            styles.yardBubble,
-            { left: targetX - 56, top: targetY - CROSS_SIZE / 2 - 44 },
-          ]}
+          style={[styles.yardBubble, bubbleStyle]}
         >
           <Text style={styles.yardBubbleText}>
             {isCenter ? '↕ drag' : `${targetYards} yds`}
           </Text>
-        </View>
+        </Animated.View>
       )}
     </View>
   );

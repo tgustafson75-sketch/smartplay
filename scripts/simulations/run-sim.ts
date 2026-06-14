@@ -2500,6 +2500,27 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — perf) — the SmartFinder targeting reticle re-rendered the whole
+// overlay (×4 corner brackets) on every drag pixel via setTargetX/Y, and fired the
+// parent yardage recompute per pixel. Reticle POSITION now lives on reanimated shared
+// values (UI-thread, no React re-render) and the parent callback is throttled to ~30fps.
+check('Perf: SmartFinder reticle drags on shared values + throttled recompute',
+  (() => {
+    const t = read('components/smartfinder/TargetingOverlay.tsx');
+    return (
+      /const tx = useSharedValue\(width \/ 2\)/.test(t) &&
+      /const ty = useSharedValue\(height \/ 2\)/.test(t) &&
+      /tx\.value = x;/.test(t) && /ty\.value = y;/.test(t) &&
+      /const crosshairStyle = useAnimatedStyle\(/.test(t) &&
+      /<Animated\.View[\s\S]{0,80}crosshairStyle/.test(t) &&
+      // parent recompute throttled to ~30fps during drag
+      /now - lastReportAtRef\.current >= 33/.test(t) &&
+      // the per-pixel setState position writes are gone
+      !/setTargetX\(/.test(t) && !/setTargetY\(/.test(t)
+    );
+  })(),
+  'dragging the targeting reticle moves it via reanimated shared values (no per-pixel React re-render of the overlay/brackets) and throttles the parent yardage/geometry recompute to ~30fps; the final resting point still reports exactly');
+
 // 2026-06-14 (audit — perf) — speakFromBase64 (the primary Kevin-voice path) decoded
 // the TTS base64 with an atob()+charCodeAt byte-loop on the JS thread right before
 // playback. Now it writes straight to disk with native base64 decoding (expo-file-system).
