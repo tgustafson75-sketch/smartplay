@@ -1177,6 +1177,21 @@ export const useRoundStore = create<RoundState>()(
                 .filter(h => h.par != null && (h.score - (h.par as number)) >= 2)
                 .map(h => `hole ${h.hole}`);
               if (trouble.length > 0) takeaways.push(`Trouble holes: ${trouble.slice(0, 3).join(', ')}.`);
+              // 2026-06-13 — CNS ingestion (audit G1): distill what the player SAID
+              // this round into durable takeaways so the dialogue actually feeds the
+              // brain (it was captured but stranded). Honest/narrow — only
+              // high-confidence stated signals; [] when nothing matched.
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const convo = require('./conversationLogStore') as typeof import('./conversationLogStore');
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const distill = require('../services/conversationDistill') as typeof import('../services/conversationDistill');
+                const startedAt = s.roundStartTime ?? 0;
+                const roundTurns = convo.useConversationLog.getState().turns.filter(t => t.at >= startedAt);
+                for (const note of distill.distillConversation(roundTurns)) takeaways.push(note);
+              } catch (e) {
+                console.log('[roundStore] conversation distill failed (non-fatal):', e);
+              }
               mem.useCaddieMemoryStore.getState().recordReflection({
                 round_id: record.id,
                 course_id: s.activeCourseId,

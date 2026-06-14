@@ -117,6 +117,10 @@ export class VoiceCommandRouter {
           : 'en';
         const local = responder.tryLocalReply(intent.raw_text, langSafe);
         if (local) {
+          // Self-growing metric: this query was first counted as cloud (precheck
+          // missed), but the memory-backed responder answered it locally — reclassify
+          // so localHitRate reflects CNS growth, not just the static precheck.
+          try { useAgentBrainStats.getState().reclassifyCloudToLocal(); } catch { /* best-effort */ }
           return {
             success: true,
             voice_response: local.text,

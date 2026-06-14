@@ -59,6 +59,7 @@ import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
 import { evaluateTeeGoal, describeTeeGoal } from '../../services/goals/teeScoreGoal';
 import { defaultDtlRig, translateRig } from '../../services/cage/targetRig';
+import { distillConversation } from '../../services/conversationDistill';
 
 interface ScenarioResult {
   scenario: string;
@@ -1281,6 +1282,46 @@ check('Offline caddie: "can I reach it" answers locally vs the longest real club
     );
   })(),
   'reach feasibility: plays-like vs longest real club (yes/tight/lay-up); honest; offline-safe');
+
+check('CNS ingestion: conversation distilled into durable memory notes (honest, narrow)',
+  // 2026-06-13 — audit G1 fix: the dialogue was captured but never read back into
+  // the CNS. distillConversation mines HIGH-CONFIDENCE stated signals from the
+  // player's words (miss tendency, focus, stated carry) → reflection takeaways at
+  // round end. Honest: nothing inferred; [] when no confident match.
+  (() => {
+    const turns = [
+      { role: 'user' as const, text: 'man I keep slicing my driver', at: 1 },
+      { role: 'caddie' as const, text: 'Let us tee it lower.', at: 2 },
+      { role: 'user' as const, text: "I'm working on my tempo today", at: 3 },
+      { role: 'user' as const, text: 'my 7 iron goes 150', at: 4 },
+      { role: 'user' as const, text: 'what time is it', at: 5 }, // no golf signal → ignored
+    ];
+    const notes = distillConversation(turns);
+    const blob = notes.join(' | ').toLowerCase();
+    // caddie line never mined; nonsense user line yields nothing; the 3 real signals land.
+    const slice = /fighting a slice/.test(blob);
+    const tempo = /working on:\s*tempo/.test(blob);
+    const carry = /7 iron carries about 150/.test(blob);
+    // empty in → empty out (no fabrication)
+    const emptySafe = distillConversation([]).length === 0 &&
+      distillConversation([{ role: 'user', text: 'nice weather huh', at: 1 }]).length === 0;
+    return slice && tempo && carry && emptySafe && notes.length <= 3;
+  })(),
+  'distillConversation mines only stated high-confidence signals (miss/focus/carry) → memory notes; empty-safe, capped, no fabrication');
+
+check('Self-growing agent: local hit-rate counts memory-backed local answers (G4)',
+  // 2026-06-13 — audit G4: the metric only counted the static regex precheck; a
+  // memory-backed tryLocalReply answer (which gets richer as the CNS grows) was
+  // miscounted as cloud. reclassifyCloudToLocal moves it cloud→local at the router.
+  (() => {
+    const stats = read('store/agentBrainStats.ts');
+    const router = read('services/voiceCommandRouter.ts');
+    return /reclassifyCloudToLocal:/.test(stats) &&
+      /cloudEscalated: Math\.max\(0, s\.cloudEscalated - 1\)/.test(stats) &&
+      /localAnswered: s\.localAnswered \+ 1/.test(stats) &&
+      /reclassifyCloudToLocal\(\)/.test(router); // called in the tryLocalReply success branch
+  })(),
+  'memory-backed local answers reclassify cloud→local so localHitRate reflects CNS growth, not just the regex precheck');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

@@ -27,6 +27,10 @@ interface AgentBrainStatsState {
   since: number;
   noteLocal: () => void;
   noteCloud: () => void;
+  /** A query first counted as cloud (precheck missed) but then ANSWERED locally by
+   *  the memory-backed fallback (tryLocalReply) — move it cloud→local so the metric
+   *  reflects memory growth, not just the static regex precheck. */
+  reclassifyCloudToLocal: () => void;
   /** Fraction 0..1 of queries answered locally. 0 when no data yet. */
   localHitRate: () => number;
   reset: (now: number) => void;
@@ -40,6 +44,10 @@ export const useAgentBrainStats = create<AgentBrainStatsState>()(
       since: 0,
       noteLocal: () => set((s) => ({ localAnswered: s.localAnswered + 1 })),
       noteCloud: () => set((s) => ({ cloudEscalated: s.cloudEscalated + 1 })),
+      reclassifyCloudToLocal: () => set((s) => ({
+        cloudEscalated: Math.max(0, s.cloudEscalated - 1),
+        localAnswered: s.localAnswered + 1,
+      })),
       localHitRate: () => {
         const { localAnswered, cloudEscalated } = get();
         const total = localAnswered + cloudEscalated;
