@@ -1705,8 +1705,10 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
           <>
             <View style={styles.puttResultRow}>
               <View style={styles.puttResultItem}>
-                <Text style={styles.puttResultValue}>{distanceFeet}</Text>
-                <Text style={styles.puttResultLabel}>FEET</Text>
+                <Text style={styles.puttResultValue}>{distanceFeet != null ? `~${distanceFeet}` : '—'}</Text>
+                {/* 2026-06-14 (audit) — mark the uncalibrated pixel→feet heuristic as an
+                    estimate, like SLOPE/READ; it's a rough visual reference, not a measure. */}
+                <Text style={styles.puttResultLabel}>FEET (EST)</Text>
               </View>
               <View style={styles.puttDivider} />
               <View style={styles.puttResultItem}>

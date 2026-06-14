@@ -2498,6 +2498,28 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — MED honesty) — two surfaces presented rough/placeholder
+// numbers as if real. SmartFinder putt distance (uncalibrated pixels→feet) now reads
+// "~N" + "FEET (EST)"; the course-detail generic placeholder layout (18×par-4×380y for
+// un-catalogued local courses) now shows an "Estimated layout" banner instead of
+// silently fabricating a scorecard. Keep-and-flag, not silent fabrication.
+check('Honesty: putt distance + placeholder course layout are flagged as estimates',
+  (() => {
+    const sf = read('app/smartfinder.tsx');
+    const cd = read('app/course/[course_id].tsx');
+    return (
+      // putt distance shows ~N and an EST label (was a bare number + "FEET")
+      /distanceFeet != null \? `~\$\{distanceFeet\}` : '—'/.test(sf) &&
+      /FEET \(EST\)/.test(sf) &&
+      // course detail flags the generic placeholder layout + clears it on real data
+      /const \[layoutEstimated, setLayoutEstimated\] = useState\(false\)/.test(cd) &&
+      /setLayoutEstimated\(!realHoles\)/.test(cd) &&
+      /\{ setCourse\(c\); setLayoutEstimated\(false\); \}/.test(cd) &&
+      /Estimated layout — full course data not available yet\./.test(cd)
+    );
+  })(),
+  'the uncalibrated putt distance reads as an estimate (~N, FEET (EST)) and an un-catalogued course shows an "Estimated layout" banner instead of presenting the 18×par-4×380y placeholder as a real scorecard');
+
 // 2026-06-14 (audit — perf/battery) — the on-course dot tickers forced a fresh
 // high-accuracy GPS pull (refreshFix → getOneShotFix maxAgeMs:0) every 3-4s from
 // THREE components, on top of the already-running watch. peekFix rides the watch

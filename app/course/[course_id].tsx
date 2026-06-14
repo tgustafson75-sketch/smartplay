@@ -76,6 +76,11 @@ export default function CourseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
   const [geometryReady, setGeometryReady] = useState(false);
+  // 2026-06-14 (audit — honesty) — true when we're showing the generic
+  // 18×par-4×380y placeholder layout (un-catalogued local course, no per-hole
+  // data fetched yet). Surfaced as a banner so the fabricated numbers aren't
+  // presented as the real scorecard. Cleared the moment real data lands.
+  const [layoutEstimated, setLayoutEstimated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +180,7 @@ export default function CourseDetailScreen() {
         };
         if (!cancelled) {
           setCourse(stubCourse);
+          setLayoutEstimated(!realHoles); // flag the generic placeholder layout (audit)
           setLoading(false);
           setGeometryReady(true); // bundled images don't need API geometry
         }
@@ -184,7 +190,7 @@ export default function CourseDetailScreen() {
           const real = found.find(r => !r._error);
           if (!real?.id) return;
           void getCourse(real.id).then(c => {
-            if (!cancelled && c) setCourse(c);
+            if (!cancelled && c) { setCourse(c); setLayoutEstimated(false); } // real data landed (audit)
             const courseLocation =
               c &&
               typeof c.location?.latitude === 'number' &&
@@ -439,6 +445,13 @@ export default function CourseDetailScreen() {
               </View>
             )}
           </View>
+          {/* 2026-06-14 (audit — honesty) — don't present the generic placeholder
+              layout as the real scorecard. Flag it; clears when real data loads. */}
+          {layoutEstimated && (
+            <Text style={styles.estimatedLayoutNote}>
+              Estimated layout — full course data not available yet.
+            </Text>
+          )}
         </View>
 
         {/* Caddie tips — leads the page. Expanded by default to match
@@ -548,6 +561,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  estimatedLayoutNote: {
+    color: '#d97706',
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 6,
   },
   holesBadge: {
     paddingHorizontal: 8,
