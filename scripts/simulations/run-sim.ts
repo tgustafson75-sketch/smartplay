@@ -1263,6 +1263,25 @@ check('Offline caddie: wind status answers locally (head/tail/cross from cached 
   })(),
   'wind status composes locally from cached weather + shot bearing (head/tail/cross); routed after plays-like; offline-safe');
 
+check('Offline caddie: "can I reach it" answers locally vs the longest real club',
+  // 2026-06-13 — feasibility offline: plays-like distance to the green vs the player's
+  // LONGEST logged club. Yes / tight / lay-up. Honest — only real bag carries.
+  (() => {
+    const src = read('services/localStatusResponder.ts');
+    return (
+      /reach:\s*\/\\b\(can\\s\+i\\s\+\(\?:reach/.test(src) &&        // the reach matcher
+      /if \(RX\.reach\.test\(t\)\) \{\s*\n\s*return reachReply\(lang\);/.test(src) &&
+      /function reachReply/.test(src) &&
+      /const margin = longest\[1\] - plays/.test(src) &&            // vs longest real club
+      /reachYes|reachTight|reachNo/.test(src) &&
+      /queryType: 'reach'/.test(src) &&
+      /bagDistances\(\)/.test(src) &&                               // real logged clubs only
+      // reach routed before plain yardage (so "can I reach the green" isn't a raw distance)
+      src.indexOf('RX.reach.test(t)') < src.indexOf('RX.yardage.test(t)')
+    );
+  })(),
+  'reach feasibility: plays-like vs longest real club (yes/tight/lay-up); honest; offline-safe');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

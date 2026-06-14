@@ -68,6 +68,7 @@ export type LocalReplyResult = {
     | 'club_recommend'
     | 'plays_like'
     | 'wind'
+    | 'reach'
     | 'last_shot'
     | 'handicap'
     | 'course_memory'
@@ -113,6 +114,9 @@ const L: Record<LocalReplyLanguage, {
   windPlain: (mph: number) => string;
   windInto: string; windHelp: string; windL2R: string; windR2L: string;
   noWind: string;
+  reachYes: (plays: number, club: string, carry: number) => string;
+  reachTight: (plays: number, club: string, carry: number) => string;
+  reachNo: (plays: number, club: string, carry: number) => string;
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
   handicapIs: (h: number) => string;
@@ -157,6 +161,9 @@ const L: Record<LocalReplyLanguage, {
     windInto: 'into your face', windHelp: 'at your back',
     windL2R: 'a left-to-right cross', windR2L: 'a right-to-left cross',
     noWind: "I don't have a wind reading right now.",
+    reachYes: (p) => `${p} to play — yes, you've got plenty of club.`,
+    reachTight: (p, c, y) => `${p} to play — that's all of your ${c} (${y}). Flush it or take the safe miss short.`,
+    reachNo: (p, c, y) => `${p} to play — that's past your ${c} (${y}). Lay up and leave a number.`,
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' pulled left' : dir === 'right' ? ' out to the right' : dir === 'straight' ? ' dead straight' : '';
       if (c && d != null) return `Your last one was a ${c}, ${d} yards${where}.`;
@@ -206,6 +213,9 @@ const L: Record<LocalReplyLanguage, {
     windInto: 'de frente', windHelp: 'a favor',
     windL2R: 'cruzado de izquierda a derecha', windR2L: 'cruzado de derecha a izquierda',
     noWind: 'No tengo lectura de viento ahora mismo.',
+    reachYes: (p) => `${p} para jugar — sí, te sobra palo.`,
+    reachTight: (p, c, y) => `${p} para jugar — es todo tu ${c} (${y}). Pégale bien o tira corto seguro.`,
+    reachNo: (p, c, y) => `${p} para jugar — pasa tu ${c} (${y}). Tira corto y deja número.`,
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? ' a la izquierda' : dir === 'right' ? ' a la derecha' : dir === 'straight' ? ' recto' : '';
       if (c && d != null) return `Tu último fue un ${c}, ${d} yardas${where}.`;
@@ -255,6 +265,9 @@ const L: Record<LocalReplyLanguage, {
     windInto: '迎风', windHelp: '顺风',
     windL2R: '从左到右的侧风', windR2L: '从右到左的侧风',
     noWind: '现在没有风力读数。',
+    reachYes: (p) => `还有${p}码——可以，球杆足够。`,
+    reachTight: (p, c, y) => `还有${p}码——刚好是你的${c}（${y}码）。打实，或者稳妥地打短。`,
+    reachNo: (p, c, y) => `还有${p}码——超过你的${c}（${y}码）。先打短，留个好距离。`,
     lastShot: (c, d, dir) => {
       const where = dir === 'left' ? '偏左' : dir === 'right' ? '偏右' : dir === 'straight' ? '很直' : '';
       if (c && d != null) return `你上一杆是${c}，${d}码${where}。`;
@@ -301,6 +314,8 @@ const RX = {
   // WIND status ("what's the wind / how's the wind / windy / breeze"). Checked AFTER
   // plays-like so "with/into the wind" routes to the distance read, not here.
   wind:       /\b(wind|windy|breeze|breezy|gust(?:s|ing|y)?|how(?:'s|s)?\s+(?:the\s+)?wind)\b/i,
+  // REACH feasibility — "can I reach / get there / get home / carry it / enough club".
+  reach:      /\b(can\s+i\s+(?:reach|get\s+(?:there|home|to\s+the\s+green))|(?:will|can)\s+i\s+(?:make|carry)\s+(?:it|the\s+green)|do\s+i\s+have\s+(?:enough\s+club|the\s+club)|enough\s+club|reach\s+(?:the\s+green|it|in))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
   // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
   // gate). Save = the stretches the caddie just gave (from the conversation log);
@@ -353,6 +368,10 @@ export function tryLocalReply(
   // ── PLAYS-LIKE (the composed moat read — check before plain yardage) ──
   if (RX.playsLike.test(t)) {
     return composedReadReply(lang);
+  }
+  // ── REACH (plays-like distance vs the player's longest club) ──
+  if (RX.reach.test(t)) {
+    return reachReply(lang);
   }
   // ── WIND (cached weather → head/tail/cross relative to the shot) ──
   if (RX.wind.test(t)) {
@@ -569,6 +588,41 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
   let text = L[lang].playsLike(read.rawYards ?? rawYards, read.playsLikeYards, read.club, why);
   if (quality.level === 'weak') text += L[lang].clubIffy;
   return { text, queryType: 'plays_like' };
+}
+
+// Offline caddie — REACH feasibility: the plays-like distance to the green vs the
+// player's LONGEST real club. Honest — only real bag carries, never a fabricated one.
+function reachReply(lang: LocalReplyLanguage): LocalReplyResult {
+  const round = useRoundStore.getState();
+  const bag = Object.entries(bagDistances()) as [string, number][];
+  if (bag.length === 0) return { text: L[lang].noBag, queryType: 'reach' };
+  if (typeof round.currentHole !== 'number' || round.currentHole <= 0) {
+    return { text: L[lang].noFix, queryType: 'reach' };
+  }
+  const green = resolveGreenCoords(round.currentHole);
+  const fix = getLastFix();
+  if (!green || !green.middle || !fix || typeof fix.lat !== 'number' || typeof fix.lng !== 'number') {
+    return { text: green && !green.middle ? L[lang].noGreen : L[lang].noFix, queryType: 'reach' };
+  }
+  const quality = classifyAccuracy(fix.accuracy_m, fix.timestamp);
+  if (quality.level === 'none' || quality.level === 'stale') {
+    return { text: L[lang].noFix, queryType: 'reach' };
+  }
+  const playerLoc = { lat: fix.lat, lng: fix.lng };
+  const rawYards = Math.round(haversineYards(playerLoc, green.middle));
+  const read = composeShotRead({
+    rawYards,
+    weather: getCachedWeatherEvenIfStale(playerLoc),
+    shotBearingDeg: bearingDegrees(playerLoc, green.middle),
+    bag: bagDistances(),
+  });
+  const plays = read?.playsLikeYards ?? rawYards;
+  let longest = bag[0];
+  for (const e of bag) if (e[1] > longest[1]) longest = e;
+  const margin = longest[1] - plays; // + = you have enough club
+  if (margin >= 8) return { text: L[lang].reachYes(plays, longest[0], longest[1]), queryType: 'reach' };
+  if (margin >= -6) return { text: L[lang].reachTight(plays, longest[0], longest[1]), queryType: 'reach' };
+  return { text: L[lang].reachNo(plays, longest[0], longest[1]), queryType: 'reach' };
 }
 
 // Offline caddie — WIND status from cached weather. When the green + GPS give a
