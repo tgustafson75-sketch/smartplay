@@ -36,8 +36,12 @@ import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
-// 2026-06-14 (Tim) — quick instructions are SILENT pop-up cards: no voice element, kept
-// OUT of the voice path. The caddie's normal voice (opener/greeting/brain) is unchanged.
+import { speak } from '../services/voiceService';
+import { getApiBaseUrl } from '../services/apiBase';
+// 2026-06-14 (Tim) — quick instructions are SILENT pop-up cards by default (out of the
+// caddie's voice path). A 🔊 button plays the narration ON DEMAND only — accessibility
+// without ever clashing with the caddie's voice profile.
+const API_URL = getApiBaseUrl();
 
 interface QuickTutorialProps {
   /** Persisted-seen key. Matches Coach Mode's COACH_TUTORIAL_KEY pattern. */
@@ -60,12 +64,15 @@ export function QuickTutorial({
   slug,
   title,
   lines,
+  spokenText,
   visible,
   onDismiss,
   iconName = 'school-outline',
 }: QuickTutorialProps) {
   const tutorialsSeen = useSettingsStore(s => s.tutorialsSeen);
   const markTutorialSeen = useSettingsStore(s => s.markTutorialSeen);
+  const voiceGender = useSettingsStore(s => s.voiceGender);
+  const language = useSettingsStore(s => s.language);
 
   // Self-managed visibility — open on first mount when the slug hasn't
   // been marked seen. Parent override (visible prop) wins when defined.
@@ -84,8 +91,13 @@ export function QuickTutorial({
     }
   };
 
-  // No voice: quick instructions are silent cards (Tim) — the caddie's normal voice
-  // path is untouched. Nothing speaks here; the user reads + skips.
+  // Silent by default — nothing auto-speaks (out of the caddie's voice path). The 🔊
+  // button below plays the narration ON DEMAND only (accessibility, user-initiated).
+  const playNarration = () => {
+    if (!spokenText) return;
+    void speak(spokenText, voiceGender, language, API_URL, { userInitiated: true }).catch(() => { /* non-fatal */ });
+  };
+
   if (!open) return null;
 
   return (
@@ -95,7 +107,20 @@ export function QuickTutorial({
           <View style={styles.iconWrap}>
             <Ionicons name={iconName} size={32} color="#00C896" />
           </View>
-          <Text style={styles.title}>{title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{title}</Text>
+            {spokenText ? (
+              <TouchableOpacity
+                onPress={playNarration}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityRole="button"
+                accessibilityLabel="Read these instructions aloud"
+                style={styles.speakerBtn}
+              >
+                <Ionicons name="volume-high" size={20} color="#00C896" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           {lines.map((ln, i) => (
             <Text key={i} style={styles.line}>{`${i + 1}. ${ln}`}</Text>
           ))}
@@ -140,12 +165,16 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   iconWrap: { alignItems: 'center', marginBottom: 4 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 },
+  speakerBtn: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(0,200,150,0.5)', backgroundColor: 'rgba(0,200,150,0.12)',
+  },
   title: {
     color: '#ffffff',
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 6,
   },
   line: { color: '#e5e7eb', fontSize: 14, lineHeight: 20, marginVertical: 2 },
   gotItBtn: {

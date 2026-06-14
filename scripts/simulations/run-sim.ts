@@ -1581,20 +1581,20 @@ check('Gyro-parallax wow v1: tilt floats the SmartVision hole image (presentatio
   })(),
   'ParallaxTilt pans the hole image by gyro tilt behind fixed overlays (depth illusion); applied to SmartVision preview; static w/o sensor; presentation-only');
 
-check('Quick instructions are SILENT — out of the voice path (no clash)',
-  // 2026-06-14 (Tim) — quick instructions are pop-up cards only: NO voice element, kept
-  // out of the voice path so they can never clash with the caddie's normal voice
-  // (opener/greeting/brain). The user reads + skips; nothing speaks.
+check('Quick instructions: silent by default, 🔊 plays narration on demand (Tim)',
+  // 2026-06-14 (Tim) — quick instructions never AUTO-narrate (out of the caddie voice
+  // path, no clash), but a speaker button plays them on demand (accessibility).
   (() => {
     const tut = read('components/QuickTutorial.tsx');
     return (
-      !/\bspeak\(/.test(tut) &&                 // no narration at all
-      !/setTutorialNarrating/.test(tut) &&      // no audio-ownership hack
-      /quick instructions are SILENT/i.test(tut) &&
-      /import React, \{ useState \} from 'react'/.test(tut) // useEffect/voice imports removed
+      !/useEffect/.test(tut) &&                  // nothing auto-fires (no auto-narration)
+      !/setTutorialNarrating/.test(tut) &&       // no audio-ownership hack
+      /volume-high/.test(tut) &&                 // the 🔊 button
+      /const playNarration = \(\) =>/.test(tut) && /onPress=\{playNarration\}/.test(tut) &&
+      /userInitiated: true/.test(tut)            // on-demand = user-initiated
     );
   })(),
-  'QuickTutorial has no speak() and no audio-ownership — silent cards only, out of the voice path');
+  'QuickTutorial silent by default (no auto-narration), 🔊 button plays it on demand — accessibility without clashing the caddie voice');
 
 check('Course-data bootstrap: SmartFinder capture ingests → previews use your real shot',
   // 2026-06-14 (Tim) — every SmartFinder photo/video tags to course/hole/GPS and builds
