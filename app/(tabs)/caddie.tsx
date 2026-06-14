@@ -2262,7 +2262,7 @@ export default function CaddieTab() {
             tagline ("real-time caddie intelligence") and ABOVE Kevin's box
             (cellTop = insets.top + 100). The accented pill was kissing the end of the
             tagline at the row's insets.top+38 anchor; +22 seats it cleanly in the gap. */}
-        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6, marginTop: 22 }}>
+        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6, marginTop: 30 }}>
           {/* 2026-05-30 — Fix FY: Local Mode indicator. Subtle leaf
               next to the Tools pill when localMode is ON. Honest "you
               are here" — NOT a warning, NOT an error state. Tap routes
