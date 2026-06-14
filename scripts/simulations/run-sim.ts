@@ -60,6 +60,7 @@ import { analyzePuttRoll } from '../../services/putting/puttRoll';
 import { evaluateTeeGoal, describeTeeGoal } from '../../services/goals/teeScoreGoal';
 import { defaultDtlRig, translateRig } from '../../services/cage/targetRig';
 import { distillConversation } from '../../services/conversationDistill';
+import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 
 interface ScenarioResult {
   scenario: string;
@@ -1347,6 +1348,34 @@ check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA
     );
   })(),
   'scene read snaps the view, grounds it in measured wind/temp via /api/kevin multimodal, renders + speaks the mental approach; no fabricated wind; OTA-safe');
+
+check('Recap speed: stored round renders INSTANTLY from the record (no 30s spin)',
+  // 2026-06-13 — Tim hit a stored round that spun (recap screen polled the archive
+  // 30x/1s; an un-generated recap = endless spinner). synthesizeRecapFromRecord builds
+  // a complete recap synchronously from the stored RoundRecord, and the recap screen
+  // shows it immediately (archived rich recap still wins; only just-ended rounds poll).
+  (() => {
+    const gen = read('services/recapSynth.ts');
+    const screen = read('app/recap/[round_id].tsx');
+    const synthExists = /export function synthesizeRecapFromRecord\(record: RoundRecord\): RoundRecap/.test(gen) &&
+      /hole_comparisons/.test(gen) && /overall_kevin_summary: record\.summary/.test(gen);
+    const wired = /synthesizeRecapFromRecord\(rec\)/.test(screen) &&
+      /roundHistory\.find\(\(r\) => r\.id === round_id\)/.test(screen) &&
+      /justEnded/.test(screen) &&            // old rounds don't background-poll
+      /Date\.now\(\) - rec2\.endedAt\) < 90_000/.test(screen);
+    // runtime: a record with scores → a renderable recap with matching holes + score.
+    const rec: any = {
+      id: 'r1', roundNumber: 1, courseName: 'Pebble', courseId: 'c1', startedAt: 1, endedAt: 2,
+      holesPlayed: 2, totalScore: 9, scoreVsPar: 1, isCompetition: false, nineHoleMode: false,
+      mode: 'free_play', scores: { 1: 4, 2: 5 }, putts: {}, shots: [{ hole: 1 }, { hole: 2 }] as any,
+      summary: 'Solid front two.',
+    };
+    const out = synthesizeRecapFromRecord(rec);
+    const runtime = out.total_score === 9 && out.hole_comparisons.length === 2 &&
+      out.hole_comparisons[0].actual_score === 4 && out.overall_kevin_summary === 'Solid front two.';
+    return synthExists && wired && runtime;
+  })(),
+  'synthesizeRecapFromRecord builds a renderable recap from the stored round; screen shows it instantly, no 30s poll for stored rounds');
 
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,

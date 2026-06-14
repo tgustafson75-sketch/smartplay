@@ -23,6 +23,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
+import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -216,30 +217,52 @@ export default function RecapScreen() {
   // the user navigates here. Previously this was a single load that
   // captured the not-yet-existing state and left the screen blank
   // forever. Polls every 1s for up to 30s; stops as soon as recap loads.
+  // 2026-06-13 (Tim — speed is critical) — render INSTANTLY. A stored round used to
+  // spin for up to 30s polling the recap archive; if no LLM recap was ever generated
+  // (older in-app rounds, or generation still pending), it just spun. Now: prefer the
+  // archived (rich) recap if present, else SYNTHESIZE one from the stored RoundRecord
+  // immediately (scores/shots/summary we already have). Only a JUST-ended round (recap
+  // generating in the background) keeps polling to swap in the richer version — and it
+  // does so behind the already-rendered synth, never a spinner.
   useEffect(() => {
     if (!round_id) return;
     let cancelled = false;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 30;
-    const tick = async () => {
+    const shown = { current: false };
+
+    void (async () => {
+      const archived = await loadRecap(round_id).catch(() => null);
       if (cancelled) return;
-      attempts += 1;
-      const r = await loadRecap(round_id);
-      if (cancelled) return;
-      if (r) {
-        setRecap(r);
-        setLoading(false);
+      if (archived) { setRecap(archived); setLoading(false); shown.current = true; return; }
+      // No archive — show the stored round instantly.
+      const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
+      if (rec) { setRecap(synthesizeRecapFromRecord(rec)); setLoading(false); shown.current = true; }
+
+      // Background upgrade: only when it's worth waiting — the round JUST ended (Sonnet
+      // recap lands a few seconds later) OR we have nothing to show yet. Old history
+      // rounds with a synth already on screen don't poll (no wasted reads, no spinner).
+      const rec2 = rec ?? null;
+      const justEnded = rec2 ? (Date.now() - rec2.endedAt) < 90_000 : true;
+      if (!justEnded) {
+        if (!shown.current) { setTimedOut(true); setLoading(false); }
         return;
       }
-      if (attempts >= MAX_ATTEMPTS) {
-        // Give up — flag timed-out so the empty state offers a retry.
-        setTimedOut(true);
-        setLoading(false);
-        return;
-      }
-      setTimeout(() => { void tick(); }, 1000);
-    };
-    void tick();
+      let attempts = 0;
+      const MAX_ATTEMPTS = 30;
+      const tick = async () => {
+        if (cancelled) return;
+        attempts += 1;
+        const r = await loadRecap(round_id).catch(() => null);
+        if (cancelled) return;
+        if (r) { setRecap(r); setLoading(false); shown.current = true; return; }
+        if (attempts >= MAX_ATTEMPTS) {
+          if (!shown.current) { setTimedOut(true); setLoading(false); }
+          return;
+        }
+        setTimeout(() => { void tick(); }, 1000);
+      };
+      void tick();
+    })();
+
     return () => { cancelled = true; };
   }, [round_id, retryNonce]);
 

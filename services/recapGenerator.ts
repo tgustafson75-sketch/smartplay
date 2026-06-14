@@ -3,6 +3,9 @@ import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode } from '../types/patterns';
 import type { GhostMatchSnapshot } from '../types/ghost';
 import { saveRecap } from './planStorage';
+// Instant deterministic recap (pure, react-native-free) lives in recapSynth so it's
+// unit-testable; re-exported here for callers that already import from recapGenerator.
+export { synthesizeRecapFromRecord } from './recapSynth';
 
 // 2026-06-04 — HolePlan removed. Recap is actual-outcome only; no
 // planned-vs-actual comparison and no `total_planned_score`. The
