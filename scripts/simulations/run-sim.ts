@@ -2498,6 +2498,57 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit — perf/battery) — the on-course dot tickers forced a fresh
+// high-accuracy GPS pull (refreshFix → getOneShotFix maxAgeMs:0) every 3-4s from
+// THREE components, on top of the already-running watch. peekFix rides the watch
+// cache (≤3s) so the dot stays live without redundant pulses; refreshFix stays for
+// the explicit Refresh button (which must be guaranteed-fresh).
+check('Perf: on-course dot tickers ride the GPS watch cache (peekFix), not forced pulls',
+  (() => {
+    const svc = read('services/smartFinderService.ts');
+    const sf = read('app/smartfinder.tsx');
+    const card = read('components/smartfinder/SmartFinderCard.tsx');
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    return (
+      /export async function peekFix\(\): Promise<LastFix \| null>/.test(svc) &&
+      /getOneShotFix\(\{ maxAgeMs: 3000 \}\)/.test(svc) &&
+      // refreshFix keeps its forced-fresh maxAgeMs:0 for explicit refresh
+      /const fix = await getOneShotFix\(\{ maxAgeMs: 0 \}\)/.test(svc) &&
+      // all three timer callers switched to peekFix
+      /const fix = await peekFix\(\)/.test(sf) &&
+      /const fix = await peekFix\(\)/.test(card) &&
+      /await peekFix\(\)/.test(prev) &&
+      !/await refreshFix\(\)/.test(prev) && !/await refreshFix\(\)/.test(card)
+    );
+  })(),
+  'the SmartFinder screen, SmartFinder card, and hole-preview dot tickers read the running watch cache instead of each forcing a high-accuracy GPS pull every 3-4s — the dominant avoidable on-course battery cost; the manual Refresh button stays guaranteed-fresh');
+
+// 2026-06-14 (audit — perf) — SmartVisionTap was defined INSIDE L1HolePreview's
+// render, so every 4s dot-tick made a new component type and React remounted the
+// whole subtree (hero Image reload + ParallaxTilt DeviceMotion re-subscribe).
+check('Perf: L1HolePreview SmartVisionTap is module-level (no 4s remount cascade)',
+  (() => {
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    // module-level component (declared BEFORE the default export, takes onPress)
+    const defIdx = prev.search(/const SmartVisionTap: React\.FC<\{ onPress\?: \(\) => void; children: React\.ReactNode \}>/);
+    const fnIdx = prev.search(/export default function L1HolePreview/);
+    return (
+      defIdx >= 0 && fnIdx >= 0 && defIdx < fnIdx &&        // defined at module scope, before the component
+      /<SmartVisionTap onPress=\{onOpenSmartVision\}>/.test(prev) &&
+      !/const SmartVisionTap: React\.FC<\{ children: React\.ReactNode \}>/.test(prev)  // old in-render def gone
+    );
+  })(),
+  'the hole-preview tap wrapper is a stable module-level component, so the 4s GPS tick reconciles in place instead of remounting the image + parallax sensor every cycle');
+
+// 2026-06-14 (audit — redundant work) — golfbert holes were re-fetched over the
+// network on every hole switch even though the cache was populated. Now read-through.
+check('Perf: golfbert holes served from cache (no per-hole refetch)',
+  (() => {
+    const g = read('services/golfbertApi.ts');
+    return /const cached = golfbertCache\.get\(smartplayCourseId\);\s*\n\s*if \(cached && cached\.length > 0\) return cached;/.test(g);
+  })(),
+  'getGolfbertHolesForCourse returns the in-memory cache once fetched instead of re-hitting the network on every hole change');
+
 // 2026-06-14 (audit — lifecycle/audio) — recordings/cameras left running on abrupt
 // unmount kept the iOS audio session in record mode (muting later TTS) or left the
 // camera recording. Both now clean up on unmount; the cage overlay reads a live

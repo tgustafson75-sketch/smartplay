@@ -5,7 +5,7 @@ import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
-import { refreshFix, getLastFix } from '../../services/smartFinderService';
+import { peekFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 
@@ -41,6 +41,23 @@ type Props = {
   /** Optional height override (default 300). */
   height?: number;
 };
+
+// 2026-06-14 (audit — perf) — hoisted to MODULE level. It was defined inside the
+// render body, so every 4s dot-tick (setTick) created a NEW component type and React
+// unmounted/remounted the whole subtree — the hero Image reloaded and ParallaxTilt
+// re-subscribed DeviceMotion every tick. A stable module-level component lets React
+// reconcile in place. The tap handler is passed as a prop.
+const SmartVisionTap: React.FC<{ onPress?: () => void; children: React.ReactNode }> = ({ onPress, children }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    activeOpacity={onPress ? 0.85 : 1}
+    disabled={!onPress}
+    accessibilityRole="button"
+    accessibilityLabel="Open SmartVision for this hole"
+  >
+    {children}
+  </TouchableOpacity>
+);
 
 export default function L1HolePreview({ onOpenSmartVision, width, height }: Props) {
   const W = width ?? DEFAULT_W;
@@ -110,27 +127,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     if (!isRoundActive) return;
     let cancelled = false;
     const tick = async () => {
-      await refreshFix();
+      await peekFix(); // rides the watch cache — no forced GPS pulse per tick (audit)
       if (!cancelled) setTick(t => t + 1);
     };
     tick();
     const id = setInterval(tick, REFRESH_MS);
     return () => { cancelled = true; clearInterval(id); };
   }, [isRoundActive]);
-
-  // The preview is wrapped in a tappable that launches the full SmartVision
-  // tool for the current hole. Body content varies by data availability.
-  const SmartVisionTap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <TouchableOpacity
-      onPress={onOpenSmartVision}
-      activeOpacity={onOpenSmartVision ? 0.85 : 1}
-      disabled={!onOpenSmartVision}
-      accessibilityRole="button"
-      accessibilityLabel="Open SmartVision for this hole"
-    >
-      {children}
-    </TouchableOpacity>
-  );
 
   const wrapDims = { width: W, height: H };
 
@@ -150,7 +153,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     const defaultImg = previewImg;
     if (defaultImg) {
       return (
-        <SmartVisionTap>
+        <SmartVisionTap onPress={onOpenSmartVision}>
           {/* 2026-06-13 — gyro-parallax: the hole image floats behind the fixed label
               as you tilt (depth illusion / "wow"). Renders static where no sensor. */}
           <ParallaxTilt
@@ -169,7 +172,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       );
     }
     return (
-      <SmartVisionTap>
+      <SmartVisionTap onPress={onOpenSmartVision}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>SMARTVISION</Text>
           <Text style={styles.placeholderSub}>Pick a course on the Play tab to plan.</Text>
@@ -242,7 +245,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     const trackHeight = wrapDims.height - padTop - padBottom;
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
-      <SmartVisionTap>
+      <SmartVisionTap onPress={onOpenSmartVision}>
         {/* 2026-06-13 — gyro-parallax: the hole photo pans behind the fixed HOLE label,
             cart, and yardage (which stay anchored) → depth illusion. Static w/o sensor. */}
         <ParallaxTilt
@@ -302,7 +305,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
         }
       }
       return (
-        <SmartVisionTap>
+        <SmartVisionTap onPress={onOpenSmartVision}>
           <ImageBackground source={localImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
@@ -328,7 +331,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     // whose photo bundle isn't dropped in yet. Show a soft placeholder
     // that names the hole and offers SmartVision as the path forward.
     return (
-      <SmartVisionTap>
+      <SmartVisionTap onPress={onOpenSmartVision}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
           <Text style={styles.placeholderSub}>Preview coming for this course.</Text>
@@ -386,7 +389,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   }, W, H);
 
   return (
-    <SmartVisionTap>
+    <SmartVisionTap onPress={onOpenSmartVision}>
     <View style={[styles.wrap, wrapDims]}>
       {aerialUrl ? (
         <Image source={{ uri: aerialUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />

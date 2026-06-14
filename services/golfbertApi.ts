@@ -167,6 +167,13 @@ export async function getGolfbertHolesForCourse(smartplayCourseId: string): Prom
   const mapping = getGolfbertMapping(smartplayCourseId);
   if (!mapping) return null;
 
+  // 2026-06-14 (audit — redundant work) — serve from the in-memory cache once
+  // we've fetched this course's holes. The prior code wrote the cache but never
+  // read it here, so every hole switch re-fetched the whole course over the
+  // network. Course holes don't change mid-session, so the cache is authoritative.
+  const cached = golfbertCache.get(smartplayCourseId);
+  if (cached && cached.length > 0) return cached;
+
   try {
     const res = await fetch(proxyUrl({ action: 'holes', id: mapping.golfbertCourseId }), {
       signal: AbortSignal.timeout(15_000),

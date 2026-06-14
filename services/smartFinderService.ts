@@ -260,6 +260,31 @@ export async function refreshFix(): Promise<LastFix | null> {
   }
 }
 
+/**
+ * 2026-06-14 (audit — battery) — cheap polling read for the on-course dot
+ * tickers (SmartFinder screen, SmartFinder card, hole preview). Unlike
+ * refreshFix() it does NOT force a high-accuracy getCurrentPositionAsync every
+ * tick: it rides the gpsManager watch's cached fix (≤3s old) and only pulls if
+ * the watch has genuinely stalled. The watch already runs during a round, so
+ * three components polling every 3-4s previously each fired a redundant GPS
+ * pulse on top of it — the dominant avoidable battery cost on the live screens.
+ * Still bumps to active so the watch stays responsive while a shot surface is open.
+ */
+export async function peekFix(): Promise<LastFix | null> {
+  bumpToActive('smartfinder_peek');
+  try {
+    const fix = await getOneShotFix({ maxAgeMs: 3000 });
+    if (!fix) return getLastFixInternal();
+    return {
+      location: { lat: fix.lat, lng: fix.lng },
+      accuracy_m: fix.accuracy_m ?? null,
+      timestamp: fix.timestamp,
+    };
+  } catch {
+    return getLastFixInternal();
+  }
+}
+
 // 2026-05-27 — Fix ET: stale threshold. A fix older than this is
 // reported as 'stale' regardless of its original accuracy — the user
 // has likely walked / driven the cart since, so the cached number is

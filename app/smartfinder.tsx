@@ -33,7 +33,7 @@ import { composeShotRead } from '../services/cnsShotRead';
 import { bagDistances } from '../services/shotStrategy';
 import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
 import {
-  refreshFix,
+  peekFix,
   classifyAccuracy,
   getLastFix,
   getGreenYardagesSync,
@@ -113,7 +113,9 @@ export default function SmartFinder() {
     let cancelled = false;
     const tick = async () => {
       if (cancelled) return;
-      const fix = await refreshFix();
+      // 2026-06-14 (audit — battery) — ride the watch cache (≤3s) instead of
+      // forcing a fresh high-accuracy pull every 3s; matches the poll cadence.
+      const fix = await peekFix();
       if (cancelled) return;
       setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
       setYards(getGreenYardagesSync(currentHole));

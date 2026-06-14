@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import GPSQuality from './GPSQuality';
 import {
   getGreenYardagesSync,
-  refreshFix,
+  peekFix,
   classifyAccuracy,
   getLastFix,
   type GreenYardages,
@@ -44,7 +44,7 @@ export default function SmartFinderCard() {
     if (!isRoundActive) return;
     let cancelled = false;
     const tick = async () => {
-      const fix = await refreshFix();
+      const fix = await peekFix(); // watch-cache read — no forced GPS pulse per tick (audit)
       if (cancelled) return;
       setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
       setYards(getGreenYardagesSync(currentHole));
