@@ -2500,6 +2500,30 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit P1 — hot-path serialization) — setLocationContext is the ONLY
+// roundStore setter fired on every GPS tick. It used set((s)=>...return {}), but a
+// zustand set() always re-serializes the persisted blob (shots + full roundHistory)
+// even for {}, so standing still re-stringified the whole history ~1×/s. It now reads
+// via get() and only set()s on an ACTUAL tee/green/fairway transition; no-change ticks
+// return without touching the store. No data-shape change (safer than relocating shots).
+check('Perf: setLocationContext only persists on a real location transition',
+  (() => {
+    const s = read('store/roundStore.ts');
+    return (
+      // converted from set((s)=>...) to a get()-read function
+      /setLocationContext: \(coords\) => \{\s*\n\s*const s = get\(\);/.test(s) &&
+      // no-change branches return WITHOUT calling set()
+      /s\.currentTeeBox\?\.hole === hole\.hole\s*\n\s*\) return; \/\/ no change/.test(s) &&
+      /if \(s\.currentLocationType === 'green'\) return;/.test(s) &&
+      /if \(s\.currentLocationType === 'fairway'\) return;/.test(s) &&
+      // real transitions still set the location state
+      /set\(\{ currentLocationType: 'fairway', currentTeeBox: null \}\);/.test(s) &&
+      // the old always-fires set((s)=>... wrapper is gone
+      !/setLocationContext: \(coords\) => set\(\(s\) =>/.test(s)
+    );
+  })(),
+  'a player standing still no longer re-serializes the whole shots+roundHistory blob every GPS tick — setLocationContext only writes on an actual tee/green/fairway transition (a few per round), eliminating the per-tick persistence cost with no data-shape change');
+
 // 2026-06-14 (audit — perf) — the SmartFinder targeting reticle re-rendered the whole
 // overlay (×4 corner brackets) on every drag pixel via setTargetX/Y, and fired the
 // parent yardage recompute per pixel. Reticle POSITION now lives on reanimated shared

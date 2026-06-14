@@ -646,8 +646,21 @@ export const useRoundStore = create<RoundState>()(
       // type+box so a steady fairway-walking GPS stream doesn't churn
       // subscribers every 1-2s. See header comment on
       // currentLocationType for why hole auto-advance was DROPPED.
-      setLocationContext: (coords) => set((s) => {
-        if (!s.courseHoles.length) return {};
+      // 2026-06-14 (audit P1 — hot-path serialization) — this is the ONLY
+      // roundStore setter fired on every GPS tick (gpsManager emit). It was
+      // `set((s) => ... return {})`, but a zustand set() ALWAYS notifies +
+      // re-serializes the persisted blob (shots + full roundHistory) even when
+      // the partial is `{}` — so a player standing in one spot re-stringified
+      // the whole history ~1×/s for nothing. Now we read via get() and only
+      // call set() on an ACTUAL tee/green/fairway transition (a handful per
+      // round); no-change ticks return without touching the store. Behaviour is
+      // identical (same transitions, same dedup) — only the wasted writes are gone.
+      // No data-shape change, no migration: far safer than relocating stored shots,
+      // and it fully addresses the per-tick cost since setLocationContext was the
+      // sole per-tick writer (currentYardage is set only by the one-shot refresh).
+      setLocationContext: (coords) => {
+        const s = get();
+        if (!s.courseHoles.length) return;
         const TEE_RADIUS_YARDS = 30;
         const GREEN_RADIUS_YARDS = 40;
 
@@ -660,11 +673,12 @@ export const useRoundStore = create<RoundState>()(
             if (
               s.currentLocationType === 'tee' &&
               s.currentTeeBox?.hole === hole.hole
-            ) return {};
-            return {
+            ) return; // no change → no set() → no persist write
+            set({
               currentLocationType: 'tee',
               currentTeeBox: { hole: hole.hole, lat: hole.teeLat, lng: hole.teeLng },
-            };
+            });
+            return;
           }
         }
 
@@ -678,15 +692,16 @@ export const useRoundStore = create<RoundState>()(
             // (currentLocationType) only; green/fairway always null the
             // tee box, so the prior `&& currentTeeBox === null` was a
             // brittle coincidence.
-            if (s.currentLocationType === 'green') return {};
-            return { currentLocationType: 'green', currentTeeBox: null };
+            if (s.currentLocationType === 'green') return;
+            set({ currentLocationType: 'green', currentTeeBox: null });
+            return;
           }
         }
 
         // Default fairway. Dedup on location type.
-        if (s.currentLocationType === 'fairway') return {};
-        return { currentLocationType: 'fairway', currentTeeBox: null };
-      }),
+        if (s.currentLocationType === 'fairway') return;
+        set({ currentLocationType: 'fairway', currentTeeBox: null });
+      },
 
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
