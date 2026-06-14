@@ -536,7 +536,9 @@ export default function Dashboard() {
             {topDrills.map(([id, rec]) => (
               <View key={id} style={styles.practiceRow}>
                 <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>
-                  {getDrillEntry(id)?.title ?? id}
+                  {/* drills resolve via the catalog; focus/open-range keys use the
+                      stored label (2026-06-14 unified award). */}
+                  {getDrillEntry(id)?.title ?? rec.label ?? id}
                 </Text>
                 <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
                   {rec.points} pts · {rec.sessions}×

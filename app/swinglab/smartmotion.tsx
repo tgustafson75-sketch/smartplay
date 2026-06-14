@@ -2053,13 +2053,21 @@ export default function SmartMotion() {
     if (sid && isDrill && drillId) {
       try {
         const swings = Math.max(1, segmentsRef.current.length || drillShotCount || 1);
-        const pts = usePracticePointsStore.getState().awardDrill(drillId, swings, Date.now());
+        // 2026-06-14 (Tim — wire the points) — use the unified award so the drill
+        // ALSO feeds the visible tier (not just the practice ledger), with a label
+        // for the dashboard. Same conservative points as before.
+        const pts = usePracticePointsStore.getState().awardPracticePoints({
+          key: drillId,
+          label: typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null,
+          swings,
+          now: Date.now(),
+        });
         savedMsg = `Saved · +${pts} practice points`;
       } catch { /* non-fatal */ }
     }
     useToastStore.getState().show(savedMsg);
     router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillShotCount]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));

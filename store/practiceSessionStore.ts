@@ -66,6 +66,11 @@ interface PracticeSessionState {
   activeSummary: () => OpenRangeSummary | null;
 }
 
+/** "driver_speed" → "Driver Speed", "irons" → "Irons". For the points label. */
+function prettyFocus(focus: string): string {
+  return focus.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
 let _seq = 0;
 function newId(prefix: string): string {
   _seq += 1;
@@ -102,6 +107,20 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
         if (!active) return;
         const ended: PracticeSession = { ...active, endedAt: Date.now() };
         set((s) => ({ active: null, history: [ended, ...s.history].slice(0, 50) }));
+        // 2026-06-14 (Tim — wire the points) — EVERY session-based practice surface
+        // (Open Range, Focus, SmartPlan) funnels through here, so award practice
+        // points on completion (per-key ledger + the visible tier). Previously only
+        // the Drills screen awarded; these surfaces granted nothing. Real swings only.
+        const swings = active.swings.length;
+        if (swings > 0) {
+          try {
+            const key = active.focus ? `focus:${active.focus}` : active.kind;
+            const label = active.focus ? prettyFocus(active.focus) : (active.kind === 'open_range' ? 'Open Range' : 'Practice');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const pp = require('./practicePointsStore') as typeof import('./practicePointsStore');
+            pp.usePracticePointsStore.getState().awardPracticePoints({ key, label, swings, now: Date.now() });
+          } catch { /* award best-effort, never blocks ending a session */ }
+        }
       },
       activeSummary: () => {
         const active = get().active;

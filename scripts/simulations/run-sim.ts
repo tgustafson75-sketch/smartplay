@@ -1743,12 +1743,13 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
     const dash = read('app/(tabs)/dashboard.tsx');
     return (
       /export const usePracticePointsStore = create/.test(store) &&
-      /awardDrill: \(drillId, swings, now\)/.test(store) &&
+      // 2026-06-14 — awardDrill now delegates to the unified awardPracticePoints.
+      /awardDrill: \(drillId, swings, now\) => get\(\)\.awardPracticePoints/.test(store) &&
       /const BASE_PER_DRILL = 5/.test(store) && /MAX_SWINGS_COUNTED = 5/.test(store) && // conservative + no farming
       /persist\(/.test(store) && // accumulates
-      // awarded only on a DRILL save
+      // awarded on a DRILL save (now via the unified award so it also feeds the tier)
       /if \(sid && isDrill && drillId\)/.test(sm) &&
-      /usePracticePointsStore\.getState\(\)\.awardDrill\(drillId, swings/.test(sm) &&
+      /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(sm) &&
       // surfaced on the dashboard, per-drill, hidden until earned
       /practiceTotal > 0 &&/.test(dash) &&
       /PRACTICE POINTS/.test(dash) &&
@@ -2499,6 +2500,35 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
   /version: 12/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
+
+// 2026-06-14 (Tim — points, phase 1) — practice points were awarded ONLY from the
+// Drills screen; Open Range / Focus / SmartPlan granted nothing, and practice never
+// fed the visible tier. Now ONE award (awardPracticePoints) records the per-key ledger
+// AND feeds the tiered pointsStore, called from every practice completion (session end
+// + drill save). Unified points the user actually sees.
+check('Points: practice awards from every surface + feeds the visible tier',
+  (() => {
+    const pp = read('store/practicePointsStore.ts');
+    const ps = read('store/practiceSessionStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    const unifiedAward =
+      /awardPracticePoints: \(input: \{ key: string; label\?: string \| null; swings: number; now: number \}\) => number/.test(pp) &&
+      // feeds the tiered (visible) points store
+      /const pts = require\('\.\/pointsStore'\)[\s\S]{0,120}\.addPoints\(granted,/.test(pp) &&
+      // back-compat drill wrapper still exists
+      /awardDrill: \(drillId, swings, now\) => get\(\)\.awardPracticePoints\(\{ key: drillId, swings, now \}\)/.test(pp);
+    // session end (open range / focus / smartplan all funnel here) now awards
+    const sessionAward =
+      /const swings = active\.swings\.length;\s*\n\s*if \(swings > 0\)/.test(ps) &&
+      /awardPracticePoints\(\{ key, label, swings, now: Date\.now\(\) \}\)/.test(ps);
+    // drill save uses the unified award (so drills also feed the tier) with a label
+    const drillAward = /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{\s*\n\s*key: drillId,\s*\n\s*label:/.test(sm);
+    // dashboard renders non-drill keys via the stored label
+    const dashOk = /getDrillEntry\(id\)\?\.title \?\? rec\.label \?\? id/.test(dash);
+    return unifiedAward && sessionAward && drillAward && dashOk;
+  })(),
+  'every practice surface (drills + Open Range + Focus + SmartPlan) now awards practice points through one unified award that also feeds the visible tiered points; the dashboard labels focus/open-range entries — practice finally counts toward the user\'s level everywhere');
 
 // 2026-06-14 (Tim — course book, step 3) — Golf Course API has no website/booking, so
 // Google Places (name + coords → official website + phone) bridges it. Anchored into the

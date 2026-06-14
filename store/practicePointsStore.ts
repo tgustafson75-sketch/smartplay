@@ -25,13 +25,24 @@ export interface DrillPointRecord {
   points: number;
   sessions: number;
   lastAt: number;
+  /** 2026-06-14 — display label for non-drill keys (focus/open-range), so the
+   *  dashboard can render them without a drill-catalog lookup. */
+  label?: string;
 }
 
 interface PracticePointsState {
   total: number;
-  /** Points per drill id (e.g. 'tempo_consistency', 'early_extension'). */
+  /** Points per practice key — a drill id ('tempo_consistency'), a focus
+   *  ('focus:irons'), or 'open_range'. */
   byDrill: Record<string, DrillPointRecord>;
-  /** Award a completed drill session. Returns the points granted. */
+  /**
+   * 2026-06-14 (Tim — wire the points) — the unified practice award. Records the
+   * per-key practice ledger AND feeds the visible tiered pointsStore so ALL
+   * practice (drills + Open Range + Focus + SmartPlan) counts toward the user's
+   * level — not just the Drills-screen path. Returns points granted.
+   */
+  awardPracticePoints: (input: { key: string; label?: string | null; swings: number; now: number }) => number;
+  /** Back-compat thin wrapper for the drill flow (keys by drillId). */
   awardDrill: (drillId: string, swings: number, now: number) => number;
   reset: () => void;
 }
@@ -41,19 +52,33 @@ export const usePracticePointsStore = create<PracticePointsState>()(
     (set, get) => ({
       total: 0,
       byDrill: {},
-      awardDrill: (drillId, swings, now) => {
+      awardPracticePoints: ({ key, label, swings, now }) => {
+        if (!key) return 0;
         const counted = Math.max(0, Math.min(MAX_SWINGS_COUNTED, Math.round(swings)));
         const granted = BASE_PER_DRILL + counted * PER_SWING;
-        const prev = get().byDrill[drillId] ?? { points: 0, sessions: 0, lastAt: 0 };
+        const prev = get().byDrill[key] ?? { points: 0, sessions: 0, lastAt: 0 };
         set((s) => ({
           total: s.total + granted,
           byDrill: {
             ...s.byDrill,
-            [drillId]: { points: prev.points + granted, sessions: prev.sessions + 1, lastAt: now },
+            [key]: {
+              points: prev.points + granted,
+              sessions: prev.sessions + 1,
+              lastAt: now,
+              label: (label && label.trim()) ? label.trim() : prev.label,
+            },
           },
         }));
+        // Unify: practice also feeds the visible tiered points (gamification),
+        // so the user's level reflects practice, not just rounds/cage/caddie.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pts = require('./pointsStore') as typeof import('./pointsStore');
+          pts.usePointsStore.getState().addPoints(granted, label ? `Practice: ${label}` : 'Practice session');
+        } catch { /* tier feed best-effort */ }
         return granted;
       },
+      awardDrill: (drillId, swings, now) => get().awardPracticePoints({ key: drillId, swings, now }),
       reset: () => set({ total: 0, byDrill: {} }),
     }),
     {
