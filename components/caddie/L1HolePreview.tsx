@@ -15,6 +15,7 @@ import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
+import { ParallaxTilt } from '../ParallaxTilt';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -145,14 +146,20 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     if (defaultImg) {
       return (
         <SmartVisionTap>
-          <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+          {/* 2026-06-13 — gyro-parallax: the hole image floats behind the fixed label
+              as you tilt (depth illusion / "wow"). Renders static where no sensor. */}
+          <ParallaxTilt
+            style={[styles.wrap, wrapDims]}
+            radius={10}
+            background={<Image source={defaultImg} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+          >
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
               <Text style={styles.placeholderSubLight}>
                 {previewImg ? 'Tap to plan this hole.' : 'Pick a course to plan.'}
               </Text>
             </View>
-          </ImageBackground>
+          </ParallaxTilt>
         </SmartVisionTap>
       );
     }
@@ -227,7 +234,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
       <SmartVisionTap>
-        <ImageBackground source={curatedImage} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+        {/* 2026-06-13 — gyro-parallax: the hole photo pans behind the fixed HOLE label,
+            cart, and yardage (which stay anchored) → depth illusion. Static w/o sensor. */}
+        <ParallaxTilt
+          style={[styles.wrap, wrapDims]}
+          radius={10}
+          background={<Image source={curatedImage} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+        >
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
           </View>
@@ -245,7 +258,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
               </View>
             </>
           ) : null}
-        </ImageBackground>
+        </ParallaxTilt>
       </SmartVisionTap>
     );
   }

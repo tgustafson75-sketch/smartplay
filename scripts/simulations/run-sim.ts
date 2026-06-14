@@ -1563,6 +1563,24 @@ check('Voice polish: in-app "play" stays in-app · plain-speak mode · tutorials
   })(),
   'in-app play never hits YouTube; plain-speak reshapes only on signal; quick instructions default-on + skippable for testing');
 
+check('Gyro-parallax wow v1: tilt floats the SmartVision hole image (presentation-only)',
+  // 2026-06-13 (Tim) — rung 1 of the 3D roadmap. ParallaxTilt pans the background by
+  // gyro tilt (DeviceMotion) so it reads as depth; overlays stay fixed. Applied to the
+  // SmartVision hole preview. Pure illusion — never feeds analysis. Static w/o a sensor.
+  (() => {
+    const c = read('components/ParallaxTilt.tsx');
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    return (
+      /from 'expo-sensors'/.test(c) && /DeviceMotion\.isAvailableAsync\(\)/.test(c) &&
+      /DeviceMotion\.addListener/.test(c) && /translateX: tx/.test(c) && /OVERSCAN/.test(c) &&
+      /never feeds analysis|presentation illusion|never feeds/i.test(c) &&  // honesty noted
+      // applied to the hole preview, image as the parallax background, overlays as children
+      /import \{ ParallaxTilt \} from '\.\.\/ParallaxTilt'/.test(prev) &&
+      /<ParallaxTilt[\s\S]*?background=\{<Image source=\{curatedImage\}/.test(prev)
+    );
+  })(),
+  'ParallaxTilt pans the hole image by gyro tilt behind fixed overlays (depth illusion); applied to SmartVision preview; static w/o sensor; presentation-only');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at
