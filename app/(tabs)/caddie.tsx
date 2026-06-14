@@ -2064,13 +2064,18 @@ export default function CaddieTab() {
         // with a 10px gap; each cell capped so the bottom of the
         // bottom cell stays clear of the SmartFinder card.
         const cellW = W - 24;
-        const cellH = Math.min(220, Math.floor((cellMaxBottom - cellTop - 10) / 2));
         const gap = 10;
+        const cellH = Math.min(220, Math.floor((cellMaxBottom - cellTop - gap) / 2));
+        // 2026-06-13 (Tim) — when the cells are capped (slack below them), LOWER the
+        // whole block so it fills the gap above Start Round instead of floating high.
+        // Bottom-bias to ~8px above cellMaxBottom (already clears the bubble); never
+        // higher than the original cellTop. Cells keep their size; only the block moves.
+        const blockTop = Math.max(cellTop, cellMaxBottom - (cellH * 2 + gap) - 8);
         return (
           <>
             <View
               style={{
-                position: 'absolute', top: cellTop, left: 12,
+                position: 'absolute', top: blockTop, left: 12,
                 width: cellW, height: cellH,
                 borderRadius: 14, borderWidth: 1.5, borderColor: '#1e3a28',
                 overflow: 'hidden', backgroundColor: '#060f09', zIndex: 6,
@@ -2095,7 +2100,7 @@ export default function CaddieTab() {
               />
             </View>
             <View
-              style={{ position: 'absolute', top: cellTop + cellH + gap, left: 12, zIndex: 6 }}
+              style={{ position: 'absolute', top: blockTop + cellH + gap, left: 12, zIndex: 6 }}
               pointerEvents="box-none"
             >
               <L1HolePreview onOpenSmartVision={openSmartVision} width={cellW} height={cellH} />
