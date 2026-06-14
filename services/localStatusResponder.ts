@@ -119,6 +119,7 @@ const L: Record<LocalReplyLanguage, {
   reachNo: (plays: number, club: string, carry: number) => string;
   lastShot: (club: string | null, dist: number | null, dir: 'left' | 'right' | 'straight' | null) => string;
   noLastShot: string;
+  noClubShot: (club: string) => string;
   handicapIs: (h: number) => string;
   routineSaved: string;
   routineNothingToSave: string;
@@ -172,6 +173,7 @@ const L: Record<LocalReplyLanguage, {
       return where ? `Last shot${where} — I don't have the club or distance logged.` : "I have your last shot logged but no club or distance on it.";
     },
     noLastShot: "You haven't logged a shot yet this round.",
+    noClubShot: (c) => `I don't have a ${c} shot logged this round yet.`,
     handicapIs: (h) => `Your handicap is ${h}.`,
     routineSaved: "Saved — that's your pre-round routine now. Ask for it any time.",
     routineNothingToSave: "I don't have a routine to save yet — ask me for a pre-round stretch first, then say save it.",
@@ -224,6 +226,7 @@ const L: Record<LocalReplyLanguage, {
       return where ? `Último tiro${where} — sin palo ni distancia.` : 'Tengo tu último tiro pero sin palo ni distancia.';
     },
     noLastShot: 'Aún no has registrado un tiro en esta ronda.',
+    noClubShot: (c) => `Aún no tengo un tiro con ${c} registrado en esta ronda.`,
     handicapIs: (h) => `Tu handicap es ${h}.`,
     routineSaved: 'Guardado — esa es tu rutina previa. Pídemela cuando quieras.',
     routineNothingToSave: 'Aún no tengo una rutina para guardar — pídeme un estiramiento primero y luego di que lo guarde.',
@@ -276,6 +279,7 @@ const L: Record<LocalReplyLanguage, {
       return where ? `上一杆${where}——没有球杆和距离记录。` : '有你上一杆的记录，但没有球杆和距离。';
     },
     noLastShot: '这回合你还没有记录任何一杆。',
+    noClubShot: (c) => `这回合还没有记录${c}的击球。`,
     handicapIs: (h) => `你的差点是${h}。`,
     routineSaved: '已保存——这就是你的赛前热身routine。随时可以问我。',
     routineNothingToSave: '我还没有可保存的routine——先让我给你一个赛前拉伸，然后说保存。',
@@ -307,7 +311,7 @@ const RX = {
   // club RECOMMENDATION ("what club should I hit / club for this / what do I hit here")…
   clubRec:    /\b(what|which)\s+club\s+(should|do|would)\s+i\b|\bclub\s+(for\s+this|from\s+here|do\s+i\s+(?:hit|need))\b|\bwhat\s+(?:should|do)\s+i\s+(?:hit|play)\s+(?:here|from\s+here|on\s+this)?\b|\bgive\s+me\s+a\s+club\b/i,
   // …and LAST SHOT recall ("what did I just hit / how was that / my last shot").
-  lastShot:   /\b(last\s+shot|what\s+did\s+i\s+(?:just\s+)?hit|how\s+was\s+(?:that|my\s+last)|that\s+last\s+(?:one|shot)|my\s+last\s+(?:shot|swing))\b/i,
+  lastShot:   /\b(last\s+shot|what\s+did\s+i\s+(?:just\s+)?hit|how\s+was\s+(?:that|my\s+last)|that\s+last\s+(?:one|shot)|my\s+last\s+(?:shot|swing|drive)|what\s+did\s+my\s+(?:driver|drive|last\s+shot)\s+do|how\s+far\s+(?:was|did)\s+(?:my\s+(?:last\s+)?(?:shot|drive|driver)|i\s+(?:hit|drive))|how\s+far\s+did\s+that\s+go)\b/i,
   // PLAYS-LIKE — the composed read (distance adjusted for wind/elevation). Check
   // BEFORE yardage since "how far does it play" also contains "how far".
   playsLike:  /\b(plays?\s+like|playing\s+(?:distance|like)|how\s+far\s+does\s+it\s+play|with\s+the\s+wind|into\s+the\s+wind|adjusted?\s+(?:for\s+)?(?:wind|elevation)|effective\s+(?:distance|yardage))\b/i,
@@ -388,7 +392,7 @@ export function tryLocalReply(
   }
   // ── LAST SHOT recall ──
   if (RX.lastShot.test(t)) {
-    return lastShotReply(lang);
+    return lastShotReply(t, lang);
   }
   // ── HOLE ──
   if (RX.hole.test(t)) {
@@ -662,13 +666,22 @@ function windReply(lang: LocalReplyLanguage): LocalReplyResult {
 
 // Offline caddie Tier 1 — LAST SHOT recall, straight from the logged round state
 // (roundStore.shots). Honest about missing club/distance fields.
-function lastShotReply(lang: LocalReplyLanguage): LocalReplyResult {
+function lastShotReply(transcript: string, lang: LocalReplyLanguage): LocalReplyResult {
   const round = useRoundStore.getState();
   const shots = round.shots ?? [];
   if (shots.length === 0) {
     return { text: L[lang].noLastShot, queryType: 'last_shot' };
   }
-  const s = shots[shots.length - 1];
+  // 2026-06-14 (Tim) — "what did my driver do / how far was my drive" → report the LAST
+  // DRIVER shot (not just the last shot). People most want their driver number.
+  const t = (transcript ?? '').toLowerCase();
+  const wantsDriver = /\b(driver|drive|tee shot|off the tee)\b/.test(t);
+  let s = shots[shots.length - 1];
+  if (wantsDriver) {
+    const driverShot = [...shots].reverse().find((x) => typeof x.club === 'string' && /driv/i.test(x.club));
+    if (driverShot) s = driverShot;
+    else return { text: L[lang].noClubShot('driver'), queryType: 'last_shot' };
+  }
   const club = typeof s.club === 'string' && s.club.trim() ? s.club.trim() : null;
   const dist = typeof s.distance_yards === 'number' ? s.distance_yards : null;
   const dir = s.direction ?? null;
