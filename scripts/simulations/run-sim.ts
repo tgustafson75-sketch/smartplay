@@ -1677,6 +1677,22 @@ check('Analysis speed: pre-warm the lambda on record entry (kills cold-start)',
   })(),
   'swing-analysis lambda pre-warmed on record entry (empty-frames fast path, throttled) so the first real analysis lands hot');
 
+// 2026-06-14 (Tim) — quick-tier payload: 3 frames at 512px (down from 640) shrinks the
+// per-frame base64 ~36% so the UPLOAD leg lands faster on weak cellular, without losing
+// the gross-fault read accuracy (golfer fills the frame; face-angle is parked). Full-tier
+// (library/upload detail) stays 800px untouched. Guard against a regression back to 1024+.
+check('Analysis speed: quick-tier payload is lean (3 frames @ 512px) without touching full-tier',
+  (() => {
+    const p = read('services/poseDetection.ts');
+    return (
+      /const QUICK_TIER_FRAME_TIME_FRACTIONS = \[0\.10, 0\.55, 0\.85\]/.test(p) &&  // 3 frames
+      /const QUICK_TIER_RESIZE_WIDTH = 512/.test(p) &&                            // shrunk 640→512
+      /const FULL_TIER_RESIZE_WIDTH = 800/.test(p) &&                             // full-tier untouched
+      !/RESIZE_WIDTH = (?:1024|1280)/.test(p)                                     // no regression to huge frames
+    );
+  })(),
+  'the speed-path (SmartMotion / Cage / library Quick) sends 3 frames at 512px — a ~36% lighter upload than 640 — while full-tier library reads keep 800px for detail; no regression to 1024px+ payloads');
+
 check('Self-growing agent: local hit-rate is instrumented (local vs cloud)',
   // 2026-06-13 — Tim's standing rule: the brain answers more LOCALLY over time,
   // pinging the cloud less. A persisted counter tags every query local vs cloud at

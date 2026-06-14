@@ -293,7 +293,15 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
 // ~30-45% of model time and ~40% of per-frame upload payload.
 // Used via the optional `quickTier` arg below.
 const QUICK_TIER_FRAME_TIME_FRACTIONS = [0.10, 0.55, 0.85];
-const QUICK_TIER_RESIZE_WIDTH = 640;
+// 2026-06-14 (Tim — analysis speed, "without losing accuracy") — 640 → 512px.
+// The quick-tier read is gross body-fault detection (over-the-top, reverse pivot,
+// early extension) where the golfer fills the frame; that's fully legible at 512px.
+// (Face-angle is the only thing that degrades sub-640, and it's parked — needs
+// 240fps. See face-smash-fps-future.) This cuts the per-frame base64 ~36% on top
+// of the 3-frame sample, so the UPLOAD leg — the real bottleneck on the weak
+// cellular Tim plays in — lands faster. Conservative step within the validated
+// 800→640 accuracy-neutral range; revert to 640 if a clean-session A/B shows drift.
+const QUICK_TIER_RESIZE_WIDTH = 512;
 const QUICK_TIER_COMPRESS = 0.55;
 const FULL_TIER_RESIZE_WIDTH = 800;
 const FULL_TIER_COMPRESS = 0.65;
