@@ -7,7 +7,7 @@
  * the video to the detected moment.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
@@ -134,6 +134,14 @@ export default function SwingDetail() {
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
   // 2026-05-22 — Compare-to-Reference picker sheet open/close.
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
+  // 2026-06-14 (Tim — bilateral) — link a SECOND ANGLE of the same swing. Picks
+  // another library swing → opens the bilateral read (one DTL + one face-on).
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const allSessions = useCageStore(s => s.sessionHistory);
+  const otherSessions = useMemo(
+    () => allSessions.filter(x => x.id !== swing_id).slice(0, 30),
+    [allSessions, swing_id],
+  );
   // 2026-05-23 — Comparison result sheet state. Holds the resolved
   // SwingComparison + ReferenceSwing pair. When both are non-null
   // the result sheet animates up with the side-by-side metric bars.
@@ -1325,6 +1333,51 @@ export default function SwingDetail() {
                   swings). Gemini-first Q&A — Bryson-DeChambeau-ad
                   parity with our caddie voice on top. */}
               <AskYourSwingCard session={session} />
+              {/* 2026-06-14 (Tim — bilateral / second video source) — link another
+                  library swing (the other angle of the same swing) → combined read. */}
+              <TouchableOpacity
+                style={[styles.linkAngleBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                onPress={() => setLinkPickerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Link a second camera angle of this swing"
+              >
+                <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+                <Text style={[styles.linkAngleText, { color: colors.text_primary }]}>Link a second angle (bilateral)</Text>
+              </TouchableOpacity>
+              <Modal visible={linkPickerOpen} transparent animationType="slide" onRequestClose={() => setLinkPickerOpen(false)}>
+                <View style={styles.linkBackdrop}>
+                  <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Pick the other angle</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Choose the same swing from the other camera (one down-the-line, one face-on).</Text>
+                    <ScrollView style={{ maxHeight: 360 }}>
+                      {otherSessions.length === 0 ? (
+                        <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other swings yet — upload the second angle first.</Text>
+                      ) : otherSessions.map((os) => {
+                        const ang = os.upload?.angleOverride;
+                        const angLabel = ang === 'face_on' ? 'FACE-ON' : ang === 'down_the_line' ? 'DTL' : '—';
+                        const club = os.currentClub ?? os.club ?? 'swing';
+                        const d = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
+                        return (
+                          <TouchableOpacity
+                            key={os.id}
+                            style={[styles.linkRow, { borderColor: colors.border }]}
+                            onPress={() => {
+                              setLinkPickerOpen(false);
+                              router.push(`/swinglab/bilateral?a=${swing_id}&b=${os.id}` as never);
+                            }}
+                          >
+                            <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{club} · {d}</Text>
+                            <Text style={[styles.linkRowBadge, { color: colors.accent }]}>{angLabel}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                    <TouchableOpacity onPress={() => setLinkPickerOpen(false)} style={styles.linkCancel}>
+                      <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
               {/* 2026-05-23 (Fix #5) — DrillCard gated on
                   drill_recommendation being non-null for putting
                   sessions so no empty drill placeholder appears
@@ -1939,6 +1992,18 @@ const coachNoteStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingBottom: 60 },
+  // 2026-06-14 — bilateral link button + picker sheet
+  linkAngleBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginHorizontal: 16, marginTop: 12 },
+  linkAngleText: { fontSize: 14, fontWeight: '700' },
+  linkBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  linkSheet: { borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, paddingBottom: 30 },
+  linkTitle: { fontSize: 18, fontWeight: '900' },
+  linkSub: { fontSize: 12, marginTop: 4, marginBottom: 10 },
+  linkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, paddingVertical: 12 },
+  linkRowText: { fontSize: 14, fontWeight: '600', flex: 1, marginRight: 10 },
+  linkRowBadge: { fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  linkCancel: { paddingVertical: 12, alignItems: 'center', marginTop: 6 },
+  linkCancelText: { fontSize: 14, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

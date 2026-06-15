@@ -2528,6 +2528,36 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — bilateral / second video source) — link two analyzed swings (one
+// DTL, one face-on of the same swing) → one combined read. Honest: each angle's valid
+// half, impact-anchored (acoustic strike = shared event), labeled 2D not 3D.
+check('Bilateral: link two angles → merged read (impact-anchored, honest 2D)',
+  (() => {
+    const svc = read('services/swing/bilateralMerge.ts');
+    const view = read('app/swinglab/bilateral.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const svcOk =
+      /export function mergeBilateral\(a: BilateralSwingInput, b: BilateralSwingInput\): BilateralRead/.test(svc) &&
+      // pure (no store/RN imports)
+      !/from '\.\.\/\.\.\/store|from 'react-native'/.test(svc) &&
+      // classifies by angle, honest about same/missing angle
+      /s\.angle === 'down_the_line'/.test(svc) && /s\.angle === 'face_on'/.test(svc) &&
+      /Link one of each angle/.test(svc) &&
+      // impact alignment (acoustic anchor) + honest 2D-not-3D line
+      /alignedAtImpact = \(dtlIn\?\.impactSec != null\) && \(faceOnIn\?\.impactSec != null\)/.test(svc) &&
+      /Aligned on the acoustic impact/.test(svc) &&
+      /Not 3D \(that needs synced, calibrated capture\)/.test(svc);
+    const viewOk =
+      /mergeBilateral\(toInput\(sa\), toInput\(sb\)\)/.test(view) &&
+      // impact anchor read from the shot's detectionOffsetSeconds
+      /s\.shots\?\.\[0\]\?\.detectionOffsetSeconds/.test(view);
+    const entryOk =
+      /Link a second angle \(bilateral\)/.test(detail) &&
+      /router\.push\(`\/swinglab\/bilateral\?a=\$\{swing_id\}&b=\$\{os\.id\}`/.test(detail);
+    return svcOk && viewOk && entryOk;
+  })(),
+  'a swing detail can link a second library swing (the other angle) → a bilateral read that merges DTL (path/plane) + face-on (sway/weight), aligned on the shared acoustic impact when both have one, honestly labeled 2D-not-3D');
+
 // 2026-06-14 (audit rerun — 5 confirmed fixes before testing) ──────────────────
 check('Audit fix: upload never strands on "Saving…" if ingest throws',
   (() => {
