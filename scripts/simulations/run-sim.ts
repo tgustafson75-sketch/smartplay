@@ -4357,6 +4357,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       full.hasEnough && full.totalEstimatedPoints === 50 && full.pointsSeries.length === 6 &&
       full.scoreSeries.length === 5 && !/cause|because/i.test(full.headline),
     'thin data → "keep logging" (no claim); enough data → estimated total (5 sessions x 10) + points/week + score series, headline describes association only');
+
+  // Tim — "run live, re-estimate clean start later": sinceMs baseline starts clean.
+  const baseline = now - 10 * DAY; // only the 2 most-recent of the 5 sessions land after it
+  const live = computePointsPerformance({
+    sessions: Array.from({ length: 5 }, (_, i) => ({ startedAt: now - (i + 1) * 3 * DAY, swings: 5 })),
+    rounds: [],
+    nowMs: now,
+    sinceMs: baseline,
+  });
+  check('Library points: clean-start baseline (sinceMs) counts only sessions after it',
+    live.sessionsCounted === 3 && live.totalEstimatedPoints === 30 &&
+      full.sessionsCounted === 5, // all-time (no sinceMs) still sees everything for the later re-estimate
+    'sinceMs excludes pre-baseline sessions so the graph builds live from a clean start (3 of 5 here); omitting sinceMs counts all-time for the future re-estimate');
 }
 
 // ─── Shot-shape drills (2026-06-15, Tim) ────────────────────────────────────────

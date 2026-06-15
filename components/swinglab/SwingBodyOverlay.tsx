@@ -189,7 +189,9 @@ export default function SwingBodyOverlay({
   }
   // Stroke widths derived from the draw space so the overlay stays readable.
   const sw = strokeBase * 0.012;
-  const dotR = strokeBase * 0.018;
+  // 2026-06-15 (Tim) — joint dots were too big and overlapped; smaller so the
+  // skeleton reads cleanly (joints sit on the lines, not blobs over them).
+  const dotR = strokeBase * 0.011;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">

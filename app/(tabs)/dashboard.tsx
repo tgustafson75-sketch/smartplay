@@ -40,6 +40,7 @@ import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { useCageStore } from '../../store/cageStore';
+import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
@@ -114,6 +115,10 @@ export default function Dashboard() {
   // them (conservative, labeled) and pair points/week vs score-vs-par. Honest first
   // version: association, never causation. [[points-practice-correlation]]
   const libraryHistory = useCageStore((s) => s.sessionHistory);
+  // 2026-06-15 (Tim) — run LIVE from a clean baseline so the graph builds up as new
+  // practice lands; re-estimate the historical start later (setBaseline). Set once.
+  const pointsBaselineMs = usePointsBaselineStore((s) => s.baselineMs);
+  useEffect(() => { usePointsBaselineStore.getState().ensureBaseline(Date.now()); }, []);
   const pointsPerf = useMemo(
     () => computePointsPerformance({
       sessions: (libraryHistory ?? [])
@@ -121,8 +126,9 @@ export default function Dashboard() {
         .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
       rounds: roundHistory.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
       nowMs: Date.now(),
+      sinceMs: pointsBaselineMs ?? undefined, // clean-start baseline (live build)
     }),
-    [libraryHistory, roundHistory],
+    [libraryHistory, roundHistory, pointsBaselineMs],
   );
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
@@ -678,7 +684,9 @@ export default function Dashboard() {
               </View>
             </View>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
-              Estimated from {pointsPerf.sessionsCounted} library {pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} · conservative, for trend not a tally.
+              {pointsBaselineMs
+                ? `Running live since ${new Date(pointsBaselineMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${pointsPerf.sessionsCounted} ${pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} so far. Watch it build — we'll re-estimate your earlier history later.`
+                : 'Building live as you practice. We\'ll re-estimate your earlier history later.'}
             </Text>
           </View>
         )}

@@ -31,6 +31,10 @@ export interface PointsPerformanceInput {
   /** Completed rounds: an end time + score relative to par (lower = better). */
   rounds: { endedAt: number; scoreVsPar: number }[];
   nowMs: number;
+  /** 2026-06-15 (Tim — "run live for now, re-estimate clean start later") — count
+   *  only sessions on/after this baseline so the graph starts CLEAN and builds live.
+   *  Omit/0 to count all-time (the future "re-estimate" path). */
+  sinceMs?: number;
 }
 
 export interface PointsPerformance {
@@ -54,13 +58,14 @@ const MIN_SESSIONS = 3;
 const MIN_ROUNDS = 4;
 
 export function computePointsPerformance(input: PointsPerformanceInput): PointsPerformance {
-  const { sessions, rounds, nowMs } = input;
+  const { sessions, rounds, nowMs, sinceMs = 0 } = input;
 
   const pointsSeries = new Array(WEEKS).fill(0) as number[];
   let totalEstimatedPoints = 0;
   let sessionsCounted = 0;
   for (const s of sessions ?? []) {
     if (typeof s.startedAt !== 'number') continue;
+    if (s.startedAt < sinceMs) continue; // before the live baseline — clean start
     const pts = estimateSessionPoints(s.swings);
     totalEstimatedPoints += pts;
     sessionsCounted += 1;
