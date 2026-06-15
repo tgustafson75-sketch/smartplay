@@ -215,8 +215,19 @@ export default function SwingDetail() {
   // per swing via the effect below. Single source of truth.
   useEffect(() => {
     void videoRef.current?.setIsMutedAsync(true);
-    return () => { void stopSpeaking(); };
   }, []);
+
+  // 2026-06-15 (Tim — voice racing) — stop any in-flight/queued narration when the
+  // swing CHANGES, not just on unmount. The speak queue is serial: if you open
+  // swing A, its narration is mid-TTS-fetch (slow/failing network — Tim's exact
+  // case) holding the queue slot, then back out and open swing B, A's audio still
+  // plays to completion and B queues behind it → "voices catching up late". Keying
+  // this cleanup on swing_id bumps the speak generation + aborts the in-flight
+  // fetch on every swing change (covers screen-reuse where the []-unmount never
+  // fires), so each swing starts from a clean voice slot.
+  useEffect(() => {
+    return () => { void stopSpeaking(); };
+  }, [swing_id]);
 
   // Phase V — automatic Kevin voice when analysis FIRST completes for this
   // session. Fires once per swing_id transition into 'ok' so the player

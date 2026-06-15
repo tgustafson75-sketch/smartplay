@@ -4328,6 +4328,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'focus re-orders the swing emphasis (power → driver leads) but every club the budget allows still survives');
 }
 
+// ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────
+check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catch-up racing)',
+  (() => {
+    const src = read('app/swinglab/swing/[swing_id].tsx');
+    // a stopSpeaking cleanup keyed on [swing_id] (fires on every swing change +
+    // unmount), so a slow/failing TTS fetch from the prior swing can't play late
+    // while the next swing's narration queues behind it on the serial speak queue.
+    return /return \(\) => \{ void stopSpeaking\(\); \};\s*\}, \[swing_id\]\)/.test(src);
+  })(),
+  'navigating between swing-library files aborts the prior swing\'s in-flight/queued narration (stopSpeaking bumps the speak generation + aborts the TTS fetch) so voices don\'t stack and catch up late');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
