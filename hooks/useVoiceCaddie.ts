@@ -1784,6 +1784,13 @@ export const useVoiceCaddie = ({
     // a prior reply; once they're starting a new question, that state
     // is no longer relevant.
     userInterruptedRef.current = false;
+    // 2026-06-15 (Tim — Ray-Ban Meta glasses tap-to-talk cold-start) — warm the
+    // voice Lambdas the INSTANT a capture starts, so the cold-start overlaps the few
+    // seconds the user is speaking (the recording window hides it). Covers the gap
+    // the mount/foreground warms miss: sitting idle on the caddie tab (glasses on),
+    // then tapping after the Lambdas have re-cooled — Tim's "first tap = no
+    // connection, fine after ~20s." 30s dedupe makes it a no-op when already warm.
+    if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS

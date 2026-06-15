@@ -15,6 +15,9 @@ Severity key: 🔴 blocker · 🟠 broken/wrong · 🟡 polish/nit · 🔵 quest
 > Filled in as Tim works the 7 pages of `docs/TEST-MANUAL.md`. One bullet per finding:
 > `- [severity] <tool/item> — <symptom in Tim's words> (manual pg N)`
 
+### Unassigned (confirm which manual page)
+- ✅ **FIXED (test-enabling, OTA'd 2026-06-15) — Tap-to-talk on Ray-Ban Meta glasses cold-start delay.** First tap engaged the mic but the first response was delayed / read as "no connection"; after ~20s it warmed and every tap worked. Cause: the voice Lambdas re-cool after ~15 min idle, and the existing warms only fire on caddie-tab mount + app-foreground — not on "sat idle on the tab, then tapped." Fix: `handleMicPress` now fires `prewarmVoice()` the instant a capture STARTS, so the cold-start overlaps the seconds you're speaking. (hooks/useVoiceCaddie.ts)
+
 ### Page 1 —
 - _(none yet)_
 
