@@ -36,7 +36,7 @@ import {
 } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { recalibrateGps } from '../../services/gpsManager';
@@ -82,12 +82,8 @@ export function GlobalToolsMenu() {
   const endRound = useRoundStore((s) => s.endRound);
   // Feature gate (subscription_status lives in playerProfileStore)
   const subscription_status = usePlayerProfileStore((s) => s.subscription_status);
-  // 2026-05-25 — Beta-blocker fix: Reference Authoring is an internal
-  // instructor tool. Gate the row behind isOwnerEmail so beta testers
-  // don't see "Internal · capture instructor reference assets" in their
-  // tools menu. Owner sees the row as before.
-  const profileEmail = usePlayerProfileStore((s) => s.email);
-  const isOwner = isOwnerEmail(profileEmail);
+  // 2026-06-15 (Tim) — Reference Authoring relocated to Settings → Owner Tools
+  // as "Train the Trainer"; the owner gate (isOwnerEmail) moved with it.
 
   // ─── Action helpers — all close menu + haptic, optional toast/nav ─
 
@@ -368,15 +364,9 @@ export function GlobalToolsMenu() {
               onPress={() => nav('/(tabs)/swinglab')}
               colors={colors}
             />
-            {isOwner && (
-              <Row
-                icon="construct-outline"
-                label="Reference Authoring"
-                sub="Internal · capture instructor assets"
-                onPress={() => nav('/author/reference-assets')}
-                colors={colors}
-              />
-            )}
+            {/* 2026-06-15 (Tim) — "Reference Authoring" moved to Settings → Owner
+                Tools as "Train the Trainer" (instructor surface). Removed here to
+                avoid a duplicate owner entry. */}
             <Row
               icon="telescope-outline"
               label="SmartVision"

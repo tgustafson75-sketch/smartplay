@@ -1601,6 +1601,24 @@ export default function Settings() {
                       voiceService.configureAudioForSpeech (queued, no
                       race with the rest of voice stack). */}
                   <GlassesModeRow colors={colors} />
+                  {/* 2026-06-15 (Tim) — "Train the Trainer" — the reference-asset
+                      authoring tool (capture example pics + narrative for faults
+                      like open-face), moved here from the global Tools menu so it's
+                      an owner/instructor surface Tim can point Tank to. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/author/reference-assets' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Train the Trainer reference authoring"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Train the Trainer</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Capture example photos + narrative for fault references (open face, over-the-top, etc.) that train the analysis.
+                      </Text>
+                    </View>
+                    <Ionicons name="school-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-05-24 — Feel Capture toggle. When ON, every
                       cage swing's clip audio is transcribed via
                       Whisper and stored as feel_narration_transcript
