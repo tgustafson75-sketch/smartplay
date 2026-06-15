@@ -170,6 +170,7 @@ export function classifySession(
       fix: (only.analysis.fix ?? '').trim() || undefined,
       drill: (only.analysis.drill ?? '').trim() || undefined,
       evidence: (only.analysis.evidence ?? '').trim() || undefined,
+      strengths: cleanStrengths(only.analysis.strengths),
     };
   }
 
@@ -225,6 +226,7 @@ export function classifySession(
       fix: (best?.fix ?? '').trim() || undefined,
       drill: (best?.drill ?? '').trim() || undefined,
       evidence: (best?.evidence ?? '').trim() || undefined,
+      strengths: cleanStrengths(best?.strengths),
     };
   }
 
@@ -260,7 +262,22 @@ export function classifySession(
     fix: (fallback.analysis.fix ?? '').trim() || undefined,
     drill: (fallback.analysis.drill ?? '').trim() || undefined,
     evidence: (fallback.analysis.evidence ?? '').trim() || undefined,
+    strengths: cleanStrengths(fallback.analysis.strengths),
   };
+}
+
+// 2026-06-14 (Tim) — normalize the model's strengths list: trim, drop empties,
+// cap at 2 (the card leads with the fault; strengths are a tight "what's
+// working" line, not a paragraph). Returns undefined when nothing usable so the
+// card hides the block cleanly (back-compat with pre-deploy servers).
+function cleanStrengths(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const cleaned = raw
+    .filter((x): x is string => typeof x === 'string')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0)
+    .slice(0, 2);
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 // 2026-05-24 — GolfFix #1 multi-swing helper. Find the highest-confidence
@@ -270,7 +287,7 @@ export function classifySession(
 function pickBestStructured(
   swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
   consensusIssue: CanonicalIssue,
-): { primary_fault?: SwingAnalysis['primary_fault']; cause?: string; fix?: string; drill?: string; evidence?: string } | null {
+): { primary_fault?: SwingAnalysis['primary_fault']; cause?: string; fix?: string; drill?: string; evidence?: string; strengths?: string[] } | null {
   const matches = swingAnalyses
     .filter((s) => s.analysis.detected_issue === consensusIssue)
     .filter((s) => (s.analysis.fix ?? '').trim().length > 0)
@@ -280,7 +297,7 @@ function pickBestStructured(
     });
   if (matches.length === 0) return null;
   const a = matches[0].analysis;
-  return { primary_fault: a.primary_fault, cause: a.cause, fix: a.fix, drill: a.drill, evidence: a.evidence };
+  return { primary_fault: a.primary_fault, cause: a.cause, fix: a.fix, drill: a.drill, evidence: a.evidence, strengths: a.strengths };
 }
 
 // 2026-05-16 — Pick the highest-confidence per-swing observation that

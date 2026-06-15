@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +21,14 @@ function fmtDate(ms: number): string {
 function toInput(s: CageSession): BilateralSwingInput {
   const pi = s.primary_issue ?? null;
   const club = s.currentClub ?? s.club ?? 'swing';
+  const faultName = pi?.name ?? (pi as { primary_fault?: string } | null)?.primary_fault ?? null;
+  const category = pi?.category ?? null;
+  // A real fault = a named fault whose primary_fault isn't the "clean / can't tell"
+  // outcomes. primary_fault carries those sentinels (category is the fault family).
+  const pf = pi?.primary_fault ?? null;
+  const hasFault = !!faultName && pf !== 'no_dominant_fault' && pf !== 'inconclusive';
+  // Model-named strengths — server `strengths` field (staged; absent until deployed).
+  const strengths = (pi as { strengths?: string[] } | null)?.strengths ?? null;
   return {
     sessionId: s.id,
     angle: s.upload?.angleOverride ?? null,
@@ -28,11 +36,20 @@ function toInput(s: CageSession): BilateralSwingInput {
     // The acoustic impact anchor lives on the shot (detectionOffsetSeconds); use the
     // first shot's offset as this swing's impact for cross-angle alignment.
     impactSec: typeof s.shots?.[0]?.detectionOffsetSeconds === 'number' ? s.shots[0].detectionOffsetSeconds : null,
-    faultName: pi?.name ?? (pi as { primary_fault?: string } | null)?.primary_fault ?? null,
-    category: pi?.category ?? null,
+    faultName,
+    category,
     breakdown: pi?.mechanical_breakdown ?? null,
     fix: (pi as { fix?: string } | null)?.fix ?? pi?.feel_cue ?? null,
+    strengths,
+    hasFault,
   };
+}
+
+/** Best representative frame for the side-by-side: library thumbnail, else the
+ *  server's wire-quality fault frame. Null ⇒ render a placeholder tile. */
+function frameUri(s: CageSession | null): string | null {
+  if (!s) return null;
+  return s.thumbnailUri ?? s.primary_issue?.visual_reference_path ?? null;
 }
 
 export default function BilateralReview() {
@@ -46,6 +63,16 @@ export default function BilateralReview() {
   const sb = useMemo(() => history.find((s) => s.id === b) ?? null, [history, b]);
 
   const read = useMemo(() => (sa && sb ? mergeBilateral(toInput(sa), toInput(sb)) : null), [sa, sb]);
+
+  // Map each session to its angle for the side-by-side biplane strip (DTL left, face-on right).
+  const dtlSession = useMemo(
+    () => [sa, sb].find((s) => s?.upload?.angleOverride === 'down_the_line') ?? null,
+    [sa, sb],
+  );
+  const faceOnSession = useMemo(
+    () => [sa, sb].find((s) => s?.upload?.angleOverride === 'face_on') ?? null,
+    [sa, sb],
+  );
 
   const back = (
     <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
@@ -62,17 +89,51 @@ export default function BilateralReview() {
     );
   }
 
-  const AngleCard = ({ r }: { r: BilateralAngleRead }) => (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-      <Text style={[styles.angleLabel, { color: colors.accent }]}>
-        {r.angle === 'down_the_line' ? 'DOWN THE LINE' : 'FACE-ON'}
-      </Text>
-      <Text style={[styles.sub, { color: colors.text_muted }]}>{r.label} · reads {r.reads}</Text>
-      {r.faultName ? <Text style={[styles.fault, { color: colors.text_primary }]}>{r.faultName}</Text> : <Text style={[styles.sub, { color: colors.text_muted }]}>No fault flagged from this angle.</Text>}
-      {r.breakdown ? <Text style={[styles.body, { color: colors.text_primary }]}>{r.breakdown}</Text> : null}
-      {r.fix ? <Text style={[styles.fix, { color: colors.accent }]}>Fix: {r.fix}</Text> : null}
-    </View>
-  );
+  // Honest positives for this angle: model-named strengths if present, else the
+  // clean-base note (absence of a flagged fault in this angle's domain).
+  const positives = (r: BilateralAngleRead): string[] =>
+    r.strengths.length > 0 ? r.strengths : r.cleanNote ? [r.cleanNote] : [];
+
+  const AngleCard = ({ r }: { r: BilateralAngleRead }) => {
+    const wins = positives(r);
+    return (
+      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <Text style={[styles.angleLabel, { color: colors.accent }]}>
+          {r.angle === 'down_the_line' ? 'DOWN THE LINE' : 'FACE-ON'}
+        </Text>
+        <Text style={[styles.sub, { color: colors.text_muted }]}>{r.label} · reads {r.reads}</Text>
+        {wins.length > 0 ? (
+          <View style={styles.winBlock}>
+            <Text style={[styles.winLabel, { color: '#3FB950' }]}>WHAT&apos;S WORKING</Text>
+            {wins.map((w, i) => (
+              <Text key={i} style={[styles.win, { color: colors.text_primary }]}>✓ {w}</Text>
+            ))}
+          </View>
+        ) : null}
+        {r.faultName ? <Text style={[styles.fault, { color: colors.text_primary }]}>{r.faultName}</Text> : <Text style={[styles.sub, { color: colors.text_muted }]}>No fault flagged from this angle.</Text>}
+        {r.breakdown ? <Text style={[styles.body, { color: colors.text_primary }]}>{r.breakdown}</Text> : null}
+        {r.fix ? <Text style={[styles.fix, { color: colors.accent }]}>Fix: {r.fix}</Text> : null}
+      </View>
+    );
+  };
+
+  // Side-by-side biplane strip: the two angles' representative frames together.
+  const FrameTile = ({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) => {
+    const uri = frameUri(session);
+    return (
+      <View style={[styles.tile, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+        <Text style={[styles.tileLabel, { color: colors.accent }]}>{fallbackLabel}</Text>
+        {uri ? (
+          <Image source={{ uri }} style={styles.tileImg} resizeMode="cover" />
+        ) : (
+          <View style={[styles.tileImg, styles.tilePlaceholder]}>
+            <Ionicons name="image-outline" size={22} color={colors.text_muted} />
+            <Text style={[styles.tilePlaceholderText, { color: colors.text_muted }]}>no frame</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -80,6 +141,12 @@ export default function BilateralReview() {
         {back}
         <Text style={[styles.title, { color: colors.text_primary }]}>Bilateral read</Text>
         <Text style={[styles.headline, { color: colors.text_primary }]}>{read.headline}</Text>
+
+        {/* Side-by-side biplane: same swing, two angles together. */}
+        <View style={styles.biplaneRow}>
+          <FrameTile session={dtlSession} fallbackLabel="DOWN THE LINE" />
+          <FrameTile session={faceOnSession} fallbackLabel="FACE-ON" />
+        </View>
 
         {read.dtl ? <AngleCard r={read.dtl} /> : null}
         {read.faceOn ? <AngleCard r={read.faceOn} /> : null}
@@ -101,6 +168,15 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, justifyContent: 'center', marginBottom: 4 },
   title: { fontSize: 24, fontWeight: '900', marginTop: 4 },
   headline: { fontSize: 15, fontWeight: '700', marginTop: 6, marginBottom: 12 },
+  biplaneRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  tile: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 8 },
+  tileLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.1, marginBottom: 6 },
+  tileImg: { width: '100%', aspectRatio: 3 / 4, borderRadius: 8 },
+  tilePlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 4 },
+  tilePlaceholderText: { fontSize: 11 },
+  winBlock: { marginTop: 10, marginBottom: 2 },
+  winLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 4 },
+  win: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 2 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12 },
   angleLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
   sub: { fontSize: 12, marginTop: 4 },

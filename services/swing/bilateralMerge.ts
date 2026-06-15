@@ -26,6 +26,10 @@ export interface BilateralSwingInput {
   category: string | null;            // primary_issue.category
   breakdown: string | null;           // mechanical_breakdown
   fix: string | null;                 // primary_issue.fix / feel_cue
+  /** Model-named strengths (primary_issue.strengths once the server field deploys). */
+  strengths?: string[] | null;
+  /** Whether this swing's read flagged a real fault (false ⇒ a clean-base positive). */
+  hasFault?: boolean;
 }
 
 export interface BilateralAngleRead {
@@ -36,6 +40,14 @@ export interface BilateralAngleRead {
   fix: string | null;
   /** What this angle is the authority on. */
   reads: string;
+  /** 2026-06-14 (Tim) — model-named strengths for this swing (from /api/swing-analysis
+   *  `strengths`, once deployed). Empty until then. */
+  strengths: string[];
+  /** Honest fallback positive when the model named no explicit strength but this angle
+   *  flagged no fault — "nothing flagged from the domain this angle reads". Null otherwise.
+   *  Face-on owns the fundamentals (setup: stance/ball position/grip) + the finish; DTL
+   *  owns path/plane. Honest by construction: absence of a flagged fault, not invented praise. */
+  cleanNote: string | null;
 }
 
 export interface BilateralRead {
@@ -50,8 +62,21 @@ export interface BilateralRead {
 const DTL_READS = 'path, plane, over-the-top, early extension, attack angle';
 const FACEON_READS = 'weight shift, hip rotation, sway, reverse pivot, setup';
 
+// Honest "clean base" positive when no fault was flagged from this angle. Names the
+// domains the angle actually reads (face-on owns Tank's fundamentals + the finish;
+// DTL owns path/plane) — it's the ABSENCE of a flagged fault, framed as a base to
+// build on, not invented praise.
+const FACEON_CLEAN = 'Setup (stance, ball position, grip) and finish — nothing flagged from face-on.';
+const DTL_CLEAN = 'Path & plane looked sound — nothing flagged from down the line.';
+
 function toAngleRead(s: BilateralSwingInput | null, angle: SwingAngle): BilateralAngleRead | null {
   if (!s) return null;
+  const modelStrengths = (s.strengths ?? []).filter((x) => typeof x === 'string' && x.trim());
+  // Only offer the clean-base note when the model named NO explicit strength AND this
+  // angle flagged no fault (s.hasFault === false). If hasFault is undefined we stay quiet.
+  const cleanNote = (modelStrengths.length === 0 && s.hasFault === false)
+    ? (angle === 'down_the_line' ? DTL_CLEAN : FACEON_CLEAN)
+    : null;
   return {
     angle,
     label: s.label,
@@ -59,6 +84,8 @@ function toAngleRead(s: BilateralSwingInput | null, angle: SwingAngle): Bilatera
     breakdown: s.breakdown,
     fix: s.fix,
     reads: angle === 'down_the_line' ? DTL_READS : FACEON_READS,
+    strengths: modelStrengths,
+    cleanNote,
   };
 }
 

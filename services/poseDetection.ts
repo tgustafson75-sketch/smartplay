@@ -80,6 +80,11 @@ export type SwingAnalysis = {
   // against the prior default-bias where every swing got 'early
   // extension' — a diagnostic call must now cite the frame.
   evidence?: string;
+  // 2026-06-14 (Tim) — 1-2 genuinely-observed strengths for THIS swing,
+  // named by the model alongside the fault (setup fundamentals from the
+  // address frame + balance from the finish). Empty when nothing observable;
+  // absent until the /api/swing-analysis `strengths` field is deployed.
+  strengths?: string[];
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe

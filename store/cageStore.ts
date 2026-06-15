@@ -349,6 +349,15 @@ export interface PrimaryIssue {
    *  no_dominant_fault). Empty for inconclusive. Surfaced under the
    *  fault headline on PrimaryIssueCard. */
   evidence?: string;
+  /** 2026-06-14 (Tim — "we go fault, fault, fault, but never say what you did
+   *  well") — 1-2 genuinely-OBSERVED strengths for THIS swing, named by the
+   *  model alongside the fault. Tank's fundamentals live here: setup (stance /
+   *  ball position / grip) from the address frame + balance from the finish.
+   *  Honest by construction — the model only populates this from what it can
+   *  see; empty when nothing observable. Surfaced as a "What's working" block
+   *  ABOVE the fault on PrimaryIssueCard. Absent until /api/swing-analysis
+   *  `strengths` is deployed (back-compat: card hides the block when empty). */
+  strengths?: string[];
 }
 
 export interface DrillRecommendation {

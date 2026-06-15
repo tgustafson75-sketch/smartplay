@@ -126,6 +126,14 @@ type SwingAnalysisResponse = {
   // even when it doesn't rise to a dominant fault). Surfaced under the
   // fault headline so the player can see WHY the call was made.
   evidence?: string;
+  // 2026-06-14 (Tim) — 1-2 genuinely-observed strengths for THIS swing,
+  // named alongside the fault. Tank's fundamentals (setup: grip / stance /
+  // ball position from the address frame; balance from the finish frame) are
+  // the primary source. CAUSAL: a confirmed-sound fundamental RULES OUT that
+  // fundamental as the source of the fault (state it — "neutral grip rules
+  // out the grip as the cause of the open face"); a flawed one is named as the
+  // ROOT in `cause`, not as a strength. Empty when nothing is observable.
+  strengths?: string[];
   // Phase 403b — 0-based index into the submitted frames identifying the
   // most diagnostic frame for the detected issue. Used downstream to
   // persist that exact frame as a JPEG so the review UI can show the
@@ -342,8 +350,18 @@ Output ONLY a JSON object:
   "cause": "<one sentence specific to THIS swing. For no_dominant_fault: strongest tendency observed or a genuine strength. Empty string '' only when primary_fault is 'inconclusive'.>",
   "fix": "<one concrete imperative swing cue. For no_dominant_fault: strongest area to work on next. Empty string '' only when primary_fault is 'inconclusive'.>",
   "drill": "<one specific actionable drill. For no_dominant_fault: maintenance/consistency drill or one targeting the named tendency. Empty string '' only when primary_fault is 'inconclusive'.>",
-  "evidence": "<string in the format 'Frame N: <what is visible that earned the call>'. REQUIRED for every diagnostic primary_fault including no_dominant_fault. Empty string '' only when primary_fault is 'inconclusive'.>"
+  "evidence": "<string in the format 'Frame N: <what is visible that earned the call>'. REQUIRED for every diagnostic primary_fault including no_dominant_fault. Empty string '' only when primary_fault is 'inconclusive'.>",
+  "strengths": ["<0-2 short strings naming what this player did WELL in THIS swing — see STRENGTHS rules. Empty array [] when nothing is genuinely observable, or when valid_swing is false.>"]
 }
+
+STRENGTHS — what the player did WELL (2026-06-14, CRITICAL — the app's coaching balance).
+The app has been naming faults and only faults. A good coach also names what's working — and a CONFIRMED-GOOD fundamental does real diagnostic work, not just morale. Populate "strengths" (0-2 short items) under these rules:
+
+- Source from what you can ACTUALLY SEE. The richest source is the SETUP / ADDRESS frame (usually the earliest, and clearest on a face-on clip): grip, stance width, posture, ball position. The FINISH frame is the other: a balanced, held finish is a real strength. Tempo that looks smooth across the sequence counts too.
+- HONESTY GATE (same bar as faults): only name a strength you can point to in a specific frame. If you can't see the grip (down-the-line, hands occluded), do NOT claim the grip is good — say nothing. An empty array is correct and honest when nothing stands out. NEVER invent praise; absence of a fault is NOT a strength.
+- CAUSAL LINK (Tim's rule — the important part): when a fundamental looks SOUND, use it to RULE OUT that fundamental as the cause of the named fault, and SAY SO. e.g. fault = club_face_open / slice, but grip is neutral and correct → strength: "Neutral grip — so the open face isn't coming from your hands; it's the path/release." This narrows the diagnosis for the player. Conversely, when a fundamental is FLAWED and plausibly explains the fault (weak/strong grip → face issue; ball too far back → steep strike), that belongs in "cause" as the ROOT — NOT in strengths.
+- Keep each item ONE short clause, plain language, second person. Lead with the thing, then (when it applies) the rule-out. Stay in the active caddie's voice.
+- When valid_swing is false OR frames are unreadable: return [].
 
 EXPLAIN — layman_explanation quality bar (CRITICAL).
 Most of this app's users are higher-handicap golfers. "Early extension" lands as noise to them and the diagnosis gets lost. The expert term stays the headline of the card (kept for trust); your job in layman_explanation is to TRANSLATE the term into something a beginner reads once and understands. Rules:
@@ -499,6 +517,22 @@ function normalizeAnalysis(
   parsed.fix = coerceStr(parsed.fix);
   parsed.drill = coerceStr(parsed.drill);
   parsed.evidence = coerceStr(parsed.evidence);
+  // 2026-06-14 (Tim) — strengths: array of short observed-positive strings.
+  // Trim, drop empties, cap at 2. Cleared when the swing is unreadable (no
+  // valid read ⇒ nothing observable to praise). Honest by construction —
+  // the model is gated to only name strengths it can see in a frame.
+  if (Array.isArray(parsed.strengths)) {
+    parsed.strengths = parsed.strengths
+      .filter((x: unknown): x is string => typeof x === 'string')
+      .map((x: string) => x.trim())
+      .filter((x: string) => x.length > 0)
+      .slice(0, 2);
+  } else {
+    parsed.strengths = [];
+  }
+  if (parsed.valid_swing === false) {
+    parsed.strengths = [];
+  }
   if (parsed.primary_fault === 'inconclusive') {
     parsed.cause = '';
     parsed.fix = '';

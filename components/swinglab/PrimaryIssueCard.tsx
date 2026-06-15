@@ -81,6 +81,13 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
   const layman = (issue.layman_explanation ?? '').trim();
   const hasLayman = layman.length > 0;
 
+  // 2026-06-14 (Tim) — "we go fault, fault, fault, but never say what you did
+  // well." Lead the card with the model's genuinely-observed strengths (setup
+  // fundamentals + finish balance, often carrying a causal rule-out). Hidden
+  // entirely until /api/swing-analysis `strengths` deploys (back-compat).
+  const strengths = (issue.strengths ?? []).filter((s) => typeof s === 'string' && s.trim().length > 0);
+  const hasStrengths = strengths.length > 0;
+
   return (
     <View style={[styles.card, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
       <View style={styles.headerRow}>
@@ -133,6 +140,18 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
       )}
 
       <View style={styles.divider} />
+
+      {hasStrengths && (
+        <View style={styles.strengthsBox}>
+          <Text style={styles.strengthsLabel}>WHAT&apos;S WORKING</Text>
+          {strengths.map((s, i) => (
+            <View key={i} style={styles.strengthRow}>
+              <Ionicons name="checkmark-circle" size={15} color="#3FB950" style={{ marginRight: 6, marginTop: 1 }} />
+              <Text style={styles.strengthText}>{s}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* 2026-05-24 — GolfFix #1 + S1.1 structured render. Branch order
           matters:
@@ -361,4 +380,19 @@ const styles = StyleSheet.create({
     borderLeftColor: '#00C896',
   },
   laymanText: { color: '#e8f5e9', fontSize: 13, lineHeight: 20 },
+  // 2026-06-14 (Tim) — strengths block. Green, leads the structured body so
+  // the player hears what's working before the fault. Distinct from the
+  // amber/teal fault treatments.
+  strengthsBox: {
+    backgroundColor: 'rgba(63,185,80,0.07)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3FB950',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 4,
+    marginBottom: 12,
+  },
+  strengthsLabel: { color: '#3FB950', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
+  strengthRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 2 },
+  strengthText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, flex: 1, fontWeight: '600' },
 });
