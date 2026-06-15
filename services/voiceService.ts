@@ -702,9 +702,14 @@ function pickDeviceVoice(gender: 'male' | 'female', language: 'en' | 'es' | 'zh'
   return match?.identifier;
 }
 
-function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male'): void {
+async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male'): Promise<void> {
   if (!text || myId !== currentSpeechId) return;
   ensureDeviceVoicesLoaded();
+  // 2026-06-15 (audit) — ensure SPEAKER playback mode before device-TTS. If we fell
+  // back right after a captureUtterance, the audio session can still be in RECORD
+  // mode and the device voice would play into the mic (the caddie goes silent).
+  try { await configureAudioForSpeech(); } catch { /* best-effort; speak anyway */ }
+  if (myId !== currentSpeechId) return; // preempted during the audio-mode switch
   try {
     Speech.stop(); // cancel any prior device utterance before starting a new one
     usingDeviceFallback = true;
@@ -1143,7 +1148,7 @@ export const speak = async (
       currentAbortController = null;
       logVoiceSilentFail('speak_circuit_degraded', { speechId: myId, textHead: text.slice(0, 60) });
       // Breaker open = we're offline. Don't go mute — speak it on the device.
-      deviceSpeakFallback(text, language, myId, effectiveGender);
+      void deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1178,7 +1183,7 @@ export const speak = async (
       logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
       cbRecordFailure('voice');
       // Server TTS errored (quota / 5xx) — fall back to the device voice.
-      deviceSpeakFallback(text, language, myId, effectiveGender);
+      void deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
     // Got bytes from the server → online; clear the breaker window.
@@ -1209,7 +1214,7 @@ export const speak = async (
       });
       logVoiceSilentFail('speak_small_payload', { speechId: myId, bytes: arrayBuffer.byteLength, language, textHead: text.slice(0, 40) });
       // Bad/empty audio blob — fall back to the device voice instead of going silent.
-      deviceSpeakFallback(text, language, myId, effectiveGender);
+      void deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1391,7 +1396,7 @@ export const speak = async (
       // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
       // mute — speak the line on the device instead. (AbortError = a newer
       // utterance preempted us; that correctly stays silent.)
-      deviceSpeakFallback(text, language, myId, effectiveGender);
+      void deviceSpeakFallback(text, language, myId, effectiveGender);
     }
   }
 });

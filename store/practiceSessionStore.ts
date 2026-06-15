@@ -166,6 +166,9 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
     {
       name: 'practice-session-v1',
       version: 1,
+      // 2026-06-15 (audit) — passthrough migrate so a future version bump upgrades
+      // cleanly instead of zustand silently discarding persisted state.
+      migrate: (s) => s as never,
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),

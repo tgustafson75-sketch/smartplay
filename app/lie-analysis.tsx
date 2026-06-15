@@ -165,8 +165,10 @@ export default function LieAnalysisScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smartplayMode]);
 
-  const handleSkipOpener = useCallback(() => {
-    void stopSpeaking().catch(() => {});
+  const handleSkipOpener = useCallback(async () => {
+    // 2026-06-15 (audit) — await the stop so the opener's TTS can't resolve + play
+    // into the camera's recording audio session after the user skips.
+    await stopSpeaking().catch(() => {});
     setPhase('camera');
   }, []);
 

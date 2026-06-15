@@ -60,6 +60,10 @@ export default function SetupCheckScreen() {
     return () => sub.remove();
   }, [requestCameraPermission]);
 
+  // 2026-06-15 (audit) — stop any in-flight setup readout when leaving the screen so
+  // it can't play over the next screen's voice (sibling of the swing-detail fix).
+  useEffect(() => () => { void stopSpeaking().catch(() => undefined); }, []);
+
   const speakResult = useCallback(async (r: SetupCheckResult) => {
     if (!voiceEnabled || !r.valid) return;
     const parts = [r.readyNote];

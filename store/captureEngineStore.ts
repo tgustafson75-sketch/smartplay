@@ -35,6 +35,7 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
     {
       name: 'capture-engine-v1',
       version: 1,
+      migrate: (s) => s as never, // 2026-06-15 (audit) — passthrough; no silent wipe on bump
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),

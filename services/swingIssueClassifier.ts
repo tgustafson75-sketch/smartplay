@@ -140,6 +140,9 @@ export function classifySession(
   // ── Single-swing branch (uploads). One read, one decision. ─────────
   if (swingAnalyses.length === 1) {
     const only = swingAnalyses[0];
+    // 2026-06-15 (audit) — honest failure over bad data: without a swing_id,
+    // detected_in_shots would be [undefined] and break downstream shot lookups.
+    if (!only.swing_id) return null;
     console.log('[classifier] single: detected=' + only.analysis.detected_issue + ' conf=' + only.analysis.confidence);
     if (only.analysis.detected_issue === 'none') return null;
     const voice = ISSUE_COACH_VOICE[only.analysis.detected_issue];
