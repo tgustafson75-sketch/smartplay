@@ -55,7 +55,7 @@ import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan'
 import { composePreroundPlan, preroundReadiness } from '../../services/practice/preroundPlan';
 import { SHOT_SHAPES, getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { estimateSessionPoints, computePointsPerformance } from '../../services/practice/pointsPerformance';
-import { composeFitProfile } from '../../services/practice/fitProfile';
+import { composeFitProfile, recommendFlex, recommendBallCategory } from '../../services/practice/fitProfile';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -4353,6 +4353,25 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /starting point/i.test(fp.disclaimer) && !/(\d+\s?°|mph|smash)/i.test(fp.disclaimer + fp.headline) &&
       composeFitProfile([{ club: '7I', yards: 140, measured: false }]).confidence === 'low',
     'confidence = measured-club count (4→medium, <4→low); disclaimer says "starting point" and nothing claims lie degrees / mph / smash');
+
+  // FLEX — honest only off a MEASURED driver carry, distance→flex (no fabricated mph).
+  const flexStiff = recommendFlex(240, true);
+  const flexReg = recommendFlex(205, true);
+  const flexNone = recommendFlex(210, false); // not measured → no guess
+  check('Fit Profile: flex from MEASURED driver carry only, distance heuristic, no fake mph',
+    flexStiff?.flex === 'Stiff flex' && flexReg?.flex === 'Regular flex' && flexNone === null &&
+      !/mph|\bspeed\b.*\d/i.test(flexStiff?.note ?? '') && /starting point/i.test(flexStiff?.note ?? ''),
+    '240yd carry → Stiff, 205 → Regular; unmeasured driver → null (no guess); note is a "starting point", never a claimed mph');
+
+  // BALL — category-level from speed tier + handicap; never a SKU or fabricated spin.
+  const ballFast = recommendBallCategory(255, 8);
+  const ballSlow = recommendBallCategory(185, 22);
+  const ballDefault = recommendBallCategory(0, null); // unknown → assume mid, still honest
+  check('Fit Profile: ball is CATEGORY-level from readable signals, no SKU / no fabricated spin',
+    ballFast.category === 'Tour (urethane)' && ballSlow.category === 'Low-compression soft' &&
+      typeof ballDefault.category === 'string' &&
+      [ballFast, ballSlow].every((b) => /spin\/compression/i.test(b.note) && !/\b(Pro V1|TP5|Chrome|\$)\b/i.test(b.category)),
+    'fast+low-hcp → Tour urethane, slow → low-compression; category not a SKU; note states we don\'t measure spin/compression');
 }
 
 // ─── Library points → performance graph (2026-06-15, Tim) ───────────────────────

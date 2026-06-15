@@ -12,12 +12,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
-import { composeFitProfile, type FitClubInput } from '../../services/practice/fitProfile';
+import { composeFitProfile, recommendFlex, recommendBallCategory, type FitClubInput } from '../../services/practice/fitProfile';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
 
 export default function FitProfileScreen() {
   const { colors } = useTheme();
   const stats = useClubStatsStore((s) => s.stats);
+  const handicap = usePlayerProfileStore((s) => s.handicap);
 
   const profile = useMemo(() => {
     const st = useClubStatsStore.getState();
@@ -28,6 +30,19 @@ export default function FitProfileScreen() {
     // recompute when the tracked stats change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats]);
+
+  // FLEX (honest: only off a MEASURED driver carry) + BALL category (speed tier +
+  // handicap). Both starting points, never launch-monitor specs.
+  const { flex, ball } = useMemo(() => {
+    const st = useClubStatsStore.getState();
+    const driverCarry = st.avgFor('Driver');
+    const driverMeasured = st.hasSamples('Driver');
+    return {
+      flex: recommendFlex(driverCarry, driverMeasured),
+      ball: recommendBallCategory(driverMeasured ? driverCarry : 0, typeof handicap === 'number' ? handicap : null),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats, handicap]);
 
   const gapSet = useMemo(() => {
     const m = new Map<string, number>();
@@ -81,6 +96,25 @@ export default function FitProfileScreen() {
           </View>
         )}
 
+        {/* FLEX + BALL — honest directional layers (starting points). */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: '#22d3ee' }]}>SHAFT FLEX</Text>
+          {flex ? (
+            <>
+              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{flex.flex}</Text>
+              <Text style={[styles.gapText, { color: colors.text_muted }]}>{flex.note}</Text>
+            </>
+          ) : (
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>Track a few driver shots and I&apos;ll give you an honest flex starting point (from your real carry, not a guess).</Text>
+          )}
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: '#a78bfa' }]}>BALL CATEGORY</Text>
+          <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.category}</Text>
+          <Text style={[styles.gapText, { color: colors.text_muted }]}>{ball.note}</Text>
+        </View>
+
         {/* LADDER */}
         <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR DISTANCE LADDER</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
@@ -118,6 +152,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
   cardLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 8 },
   gapText: { fontSize: 13, lineHeight: 19, marginTop: 4 },
+  fitValue: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
   ladderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(127,127,127,0.18)' },
   ladderClub: { fontSize: 14, fontWeight: '700' },
   ladderRight: { flexDirection: 'row', alignItems: 'center' },

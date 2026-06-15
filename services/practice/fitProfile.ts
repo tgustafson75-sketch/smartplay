@@ -95,3 +95,48 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
 
   return { ladder, gaps, overlaps, measuredCount, totalCount, confidence, headline, disclaimer: DISCLAIMER };
 }
+
+/**
+ * 2026-06-15 (Tim) — FLEX DIRECTION, honestly. From the player's MEASURED driver
+ * carry (real) via the standard distance→flex heuristic online fitters use — NOT a
+ * fabricated clubhead-speed mph. Returns null when the driver carry isn't measured
+ * yet (don't guess flex off a standard-chart number). A starting point, not a spec.
+ */
+export interface FlexSuggestion { flex: string; note: string }
+export function recommendFlex(driverCarryYards: number, measured: boolean): FlexSuggestion | null {
+  if (!measured || !(driverCarryYards > 0)) return null;
+  const c = Math.round(driverCarryYards);
+  const flex = c < 190 ? 'Senior / A flex'
+    : c < 215 ? 'Regular flex'
+    : c < 245 ? 'Stiff flex'
+    : 'X-Stiff flex';
+  return {
+    flex,
+    note: `A sensible starting point from your ~${c} yd driver carry — not a launch-monitor fitting. Tempo and ball speed refine it; confirm with a fitter.`,
+  };
+}
+
+/**
+ * 2026-06-15 (Tim) — BALL FIT, honestly, at the CATEGORY level. From the speed tier
+ * (driver carry) + handicap — readable signals. NOT a specific ball/SKU and NO
+ * fabricated spin/compression numbers (we don't measure those). Always returns a
+ * category as a starting point; handicap null → assume mid.
+ */
+export interface BallSuggestion { category: string; note: string }
+export function recommendBallCategory(driverCarryYards: number, handicap: number | null): BallSuggestion {
+  const c = driverCarryYards > 0 ? driverCarryYards : 0;
+  const speed: 'slow' | 'moderate' | 'fast' = c >= 250 ? 'fast' : c >= 200 ? 'moderate' : c > 0 ? 'slow' : 'moderate';
+  const hcp = typeof handicap === 'number' ? handicap : 18;
+  const skilled = hcp <= 12;
+
+  let category: string;
+  if (speed === 'slow') category = 'Low-compression soft';
+  else if (speed === 'fast') category = skilled ? 'Tour (urethane)' : 'Soft distance';
+  else category = skilled ? 'Tour / soft urethane' : 'Soft distance (two-piece)';
+
+  const speedLabel = c > 0 ? `your speed tier (~${Math.round(c)} yd driver)` : 'a typical speed tier';
+  return {
+    category,
+    note: `Category-level from ${speedLabel} + a ${hcp} handicap. We don\'t measure spin/compression yet, so pick the exact ball by feel and greenside control within this category.`,
+  };
+}
