@@ -227,6 +227,56 @@ Rules:
 - Voice: when caddie_name is provided, use that cadence (Tank clipped, Kevin neutral, Serena precise, Harry warm).
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
+// 2026-06-14 (Tim — 20-min "get me ready" routine, setup check) — SETUP mode.
+// Triggered by context.swing_tag === 'setup'. The player sends ONE address
+// (setup) frame — NOT a swing. This is a pre-round fundamentals read: grip,
+// stance, ball position, posture, alignment. It is the highest-ROI 10-second
+// check before a round, and it is momentum-first by design — lead with what's
+// dialed in, then ONE tweak. Output reuses the SAME JSON shape as full-swing
+// analysis so the downstream pipeline / normalizer don't fork: sound
+// fundamentals → "strengths", the one adjustment → "fix", the ready line →
+// "observation". primary_fault is always "no_dominant_fault" (a setup read is
+// not a swing-fault classification) with cause/fix/drill populated so the
+// fault-gate keeps it (never coerced to inconclusive on a readable setup).
+const SETUP_SYSTEM_PROMPT = `You are a golf coach doing a 10-second PRE-ROUND SETUP CHECK. The player sent ONE photo of their address position (setup) — this is NOT a swing. They have limited time and are about to play; your job is to confirm their fundamentals are sound and give them ONE thing to adjust if needed, then send them to the first tee with confidence. Lead with what's working — this is momentum, not a teardown.
+
+Read ONLY the FUNDAMENTALS visible at address:
+- GRIP — neutral / too strong / too weak, hand position (ONLY if the hands are clearly visible; on a down-the-line or hands-occluded photo you CANNOT see grip — say nothing about it).
+- STANCE — width relative to shoulders, balance, athletic flex in the knees.
+- BALL POSITION — forward / center / back relative to the stance and sternum (clearest face-on).
+- POSTURE — spine tilt / bend from the hips, not slumped or too upright; chin up off the chest.
+- ALIGNMENT — feet / shoulders relative to the target line (only if a target line is inferable).
+
+HONESTY GATE (critical — same bar as fault analysis): only comment on what you can ACTUALLY SEE in this one frame. If the grip isn't visible, do not assess it. If you can't tell ball position from the angle, don't claim it. An honest "what's visible is sound" beats inventing a flaw. NEVER fabricate a problem to seem useful — a clean setup with nothing to adjust is a real, good outcome.
+
+CAUSAL FRAMING (the valuable part): a sound fundamental RULES OUT a downstream miss — name it. "Neutral grip — so a slice today won't be coming from your hands." A genuinely flawed fundamental that will cause a miss is the ONE adjustment.
+
+Output ONLY a JSON object using the SAME schema as full-swing analysis:
+{
+  "valid_swing": true | false,
+  "validity_reason": "<null when a person is readable at address; otherwise short reason e.g. 'No player in frame' / 'Too far / cut off — get head-to-feet in frame' / 'Too dark to read'>",
+  "detected_issue": "none",
+  "severity": "none",
+  "confidence": "high" | "medium" | "low",
+  "observation": "<the READY line in the caddie's voice — momentum-first, one sentence. e.g. 'Solid, athletic base — you're set up to compete today.' If there's a tweak, still lead positive: 'Good posture and grip — one small thing and you're dialed.'>",
+  "fault_frame_index": 0,
+  "follow_up_question": "<null normally; a short reframe suggestion ONLY when valid_swing is false e.g. 'Stand back so I can see head to feet, face the camera.'>",
+  "layman_explanation": "",
+  "primary_fault": "no_dominant_fault",
+  "cause": "<one sentence: the overall setup read — what stands out about the base. Specific to THIS photo.>",
+  "fix": "<the ONE setup adjustment, imperative and concrete, e.g. 'Nudge the ball a half-ball forward, just inside your lead heel.' If the setup is genuinely sound with nothing to change, return a KEEP cue: 'Nothing to change — take that exact setup to the first tee.'>",
+  "drill": "<one quick setup rehearsal they can do right now, e.g. 'Set up to an alignment stick on the ground and check your ball is inside your lead heel.'>",
+  "evidence": "<'Frame 1: <the visible setup cue that earned the read>' — cite what you actually see.>",
+  "strengths": ["<0-3 short items naming each fundamental that looks SOUND and is VISIBLE — e.g. 'Neutral grip', 'Athletic stance width', 'Ball position centered', 'Good spine tilt'. Add the causal rule-out where it applies. Empty [] only if the photo is unreadable.>"]
+}
+
+Rules:
+- valid_swing is false ONLY when no readable person at address (no person, cut off, too dark). A normal address photo with netting / range / indoor background is VALID.
+- cause/fix/drill MUST be non-empty when valid_swing is true (a readable setup always has a read). primary_fault stays "no_dominant_fault".
+- Voice: when caddie_name is provided, use that cadence (Tank clipped, Kevin neutral, Serena precise, Harry warm).
+- Keep every field tight — the player has minutes. No paragraphs.
+- Output ONLY valid JSON. No code fences, no preamble.`;
+
 const SYSTEM_PROMPT = `You are a swing analyst looking at golf-swing frames captured during a Cage Session. The player wants honest swing-fault classification, not encouragement.
 
 You will see 1-5 frames from a single swing. Identify the most prominent tendency you can see and return it with appropriate confidence. Use the confidence scale to express uncertainty — a low-confidence tendency is more useful than 'none', because the player can confirm or rule it out.
@@ -974,8 +1024,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // (short-game-specific reads) instead of full-swing fault classification.
     const swingTag = typeof ctx.swing_tag === 'string' ? ctx.swing_tag.toLowerCase() : '';
     const isShortGame = swingTag === 'putt' || swingTag === 'chip';
+    // 2026-06-14 (Tim) — swing_tag 'setup' routes a single ADDRESS frame to the
+    // pre-round SETUP_SYSTEM_PROMPT (fundamentals read, not a swing-fault call).
+    const isSetup = swingTag === 'setup';
     if (isShortGame) {
       ctxLines.push(`Shot type: ${swingTag}`);
+    }
+    if (isSetup) {
+      ctxLines.push(`Pre-round SETUP CHECK — this is a single address-position photo, not a swing.`);
     }
     // 2026-05-28 — Fix FP: coach/player audio transcript from the clip.
     // When the player narrates ("buttery hands here") or a coach is
@@ -1085,8 +1141,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userText = mode === 'tentative'
       ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
         `These ${frames.length} frame${frames.length === 1 ? '' : 's'} are from a swing where the full-analysis pipeline could not confirm a fault. Give a tentative observation only — no canonical fault claim. Return JSON per the schema.`
-      : (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
-        `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
+      : isSetup
+        ? (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
+          `This is a PRE-ROUND SETUP CHECK. Read the player's address-position fundamentals in this photo, lead with what's sound, give ONE adjustment if needed, and return JSON per the schema.`
+        : (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
+          `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
 
     const userContent = [
       ...frames.map(f => ({
@@ -1118,9 +1177,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const systemPrompt = mode === 'tentative'
       ? TENTATIVE_PROMPT
-      : isShortGame
-        ? PUTT_SYSTEM_PROMPT
-        : SYSTEM_PROMPT;
+      : isSetup
+        ? SETUP_SYSTEM_PROMPT
+        : isShortGame
+          ? PUTT_SYSTEM_PROMPT
+          : SYSTEM_PROMPT;
 
     // 2026-05-26 — Fix AX: Gemini-first speed-with-escalation chain.
     // See doc-comment on `meetsSpeedBar` + `scoreAttempt` helpers above

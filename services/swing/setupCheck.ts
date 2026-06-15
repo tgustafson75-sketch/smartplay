@@ -1,0 +1,121 @@
+/**
+ * 2026-06-14 (Tim — 20-min "get me ready" routine) — PRE-ROUND SETUP CHECK.
+ *
+ * The single highest-ROI 10-second pre-round read: one face-on ADDRESS photo →
+ * a fundamentals read (grip / stance / ball position / posture). Momentum-first
+ * by design — lead with what's dialed in, then ONE tweak — built for the
+ * time-constrained golfer ([[time-constrained-golfer-lens]]), NOT a teardown.
+ *
+ * Rides the existing /api/swing-analysis pipeline via context.swing_tag='setup'
+ * (SETUP_SYSTEM_PROMPT, server-staged). The response reuses the standard shape:
+ *   - strengths   → the SOUND fundamentals (✓), causal rule-outs included
+ *   - fix         → the ONE adjustment (or a KEEP cue when nothing to change)
+ *   - observation → the ready / momentum line
+ * so no fault-normalizer surgery and the same honesty gate (only what's visible).
+ *
+ * SERVER-GATED: lights up only once the SETUP_SYSTEM_PROMPT is deployed to
+ * Vercel (bundled with the strengths deploy). Until then the entry point is
+ * hidden (SETUP_CHECK_ENABLED), so this never shows a half-working read.
+ */
+
+import { getApiBaseUrl } from '../apiBase';
+import * as ImageManipulator from 'expo-image-manipulator';
+
+// Flip to true ONLY after the SETUP_SYSTEM_PROMPT is live on Vercel. Until then
+// the Setup Check entry stays hidden everywhere so no one hits a dead read
+// (honesty: no UI on a capability that isn't wired — [[no-deferred-wiring-placeholders]]).
+export const SETUP_CHECK_ENABLED = false;
+
+export type SetupCheckResult = {
+  /** A readable person at address was found. */
+  valid: boolean;
+  /** When !valid — the honest reason + a reframe suggestion. */
+  reason: string | null;
+  /** The READY / momentum line — what to hear first. */
+  readyNote: string;
+  /** Sound, VISIBLE fundamentals (✓), causal rule-outs included. May be empty. */
+  strengths: string[];
+  /** The ONE adjustment, or a KEEP cue when the setup is sound. Null only on !valid. */
+  adjustment: string | null;
+  /** A quick setup rehearsal. */
+  drill: string | null;
+  /** "Frame 1: <visible cue>" — what the read was based on. */
+  evidence: string | null;
+};
+
+const FAILED: SetupCheckResult = {
+  valid: false,
+  reason: 'Couldn\'t read your setup — stand back so I can see head to feet, face the camera, and try again.',
+  readyNote: '',
+  strengths: [],
+  adjustment: null,
+  drill: null,
+  evidence: null,
+};
+
+/**
+ * Analyze a single address-position photo. Pure-ish: never throws — returns an
+ * honest FAILED result on any error (offline / server / unreadable), matching
+ * the caddie fail-safe discipline. caddieName threads voice when provided.
+ */
+export async function analyzeSetup(
+  photoUri: string,
+  opts?: { angle?: 'down_the_line' | 'face_on'; caddieName?: string; handedness?: 'left' | 'right' | null },
+): Promise<SetupCheckResult> {
+  try {
+    // Resize to ~1024px long edge so the payload clears the server frame-size
+    // gate (413 over ~limit) and the upload stays fast on cell.
+    const manip = await ImageManipulator.manipulateAsync(
+      photoUri,
+      [{ resize: { width: 1024 } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    const FS = await import('expo-file-system/legacy');
+    const b64 = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
+    if (!b64) return FAILED;
+
+    const res = await fetch(`${getApiBaseUrl()}/api/swing-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        frames: [{ b64, media_type: 'image/jpeg' }],
+        context: {
+          club: 'setup',
+          swing_number: 1,
+          swing_tag: 'setup',
+          angle: opts?.angle ?? 'face_on',
+          caddie_name: opts?.caddieName,
+          handedness: opts?.handedness ?? null,
+          tier: 'quick',
+        },
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) return FAILED;
+    const data = await res.json();
+
+    const validSwing = data?.valid_swing !== false; // default true (legacy-safe)
+    if (!validSwing) {
+      return {
+        ...FAILED,
+        reason: (typeof data?.validity_reason === 'string' && data.validity_reason.trim())
+          || (typeof data?.follow_up_question === 'string' && data.follow_up_question.trim())
+          || FAILED.reason,
+      };
+    }
+
+    const strengths = Array.isArray(data?.strengths)
+      ? data.strengths.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
+      : [];
+    const adjustment = typeof data?.fix === 'string' && data.fix.trim() ? data.fix.trim() : null;
+    const readyNote = typeof data?.observation === 'string' && data.observation.trim()
+      ? data.observation.trim()
+      : 'You\'re set — go.';
+    const drill = typeof data?.drill === 'string' && data.drill.trim() ? data.drill.trim() : null;
+    const evidence = typeof data?.evidence === 'string' && data.evidence.trim() ? data.evidence.trim() : null;
+
+    return { valid: true, reason: null, readyNote, strengths, adjustment, drill, evidence };
+  } catch {
+    return FAILED;
+  }
+}

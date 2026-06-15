@@ -4248,6 +4248,47 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'review playback opens on the actual swing (not the bend-to-place-the-ball setup frame), the loop stays windowed to the swing instead of replaying the whole clip, and seeks are awaited so they land — the "won\'t play / replaced the whole video" report');
 }
 
+// ─── Strengths + setup check (2026-06-14, Tim) ──────────────────────────────────
+{
+  const apiSrc = read('api/swing-analysis.ts');
+  const classifierSrc = read('services/swingIssueClassifier.ts');
+  const cardSrc = read('components/swinglab/PrimaryIssueCard.tsx');
+  const setupSvc = read('services/swing/setupCheck.ts');
+  const setupScreen = read('app/swinglab/setup-check.tsx');
+  const swinglabTab = read('app/(tabs)/swinglab.tsx');
+
+  check('Strengths: server `strengths` field staged in prompt + type + normalize',
+    apiSrc.includes('"strengths"') &&
+      /strengths\?: string\[\]/.test(apiSrc) &&
+      /parsed\.strengths = \[\]/.test(apiSrc) &&
+      /valid_swing === false[\s\S]{0,80}parsed\.strengths = \[\]/.test(apiSrc),
+    'strengths added to SYSTEM_PROMPT JSON, response type, and coerced/cleared in the normalizer (cleared when valid_swing=false)');
+
+  check('Strengths: classifier threads strengths through all return sites via cleanStrengths',
+    /function cleanStrengths/.test(classifierSrc) &&
+      (classifierSrc.match(/strengths: cleanStrengths\(/g) || []).length >= 3,
+    'single / multi-consensus / fallback all map analysis.strengths → PrimaryIssue.strengths, capped + trimmed');
+
+  check('Strengths: card leads with a "WHAT\'S WORKING" block above the fault',
+    cardSrc.includes('WHAT&apos;S WORKING') &&
+      /hasStrengths/.test(cardSrc) &&
+      cardSrc.indexOf('hasStrengths &&') < cardSrc.indexOf("primary_fault === 'inconclusive'"),
+    'strengths render above the fault branches — positive first (honesty-gated: hidden when empty)');
+
+  check('Setup check: deploy-gated by SETUP_CHECK_ENABLED (off until Vercel deploy)',
+    /export const SETUP_CHECK_ENABLED = false/.test(setupSvc) &&
+      setupScreen.includes('if (!SETUP_CHECK_ENABLED)') &&
+      /SETUP_CHECK_ENABLED \?/.test(swinglabTab),
+    'flag default false; screen renders a "coming with next update" gate; launcher card spread-hidden until flip — no dead entry (no-deferred-wiring)');
+
+  check('Setup check: rides /api/swing-analysis via swing_tag=setup with honest fail-safe',
+    /swing_tag: 'setup'/.test(setupSvc) &&
+      /isSetup = swingTag === 'setup'/.test(apiSrc) &&
+      apiSrc.includes('SETUP_SYSTEM_PROMPT') &&
+      /catch \{\s*return FAILED;/.test(setupSvc),
+    'single address frame → SETUP_SYSTEM_PROMPT; never throws (returns an honest unreadable result), reusing strengths=fundamentals / fix=adjustment');
+}
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

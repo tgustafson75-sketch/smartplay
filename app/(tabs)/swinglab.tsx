@@ -30,6 +30,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
+import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
 
 
 interface LauncherCardSpec {
@@ -119,6 +120,19 @@ const CARDS: LauncherCardSpec[] = [
 // practice-engine-smartmotion). All run THROUGH Smart Motion. Copy from the spec
 // (no i18n keys yet — LauncherCard falls back to spec.title/sub).
 const PRACTICE_CARDS: LauncherCardSpec[] = [
+  // 2026-06-14 (Tim) — pre-round Setup Check. Gated behind SETUP_CHECK_ENABLED
+  // (the server SETUP_SYSTEM_PROMPT is staged, not deployed) so the card stays
+  // hidden until the bundled Vercel deploy — never a dead entry. Flip the flag
+  // in services/swing/setupCheck.ts post-deploy and this appears.
+  ...(SETUP_CHECK_ENABLED ? [{
+    key: 'setup-check',
+    icon: 'body-outline' as const,
+    title: 'Setup Check',
+    sub: 'Pre-round fundamentals from one address photo — grip, stance, ball position',
+    route: '/swinglab/setup-check',
+    accent: '#88F700',
+    tag: 'PRE-ROUND',
+  }] : []),
   {
     key: 'open-range',
     icon: 'infinite-outline',
