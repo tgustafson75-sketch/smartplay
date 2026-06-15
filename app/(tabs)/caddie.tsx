@@ -1386,34 +1386,43 @@ export default function CaddieTab() {
 
     setCaddieResponse(summary);
 
+    // 2026-06-14 (audit fix) — the audio/TTS block must NOT be able to throw past
+    // the points award + recap navigation below. On a course, configureAudioForSpeech
+    // or speakChunked can reject (weak signal / TTS fail); previously that threw out
+    // of generateRoundSummary so the round "ended" with NO recap and NO points. Wrap
+    // it so a mute caddie still credits points and opens the recap.
     if (voiceEnabled) {
-      await configureAudioForSpeech();
-      // 2026-05-25 — On personal best, play the D-ID bestround clip
-      // (Kevin's real voice celebrating) instead of TTS'ing the text
-      // summary. The video itself isn't shown — we're just routing the
-      // celebration audio through the same speak surface so the user
-      // hears Kevin congratulate them in his actual recorded voice.
-      // Defensive: if the clip resolves to a bundled module but the
-      // asset.downloadAsync/localUri pipeline fails (rare), fall back
-      // to the standard TTS speak so the user still hears SOMETHING.
-      let playedBestroundClip = false;
-      if (isNewPersonalBest) {
-        try {
-          const bestroundMod = getCaddieClip('kevin', 'bestround');
-          if (bestroundMod != null) {
-            const asset = Asset.fromModule(bestroundMod);
-            await asset.downloadAsync();
-            if (asset.localUri) {
-              await playLocalFile(asset.localUri, undefined, { userInitiated: true });
-              playedBestroundClip = true;
+      try {
+        await configureAudioForSpeech();
+        // 2026-05-25 — On personal best, play the D-ID bestround clip
+        // (Kevin's real voice celebrating) instead of TTS'ing the text
+        // summary. The video itself isn't shown — we're just routing the
+        // celebration audio through the same speak surface so the user
+        // hears Kevin congratulate them in his actual recorded voice.
+        // Defensive: if the clip resolves to a bundled module but the
+        // asset.downloadAsync/localUri pipeline fails (rare), fall back
+        // to the standard TTS speak so the user still hears SOMETHING.
+        let playedBestroundClip = false;
+        if (isNewPersonalBest) {
+          try {
+            const bestroundMod = getCaddieClip('kevin', 'bestround');
+            if (bestroundMod != null) {
+              const asset = Asset.fromModule(bestroundMod);
+              await asset.downloadAsync();
+              if (asset.localUri) {
+                await playLocalFile(asset.localUri, undefined, { userInitiated: true });
+                playedBestroundClip = true;
+              }
             }
+          } catch (e) {
+            console.log('[caddie] bestround clip play failed (falling back to TTS):', e);
           }
-        } catch (e) {
-          console.log('[caddie] bestround clip play failed (falling back to TTS):', e);
         }
-      }
-      if (!playedBestroundClip) {
-        await speakChunked(summary, voiceGender, language, apiUrl);
+        if (!playedBestroundClip) {
+          await speakChunked(summary, voiceGender, language, apiUrl);
+        }
+      } catch (e) {
+        console.log('[caddie] round-summary speak failed (non-fatal, continuing to points + recap):', e);
       }
     }
 

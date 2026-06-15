@@ -186,14 +186,27 @@ export default function UploadSwing() {
     const hasKnownDuration = typeof durationSec === 'number' && durationSec > 0;
     const isShortClip = hasKnownDuration && durationSec <= SHORT_CLIP_SEC;
     const isLongClip = hasKnownDuration && durationSec > SHORT_CLIP_SEC;
-    const sessionId = await ingestVideoFromPick({
-      uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
-      tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
-      source_device: sourceDevice,
-      perspective,
-      angleOverride: angle,
-      deferAnalysis: isShortClip || isLongClip,
-    });
+    // 2026-06-14 (audit fix) — ingest can reject (e.g. a persist/AsyncStorage
+    // write throw). Without a catch the screen sat on "Saving…" forever with no
+    // recovery. Catch → restore the editable form + tell the user. (Tonight's
+    // 2nd-video-source upload runs through here, so this dead-end mattered.)
+    let sessionId: string;
+    try {
+      sessionId = await ingestVideoFromPick({
+        uri, club, notes: notes.trim() || null, swinger: swinger.trim() || 'Me',
+        tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
+        source_device: sourceDevice,
+        perspective,
+        angleOverride: angle,
+        deferAnalysis: isShortClip || isLongClip,
+      });
+    } catch (e) {
+      console.log('[upload] ingest failed:', e);
+      uploadLog('save-failed', { error: e instanceof Error ? e.message : String(e) });
+      setStep('metadata');
+      Alert.alert('Upload failed', "Couldn't save that video. Please try again.");
+      return;
+    }
     // Phase V — Kevin acknowledges the upload immediately and we navigate
     // straight to the swing detail surface. Feels like submitting work to
     // a coach who starts watching, not "uploaded successfully, navigate
@@ -206,7 +219,7 @@ export default function UploadSwing() {
         // moment that most warrants the audible "got your video"
         // ack. Without the flag, isVoiceAllowed silenced it at L1.
         await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl, { userInitiated: true });
-      })();
+      })().catch(() => undefined);
     }
     // Routing: long → trim screen; short → detail with watch param;
     // unknown duration → detail (legacy auto-fire path runs).

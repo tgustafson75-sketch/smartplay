@@ -2528,6 +2528,52 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (audit rerun — 5 confirmed fixes before testing) ──────────────────
+check('Audit fix: upload never strands on "Saving…" if ingest throws',
+  (() => {
+    const u = read('app/swinglab/upload.tsx');
+    // ingest is wrapped; on throw it restores the form + alerts (no infinite spinner)
+    return /try \{\s*\n\s*sessionId = await ingestVideoFromPick\(\{/.test(u) &&
+      /\} catch \(e\) \{[\s\S]{0,180}setStep\('metadata'\);[\s\S]{0,120}Alert\.alert\('Upload failed'/.test(u);
+  })(),
+  'a rejected video ingest restores the editable upload form + shows an alert instead of hanging on the Saving spinner forever (tonight\'s 2nd-video-source path)');
+
+check('Audit fix: end-of-round summary credits points + opens recap even if TTS fails',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    // the voiceEnabled audio block is wrapped so a TTS/audio throw can't skip
+    // the points award + recap navigation that follow it.
+    return /if \(voiceEnabled\) \{\s*\n\s*try \{\s*\n\s*await configureAudioForSpeech\(\);/.test(c) &&
+      /round-summary speak failed \(non-fatal, continuing to points \+ recap\)/.test(c);
+  })(),
+  'a network/TTS failure during the end-of-round summary no longer throws past the points award + recap navigation — the round still credits points and opens the recap (mute, not broken)');
+
+check('Audit fix: cage-review stops caddie TTS on unmount (no cross-screen audio bleed)',
+  (() => {
+    const cr = read('app/cage-review/[review_session_id].tsx');
+    return /import \{[^}]*stopSpeaking[^}]*\} from '\.\.\/\.\.\/services\/voiceService'/.test(cr) &&
+      /void stopSpeaking\(\)\.catch\(\(\) => undefined\)/.test(cr);
+  })(),
+  'navigating away from a cage review mid-question stops the spoken TTS instead of letting it play over the next screen');
+
+check('Audit fix: synthesized whole-clip fallback swing is surfaced to segments state',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // when no strikes + no recovery, the synthesized firstSeg is also pushed to
+    // state + selected, so the review's per-swing effects don't see [].
+    return /segsForAnalysis = \[firstSeg\];\s*\n\s*setSegments\(segsForAnalysis\);\s*\n\s*setSelectedSwing\(0\);/.test(sm);
+  })(),
+  'a missed-strike single-swing recording surfaces its synthesized whole-clip segment to state (was []), so the review per-swing effects run instead of silently skipping');
+
+check('Audit fix: review video loop reads live swing selection via ref (no reel-scrub jump)',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // both onLoad + onPlaybackStatusUpdate read selectedSwingRef.current, not the
+    // stale closed-over selectedSwing.
+    return (sm.match(/const seg = segments\[selectedSwingRef\.current\]/g) || []).length >= 2;
+  })(),
+  'the windowed-loop + onLoad seek read the live selected-swing ref, so tapping a reel chip for an earlier swing no longer briefly yanks playback back to the old swing');
+
 // 2026-06-14 (Tim — multi-swing cage test) — two reliability fixes: (1) per-swing trace
 // was computed ONCE off the first strike and never recomputed, so swings 2-5 showed
 // swing 1's trace; now cached per swing index off THAT swing's strike. (2) a loud bay
@@ -2956,7 +3002,7 @@ check('Lifecycle: cage-review + cage-overlay release mic/camera on unmount',
     return (
       // cage-review: []-effect stops+unloads the in-flight recording and hands the
       // audio session back to playback so the next caddie line isn't silent.
-      /return \(\) => \{[\s\S]{0,200}rec\.stopAndUnloadAsync\(\)[\s\S]{0,120}configureAudioForSpeech\(\)/.test(cr) &&
+      /return \(\) => \{[\s\S]{0,420}rec\.stopAndUnloadAsync\(\)[\s\S]{0,120}configureAudioForSpeech\(\)/.test(cr) &&
       // cage-overlay: live phaseRef + cleanup reads it (no stale 'requesting' closure)
       /const phaseRef = useRef\(phase\);\s*\n\s*phaseRef\.current = phase;/.test(co) &&
       /if \(phaseRef\.current === 'recording'\) \{\s*\n\s*cameraRef\.current\?\.stopRecording\(\)/.test(co)
@@ -4160,8 +4206,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       return (
         // selectSwing awaits the seek before playing
         /try \{ await v\.setPositionAsync\(seg\.startMs\); \} catch/.test(sm) &&
-        // onLoad seeks to the selected swing window before kicking play
-        /const seg = segments\[selectedSwing\];\s*\n\s*if \(seg && seg\.startMs > 0\) \{ try \{ await v\.setPositionAsync\(seg\.startMs\)/.test(sm) &&
+        // onLoad seeks to the selected swing window before kicking play (live ref, audit-fixed)
+        /const seg = segments\[selectedSwingRef\.current\];\s*\n\s*if \(seg && seg\.startMs > 0\) \{ try \{ await v\.setPositionAsync\(seg\.startMs\)/.test(sm) &&
         // looped playback re-seeks to the swing start once it runs past endMs (windowed)
         /const windowed = seg && seg\.endMs > seg\.startMs && \(dur === 0 \|\| seg\.endMs < dur - 250\)/.test(sm) &&
         /loopSeekGuardRef\.current/.test(sm) &&

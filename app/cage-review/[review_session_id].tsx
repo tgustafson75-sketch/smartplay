@@ -20,7 +20,7 @@ import {
 import { saveGeneratedProfile } from '../../services/vocabularyProfile';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak, configureAudioForSpeech, configureAudioForRecording } from '../../services/voiceService';
+import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeaking } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
 import type { CageShot } from '../../store/cageStore';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -106,6 +106,10 @@ export default function CageReviewInterview() {
   // Stop + unload on unmount and hand the session back to playback. Best-effort.
   useEffect(() => {
     return () => {
+      // 2026-06-14 (audit) — also stop any in-flight caddie TTS, or a spoken
+      // question keeps playing over the next screen until something else reclaims
+      // the audio. Other TTS screens already do this; cage-review was the gap.
+      void stopSpeaking().catch(() => undefined);
       const rec = recordingRef.current;
       recordingRef.current = null;
       if (rec) {

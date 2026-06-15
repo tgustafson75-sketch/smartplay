@@ -1940,6 +1940,13 @@ export default function SmartMotion() {
         const durMs = meteredDurationMs ?? 0;
         if (durMs > 0 && durMs <= 12_000) {
           firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false };
+          // 2026-06-14 (audit fix) — surface the synthesized whole-clip segment to
+          // state too, so the review's per-swing effects see segments[0] instead of
+          // [] (otherwise tempo/ball-departure silently skipped this swing). It's
+          // peakDb:0 so tempo/departure stay honestly off, but the segment exists.
+          segsForAnalysis = [firstSeg];
+          setSegments(segsForAnalysis);
+          setSelectedSwing(0);
         }
       }
       // Sync the ref SYNCHRONOUSLY (the state-mirror effect hasn't run yet this tick) so
@@ -2317,7 +2324,9 @@ export default function SmartMotion() {
               // Frame 0 is usually the pre-swing setup ("bending to place the ball")
               // the user saw replay; seek to the swing first so review opens on the
               // actual swing. Awaited so the kick-play below starts at the swing.
-              const seg = segments[selectedSwing];
+              // Read the selection via the ref (this callback closure is captured on
+              // mount; selectedSwing in scope would be stale — see the loop below).
+              const seg = segments[selectedSwingRef.current];
               if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
               // expo-av often ignores the shouldPlay PROP on first load, leaving the
               // clip frozen; kick playback explicitly.
@@ -2331,7 +2340,10 @@ export default function SmartMotion() {
               // we re-seek to its start once playback runs past endMs. The whole-clip
               // synthetic segment has endMs ≈ duration, so this is a no-op there.
               if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
-                const seg = segments[selectedSwing];
+                // 2026-06-14 (audit) — read the LIVE selection via the ref; the stale
+                // closure value made the loop briefly re-seek to the OLD swing when
+                // tapping a reel chip for an earlier-in-clip swing.
+                const seg = segments[selectedSwingRef.current];
                 const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
                 const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
                 if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
