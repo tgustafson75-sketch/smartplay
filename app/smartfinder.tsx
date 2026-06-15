@@ -457,6 +457,22 @@ function CameraSmartFinder({
       });
   }, [setZoomFromPinch, commitBaseZoom]);
 
+  // 2026-06-14 (Tim) — track the live compass heading so SmartFinder captures are
+  // tagged with the direction the camera faced (the key field for green-facing
+  // selection + future geometry/3D rebuild). The capture component had no heading
+  // source, so every ingest landed heading:null. Mirrors StandardCameraOverlay.
+  const headingRef = useRef<number | null>(null);
+  useEffect(() => {
+    DeviceMotion.setUpdateInterval(200);
+    const sub = DeviceMotion.addListener((data) => {
+      if (data.rotation) {
+        const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
+        headingRef.current = ((alphaDeg % 360) + 360) % 360;
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
       setLocationGranted(status === 'granted');
@@ -709,7 +725,10 @@ function CameraSmartFinder({
                 if (result?.uri) {
                   // 2026-06-13 (Tim) — INGEST: a turn-while-recording clip is this hole's
                   // panorama source → builds the course's spatial data as you play.
-                  void ingestCapture({ sourceUri: result.uri, kind: 'pano', hole: currentHole })
+                  // 2026-06-14 (Tim) — attach the live compass heading; it's the key
+                  // field for green-facing selection + any future geometry/3D rebuild
+                  // (was being dropped — captures landed heading:null).
+                  void ingestCapture({ sourceUri: result.uri, kind: 'pano', hole: currentHole, heading: headingRef.current })
                     .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
                   const Sharing = await import('expo-sharing');
                   const can = await Sharing.isAvailableAsync().catch(() => false);
@@ -733,7 +752,7 @@ function CameraSmartFinder({
               if (photo?.uri) {
                 // 2026-06-13 (Tim) — INGEST: every SmartFinder photo bootstraps this
                 // hole's real player's-eye imagery (course-data self-build).
-                void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole })
+                void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole, heading: headingRef.current })
                   .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
                 const Sharing = await import('expo-sharing');
                 const can = await Sharing.isAvailableAsync().catch(() => false);

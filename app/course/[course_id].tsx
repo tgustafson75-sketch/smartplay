@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
+import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 
@@ -356,9 +357,18 @@ export default function CourseDetailScreen() {
   // Tim 2026-05-14 hit "aerial unavailable" on Lakes/Rancho because the
   // Palms-only branch was the only bundled path; now every local course
   // routes through getLocalHoleImage which handles all 5.
+  // 2026-06-14 (Tim — close the capture→course-book loop) — the user's OWN photo of a
+  // hole (from SmartFinder ingest) is the most valuable imagery; prefer it over the
+  // curated bundle / satellite. Subscribe to the manifest so new captures re-render.
+  const captures = useCourseCaptureStore((s) => s.captures);
   const holePhotos = useMemo(() => {
     if (!tee || !course) return [];
     return tee.holes.map(h => {
+      // 1. Player's own captured photo for this hole (closes the bootstrap loop).
+      const cap = useCourseCaptureStore.getState().bestForward(course.id, h.hole_number);
+      if (cap && cap.kind === 'single' && cap.uri) {
+        return { hole_number: h.hole_number, url: cap.uri, bundled: null, yardage: h.yardage };
+      }
       const bundled = getLocalHoleImage(displayClubName, h.hole_number);
       if (bundled) {
         // Phase 405b — carry yardage so the grid renders a centered
@@ -377,7 +387,7 @@ export default function CourseDetailScreen() {
       return url ? { hole_number: h.hole_number, url, bundled: null, yardage: h.yardage } : null;
     }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null; yardage: number } => x !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tee, course, displayClubName, geometryReady]);
+  }, [tee, course, displayClubName, geometryReady, captures]);
 
   // Phase 405b — heroSource useMemo + getCourseImageryUrl fallback
   // were removed in the V3-reference redesign. The page no longer

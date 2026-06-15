@@ -1644,6 +1644,32 @@ check('Course-data bootstrap: SmartFinder capture ingests → previews use your 
   })(),
   'SmartFinder photo→single / video→pano ingest tagged to course/hole/GPS (bounded, persisted); hole preview prefers the captured shot');
 
+// 2026-06-14 (Tim — close the capture gaps) — heading was captured live but dropped at
+// ingest (always null), captures didn't feed the course book, and dropped/cleared files
+// leaked on disk. Fixes: heading wired in, course-detail grid prefers the user capture,
+// file GC on cap/clear.
+check('Course capture: heading wired + feeds the course book + files GC\'d',
+  (() => {
+    const sf = read('app/smartfinder.tsx');
+    const store = read('store/courseCaptureStore.ts');
+    const courseScreen = read('app/course/[course_id].tsx');
+    const headingWired =
+      // CameraSmartFinder now tracks heading and passes it on BOTH captures
+      /const headingRef = useRef<number \| null>\(null\);/.test(sf) &&
+      (sf.match(/heading: headingRef\.current/g) || []).length >= 2;
+    const gc =
+      /function deleteCaptureFiles\(uris: string\[\]\)/.test(store) &&
+      /deleteCaptureFiles\(merged\.slice\(0, merged\.length - kept\.length\)/.test(store) && // cap eviction GC
+      /deleteCaptureFiles\(\(s\.captures\[k\] \?\? \[\]\)\.map/.test(store) &&                 // clearHole GC
+      /deleteCaptureFiles\(Object\.values\(s\.captures\)\.flat\(\)/.test(store);               // clearAll GC
+    // course book (course-detail grid) now consumes captures — your photo wins
+    const feedsBook =
+      /useCourseCaptureStore\.getState\(\)\.bestForward\(course\.id, h\.hole_number\)/.test(courseScreen) &&
+      /if \(cap && cap\.kind === 'single' && cap\.uri\)/.test(courseScreen);
+    return headingWired && gc && feedsBook;
+  })(),
+  'SmartFinder captures now carry the live compass heading (no longer dropped), the course-detail hole grid prefers the player\'s own captured photo (capture→course-book loop closed), and dropped/cleared capture files are deleted instead of leaking on disk');
+
 check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on address frame)',
   // 2026-06-14 — the review clip froze on frame 0 (the "bending to place the ball"
   // address frame) and the Play tap was a no-op. Cause: expo-av ignores shouldPlay on

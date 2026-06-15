@@ -17,6 +17,21 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 
 export type CaptureKind = 'single' | 'pano';
 
+// 2026-06-14 (Tim) — delete the underlying files when manifest entries are dropped
+// (the per-hole cap, clearHole, clearAll). Without this, orphaned JPEG/MP4s leaked in
+// course_captures/ forever. Best-effort, fire-and-forget, never throws into a set().
+function deleteCaptureFiles(uris: string[]): void {
+  if (uris.length === 0) return;
+  void (async () => {
+    try {
+      const FS = await import('expo-file-system/legacy');
+      for (const uri of uris) {
+        if (uri) await FS.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
+      }
+    } catch { /* GC is best-effort */ }
+  })();
+}
+
 export interface CourseCapture {
   id: string;
   uri: string;            // FileSystem path to the JPEG
@@ -61,7 +76,13 @@ export const useCourseCaptureStore = create<CourseCaptureState>()(
         const k = keyOf(courseId, hole);
         set((s) => {
           const prev = s.captures[k] ?? [];
-          return { captures: { ...s.captures, [k]: [...prev, cap].slice(-MAX_PER_HOLE) } };
+          const merged = [...prev, cap];
+          const kept = merged.slice(-MAX_PER_HOLE);
+          // GC the files for entries pushed out past the per-hole cap.
+          if (merged.length > kept.length) {
+            deleteCaptureFiles(merged.slice(0, merged.length - kept.length).map((c) => c.uri));
+          }
+          return { captures: { ...s.captures, [k]: kept } };
         });
       },
       forHole: (courseId, hole) => (courseId ? get().captures[keyOf(courseId, hole)] ?? [] : []),
@@ -83,11 +104,16 @@ export const useCourseCaptureStore = create<CourseCaptureState>()(
         return (singles.length ? singles : list)[(singles.length ? singles : list).length - 1];
       },
       clearHole: (courseId, hole) => set((s) => {
+        const k = keyOf(courseId, hole);
+        deleteCaptureFiles((s.captures[k] ?? []).map((c) => c.uri));
         const next = { ...s.captures };
-        delete next[keyOf(courseId, hole)];
+        delete next[k];
         return { captures: next };
       }),
-      clearAll: () => set({ captures: {} }),
+      clearAll: () => set((s) => {
+        deleteCaptureFiles(Object.values(s.captures).flat().map((c) => c.uri));
+        return { captures: {} };
+      }),
     }),
     {
       name: 'course-captures-v1',
