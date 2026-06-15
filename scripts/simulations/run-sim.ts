@@ -698,10 +698,13 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     // 2026-06-14 — departure effect is now per-swing (cached by index, recomputed off
     // the SELECTED swing's strike); deps dropped `ballDeparture` (the old run-once guard).
     /\[showSkeleton, clipUri, ballArea, segments, selectedSwing\]/.test(smSrc) &&
-    // departure still only verifies off an ACOUSTIC anchor; video-located segments carry
-    // peakDb EXACTLY 0 (~±1s, would read the wrong departure frames). Sign-agnostic `=== 0`.
-    /if \(\(seg\?\.peakDb \?\? 0\) === 0\) \{ setBallDeparture\(null\); return; \}/.test(smSrc),
-  'default reference box + verifier runs under Motion (fast default), per-swing, AND only off a precise acoustic impact anchor');
+    // 2026-06-15 (Tim) — video-located segments (peakDb EXACTLY 0, ~±1s) no longer go
+    // DARK; they ATTEMPT departure and accept ONLY a high-confidence, clearly-departed
+    // read (degrade+flag), so a clearly-departed daytime ball still traces while a
+    // loose anchor never draws a wrong direction. Acoustic anchors keep frame-accuracy.
+    /const videoLocated = \(seg\?\.peakDb \?\? 0\) === 0;/.test(smSrc) &&
+    /videoLocated[\s\S]{0,160}r\.departed && r\.confidence === 'high' && r\.ball_present_before/.test(smSrc),
+  'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a high-confidence-only trace instead of going dark');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
@@ -2617,7 +2620,9 @@ check('Cage multi-swing: per-swing trace + noisy-bay degrade (no lost swings)',
       // departure computed off the SELECTED swing's strike, cached per index
       /const strikeMs = seg\?\.strikeMs \?\? firstStrikeMsRef\.current/.test(sm) &&
       /if \(selectedSwing in ballDepartureCacheRef\.current\)/.test(sm) &&
-      /ballDepartureCacheRef\.current\[selectedSwing\] = r \?\? null/.test(sm) &&
+      // 2026-06-15 — cache write is now the confidence-gated `accepted` value
+      // (video-located degrade), not the raw result.
+      /ballDepartureCacheRef\.current\[selectedSwing\] = accepted/.test(sm) &&
       // the old first-strike-only single-shot guard is gone
       !/firstStrikeMsRef\.current == null \|\| ballDeparture\) return/.test(sm) &&
       // cache cleared on new capture (reset + startRecording)

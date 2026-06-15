@@ -44,6 +44,11 @@ export default function SetupCheckScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [result, setResult] = useState<SetupCheckResult | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  // 2026-06-15 (Tim) — self-timer so the user can set the phone down (esp. selfie/
+  // face-on, propped on a stand) and walk into their address + pre-shot routine
+  // before it fires. Off / 10s / 15s. countdown != null = a capture is counting down.
+  const [timerSec, setTimerSec] = useState(10);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const { voiceEnabled, voiceGender, language, caddiePersonality } = useSettingsStore();
   const handedness = usePlayerProfileStore((s) => s.handedness);
@@ -78,7 +83,7 @@ export default function SetupCheckScreen() {
     void speakResult(r);
   }, [facing, caddiePersonality, handedness, speakResult]);
 
-  const handleCapture = useCallback(async () => {
+  const captureNow = useCallback(async () => {
     if (!cameraRef.current) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
@@ -91,6 +96,22 @@ export default function SetupCheckScreen() {
       setPhase('result');
     }
   }, [runAnalysis]);
+
+  // Shutter tap: start the self-timer (or capture immediately when off). Tapping
+  // again while counting cancels it.
+  const handleShutter = useCallback(() => {
+    if (countdown != null) { setCountdown(null); return; }
+    if (timerSec <= 0) { void captureNow(); return; }
+    setCountdown(timerSec);
+  }, [countdown, timerSec, captureNow]);
+
+  // Drive the countdown; fire the capture at 0.
+  useEffect(() => {
+    if (countdown == null) return;
+    if (countdown <= 0) { setCountdown(null); void captureNow(); return; }
+    const id = setTimeout(() => setCountdown((c) => (c == null ? null : c - 1)), 1000);
+    return () => clearTimeout(id);
+  }, [countdown, captureNow]);
 
   const handleReplay = useCallback(async () => {
     if (!result) return;
@@ -204,20 +225,51 @@ export default function SetupCheckScreen() {
       </View>
 
       {/* Face-on framing guide — head-to-feet, square to the camera. */}
-      {phase === 'camera' && (
+      {phase === 'camera' && countdown == null && (
         <>
           <View style={styles.guideFrame} pointerEvents="none" />
           <View style={styles.instructionBox} pointerEvents="none">
-            <Text style={styles.instructionText}>Take your address, face-on. Get head to feet in the frame, then capture.</Text>
+            <Text style={styles.instructionText}>
+              {timerSec > 0
+                ? `Tap the shutter — you get ${timerSec}s to set the phone down and take your address, face-on (head to feet in frame).`
+                : 'Take your address, face-on. Get head to feet in the frame, then capture.'}
+            </Text>
           </View>
         </>
       )}
 
+      {/* Self-timer countdown — tap anywhere to cancel. */}
+      {phase === 'camera' && countdown != null && (
+        <TouchableOpacity style={styles.countdownOverlay} activeOpacity={1} onPress={handleShutter}>
+          <Text style={styles.countdownNumber}>{countdown}</Text>
+          <Text style={styles.countdownHint}>Get into your address · tap to cancel</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={[styles.cameraBottom, { paddingBottom: insets.bottom + 24 }]}>
         {phase === 'camera' ? (
-          <TouchableOpacity onPress={handleCapture} activeOpacity={0.85} style={styles.shutterOuter}>
-            <View style={styles.shutterInner} />
-          </TouchableOpacity>
+          <>
+            {countdown == null && (
+              <View style={styles.timerRow}>
+                {([0, 10, 15] as const).map((s) => (
+                  <TouchableOpacity
+                    key={s}
+                    onPress={() => setTimerSec(s)}
+                    style={[styles.timerChip, timerSec === s && styles.timerChipOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: timerSec === s }}
+                  >
+                    <Text style={[styles.timerChipText, timerSec === s && styles.timerChipTextOn]}>
+                      {s === 0 ? 'No timer' : `${s}s`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <TouchableOpacity onPress={handleShutter} activeOpacity={0.85} style={styles.shutterOuter}>
+              <View style={[styles.shutterInner, countdown != null && styles.shutterInnerCounting]} />
+            </TouchableOpacity>
+          </>
         ) : (
           <View style={styles.analyzingBox}>
             <ActivityIndicator color="#00C896" />
@@ -264,8 +316,17 @@ function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
     },
 
     cameraBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingTop: 20, backgroundColor: 'rgba(6,15,9,0.55)' },
+    timerRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    timerChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(0,0,0,0.5)' },
+    timerChipOn: { borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.18)' },
+    timerChipText: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+    timerChipTextOn: { color: '#00C896' },
     shutterOuter: { width: 76, height: 76, borderRadius: 38, borderWidth: 5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
     shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
+    shutterInnerCounting: { backgroundColor: '#00C896' },
+    countdownOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
+    countdownNumber: { color: '#fff', fontSize: 120, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 12 },
+    countdownHint: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '700', marginTop: 8 },
     analyzingBox: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, paddingHorizontal: 22, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 14 },
     analyzingText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   });

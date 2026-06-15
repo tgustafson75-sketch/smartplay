@@ -895,12 +895,18 @@ export default function SmartMotion() {
     const seg = segments[selectedSwing];
     const strikeMs = seg?.strikeMs ?? firstStrikeMsRef.current;
     if (strikeMs == null) return;
-    // 2026-06-12 (reliability) — only verify departure off an ACOUSTIC impact anchor.
-    // A video-LOCATED swing time (range/upload) is only ~±1s accurate; sampling the
-    // ±120/160ms departure window around it reads the wrong frames → false departed/
-    // direction. swingSegmentation sets video-located peakDb to EXACTLY 0; an acoustic
-    // strike carries the real (non-zero) metering reading.
-    if ((seg?.peakDb ?? 0) === 0) { setBallDeparture(null); return; }
+    // An ACOUSTIC impact anchor is frame-accurate; a video-LOCATED swing time
+    // (range/upload/night-no-acoustic) is only ~±1s accurate, so the ±120/160ms
+    // departure window around it can read the wrong frames → false direction.
+    // swingSegmentation sets video-located peakDb to EXACTLY 0; an acoustic strike
+    // carries the real (non-zero) metering reading.
+    // 2026-06-15 (Tim — "watched the ball to the canvas but got no trace") — instead
+    // of going DARK on video-located swings, ATTEMPT departure and accept it only
+    // when it's HIGH-confidence and the ball was clearly present-then-gone. That
+    // surfaces a trace when the departure is visually unambiguous (the daytime case)
+    // WITHOUT ever drawing a wrong-direction line off a loose anchor — degrade+flag,
+    // not hard-reject ([[overstrict-gate-lens]]).
+    const videoLocated = (seg?.peakDb ?? 0) === 0;
     // Cache hit → show this swing's trace immediately.
     if (selectedSwing in ballDepartureCacheRef.current) {
       setBallDeparture(ballDepartureCacheRef.current[selectedSwing]);
@@ -911,8 +917,14 @@ export default function SmartMotion() {
     void detectBallDeparture({ videoUri: clipUri, impactMs: strikeMs, ballArea })
       .then((r) => {
         if (cancelled) return;
-        ballDepartureCacheRef.current[selectedSwing] = r ?? null;
-        setBallDeparture(r ?? null);
+        // Video-located: trust only a high-confidence, clearly-departed read (ball
+        // present before, gone after); else stay silent rather than risk a mis-timed
+        // direction. Acoustic anchors keep the existing (frame-accurate) behavior.
+        const accepted = videoLocated
+          ? (r && r.departed && r.confidence === 'high' && r.ball_present_before ? r : null)
+          : (r ?? null);
+        ballDepartureCacheRef.current[selectedSwing] = accepted;
+        setBallDeparture(accepted);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
