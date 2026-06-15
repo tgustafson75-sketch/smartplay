@@ -2501,6 +2501,41 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — points, phase 2) — the visible payoff: a Practice History on the
+// dashboard (sessions by date → tap → per-club striation + tempo trend). Drills now
+// land in the same history. Two reusable SVG primitives back the viz.
+check('Practice history: dashboard list → detail with per-club striation + tempo trend',
+  (() => {
+    const ps = read('store/practiceSessionStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    const detail = read('app/practice/[sessionId].tsx');
+    const trend = read('components/charts/TrendChart.tsx');
+    const stri = read('components/charts/StriationBar.tsx');
+    const storeOk =
+      /recordCompletedSession: \(input:/.test(ps) &&
+      /drillId\?: string \| null;/.test(ps) &&
+      /swingCount\?: number \| null;/.test(ps);
+    // drills get recorded into the unified history (separate from the award)
+    const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(sm);
+    // dashboard surfaces the history list and navigates to the detail route
+    const dashOk =
+      /PRACTICE HISTORY/.test(dash) &&
+      /recentSessions = useMemo\(\(\) => practiceHistory\.slice\(0, 6\)/.test(dash) &&
+      /router\.push\(`\/practice\/\$\{s\.id\}`/.test(dash);
+    // detail screen renders the two primitives off real session data
+    const detailOk =
+      /summarizeOpenRange\(session\.swings\)/.test(detail) &&
+      /<StriationBar/.test(detail) &&
+      /<TrendChart/.test(detail);
+    // primitives exist + are generic (number[] / segments), pure SVG
+    const primitivesOk =
+      /export default function TrendChart/.test(trend) && /data: number\[\]/.test(trend) &&
+      /export default function StriationBar/.test(stri) && /react-native-svg/.test(stri);
+    return storeOk && drillHistory && dashOk && detailOk && primitivesOk;
+  })(),
+  'practice sessions (Open Range / Focus / drills) appear in a dashboard Practice History list; tapping one opens a detail screen with a per-club striation bar + a within-session tempo trend, built on two new reusable react-native-svg primitives');
+
 // 2026-06-14 (Tim — points, phase 1) — practice points were awarded ONLY from the
 // Drills screen; Open Range / Focus / SmartPlan granted nothing, and practice never
 // fed the visible tier. Now ONE award (awardPracticePoints) records the per-key ledger

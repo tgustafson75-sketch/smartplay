@@ -52,7 +52,7 @@ import { defaultDtlRig } from '../../services/cage/targetRig';
 import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
-import { recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
+import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
 // The component is lazy-required ONLY when the runtime toggle is on (a vision build),
 // keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
@@ -2056,11 +2056,21 @@ export default function SmartMotion() {
         // 2026-06-14 (Tim — wire the points) — use the unified award so the drill
         // ALSO feeds the visible tier (not just the practice ledger), with a label
         // for the dashboard. Same conservative points as before.
+        const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
         const pts = usePracticePointsStore.getState().awardPracticePoints({
           key: drillId,
-          label: typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null,
+          label: drillLabel,
           swings,
           now: Date.now(),
+        });
+        // 2026-06-14 (Tim) — also record the drill in the unified practice history so
+        // it appears alongside Open Range / Focus sessions (separate from the award).
+        usePracticeSessionStore.getState().recordCompletedSession({
+          kind: 'focus',
+          focus: drillId,
+          drillId,
+          label: drillLabel,
+          swingCount: swings,
         });
         savedMsg = `Saved · +${pts} practice points`;
       } catch { /* non-fatal */ }

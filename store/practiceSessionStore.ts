@@ -47,6 +47,12 @@ export interface PracticeSession {
   startedAt: number;
   endedAt: number | null;
   swings: PracticeSwing[];
+  // 2026-06-14 (Tim — points/history) — drill provenance + a display label so the
+  // unified practice-history list can show drills alongside Open Range / Focus, and a
+  // swingCount for records that carry a count but no per-swing samples (drills).
+  drillId?: string | null;
+  label?: string | null;
+  swingCount?: number | null;
 }
 
 interface StartOpts {
@@ -62,6 +68,19 @@ interface PracticeSessionState {
   /** Append an analyzed swing to the active session (no-op when none active). */
   recordSwing: (sample: RangeSwingSample) => void;
   endSession: () => void;
+  /**
+   * 2026-06-14 (Tim) — push an ALREADY-completed session straight to history
+   * (for the drill flow, which awards at save and has no active-session lifecycle).
+   * Keeps drills in the same unified practice history without touching the award path.
+   */
+  recordCompletedSession: (input: {
+    kind: PracticeKind;
+    focus?: string | null;
+    drillId?: string | null;
+    label?: string | null;
+    swingCount?: number | null;
+    environment?: string | null;
+  }) => void;
   /** Live read of the active session, or null. */
   activeSummary: () => OpenRangeSummary | null;
 }
@@ -121,6 +140,23 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
             pp.usePracticePointsStore.getState().awardPracticePoints({ key, label, swings, now: Date.now() });
           } catch { /* award best-effort, never blocks ending a session */ }
         }
+      },
+      recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment }) => {
+        const now = Date.now();
+        const session: PracticeSession = {
+          id: newId('ps'),
+          kind,
+          focus: focus ?? null,
+          environment: environment ?? null,
+          targetReps: null,
+          startedAt: now,
+          endedAt: now,
+          swings: [],
+          drillId: drillId ?? null,
+          label: label ?? null,
+          swingCount: swingCount ?? null,
+        };
+        set((s) => ({ history: [session, ...s.history].slice(0, 50) }));
       },
       activeSummary: () => {
         const active = get().active;

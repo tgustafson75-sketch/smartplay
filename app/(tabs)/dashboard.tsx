@@ -36,6 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
+import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
 import { useRelationshipStore } from '../../store/relationshipStore';
@@ -89,6 +90,10 @@ export default function Dashboard() {
     () => Object.entries(practiceByDrill).sort((a, b) => b[1].points - a[1].points).slice(0, 4),
     [practiceByDrill],
   );
+  // 2026-06-14 (Tim — practice history) — recent practice sessions for the dashboard
+  // list (tap → /practice/[sessionId] for the per-club striation + tempo trend).
+  const practiceHistory = usePracticeSessionStore((s) => s.history);
+  const recentSessions = useMemo(() => practiceHistory.slice(0, 6), [practiceHistory]);
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
   // IN-APP rounds that predate the recap feature (Golfshot imports excluded).
@@ -545,6 +550,33 @@ export default function Dashboard() {
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* ─── PRACTICE HISTORY (Tim) — sessions by date → tap for the per-club
+            striation + tempo trend. The visible half of the practice ledger. */}
+        {recentSessions.length > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE HISTORY</Text>
+            {recentSessions.map((s) => {
+              const label = s.label ?? (s.focus ? s.focus : s.kind === 'open_range' ? 'Open Range' : 'Practice');
+              const balls = s.swingCount ?? s.swings.length;
+              const d = (() => { try { return new Date(s.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  style={styles.practiceRow}
+                  onPress={() => router.push(`/practice/${s.id}` as never)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open practice session ${label}`}
+                >
+                  <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>{label}</Text>
+                  <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
+                    {d} · {balls} {balls === 1 ? 'ball' : 'balls'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
