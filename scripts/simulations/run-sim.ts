@@ -55,6 +55,7 @@ import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan'
 import { composePreroundPlan, preroundReadiness } from '../../services/practice/preroundPlan';
 import { SHOT_SHAPES, getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { estimateSessionPoints, computePointsPerformance } from '../../services/practice/pointsPerformance';
+import { composeFitProfile } from '../../services/practice/fitProfile';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -4328,6 +4329,30 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       return swings20.length >= 2 && powerLeadsDriver;
     })(),
     'focus re-orders the swing emphasis (power → driver leads) but every club the budget allows still survives');
+}
+
+// ─── AI club fitting — Fit Profile v1 (2026-06-15, Tim) ─────────────────────────
+{
+  const fp = composeFitProfile([
+    { club: 'Driver', yards: 230, measured: true },
+    { club: '5I', yards: 160, measured: true },   // 70-yd gap below Driver in this sparse set
+    { club: '6I', yards: 154, measured: true },   // within 7 of 5I → overlap
+    { club: 'PW', yards: 110, measured: true },    // 44-yd gap below 6I
+    { club: 'Putter', yards: 0, measured: false }, // excluded
+  ]);
+  const gapDriver5i = fp.gaps.some((g) => g.upper === 'Driver' && g.lower === '5I' && g.gapYards === 70);
+  const overlap = fp.overlaps.some((o) => o.longer === '5I' && o.shorter === '6I');
+
+  check('Fit Profile: ladder excludes putter, finds gaps + overlaps from real distances',
+    fp.ladder.length === 4 && fp.ladder[0].club === 'Driver' && !fp.ladder.some((c) => c.club === 'Putter') &&
+      gapDriver5i && overlap,
+    'full-swing ladder sorted longest→shortest (Putter/0 excluded); a >=20yd adjacent gap is a hole, a <=7yd one is a redundant club');
+
+  check('Fit Profile: honesty — confidence scales with measured, never a fabricated spec',
+    fp.measuredCount === 4 && fp.confidence === 'medium' &&
+      /starting point/i.test(fp.disclaimer) && !/(\d+\s?°|mph|smash)/i.test(fp.disclaimer + fp.headline) &&
+      composeFitProfile([{ club: '7I', yards: 140, measured: false }]).confidence === 'low',
+    'confidence = measured-club count (4→medium, <4→low); disclaimer says "starting point" and nothing claims lie degrees / mph / smash');
 }
 
 // ─── Library points → performance graph (2026-06-15, Tim) ───────────────────────

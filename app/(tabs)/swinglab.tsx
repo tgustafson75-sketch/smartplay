@@ -173,6 +173,17 @@ const PRACTICE_CARDS: LauncherCardSpec[] = [
     accent: '#fb7185',
     tag: 'FOCUS',
   },
+  // 2026-06-15 (Tim — AI club fitting v1) — honest Fit Profile: your tracked
+  // distance ladder + gaps to fill + redundant clubs. A starting point, not a spec.
+  {
+    key: 'fit-profile',
+    icon: 'construct-outline',
+    title: 'Fit Profile',
+    sub: 'Your distance ladder, gaps to fill + redundant clubs — from real shots',
+    route: '/practice/fit-profile',
+    accent: '#22d3ee',
+    tag: 'FITTING',
+  },
   {
     key: 'smartplan',
     icon: 'calendar-outline',

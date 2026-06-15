@@ -1,0 +1,129 @@
+/**
+ * 2026-06-15 (Tim — AI club fitting, honest v1) — FIT PROFILE screen.
+ *
+ * The honest first piece of club fitting: your distance ladder from REAL tracked
+ * shots, with the GAPS (holes to fill) and OVERLAPS (redundant clubs) called out.
+ * Each club flagged measured vs inferred; a clear "starting point, not a
+ * launch-monitor spec" disclaimer. ([[ai-club-fitting]])
+ */
+import React, { useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
+import { composeFitProfile, type FitClubInput } from '../../services/practice/fitProfile';
+import { safeBack } from '../../services/safeBack';
+
+export default function FitProfileScreen() {
+  const { colors } = useTheme();
+  const stats = useClubStatsStore((s) => s.stats);
+
+  const profile = useMemo(() => {
+    const st = useClubStatsStore.getState();
+    const clubs: FitClubInput[] = CLUB_ORDER
+      .filter((c) => c !== 'Putter')
+      .map((c) => ({ club: c, yards: st.avgFor(c), measured: st.hasSamples(c) }));
+    return composeFitProfile(clubs);
+    // recompute when the tracked stats change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats]);
+
+  const gapSet = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of profile.gaps) m.set(g.upper, g.gapYards); // gap sits below the longer club
+    return m;
+  }, [profile.gaps]);
+  const overlapSet = useMemo(() => new Set(profile.overlaps.map((o) => o.longer)), [profile.overlaps]);
+
+  const confColor = profile.confidence === 'high' ? '#3FB950' : profile.confidence === 'medium' ? '#f5a623' : '#9ca3af';
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn} accessibilityRole="button">
+          <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Fit Profile</Text>
+        <View style={styles.headerBtn} />
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
+        <Text style={[styles.headline, { color: colors.text_primary }]}>{profile.headline}</Text>
+        <View style={styles.confRow}>
+          <View style={[styles.confDot, { backgroundColor: confColor }]} />
+          <Text style={[styles.confText, { color: colors.text_muted }]}>
+            {profile.measuredCount} of {profile.totalCount} clubs from real tracked shots · {profile.confidence} confidence
+          </Text>
+        </View>
+
+        {/* GAPS */}
+        {profile.gaps.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#f5a623' }]}>
+            <Text style={[styles.cardLabel, { color: '#f5a623' }]}>GAPS TO FILL</Text>
+            {profile.gaps.map((g, i) => (
+              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
+                {g.gapYards} yd between your {g.upper} and {g.lower} — a club-and-a-half hole around {g.centerYards} yds.
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* OVERLAPS */}
+        {profile.overlaps.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>DOING THE SAME JOB</Text>
+            {profile.overlaps.map((o, i) => (
+              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
+                {o.longer} and {o.shorter} carry within {o.gapYards} yds — one may be redundant.
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* LADDER */}
+        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR DISTANCE LADDER</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
+          {profile.ladder.map((c) => (
+            <View key={c.club} style={styles.ladderRow}>
+              <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+              <View style={styles.ladderRight}>
+                <Text style={[styles.ladderYards, { color: colors.text_primary }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
+                <View style={[styles.measuredDot, { backgroundColor: c.measured ? '#3FB950' : 'transparent', borderColor: c.measured ? '#3FB950' : colors.text_muted }]} />
+                {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
+                {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
+              </View>
+            </View>
+          ))}
+          <Text style={[styles.legend, { color: colors.text_muted }]}>
+            ● measured from your shots · ○ standard-chart estimate (track shots to learn it)
+          </Text>
+        </View>
+
+        <Text style={[styles.disclaimer, { color: colors.text_muted }]}>{profile.disclaimer}</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
+  headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '800' },
+  headline: { fontSize: 16, fontWeight: '800', lineHeight: 22, marginTop: 4 },
+  confRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 },
+  confDot: { width: 8, height: 8, borderRadius: 4 },
+  confText: { fontSize: 12 },
+  card: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
+  cardLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 8 },
+  gapText: { fontSize: 13, lineHeight: 19, marginTop: 4 },
+  ladderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(127,127,127,0.18)' },
+  ladderClub: { fontSize: 14, fontWeight: '700' },
+  ladderRight: { flexDirection: 'row', alignItems: 'center' },
+  ladderYards: { fontSize: 14, fontWeight: '800' },
+  ladderUnit: { fontSize: 11, fontWeight: '600' },
+  measuredDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, marginLeft: 10 },
+  legend: { fontSize: 10, lineHeight: 15, paddingHorizontal: 10, paddingVertical: 8 },
+  disclaimer: { fontSize: 12, lineHeight: 18, fontStyle: 'italic', marginTop: 16 },
+});
