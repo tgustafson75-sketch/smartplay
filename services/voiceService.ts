@@ -64,7 +64,9 @@ export const setAudioModeSerial = (mode: Parameters<typeof Audio.setAudioModeAsy
       // NEXT caller. Worst case: audio mode is one call behind reality,
       // and the next caller will reapply. Log loudly so the hang is
       // visible in logcat — provable when it happens.
-      console.log('[voice] setAudioModeSerial swallowed error to keep queue alive:', err instanceof Error ? err.message : String(err));
+      // 2026-06-15 (audit) — include err.name: some Android OEMs throw a
+      // non-standard error with an empty .message, which logged as a blank line.
+      console.log('[voice] setAudioModeSerial swallowed error to keep queue alive:', err instanceof Error ? `${err.name}: ${err.message}` : String(err));
     });
   return audioModeQueue;
 };

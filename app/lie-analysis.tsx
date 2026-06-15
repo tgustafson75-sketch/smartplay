@@ -19,7 +19,7 @@ import {
   type LieAnalysis,
   type RiskRewardCall,
 } from '../services/lieAnalysisService';
-import { speak, stopSpeaking, captureUtterance, configureAudioForSpeech } from '../services/voiceService';
+import { speak, stopSpeaking, captureUtterance, configureAudioForSpeech, stopCapture } from '../services/voiceService';
 import { getCaddieName } from '../lib/persona';
 import { useSettingsStore } from '../store/settingsStore';
 // Phase 409 — persist the lie analysis onto the pending slot so the
@@ -73,6 +73,14 @@ export default function LieAnalysisScreen() {
     });
     return () => sub.remove();
   }, [requestCameraPermission]);
+
+  // 2026-06-15 (audit) — on unmount, stop any in-flight opener TTS + listening
+  // capture so a spoken "what do you see?" can't play over the next screen and a
+  // background captureUtterance doesn't burn a wasted transcribe. Best-effort.
+  useEffect(() => () => {
+    void stopSpeaking().catch(() => undefined);
+    void stopCapture().catch(() => undefined);
+  }, []);
 
   const [phase, setPhase] = useState<Phase>(smartplayMode ? 'opener' : 'camera');
   const [imageUri, setImageUri] = useState<string | null>(null);
