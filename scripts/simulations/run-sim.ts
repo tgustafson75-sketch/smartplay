@@ -2527,6 +2527,31 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — second video source) — a second-angle clip (iPad/GoPro face-on of
+// the same swing) imported via Upload must be analyzed as FACE-ON, not the global cage
+// DTL default (which withholds face-on metrics). New per-upload angle picker → angleOverride
+// threaded onto the session → wins over the cage angle in analysis.
+check('Upload angle picker: imported clip read at its true angle (DTL vs face-on)',
+  (() => {
+    const screen = read('app/swinglab/upload.tsx');
+    const svc = read('services/videoUpload.ts');
+    const store = read('store/cageStore.ts');
+    const uiOk =
+      /const \[angle, setAngle\] = useState<'down_the_line' \| 'face_on'>\('down_the_line'\)/.test(screen) &&
+      /CAMERA ANGLE/.test(screen) &&
+      /onPress=\{\(\) => setAngle\('face_on'\)\}/.test(screen) &&
+      /angleOverride: angle/.test(screen);
+    const svcOk =
+      /angleOverride\?: 'down_the_line' \| 'face_on' \| null/.test(svc) &&
+      /angleOverride: args\.angleOverride \?\? null/.test(svc) &&
+      // per-upload angle WINS over the global cage angle in analysis
+      /const uploadAngle = session\.upload\?\.angleOverride \?\? null/.test(svc) &&
+      /if \(uploadAngle === 'down_the_line' \|\| uploadAngle === 'face_on'\)/.test(svc);
+    const storeOk = /angleOverride\?: 'down_the_line' \| 'face_on' \| null/.test(store);
+    return uiOk && svcOk && storeOk;
+  })(),
+  'the Upload screen has a DTL/Face-on angle picker; the chosen angle is persisted on the session as angleOverride and wins over the global cage angle when analyzing — so an imported iPad/GoPro face-on clip of the same swing gets the correct face-on read (a second video source → a valid second analysis)');
+
 // 2026-06-14 (Tim — points phase 3) — the honest practice→course connection: practice
 // volume vs scoring trend, shown as ASSOCIATION (never causation) and gated until there's
 // enough data on both sides. Lower score-vs-par = better.

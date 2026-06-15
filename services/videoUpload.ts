@@ -424,11 +424,19 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     // calibration store on every iteration. Identical for every swing
     // in the session, so resolving once saves ~50ms × swings.length.
     let cageAngleCtx: 'down_the_line' | 'face_on' | 'glasses_pov' | undefined;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const calMod = require('../store/cageOverlayCalibrationStore');
-      cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
-    } catch { /* ignore — default in analyzer */ }
+    // 2026-06-14 (Tim — second video source) — a per-upload angleOverride (the
+    // Upload screen's DTL/Face-on toggle) WINS over the global cage angle, so an
+    // imported face-on clip is read as face-on without flipping the cage default.
+    const uploadAngle = session.upload?.angleOverride ?? null;
+    if (uploadAngle === 'down_the_line' || uploadAngle === 'face_on') {
+      cageAngleCtx = uploadAngle;
+    } else {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const calMod = require('../store/cageOverlayCalibrationStore');
+        cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
+      } catch { /* ignore — default in analyzer */ }
+    }
 
     // 2026-05-28 — Fix FQ (bug #3) / Fix FU: bounded wait for the
     // audio transcript when the clip has audio AND swingCommentaryService
@@ -1012,6 +1020,10 @@ export async function ingestVideoFromPick(args: {
    *  play through on the swing detail screen via ?watch=1 nav param.
    *  Default false preserves current background-analysis behavior. */
   deferAnalysis?: boolean;
+  /** 2026-06-14 (Tim — second video source) — per-upload camera angle. When the
+   *  user imports a face-on clip (iPad/GoPro of the same swing), this makes the
+   *  analysis read it as face-on instead of the global cage DTL default. */
+  angleOverride?: 'down_the_line' | 'face_on' | null;
 }): Promise<string> {
   // 2026-05-23 — Perspective auto-inference. If the caller didn't pass
   // an explicit perspective, look at familyStore — when a family
@@ -1042,6 +1054,7 @@ export async function ingestVideoFromPick(args: {
     duration_sec: args.duration_sec ?? null,
     source_device: args.source_device ?? null,
     perspective: inferredPerspective,
+    angleOverride: args.angleOverride ?? null,
   };
   // Persist the clip into documents BEFORE ingest so the stored clipUri is
   // durable (replayable + re-analyzable later). Falls back to the original uri

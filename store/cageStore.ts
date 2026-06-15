@@ -156,6 +156,11 @@ export interface UploadMetadata {
    *  Legacy uploads have null/undefined here — getAnalyzerKind falls
    *  back to the original source_device-only routing for those. */
   perspective?: 'pov_self' | 'watching_someone' | null;
+  /** 2026-06-14 (Tim — second video source) — per-UPLOAD camera angle, so an
+   *  imported clip (e.g. an iPad face-on recording of the same swing) is analyzed
+   *  as face-on instead of inheriting the global cage DTL default. Wins over the
+   *  cage calibration angle in runPhaseKOnSession. null = use the global default. */
+  angleOverride?: 'down_the_line' | 'face_on' | null;
 }
 
 export interface CageSession {

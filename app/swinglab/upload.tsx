@@ -122,6 +122,10 @@ export default function UploadSwing() {
   const [perspective, setPerspective] = useState<'pov_self' | 'watching_someone'>(
     activeMember ? 'watching_someone' : 'pov_self',
   );
+  // 2026-06-14 (Tim — second video source) — camera ANGLE for this upload. A face-on
+  // clip (e.g. an iPad/GoPro recording of the same swing) must be read as face-on, or
+  // the engine withholds face-on metrics (sway/weight/rotation) thinking it's DTL.
+  const [angle, setAngle] = useState<'down_the_line' | 'face_on'>('down_the_line');
 
   const onPick = async () => {
     const result = await pickVideo();
@@ -187,6 +191,7 @@ export default function UploadSwing() {
       tag: effectiveTag, has_audio: hasAudio, duration_sec: durationSec,
       source_device: sourceDevice,
       perspective,
+      angleOverride: angle,
       deferAnalysis: isShortClip || isLongClip,
     });
     // Phase V — Kevin acknowledges the upload immediately and we navigate
@@ -371,6 +376,48 @@ export default function UploadSwing() {
                 {perspective === 'pov_self'
                   ? 'Looking down at your own setup — routes to grip / putting analysis.'
                   : 'Watching another golfer swing — routes to full swing fault analysis.'}
+              </Text>
+            </View>
+
+            {/* 2026-06-14 (Tim — second video source) — camera ANGLE for this clip.
+                A face-on import (iPad/GoPro of the same swing) MUST be tagged face-on,
+                or the engine reads it as DTL and withholds face-on metrics. */}
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.label, { color: colors.text_muted }]}>CAMERA ANGLE</Text>
+              <View style={styles.tagRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    angle === 'down_the_line' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setAngle('down_the_line')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    angle === 'down_the_line' && { color: colors.accent, fontWeight: '700' },
+                  ]}>Down the line</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pill,
+                    { borderColor: colors.border, backgroundColor: colors.surface_elevated },
+                    angle === 'face_on' && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
+                  ]}
+                  onPress={() => setAngle('face_on')}
+                >
+                  <Text style={[
+                    styles.pillText,
+                    { color: colors.text_muted },
+                    angle === 'face_on' && { color: colors.accent, fontWeight: '700' },
+                  ]}>Face-on</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.helperText, { color: colors.text_muted }]}>
+                {angle === 'down_the_line'
+                  ? 'Behind you, looking down the target line — reads path / plane / early extension.'
+                  : 'Facing you — reads weight shift / hip rotation / sway. Use this for an iPad/GoPro face-on clip.'}
               </Text>
             </View>
 
