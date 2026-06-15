@@ -37,6 +37,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { computePracticeImpact } from '../../services/practice/practiceImpact';
+import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
 import { useRelationshipStore } from '../../store/relationshipStore';
@@ -94,6 +96,16 @@ export default function Dashboard() {
   // list (tap → /practice/[sessionId] for the per-club striation + tempo trend).
   const practiceHistory = usePracticeSessionStore((s) => s.history);
   const recentSessions = useMemo(() => practiceHistory.slice(0, 6), [practiceHistory]);
+  // 2026-06-14 (Tim — phase 3) — the honest practice→course connection: practice
+  // volume per week vs score-vs-par per round. Association, never causation.
+  const practiceImpact = useMemo(
+    () => computePracticeImpact({
+      sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
+      rounds: roundHistory.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      nowMs: Date.now(),
+    }),
+    [practiceHistory, roundHistory],
+  );
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
   // IN-APP rounds that predate the recap feature (Golfshot imports excluded).
@@ -580,6 +592,39 @@ export default function Dashboard() {
           </View>
         )}
 
+        {/* ─── PRACTICE → PERFORMANCE (Tim, phase 3) — the honest connection:
+            practice volume vs scoring trend. Shows once there's any of both. */}
+        {practiceHistory.length > 0 && roundHistory.length > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE → PERFORMANCE</Text>
+            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{practiceImpact.headline}</Text>
+            <View style={styles.impactCharts}>
+              <View style={styles.impactCol}>
+                <TrendChart
+                  data={practiceImpact.practiceSeries}
+                  width={140}
+                  height={56}
+                  color={colors.accent}
+                  label="PRACTICE / WK"
+                  higherIsBetter
+                  emptyText="—"
+                />
+              </View>
+              <View style={styles.impactCol}>
+                <TrendChart
+                  data={practiceImpact.scoreSeries}
+                  width={140}
+                  height={56}
+                  color={colors.accent}
+                  label="SCORE VS PAR"
+                  higherIsBetter={false}
+                  emptyText="—"
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* ─── 7. RECENT SHOTS ─────────────────────────────────────────
             2026-05-25 — Fix X: swapped the plain text list for the new
             ShotTimeline component (icons + outcome chips + distance).
@@ -992,6 +1037,9 @@ const styles = StyleSheet.create({
   practiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
   practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
   practiceDrillPts: { fontSize: 12, fontWeight: '600' },
+  impactHeadline: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginBottom: 10 },
+  impactCharts: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  impactCol: { flex: 1 },
   roundHistoryList: { paddingHorizontal: 12, gap: 8 },
   roundRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

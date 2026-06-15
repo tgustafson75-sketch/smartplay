@@ -2501,6 +2501,37 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — points phase 3) — the honest practice→course connection: practice
+// volume vs scoring trend, shown as ASSOCIATION (never causation) and gated until there's
+// enough data on both sides. Lower score-vs-par = better.
+check('Practice→performance: honest connection card (association, gated, no fabrication)',
+  (() => {
+    const svc = read('services/practice/practiceImpact.ts');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    const svcOk =
+      /export function computePracticeImpact/.test(svc) &&
+      // pure — no store/RN imports (sim-safe, offline-safe)
+      !/from '\.\.\/\.\.\/store|from 'react-native'/.test(svc) &&
+      // gated until enough on BOTH sides
+      /const MIN_SESSIONS = 3/.test(svc) && /const MIN_ROUNDS = 4/.test(svc) &&
+      /hasEnough = practiceSessions >= MIN_SESSIONS && roundsCounted >= MIN_ROUNDS/.test(svc) &&
+      // honest "keep logging" when not enough; association language when it is
+      /Keep logging practice and rounds/.test(svc) &&
+      /showing up on the course/.test(svc) &&
+      // never claims causation
+      !/because you practiced|practice caused|proves/.test(svc);
+    const dashOk =
+      /PRACTICE → PERFORMANCE/.test(dash) &&
+      /computePracticeImpact\(\{/.test(dash) &&
+      // two trends: practice volume + score-vs-par (lower better)
+      /data=\{practiceImpact\.practiceSeries\}/.test(dash) &&
+      /data=\{practiceImpact\.scoreSeries\}/.test(dash) &&
+      /higherIsBetter=\{false\}/.test(dash) &&
+      /practiceHistory\.length > 0 && roundHistory\.length > 0/.test(dash);
+    return svcOk && dashOk;
+  })(),
+  'the dashboard shows a practice→performance card pairing weekly practice volume against score-vs-par trend, described as an honest association (gated until ≥3 sessions + ≥4 rounds, "keep logging" before that), never claiming practice caused the result');
+
 // 2026-06-14 (Tim — points, phase 2) — the visible payoff: a Practice History on the
 // dashboard (sessions by date → tap → per-club striation + tempo trend). Drills now
 // land in the same history. Two reusable SVG primitives back the viz.
