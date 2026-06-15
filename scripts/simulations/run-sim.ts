@@ -54,6 +54,7 @@ import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from 
 import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan';
 import { composePreroundPlan, preroundReadiness } from '../../services/practice/preroundPlan';
 import { SHOT_SHAPES, getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
+import { estimateSessionPoints, computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -4327,6 +4328,35 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       return swings20.length >= 2 && powerLeadsDriver;
     })(),
     'focus re-orders the swing emphasis (power → driver leads) but every club the budget allows still survives');
+}
+
+// ─── Library points → performance graph (2026-06-15, Tim) ───────────────────────
+{
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = 1_700_000_000_000; // fixed clock (Date.now() unavailable in sims)
+  // estimate matches the tracked ledger's conservative scheme (5 base + 1/swing, cap 5).
+  const estOk = estimateSessionPoints(3) === 8 && estimateSessionPoints(5) === 10 &&
+    estimateSessionPoints(20) === 10 && estimateSessionPoints(0) === 5;
+
+  // Not enough on both sides → honest "keep logging", no fabricated connection.
+  const thin = computePointsPerformance({ sessions: [{ startedAt: now - DAY, swings: 4 }], rounds: [], nowMs: now });
+
+  // Enough on both sides → totals + series populated; never claims causation.
+  const full = computePointsPerformance({
+    sessions: Array.from({ length: 5 }, (_, i) => ({ startedAt: now - (i + 1) * 3 * DAY, swings: 5 })),
+    rounds: Array.from({ length: 5 }, (_, i) => ({ endedAt: now - (i + 1) * 5 * DAY, scoreVsPar: 10 - i })),
+    nowMs: now,
+  });
+
+  check('Library points: estimate matches the tracked conservative scheme (no inflation)',
+    estOk,
+    '5 base + 1/swing capped at 5 → 3 swings = 8, 5+ swings = 10, 0 swings = 5 (same as practicePointsStore)');
+
+  check('Library points→performance: honest gate + totals/series, association not causation',
+    !thin.hasEnough && /keep practicing|enough/i.test(thin.headline) &&
+      full.hasEnough && full.totalEstimatedPoints === 50 && full.pointsSeries.length === 6 &&
+      full.scoreSeries.length === 5 && !/cause|because/i.test(full.headline),
+    'thin data → "keep logging" (no claim); enough data → estimated total (5 sessions x 10) + points/week + score series, headline describes association only');
 }
 
 // ─── Shot-shape drills (2026-06-15, Tim) ────────────────────────────────────────

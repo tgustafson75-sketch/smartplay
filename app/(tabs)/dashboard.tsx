@@ -38,6 +38,8 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
+import { computePointsPerformance } from '../../services/practice/pointsPerformance';
+import { useCageStore } from '../../store/cageStore';
 import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
@@ -105,6 +107,22 @@ export default function Dashboard() {
       nowMs: Date.now(),
     }),
     [practiceHistory, roundHistory],
+  );
+
+  // 2026-06-15 (Tim — estimated points from the swing library + the point/performance
+  // graph) — every library capture is practice that never earned points; estimate
+  // them (conservative, labeled) and pair points/week vs score-vs-par. Honest first
+  // version: association, never causation. [[points-practice-correlation]]
+  const libraryHistory = useCageStore((s) => s.sessionHistory);
+  const pointsPerf = useMemo(
+    () => computePointsPerformance({
+      sessions: (libraryHistory ?? [])
+        .filter((s) => (s.shots?.length ?? 0) > 0)
+        .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
+      rounds: roundHistory.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      nowMs: Date.now(),
+    }),
+    [libraryHistory, roundHistory],
   );
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
@@ -622,6 +640,46 @@ export default function Dashboard() {
                 />
               </View>
             </View>
+          </View>
+        )}
+
+        {/* ─── SWING LIBRARY · POINTS → PERFORMANCE (Tim, 2026-06-15) — estimated
+            points from every library capture, paired with scoring. First version of
+            the point/performance graph. */}
+        {libraryHistory.length > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>LIBRARY POINTS → PERFORMANCE</Text>
+              <Text style={[styles.practiceLabel, { color: colors.accent }]}>~{pointsPerf.totalEstimatedPoints} EST</Text>
+            </View>
+            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{pointsPerf.headline}</Text>
+            <View style={styles.impactCharts}>
+              <View style={styles.impactCol}>
+                <TrendChart
+                  data={pointsPerf.pointsSeries}
+                  width={140}
+                  height={56}
+                  color={colors.accent}
+                  label="POINTS / WK"
+                  higherIsBetter
+                  emptyText="—"
+                />
+              </View>
+              <View style={styles.impactCol}>
+                <TrendChart
+                  data={pointsPerf.scoreSeries}
+                  width={140}
+                  height={56}
+                  color={colors.accent}
+                  label="SCORE VS PAR"
+                  higherIsBetter={false}
+                  emptyText="—"
+                />
+              </View>
+            </View>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
+              Estimated from {pointsPerf.sessionsCounted} library {pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} · conservative, for trend not a tally.
+            </Text>
           </View>
         )}
 
