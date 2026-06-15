@@ -131,7 +131,7 @@ Then P1 consolidation (5 swing-capture surfaces → 2; 5 haversines → 1; 3 GPS
 
 ## Hard constraints / standing decisions a new chat must know
 
-- **Feature-complete.** Nothing new gets added this sprint. Only clean, consolidate, harden, verify.
+- **(RETRACTED 2026-06-14 — was stale)** ~~Feature-complete. Nothing new gets added this sprint.~~ The 2026-06-08→14 session was overwhelmingly new-feature work (CNS, Smart Motion rebuild, Practice Engine, course book, points, offline caddie, on-device pose). Current mode: build new features in gated OTA increments + keep the audit/honesty/perf bar. See the 2026-06-08→14 reconciliation section in SPRINT-LOG.md and docs/TEST-MANUAL.md.
 - **SwingLab and Practice are ONE feature.** Never duplicate components, routes, or services across them. Per audit they appear clean today — keep it that way.
 - **Empirical verification on Z Fold is the bar.** Code on `main` is not "done." Every P0 / P1 item closes only after on-device confirmation.
 - **The Pro app lives at `~/Documents/smartplay`.** `~/smartplaycaddie` (this working dir for Claude Code) is a different/sandbox repo — do NOT edit it. All sprint work is in `/Users/timothyg/Documents/smartplay`.

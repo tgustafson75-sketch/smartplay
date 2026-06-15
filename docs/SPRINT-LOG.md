@@ -1882,3 +1882,39 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 - Competitor-parity question must be answered when relevant.
 
 
+
+---
+
+# 2026-06-08 → 2026-06-14 — MAJOR FEATURE SESSION (build-record reconciliation, logged 2026-06-14)
+
+> The log had fallen ~11 days / ~274 commits behind (last real entry 2026-06-03). This window is the largest feature push in the repo's history. Reconciled from git + a full read-only code pass. Anchor commits in parens.
+
+## DONE this window (was unrecorded)
+- **Caddie CNS / brain** — Phase 1 memory store (904e848), Phase 2 retrieval (aa81a2b), Phase 3 reflection + Phase 4 signal-independence (68ae687), conversation ingestion + self-growth metric (7356201, 1c8e7f3), local hit-rate instrumentation (98219cb), bag-model reconcile + re-audits (8dc5f28, 6729a12).
+- **Offline / local-first caddie (Tier-1)** — plays-like (4aafc8b), wind (a8a7280), reach (db1d123), driver last-shot ask (69375eb), gender-aware device-TTS so the caddie never goes mute (ab34c9f), Tier-1 club call + recall (aa37b03).
+- **Smart Motion rebuild** — mode/icon system, metric rails + biomech badges, page-2 pre-swing + page-3 shot map, DTL ball-trace, Framing Coach, front/rear camera, multi-swing detection/segmentation, review-video playback fix + per-swing trace + noisy-bay degrade (10e52b7, d685b9d, 653b99ae), upload camera-angle picker = 2nd video source (8811621).
+- **Practice Engine + points** — Open Range, Session Runner, SmartPlan, SmartTrace tiers; practice points unified across all surfaces + fed to the visible tier; dashboard Practice History (per-club striation + tempo trend) + honest Practice→Performance card (e84af44, 82a1ef0, f4248d5).
+- **Course book** — coord-guard imagery (db81a2b), per-hole CNS anchoring + offline "hole info" intent (f160b2c), Google Places real website/phone/booking (b61e591), capture heading + file GC (e0c6236).
+- **On-device pose (MediaPipe)** — services/mediaPipePoseService.ts, plugins/withMediaPipePose.js (d2e6943, abdc095, 31b8276). Activation needs a native build (NOT GITHUB_TOKEN — that's the separate Meta-glasses plugin).
+- **Rounds/scorecard/GPS** — Round History list, course-bag optimizer A/B1, retro caddie summaries, Round Rest OLED mode, layup planning, hole-view unified onto gpsManager (removed the <55m go-dark cliff), elevation proxy → plays-like.
+- **API-base-URL spine fix** (4937c84) — fixed "Invalid URL: /api/voice" that had killed voice/brain/analysis in OTA bundles. Round-critical.
+- **Audit + refactor passes (2026-06-14)** — criticals (final-hole persist, silent round-save guard), honesty (GPS-trains-bag gate, fault-frame fraction, kids' progress), lifecycle/audio (mic/camera release, VAD single-flight, GPS refresh single-flight), perf (GPS watch-cache tickers, L1HolePreview remount, golfbert cache, Smart Motion meter throttle, setLocationContext per-tick persistence), dedup (shared geo helpers, single warmup), voice native base64 decode, SmartFinder reticle on reanimated, dead-code sweep (13 orphans), store hygiene (version+migrate + roundHistory cap).
+- **Other** — Tee Goals, Ball Fit, putting tripod roll + green heat-map (dormant), gyro-parallax, i18n of the 5 main tabs (spoken/UI labels), YouTube song portal + sing.
+
+## Parked items now DONE (flip in the parked list)
+- Parked #2 "Skeletal-overlay auto pose" → DONE (on-device MediaPipe wired; Framing Coach uses live pose). Caveat: needs a native build to activate.
+- Parked #1 "Library missing-MP4 existence check" → DONE (getInfoAsync probe in app/swinglab/library.tsx).
+- Plays-like elevation (was "dormant, always 0") → WIRED end-to-end.
+- GPS hole-view rogue watch / <55m cliff → RESOLVED (unified onto gpsManager).
+
+## NEWLY PARKED this session (future state)
+- Face angle + smash factor — page-2 "COMING SOON", blocked on 240fps+ capture (GoPro/added camera = future enhancer).
+- Bilateral multi-angle FUSION (DTL + face-on → one elite read) — enabler (upload angle picker) shipped; fusion to scope with real two-angle data. True 3D/4D needs synced+calibrated capture (not two un-synced phones).
+- Cage canvas-hit center-vs-edge from loudness — spec'd; needs peakDb-on-shot + a center calibration + quality-normalization (peakDb confounds loudness with strike quality). Multi-frame ball trace = related next step.
+- Off-device data layer (shared course repository + business analytics + shared course model) — PROPOSED, not built; first data to leave the device, a privacy+infra decision. Own course data / rent analytics (PostHog opt-in); phases A→B→C.
+- Course-bag optimizer Part B2 (new-course-from-profile), Tier-2 on-device LLM (LiteRT-LM), Meta glasses live SDK (GITHUB_TOKEN), per-club practice→course correlation.
+- Still genuinely open (unchanged): auto voice-match (Parked #3), Android nav-bar hide (Parked #4).
+
+## Note
+- docs/SPRINT-RESUME.md's "Feature-complete / nothing new gets added" standing rule was stale + contradicted by this session; corrected 2026-06-14.
+- Full tester reference written: docs/TEST-MANUAL.md (every tool/mode/option, with LIVE vs NATIVE-POSE vs dormant flags).
