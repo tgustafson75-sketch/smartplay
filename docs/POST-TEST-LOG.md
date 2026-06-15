@@ -43,7 +43,7 @@ Severity key: 🔴 blocker · 🟠 broken/wrong · 🟡 polish/nit · 🔵 quest
 
 ## NEW IDEAS (parked — build after the window)
 
-- _(none yet)_
+- **Detect glasses/Bluetooth connect → pre-warm + "voice mode" (NATIVE BUILD).** Tim: the Meta glasses send a BT connection signal when opened — capture it to know we're in glasses mode. Value: connection = imminent voice use = the perfect pre-warm trigger (and a real mode flag). NOT possible via OTA: expo-av exposes no granular route-change events (audioRoutingService is a best-effort stub, route stays 'unknown'); honest capture needs a custom native module (iOS AVAudioSession.routeChangeNotification / Android BT-profile listener — a "BT audio connected" proxy) OR the Meta Wearables SDK (the actual glasses; currently no-op'd, needs the GITHUB_TOKEN native build). When we do the next native build: BT-route listener → fire prewarmVoice() + set a glasses/voice-mode flag. Interim cold-start already mitigated by the warm-on-capture-start fix (16f7f1a).
 
 ---
 
