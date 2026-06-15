@@ -124,6 +124,17 @@ const PRACTICE_CARDS: LauncherCardSpec[] = [
   // (the server SETUP_SYSTEM_PROMPT is staged, not deployed) so the card stays
   // hidden until the bundled Vercel deploy — never a dead entry. Flip the flag
   // in services/swing/setupCheck.ts post-deploy and this appears.
+  // 2026-06-15 (Tim) — the adaptive pre-round warm-up: pick your time, it composes
+  // the sequence (stretch → setup → swings → brief → confidence ball) + honest readiness.
+  {
+    key: 'preround',
+    icon: 'timer-outline',
+    title: 'Pre-Round Warm Up',
+    sub: 'Got 10/20/30 min? An adaptive warm-up that ends you on a good one',
+    route: '/practice/preround',
+    accent: '#88F700',
+    tag: 'PRE-ROUND',
+  },
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
     icon: 'body-outline' as const,

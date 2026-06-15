@@ -52,6 +52,7 @@ import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
 import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from '../../services/practice/sessionPlan';
 import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan';
+import { composePreroundPlan, preroundReadiness } from '../../services/practice/preroundPlan';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -4292,6 +4293,39 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       apiSrc.includes('SETUP_SYSTEM_PROMPT') &&
       /catch \{\s*return FAILED;/.test(setupSvc),
     'single address frame → SETUP_SYSTEM_PROMPT; never throws (returns an honest unreadable result), reusing strengths=fundamentals / fix=adjustment');
+}
+
+// ─── Pre-round orchestrator (2026-06-15, Tim) ───────────────────────────────────
+{
+  const p10 = composePreroundPlan({ minutes: 10, focus: 'tempo' });
+  const p20 = composePreroundPlan({ minutes: 20, focus: 'tempo' });
+  const p30 = composePreroundPlan({ minutes: 30, focus: 'power' });
+
+  check('Pre-round: momentum-first — always opens loose, always ends on a confidence ball',
+    p10.steps[0].kind === 'stretch' && p10.steps[p10.steps.length - 1].kind === 'finish' &&
+      p20.steps[0].kind === 'stretch' && p20.steps[p20.steps.length - 1].kind === 'finish' &&
+      p30.steps[0].kind === 'stretch' && p30.steps[p30.steps.length - 1].kind === 'finish',
+    'every composed plan starts with stretch (loosen up) and ends with the confidence finish — never drilled-then-cold to the first tee');
+
+  check('Pre-round: adaptive to the time budget — tighter time = fewer steps, fits the budget',
+    p10.steps.length < p20.steps.length && p20.steps.length <= p30.steps.length &&
+      p10.allocated <= 12 && p20.allocated <= 24 && p30.allocated <= 36 &&
+      // the brief (mental prep, not a swing) is dropped on the tightest 10-min plan
+      !p10.steps.some(s => s.kind === 'brief') && p20.steps.some(s => s.kind === 'brief'),
+    'the plan COMPOSES to the minutes you actually have (10<20<=30 steps, allocated within budget); 10-min drops the lower-ROI brief but keeps stretch+setup+swing+finish');
+
+  check('Pre-round: readiness is DERIVED from completion, never fabricated',
+    preroundReadiness(5, 0) === 0 && preroundReadiness(5, 5) === 1 &&
+      Math.abs(preroundReadiness(5, 3) - 0.6) < 1e-9 && preroundReadiness(0, 0) === 0,
+    'readiness = completed/total (0..1), divide-by-zero safe — no hardcoded score (honesty bar); screen renders "N of M" + a bar');
+
+  check('Pre-round: focus leads the matching club without dropping the others',
+    (() => {
+      const swings20 = p20.steps.filter(s => s.kind === 'swings');
+      const powerLeadsDriver = p30.steps.filter(s => s.kind === 'swings')[0]?.club === 'driver';
+      return swings20.length >= 2 && powerLeadsDriver;
+    })(),
+    'focus re-orders the swing emphasis (power → driver leads) but every club the budget allows still survives');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
