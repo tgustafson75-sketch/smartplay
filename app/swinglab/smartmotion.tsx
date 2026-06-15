@@ -422,6 +422,11 @@ export default function SmartMotion() {
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
   // Camera cross-check of the acoustic strike (ball there → gone at impact).
   const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
+  // 2026-06-14 (Tim — per-swing trace) — cache the departure read PER swing index so
+  // switching reel tabs shows THAT swing's trace. The old single-shot effect computed
+  // departure once off the FIRST strike and never recomputed, so swings 2-5 showed
+  // swing 1's trace (or none). Mirrors the per-swing tempo cache.
+  const ballDepartureCacheRef = useRef<Record<number, BallDepartureResult | null>>({});
   const [liveDb, setLiveDb] = useState<number | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
@@ -884,22 +889,34 @@ export default function SmartMotion() {
   // default path stays a single fast analyzeSwing call; the verifier only runs
   // once the user opens Motion, so it never competes with the core read.
   useEffect(() => {
-    if (!showSkeleton || !clipUri || !ballArea || firstStrikeMsRef.current == null || ballDeparture) return;
+    if (!showSkeleton || !clipUri || !ballArea) return;
+    // 2026-06-14 (Tim) — compute departure for the SELECTED swing (its own strike),
+    // cached per index, so each reel tab shows its own trace (was first-strike-only).
+    const seg = segments[selectedSwing];
+    const strikeMs = seg?.strikeMs ?? firstStrikeMsRef.current;
+    if (strikeMs == null) return;
     // 2026-06-12 (reliability) — only verify departure off an ACOUSTIC impact anchor.
     // A video-LOCATED swing time (range/upload) is only ~±1s accurate; sampling the
     // ±120/160ms departure window around it reads the wrong frames → false departed/
     // direction. swingSegmentation sets video-located peakDb to EXACTLY 0; an acoustic
-    // strike carries the real (non-zero) metering reading. Test `=== 0` so it's correct
-    // regardless of the metering sign convention. [2026-06-12 bug fix: was `<= 0`, which
-    // also matched a negative acoustic peakDb and skipped EVERY real strike.]
-    const seg = segments[selectedSwing];
-    if ((seg?.peakDb ?? 0) === 0) return;
+    // strike carries the real (non-zero) metering reading.
+    if ((seg?.peakDb ?? 0) === 0) { setBallDeparture(null); return; }
+    // Cache hit → show this swing's trace immediately.
+    if (selectedSwing in ballDepartureCacheRef.current) {
+      setBallDeparture(ballDepartureCacheRef.current[selectedSwing]);
+      return;
+    }
+    setBallDeparture(null); // clear the prior swing's trace while this one computes
     let cancelled = false;
-    void detectBallDeparture({ videoUri: clipUri, impactMs: firstStrikeMsRef.current, ballArea })
-      .then((r) => { if (!cancelled && r) setBallDeparture(r); })
+    void detectBallDeparture({ videoUri: clipUri, impactMs: strikeMs, ballArea })
+      .then((r) => {
+        if (cancelled) return;
+        ballDepartureCacheRef.current[selectedSwing] = r ?? null;
+        setBallDeparture(r ?? null);
+      })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing]);
+  }, [showSkeleton, clipUri, ballArea, segments, selectedSwing]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
@@ -1392,6 +1409,7 @@ export default function SmartMotion() {
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
+    ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset
     setLiveDb(null);
     setMeteringActive(false);
     // Clear caches BEFORE resetting selection so no stale per-swing
@@ -1597,6 +1615,7 @@ export default function SmartMotion() {
     try { require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true }); } catch { /* non-fatal */ }
     setBallSpeed(null);
     setBallDeparture(null);
+    ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     // Clear the prior swing's results so the next minute starts clean (the
     // voice loop uses startRecording, not reset).
     setAnalysis(null);
@@ -1717,10 +1736,21 @@ export default function SmartMotion() {
         // noisy floor can't fabricate a swing); cage keeps the strict default.
         // CHIP sensitivity drops the threshold so a quiet pitch/chip still registers.
         const chipOn = useSettingsStore.getState().chipSensitivity;
-        const res = detectStrikes(samples, {
-          thresholdDb: chipOn ? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration?.transientThresholdDb,
+        const thresholdDb = chipOn ? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration?.transientThresholdDb;
+        let res = detectStrikes(samples, {
+          thresholdDb,
           noisyFloorDb: meterMode === 'range' ? 0 : undefined,
         });
+        // 2026-06-14 (Tim — over-strict gate / multi-swing reliability) — a loud bay
+        // makes cage detection BAIL to zero strikes, so a 3-5 swing recording collapses
+        // to a single whole-clip "1 of 1". The relative floor+threshold (a strike must
+        // be ~30 dB ABOVE the floor) still gates fabrication, so on a noisy-floor bail
+        // re-run cage detection with the absolute floor gate disabled (degrade + flag)
+        // rather than losing every swing. [[overstrict-gate-lens]]
+        if (res.kind === 'noisy-environment' && meterMode === 'cage') {
+          console.log('[smartmotion] cage noisy floor', res.floorDb, '— degrading to relative-threshold detection (keep swings)');
+          res = detectStrikes(samples, { thresholdDb, noisyFloorDb: Number.POSITIVE_INFINITY });
+        }
         if (res.kind === 'ok' && res.strikes.length > 0) {
           acousticStrikes = res.strikes;
           // CAGE: trust acoustics as the final segmentation here. RANGE waits for

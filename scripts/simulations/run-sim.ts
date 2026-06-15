@@ -695,12 +695,13 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     // 2026-06-13 — ball box now lives as a labeled row in the collapsible setup
     // tools CARD (single tools icon → card), not the old right-edge rail button.
     /title=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
-    /\[showSkeleton, clipUri, ballArea, ballDeparture, segments, selectedSwing\]/.test(smSrc) &&
-    // 2026-06-12 — departure only verifies off an ACOUSTIC anchor; video-located segments
-    // carry peakDb EXACTLY 0 (~±1s, would read the wrong departure frames). Sign-agnostic
-    // `=== 0` test (real acoustic peakDb is non-zero, sign convention aside).
-    /const seg = segments\[selectedSwing\];\n\s*if \(\(seg\?\.peakDb \?\? 0\) === 0\) return;/.test(smSrc),
-  'default reference box + verifier runs under Motion (fast default) AND only off a precise acoustic impact anchor');
+    // 2026-06-14 — departure effect is now per-swing (cached by index, recomputed off
+    // the SELECTED swing's strike); deps dropped `ballDeparture` (the old run-once guard).
+    /\[showSkeleton, clipUri, ballArea, segments, selectedSwing\]/.test(smSrc) &&
+    // departure still only verifies off an ACOUSTIC anchor; video-located segments carry
+    // peakDb EXACTLY 0 (~±1s, would read the wrong departure frames). Sign-agnostic `=== 0`.
+    /if \(\(seg\?\.peakDb \?\? 0\) === 0\) \{ setBallDeparture\(null\); return; \}/.test(smSrc),
+  'default reference box + verifier runs under Motion (fast default), per-swing, AND only off a precise acoustic impact anchor');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
@@ -2527,6 +2528,31 @@ check('One-time migration clears auto-trapped Local Mode (settings v12)',
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
+// 2026-06-14 (Tim — multi-swing cage test) — two reliability fixes: (1) per-swing trace
+// was computed ONCE off the first strike and never recomputed, so swings 2-5 showed
+// swing 1's trace; now cached per swing index off THAT swing's strike. (2) a loud bay
+// bailed cage detection to zero strikes (→ a single whole-clip "1 of 1"); now it
+// degrades to relative-threshold detection so the swings survive.
+check('Cage multi-swing: per-swing trace + noisy-bay degrade (no lost swings)',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const perSwingTrace =
+      /const ballDepartureCacheRef = useRef<Record<number, BallDepartureResult \| null>>\(\{\}\)/.test(sm) &&
+      // departure computed off the SELECTED swing's strike, cached per index
+      /const strikeMs = seg\?\.strikeMs \?\? firstStrikeMsRef\.current/.test(sm) &&
+      /if \(selectedSwing in ballDepartureCacheRef\.current\)/.test(sm) &&
+      /ballDepartureCacheRef\.current\[selectedSwing\] = r \?\? null/.test(sm) &&
+      // the old first-strike-only single-shot guard is gone
+      !/firstStrikeMsRef\.current == null \|\| ballDeparture\) return/.test(sm) &&
+      // cache cleared on new capture (reset + startRecording)
+      (sm.match(/ballDepartureCacheRef\.current = \{\}/g) || []).length >= 2;
+    const noisyDegrade =
+      /if \(res\.kind === 'noisy-environment' && meterMode === 'cage'\)/.test(sm) &&
+      /detectStrikes\(samples, \{ thresholdDb, noisyFloorDb: Number\.POSITIVE_INFINITY \}\)/.test(sm);
+    return perSwingTrace && noisyDegrade;
+  })(),
+  'each swing in a multi-swing cage recording gets ITS OWN ball trace (departure cached per swing index off that swing\'s strike, cleared on new capture), and a loud bay no longer zeros all swings — cage detection degrades to the relative floor+threshold so a 3-5 swing recording keeps its swings instead of collapsing to one whole-clip result');
+
 // 2026-06-14 (Tim — second video source) — a second-angle clip (iPad/GoPro face-on of
 // the same swing) imported via Upload must be analyzed as FACE-ON, not the global cage
 // DTL default (which withholds face-on metrics). New per-upload angle picker → angleOverride
@@ -3662,7 +3688,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('SmartMotion: chip sensitivity — lower threshold + mode-aware acoustics + clear toggle',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
-      /thresholdDb: chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2) &&
+      /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2) &&
       // mode-aware: chip → cage+course (off-round), NOT range; default → cage+range
       /chipOnStart\s*\n?\s*\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smSrc2) &&
       // course+chip single-shot anchor
