@@ -53,6 +53,7 @@ import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../stor
 import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from '../../services/practice/sessionPlan';
 import { buildGoalPlan, PRACTICE_GOALS } from '../../services/practice/goalPlan';
 import { composePreroundPlan, preroundReadiness } from '../../services/practice/preroundPlan';
+import { SHOT_SHAPES, getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { composeShotRead } from '../../services/cnsShotRead';
@@ -4326,6 +4327,33 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       return swings20.length >= 2 && powerLeadsDriver;
     })(),
     'focus re-orders the swing emphasis (power → driver leads) but every club the budget allows still survives');
+}
+
+// ─── Shot-shape drills (2026-06-15, Tim) ────────────────────────────────────────
+{
+  const origin = { x: 0.5, y: 0.8 };
+  // steep-up vector → high launch; shallow vector → low launch.
+  const high = readActualLaunch(origin, { x: 0.52, y: 0.55 });   // mostly vertical
+  const low = readActualLaunch(origin, { x: 0.75, y: 0.77 });    // mostly horizontal
+  const none = readActualLaunch(origin, { x: 0.505, y: 0.795 }); // negligible move
+  const flop = getShotShape('flop');
+
+  check('Shot-shape: launch read from origin→one departure point (height + direction, no fabrication)',
+    high?.height === 'high' && low?.height === 'low' && none === null &&
+      (low?.direction === 'right') && SHOT_SHAPES.length >= 6 && !SHOT_SHAPES.some(s => s.id === 'putt'),
+    'a steep vector reads HIGH, a shallow one LOW, negligible movement reads NULL (no honest direction); putting is excluded (ground roll, not a launch)');
+
+  check('Shot-shape: intended-vs-actual grades on launch height, and NEVER claims roll',
+    (() => {
+      if (!flop) return false;
+      const onTarget = compareShotShape(flop, high);     // flop=high vs high read
+      const missed = compareShotShape(flop, low);        // flop=high vs low read
+      const unread = compareShotShape(flop, null);       // no departure
+      const noRollClaim = ![onTarget, missed, unread].some(v => /\broll|release|check\b/i.test(v.feedback));
+      return onTarget.match === 'on' && missed.match === 'off' && unread.match === 'off' &&
+        /couldn't read/i.test(unread.feedback) && noRollClaim;
+    })(),
+    'flop vs a high read = on; vs a low read = off; no departure = honest "couldn\'t read"; feedback never claims roll/check/release (single point can\'t see it)');
 }
 
 // ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────

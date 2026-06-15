@@ -153,6 +153,17 @@ const PRACTICE_CARDS: LauncherCardSpec[] = [
     accent: '#22d3ee',
     tag: 'RANGE',
   },
+  // 2026-06-15 (Tim — shot-shape drills) — pick a short-game shot, record it,
+  // see what you went for vs what came out (origin→departure launch read).
+  {
+    key: 'shot-shapes',
+    icon: 'analytics-outline',
+    title: 'Shot Shapes',
+    sub: 'Flop, pitch, chip, runner — what you went for vs what came out',
+    route: '/practice/shot-shapes',
+    accent: '#fb7185',
+    tag: 'SHORT GAME',
+  },
   {
     key: 'focus-session',
     icon: 'list-outline',

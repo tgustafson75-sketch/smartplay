@@ -109,6 +109,7 @@ import { speak, warmVoice, configureAudioForSpeech, captureUtterance, endCapture
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
+import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
@@ -342,7 +343,7 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots } =
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType } =
     useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string }>();
   // Note: drillFocus + drillShotType are carried on the route for the next
   // increment (per-focus metric surfacing); typed here so the drill contract is
@@ -787,6 +788,15 @@ export default function SmartMotion() {
     if (!ballDeparture?.departurePoint || !ballArea) return null;
     return computeTraceDirection(ballArea, ballDeparture.departurePoint, targetPoint);
   }, [angle, isPutt, ballDeparture, ballArea, targetPoint]);
+  // 2026-06-15 (Tim — shot-shape drills) — when this is a shot-shape drill, read
+  // the actual LAUNCH (origin → the one departure point) and compare it to the
+  // intended shape. Honest: launch height + direction only; roll is never claimed.
+  const shotShapeDef = useMemo(() => getShotShape(drillShotType), [drillShotType]);
+  const shotShapeVerdict = useMemo(() => {
+    if (!shotShapeDef || !ballArea) return null;
+    const actual = ballDeparture?.departurePoint ? readActualLaunch(ballArea, ballDeparture.departurePoint) : null;
+    return compareShotShape(shotShapeDef, actual);
+  }, [shotShapeDef, ballArea, ballDeparture]);
   // Green→red by how far off the aim line it started, dimmed by a weak strike (peakDb
   // vs the session's strongest). Honest: divergence + real strike energy, no faked curve.
   const ballTraceColor = useMemo(() => {
@@ -2715,6 +2725,22 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
+        {/* SHOT-SHAPE drill verdict — intended vs the launch we actually read
+            (origin → departure). Honest: launch height + direction, never roll. */}
+        {isReview && showResults && shotShapeVerdict && shotShapeDef ? (
+          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+            <Text style={styles.shotShapeTitle}>
+              {shotShapeVerdict.match === 'on' ? '✓ ' : ''}{shotShapeDef.name.toUpperCase()}
+            </Text>
+            <View style={styles.shotShapeRow}>
+              <Text style={styles.shotShapeLeg}>WENT FOR <Text style={styles.shotShapeVal}>{shotShapeVerdict.intendedHeight}</Text></Text>
+              <Ionicons name="arrow-forward" size={12} color="#9ca3af" />
+              <Text style={styles.shotShapeLeg}>READ <Text style={[styles.shotShapeVal, { color: shotShapeVerdict.match === 'on' ? '#3FB950' : shotShapeVerdict.match === 'close' ? '#f5a623' : '#ef4444' }]}>{shotShapeVerdict.actualHeight}</Text></Text>
+            </View>
+            <Text style={styles.shotShapeFeedback}>{shotShapeVerdict.feedback}</Text>
+          </View>
+        ) : null}
+
         {/* SHOW/HIDE RESULTS — clears every result overlay for a clean frame to
             screenshot/share (Tim's Smart Capture), or declutter the center video. */}
         {isReview ? (
@@ -3351,6 +3377,13 @@ const styles = StyleSheet.create({
   barBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   barRateTag: { position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' },
   overlayToggle: { position: 'absolute', right: 46, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', zIndex: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.5)' },
+  // 2026-06-15 (Tim — shot-shape drills) — intended-vs-actual launch card.
+  shotShapeCard: { position: 'absolute', alignSelf: 'center', maxWidth: '88%', backgroundColor: 'rgba(6,15,9,0.86)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, zIndex: 7 },
+  shotShapeTitle: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textAlign: 'center' },
+  shotShapeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
+  shotShapeLeg: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  shotShapeVal: { color: '#e8f5e9', fontSize: 11, fontWeight: '900' },
+  shotShapeFeedback: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 6 },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
   barBtnStop: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(229,72,77,0.22)' },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },
