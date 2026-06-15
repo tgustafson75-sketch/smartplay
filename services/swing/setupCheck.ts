@@ -21,10 +21,11 @@
 import { getApiBaseUrl } from '../apiBase';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-// Flip to true ONLY after the SETUP_SYSTEM_PROMPT is live on Vercel. Until then
-// the Setup Check entry stays hidden everywhere so no one hits a dead read
-// (honesty: no UI on a capability that isn't wired — [[no-deferred-wiring-placeholders]]).
-export const SETUP_CHECK_ENABLED = false;
+// LIVE 2026-06-14 — SETUP_SYSTEM_PROMPT deployed to Vercel (smartplay-beta
+// alias re-pointed), so the setup read is wired end-to-end. Was false while the
+// server prompt was staged-not-deployed (honesty: no UI on an unwired
+// capability — [[no-deferred-wiring-placeholders]]).
+export const SETUP_CHECK_ENABLED = true;
 
 export type SetupCheckResult = {
   /** A readable person at address was found. */

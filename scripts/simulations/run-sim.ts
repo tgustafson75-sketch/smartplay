@@ -4275,11 +4275,11 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       cardSrc.indexOf('hasStrengths &&') < cardSrc.indexOf("primary_fault === 'inconclusive'"),
     'strengths render above the fault branches — positive first (honesty-gated: hidden when empty)');
 
-  check('Setup check: deploy-gated by SETUP_CHECK_ENABLED (off until Vercel deploy)',
-    /export const SETUP_CHECK_ENABLED = false/.test(setupSvc) &&
+  check('Setup check: gated by SETUP_CHECK_ENABLED (server-deploy switch, now LIVE)',
+    /export const SETUP_CHECK_ENABLED = (true|false)/.test(setupSvc) &&
       setupScreen.includes('if (!SETUP_CHECK_ENABLED)') &&
       /SETUP_CHECK_ENABLED \?/.test(swinglabTab),
-    'flag default false; screen renders a "coming with next update" gate; launcher card spread-hidden until flip — no dead entry (no-deferred-wiring)');
+    'single flag gates screen ("coming" state when off) + launcher card (spread-hidden when off) — no dead entry (no-deferred-wiring); flipped true once SETUP_SYSTEM_PROMPT deployed');
 
   check('Setup check: rides /api/swing-analysis via swing_tag=setup with honest fail-safe',
     /swing_tag: 'setup'/.test(setupSvc) &&
