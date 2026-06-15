@@ -41,6 +41,10 @@ Severity key: 🔴 blocker · 🟠 broken/wrong · 🟡 polish/nit · 🔵 quest
 
 ---
 
+## ROADMAP — native build (not "new ideas"; continuations needing native work)
+
+- **Single-phone simultaneous front+back capture (chipping rig) — NATIVE BUILD.** Tim (explicitly NOT a new idea — the one-phone version of the long-running multi-angle/bilateral thread): phone in the middle, back cam on the ball/target line (chip flight + landing, which stays in-frame), front cam on the player (stroke/low-point), both in one auto-synced take. Constraint (the real reason it's not built): expo-camera does NOT support dual-cam; needs a custom native module — iOS AVCaptureMultiCamSession (A12+), Android Camera2 concurrent-camera (API 30+, device-dependent), often at reduced res/fps. Native build + device-gated + a fallback to the single/bilateral path on unsupported phones. Today's honest stand-in = the bilateral two-clip merge. Prototype on a supported device in the next native build.
+
 ## NEW IDEAS (parked — build after the window)
 
 - **Detect glasses/Bluetooth connect → pre-warm + "voice mode" (NATIVE BUILD).** Tim: the Meta glasses send a BT connection signal when opened — capture it to know we're in glasses mode. Value: connection = imminent voice use = the perfect pre-warm trigger (and a real mode flag). NOT possible via OTA: expo-av exposes no granular route-change events (audioRoutingService is a best-effort stub, route stays 'unknown'); honest capture needs a custom native module (iOS AVAudioSession.routeChangeNotification / Android BT-profile listener — a "BT audio connected" proxy) OR the Meta Wearables SDK (the actual glasses; currently no-op'd, needs the GITHUB_TOKEN native build). When we do the next native build: BT-route listener → fire prewarmVoice() + set a glasses/voice-mode flag. Interim cold-start already mitigated by the warm-on-capture-start fix (16f7f1a).
