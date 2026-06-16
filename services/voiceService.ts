@@ -143,6 +143,23 @@ const SILENCE_DB_THRESHOLD = -40;
 const SILENCE_TIMEOUT_MS = 1200;
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
+// 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive
+// noise floor, the same idea as Smart Motion's rolling strike floor. The fixed
+// -40/-30 thresholds above assume a ~-55 dB quiet room. With ANY real background
+// sound (TV, range, wind, traffic, a room of people) the ambient sits ABOVE -40,
+// so noise kept refreshing lastLoudAt and the silence-VAD NEVER tripped — the
+// capture ran the full timeout, then transcribed a long noisy clip and Kevin got
+// garbage / no usable response on the first tap. We now estimate the live ambient
+// floor and lift the speech + silence thresholds RELATIVE to it, clamped to the
+// absolute floors so a genuinely quiet room behaves EXACTLY as before (the fix can
+// only ever make it MORE robust, never less sensitive).
+const NOISE_FLOOR_INIT_DB = -50;     // sane ambient default before we've sampled
+const NOISE_FLOOR_MIN_DB = -60;      // ignore the -160 "no-signal" sentinel reads
+const NOISE_FLOOR_FALL_ALPHA = 0.15; // settle down to a quieter ambient in ~1.5s
+const NOISE_FLOOR_RISE_ALPHA = 0.02; // rise slowly so the user's speech can't inflate it
+const SILENCE_MARGIN_DB = 12;        // voice must clear ambient by this to count as "still talking"
+const SPEECH_MARGIN_DB = 18;         // and by this to confirm "they spoke at least once"
+
 /**
  * Record audio for up to {timeoutMs}, transcribe, and return the text.
  * Returns null on permission denial, recording failure, transcription
@@ -221,12 +238,15 @@ export const captureUtterance = async (
     await configureAudioForRecording();
 
     // 2026-05-25 — Fix A: track silence + speech-onset via metering.
-    // hasSpoken flips true once a metering reading exceeds
-    // SPEECH_DETECT_DB. lastLoudAt tracks the most recent above-threshold
+    // hasSpoken flips true once a metering reading exceeds the (adaptive)
+    // speech threshold. lastLoudAt tracks the most recent above-threshold
     // sample. The wait loop below breaks early when (hasSpoken AND
     // silence sustained ≥ SILENCE_TIMEOUT_MS).
+    // 2026-06-16 — thresholds are now lifted relative to a live ambient floor
+    // (noiseFloorDb) so background noise can't masquerade as "still talking".
     let hasSpoken = false;
     let lastLoudAt = Date.now();
+    let noiseFloorDb = NOISE_FLOOR_INIT_DB;
 
     const r = await Audio.Recording.createAsync(
       RECORDING_OPTIONS,
@@ -234,8 +254,19 @@ export const captureUtterance = async (
         if (!status.isRecording) return;
         const metering = (status as { metering?: number }).metering;
         if (typeof metering !== 'number') return;
-        if (metering > SPEECH_DETECT_DB) hasSpoken = true;
-        if (metering > SILENCE_DB_THRESHOLD) lastLoudAt = Date.now();
+        // Adaptive ambient floor: fall fast toward a quieter level, rise slowly
+        // (the user's speech raises readings only briefly, so the slow rise keeps
+        // the floor tracking the TRUE ambient between/around words). Clamp the
+        // input so a -160 dropout can't crash the floor.
+        const m = Math.max(metering, NOISE_FLOOR_MIN_DB);
+        const alpha = m < noiseFloorDb ? NOISE_FLOOR_FALL_ALPHA : NOISE_FLOOR_RISE_ALPHA;
+        noiseFloorDb += (m - noiseFloorDb) * alpha;
+        // Effective thresholds = ambient + margin, but never more sensitive than
+        // the original fixed floors (so a quiet room is byte-for-byte prior behavior).
+        const effSpeechDb = Math.max(SPEECH_DETECT_DB, noiseFloorDb + SPEECH_MARGIN_DB);
+        const effSilenceDb = Math.max(SILENCE_DB_THRESHOLD, noiseFloorDb + SILENCE_MARGIN_DB);
+        if (metering > effSpeechDb) hasSpoken = true;
+        if (metering > effSilenceDb) lastLoudAt = Date.now();
       },
       100, // 100ms update interval — cheap and responsive
     );

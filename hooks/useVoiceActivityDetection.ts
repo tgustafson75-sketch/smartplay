@@ -18,6 +18,17 @@ export const SPEECH_THRESHOLD_DB   = -40;
 export const SILENCE_DURATION_MS   = 2800;
 export const MIN_SPEECH_DURATION_MS = 500;
 
+// 2026-06-16 (Tim — voice sensitivity in background noise) — same adaptive
+// ambient floor as captureUtterance (services/voiceService.ts). A fixed -40 dB
+// bar treats any room louder than ~-40 ambient as perpetual speech, so the VAD
+// never endpoints. We lift the speech bar relative to the live ambient floor,
+// clamped to SPEECH_THRESHOLD_DB so a quiet room is unchanged.
+const NOISE_FLOOR_INIT_DB = -50;
+const NOISE_FLOOR_MIN_DB = -60;
+const NOISE_FLOOR_FALL_ALPHA = 0.15;
+const NOISE_FLOOR_RISE_ALPHA = 0.02;
+const SPEECH_MARGIN_DB = 14;
+
 // ─── TYPES ────────────────────────────────
 
 type VADState = 'IDLE' | 'SPEAKING' | 'TRAILING';
@@ -77,6 +88,7 @@ export function useVoiceActivityDetection({
   const speakStartRef   = useRef<number>(0);
   const silenceStartRef = useRef<number>(0);
   const aboveCountRef   = useRef<number>(0);
+  const noiseFloorRef   = useRef<number>(NOISE_FLOOR_INIT_DB);
 
   // Use refs for callbacks to avoid stale closures in the status handler
   const onSpeechStartRef = useRef(onSpeechStart);
@@ -136,9 +148,16 @@ export function useVoiceActivityDetection({
         const db = status.metering ?? -160;
         setCurrentLevel(db);
 
+        // Adaptive ambient floor: fall fast toward quiet, rise slowly so speech
+        // doesn't inflate it; clamp the input so a dropout can't crash the floor.
+        const m = Math.max(db, NOISE_FLOOR_MIN_DB);
+        const a = m < noiseFloorRef.current ? NOISE_FLOOR_FALL_ALPHA : NOISE_FLOOR_RISE_ALPHA;
+        noiseFloorRef.current += (m - noiseFloorRef.current) * a;
+        const effThresholdDb = Math.max(SPEECH_THRESHOLD_DB, noiseFloorRef.current + SPEECH_MARGIN_DB);
+
         const now = Date.now();
         const state = vadStateRef.current;
-        const isAbove = db > SPEECH_THRESHOLD_DB;
+        const isAbove = db > effThresholdDb;
 
         if (isAbove) {
           aboveCountRef.current += 1;
@@ -180,6 +199,7 @@ export function useVoiceActivityDetection({
       recordingRef.current = recording;
       vadStateRef.current  = 'IDLE';
       aboveCountRef.current = 0;
+      noiseFloorRef.current = NOISE_FLOOR_INIT_DB;
       setIsListening(true);
     } catch (err) {
       console.log('[VAD] startRecording error:', err);

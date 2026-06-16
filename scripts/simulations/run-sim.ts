@@ -1950,6 +1950,35 @@ check('Round record: holesPlayed/totalScore gate on score>0 (consistent with sco
   })(),
   'holesPlayed + totalScore + scoreVsPar all derive from the same score>0 gate');
 
+check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged when quiet',
+  // 2026-06-16 (Tim — first-tap-in-noise failures) — fixed -40/-30 thresholds let
+  // any room louder than ~-40 ambient keep refreshing lastLoudAt, so the capture
+  // never auto-stopped and Kevin got a long noisy clip. Thresholds now ride a live
+  // ambient floor, clamped so a quiet room is byte-for-byte the old behavior.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const hook = read('hooks/useVoiceActivityDetection.ts');
+    const wired =
+      /noiseFloorDb \+= \(m - noiseFloorDb\) \* alpha/.test(vs) &&
+      /const effSilenceDb = Math\.max\(SILENCE_DB_THRESHOLD, noiseFloorDb \+ SILENCE_MARGIN_DB\)/.test(vs) &&
+      /const effSpeechDb = Math\.max\(SPEECH_DETECT_DB, noiseFloorDb \+ SPEECH_MARGIN_DB\)/.test(vs) &&
+      /noiseFloorRef\.current \+= \(m - noiseFloorRef\.current\) \* a/.test(hook) &&
+      /const effThresholdDb = Math\.max\(SPEECH_THRESHOLD_DB, noiseFloorRef\.current \+ SPEECH_MARGIN_DB\)/.test(hook);
+    // Behavioral: replicate the floor math (INIT -50, MIN -60, fall .15 / rise .02).
+    const floorAfter = (db: number, n: number): number => {
+      let f = -50;
+      for (let i = 0; i < n; i++) { const m = Math.max(db, -60); const a = m < f ? 0.15 : 0.02; f += (m - f) * a; }
+      return f;
+    };
+    const effSilence = (f: number): number => Math.max(-40, f + 12);
+    const quiet = effSilence(floorAfter(-55, 40)); // quiet room (~-55 ambient)
+    const noisy = effSilence(floorAfter(-38, 80)); // sustained ~-38 background
+    const quietUnchanged = quiet === -40;          // identical to the prior fixed bar
+    const noisyLifted = noisy > -40 && -38 <= noisy; // -38 background no longer counts as "loud"
+    return wired && quietUnchanged && noisyLifted;
+  })(),
+  'noise lifts the VAD silence bar so auto-stop fires; a quiet room is unchanged');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
