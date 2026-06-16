@@ -79,12 +79,20 @@ export interface DetectStrikesOptions {
    * there at all.
    */
   noisyFloorDb?: number;
+  /**
+   * 2026-06-15 (Tim — calibration caught 4/6) — collapse-window between peaks.
+   * Default 500ms suits a full swing, but a rapid calibration / chip sequence puts
+   * strikes ~300-400ms apart, so adjacent real strikes were merged (4 of 6). The
+   * calibration pass uses a tighter window so it counts them all.
+   */
+  minDebounceMs?: number;
 }
 
 export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOptions): StrikeDetectionResult {
   const thresholdDb = opts?.thresholdDb ?? STRIKE_THRESHOLD_DB;
   const minRecordingMs = opts?.minRecordingMs ?? MIN_RECORDING_MS;
   const noisyFloorDb = opts?.noisyFloorDb ?? NOISY_FLOOR_DB;
+  const minDebounceMs = opts?.minDebounceMs ?? MIN_DEBOUNCE_MS;
   if (samples.length < 2) {
     return { kind: 'too-short', floorDb: -160 };
   }
@@ -164,11 +172,11 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   }
 
   // Fourth pass: debounce. Walk in time order; when two sharp peaks are
-  // within MIN_DEBOUNCE_MS, keep only the louder.
+  // within minDebounceMs (default MIN_DEBOUNCE_MS), keep only the louder.
   const debounced: Sharp[] = [];
   for (const s of isolated) {
     const last = debounced[debounced.length - 1];
-    if (last && s.timeMs - last.timeMs < MIN_DEBOUNCE_MS) {
+    if (last && s.timeMs - last.timeMs < minDebounceMs) {
       if (s.peakDb > last.peakDb) {
         debounced[debounced.length - 1] = s;
       }

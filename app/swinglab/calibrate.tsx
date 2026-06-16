@@ -99,7 +99,10 @@ export default function CalibrateAcoustics() {
       const { samples, durationMs: dMs } = await handle.stop();
       durationMs = dMs;
       sampleCount = samples.length;
-      res = detectStrikes(samples, { minRecordingMs: 1500 });
+      // 2026-06-15 (Tim — caught 4/6) — calibration strikes land ~300-400ms apart;
+      // the default 500ms debounce merged adjacent ones. Tighten to 350ms here so
+      // a rapid 6-strike calibration counts them all.
+      res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350 });
     } catch (e) {
       setPhase('idle');
       Alert.alert('Calibration failed', e instanceof Error ? e.message : String(e));

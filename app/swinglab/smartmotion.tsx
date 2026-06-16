@@ -664,7 +664,12 @@ export default function SmartMotion() {
   // 2026-06-13 — Tim: skeleton ON by default. The pose overlay draws async and
   // the video plays immediately, so it never slows the replay; the Motion chip
   // still toggles it OFF for a clean frame.
-  const [showSkeleton, setShowSkeleton] = useState(true);
+  // 2026-06-15 (Tim) — default the skeleton/body-trace OFF (it interpolates a
+  // sparse 5-frame pose onto the moving video → laggy). The ball-departure/trace
+  // compute is gated on showSkeleton too, so this defaults BOTH overlays off;
+  // the toggle re-enables + processes them on demand. ([[overstrict-gate-lens]] —
+  // off-by-default-but-available, not removed.)
+  const [showSkeleton, setShowSkeleton] = useState(false);
   // 2026-06-12 — master show/hide for the result overlays on the review video, so the
   // player can grab a CLEAN frame (off) or an annotated one (on) for screenshot/share
   // (Tim's Smart Capture), and to declutter the center video. Video + controls stay.

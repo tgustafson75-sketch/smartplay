@@ -808,15 +808,15 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
   'gradient fade + glass cards + panel hidden while placing the ball box');
 
 // ─── 2026-06-09: SmartMotion unstack + workflow fixes ──────────────────────
-check('Motion ON by default (async overlay) — toggle still gates compute/render',
-  // 2026-06-13 — Tim: skeleton ON by default. The video plays immediately and the
-  // pose overlay draws async, so default-on never slows the replay; the Motion chip
-  // still toggles it OFF (and the !showSkeleton/showSkeleton gates still hold) so a
-  // clean frame is one tap away.
-  /const \[showSkeleton, setShowSkeleton\] = useState\(true\)/.test(smSrc) &&
+check('Motion OFF by default (lag fix) — toggle still gates compute/render',
+  // 2026-06-15 — Tim: body-trace/skeleton OFF by default (it interpolates a sparse
+  // 5-frame pose onto the moving video → laggy). The ball-departure compute is gated
+  // on showSkeleton too, so default-off keeps BOTH overlays + their compute off; the
+  // Motion chip toggles it ON to process on demand. Toggle-gates still hold.
+  /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
     /Motion overlay/.test(smSrc) &&
     /!showSkeleton\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
-  'skeleton/tempo/stat overlay defaults on but is fully toggle-gated for a clean frame');
+  'skeleton/body-trace overlay defaults OFF (no lag) but is fully toggle-gated — process on demand');
 
 check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressable)',
   // 2026-06-13 — Tim: every Smart Motion icon should buzz + wobble on tap. A single
