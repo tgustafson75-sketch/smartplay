@@ -17,6 +17,7 @@ import { getCourse, searchCourses } from '../../services/golfCourseApi';
 // each, when it's actually 9 par-3 holes maxing at ~160y.
 import { getCourse as getLocalCourseData } from '../../data/courses';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
+import { holeNoteFromStats } from '../../services/holeNote';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
@@ -341,7 +342,11 @@ export default function CourseDetailScreen() {
         hole_number: h.hole_number,
         par: h.par,
         yardage: h.yardage,
-        note: noteByHole.get(h.hole_number),
+        // 2026-06-15 (Tim) — a real content-backend note wins; otherwise FILL from
+        // the real par+yardage so the guide is never a wall of dashes ("—" = the
+        // "null" Tim flagged as unacceptable). Honest length descriptor, not a
+        // fabricated hazard.
+        note: noteByHole.get(h.hole_number) || holeNoteFromStats(h.par, h.yardage),
         description: desc?.description,
         description_source: desc?.source,
       };
