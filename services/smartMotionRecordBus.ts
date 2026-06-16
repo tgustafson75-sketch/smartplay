@@ -28,6 +28,12 @@ type Listener = (cmd: SmartMotionCommand) => void;
 
 const listeners: Set<Listener> = new Set();
 let active = false;
+// 2026-06-16 (Tim — earbud-tap-to-stop) — true ONLY while a swing is actively
+// RECORDING (camera owns the mic). Voice handlers read this to know the mic is
+// reserved: an earbud/glasses tap during recording must STOP the capture, never
+// open a listen session (that would race the camera's audio = "Only one Recording
+// object" crash). Frees the moment recording stops → voice takes over.
+let recording = false;
 
 /** Subscribe to record commands. Returns an unsubscribe fn. */
 export function subscribeSmartMotionCommand(cb: Listener): () => void {
@@ -48,3 +54,10 @@ export function setSmartMotionActive(v: boolean): void { active = v; }
 
 /** True when the Smart Motion screen is mounted and can take a voice command. */
 export function isSmartMotionActive(): boolean { return active; }
+
+/** The Smart Motion screen calls this on record start/stop so voice handlers know
+ *  the mic is reserved by the camera (block listening; a tap means STOP). */
+export function setSmartMotionRecording(v: boolean): void { recording = v; }
+
+/** True while a swing is actively recording (camera owns the mic). */
+export function isSmartMotionRecording(): boolean { return recording; }

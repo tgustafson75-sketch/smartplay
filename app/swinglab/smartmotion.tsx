@@ -112,7 +112,7 @@ import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { ensureSwingThumbnail } from '../../services/videoUpload';
-import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
@@ -1006,6 +1006,7 @@ export default function SmartMotion() {
       // next screen. Abort the per-swing pipeline AND stop the TTS queue.
       pipelineAbortRef.current = true;
       void stopSpeaking().catch(() => undefined);
+      setSmartMotionRecording(false); // never leave the mic flagged-reserved after we leave
     };
   }, []);
 
@@ -1477,6 +1478,7 @@ export default function SmartMotion() {
     pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
     pipelineAbortRef.current = true;     // abort any still-running narration from the prior session
     void stopSpeaking().catch(() => undefined); // and silence its in-flight/queued TTS
+    setSmartMotionRecording(false);      // not recording after a reset
     setSegments([]);
     setSelectedSwing(0);
     setCoachNote('');
@@ -1753,6 +1755,7 @@ export default function SmartMotion() {
     setRecordedSeconds(0);
     stoppingRef.current = false;
     setPhase('recording');
+    setSmartMotionRecording(true); // mic is now the camera's — taps mean STOP, not listen
 
     // 2026-06-10 — Mode-aware capture. Read fresh so the current state wins
     // without re-creating this callback. A live round forces COURSE.
@@ -1826,6 +1829,7 @@ export default function SmartMotion() {
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
+    setSmartMotionRecording(false); // mic released → voice/listen takes over from here
     if (recordTimerRef.current) { clearInterval(recordTimerRef.current); recordTimerRef.current = null; }
     if (recordTimeoutRef.current) { clearTimeout(recordTimeoutRef.current); recordTimeoutRef.current = null; }
     try { cameraRef.current?.stopRecording(); } catch { /* no-op */ }

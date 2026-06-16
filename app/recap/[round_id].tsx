@@ -437,6 +437,12 @@ export default function RecapScreen() {
   const ROUND_NOTE_GRACE_MS = 5 * 60 * 1000;
   const roundNotes = issueEntries
     .filter(e =>
+      // 2026-06-16 (Tim — recap was THREE PAGES of transcribe/voice errors) — this
+      // section is for the player's OWN notes ("Kevin, log this"), NOT the diagnostic
+      // log. issueEntries holds both; only 'user' (or legacy undefined) entries are
+      // real notes. Excludes voice_error / voice_silent_fail / transcribe_error /
+      // gps_error / analysis_error / app_error so the recap reads like a recap again.
+      (e.kind === 'user' || e.kind == null) &&
       e.timestamp >= recap.started_at &&
       e.timestamp <= recap.ended_at + ROUND_NOTE_GRACE_MS
     )

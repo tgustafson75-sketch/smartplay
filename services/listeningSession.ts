@@ -7,6 +7,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { voiceCommandRouter } from './intents';
 import { subscribeEarbudTap } from './earbudControl';
+import { isSmartMotionRecording, emitSmartMotionCommand } from './smartMotionRecordBus';
 import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
 import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
@@ -77,6 +78,12 @@ let unsubEarbud: (() => void) | null = null;
 // consumers; React UI should subscribe to listeningSessionStore.state
 // directly for reactive updates.
 let sessionInFlight = false;
+// 2026-06-16 (Tim — earbud-tap-to-stop) — timestamp of the last tap that STOPPED a
+// Smart Motion recording; toggles within the cooldown are swallowed so the duplicate
+// tap signal (immediate sub + ~350ms pattern) can't open listening over the just-
+// freed mic.
+let recordingStopTapAt = 0;
+const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
 export function isSessionInFlight(): boolean {
   return sessionInFlight;
 }
@@ -186,6 +193,25 @@ export function isActiveListeningEnabled(): boolean {
  * Toggle the listening session. Open if idle; close if any other state.
  */
 export async function toggle(): Promise<void> {
+  // 2026-06-16 (Tim — earbud-tap-to-stop) — if Smart Motion is actively RECORDING,
+  // the camera owns the mic. A tap must STOP the capture, NOT open a listen session
+  // (opening one races the camera's audio = "Only one Recording object" crash). This
+  // is the single chokepoint: BOTH the boot-level earbud tap and handsFreeOrchestrator's
+  // single-tap route through toggle(). After recording stops the mic frees and the
+  // next tap opens listening normally.
+  if (isSmartMotionRecording()) {
+    recordingStopTapAt = Date.now();
+    emitSmartMotionCommand('stop');
+    return;
+  }
+  // 2026-06-16 (Tim) — a single tap reaches toggle() TWICE (the boot-level earbud
+  // sub fires immediately; handsFreeOrchestrator's 'single' pattern fires ~350ms
+  // later). Normally sessionInFlight dedupes that, but the recording-stop branch
+  // above returns WITHOUT opening a session — so the 350ms follow-up would see
+  // recording already stopped and open listening right over the just-freed mic.
+  // Swallow toggles for a short window after a tap-stop (covers the pattern
+  // follow-up + the camera's audio-session release).
+  if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
   // See sessionInFlight comment above for rationale.
   if (sessionInFlight) return;

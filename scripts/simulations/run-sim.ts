@@ -1954,6 +1954,31 @@ check('Clean state at restart: practice session "active" is NOT persisted',
   (() => /partialize: \(s\) => \(\{ history: s\.history \}\)/.test(read('store/practiceSessionStore.ts')))(),
   'a crash mid-practice cannot resurrect a live session on cold launch');
 
+check('Earbud/glasses tap STOPS Smart Motion recording (mic stays the camera\'s)',
+  // 2026-06-16 (Tim) — during recording the camera owns the mic; a tap must STOP the
+  // capture, never open a listen session (that races the camera audio = "Only one
+  // Recording object" crash). Centralized in listeningSession.toggle (both tap paths
+  // route through it); a short cooldown swallows the duplicate tap signal.
+  (() => {
+    const bus = read('services/smartMotionRecordBus.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const ls = read('services/listeningSession.ts');
+    return (
+      /export function setSmartMotionRecording/.test(bus) && /export function isSmartMotionRecording/.test(bus) &&
+      /setSmartMotionRecording\(true\)/.test(sm) && /setSmartMotionRecording\(false\)/.test(sm) &&
+      /if \(isSmartMotionRecording\(\)\) \{\s*recordingStopTapAt = Date\.now\(\);\s*emitSmartMotionCommand\('stop'\)/.test(ls) &&
+      /Date\.now\(\) - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS/.test(ls)
+    );
+  })(),
+  'tap-while-recording emits stop (no listen-open → no crash); cooldown dedupes the double tap signal');
+
+check('Round recap notes show the player\'s notes only, not the error log',
+  // 2026-06-16 (Tim — recap was 3 pages of transcribe/voice errors) — "Notes from
+  // this round" filters to kind==='user' (or legacy undefined), excluding the
+  // auto-logged diagnostics.
+  (() => /\(e\.kind === 'user' \|\| e\.kind == null\) &&/.test(read('app/recap/[round_id].tsx')))(),
+  'transcribe_error / voice_error / gps_error no longer flood the recap notes');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
