@@ -1979,6 +1979,19 @@ export default function SmartMotion() {
       // Sync the ref SYNCHRONOUSLY (the state-mirror effect hasn't run yet this tick) so
       // runAnalysis's multi-swing carve sees the final segment set, not a stale one.
       segmentsRef.current = segsForAnalysis;
+      // 2026-06-15 (Tim) — audible capture confirmation. After the strike session
+      // CLOSES (recording stopped + segmented) the caddie says it got the swing, so
+      // the user KNOWS it captured. Fired POST-stop so the TTS can't be metered as a
+      // false strike. Honest count — also surfaces a mis-count audibly (3 vs 10)
+      // while testing. Gated on voiceEnabled inside speak(); fire-and-forget.
+      try {
+        const n = segsForAnalysis.length || 1;
+        const st = useSettingsStore.getState();
+        void speak(
+          n === 1 ? 'Got your swing.' : `Got it — ${n} swings.`,
+          st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: true },
+        ).catch(() => undefined);
+      } catch { /* non-fatal */ }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, firstSeg);
