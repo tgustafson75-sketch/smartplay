@@ -1935,6 +1935,21 @@ check('Smart Motion record cue is honest about camera startup',
   (() => /Recording — swing when you/.test(read('services/intents/mediaHandlers.ts')))(),
   'record voice cue says swing-when-set, not swing-away');
 
+check('Round record: holesPlayed/totalScore gate on score>0 (consistent with scoreVsPar)',
+  // 2026-06-16 (whole-app audit) — a never-finalized 0-score hole used to inflate
+  // holesPlayed while scoreVsPar skipped it, saving an inconsistent triplet and
+  // skewing the incomplete-round handicap filter. All three now share one gate.
+  (() => {
+    const rs = read('store/roundStore.ts');
+    return (
+      /const scoredEntries = Object\.entries\(s\.scores\)\.filter\(\(\[, score\]\) => score > 0\)/.test(rs) &&
+      /holesPlayed: scoredEntries\.length/.test(rs) &&
+      /totalScore: scoredEntries\.reduce/.test(rs) &&
+      /getHolesPlayed: \(\) =>[\s\S]*?\.filter\(\(score\) => score > 0\)\.length/.test(rs)
+    );
+  })(),
+  'holesPlayed + totalScore + scoreVsPar all derive from the same score>0 gate');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when

@@ -1658,6 +1658,7 @@ export default function SmartMotion() {
       const waitForCache0 = async (): Promise<SwingAnalysis | null> => {
         const deadline = Date.now() + 32_000;
         while (Date.now() < deadline) {
+          if (cancelled()) return null; // new session / left screen — abandon the poll now
           const c = analysisCacheRef.current[0];
           if (c) return c;
           await new Promise((r) => setTimeout(r, 200));

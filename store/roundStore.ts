@@ -1172,9 +1172,14 @@ export const useRoundStore = create<RoundState>()(
         // RoundRecord.scoreVsPar drives the handicap differential
         // push, so a 0 in the scores map was silently biasing the
         // user's handicap calculation toward over-par.
+        // 2026-06-16 (audit) — derive holesPlayed + totalScore from the SAME
+        // score>0 gate scoreVsPar uses below. A never-finalized 0-score hole left
+        // in the map otherwise inflated holesPlayed (and skewed the incomplete-
+        // round handicap filter `totalScore >= MIN_STROKES_PER_HOLE * holesPlayed`)
+        // while scoreVsPar already skipped it — an inconsistent saved triplet.
+        const scoredEntries = Object.entries(s.scores).filter(([, score]) => score > 0);
         let scoreVsPar = 0;
-        for (const [holeNum, score] of Object.entries(s.scores)) {
-          if (!score || score <= 0) continue;
+        for (const [holeNum, score] of scoredEntries) {
           const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;
           scoreVsPar += score - par;
         }
@@ -1185,8 +1190,8 @@ export const useRoundStore = create<RoundState>()(
           courseId: s.activeCourseId,
           startedAt: s.roundStartTime ?? Date.now(),
           endedAt: Date.now(),
-          holesPlayed: Object.keys(s.scores).length,
-          totalScore: Object.values(s.scores).reduce((a, b) => a + b, 0),
+          holesPlayed: scoredEntries.length,
+          totalScore: scoredEntries.reduce((a, [, score]) => a + score, 0),
           scoreVsPar,
           isCompetition: s.isCompetition,
           nineHoleMode: s.nineHoleMode,
@@ -2028,7 +2033,10 @@ export const useRoundStore = create<RoundState>()(
         Object.values(get().scores).reduce((a, b) => a + b, 0),
 
       getHolesPlayed: () =>
-        Object.keys(get().scores).length,
+        // 2026-06-16 (audit) — count only finalized holes (score>0), matching
+        // getScoreVsPar + the persisted RoundRecord. A 0-score in-progress hole
+        // must not inflate the count.
+        Object.values(get().scores).filter((score) => score > 0).length,
 
       getScoreVsPar: () => {
         const { scores, courseHoles } = get();
