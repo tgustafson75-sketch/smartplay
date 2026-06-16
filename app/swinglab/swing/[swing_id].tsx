@@ -92,6 +92,13 @@ export default function SwingDetail() {
   // a second navigation to this screen from re-firing the analysis on
   // an already-analyzed session.
   const shouldAutoplayThenAnalyze = watch === '1';
+  // 2026-06-15 (Tim) — the swing LIBRARY is MANUAL: an upload verifies + lands
+  // STATIC; the USER initiates analysis (and biomech/mechanics) via the Analyze
+  // button. No auto-analyze/auto-biomech on open — that was the on-open
+  // re-processing + racing. This flag gates every auto-process-on-open path; the
+  // explicit Analyze/Re-analyze button (onReanalyze) is the only trigger.
+  const LIBRARY_AUTO_PROCESS = false;
+  const analyzeInFlightRef = useRef(false);
   const watchFiredRef = useRef(false);
   const trustLevel = useTrustLevelStore(s => s.level);
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
@@ -293,6 +300,9 @@ export default function SwingDetail() {
   // and known to be flaky — same posture as the upload pipeline's branch).
   const poseBackfillRef = useRef<string | null>(null);
   useEffect(() => {
+    // 2026-06-15 (Tim — mechanics manual) — no auto-biomech on open; the user runs
+    // it via Analyze. Static library until the user acts.
+    if (!LIBRARY_AUTO_PROCESS) return;
     if (!swing_id || !shot?.clipUri) return;
     if (session?.biomechanics !== undefined) return;
     if (poseBackfillRef.current === swing_id) return;
@@ -445,6 +455,7 @@ export default function SwingDetail() {
     // analysisStatus so we don't clobber a result if one's already
     // present (e.g. user navigated back-and-forth after analysis ran).
     if (
+      LIBRARY_AUTO_PROCESS &&
       s.didJustFinish &&
       shouldAutoplayThenAnalyze &&
       !watchFiredRef.current &&
@@ -475,6 +486,7 @@ export default function SwingDetail() {
   // we kick off analysis anyway so the user isn't stranded. Cleaned up
   // on unmount + on status change.
   useEffect(() => {
+    if (!LIBRARY_AUTO_PROCESS) return; // 2026-06-15 (Tim) — library is manual; no watchdog auto-fire
     if (!swing_id) return;
     if (!shouldAutoplayThenAnalyze) return;
     if (analysisStatus !== 'pending') return;
@@ -639,11 +651,16 @@ export default function SwingDetail() {
   // Phase V.7 — Re-run Phase K on this session with the post-V.6 pipeline.
   // Status transitions inside runPhaseKOnSession drive the existing analyzing
   // card automatically. Reset spokenForRef so Kevin re-narrates on completion.
+  // 2026-06-15 (Tim — library manual) — 'pending' is now the STABLE "uploaded, not
+  // analyzed yet" state (auto-analyze removed), so it must NOT count as in-flight or
+  // the Analyze button would be permanently disabled. Only the analyzing_* states are
+  // in-flight; analyzeInFlightRef bridges the brief pending→analyzing_pose window on
+  // a manual tap so a double-tap can't double-fire.
   const reanalyzing =
     analysisStatus === 'analyzing_frames' ||
     analysisStatus === 'analyzing_pose' ||
-    analysisStatus === 'analyzing_pattern' ||
-    analysisStatus === 'pending';
+    analysisStatus === 'analyzing_pattern';
+  useEffect(() => { if (analysisStatus !== 'pending') analyzeInFlightRef.current = false; }, [analysisStatus]);
   // 2026-06-09 — Uploaded phone clips have NO acoustics to auto-find the
   // swing, and a 30-60s clip can't be reliably frame-sampled (a ~2s swing
   // falls between samples). So let the user POINT at it: scrub the video to
@@ -651,7 +668,8 @@ export default function SwingDetail() {
   // around that position and analyze ONLY that — dense frames on the real
   // swing instead of sparse frames across a minute of setup/practice/walk-up.
   const onAnalyzeAtPosition = () => {
-    if (!swing_id || !shot || reanalyzing) return;
+    if (!swing_id || !shot || reanalyzing || analyzeInFlightRef.current) return;
+    analyzeInFlightRef.current = true;
     const center = position;
     const startSec = Math.max(0, center - 2.5);
     const endSec = (duration ? Math.min(duration, center + 3) : center + 3);
@@ -661,7 +679,8 @@ export default function SwingDetail() {
   };
 
   const onReanalyze = () => {
-    if (!swing_id || reanalyzing) return;
+    if (!swing_id || reanalyzing || analyzeInFlightRef.current) return;
+    analyzeInFlightRef.current = true;
     // Phase V.7 — flip status to 'pending' BEFORE clearing spokenForRef so the
     // auto-narrate effect can't fire with stale 'ok' status and re-speak the
     // old primary_issue between the ref clear and the first runPhaseK status
@@ -1106,9 +1125,29 @@ export default function SwingDetail() {
           </View>
         )}
 
-        {/* Phase V — analysis processing / failure / done */}
+        {/* Phase V — analysis processing / failure / done.
+            2026-06-15 (Tim) — the library is MANUAL: a 'pending' upload is STATIC
+            (verified, not analyzed) and shows an ANALYZE CTA, not a spinner. Only the
+            analyzing_* in-flight states show the spinner. */}
         <View style={{ marginTop: 16 }}>
-          {analysisStatus !== 'ok' && analysisStatus !== 'failed' && (
+          {analysisStatus === 'pending' && (
+            <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+              <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Ready to analyze</Text>
+              <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                Your upload is saved. Analysis runs when you choose — tap to analyze this swing.
+              </Text>
+              <TouchableOpacity
+                onPress={onReanalyze}
+                style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
+                accessibilityRole="button"
+                accessibilityLabel="Analyze this swing"
+              >
+                <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>Analyze this swing</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {(analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') && (
             <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <ActivityIndicator color={colors.accent} />
               <View style={{ flex: 1 }}>

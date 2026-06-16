@@ -198,7 +198,11 @@ export default function UploadSwing() {
         source_device: sourceDevice,
         perspective,
         angleOverride: angle,
-        deferAnalysis: isShortClip || isLongClip,
+        // 2026-06-15 (Tim) — the swing LIBRARY is MANUAL: ALWAYS defer, so every
+        // upload lands STATIC (verified, not analyzed) and the user initiates
+        // analysis from the swing-detail Analyze button. (Was: medium clips
+        // auto-analyzed — the on-open re-processing / racing.)
+        deferAnalysis: true,
       });
     } catch (e) {
       console.log('[upload] ingest failed:', e);
@@ -218,7 +222,7 @@ export default function UploadSwing() {
         // trust=1 (Quiet). The user JUST tapped Upload — this is the
         // moment that most warrants the audible "got your video"
         // ack. Without the flag, isVoiceAllowed silenced it at L1.
-        await speak("Got your video. Let me take a look.", voiceGender, language, apiUrl, { userInitiated: true });
+        await speak("Got your video — it's saved. Tap Analyze when you're ready.", voiceGender, language, apiUrl, { userInitiated: true });
       })().catch(() => undefined);
     }
     // Routing: long → trim screen; short → detail with watch param;
