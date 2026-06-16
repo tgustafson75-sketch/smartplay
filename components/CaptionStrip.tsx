@@ -39,6 +39,13 @@ export default function CaptionStrip(): React.ReactElement | null {
   // their own speech surface.
   const pathname = usePathname();
   const suppressOnCaddieTab = pathname === '/' || pathname === '/(tabs)/caddie' || pathname.endsWith('/caddie');
+  // 2026-06-15 (Tim — "elements overlaid over each other") — suppress on the
+  // swing detail screen too. It has its OWN top header (Back / title / share)
+  // AND renders the full written analysis in cards, so the global caption pill
+  // landed right on top of the "Smart Motion · swing" title (a visible collision)
+  // while just duplicating text already on screen. Same rationale as the Caddie
+  // tab's own speech bubble.
+  const suppressOnSwingDetail = pathname.includes('/swinglab/swing');
   // Re-sim P1 — when audio routes through Bluetooth we surface captions
   // automatically *for the duration of the BT connection only*, then ask
   // the user once whether to keep them on permanently. This avoids the
@@ -133,6 +140,8 @@ export default function CaptionStrip(): React.ReactElement | null {
   if (!caption) return null;
   // Suppress on Caddie tab — Cockpit speech bubble handles this surface.
   if (suppressOnCaddieTab) return null;
+  // Suppress on swing detail — own header + on-screen report (see note above).
+  if (suppressOnSwingDetail) return null;
 
   return (
     <Animated.View

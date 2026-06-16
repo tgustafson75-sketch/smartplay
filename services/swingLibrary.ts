@@ -93,7 +93,20 @@ function describe(session: CageSession): string {
     return session.upload.notes.slice(0, 60);
   }
   if (session.source === 'uploaded_video') return 'Uploaded swing';
-  return `${session.club} cage session`;
+
+  // 2026-06-15 (Tim) — was `${session.club} cage session`, which rendered
+  // "unknown cage session" any time the club wasn't tagged (Smart Motion is
+  // mode-based, not always club-tagged). Name it honestly: lead with a REAL
+  // club when we have one (live club → recorded segment → legacy field); an
+  // on-course highlight leads with its hole; else a clean "Cage session" —
+  // never "unknown".
+  const rawClub = (session.currentClub ?? session.club ?? '').trim();
+  const segClub = (
+    session.clubSegments?.find(s => (s.club_id ?? '').trim() && s.club_id.toLowerCase() !== 'unknown')?.club_id ?? ''
+  ).trim();
+  const club = rawClub && rawClub.toLowerCase() !== 'unknown' ? rawClub : segClub;
+  if (session.roundHole) return club ? `Hole ${session.roundHole} · ${club}` : `Hole ${session.roundHole} swing`;
+  return club ? `${club} · Cage` : 'Cage session';
 }
 
 /** Read all sessions, newest first, optionally filtered. */

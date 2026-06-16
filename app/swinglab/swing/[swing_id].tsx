@@ -181,12 +181,6 @@ export default function SwingDetail() {
   // button cycles 1× → ½× → ¼× → 1×.
   const [playbackRate, setPlaybackRate] = useState(1);
   const cycleSlowMo = () => setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
-  // 2026-06-10 — Auto-play the swing ONCE when the detail screen opens (library
-  // + re-analyze paths). Previously only the ?watch=1 route auto-played, so
-  // opening a swing from the library sat on a frozen first frame until you
-  // tapped play. Guarded so it fires a single time; native controls own it
-  // after, and it never loops. Muted (matches the non-watch isMuted prop).
-  const autoplayedRef = useRef(false);
   const leftCompareVideoRef = useRef<Video>(null);
   const rightCompareVideoRef = useRef<Video>(null);
   // Phase V.7+ — default to Kevin analysis. The has_audio probe in
@@ -205,8 +199,19 @@ export default function SwingDetail() {
     if (!v) return;
     try {
       const st = await v.getStatusAsync();
-      if (st.isLoaded && st.isPlaying) await v.pauseAsync();
-      else await v.playAsync();
+      if (st.isLoaded && st.isPlaying) {
+        await v.pauseAsync();
+      } else if (st.isLoaded) {
+        // 2026-06-15 (Tim) — if we're at (or a hair from) the end, restart from
+        // the top so a tap ALWAYS plays. expo-av's playAsync() at end-of-clip is
+        // a no-op — that's why the controls felt dead after the video finished.
+        const pos = st.positionMillis ?? 0;
+        const dur = st.durationMillis ?? 0;
+        if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(0);
+        await v.playAsync();
+      } else {
+        await v.playAsync();
+      }
     } catch { /* best-effort */ }
   }, []);
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -440,19 +445,11 @@ export default function SwingDetail() {
     if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
     if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
     setIsPlaying(s.isPlaying === true);
-    // Auto-play once on open for the normal (non-watch) paths. The ?watch=1
-    // route keeps its own shouldPlay + analyze-on-finish handling below, so we
-    // skip it here. Fires a single time once the clip has a real duration;
-    // isLooping is unset so it plays through once and stops.
-    if (
-      !shouldAutoplayThenAnalyze &&
-      !autoplayedRef.current &&
-      s.durationMillis != null &&
-      s.durationMillis > 0
-    ) {
-      autoplayedRef.current = true;
-      void videoRef.current?.playAsync().catch(() => {});
-    }
+    // 2026-06-15 (Tim) — NO autoplay on open. The library swing sits STATIC on
+    // the first frame; the user taps to play (togglePlayPause restarts from the
+    // top when at end). Autoplay was also what left the controls dead — it ran
+    // the clip to the end on open, so the user's first tap hit a finished video
+    // and did nothing. The ?watch=1 path below keeps its own shouldPlay.
     // 2026-05-25 — Path A: when the user routed here with ?watch=1
     // (analysis was deferred at upload time for short clips), fire
     // runPhaseKOnSession the moment the video plays through. Gated
@@ -475,8 +472,11 @@ export default function SwingDetail() {
   };
 
   const scrubTo = async (sec: number) => {
+    // 2026-06-15 (Tim) — seek + HOLD the frame (don't force play). Scrubbing to
+    // a position on a swing is a "show me this frame" action; auto-playing from
+    // there fights the static-by-default behavior. Tap the frame to play.
     await videoRef.current?.setPositionAsync(sec * 1000);
-    await videoRef.current?.playAsync();
+    await videoRef.current?.pauseAsync();
   };
 
   // 2026-05-25 — Safety-net auto-fire for stuck-on-pending analysis.
