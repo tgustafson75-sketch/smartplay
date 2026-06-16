@@ -1933,6 +1933,27 @@ check('No ghost reads: Smart Motion + library stop speech on exit / new session'
   })(),
   'narration is cancelled on exit/new-session + guarded against post-unmount fire — no late ghost read');
 
+check('Shot-rest: swing-count selector (Open/1/3/5) caps the session',
+  // 2026-06-16 (Tim) — OPEN = the free window; picking 1/3/5 caps the session to
+  // exactly N swings (read + narration cover N). A drill's own count still wins.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /const \[targetSwings, setTargetSwings\] = useState<number \| null>\(null\)/.test(sm) &&
+      /const swingCap = drillShotCount \?\? targetSwingsRef\.current/.test(sm) &&
+      /segsForAnalysis = segsForAnalysis\.slice\(0, swingCap\)/.test(sm) &&
+      /SWINGS/.test(sm) && /\[null, 1, 3, 5\]/.test(sm)
+    );
+  })(),
+  'OPEN = free window; 1/3/5 caps segments so the read + narration cover exactly N');
+
+check('Clean state at restart: practice session "active" is NOT persisted',
+  // 2026-06-16 (Tim — clean state at restart) — persisting active re-spawned a stale
+  // "still running" session on relaunch (stuck spinner / ghost swings). Persist
+  // history only.
+  (() => /partialize: \(s\) => \(\{ history: s\.history \}\)/.test(read('store/practiceSessionStore.ts')))(),
+  'a crash mid-practice cannot resurrect a live session on cold launch');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

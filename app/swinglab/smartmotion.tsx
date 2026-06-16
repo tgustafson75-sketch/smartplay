@@ -368,6 +368,13 @@ export default function SmartMotion() {
   // undefined and behaves exactly as before.
   const isDrill = typeof drillId === 'string' && drillId.length > 0;
   const drillShotCount = isDrill ? Math.max(1, Math.min(5, Number(drillShots) || 3)) : null;
+  // 2026-06-16 (Tim — shot-rest cycles) — user-chosen swing count: null = OPEN (the
+  // existing free window), or 1/3/5 → cap the session to exactly N swings (the read +
+  // narration cover N). A drill's own count still wins. Ref mirror so the stop
+  // callback reads the live value without dep churn.
+  const [targetSwings, setTargetSwings] = useState<number | null>(null);
+  const targetSwingsRef = useRef<number | null>(null);
+  useEffect(() => { targetSwingsRef.current = targetSwings; }, [targetSwings]);
 
   const profile = usePlayerProfileStore();
   // Swinger's handedness — the active family member when recording someone
@@ -2062,6 +2069,16 @@ export default function SmartMotion() {
           setSelectedSwing(0);
         }
       }
+      // 2026-06-16 (Tim — shot-rest 1/3/5) — cap the session to the chosen swing
+      // count (a drill's own count wins). Applied HERE so everything downstream —
+      // segments state, the "Got it — N" count, the pipeline narration, the rep
+      // credit, and the library carve — all see exactly N. OPEN (null) = no cap.
+      const swingCap = drillShotCount ?? targetSwingsRef.current;
+      if (swingCap && segsForAnalysis.length > swingCap) {
+        segsForAnalysis = segsForAnalysis.slice(0, swingCap);
+        setSegments(segsForAnalysis);
+        setSelectedSwing(0);
+      }
       // Sync the ref SYNCHRONOUSLY (the state-mirror effect hasn't run yet this tick) so
       // runAnalysis's multi-swing carve sees the final segment set, not a stale one.
       segmentsRef.current = segsForAnalysis;
@@ -2694,6 +2711,31 @@ export default function SmartMotion() {
               <Text style={styles.drillBannerText} numberOfLines={1}>
                 {`DRILL · ${drillName ?? 'Practice'} · ${drillShotCount} shots`}
               </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* SHOT-REST swing-count selector — 2026-06-16 (Tim). Non-drill setup only.
+            OPEN = the free window; 1/3/5 caps the session to exactly that many swings
+            (the read + narration cover N). Sits where the drill banner would. */}
+        {!isDrill && phase === 'setup' ? (
+          <View style={[styles.swingCountOuter, { top: insets.top + 46 }]}>
+            <View style={styles.swingCountPill}>
+              <Text style={styles.swingCountLabel}>SWINGS</Text>
+              {([null, 1, 3, 5] as const).map((n) => {
+                const active = targetSwings === n;
+                return (
+                  <TactilePressable
+                    key={String(n)}
+                    onPress={() => setTargetSwings(n)}
+                    style={[styles.swingCountChip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={n == null ? 'Open swing count' : `${n} swings`}
+                  >
+                    <Text style={[styles.swingCountText, active && { color: '#06140b' }]}>{n == null ? 'OPEN' : String(n)}</Text>
+                  </TactilePressable>
+                );
+              })}
             </View>
           </View>
         ) : null}
@@ -3384,6 +3426,11 @@ const styles = StyleSheet.create({
   dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   drillBannerWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
+  swingCountOuter: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
+  swingCountPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  swingCountLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 2 },
+  swingCountChip: { minWidth: 30, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
+  swingCountText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   drillBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#7CE04F', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 13,

@@ -169,6 +169,12 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
       // 2026-06-15 (audit) — passthrough migrate so a future version bump upgrades
       // cleanly instead of zustand silently discarding persisted state.
       migrate: (s) => s as never,
+      // 2026-06-16 (Tim — clean state at restart) — persist ONLY history. The `active`
+      // session is transient: persisting it re-spawned a "still running" session on
+      // relaunch (stuck spinner, double-logged history, ghost swings stamped into a
+      // dead session). It always starts null now; an unfinished session is dropped on
+      // cold launch by design (a crash mid-practice shouldn't resurrect as live).
+      partialize: (s) => ({ history: s.history }),
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
