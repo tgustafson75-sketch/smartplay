@@ -1047,6 +1047,18 @@ export default function PlayTab() {
                 <AppIcon name="trophy" size={13} color="#00C896" />
                 <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.tournament')}</Text>
               </TouchableOpacity>
+              {/* 2026-06-15 (Tim) — round CHALLENGE (break a score from a tee — the
+                  Bryson break-50-from-the-reds idea) surfaced on the Play tab where it
+                  belongs, instead of buried in Caddie → Tools. Opens the tee-goals flow. */}
+              <TouchableOpacity
+                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }]}
+                onPress={() => router.push('/tee-goals' as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Round challenge — break a score from a tee"
+              >
+                <AppIcon name="flag" size={13} color="#00C896" />
+                <Text style={[styles.chipText, { marginLeft: 5 }]}>Challenge</Text>
+              </TouchableOpacity>
             </View>
 
             {/* 2026-06-13 (Tim) — Getting around: walking vs cart. Stored on
