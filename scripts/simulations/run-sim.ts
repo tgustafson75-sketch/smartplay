@@ -2017,6 +2017,18 @@ check('Custom caddie: explicit apply pipeline + save-to-phone',
   })(),
   'apply sets persona custom + useCustomCaddie (portrait follows); save goes to Photos, not email');
 
+check('SwingLab hub: compact 2-up branded grid (not big full-width buttons)',
+  // 2026-06-16 (Tim — "too many big buttons; iconography wraps cleanly") — the
+  // tools render as compact icon-led tiles that wrap two-up, not a long scroll.
+  (() => {
+    const sl = read('app/(tabs)/swinglab.tsx');
+    return (
+      /flexWrap: 'wrap'/.test(sl) && /justifyContent: 'space-between'/.test(sl) &&
+      /width: '48%'/.test(sl) && /<View style=\{styles\.grid\}>/.test(sl)
+    );
+  })(),
+  'SwingLab tools are compact tiles in a wrapping 2-up grid');
+
 check('Course detail: API enrichment keeps the curated town (no location flap)',
   // 2026-06-16 (Tim — town flapped Temecula→Aguanga) — a bundled course keeps its
   // curated location + name; the API enrichment only updates layout.

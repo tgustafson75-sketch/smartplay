@@ -236,31 +236,37 @@ export default function SwingLab() {
 
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('swinglab.practice')}</Text>
 
-        {visibleCards.map((card) => (
-          <LauncherCard
-            key={card.key}
-            spec={card}
-            colors={colors}
-            onPress={() => {
-              if (card.route) router.push(card.route as never);
-            }}
-          />
-        ))}
+        {/* 2026-06-16 (Tim) — compact 2-up branded grid (was a long scroll of big
+            full-width buttons). Icon-led tiles that wrap cleanly on any width. */}
+        <View style={styles.grid}>
+          {visibleCards.map((card) => (
+            <LauncherCard
+              key={card.key}
+              spec={card}
+              colors={colors}
+              onPress={() => {
+                if (card.route) router.push(card.route as never);
+              }}
+            />
+          ))}
+        </View>
 
         {/* PRACTICE ENGINE — goal-driven practice that runs through Smart Motion. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.practice_engine', { defaultValue: 'PRACTICE ENGINE' })}
         </Text>
-        {PRACTICE_CARDS.map((card) => (
-          <LauncherCard
-            key={card.key}
-            spec={card}
-            colors={colors}
-            onPress={() => {
-              if (card.route) router.push(card.route as never);
-            }}
-          />
-        ))}
+        <View style={styles.grid}>
+          {PRACTICE_CARDS.map((card) => (
+            <LauncherCard
+              key={card.key}
+              spec={card}
+              colors={colors}
+              onPress={() => {
+                if (card.route) router.push(card.route as never);
+              }}
+            />
+          ))}
+        </View>
        </View>
       </ScrollView>
       <QuickTutorial
@@ -304,23 +310,20 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
         },
       ]}
     >
-      {/* Accent spine — a slim colored bar so each card reads distinctly at a glance. */}
+      {/* Accent spine — slim top bar so each tile reads distinctly at a glance. */}
       <View style={[styles.accentSpine, { backgroundColor: accent }]} />
-      <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
-        <Ionicons name={spec.icon} size={26} color={accent} />
-      </View>
-      <View style={styles.cardText}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{title}</Text>
-          <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
-          </View>
+      <View style={styles.tileTop}>
+        <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
+          <Ionicons name={spec.icon} size={22} color={accent} />
         </View>
-        <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
-          {sub}
-        </Text>
+        <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+          <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+        </View>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+      <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
+        {sub}
+      </Text>
     </Pressable>
   );
 }
@@ -352,35 +355,41 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 8,
   },
-  card: {
+  // 2026-06-16 (Tim) — 2-up grid of compact, icon-led tiles (was big full-width
+  // buttons). space-between gives a clean gutter without percentage+gap overflow,
+  // and wraps to rows of two on any width; a lone last tile sits left at 48%.
+  grid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 12,
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  card: {
+    width: '48%',
     marginBottom: 10,
+    minHeight: 118,
     borderWidth: 1,
     borderRadius: 14,
-    padding: 14,
-    paddingLeft: 18, // room for the accent spine
+    padding: 12,
+    paddingTop: 14, // room for the top accent spine
     overflow: 'hidden',
   },
   accentSpine: {
     position: 'absolute',
-    left: 0, top: 0, bottom: 0,
-    width: 5,
+    left: 0, right: 0, top: 0,
+    height: 4,
   },
+  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   iconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardText: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  cardTitle: { fontSize: 17, fontWeight: '800' },
+  cardTitle: { fontSize: 15, fontWeight: '800', marginBottom: 3 },
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  cardSub: { fontSize: 12, lineHeight: 17 },
+  cardSub: { fontSize: 11, lineHeight: 15 },
 });
