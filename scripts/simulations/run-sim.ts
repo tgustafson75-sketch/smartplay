@@ -2017,17 +2017,20 @@ check('Custom caddie: explicit apply pipeline + save-to-phone',
   })(),
   'apply sets persona custom + useCustomCaddie (portrait follows); save goes to Photos, not email');
 
-check('SwingLab hub: compact 2-up branded grid (not big full-width buttons)',
-  // 2026-06-16 (Tim — "too many big buttons; iconography wraps cleanly") — the
-  // tools render as compact icon-led tiles that wrap two-up, not a long scroll.
+check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
+  // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
+  // feature row, full-width colored intent cards, and a compact Advanced-tools grid.
   (() => {
     const sl = read('app/(tabs)/swinglab.tsx');
     return (
-      /flexWrap: 'wrap'/.test(sl) && /justifyContent: 'space-between'/.test(sl) &&
-      /width: '48%'/.test(sl) && /<View style=\{styles\.grid\}>/.test(sl)
+      /function SmartMotionHero/.test(sl) && /function AdvancedTile/.test(sl) &&
+      /ANALYZE & IMPROVE/.test(sl) && /PRACTICE BETTER/.test(sl) && /PLAY SMARTER/.test(sl) && /ADVANCED TOOLS/.test(sl) &&
+      /feature-smartmotion\.png/.test(sl) &&
+      /Swing Analysis/.test(sl) && /Acoustic Detection/.test(sl) && /Body Mechanics/.test(sl) &&
+      /<View style=\{styles\.grid\}>/.test(sl) && /width: '48%'/.test(sl)
     );
   })(),
-  'SwingLab tools are compact tiles in a wrapping 2-up grid');
+  'sectioned layout: Smart Motion hero (branded feature row) + full-width colored cards + compact Advanced grid');
 
 check('Course detail: API enrichment keeps the curated town (no location flap)',
   // 2026-06-16 (Tim — town flapped Temecula→Aguanga) — a bundled course keeps its

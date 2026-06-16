@@ -23,7 +23,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuickTutorial } from '../../components/QuickTutorial';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
+
+// 2026-06-16 (Tim — mockup) — branded SmartMotion icons for the hero + feature row.
+const ICON_FEATURE_SM = require('../../assets/icons/smartmotion/feature-smartmotion.png');
+const ICON_FEAT_ANALYSIS = require('../../assets/icons/smartmotion/metric-tempo.png');
+const ICON_FEAT_ACOUSTIC = require('../../assets/icons/smartmotion/acoustic-listening.png');
+const ICON_FEAT_BODY = require('../../assets/icons/smartmotion/biomech-posture.png');
 
 
 interface LauncherCardSpec {
@@ -64,31 +71,38 @@ interface LauncherCardSpec {
 //   3 Tempo Trainer — the headline metric, trained directly (TEMPO)
 //   4 Swing Library — the payoff: your AI-analyzed swings (REVIEW)
 //   5 Coach Mode    — analyze someone ELSE (secondary to the solo wow) (COACH)
-const CARDS: LauncherCardSpec[] = [
-  {
-    key: 'smartmotion',
-    icon: 'camera-outline',
-    title: 'Smart Motion',
-    sub: 'AI swing analysis · acoustic swing detection · body mechanics',
-    route: '/swinglab/smartmotion',
-    accent: '#88F700',
-    tag: 'CORE',
-  },
+// 2026-06-16 (Tim — mockup-driven redesign) — sectioned hierarchy:
+//   ANALYZE & IMPROVE → Smart Motion HERO (image + feature row)
+//   PRACTICE BETTER   → Drills / Tempo / Swing Library (full-width colored cards)
+//   PLAY SMARTER      → Coach Mode / On-Course Caddie
+//   ADVANCED TOOLS    → compact tile grid + Fit Profile / SmartPlan full-width
+
+// The hero (rendered specially, not as a LauncherCard).
+const HERO_CARD: LauncherCardSpec = {
+  key: 'smartmotion',
+  icon: 'camera-outline',
+  title: 'Smart Motion',
+  sub: 'AI-powered swing analysis with acoustic detection & body mechanics',
+  route: '/swinglab/smartmotion',
+  accent: '#88F700',
+  tag: 'CORE',
+};
+
+const PRACTICE_SECTION: LauncherCardSpec[] = [
   {
     key: 'drills',
-    icon: 'golf-outline',
+    icon: 'flag-outline',
     title: 'Drills',
-    sub: 'Primary Issue · Common Faults · pro instructor videos',
+    sub: 'Targeted drills for primary issues and common faults',
     route: '/drills',
     accent: '#3b9eff',
     tag: 'PRACTICE',
   },
-  // 2026-06-11 — Tempo Trainer (Tour Tempo): tick takeaway · tick top · tock strike, 3:1.
   {
     key: 'tempo',
     icon: 'musical-notes-outline',
     title: 'Tempo Trainer',
-    sub: 'Swing to the beat · Tour-Tempo 3:1 · tick·tick·tock',
+    sub: 'Improve rhythm and timing with guided tempo training',
     route: '/swinglab/tempo-trainer',
     accent: '#f5a623',
     tag: 'TEMPO',
@@ -97,21 +111,32 @@ const CARDS: LauncherCardSpec[] = [
     key: 'library',
     icon: 'albums-outline',
     title: 'Swing Library',
-    sub: 'Captured swings, uploads from camera roll',
+    sub: 'View, compare, and analyze your captured swings',
     route: '/swinglab/library',
     accent: '#a78bfa',
     tag: 'REVIEW',
   },
-  // 2026-05-23 — Coach Mode: watch + analyze someone else's swing (player roster +
-  // coach notes). For Tank (instructor) + parent-coaching-kid via the family roster.
+];
+
+const PLAY_SECTION: LauncherCardSpec[] = [
   {
     key: 'coach-mode',
     icon: 'school-outline',
     title: 'Coach Mode',
-    sub: 'Watch + analyze someone else\'s swing · player roster · coach notes',
+    sub: 'Watch and analyze other players + manage your team',
     route: '/swinglab/coach-mode',
     accent: '#34d399',
     tag: 'COACH',
+  },
+  // 2026-06-16 (Tim — mockup) — On-Course Caddie shortcut into the live round flow.
+  {
+    key: 'oncourse',
+    icon: 'disc-outline',
+    title: 'On-Course Caddie',
+    sub: 'Real-time caddie help, club recs, wind, slopes & more',
+    route: '/(tabs)/play',
+    accent: '#22d3ee',
+    tag: 'PLAY',
   },
 ];
 
@@ -119,67 +144,62 @@ const CARDS: LauncherCardSpec[] = [
 // belongs (it was buried in the caddie Tools menu — discoverability gap, see memory
 // practice-engine-smartmotion). All run THROUGH Smart Motion. Copy from the spec
 // (no i18n keys yet — LauncherCard falls back to spec.title/sub).
-const PRACTICE_CARDS: LauncherCardSpec[] = [
-  // 2026-06-14 (Tim) — pre-round Setup Check. Gated behind SETUP_CHECK_ENABLED
-  // (the server SETUP_SYSTEM_PROMPT is staged, not deployed) so the card stays
-  // hidden until the bundled Vercel deploy — never a dead entry. Flip the flag
-  // in services/swing/setupCheck.ts post-deploy and this appears.
-  // 2026-06-15 (Tim) — the adaptive pre-round warm-up: pick your time, it composes
-  // the sequence (stretch → setup → swings → brief → confidence ball) + honest readiness.
-  {
-    key: 'preround',
-    icon: 'timer-outline',
-    title: 'Pre-Round Warm Up',
-    sub: 'Got 10/20/30 min? An adaptive warm-up that ends you on a good one',
-    route: '/practice/preround',
-    accent: '#88F700',
-    tag: 'PRE-ROUND',
-  },
+// ADVANCED TOOLS — compact tile grid (small icon + title + short sub, no chevron).
+const ADVANCED_GRID: LauncherCardSpec[] = [
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
     icon: 'body-outline' as const,
     title: 'Setup Check',
-    sub: 'Pre-round fundamentals from one address photo — grip, stance, ball position',
+    sub: 'Verify fundamentals before you play',
     route: '/swinglab/setup-check',
     accent: '#88F700',
-    tag: 'PRE-ROUND',
+    tag: 'PREP',
   }] : []),
   {
     key: 'open-range',
     icon: 'infinite-outline',
     title: 'Open Range',
-    sub: 'Quantify the mash — balls, flight-seen, on-line rate, per club',
+    sub: 'Track all shots and get detailed stats',
     route: '/practice/open-range',
     accent: '#22d3ee',
     tag: 'RANGE',
   },
-  // 2026-06-15 (Tim — shot-shape drills) — pick a short-game shot, record it,
-  // see what you went for vs what came out (origin→departure launch read).
   {
     key: 'shot-shapes',
-    icon: 'analytics-outline',
+    icon: 'git-network-outline',
     title: 'Shot Shapes',
-    sub: 'Flop, pitch, chip, runner — what you went for vs what came out',
+    sub: 'Compare shot patterns & results',
     route: '/practice/shot-shapes',
     accent: '#fb7185',
     tag: 'SHORT GAME',
   },
   {
     key: 'focus-session',
-    icon: 'list-outline',
+    icon: 'locate-outline',
     title: 'Focus Session',
-    sub: 'Interleaved practice for one focus — auto-advances as you swing',
+    sub: 'Stay locked in with interleaved practice',
     route: '/practice/session',
     accent: '#fb7185',
     tag: 'FOCUS',
   },
-  // 2026-06-15 (Tim — AI club fitting v1) — honest Fit Profile: your tracked
-  // distance ladder + gaps to fill + redundant clubs. A starting point, not a spec.
+  {
+    key: 'preround',
+    icon: 'timer-outline',
+    title: 'Pre-Round Warm Up',
+    sub: 'Adaptive warm-up that ends you on a good one',
+    route: '/practice/preround',
+    accent: '#88F700',
+    tag: 'PREP',
+  },
+];
+
+// Full-width cards below the grid (richer one-liners).
+const FULL_SECTION: LauncherCardSpec[] = [
   {
     key: 'fit-profile',
     icon: 'construct-outline',
     title: 'Fit Profile',
-    sub: 'Your distance ladder, gaps to fill + redundant clubs — from real shots',
+    sub: 'Build your bag with real data from your game',
     route: '/practice/fit-profile',
     accent: '#22d3ee',
     tag: 'FITTING',
@@ -188,7 +208,7 @@ const PRACTICE_CARDS: LauncherCardSpec[] = [
     key: 'smartplan',
     icon: 'calendar-outline',
     title: 'SmartPlan',
-    sub: 'A weighted weekly plan from your goal · tap a day to run it',
+    sub: 'Your personalized improvement plan',
     route: '/practice/smartplan',
     accent: '#a3e635',
     tag: 'PLAN',
@@ -213,10 +233,6 @@ export default function SwingLab() {
   // unchanged.
   const { isWide } = useDeviceLayout();
 
-  // 2026-06-08 — Acoustic Test Bench removed (acoustic is wired into
-  // SmartMotion calibration now); SwingLab shows all cards.
-  const visibleCards = CARDS;
-
   // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
   // swing commands" prompt. Active listening is Caddie-tab + round-only and was
   // deliberately NOT wired into SmartMotion (one mic, owned by the camera during
@@ -234,39 +250,42 @@ export default function SwingLab() {
         {/* BRAND HEADER — shared v3-style row, matches every other tab. */}
         <BrandHeaderRow />
 
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('swinglab.practice')}</Text>
-
-        {/* 2026-06-16 (Tim) — compact 2-up branded grid (was a long scroll of big
-            full-width buttons). Icon-led tiles that wrap cleanly on any width. */}
-        <View style={styles.grid}>
-          {visibleCards.map((card) => (
-            <LauncherCard
-              key={card.key}
-              spec={card}
-              colors={colors}
-              onPress={() => {
-                if (card.route) router.push(card.route as never);
-              }}
-            />
-          ))}
-        </View>
-
-        {/* PRACTICE ENGINE — goal-driven practice that runs through Smart Motion. */}
+        {/* 2026-06-16 (Tim — mockup-driven) — sectioned hierarchy: Smart Motion hero,
+            then full-width colored cards by intent, then a compact Advanced grid. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
-          {t('swinglab.practice_engine', { defaultValue: 'PRACTICE ENGINE' })}
+          {t('swinglab.sec_analyze', { defaultValue: 'ANALYZE & IMPROVE' })}
+        </Text>
+        <SmartMotionHero
+          spec={HERO_CARD}
+          colors={colors}
+          onPress={() => router.push(HERO_CARD.route as never)}
+        />
+
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
+          {t('swinglab.sec_practice', { defaultValue: 'PRACTICE BETTER' })}
+        </Text>
+        {PRACTICE_SECTION.map((card) => (
+          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        ))}
+
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
+          {t('swinglab.sec_play', { defaultValue: 'PLAY SMARTER' })}
+        </Text>
+        {PLAY_SECTION.map((card) => (
+          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        ))}
+
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
+          {t('swinglab.sec_advanced', { defaultValue: 'ADVANCED TOOLS' })}
         </Text>
         <View style={styles.grid}>
-          {PRACTICE_CARDS.map((card) => (
-            <LauncherCard
-              key={card.key}
-              spec={card}
-              colors={colors}
-              onPress={() => {
-                if (card.route) router.push(card.route as never);
-              }}
-            />
+          {ADVANCED_GRID.map((card) => (
+            <AdvancedTile key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
           ))}
         </View>
+        {FULL_SECTION.map((card) => (
+          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        ))}
        </View>
       </ScrollView>
       <QuickTutorial
@@ -289,10 +308,9 @@ interface LauncherCardProps {
   onPress: () => void;
 }
 
+// Full-width horizontal card (accent spine + colored icon box + title/tag + sub + chevron).
 function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
-  // Localized when a key exists; falls back to the spec copy otherwise (so new
-  // cards — e.g. the Practice Engine section — need no i18n churn to ship).
   const title = t('swinglab.card_' + spec.key + '_title', { defaultValue: spec.title });
   const sub = t('swinglab.card_' + spec.key + '_sub', { defaultValue: spec.sub });
   const accent = spec.accent;
@@ -303,27 +321,91 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
       accessibilityLabel={`${title}. ${sub}`}
       style={({ pressed }) => [
         styles.card,
-        {
-          backgroundColor: colors.surface_elevated,
-          borderColor: pressed ? accent : colors.border,
-          opacity: pressed ? 0.9 : 1,
-        },
+        { backgroundColor: colors.surface_elevated, borderColor: pressed ? accent : colors.border, opacity: pressed ? 0.9 : 1 },
       ]}
     >
-      {/* Accent spine — slim top bar so each tile reads distinctly at a glance. */}
       <View style={[styles.accentSpine, { backgroundColor: accent }]} />
-      <View style={styles.tileTop}>
-        <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
-          <Ionicons name={spec.icon} size={22} color={accent} />
-        </View>
-        <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-          <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
-        </View>
+      <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
+        <Ionicons name={spec.icon} size={24} color={accent} />
       </View>
-      <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
-      <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>
-        {sub}
-      </Text>
+      <View style={styles.cardText}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+          <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+          </View>
+        </View>
+        <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+    </Pressable>
+  );
+}
+
+// Compact tile for the Advanced Tools grid (small icon + title + short sub, no chevron).
+function AdvancedTile({ spec, colors, onPress }: LauncherCardProps) {
+  const accent = spec.accent;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${spec.title}. ${spec.sub}`}
+      style={({ pressed }) => [
+        styles.advTile,
+        { backgroundColor: colors.surface_elevated, borderColor: pressed ? accent : colors.border, opacity: pressed ? 0.9 : 1 },
+      ]}
+    >
+      <Ionicons name={spec.icon} size={22} color={accent} style={{ marginBottom: 6 }} />
+      <Text style={[styles.advTitle, { color: colors.text_primary }]} numberOfLines={2}>{spec.title}</Text>
+      <Text style={[styles.advSub, { color: colors.text_muted }]} numberOfLines={2}>{spec.sub}</Text>
+    </Pressable>
+  );
+}
+
+function HeroFeature({ icon, label, colors }: { icon: ImageSourcePropType; label: string; colors: ReturnType<typeof useTheme>['colors'] }) {
+  return (
+    <View style={styles.heroFeat}>
+      <Image source={icon} style={styles.heroFeatIcon} resizeMode="contain" />
+      <Text style={[styles.heroFeatLabel, { color: colors.text_secondary }]} numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
+// Smart Motion HERO — the marquee card: branded media + CORE badge + feature row.
+function SmartMotionHero({ spec, colors, onPress }: LauncherCardProps) {
+  const accent = spec.accent;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${spec.title}. ${spec.sub}`}
+      style={({ pressed }) => [styles.hero, { borderColor: pressed ? accent : colors.border, opacity: pressed ? 0.95 : 1 }]}
+    >
+      <View style={[styles.accentSpine, { backgroundColor: accent }]} />
+      <LinearGradient colors={['#0c2a14', '#06140b']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View style={styles.heroTopRow}>
+        <View style={[styles.heroMedia, { borderColor: hexFade(accent, 0.5), backgroundColor: hexFade(accent, 0.1) }]}>
+          <Image source={ICON_FEATURE_SM} style={styles.heroMediaIcon} resizeMode="contain" />
+          <View style={[styles.heroPlay, { backgroundColor: accent }]}>
+            <Ionicons name="play" size={16} color="#06140b" />
+          </View>
+        </View>
+        <View style={styles.heroText}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{spec.title}</Text>
+            <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+              <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+            </View>
+          </View>
+          <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={2}>{spec.sub}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+      </View>
+      <View style={styles.heroFeatures}>
+        <HeroFeature icon={ICON_FEAT_ANALYSIS} label="Swing Analysis" colors={colors} />
+        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label="Acoustic Detection" colors={colors} />
+        <HeroFeature icon={ICON_FEAT_BODY} label="Body Mechanics" colors={colors} />
+      </View>
     </Pressable>
   );
 }
@@ -358,38 +440,84 @@ const styles = StyleSheet.create({
   // 2026-06-16 (Tim) — 2-up grid of compact, icon-led tiles (was big full-width
   // buttons). space-between gives a clean gutter without percentage+gap overflow,
   // and wraps to rows of two on any width; a lone last tile sits left at 48%.
+  // Full-width horizontal card (Practice Better / Play Smarter / Fit Profile / SmartPlan).
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    paddingLeft: 18, // room for the accent spine
+    overflow: 'hidden',
+  },
+  accentSpine: {
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0,
+    width: 5,
+  },
+  iconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardText: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cardTitle: { fontSize: 17, fontWeight: '800' },
+  tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  cardSub: { fontSize: 12, lineHeight: 17 },
+
+  // ADVANCED TOOLS grid — 2-up compact tiles (wraps cleanly; 4-up felt cramped on a
+  // phone, 2-up keeps the titles + subs legible while staying icon-led + dense).
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
+    marginBottom: 4,
   },
-  card: {
+  advTile: {
     width: '48%',
     marginBottom: 10,
-    minHeight: 118,
+    minHeight: 92,
     borderWidth: 1,
     borderRadius: 14,
     padding: 12,
-    paddingTop: 14, // room for the top accent spine
+  },
+  advTitle: { fontSize: 13, fontWeight: '800', marginBottom: 3 },
+  advSub: { fontSize: 11, lineHeight: 14 },
+
+  // SMART MOTION hero.
+  hero: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    paddingLeft: 18,
     overflow: 'hidden',
   },
-  accentSpine: {
-    position: 'absolute',
-    left: 0, right: 0, top: 0,
-    height: 4,
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  heroMedia: {
+    width: 96, height: 96, borderRadius: 12, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroMediaIcon: { width: 64, height: 64 },
+  heroPlay: {
+    position: 'absolute', width: 30, height: 30, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center',
   },
-  cardTitle: { fontSize: 15, fontWeight: '800', marginBottom: 3 },
-  tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
-  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  cardSub: { fontSize: 11, lineHeight: 15 },
+  heroText: { flex: 1, minWidth: 0 },
+  heroTitle: { fontSize: 20, fontWeight: '800' },
+  heroSub: { fontSize: 13, lineHeight: 18 },
+  heroFeatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 8 },
+  heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
+  heroFeatIcon: { width: 18, height: 18 },
+  heroFeatLabel: { fontSize: 11, fontWeight: '600' },
 });
