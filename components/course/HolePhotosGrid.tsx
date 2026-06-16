@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 
 type HolePhoto = {
@@ -57,9 +58,18 @@ export default function HolePhotosGrid({ photos }: Props) {
           >
             {p.palmsImage ? (
               <Image source={p.palmsImage} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            ) : p.url ? (
-              <Image source={{ uri: p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            ) : null}
+            ) : (
+              // 2026-06-15 (Tim) — the Mapbox satellite tile rendered WHITE in the small
+              // grid (and re-fetched/stacked on every touch). Thumbnails are eye candy →
+              // a clean static golf gradient (sky → fairway) that ALWAYS shows + never
+              // reloads. The REAL whole-view image still opens on tap (viewer keeps
+              // p.url — "don't break that"). No Mapbox/GPS dependency for the grid.
+              <LinearGradient
+                colors={['#aedbf2', '#86c873', '#3f7a3a']}
+                locations={[0, 0.45, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+            )}
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{p.hole_number}</Text>
             </View>
