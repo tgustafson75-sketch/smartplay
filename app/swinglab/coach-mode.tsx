@@ -97,6 +97,45 @@ export default function CoachMode() {
       .sort((a, b) => b.date - a.date);
   }, [sessionHistory, activeMember]);
 
+  // 2026-06-16 (Tim — Coach Mode mockup) — real stats for the header + selected-player
+  // hero. Honest substitutions for un-producible mockup bits: "day streak" → a real
+  // Sessions count; no fabricated biomech %.
+  const totalSwingsLogged = useMemo(
+    () => sessionHistory.reduce((a, s) => a + (s.shots?.length ?? 0), 0),
+    [sessionHistory],
+  );
+  const playerSwingCount = useMemo(
+    () => playerSwings.reduce((a, s) => a + (s.shots?.length ?? 0), 0),
+    [playerSwings],
+  );
+  const lastCaptureLabel = useMemo(() => {
+    if (playerSwings.length === 0) return '—';
+    const d = new Date(playerSwings[0].date);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dd = new Date(d); dd.setHours(0, 0, 0, 0);
+    if (dd.getTime() === today.getTime()) return 'Today';
+    try { return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return '—'; }
+  }, [playerSwings]);
+  // 2026-06-16 (Tim — "streaks as a metric") — REAL day streak: consecutive calendar
+  // days with at least one capture, anchored at today or yesterday (else 0). Honest —
+  // computed from the actual session dates, no fabrication. (See [[streak-metric]].)
+  const dayStreak = useMemo(() => {
+    if (playerSwings.length === 0) return 0;
+    const DAY = 86400000;
+    const days = Array.from(new Set(playerSwings.map((s) => {
+      const d = new Date(s.date); d.setHours(0, 0, 0, 0); return d.getTime();
+    }))).sort((a, b) => b - a);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const t = today.getTime();
+    if (days[0] !== t && days[0] !== t - DAY) return 0; // streak broken if no session today/yesterday
+    let streak = 1;
+    for (let i = 1; i < days.length; i++) {
+      if (days[i] === days[i - 1] - DAY) streak++;
+      else break;
+    }
+    return streak;
+  }, [playerSwings]);
+
   // ── Quick-add input state ──────────────────────────────────────
   const [newPlayerName, setNewPlayerName] = useState('');
 
@@ -210,7 +249,12 @@ export default function CoachMode() {
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Coach Mode</Text>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={[styles.title, { color: colors.text_primary }]}>Coach Mode</Text>
+          <Text style={[styles.headerSub, { color: colors.text_muted }]}>
+            {roster.length} {roster.length === 1 ? 'player' : 'players'} · {totalSwingsLogged} swings logged
+          </Text>
+        </View>
         <TouchableOpacity
           onPress={() => setTutorialOpen(true)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -274,6 +318,38 @@ export default function CoachMode() {
                 </View>
               );
             })}
+          </View>
+        )}
+
+        {/* SELECTED-PLAYER HERO — 2026-06-16 (Tim mockup) — real stats only. */}
+        {activeMember && (
+          <View style={[styles.heroCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+            <View style={styles.heroTopRow}>
+              <GolferAvatar firstName={activeMember.firstName} photoUri={activeMember.avatar_photo_uri} size={56} ringColor={colors.accent} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.heroName, { color: colors.text_primary }]} numberOfLines={1}>{activeMember.firstName}</Text>
+                <Text style={[styles.heroHcp, { color: colors.accent }]}>
+                  {activeMember.approximate_handicap != null ? `${activeMember.approximate_handicap} Handicap` : 'Handicap not set'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.heroStatsRow}>
+              <View style={styles.heroStat}>
+                <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{playerSwingCount}</Text>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Swings</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{lastCaptureLabel}</Text>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Last capture</Text>
+              </View>
+              <View style={styles.heroStat}>
+                <View style={styles.heroStreakRow}>
+                  {dayStreak > 0 ? <Ionicons name="flame" size={15} color="#f5a623" /> : null}
+                  <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{dayStreak}</Text>
+                </View>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Day streak</Text>
+              </View>
+            </View>
           </View>
         )}
 
@@ -486,7 +562,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 },
+  title: { textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 },
+  headerSub: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  heroCard: { marginHorizontal: 12, marginBottom: 12, borderWidth: 1, borderRadius: 16, padding: 14 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  heroName: { fontSize: 22, fontWeight: '800' },
+  heroHcp: { fontSize: 13, fontWeight: '700', marginTop: 2 },
+  heroStatsRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  heroStat: { alignItems: 'center', gap: 2 },
+  heroStatValue: { fontSize: 18, fontWeight: '900' },
+  heroStatLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  heroStreakRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   scroll: { padding: 12, paddingBottom: 40, gap: 8 },
   sectionHeader: {
     fontSize: 11,

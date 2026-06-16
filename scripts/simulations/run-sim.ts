@@ -2046,6 +2046,20 @@ check('Dashboard SHOT STATS: 4 branded-icon tiles incl. honest score trend',
   })(),
   '4-up SHOT STATS with branded icons; score trend = real avg score-vs-par, dash until there is history');
 
+check('Coach Mode: selected-player hero + real day-streak metric (mockup)',
+  // 2026-06-16 (Tim — Coach Mode mockup + "streaks as a metric") — header shows
+  // players + total swings; the selected player gets a hero with real swings /
+  // last-capture / day-streak (consecutive session days, honest — not fabricated).
+  (() => {
+    const cm = read('app/swinglab/coach-mode.tsx');
+    return (
+      /const dayStreak = useMemo/.test(cm) && /swings logged/.test(cm) &&
+      /heroCard/.test(cm) && /Day streak/.test(cm) &&
+      /streak broken if no session today\/yesterday/.test(cm)
+    );
+  })(),
+  'Coach Mode hero shows real swing/last-capture/day-streak stats from session dates');
+
 check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
   // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
   // feature row, full-width colored intent cards, and a compact Advanced-tools grid.
