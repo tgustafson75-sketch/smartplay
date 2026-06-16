@@ -110,6 +110,7 @@ import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
+import { ensureSwingThumbnail } from '../../services/videoUpload';
 import { subscribeSmartMotionCommand, setSmartMotionActive, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
@@ -1070,6 +1071,10 @@ export default function SmartMotion() {
             });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
+        // 2026-06-15 (Tim) — eager library thumbnail at the IMPACT frame (we have the
+        // acoustic strike time), so cage sessions always carry a meaningful thumb and
+        // don't rely on the unreliable lazy library-open generation over a big clip.
+        void ensureSwingThumbnail(sessionId, uri, segs[0]?.strikeMs ?? null);
         // Carry the pre-record ball box + (DTL) target into the session so the
         // targeting overlay, ball-trace, and effort grading use them in review.
         if (draftBallRef.current) {

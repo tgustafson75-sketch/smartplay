@@ -995,6 +995,42 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
  * One-shot ingest helper: hand off picker result + metadata to the store
  * and kick off Phase K analysis. Returns the new session id.
  */
+/**
+ * 2026-06-15 (Tim) — EAGER thumbnail at ingest, anchored to the IMPACT frame when
+ * we have the acoustic strike time. Root cause of "no thumbnail for the last 5":
+ * thumbnails were generated LAZILY on library-open via getThumbnailAsync over the
+ * full clip — which times out / fails on his big recent clips (120-180MB). Generating
+ * ONCE, up front, on the fresh clip at the strike moment is reliable AND gives a
+ * meaningful frame (the impact). Never throws; the lazy library backfill stays as a
+ * fallback for legacy sessions. Ties into the report visuals: the strike frame is the
+ * library thumb; the analysis fault-frame (visual_reference_path) is the report frame.
+ */
+export async function ensureSwingThumbnail(
+  sessionId: string,
+  clipUri: string | null | undefined,
+  atMs?: number | null,
+): Promise<void> {
+  try {
+    if (!sessionId || !clipUri) return;
+    const VT = await import('expo-video-thumbnails');
+    // Prefer the impact frame; fall back to a small offset (skip a black frame 0), then 0.
+    const candidates = [...(atMs && atMs > 0 ? [Math.round(atMs)] : []), 500, 0];
+    let tmp: string | null = null;
+    for (const time of candidates) {
+      try { const r = await VT.getThumbnailAsync(clipUri, { time, quality: 0.6 }); tmp = r.uri; break; } catch { /* try next offset */ }
+    }
+    if (!tmp) return;
+    let finalUri = tmp;
+    try {
+      const FS = await import('expo-file-system/legacy');
+      const dest = `${FS.documentDirectory}swing-thumb-${sessionId}.jpg`;
+      await FS.copyAsync({ from: tmp, to: dest });
+      finalUri = dest;
+    } catch { /* keep the tmp uri */ }
+    useCageStore.getState().setSessionThumbnail(sessionId, finalUri);
+  } catch { /* non-fatal — lazy library backfill remains the fallback */ }
+}
+
 export async function ingestVideoFromPick(args: {
   uri: string;
   club: string;
@@ -1072,6 +1108,10 @@ export async function ingestVideoFromPick(args: {
     has_audio: upload.has_audio,
     duration_sec: upload.duration_sec,
   });
+  // 2026-06-15 (Tim — "no thumbnails for the last 5") — generate the library thumbnail
+  // EAGERLY now (fresh clip), not lazily on library-open over a 120-180MB file (which
+  // times out → missing thumbs). Uploads have no acoustic strike → representative frame.
+  void ensureSwingThumbnail(sessionId, persistentUri, null);
   // Promote the pre-session timing key to a session-keyed one so the
   // analysis-trigger / pose-detection / ui-render markers all share a
   // continuous elapsed-total clock from pickVideo through to UI render.
