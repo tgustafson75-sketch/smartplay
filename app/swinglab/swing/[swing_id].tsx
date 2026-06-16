@@ -347,6 +347,11 @@ export default function SwingDetail() {
     }
   }, [analysisStatus, voiceEnabled, trustLevel, apiUrl]);
 
+  // 2026-06-15 (Tim — manual analyze) — clear the in-flight guard once a manual
+  // analyze leaves the brief 'pending' window (runPhaseK moves status to
+  // analyzing_*). MUST live above the early returns (rules-of-hooks).
+  useEffect(() => { if (analysisStatus !== 'pending') analyzeInFlightRef.current = false; }, [analysisStatus]);
+
   useEffect(() => {
     if (analysisStatus === 'ok') {
       Animated.timing(cardsFade, { toValue: 1, duration: 420, useNativeDriver: true }).start();
@@ -660,7 +665,6 @@ export default function SwingDetail() {
     analysisStatus === 'analyzing_frames' ||
     analysisStatus === 'analyzing_pose' ||
     analysisStatus === 'analyzing_pattern';
-  useEffect(() => { if (analysisStatus !== 'pending') analyzeInFlightRef.current = false; }, [analysisStatus]);
   // 2026-06-09 — Uploaded phone clips have NO acoustics to auto-find the
   // swing, and a 30-60s clip can't be reliably frame-sampled (a ~2s swing
   // falls between samples). So let the user POINT at it: scrub the video to
