@@ -2060,6 +2060,21 @@ check('Coach Mode: selected-player hero + real day-streak metric (mockup)',
   })(),
   'Coach Mode hero shows real swing/last-capture/day-streak stats from session dates');
 
+check('Settings: branded icons on every category section (mockup, layout unchanged)',
+  // 2026-06-16 (Tim — "change the icons", layout already matches) — each collapsible
+  // section header now carries a branded icon; no logic/layout change.
+  (() => {
+    const s = read('app/settings.tsx');
+    return (
+      /title="Caddie" icon="bag-outline"/.test(s) &&
+      /title="Round Experience" icon="flag-outline"/.test(s) &&
+      /title="Voice & Conversation" icon="mic-outline"/.test(s) &&
+      /title="Owner Tools" icon="construct-outline"/.test(s) &&
+      /title="Reset" icon="refresh-outline"/.test(s)
+    );
+  })(),
+  'every settings section header has a branded icon; logic + toggles untouched');
+
 check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
   // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
   // feature row, full-width colored intent cards, and a compact Advanced-tools grid.

@@ -339,7 +339,7 @@ export default function Settings() {
   // children inside the standard cardStyle View only when expanded.
   // When a search query is active, the section is force-shown if its
   // title OR child text matches; otherwise the whole section is hidden.
-  const CollapsibleSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
+  const CollapsibleSection = ({ title, children, icon }: { title: string; children: React.ReactNode; icon?: React.ComponentProps<typeof Ionicons>['name'] }) => {
     // Extract plain text from children for search matching. Recursive
     // walk handles nested elements; non-string nodes (icons, etc.) are
     // ignored — matches text content only.
@@ -372,7 +372,10 @@ export default function Settings() {
           accessibilityRole="button"
           accessibilityLabel={`${title} section, ${open ? 'expanded' : 'collapsed'}`}
         >
-          <Text style={[styles.collapsibleHeaderText, { color: open ? colors.accent : colors.text_primary }]}>
+          {icon ? (
+            <Ionicons name={icon} size={20} color={open ? colors.accent : colors.text_secondary} style={{ marginRight: 10 }} />
+          ) : null}
+          <Text style={[styles.collapsibleHeaderText, { color: open ? colors.accent : colors.text_primary, flex: 1 }]}>
             {title}
           </Text>
           {!isSearching && (
@@ -797,7 +800,7 @@ export default function Settings() {
         )}
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
-        <CollapsibleSection title="Caddie">
+        <CollapsibleSection title="Caddie" icon="bag-outline">
           <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
             Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
           </Text>
@@ -922,7 +925,7 @@ export default function Settings() {
         </CollapsibleSection>
 
         {/* ROUND EXPERIENCE */}
-        <CollapsibleSection title="Round Experience">
+        <CollapsibleSection title="Round Experience" icon="flag-outline">
           {/* 2026-05-19 — trust slider moved INLINE here. Was a routed
               sub-screen at /settings/trust-level that created the
               settings-within-settings pattern Tim called out. The full
@@ -991,7 +994,7 @@ export default function Settings() {
             controlled via the Trust spectrum (L1 Quiet = Cockpit + tap-to-talk,
             L2 Companion = reactive, L3 Active = volunteers). voiceEnabled
             field stays in the store as an internal kill switch. */}
-        <CollapsibleSection title="Voice & Conversation">
+        <CollapsibleSection title="Voice & Conversation" icon="mic-outline">
           {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
               stability mode — proactive speech off, brain calls pinned
               to Haiku (the cheapest/fastest tier), navigation intents
@@ -1068,7 +1071,7 @@ export default function Settings() {
             below used to live under separate "Display" and
             "Accessibility & Pacing" headers; merged into one header
             since both control how you SEE or HEAR the app. */}
-        <CollapsibleSection title="Language & Display">
+        <CollapsibleSection title="Language & Display" icon="desktop-outline">
 
           {/* 2026-06-10 — Language moved here from the caddie-voice card: it's
               app-wide (and people look for it under display/language, not voice). */}
@@ -1216,7 +1219,7 @@ export default function Settings() {
             "Watch Connected" thinking it pulled real Samsung Health data
             when it was sim-only. Now: label is explicit, toggle is
             disabled, and the description names exactly what's missing. */}
-        <CollapsibleSection title="Devices & Health">
+        <CollapsibleSection title="Devices & Health" icon="watch-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Samsung Galaxy Watch · Not wired</Text>
@@ -1352,7 +1355,7 @@ export default function Settings() {
         {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of what
             leaves the device and where. Relocated below Devices & Health in the
             2026-06-10 settings cleanup. */}
-        <CollapsibleSection title="Data & Privacy">
+        <CollapsibleSection title="Data & Privacy" icon="shield-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>What we send for AI coaching</Text>
@@ -1372,7 +1375,7 @@ export default function Settings() {
         </CollapsibleSection>
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}
-        <CollapsibleSection title="Help & About">
+        <CollapsibleSection title="Help & About" icon="help-circle-outline">
           {/* Phase 411 — Quick Start Guide. Same content as the PDF
               tester guide, available in-app so testers can refer back
               during use without hunting for the email attachment. */}
@@ -1592,7 +1595,7 @@ export default function Settings() {
             if (!showOwner) return null;
             return (
               <>
-                <CollapsibleSection title="Owner Tools">
+                <CollapsibleSection title="Owner Tools" icon="construct-outline">
                   {/* 2026-05-24 v1.2.1 — Glasses Mode toggle. Pre-
                       configures the audio session for background
                       Bluetooth so Tank's voice routes to Ray-Ban Meta
@@ -1773,7 +1776,7 @@ export default function Settings() {
         {/* Reset / Sign Out — until real auth lands, this is the
             functional equivalent for testers who want to start fresh
             (new persona, clear stored profile, fresh trial state). */}
-        <CollapsibleSection title="Reset">
+        <CollapsibleSection title="Reset" icon="refresh-outline">
           <TouchableOpacity
             style={styles.resetRow}
             accessibilityRole="button"
