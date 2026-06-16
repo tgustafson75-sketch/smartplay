@@ -149,6 +149,15 @@ const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once
  * error, or external cancellation via {@link stopCapture}.
  */
 let currentRecording: Audio.Recording | null = null;
+// 2026-06-15 (Tim — "racing somewhere earlier in the chain") — ATOMIC re-entry
+// guard. currentRecording is only set AFTER the async createAsync() resolves, so
+// two callers (VAD auto-fire + a manual tap, or the earbud listen path firing
+// alongside a follow-up loop) could BOTH reach Audio.Recording.createAsync()
+// before either marks the mic busy → the OS throws "Only one Recording object
+// can be active at a time" and the turn is lost. This flag is set synchronously
+// at function entry (before any await), so the second concurrent call bails
+// immediately. Reset in a finally so every exit path clears it.
+let captureInProgress = false;
 let captureCancelled = false;
 // 2026-06-06 — Distinct from captureCancelled: this means "user
 // explicitly ended the capture (tap during a follow-up listen) — DO
@@ -194,6 +203,14 @@ export const captureUtterance = async (
   apiUrl: string,
   language: 'en' | 'es' | 'zh' = 'en',
 ): Promise<string | null> => {
+  // 2026-06-15 (Tim) — atomic re-entry guard (see captureInProgress decl). A
+  // second concurrent capture would crash the audio session ("Only one Recording
+  // object"); bail quietly so the in-flight capture owns the mic.
+  if (captureInProgress) {
+    console.log('[voice] captureUtterance ignored — a capture is already in progress');
+    return null;
+  }
+  captureInProgress = true;
   let recording: Audio.Recording | null = null;
   captureCancelled = false;
   captureEarlyStop = false;
@@ -348,6 +365,9 @@ export const captureUtterance = async (
     }
     currentRecording = null;
     return null;
+  } finally {
+    // Always release the re-entry guard, on every exit path.
+    captureInProgress = false;
   }
 };
 

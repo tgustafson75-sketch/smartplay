@@ -1,5 +1,6 @@
 import { Linking, Vibration } from 'react-native';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
+import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
@@ -262,6 +263,15 @@ async function openSession() {
   const settings = useSettingsStore.getState();
   const apiUrl = getApiBaseUrl();
   console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
+
+  // 2026-06-15 (Tim — ~5s lag, wants ~3s) — warm the WHOLE voice chain the
+  // instant listening opens. The manual-tap path already prewarms at mic-press;
+  // the earbud/active-listening path did NOT, so the first turn after idle paid
+  // full cold-start (transcribe + intent + kevin + voice Lambdas, sequentially)
+  // on top of generation. Firing it here means every endpoint heats up DURING
+  // the opener-speak + capture window — by the time the transcript is ready they
+  // re hot. Fire-and-forget, 30s self-dedupe.
+  if (settings.voiceEnabled) prewarmVoice();
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.
