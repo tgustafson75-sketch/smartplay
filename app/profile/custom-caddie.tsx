@@ -42,6 +42,7 @@ import { router, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
+import { useSettingsStore } from '../../store/settingsStore';
 // 2026-05-26 — Fix DY: in-screen voice recorder for personal caddie.
 // Same UI as the AI portrait flow per Tim's directive — no separate
 // screen — so the user records their own greetings right where they
@@ -86,6 +87,27 @@ export default function CustomCaddieScreen() {
   const selfieB64 = mediaSelfieB64 ?? legacySelfieB64;
   const customCaddiePortraitB64 = mediaPortraitB64 ?? legacyPortraitB64;
   const customCaddieClips: Record<string, string> = rawCustomCaddieClips ?? {};
+
+  // 2026-06-16 (Tim — "no way to actually make it apply") — explicit APPLY pipeline.
+  // The custom caddie becomes active when BOTH useCustomCaddie is on (drives the
+  // portrait via activeCustomPortrait) AND the persona is 'custom' (drives voice +
+  // name). Previously the screen only pointed at the ••• cycler; now one button
+  // sets both, so voice + person + portrait switch together — and the avatar stops
+  // showing a stock caddie (it was stock because useCustomCaddie was never set).
+  const useCustomCaddie = usePlayerProfileStore(s => s.useCustomCaddie);
+  const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
+  const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
+  const isCustomActive = useCustomCaddie && caddiePersonality === 'custom';
+  const applyCustomCaddie = () => {
+    setUseCustomCaddie(true);
+    setCaddiePersonality('custom');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+  const switchToKevin = () => {
+    setUseCustomCaddie(false);
+    setCaddiePersonality('kevin');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [busy, setBusy] = useState<'capture' | 'generate' | null>(null);
@@ -203,16 +225,29 @@ export default function CustomCaddieScreen() {
       const bytes = new Uint8Array(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
       await Promise.resolve(file.write(bytes));
-      const can = await Sharing.isAvailableAsync();
-      if (!can) {
-        Alert.alert('Sharing not available', `Saved to ${file.uri}.`);
+      // 2026-06-16 (Tim — "it makes you email it to save; we want save to phone") —
+      // save straight to the device photo library (camera roll) via MediaLibrary,
+      // not the share sheet. Fall back to the share sheet only if the photo
+      // permission is denied, so the image is never lost.
+      const ML = await import('expo-media-library');
+      const perm = await ML.requestPermissionsAsync();
+      if (perm.granted || perm.accessPrivileges === 'limited') {
+        await ML.saveToLibraryAsync(file.uri);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Saved to Photos', `Your ${label === 'caddie' ? 'caddie' : 'selfie'} is in your camera roll.`);
         return;
       }
-      await Sharing.shareAsync(file.uri, {
-        mimeType: 'image/png',
-        dialogTitle: label === 'caddie' ? 'Save your caddie' : 'Save your selfie',
-        UTI: 'public.png',
-      });
+      // Permission denied → share-sheet fallback so the image isn't trapped.
+      const can = await Sharing.isAvailableAsync();
+      if (can) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'image/png',
+          dialogTitle: label === 'caddie' ? 'Save your caddie' : 'Save your selfie',
+          UTI: 'public.png',
+        });
+        return;
+      }
+      Alert.alert('Saved', `Saved to ${file.uri}.`);
     } catch (e) {
       console.log('[customCaddie] save error', e);
       Alert.alert('Save failed', 'Try again in a moment.');
@@ -608,12 +643,37 @@ export default function CustomCaddieScreen() {
               standalone toggle needed. */}
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>To use this caddie</Text>
+              <Text style={styles.rowLabel}>{isCustomActive ? `${customCaddieName ?? 'My Caddie'} is your caddie` : 'Use this caddie'}</Text>
               <Text style={styles.rowSub}>
-                Open the ••• menu and tap the &quot;Caddie:&quot; row to cycle to &quot;{customCaddieName ?? 'My Caddie'}&quot;.
+                {isCustomActive
+                  ? 'Active across the app — voice, portrait, and name.'
+                  : 'Apply your voice, portrait, and name as the active caddie everywhere.'}
               </Text>
             </View>
           </View>
+          <TouchableOpacity
+            onPress={isCustomActive ? switchToKevin : applyCustomCaddie}
+            disabled={!isCustomActive && !customCaddiePortraitB64}
+            style={[
+              styles.applyBtn,
+              isCustomActive ? styles.applyBtnActive : (!customCaddiePortraitB64 && styles.applyBtnDisabled),
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={isCustomActive ? 'Switch back to Kevin' : 'Use this custom caddie'}
+          >
+            <Ionicons
+              name={isCustomActive ? 'checkmark-circle' : 'person-circle-outline'}
+              size={18}
+              color={isCustomActive ? '#06140b' : (customCaddiePortraitB64 ? '#06140b' : '#6b7d72')}
+            />
+            <Text style={[styles.applyBtnText, !isCustomActive && !customCaddiePortraitB64 && { color: '#6b7d72' }]}>
+              {isCustomActive
+                ? 'Active — tap to switch back to Kevin'
+                : customCaddiePortraitB64
+                  ? `Use ${customCaddieName ?? 'My Caddie'} as my caddie`
+                  : 'Generate a portrait first'}
+            </Text>
+          </TouchableOpacity>
 
           {/* 2026-05-26 — Fix DY: Step 4 — record YOUR voice for the
               fixed catalog of caddie phrases. When useCustomCaddie is
@@ -785,6 +845,10 @@ const styles = StyleSheet.create({
   thumb: { width: '100%', height: '100%' },
   rowLabel: { color: '#f4f4f4', fontSize: 15, fontWeight: '700' },
   rowSub: { color: '#9ca3af', fontSize: 12, lineHeight: 17, marginTop: 4, marginBottom: 10 },
+  applyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, marginBottom: 6 },
+  applyBtnActive: { backgroundColor: '#88F700' },
+  applyBtnDisabled: { backgroundColor: '#1e3a28' },
+  applyBtnText: { color: '#06140b', fontSize: 15, fontWeight: '800' },
   actionBtn: {
     backgroundColor: '#00C896',
     borderRadius: 10,

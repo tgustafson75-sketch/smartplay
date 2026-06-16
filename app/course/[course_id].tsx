@@ -196,7 +196,15 @@ export default function CourseDetailScreen() {
           const real = found.find(r => !r._error);
           if (!real?.id) return;
           void getCourse(real.id).then(c => {
-            if (!cancelled && c) { setCourse(c); setLayoutEstimated(false); } // real data landed (audit)
+            // 2026-06-16 (Tim — town flapped Temecula→Aguanga→Temecula) — for a
+            // bundled (local:) course the CURATED location + name are authoritative;
+            // the API enrichment is only for layout (tees/holes/rating). Keep the
+            // stub's location/club_name so the town doesn't change under the user a
+            // couple seconds after the screen loads.
+            if (!cancelled && c) {
+              setCourse(prev => (prev ? { ...c, location: prev.location, club_name: prev.club_name } : c));
+              setLayoutEstimated(false);
+            }
             const courseLocation =
               c &&
               typeof c.location?.latitude === 'number' &&

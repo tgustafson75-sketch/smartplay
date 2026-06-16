@@ -2002,6 +2002,36 @@ check('Recap Handicap Impact: no differential on an incomplete round (was -33 on
   })(),
   'a partial round shows an honest message, not a bogus negative differential');
 
+check('Custom caddie: explicit apply pipeline + save-to-phone',
+  // 2026-06-16 (Tim — "no way to apply it; it makes you email to save") — one button
+  // applies voice + person + portrait (persona 'custom' + useCustomCaddie), so the
+  // avatar stops showing a stock caddie; save writes to the photo library, not the
+  // share sheet.
+  (() => {
+    const cc = read('app/profile/custom-caddie.tsx');
+    return (
+      /setUseCustomCaddie\(true\);\s*setCaddiePersonality\('custom'\)/.test(cc) &&
+      /saveToLibraryAsync/.test(cc) &&
+      /Use \$\{customCaddieName \?\? 'My Caddie'\} as my caddie/.test(cc)
+    );
+  })(),
+  'apply sets persona custom + useCustomCaddie (portrait follows); save goes to Photos, not email');
+
+check('Course detail: API enrichment keeps the curated town (no location flap)',
+  // 2026-06-16 (Tim — town flapped Temecula→Aguanga) — a bundled course keeps its
+  // curated location + name; the API enrichment only updates layout.
+  (() => /setCourse\(prev => \(prev \? \{ \.\.\.c, location: prev\.location, club_name: prev\.club_name \} : c\)\)/.test(read('app/course/[course_id].tsx')))(),
+  'bundled course town no longer changes under the user a couple seconds after load');
+
+check('Recap view-hole shows the saved static hole image when no shots logged',
+  // 2026-06-16 (Tim — "view hole" was blank) — a bundled course shows the saved hole
+  // image instead of a bare "no shots" screen when tracking dropped that round.
+  (() => {
+    const h = read('app/recap/hole/[round_id]/[hole].tsx');
+    return /getLocalHoleImageById\(courseId, hole\) \?\? getLocalHoleImage\(courseName, hole\)/.test(h) && /staticHoleImage \?/.test(h);
+  })(),
+  'the hole view shows the static image (bundled course) instead of blank when no shots tracked');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
@@ -3178,7 +3208,9 @@ check('Honesty: putt distance + placeholder course layout are flagged as estimat
       // course detail flags the generic placeholder layout + clears it on real data
       /const \[layoutEstimated, setLayoutEstimated\] = useState\(false\)/.test(cd) &&
       /setLayoutEstimated\(!realHoles\)/.test(cd) &&
-      /\{ setCourse\(c\); setLayoutEstimated\(false\); \}/.test(cd) &&
+      // 2026-06-16 — API enrichment now preserves the curated location (no town
+      // flap) but still clears the estimate flag when real layout lands.
+      /setCourse\(prev => \(prev \? \{ \.\.\.c, location: prev\.location, club_name: prev\.club_name \} : c\)\);\s*setLayoutEstimated\(false\)/.test(cd) &&
       /Estimated layout — full course data not available yet\./.test(cd)
     );
   })(),

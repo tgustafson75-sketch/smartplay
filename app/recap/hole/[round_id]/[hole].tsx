@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import HoleShotMap from '../../../../components/recap/HoleShotMap';
 import { useRoundStore } from '../../../../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../../../../services/courseGeometryService';
+import { getLocalHoleImageById, getLocalHoleImage } from '../../../../data/localCourseImages';
 import type { ShotResult } from '../../../../store/roundStore';
 
 /**
@@ -64,6 +65,13 @@ export default function HoleShotMapScreen() {
 
   const shotsForHole = allShots.filter(s => s.hole === hole);
 
+  // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — the saved
+  // static hole image for a bundled course, so the hole view shows the hole even
+  // when shot tracking dropped out that round (network errors). Prefer the
+  // courseId-keyed lookup; fall back to the record's course name.
+  const courseName = isLive ? live.activeCourse : record?.courseName ?? null;
+  const staticHoleImage = getLocalHoleImageById(courseId, hole) ?? getLocalHoleImage(courseName, hole);
+
   if (!geometryLoaded) {
     return (
       <SafeAreaView style={styles.container}>
@@ -75,10 +83,23 @@ export default function HoleShotMapScreen() {
   if (shotsForHole.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No shots logged on hole {hole}</Text>
-          <Text style={styles.emptyText}>Open a hole you actually played.</Text>
-        </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        {staticHoleImage ? (
+          <>
+            <Image source={staticHoleImage} style={styles.staticHero} resizeMode="cover" />
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>Hole {hole}</Text>
+              <Text style={styles.emptyText}>No shots were tracked on this hole this round — here&apos;s the hole.</Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No shots logged on hole {hole}</Text>
+            <Text style={styles.emptyText}>Open a hole you actually played.</Text>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
@@ -101,6 +122,9 @@ export default function HoleShotMapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },
+  backBtn: { paddingHorizontal: 16, paddingVertical: 10 },
+  backText: { color: '#00C896', fontSize: 16, fontWeight: '700' },
+  staticHero: { width: '100%', height: '62%' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
   emptyText: { color: '#6b7280', textAlign: 'center', fontSize: 14 },
