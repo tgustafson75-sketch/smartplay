@@ -623,13 +623,25 @@ export default function Scorecard() {
             scorecard shows this instead of lingering on the last round; finished
             rounds live in dashboard Recent Rounds → recap. */}
         {!isRoundActive && (
-          <View style={[styles.emptyRound, { borderColor: c.border, backgroundColor: c.surface }]}>
+          // 2026-06-16 (Tim — tapping "Recent Rounds" did nothing) — the whole empty
+          // card now navigates to the dashboard (where Recent Rounds → recap live),
+          // with an explicit tappable affordance so the link reads as a real action.
+          <TouchableOpacity
+            style={[styles.emptyRound, { borderColor: c.border, backgroundColor: c.surface }]}
+            onPress={() => router.push('/(tabs)/dashboard' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Go to the dashboard to see your recent rounds"
+          >
             <AppIcon name="golf-outline" size={34} color={c.text_muted} />
             <Text style={[styles.emptyRoundTitle, { color: c.text_primary }]}>No round in progress</Text>
             <Text style={[styles.emptyRoundBody, { color: c.text_muted }]}>
-              Your finished rounds are saved. See <Text style={{ fontWeight: '800', color: c.accent }}>Recent Rounds</Text> on the dashboard to review any of them.
+              Your finished rounds are saved on the dashboard.
             </Text>
-          </View>
+            <View style={styles.emptyRoundCta}>
+              <Text style={[styles.emptyRoundCtaText, { color: c.accent }]}>View Recent Rounds</Text>
+              <AppIcon name="chevron-forward" size={16} color={c.accent} />
+            </View>
+          </TouchableOpacity>
         )}
 
         {/* COURSE */}
@@ -948,6 +960,8 @@ const styles = StyleSheet.create({
   },
   emptyRoundTitle: { fontSize: 17, fontWeight: '800' },
   emptyRoundBody: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 19 },
+  emptyRoundCta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  emptyRoundCtaText: { fontSize: 14, fontWeight: '800' },
   highlightRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   highlightClub: { fontSize: 14, fontWeight: '800' },
   highlightSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },

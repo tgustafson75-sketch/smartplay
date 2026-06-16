@@ -1979,6 +1979,29 @@ check('Round recap notes show the player\'s notes only, not the error log',
   (() => /\(e\.kind === 'user' \|\| e\.kind == null\) &&/.test(read('app/recap/[round_id].tsx')))(),
   'transcribe_error / voice_error / gps_error no longer flood the recap notes');
 
+check('Scorecard empty state taps through to the dashboard',
+  // 2026-06-16 (Tim — tapping "Recent Rounds" did nothing) — the no-round scorecard
+  // card now navigates to the dashboard with an explicit affordance.
+  (() => {
+    const sc = read('app/(tabs)/scorecard.tsx');
+    return /onPress=\{\(\) => router\.push\('\/\(tabs\)\/dashboard' as never\)\}/.test(sc) && /View Recent Rounds/.test(sc);
+  })(),
+  'no-round scorecard navigates to the dashboard instead of a dead "Recent Rounds" link');
+
+check('Recap Handicap Impact: no differential on an incomplete round (was -33 on 8 holes)',
+  // 2026-06-16 (Tim) — a Score Differential is only valid for a complete 9/18; a
+  // partial round compared the partial AGS to the full 18-hole rating → ~-33. Now
+  // gated: partial rounds show an honest message, no bogus differential / post button.
+  (() => {
+    const card = read('components/recap/HandicapImpactCard.tsx');
+    return (
+      /const isPostable = holesPlayed === 9 \|\| holesPlayed === 18/.test(card) &&
+      /handicapIndex == null \|\| !round \|\| !isPostable/.test(card) &&
+      /finish 9 or 18 to post a Score Differential/.test(card)
+    );
+  })(),
+  'a partial round shows an honest message, not a bogus negative differential');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

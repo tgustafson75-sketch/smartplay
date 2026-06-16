@@ -60,8 +60,15 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
   // but this card was a separate push path that the audit missed).
   // Tapping "Update Index?" then pushed the wrong unscaled diff AGAIN.
   const is9Hole = round?.holesPlayed === 9;
+  // 2026-06-16 (Tim — recap showed a -33.0 differential on an 8-hole round) — a
+  // Score Differential is only valid for a COMPLETE 9- or 18-hole round. A partial
+  // round (e.g. 8 holes) compared the partial AGS against the FULL 18-hole rating
+  // → a wildly-negative bogus differential that also craters the Index estimate.
+  // Only postable rounds compute a differential; partials show an honest message.
+  const holesPlayed = round ? (round.holesPlayed ?? Object.keys(round.scores ?? {}).length) : 0;
+  const isPostable = holesPlayed === 9 || holesPlayed === 18;
   const result = useMemo(() => {
-    if (handicapIndex == null || !round) return null;
+    if (handicapIndex == null || !round || !isPostable) return null;
     // Best-available rating + slope. Phase Q.5b's getHoleGeometry would be
     // the upgraded path; for v1.0 we read whatever's on the courseHoles
     // record (may be missing — fall back to neutral 113 / par-as-rating).
@@ -100,7 +107,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       };
     }
     return out;
-  }, [handicapIndex, round, courseHoles, recentDifferentials, is9Hole]);
+  }, [handicapIndex, round, courseHoles, recentDifferentials, is9Hole, isPostable]);
 
   // Sim-report gap #4 — when the player hasn't set their Handicap Index
   // yet, render a small invitation card instead of hiding the surface.
@@ -130,8 +137,23 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       </View>
     );
   }
-  if (!round || !result) return null;
+  if (!round) return null;
   if (dismissed) return null;
+  // Incomplete round — honest message, no bogus differential.
+  if (!isPostable) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.headerRow}>
+          <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
+          <Text style={styles.headerTitle}>Handicap Impact</Text>
+        </View>
+        <Text style={styles.impact}>
+          {holesPlayed} {holesPlayed === 1 ? 'hole' : 'holes'} in the books — finish 9 or 18 to post a Score Differential to your Index. The round&apos;s saved either way.
+        </Text>
+      </View>
+    );
+  }
+  if (!result) return null;
 
   return (
     <View style={styles.card}>
