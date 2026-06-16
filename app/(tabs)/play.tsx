@@ -702,6 +702,12 @@ export default function PlayTab() {
         contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
       >
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
+        {/* 2026-06-16 (Tim — Play mockup) — title + tagline header (look/feel). */}
+        <View style={styles.playTitleBlock}>
+          <Text style={styles.playTitle}>{t('play.title', { defaultValue: 'PLAY' })}</Text>
+          <Text style={styles.playTagline}>{t('play.tagline', { defaultValue: 'Smart guidance. Lower scores.' })}</Text>
+        </View>
+
         {/* 2026-06-10 — Tournament Mode moved into the round-setup FORMAT row
             (next to 9-Hole / Competition) so it lives with the other format
             choices instead of as a standalone card pinned to the top of the tab. */}
@@ -1284,6 +1290,9 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,200,150,0.10)',
   },
 
+  playTitleBlock: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
+  playTitle: { fontSize: 28, fontWeight: '900', color: '#f4f4f4', letterSpacing: 0.3 },
+  playTagline: { fontSize: 13, fontWeight: '500', color: '#9ca3af', marginTop: 2 },
   sectionLabel: {
     color: c.text_muted, fontSize: 11, fontWeight: '700',
     letterSpacing: 1.6, paddingHorizontal: 16, marginTop: 16, marginBottom: 8,
