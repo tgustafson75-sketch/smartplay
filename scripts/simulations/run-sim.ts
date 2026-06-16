@@ -2033,6 +2033,19 @@ check('Custom caddie portrait can be just the dashboard icon (separate from the 
   })(),
   'a portrait can be the dashboard icon without activating the custom caddie persona/voice');
 
+check('Dashboard SHOT STATS: 4 branded-icon tiles incl. honest score trend',
+  // 2026-06-16 (Tim — dashboard mockup) — 4-up shot stats with branded green icons;
+  // Score Trend is a real avg score-vs-par over recent rounds (— until history).
+  (() => {
+    const d = read('app/(tabs)/dashboard.tsx');
+    return (
+      /icon="golf-outline"/.test(d) && /icon="locate-outline"/.test(d) &&
+      /icon="flag-outline"/.test(d) && /icon="trending-up-outline"/.test(d) &&
+      /const scoreTrend = useMemo/.test(d)
+    );
+  })(),
+  '4-up SHOT STATS with branded icons; score trend = real avg score-vs-par, dash until there is history');
+
 check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
   // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
   // feature row, full-width colored intent cards, and a compact Advanced-tools grid.

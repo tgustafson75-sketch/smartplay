@@ -110,6 +110,13 @@ export default function Dashboard() {
   // 2026-06-16 (Tim) — the dashboard profile icon. A custom-caddie portrait can be
   // applied here as just your picture, separate from activating the custom caddie.
   const profilePortraitB64 = useCustomCaddieMediaStore((s) => s.profilePortraitB64);
+  // 2026-06-16 (Tim — mockup SHOT STATS 4th tile) — honest score trend = avg
+  // score-vs-par over the last few rounds. Null (→ "—") until there's history.
+  const scoreTrend = useMemo(() => {
+    const recent = roundHistory.filter((r) => typeof r.scoreVsPar === 'number').slice(-5);
+    if (recent.length === 0) return null;
+    return recent.reduce((a, r) => a + (r.scoreVsPar ?? 0), 0) / recent.length;
+  }, [roundHistory]);
   const clubStats = useClubStatsStore((s) => s.stats);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
@@ -577,16 +584,24 @@ export default function Dashboard() {
             no context. When teeShots=0, show dashes instead of 0/0%. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.shot_stats')}</Text>
         <View style={styles.statsRow}>
-          <StatTile colors={colors} value={String(shotStats.shotsLogged)} label={t('dashboard.shots_logged')} />
+          <StatTile colors={colors} icon="golf-outline" value={String(shotStats.shotsLogged)} label={t('dashboard.shots_logged')} />
           <StatTile
             colors={colors}
+            icon="locate-outline"
             value={shotStats.teeShots === 0 ? '—' : `${shotStats.fairwayPct}%`}
             label={t('dashboard.fairway_pct')}
           />
           <StatTile
             colors={colors}
+            icon="flag-outline"
             value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(shotStats.avgYds)}
             label={t('dashboard.tee_avg')}
+          />
+          <StatTile
+            colors={colors}
+            icon="trending-up-outline"
+            value={scoreTrend == null ? '—' : `${scoreTrend >= 0 ? '+' : ''}${scoreTrend.toFixed(1)}`}
+            label={t('dashboard.score_trend', { defaultValue: 'SCORE TREND' })}
           />
         </View>
 
@@ -938,15 +953,18 @@ function StatTile({
   colors,
   value,
   label,
+  icon,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   value: string;
   label: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }) {
   return (
     <View style={[styles.statTile, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+      {icon ? <Ionicons name={icon} size={18} color={colors.accent} style={{ marginBottom: 2 }} /> : null}
       <Text style={[styles.statTileValue, { color: colors.accent }]}>{value}</Text>
-      <Text style={[styles.statTileLabel, { color: colors.text_muted }]}>{label}</Text>
+      <Text style={[styles.statTileLabel, { color: colors.text_muted }]} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -1179,12 +1197,13 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderRadius: 14,
-    paddingVertical: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
-  statTileValue: { fontSize: 28, fontWeight: '900' },
-  statTileLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
+  statTileValue: { fontSize: 22, fontWeight: '900' },
+  statTileLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.8 },
   // Recent shots
   emptyLine: {
     paddingHorizontal: 16,
