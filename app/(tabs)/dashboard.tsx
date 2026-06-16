@@ -117,6 +117,22 @@ export default function Dashboard() {
     if (recent.length === 0) return null;
     return recent.reduce((a, r) => a + (r.scoreVsPar ?? 0), 0) / recent.length;
   }, [roundHistory]);
+  // 2026-06-16 (Tim — "streaks as a metric in the app") — the player's OWN day streak:
+  // consecutive calendar days with ANY activity (a round OR a practice session),
+  // anchored at today/yesterday else 0. Honest, from real dates. (See [[streak-metric]].)
+  const dayStreak = useMemo(() => {
+    const DAY = 86400000;
+    const times: number[] = [];
+    for (const r of roundHistory) { const tt = r.endedAt ?? r.startedAt; if (typeof tt === 'number') times.push(tt); }
+    for (const p of practiceHistory) { if (typeof p.startedAt === 'number') times.push(p.startedAt); }
+    if (times.length === 0) return 0;
+    const days = Array.from(new Set(times.map((tm) => { const d = new Date(tm); d.setHours(0, 0, 0, 0); return d.getTime(); }))).sort((a, b) => b - a);
+    const today = new Date(); today.setHours(0, 0, 0, 0); const t0 = today.getTime();
+    if (days[0] !== t0 && days[0] !== t0 - DAY) return 0;
+    let streak = 1;
+    for (let i = 1; i < days.length; i++) { if (days[i] === days[i - 1] - DAY) streak++; else break; }
+    return streak;
+  }, [roundHistory, practiceHistory]);
   const clubStats = useClubStatsStore((s) => s.stats);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
@@ -373,9 +389,17 @@ export default function Dashboard() {
         {/* ─── 2. TITLE + WELCOME ────────────────────────────────────── */}
         <View style={styles.titleBlock}>
           <Text style={[styles.title, { color: colors.text_primary }]}>{t('dashboard.title')}</Text>
-          <Text style={[styles.welcome, { color: colors.text_muted }]}>
-            Welcome back, {welcomeName}
-          </Text>
+          <View style={styles.welcomeRow}>
+            <Text style={[styles.welcome, { color: colors.text_muted }]}>
+              Welcome back, {welcomeName}
+            </Text>
+            {dayStreak > 0 && (
+              <View style={styles.streakPill}>
+                <Ionicons name="flame" size={13} color="#f5a623" />
+                <Text style={styles.streakPillText}>{dayStreak} day{dayStreak === 1 ? '' : 's'}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* ─── 3. PROFILE CARD ───────────────────────────────────────── */}
@@ -1012,6 +1036,9 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: '900' },
   welcome: { fontSize: 14, marginTop: 4 },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: 'rgba(245,166,35,0.14)', borderWidth: 1, borderColor: 'rgba(245,166,35,0.4)' },
+  streakPillText: { color: '#f5a623', fontSize: 12, fontWeight: '800' },
   // Profile card
   profileCard: {
     marginHorizontal: 12,

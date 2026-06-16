@@ -2046,6 +2046,15 @@ check('Dashboard SHOT STATS: 4 branded-icon tiles incl. honest score trend',
   })(),
   '4-up SHOT STATS with branded icons; score trend = real avg score-vs-par, dash until there is history');
 
+check('Dashboard: real day-streak metric surfaced',
+  // 2026-06-16 (Tim — "streaks as a metric in the app") — the player's own day streak
+  // (consecutive days with a round OR practice session) shows as a flame pill.
+  (() => {
+    const d = read('app/(tabs)/dashboard.tsx');
+    return /const dayStreak = useMemo/.test(d) && /streakPill/.test(d) && /day\{dayStreak === 1 \? '' : 's'\}/.test(d);
+  })(),
+  'dashboard shows a real consecutive-day streak (round or practice), honest from dates');
+
 check('Coach Mode: selected-player hero + real day-streak metric (mockup)',
   // 2026-06-16 (Tim — Coach Mode mockup + "streaks as a metric") — header shows
   // players + total swings; the selected player gets a hero with real swings /
