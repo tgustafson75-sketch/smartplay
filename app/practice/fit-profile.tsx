@@ -22,8 +22,16 @@ export default function FitProfileScreen() {
   const handicap = usePlayerProfileStore((s) => s.handicap);
 
   const manual = useClubStatsStore((s) => s.manual);
+  const reps = useClubStatsStore((s) => s.reps);
   const [editingClub, setEditingClub] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+
+  // 2026-06-16 (Tim — credit for swinging clubs in practice) — per-club rep volume
+  // (Smart Motion / drills). HONEST: volume only, never a measured carry.
+  const repList = useMemo(
+    () => CLUB_ORDER.filter((c) => c !== 'Putter' && (reps[c] ?? 0) > 0).map((c) => ({ club: c, n: reps[c]! })).sort((a, b) => b.n - a.n),
+    [reps],
+  );
 
   const openEdit = (club: string) => {
     const st = useClubStatsStore.getState();
@@ -134,6 +142,22 @@ export default function FitProfileScreen() {
           <Text style={[styles.gapText, { color: colors.text_muted }]}>{ball.note}</Text>
         </View>
 
+        {/* PRACTICE VOLUME — honest rep credit per club (not a measured carry). */}
+        {repList.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.accent }]}>PRACTICE VOLUME</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {repList.map((r) => (
+                <View key={r.club} style={[styles.repPill, { borderColor: colors.border }]}>
+                  <Text style={[styles.repClub, { color: colors.text_primary }]}>{r.club}</Text>
+                  <Text style={[styles.repN, { color: colors.text_muted }]}> {r.n}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>Reps you&apos;ve logged in practice — work credited per club. Volume, not a measured carry.</Text>
+          </View>
+        )}
+
         {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
         <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR BAG · TAP A CLUB TO SET ITS CARRY</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
@@ -226,6 +250,9 @@ const styles = StyleSheet.create({
   measuredDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, marginLeft: 10 },
   editInput: { minWidth: 56, borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontWeight: '800', textAlign: 'right' },
   editBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
+  repPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  repClub: { fontSize: 12, fontWeight: '800' },
+  repN: { fontSize: 12, fontWeight: '600' },
   legend: { fontSize: 10, lineHeight: 15, paddingHorizontal: 10, paddingVertical: 8 },
   disclaimer: { fontSize: 12, lineHeight: 18, fontStyle: 'italic', marginTop: 16 },
 });

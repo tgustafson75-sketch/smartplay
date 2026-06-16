@@ -7,7 +7,7 @@ export const navigateHandler: IntentHandler = {
   intent_type: 'navigate',
 
   parameter_schema: {
-    direction: 'one of: back, home, close, next_hole, previous_hole, main_menu',
+    direction: 'one of: back, home, close, exit, next_hole, previous_hole, main_menu',
   },
 
   examples: [
@@ -17,6 +17,8 @@ export const navigateHandler: IntentHandler = {
     'next hole',
     'previous hole',
     'close this',
+    'close smart motion',
+    'exit',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -35,9 +37,15 @@ export const navigateHandler: IntentHandler = {
         try { routerMod?.router.replace(HOME_PATH as never); } catch { /* no-op */ }
         return ok('Heading home.', ['navigate:home']);
       }
-      case 'close': {
-        // Close attempts: back() pops a modal or returns to previous screen — both desired.
-        try { routerMod?.router.back(); } catch { /* no-op */ }
+      case 'close':
+      case 'exit': {
+        // 2026-06-16 (Tim — "close Smart Motion" → white screen) — closing a TOOL
+        // goes HOME to the caddie (the universal hub), deterministically. The old
+        // router.back() white-screened when the tool wasn't pushed over a resolvable
+        // stack entry (voice-opened tools often aren't). Home is always valid and
+        // matches the model "the caddie screen is the home for everything." Replace
+        // (not push) so we don't stack a home on top of the tool.
+        try { routerMod?.router.replace(HOME_PATH as never); } catch { /* no-op */ }
         return ok(null, ['navigate:close']);
       }
       case 'next_hole': {

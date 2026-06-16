@@ -105,7 +105,8 @@ import {
 } from '../../components/smartmotion/SmartMotionHud';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
-import { speak, warmVoice, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
+import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
+import { speak, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
@@ -696,6 +697,7 @@ export default function SmartMotion() {
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
   const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
   const pipelineNarratedRef = useRef(false); // 2026-06-15 — guards one-time per-session pipeline narration
+  const pipelineAbortRef = useRef(false);    // 2026-06-16 — abort in-flight narration on exit / new session (no ghost reads)
 
   const cameraRef = useRef<CameraView>(null);
   // 2026-06-11 — Front/rear camera toggle ("selfie mode"). Lets the user flip to
@@ -983,7 +985,7 @@ export default function SmartMotion() {
     return null;
   }, [analysis]);
 
-  // Cleanup on unmount — stop an in-flight recording + metering.
+  // Cleanup on unmount — stop an in-flight recording + metering + ALL speech.
   useEffect(() => {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
@@ -992,6 +994,11 @@ export default function SmartMotion() {
       // eslint-disable-next-line react-hooks/exhaustive-deps
       try { cameraRef.current?.stopRecording(); } catch { /* no-op */ }
       void meteringRef.current?.cancel().catch(() => undefined);
+      // 2026-06-16 (Tim — a previous read's voice fired off later) — leaving Smart
+      // Motion must kill any in-flight / queued narration so it can't replay on the
+      // next screen. Abort the per-swing pipeline AND stop the TTS queue.
+      pipelineAbortRef.current = true;
+      void stopSpeaking().catch(() => undefined);
     };
   }, []);
 
@@ -1461,6 +1468,8 @@ export default function SmartMotion() {
     tempoCacheRef.current = {};
     analysisCacheRef.current = {};
     pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
+    pipelineAbortRef.current = true;     // abort any still-running narration from the prior session
+    void stopSpeaking().catch(() => undefined); // and silence its in-flight/queued TTS
     setSegments([]);
     setSelectedSwing(0);
     setCoachNote('');
@@ -1616,11 +1625,13 @@ export default function SmartMotion() {
     async (uri: string, segs: SwingSegment[]) => {
       if (segs.length < 2 || pipelineNarratedRef.current) return;
       pipelineNarratedRef.current = true;
+      pipelineAbortRef.current = false; // fresh narration for this session
       const st = useSettingsStore.getState();
       const speakLine = async (line: string) => {
-        if (!st.voiceEnabled) return;
+        if (!st.voiceEnabled || pipelineAbortRef.current) return;
         try {
           await configureAudioForSpeech();
+          if (pipelineAbortRef.current) return; // bailed while configuring audio
           await speak(line, st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: true });
         } catch { /* speech non-fatal */ }
       };
@@ -1638,11 +1649,13 @@ export default function SmartMotion() {
       jobs[0] = waitForCache0();
       if (segs.length > 1) jobs[1] = runWindowedAnalysis(uri, segs[1], 1); // head start
       for (let idx = 0; idx < segs.length; idx++) {
+        if (pipelineAbortRef.current) return; // left the screen / new session — stop narrating
         // Kick off the swing TWO ahead while we wait on / narrate this one, so the
         // next swing's read is always in flight before we need it.
         const ahead = idx + 2;
         if (ahead < segs.length && !jobs[ahead]) jobs[ahead] = runWindowedAnalysis(uri, segs[ahead], ahead);
         const a = await jobs[idx];
+        if (pipelineAbortRef.current) return;
         if (!a) continue;
         await speakLine(swingNarrationLine(idx + 1, a));
       }
@@ -2052,6 +2065,19 @@ export default function SmartMotion() {
       // Sync the ref SYNCHRONOUSLY (the state-mirror effect hasn't run yet this tick) so
       // runAnalysis's multi-swing carve sees the final segment set, not a stale one.
       segmentsRef.current = segsForAnalysis;
+      // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — credit
+      // per-club practice REPS for this capture (honest volume, not a distance).
+      // Only when the club is actually tagged (don't credit 'unknown'). ClubId and
+      // the bag's ClubName align except DR→Driver.
+      try {
+        const cid = clubRef.current;
+        if (cid && cid !== 'unknown') {
+          const cn = (cid === 'DR' ? 'Driver' : cid) as ClubName;
+          if ((CLUB_ORDER as readonly string[]).includes(cn)) {
+            useClubStatsStore.getState().addReps(cn, segsForAnalysis.length || 1);
+          }
+        }
+      } catch { /* non-fatal */ }
       // 2026-06-15 (Tim) — audible capture confirmation. After the strike session
       // CLOSES (recording stopped + segmented) the caddie says it got the swing, so
       // the user KNOWS it captured. Fired POST-stop so the TTS can't be metered as a

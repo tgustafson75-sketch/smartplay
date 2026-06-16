@@ -368,10 +368,18 @@ export default function SwingDetail() {
     if (!voiceEnabled || trustLevel === 1) return;
     const issue = session.primary_issue;
     const text = `Okay, I watched it. Your primary issue is ${issue.name.toLowerCase()}. ${issue.mechanical_breakdown} ${issue.feel_cue}`;
+    // 2026-06-16 (Tim — a previous read fired off later) — guard the async speak so
+    // it can't fire AFTER the screen unmounts (or the swing changes). The unmount
+    // stopSpeaking() only stops what's already playing; without this flag the await
+    // chain could START a speak a beat after we left → a ghost read on the next
+    // screen.
+    let cancelled = false;
     void (async () => {
       await configureAudioForSpeech();
+      if (cancelled) return;
       await speakChunked(text, voiceGender, language, apiUrl);
     })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, swing_id, session?.primary_issue?.issue_id]);
 

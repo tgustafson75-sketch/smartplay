@@ -1899,6 +1899,57 @@ check('Smart Motion: pipelined per-swing narration with one-ahead head start',
   })(),
   'multi-swing reads narrate in order with a background head start; single/putt sessions unaffected');
 
+check('Close a tool → HOME (no white screen), deterministic + local',
+  // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
+  // HOME to the caddie via router.replace (the old router.back() white-screened when
+  // the tool wasn't over a resolvable stack entry). Routed LOCALLY so it never rides
+  // the cloud classifier.
+  (() => {
+    const nav = read('services/intents/navigateHandler.ts');
+    const pre = read('services/localIntentPrecheck.ts');
+    return (
+      /case 'close':\s*case 'exit': \{/.test(nav) &&
+      /router\.replace\(HOME_PATH as never\)/.test(nav) &&
+      /CLOSE \/ EXIT A TOOL/.test(pre) &&
+      /direction: 'home'/.test(pre)
+    );
+  })(),
+  'close/exit routes home (replace) deterministically — no fragile back(), no white screen');
+
+check('No ghost reads: Smart Motion + library stop speech on exit / new session',
+  // 2026-06-16 (Tim — a previous read's voice fired off later) — leaving a read
+  // surface (or starting a new session) aborts the per-swing pipeline AND stops the
+  // TTS queue; the library detail's async narrate can't fire after unmount.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /pipelineAbortRef\.current = true;\s*\n\s*void stopSpeaking\(\)/.test(sm) &&
+      /if \(pipelineAbortRef\.current\) return;/.test(sm) &&
+      /let cancelled = false;/.test(detail) &&
+      /if \(cancelled\) return;/.test(detail) &&
+      /return \(\) => \{ cancelled = true; \};/.test(detail)
+    );
+  })(),
+  'narration is cancelled on exit/new-session + guarded against post-unmount fire — no late ghost read');
+
+check('Practice reps credited per club (honest volume, not distance)',
+  // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
+  // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
+  // distance ladder (honesty: reps are not a measured carry).
+  (() => {
+    const store = read('store/clubStatsStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const screen = read('app/practice/fit-profile.tsx');
+    return (
+      /addReps:/.test(store) && /repsFor:/.test(store) &&
+      /reps: Partial<Record<ClubName, number>>/.test(store) &&
+      /useClubStatsStore\.getState\(\)\.addReps\(cn, segsForAnalysis\.length/.test(sm) &&
+      /PRACTICE VOLUME/.test(screen)
+    );
+  })(),
+  'Smart Motion swings credit per-club reps; surfaced as PRACTICE VOLUME; never a distance');
+
 check('Conversation ingestion → CNS foundation + save-routine unblocked',
   // 2026-06-13 — Tim: "ingest what the caddie says and the back-and-forth to learn."
   // The conversation log captures every caddie + user turn (the learning input),

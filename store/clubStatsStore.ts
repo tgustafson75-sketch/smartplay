@@ -50,8 +50,17 @@ interface ClubStatsState {
    *  yardages immediately with the player's own numbers, before any rounds are
    *  tracked. Real tracked shots (stats) take precedence as they accumulate. */
   manual: Partial<Record<ClubName, number>>;
+  /** 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — per-club
+   *  practice REP tally (Smart Motion / drills / range). HONEST volume, NOT a
+   *  measured distance — it never feeds the fitting's distance ladder, just shows
+   *  the player they're getting credit for the work. */
+  reps: Partial<Record<ClubName, number>>;
   /** Record a tracked shot: updates the club's rolling average + usage. */
   record: (club: ClubName, yards: number) => void;
+  /** Add N practice reps for a club (volume credit, no distance). */
+  addReps: (club: ClubName, n: number) => void;
+  /** Practice reps logged for a club. */
+  repsFor: (club: ClubName) => number;
   /** Set the player's stated carry for a club (My Bag). yards<=0 clears it. */
   setManual: (club: ClubName, yards: number) => void;
   /** Remove a club's stated carry. */
@@ -87,6 +96,12 @@ export const useClubStatsStore = create<ClubStatsState>()(
     (set, get) => ({
       stats: {},
       manual: {},
+      reps: {},
+      addReps: (club, n) => {
+        if (!Number.isFinite(n) || n <= 0) return;
+        set((s) => ({ reps: { ...s.reps, [club]: (s.reps[club] ?? 0) + Math.round(n) } }));
+      },
+      repsFor: (club) => get().reps[club] ?? 0,
       setManual: (club, yards) => {
         set((s) => {
           const next = { ...s.manual };

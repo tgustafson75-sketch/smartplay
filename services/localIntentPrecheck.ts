@@ -111,6 +111,16 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'query_status', { query_topic: 'course' }),
   },
 
+  // ── CLOSE / EXIT A TOOL → HOME (deterministic) ────────────
+  // 2026-06-16 (Tim — "close Smart Motion" white-screened) — closing a tool routes
+  // HOME to the caddie locally, so it never rides the cloud classifier (which sent
+  // it nowhere → white screen). "go back" stays a real back(); this is the
+  // explicit close/exit/home set only.
+  {
+    rx: /\b(close\s+(?:smart\s*motion|this|it|the\s+(?:tool|camera|screen))|exit\b|go\s+home|take\s+me\s+home|back\s+to\s+(?:the\s+)?caddie)\b/i,
+    build: (raw) => intent(raw, 'navigate', { direction: 'home' }),
+  },
+
   // ── TOOL OPEN (high frequency) ────────────────────────────
   {
     rx: /\b(open\s+smart\s*finder|smart\s*finder|rangefinder|range\s+finder|lock\s+(?:the\s+)?distance)\b/i,
