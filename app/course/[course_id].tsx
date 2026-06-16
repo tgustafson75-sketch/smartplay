@@ -252,14 +252,14 @@ export default function CourseDetailScreen() {
       setContentLoading(false);
       return;
     }
-    // 2026-05-16 — hard timeout so "loading…" can't stick visible
-    // forever if the network is slow or the endpoint hangs. After 15s
-    // we flip contentLoading false regardless; HoleGuide notes then
-    // show "—" instead of "loading…". The actual fetch still resolves
-    // when it can and sets `content` once it returns.
+    // 2026-05-16 — hard timeout so "loading…" can't stick visible forever.
+    // 2026-06-15 (Tim) — bumped 15s → 32s to match the course-content fetch's 30s
+    // window: the Sonnet backend is ~14s cold, and flipping empty at 15s abandoned
+    // the About + Caddie Tips before they arrived. The fetch still sets `content`
+    // when it lands; hole notes already render (derived) so nothing "spins" anyway.
     const loadTimeout = setTimeout(() => {
       if (!cancelled) setContentLoading(false);
-    }, 15_000);
+    }, 32_000);
     // 2026-06-14 (step 3) — anchor the course's website/phone into the book via
     // Google Places (best-effort, one lookup per course, no-ops if Places isn't
     // enabled on the key). Powers a real "Book Tee Time" deep-link + offline

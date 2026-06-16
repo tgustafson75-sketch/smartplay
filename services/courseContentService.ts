@@ -187,7 +187,12 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
         voiceGender: _settings.voiceGender ?? 'male',
         persona: _settings.caddiePersonality,
       }),
-      signal: AbortSignal.timeout(8_000),
+      // 2026-06-15 (Tim — empty Caddie Tips / b1 richness gone) — ROOT CAUSE: the
+      // Sonnet-backed /api/course-content takes ~14s (cold), but this aborted at 8s
+      // EVERY time, so the content (About + Caddie Tips + rich hole notes) never
+      // arrived and the page fell back to empty. 30s clears a cold Sonnet call;
+      // result caches per-device (1wk) so it's instant after the first open.
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       console.warn('[courseContent] fetch failed:', res.status);
