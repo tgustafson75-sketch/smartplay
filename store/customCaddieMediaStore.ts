@@ -25,10 +25,15 @@ interface CustomCaddieMediaState {
   selfieB64: string | null;
   /** AI-edited caddie portrait (raw base64). */
   customCaddiePortraitB64: string | null;
+  /** 2026-06-16 (Tim) — the DASHBOARD profile icon (raw base64). Independent of the
+   *  active caddie: you can apply a custom-caddie portrait (or selfie) as just your
+   *  profile picture WITHOUT it becoming your caddie's voice/persona. */
+  profilePortraitB64: string | null;
   /** Set once the one-time move off playerProfileStore has run. */
   _migratedFromProfile: boolean;
   setSelfieB64: (b: string | null) => void;
   setCustomCaddiePortraitB64: (b: string | null) => void;
+  setProfilePortraitB64: (b: string | null) => void;
   /** One-time move of the two blobs out of playerProfileStore. Idempotent:
    *  copies only fields this store doesn't already have, then nulls the legacy
    *  profile fields. Call only once BOTH stores have hydrated (see _layout). */
@@ -40,9 +45,11 @@ export const useCustomCaddieMediaStore = create<CustomCaddieMediaState>()(
     (set, get) => ({
       selfieB64: null,
       customCaddiePortraitB64: null,
+      profilePortraitB64: null,
       _migratedFromProfile: false,
       setSelfieB64: (b) => set({ selfieB64: b }),
       setCustomCaddiePortraitB64: (b) => set({ customCaddiePortraitB64: b }),
+      setProfilePortraitB64: (b) => set({ profilePortraitB64: b }),
       migrateFromProfile: () => {
         if (get()._migratedFromProfile) return;
         try {
@@ -80,6 +87,7 @@ export const useCustomCaddieMediaStore = create<CustomCaddieMediaState>()(
       partialize: (s) => ({
         selfieB64: s.selfieB64,
         customCaddiePortraitB64: s.customCaddiePortraitB64,
+        profilePortraitB64: s.profilePortraitB64,
         _migratedFromProfile: s._migratedFromProfile,
       }),
     },

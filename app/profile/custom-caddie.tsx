@@ -81,8 +81,10 @@ export default function CustomCaddieScreen() {
   const {
     selfieB64: mediaSelfieB64,
     customCaddiePortraitB64: mediaPortraitB64,
+    profilePortraitB64,
     setSelfieB64,
     setCustomCaddiePortraitB64,
+    setProfilePortraitB64,
   } = useCustomCaddieMediaStore();
   const selfieB64 = mediaSelfieB64 ?? legacySelfieB64;
   const customCaddiePortraitB64 = mediaPortraitB64 ?? legacyPortraitB64;
@@ -106,6 +108,16 @@ export default function CustomCaddieScreen() {
   const switchToKevin = () => {
     setUseCustomCaddie(false);
     setCaddiePersonality('kevin');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+  // 2026-06-16 (Tim) — apply the portrait as JUST the dashboard profile icon, WITHOUT
+  // activating the custom caddie (voice/persona untouched). Separate from "use this
+  // caddie" above.
+  const portraitForPic = customCaddiePortraitB64 ?? selfieB64;
+  const isProfilePic = !!profilePortraitB64 && profilePortraitB64 === portraitForPic;
+  const useAsProfilePic = () => {
+    if (!portraitForPic) return;
+    setProfilePortraitB64(isProfilePic ? null : portraitForPic);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -674,6 +686,22 @@ export default function CustomCaddieScreen() {
                   : 'Generate a portrait first'}
             </Text>
           </TouchableOpacity>
+          {/* 2026-06-16 (Tim) — apply the portrait as JUST your dashboard icon, no
+              caddie change. Secondary action so it's clearly separate from "use this
+              caddie" above. */}
+          {portraitForPic ? (
+            <TouchableOpacity
+              onPress={useAsProfilePic}
+              style={styles.profilePicBtn}
+              accessibilityRole="button"
+              accessibilityLabel={isProfilePic ? 'Remove as profile picture' : 'Use as dashboard profile picture'}
+            >
+              <Ionicons name={isProfilePic ? 'checkmark-circle' : 'person-outline'} size={16} color="#00C896" />
+              <Text style={styles.profilePicBtnText}>
+                {isProfilePic ? 'Your profile picture — tap to remove' : 'Use as profile picture (dashboard icon)'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* 2026-05-26 — Fix DY: Step 4 — record YOUR voice for the
               fixed catalog of caddie phrases. When useCustomCaddie is
@@ -849,6 +877,8 @@ const styles = StyleSheet.create({
   applyBtnActive: { backgroundColor: '#88F700' },
   applyBtnDisabled: { backgroundColor: '#1e3a28' },
   applyBtnText: { color: '#06140b', fontSize: 15, fontWeight: '800' },
+  profilePicBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingVertical: 10, marginBottom: 8 },
+  profilePicBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
   actionBtn: {
     backgroundColor: '#00C896',
     borderRadius: 10,

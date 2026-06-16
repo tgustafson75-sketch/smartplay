@@ -2017,6 +2017,22 @@ check('Custom caddie: explicit apply pipeline + save-to-phone',
   })(),
   'apply sets persona custom + useCustomCaddie (portrait follows); save goes to Photos, not email');
 
+check('Custom caddie portrait can be just the dashboard icon (separate from the caddie)',
+  // 2026-06-16 (Tim) — apply a portrait as ONLY the dashboard profile picture, without
+  // it becoming the active custom caddie (voice/persona untouched).
+  (() => {
+    const store = read('store/customCaddieMediaStore.ts');
+    const dash = read('app/(tabs)/dashboard.tsx');
+    const cc = read('app/profile/custom-caddie.tsx');
+    return (
+      /profilePortraitB64: string \| null/.test(store) && /setProfilePortraitB64:/.test(store) &&
+      /profilePortraitB64 \?/.test(dash) && /avatarImg/.test(dash) &&
+      /setProfilePortraitB64\(isProfilePic \? null : portraitForPic\)/.test(cc) &&
+      /Use as profile picture/.test(cc)
+    );
+  })(),
+  'a portrait can be the dashboard icon without activating the custom caddie persona/voice');
+
 check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
   // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
   // feature row, full-width colored intent cards, and a compact Advanced-tools grid.

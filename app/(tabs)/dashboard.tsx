@@ -27,7 +27,9 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Image,
 } from 'react-native';
+import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { useRouter } from 'expo-router';
@@ -105,6 +107,9 @@ export default function Dashboard() {
   // (tracked OR stated), longest→shortest. Feeds the dashboard bag card; tap → the
   // editable Fit Profile. Recompute when tracked stats or the stated bag change.
   const clubManual = useClubStatsStore((s) => s.manual);
+  // 2026-06-16 (Tim) — the dashboard profile icon. A custom-caddie portrait can be
+  // applied here as just your picture, separate from activating the custom caddie.
+  const profilePortraitB64 = useCustomCaddieMediaStore((s) => s.profilePortraitB64);
   const clubStats = useClubStatsStore((s) => s.stats);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
@@ -376,10 +381,14 @@ export default function Dashboard() {
             accessibilityLabel="Open profile"
             style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}
           >
-            <View style={[styles.avatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
-              <Text style={[styles.avatarLetter, { color: colors.accent }]}>
-                {welcomeName.charAt(0).toUpperCase()}
-              </Text>
+            <View style={[styles.avatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted, overflow: 'hidden' }]}>
+              {profilePortraitB64 ? (
+                <Image source={{ uri: `data:image/png;base64,${profilePortraitB64}` }} style={styles.avatarImg} resizeMode="cover" />
+              ) : (
+                <Text style={[styles.avatarLetter, { color: colors.accent }]}>
+                  {welcomeName.charAt(0).toUpperCase()}
+                </Text>
+              )}
             </View>
             <View style={styles.profileText}>
               <Text style={[styles.profileName, { color: colors.text_primary }]} numberOfLines={1}>
@@ -1005,6 +1014,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarLetter: { fontSize: 20, fontWeight: '800' },
+  avatarImg: { width: '100%', height: '100%' },
   profileText: { flex: 1, minWidth: 0 },
   profileName: { fontSize: 17, fontWeight: '800' },
   profileMeta: { fontSize: 13, marginTop: 2 },
