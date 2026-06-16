@@ -1838,6 +1838,27 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
   })(),
   'uploaded swing windows the cloud read AND the on-device pose on the pointed moment → cards + skeleton');
 
+check('Smart Motion record by tap-to-talk is deterministic + local (no brain loop)',
+  // 2026-06-15 (Tim — "active listening doesn't work; I tap the earbud/glasses and
+  // speak") — when Smart Motion is OPEN, record/watch/stop must route LOCALLY to
+  // media_capture, never the cloud classifier (which sometimes sent it to the Kevin
+  // brain → "do you want me to watch your swing?" loop that never armed the
+  // recorder). The earbud-tap path (listeningSession) now tries the local precheck
+  // before the cloud classify; the brain's record_swing backstop emits the bus
+  // 'start' instead of navigating to the wrong screen.
+  (() => {
+    const pre = read('services/localIntentPrecheck.ts');
+    const listen = read('services/listeningSession.ts');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    return (
+      /isSmartMotionActive\(\)/.test(pre) &&
+      /'media_capture', \{ capture_type: 'swing', raw_utterance: t \}/.test(pre) &&
+      /precheckLocalIntent\(utterance\)/.test(listen) &&
+      /if \(isSmartMotionActive\(\)\) \{\s*emitSmartMotionCommand\('start'\)/.test(caddie)
+    );
+  })(),
+  'tap→"record"/"watch my swing" arms the recorder via the bus; no cloud coin-flip, no Kevin loop');
+
 check('Conversation ingestion → CNS foundation + save-routine unblocked',
   // 2026-06-13 — Tim: "ingest what the caddie says and the back-and-forth to learn."
   // The conversation log captures every caddie + user turn (the learning input),

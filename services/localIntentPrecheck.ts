@@ -29,6 +29,7 @@
  */
 
 import type { VoiceIntent } from '../types/voiceIntent';
+import { isSmartMotionActive } from './smartMotionRecordBus';
 
 interface Pattern {
   rx: RegExp;
@@ -137,6 +138,24 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // Cap length to avoid pathological regex backtracking on a wall of
   // text — high-frequency intents are always short.
   if (t.length > 200) return null;
+
+  // 2026-06-15 (Tim — tap-to-talk record loop) — when the Smart Motion screen is
+  // OPEN, a record/watch/stop command must be DETERMINISTIC and LOCAL. Previously
+  // it rode the cloud classifier: classified as media_capture → recorder fired,
+  // but classified as conversational → handed to the Kevin brain, which only
+  // *talks* ("do you want me to watch your swing?") and never arms the recorder —
+  // the loop. Routing it straight to media_capture here means the recorder arms
+  // instantly (no cloud round-trip, no brain detour). mediaCaptureHandler reads
+  // raw_utterance to pick start vs stop, so one pattern covers both. Narrow word
+  // set — only fires while Smart Motion owns the surface, so it can't hijack
+  // normal commands elsewhere.
+  if (
+    isSmartMotionActive() &&
+    /\b(record|watch|swing away|hit away|fire away|rolling|begin|capture|start recording|go again|stop|done|finish|wrap|enough|cut it|that'?s it)\b/i.test(t)
+  ) {
+    return intent(t, 'media_capture', { capture_type: 'swing', raw_utterance: t });
+  }
+
   for (const p of PATTERNS) {
     const m = t.match(p.rx);
     if (m) return p.build(t, m);

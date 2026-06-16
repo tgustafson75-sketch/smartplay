@@ -48,6 +48,7 @@ import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
+import { isSmartMotionActive, emitSmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -1111,7 +1112,15 @@ export default function CaddieTab() {
         break;
       }
       case 'record_swing':
-        router.push('/(tabs)/swinglab?mode=record' as never);
+        // 2026-06-15 (Tim) — if Smart Motion is already open, ARM the recorder in
+        // place (the bus) instead of navigating to the wrong screen. The old route
+        // pushed /(tabs)/swinglab?mode=record — NOT the Smart Motion recorder the
+        // user is standing in — so a brain-fired record_swing never actually rolled.
+        if (isSmartMotionActive()) {
+          emitSmartMotionCommand('start');
+        } else {
+          router.push('/swinglab/smartmotion' as never);
+        }
         break;
       case 'open_smartfinder':
         if (!canAccess('smartfinder', subscription_status)) {

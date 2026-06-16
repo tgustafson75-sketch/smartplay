@@ -11,7 +11,8 @@ import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
 import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
-import type { AppContext } from '../types/voiceIntent';
+import { precheckLocalIntent } from './localIntentPrecheck';
+import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { getApiBaseUrl } from './apiBase';
 
@@ -348,24 +349,32 @@ async function openSession() {
       trust_spectrum_level: getTrustLevel(),
     };
 
-    // Parse intent via the existing classifier
-    const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // 2026-05-21 — Fix Q: pass active persona so the classifier's
-      // follow-up question (if any) is styled in the user's selected
-      // caddie's voice, not the voiceGender-derived Kevin/Serena default.
-      body: JSON.stringify({
-        text: utterance,
-        voiceGender: settings.voiceGender ?? 'male',
-        persona: settings.caddiePersonality,
-      }),
-    }, INTENT_FETCH_TIMEOUT_MS);
-    if (!parseRes.ok) {
-      setSessionStateMirror('idle');
-      return;
+    // 2026-06-15 (Tim — tap-to-talk record must be deterministic, not a cloud
+    // coin-flip) — try the LOCAL precheck first. When Smart Motion is open it
+    // routes record/watch/stop straight to media_capture (the recorder arms
+    // instantly — no cloud round-trip, no brain detour that loops on "want me to
+    // watch your swing?"). It also covers the usual high-frequency phrases. On a
+    // miss it falls through to the cloud classifier exactly as before.
+    let intent: VoiceIntent | null = precheckLocalIntent(utterance);
+    if (!intent) {
+      const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // 2026-05-21 — Fix Q: pass active persona so the classifier's
+        // follow-up question (if any) is styled in the user's selected
+        // caddie's voice, not the voiceGender-derived Kevin/Serena default.
+        body: JSON.stringify({
+          text: utterance,
+          voiceGender: settings.voiceGender ?? 'male',
+          persona: settings.caddiePersonality,
+        }),
+      }, INTENT_FETCH_TIMEOUT_MS);
+      if (!parseRes.ok) {
+        setSessionStateMirror('idle');
+        return;
+      }
+      intent = await parseRes.json() as VoiceIntent;
     }
-    const intent = await parseRes.json();
     const t_intent = Date.now();
     if ((state as SessionState) !== 'thinking') return;
 
@@ -378,7 +387,7 @@ async function openSession() {
     const decision = routeQuery(intent.intent_type, {
       role,
       trust_level: getTrustLevel() as 1 | 2 | 3,
-      topic: intent.parameters?.query_topic ?? null,
+      topic: (intent.parameters?.query_topic as string | undefined) ?? null,
     });
     let fillerP: Promise<void> = Promise.resolve();
     let t_filler_start: number | null = null;
