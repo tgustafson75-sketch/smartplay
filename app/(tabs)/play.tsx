@@ -60,6 +60,8 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import type { Course } from '../../types/course';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { prewarmBriefing } from '../../services/briefingGenerator';
+import { prewarmVoice } from '../../services/voiceWarmup';
 
 type CourseSummary = {
   id: string;
@@ -652,6 +654,11 @@ export default function PlayTab() {
 
   const handleStartRound = () => {
     if (!selected) return;
+    // 2026-06-15 (Tim — pre-round brief fired ~25s late) — warm the brief + TTS
+    // Lambdas at round start so the hole-1 handoff isn't the first (cold) hit.
+    // Fire-and-forget; both dedupe-throttled internally.
+    prewarmBriefing(getApiBaseUrl());
+    prewarmVoice();
     // Pre-beta — push the chosen play factors alongside the course id so
     // Caddie's runStartRound launches with the user's strategy / mental /
     // format selection instead of the bare 'free_play' default.

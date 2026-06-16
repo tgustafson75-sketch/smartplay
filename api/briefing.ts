@@ -14,6 +14,25 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // 2026-06-15 (Tim — pre-round brief fired ~25s late) — Pre-warm. The client
+  // pings this with { mode: 'warmup' } the instant "Start Round Here" is tapped,
+  // so the Lambda + Anthropic SDK + TLS to api.anthropic.com are hot by the time
+  // the hole-1 handoff actually generates the brief. Single 'ping', max_tokens:1
+  // (~$0.0001 per warmup). Mirrors api/voice-intent.ts pre-warm shape.
+  if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    try {
+      await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      });
+      console.log('[briefing] warmup completed (Anthropic SDK hot)');
+    } catch (e) {
+      console.log('[briefing] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    }
+    return res.status(200).json({ ok: true, mode: 'warmup' });
+  }
+
   try {
     const {
       courseName = 'the course',

@@ -53,6 +53,31 @@ export function clearBriefingCache(roundId?: string): void {
   }
 }
 
+// 2026-06-15 (Tim — pre-round brief fired ~25s AFTER start-round) — ROOT CAUSE:
+// the brief is generated at the hole-1 handoff, which is the FIRST hit on the
+// cold /api/briefing Lambda (Sonnet ~14s + cold boot + cold TLS). Fire this the
+// instant "Start Round Here" is tapped: it warms the Lambda + Anthropic SDK +
+// TLS during the navigation/round-setup window, so the real brief at the handoff
+// lands promptly instead of paying the full cold-start while people watch.
+// Fire-and-forget, 30s dedupe, silent on failure. Mirrors prewarmVoice().
+let lastBriefingWarmAt = 0;
+const BRIEFING_WARMUP_DEDUPE_MS = 30_000;
+export function prewarmBriefing(apiUrl: string): void {
+  const now = Date.now();
+  if (now - lastBriefingWarmAt < BRIEFING_WARMUP_DEDUPE_MS) return;
+  lastBriefingWarmAt = now;
+  if (!apiUrl) return;
+
+  void fetch(`${apiUrl}/api/briefing?mode=warmup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'warmup' }),
+    signal: AbortSignal.timeout(15_000),
+  })
+    .then(() => { console.log('[briefingGenerator] briefing endpoint warmed'); })
+    .catch(() => { /* Silent — warmup is opportunistic. */ });
+}
+
 export async function generateBriefing(params: BriefingParams): Promise<string> {
   const { roundId, apiUrl, language = 'en', ...rest } = params;
 

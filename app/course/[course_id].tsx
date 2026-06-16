@@ -27,6 +27,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
+import { prewarmBriefing } from '../../services/briefingGenerator';
+import { prewarmVoice } from '../../services/voiceWarmup';
+import { getApiBaseUrl } from '../../services/apiBase';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
@@ -400,6 +403,12 @@ export default function CourseDetailScreen() {
 
   const handleStartRound = () => {
     if (!course) return;
+    // 2026-06-15 (Tim — pre-round brief fired ~25s late) — warm the brief +
+    // TTS Lambdas the instant the round starts, during the navigation/round-
+    // setup window, so the hole-1 handoff doesn't pay full cold-start while
+    // people watch. Fire-and-forget; both are dedupe-throttled internally.
+    prewarmBriefing(getApiBaseUrl());
+    prewarmVoice();
     // Phase Q.5b — same store-based signal as Play tab. Avoids the
     // tabs-navigator param-propagation issue that broke the loop.
     useRoundStore.getState().setPendingStartCourse(course.id);
