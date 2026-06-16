@@ -1789,8 +1789,10 @@ export const useVoiceCaddie = ({
     // seconds the user is speaking (the recording window hides it). Covers the gap
     // the mount/foreground warms miss: sitting idle on the caddie tab (glasses on),
     // then tapping after the Lambdas have re-cooled — Tim's "first tap = no
-    // connection, fine after ~20s." 30s dedupe makes it a no-op when already warm.
-    if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
+    // connection, fine after ~20s." 2026-06-16 — FORCE past the dedupe: an explicit
+    // capture tap means voice is imminent, so warm now even if a passive warm ran
+    // recently (overlaps the speech, kills cold-first-tap lag).
+    if (useSettingsStore.getState().voiceEnabled) prewarmVoice(true);
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS

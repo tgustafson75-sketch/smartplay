@@ -297,8 +297,10 @@ async function openSession() {
   // full cold-start (transcribe + intent + kevin + voice Lambdas, sequentially)
   // on top of generation. Firing it here means every endpoint heats up DURING
   // the opener-speak + capture window — by the time the transcript is ready they
-  // re hot. Fire-and-forget, 30s self-dedupe.
-  if (settings.voiceEnabled) prewarmVoice();
+  // re hot. 2026-06-16 — FORCE (bypass the 30s dedupe): a tap to talk is an explicit
+  // signal the user is about to use voice, so warm the chain NOW even if a passive
+  // warmup ran recently — it overlaps the capture and removes the cold-first-tap lag.
+  if (settings.voiceEnabled) prewarmVoice(true);
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.

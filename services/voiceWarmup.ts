@@ -40,9 +40,14 @@ const WARMUP_PATHS = [
   '/api/kevin',
 ] as const;
 
-export function prewarmVoice(): void {
+// 2026-06-16 (Tim — voice latency, "impress people") — `force` bypasses the dedupe.
+// Boot/idle warmups keep the 30s dedupe (don't spam), but an EXPLICIT user action
+// (tapping to talk → openSession) forces a fresh warm so a borderline-cold chain
+// heats up the instant the user engages — it overlaps their ~5s of speech, so by
+// the time transcribe/kevin/voice are hit they're warm. Fire-and-forget, ~$0.0004.
+export function prewarmVoice(force = false): void {
   const now = Date.now();
-  if (now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
+  if (!force && now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
   lastWarmupAt = now;
 
   const apiUrl = getApiBaseUrl();

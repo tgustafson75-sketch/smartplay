@@ -705,6 +705,7 @@ export default function SmartMotion() {
   const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
   const pipelineNarratedRef = useRef(false); // 2026-06-15 — guards one-time per-session pipeline narration
   const pipelineAbortRef = useRef(false);    // 2026-06-16 — abort in-flight narration on exit / new session (no ghost reads)
+  const pipelineRunRef = useRef(0);          // 2026-06-16 — per-run token: a new session bumps it so a stale pipeline bails
 
   const cameraRef = useRef<CameraView>(null);
   // 2026-06-11 — Front/rear camera toggle ("selfie mode"). Lets the user flip to
@@ -1005,6 +1006,7 @@ export default function SmartMotion() {
       // Motion must kill any in-flight / queued narration so it can't replay on the
       // next screen. Abort the per-swing pipeline AND stop the TTS queue.
       pipelineAbortRef.current = true;
+      pipelineRunRef.current++; // invalidate any in-flight pipeline run
       void stopSpeaking().catch(() => undefined);
       setSmartMotionRecording(false); // never leave the mic flagged-reserved after we leave
     };
@@ -1477,6 +1479,7 @@ export default function SmartMotion() {
     analysisCacheRef.current = {};
     pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
     pipelineAbortRef.current = true;     // abort any still-running narration from the prior session
+    pipelineRunRef.current++;            // invalidate the prior pipeline run (cache-collision guard)
     void stopSpeaking().catch(() => undefined); // and silence its in-flight/queued TTS
     setSmartMotionRecording(false);      // not recording after a reset
     setSegments([]);
@@ -1635,12 +1638,19 @@ export default function SmartMotion() {
       if (segs.length < 2 || pipelineNarratedRef.current) return;
       pipelineNarratedRef.current = true;
       pipelineAbortRef.current = false; // fresh narration for this session
+      // 2026-06-16 — per-run cancellation token. A NEW session (reset/unmount) bumps
+      // pipelineRunRef, so a stale in-flight pipeline bails even if a newer pipeline
+      // flipped pipelineAbortRef back to false — closes the cache-collision race where
+      // an old narration could read a NEW session's analysisCacheRef and speak the
+      // wrong swing. cancelled() is the single source of truth for "still mine".
+      const myRun = ++pipelineRunRef.current;
+      const cancelled = () => pipelineAbortRef.current || myRun !== pipelineRunRef.current;
       const st = useSettingsStore.getState();
       const speakLine = async (line: string) => {
-        if (!st.voiceEnabled || pipelineAbortRef.current) return;
+        if (!st.voiceEnabled || cancelled()) return;
         try {
           await configureAudioForSpeech();
-          if (pipelineAbortRef.current) return; // bailed while configuring audio
+          if (cancelled()) return; // bailed while configuring audio
           await speak(line, st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: true });
         } catch { /* speech non-fatal */ }
       };
@@ -1658,13 +1668,13 @@ export default function SmartMotion() {
       jobs[0] = waitForCache0();
       if (segs.length > 1) jobs[1] = runWindowedAnalysis(uri, segs[1], 1); // head start
       for (let idx = 0; idx < segs.length; idx++) {
-        if (pipelineAbortRef.current) return; // left the screen / new session — stop narrating
+        if (cancelled()) return; // left the screen / new session — stop narrating
         // Kick off the swing TWO ahead while we wait on / narrate this one, so the
         // next swing's read is always in flight before we need it.
         const ahead = idx + 2;
         if (ahead < segs.length && !jobs[ahead]) jobs[ahead] = runWindowedAnalysis(uri, segs[ahead], ahead);
         const a = await jobs[idx];
-        if (pipelineAbortRef.current) return;
+        if (cancelled()) return;
         if (!a) continue;
         await speakLine(swingNarrationLine(idx + 1, a));
       }

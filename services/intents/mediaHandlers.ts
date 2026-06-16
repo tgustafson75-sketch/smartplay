@@ -148,7 +148,11 @@ export const mediaCaptureHandler: IntentHandler = {
         success: true,
         voice_response: cmd === 'stop'
           ? 'Wrapping it up — give me a second to read those.'
-          : "Recording — swing away. Say stop when you're done, or I'll wrap at a minute.",
+          // 2026-06-16 — the camera takes ~a second to roll after this plays; "swing
+          // when you're set" (not "swing away") stops the user swinging into a
+          // not-yet-recording window + missing the first strike. The open window
+          // captures the swing whenever it comes.
+          : "Recording — swing when you're set. Say stop when you're done, or I'll wrap at a minute.",
         side_effects: ['media:smartmotion_' + cmd],
         follow_up_needed: false,
       };

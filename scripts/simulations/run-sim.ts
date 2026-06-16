@@ -1899,6 +1899,42 @@ check('Smart Motion: pipelined per-swing narration with one-ahead head start',
   })(),
   'multi-swing reads narrate in order with a background head start; single/putt sessions unaffected');
 
+check('Smart Motion: pipeline narration has a per-run cancel token (no cross-session ghost)',
+  // 2026-06-16 (deep walk) — a stale in-flight pipeline must bail even if a NEW
+  // session flipped pipelineAbortRef back to false; the per-run token (myRun vs
+  // pipelineRunRef) is the source of truth, closing the cache-collision race.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /const myRun = \+\+pipelineRunRef\.current/.test(sm) &&
+      /const cancelled = \(\) => pipelineAbortRef\.current \|\| myRun !== pipelineRunRef\.current/.test(sm) &&
+      /pipelineRunRef\.current\+\+/.test(sm)
+    );
+  })(),
+  'a stale pipeline bails via its run token — no wrong-swing narration after a fast record-again');
+
+check('Voice: explicit tap forces a warmup (bypasses dedupe) for the cold first tap',
+  // 2026-06-16 (deep latency walk) — a tap to talk forces a fresh warm even if a
+  // passive warmup ran recently, so a borderline-cold chain heats up during the
+  // user's speech. Boot/foreground warms stay passive (deduped).
+  (() => {
+    const w = read('services/voiceWarmup.ts');
+    const ls = read('services/listeningSession.ts');
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      /export function prewarmVoice\(force = false\)/.test(w) &&
+      /if \(!force && now - lastWarmupAt < WARMUP_DEDUPE_MS\) return/.test(w) &&
+      /prewarmVoice\(true\)/.test(ls) && /prewarmVoice\(true\)/.test(vc)
+    );
+  })(),
+  'tap-to-talk forces a fresh warm; cold-first-tap chain heats during the speech window');
+
+check('Smart Motion record cue is honest about camera startup',
+  // 2026-06-16 — the camera takes ~a second after the cue; "swing when you're set"
+  // (not "swing away") avoids swinging into a not-yet-recording window.
+  (() => /Recording — swing when you/.test(read('services/intents/mediaHandlers.ts')))(),
+  'record voice cue says swing-when-set, not swing-away');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
@@ -1924,8 +1960,8 @@ check('No ghost reads: Smart Motion + library stop speech on exit / new session'
     const sm = read('app/swinglab/smartmotion.tsx');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /pipelineAbortRef\.current = true;\s*\n\s*void stopSpeaking\(\)/.test(sm) &&
-      /if \(pipelineAbortRef\.current\) return;/.test(sm) &&
+      /pipelineAbortRef\.current = true/.test(sm) && /void stopSpeaking\(\)/.test(sm) &&
+      /if \(cancelled\(\)\) return;/.test(sm) &&
       /let cancelled = false;/.test(detail) &&
       /if \(cancelled\) return;/.test(detail) &&
       /return \(\) => \{ cancelled = true; \};/.test(detail)
