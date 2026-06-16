@@ -38,6 +38,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
+import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
@@ -99,6 +100,20 @@ export default function Dashboard() {
   // list (tap → /practice/[sessionId] for the per-club striation + tempo trend).
   const practiceHistory = usePracticeSessionStore((s) => s.history);
   const recentSessions = useMemo(() => practiceHistory.slice(0, 6), [practiceHistory]);
+
+  // 2026-06-15 (Tim — My Bag back on the dashboard) — the clubs with a REAL carry
+  // (tracked OR stated), longest→shortest. Feeds the dashboard bag card; tap → the
+  // editable Fit Profile. Recompute when tracked stats or the stated bag change.
+  const clubManual = useClubStatsStore((s) => s.manual);
+  const clubStats = useClubStatsStore((s) => s.stats);
+  const bagClubs = useMemo(() => {
+    const st = useClubStatsStore.getState();
+    return CLUB_ORDER
+      .filter((c) => c !== 'Putter' && st.hasDistance(c))
+      .map((c) => ({ club: c, yards: Math.round(st.distanceFor(c)), measured: st.hasSamples(c) }))
+      .sort((a, b) => b.yards - a.yards);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubManual, clubStats]);
   // 2026-06-14 (Tim — phase 3) — the honest practice→course connection: practice
   // volume per week vs score-vs-par per round. Association, never causation.
   const practiceImpact = useMemo(
@@ -588,6 +603,35 @@ export default function Dashboard() {
             ))}
           </View>
         )}
+
+        {/* ─── MY BAG (Tim) — clubs + carry distances (tracked or stated), tap to
+            edit. Powers the Fit Profile + the caddie's club calls. Empty = a CTA to
+            set it up (the fastest way to give the caddie real yardages). */}
+        <TouchableOpacity
+          style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          onPress={() => router.push('/practice/fit-profile' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Open My Bag and Fit Profile"
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>MY BAG</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.text_muted} />
+          </View>
+          {bagClubs.length > 0 ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {bagClubs.map((c) => (
+                <View key={c.club} style={[styles.bagPill, { borderColor: c.measured ? '#3FB950' : colors.border }]}>
+                  <Text style={[styles.bagPillClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  <Text style={[styles.bagPillYds, { color: colors.text_muted }]}> {c.yards}y</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>
+              Set up your bag — tap to enter your carry distances. Powers your fit profile and the caddie&apos;s club calls.
+            </Text>
+          )}
+        </TouchableOpacity>
 
         {/* ─── PRACTICE HISTORY (Tim) — sessions by date → tap for the per-club
             striation + tempo trend. The visible half of the practice ledger. */}
@@ -1099,6 +1143,9 @@ const styles = StyleSheet.create({
   },
   practiceHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 },
   practiceLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  bagPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  bagPillClub: { fontSize: 12, fontWeight: '800' },
+  bagPillYds: { fontSize: 12, fontWeight: '600' },
   practiceTotal: { fontSize: 26, fontWeight: '900' },
   practiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
   practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },

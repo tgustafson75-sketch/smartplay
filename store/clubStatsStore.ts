@@ -45,12 +45,27 @@ export interface ClubStat {
 
 interface ClubStatsState {
   stats: Partial<Record<ClubName, ClubStat>>;
+  /** 2026-06-15 (Tim — editable My Bag) — user-entered carry per club. The fastest
+   *  honest source of distances: it populates the Fit Profile + the caddie's
+   *  yardages immediately with the player's own numbers, before any rounds are
+   *  tracked. Real tracked shots (stats) take precedence as they accumulate. */
+  manual: Partial<Record<ClubName, number>>;
   /** Record a tracked shot: updates the club's rolling average + usage. */
   record: (club: ClubName, yards: number) => void;
+  /** Set the player's stated carry for a club (My Bag). yards<=0 clears it. */
+  setManual: (club: ClubName, yards: number) => void;
+  /** Remove a club's stated carry. */
+  clearManual: (club: ClubName) => void;
   /** Learned average for a club, or the standard-chart value if none yet. */
   avgFor: (club: ClubName) => number;
+  /** Best known carry: learned avg (if tracked) → user-stated → standard chart. */
+  distanceFor: (club: ClubName) => number;
   /** True if we have any real sample for this club. */
   hasSamples: (club: ClubName) => boolean;
+  /** True if the player has stated a carry for this club (My Bag). */
+  hasManual: (club: ClubName) => boolean;
+  /** True if we have ANY real number (tracked or stated) — not just the chart. */
+  hasDistance: (club: ClubName) => boolean;
   /** Best default club for a needed yardage: closest learned avg (or
    *  standard chart). Putter excluded from full-shot inference. */
   inferClub: (yards: number) => ClubName;
@@ -71,6 +86,23 @@ export const useClubStatsStore = create<ClubStatsState>()(
   persist(
     (set, get) => ({
       stats: {},
+      manual: {},
+      setManual: (club, yards) => {
+        set((s) => {
+          const next = { ...s.manual };
+          if (!Number.isFinite(yards) || yards <= 0) delete next[club];
+          else next[club] = Math.round(yards);
+          return { manual: next };
+        });
+      },
+      clearManual: (club) => {
+        set((s) => {
+          if (s.manual[club] == null) return {} as Partial<ClubStatsState>;
+          const next = { ...s.manual };
+          delete next[club];
+          return { manual: next };
+        });
+      },
       record: (club, yards) => {
         if (!Number.isFinite(yards) || yards <= 0) return;
         set((s) => {
@@ -92,14 +124,22 @@ export const useClubStatsStore = create<ClubStatsState>()(
         });
       },
       avgFor: (club) => get().stats[club]?.avgYards ?? STANDARD_YARDS[club],
+      distanceFor: (club) => {
+        const g = get();
+        if ((g.stats[club]?.samples ?? 0) > 0) return g.stats[club]!.avgYards; // tracked wins
+        return g.manual[club] ?? STANDARD_YARDS[club];                          // then stated, then chart
+      },
       hasSamples: (club) => (get().stats[club]?.samples ?? 0) > 0,
+      hasManual: (club) => get().manual[club] != null,
+      hasDistance: (club) => (get().stats[club]?.samples ?? 0) > 0 || get().manual[club] != null,
       inferClub: (yards) => {
         const g = get();
         let best: ClubName = '7I';
         let bestDiff = Infinity;
         for (const club of CLUB_ORDER) {
           if (club === 'Putter') continue;
-          const avg = g.stats[club]?.avgYards ?? STANDARD_YARDS[club];
+          // tracked → stated (My Bag) → standard chart
+          const avg = g.stats[club]?.avgYards ?? g.manual[club] ?? STANDARD_YARDS[club];
           const diff = Math.abs(avg - yards);
           if (diff < bestDiff) { bestDiff = diff; best = club; }
         }
@@ -123,11 +163,16 @@ export const useClubStatsStore = create<ClubStatsState>()(
 /** Snapshot of learned averages as a {club: yards} map — for feeding
  *  swingMetricsService.profile.clubDistances and caddie recommendations. */
 export function getLearnedClubDistances(): Record<string, number> {
-  const stats = useClubStatsStore.getState().stats;
+  const s = useClubStatsStore.getState();
   const out: Record<string, number> = {};
   for (const club of CLUB_ORDER) {
-    const st = stats[club];
+    // 2026-06-15 (Tim — My Bag) — tracked carry wins; otherwise fall back to the
+    // player's STATED carry so the caddie uses the real bag even before any rounds
+    // are tracked. Clubs with neither stay off the map (standard chart is not a
+    // "known" distance the caddie should quote as the player's own).
+    const st = s.stats[club];
     if (st && st.samples > 0) out[club] = st.avgYards;
+    else if (s.manual[club] != null) out[club] = s.manual[club]!;
   }
   return out;
 }

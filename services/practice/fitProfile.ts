@@ -18,6 +18,9 @@ export interface FitClubInput {
   yards: number;
   /** True = average from real tracked shots; false = standard-chart inference. */
   measured: boolean;
+  /** 2026-06-15 (Tim — My Bag) — True = the player STATED this carry (editable
+   *  bag), as opposed to measured-from-shots or a standard-chart estimate. */
+  stated?: boolean;
 }
 
 export interface FitGap {
@@ -40,6 +43,10 @@ export interface FitProfile {
   gaps: FitGap[];
   overlaps: FitOverlap[];
   measuredCount: number;
+  /** 2026-06-15 — clubs the player stated a carry for (My Bag), not tracked. */
+  statedCount: number;
+  /** Clubs with a REAL number behind them (measured OR stated). */
+  knownCount: number;
   totalCount: number;
   confidence: 'low' | 'medium' | 'high';
   headline: string;
@@ -78,12 +85,23 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
   }
 
   const measuredCount = ladder.filter((c) => c.measured).length;
+  const statedCount = ladder.filter((c) => !c.measured && c.stated).length;
+  const knownCount = measuredCount + statedCount;
   const totalCount = ladder.length;
-  const confidence: FitProfile['confidence'] = measuredCount >= 8 ? 'high' : measuredCount >= 4 ? 'medium' : 'low';
+  // Confidence: measured shots are gold. A stated bag (My Bag) lifts an empty
+  // profile to a usable starting point but never reaches 'high' on stated alone —
+  // measured is what sharpens it. (honest: stated = the player's own numbers, not
+  // launch-monitor-verified.)
+  const confidence: FitProfile['confidence'] =
+    measuredCount >= 8 ? 'high'
+    : (measuredCount >= 4 || knownCount >= 8) ? 'medium'
+    : 'low';
 
   let headline: string;
-  if (confidence === 'low') {
-    headline = 'Early read — log a few more tracked shots and your fit picture sharpens. So far, here\'s your distance ladder.';
+  if (knownCount === 0) {
+    headline = 'Set your carry distances below to build your bag — tap any club. Track shots on the course and they sharpen automatically.';
+  } else if (confidence === 'low') {
+    headline = 'Early read — set more carries or log tracked shots and your fit picture sharpens. So far, here\'s your distance ladder.';
   } else {
     const parts: string[] = [];
     if (gaps.length) parts.push(`${gaps.length} distance ${gaps.length === 1 ? 'gap' : 'gaps'} to fill`);
@@ -93,7 +111,7 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
       : 'Your set is evenly gapped — no holes and no redundant clubs from your tracked distances.';
   }
 
-  return { ladder, gaps, overlaps, measuredCount, totalCount, confidence, headline, disclaimer: DISCLAIMER };
+  return { ladder, gaps, overlaps, measuredCount, statedCount, knownCount, totalCount, confidence, headline, disclaimer: DISCLAIMER };
 }
 
 /**

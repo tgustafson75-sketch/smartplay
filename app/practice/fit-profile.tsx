@@ -6,12 +6,12 @@
  * Each club flagged measured vs inferred; a clear "starting point, not a
  * launch-monitor spec" disclaimer. ([[ai-club-fitting]])
  */
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
+import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, recommendBallCategory, type FitClubInput } from '../../services/practice/fitProfile';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
@@ -21,15 +21,34 @@ export default function FitProfileScreen() {
   const stats = useClubStatsStore((s) => s.stats);
   const handicap = usePlayerProfileStore((s) => s.handicap);
 
+  const manual = useClubStatsStore((s) => s.manual);
+  const [editingClub, setEditingClub] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+
+  const openEdit = (club: string) => {
+    const st = useClubStatsStore.getState();
+    setEditingClub(club);
+    setDraft(st.hasDistance(club as ClubName) ? String(Math.round(st.distanceFor(club as ClubName))) : '');
+  };
+  const saveEdit = (club: string) => {
+    const y = parseInt(draft, 10);
+    if (Number.isFinite(y) && y > 0) useClubStatsStore.getState().setManual(club as ClubName, y);
+    setEditingClub(null);
+  };
+  const clearEdit = (club: string) => {
+    useClubStatsStore.getState().clearManual(club as ClubName);
+    setEditingClub(null);
+  };
+
   const profile = useMemo(() => {
     const st = useClubStatsStore.getState();
     const clubs: FitClubInput[] = CLUB_ORDER
       .filter((c) => c !== 'Putter')
-      .map((c) => ({ club: c, yards: st.avgFor(c), measured: st.hasSamples(c) }));
+      .map((c) => ({ club: c, yards: st.distanceFor(c), measured: st.hasSamples(c), stated: st.hasManual(c) }));
     return composeFitProfile(clubs);
-    // recompute when the tracked stats change
+    // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats]);
+  }, [stats, manual]);
 
   // FLEX (honest: only off a MEASURED driver carry) + BALL category (speed tier +
   // handicap). Both starting points, never launch-monitor specs.
@@ -68,7 +87,7 @@ export default function FitProfileScreen() {
         <View style={styles.confRow}>
           <View style={[styles.confDot, { backgroundColor: confColor }]} />
           <Text style={[styles.confText, { color: colors.text_muted }]}>
-            {profile.measuredCount} of {profile.totalCount} clubs from real tracked shots · {profile.confidence} confidence
+            {profile.measuredCount} tracked · {profile.statedCount} you set · of {profile.totalCount} clubs · {profile.confidence} confidence
           </Text>
         </View>
 
@@ -115,22 +134,68 @@ export default function FitProfileScreen() {
           <Text style={[styles.gapText, { color: colors.text_muted }]}>{ball.note}</Text>
         </View>
 
-        {/* LADDER */}
-        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR DISTANCE LADDER</Text>
+        {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
+        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR BAG · TAP A CLUB TO SET ITS CARRY</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
-          {profile.ladder.map((c) => (
-            <View key={c.club} style={styles.ladderRow}>
-              <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
-              <View style={styles.ladderRight}>
-                <Text style={[styles.ladderYards, { color: colors.text_primary }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
-                <View style={[styles.measuredDot, { backgroundColor: c.measured ? '#3FB950' : 'transparent', borderColor: c.measured ? '#3FB950' : colors.text_muted }]} />
-                {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
-                {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
-              </View>
-            </View>
-          ))}
+          {profile.ladder.map((c) => {
+            if (editingClub === c.club) {
+              return (
+                <View key={c.club} style={styles.ladderRow}>
+                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  <View style={styles.ladderRight}>
+                    <TextInput
+                      value={draft}
+                      onChangeText={setDraft}
+                      keyboardType="number-pad"
+                      autoFocus
+                      placeholder="yds"
+                      placeholderTextColor={colors.text_muted}
+                      maxLength={3}
+                      onSubmitEditing={() => saveEdit(c.club)}
+                      style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
+                      accessibilityLabel={`Carry distance for ${c.club} in yards`}
+                    />
+                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel="Save">
+                      <Ionicons name="checkmark" size={20} color="#3FB950" />
+                    </TouchableOpacity>
+                    {c.stated ? (
+                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel="Remove">
+                        <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            }
+            const editable = !c.measured; // tracked carries win; don't let a stated value masquerade as tracked
+            const inner = (
+              <>
+                <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                <View style={styles.ladderRight}>
+                  <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
+                  <View style={[styles.measuredDot, { backgroundColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : 'transparent', borderColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : colors.text_muted }]} />
+                  {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
+                  {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
+                  {editable ? <Ionicons name="pencil" size={12} color={colors.text_muted} style={{ marginLeft: 6 }} /> : null}
+                </View>
+              </>
+            );
+            return editable ? (
+              <TouchableOpacity
+                key={c.club}
+                style={styles.ladderRow}
+                onPress={() => openEdit(c.club)}
+                accessibilityRole="button"
+                accessibilityLabel={`Set carry for ${c.club}`}
+              >
+                {inner}
+              </TouchableOpacity>
+            ) : (
+              <View key={c.club} style={styles.ladderRow}>{inner}</View>
+            );
+          })}
           <Text style={[styles.legend, { color: colors.text_muted }]}>
-            ● measured from your shots · ○ standard-chart estimate (track shots to learn it)
+            ● tracked from your shots · ◆ you set it · ○ estimate — tap a club to set your carry
           </Text>
         </View>
 
@@ -159,6 +224,8 @@ const styles = StyleSheet.create({
   ladderYards: { fontSize: 14, fontWeight: '800' },
   ladderUnit: { fontSize: 11, fontWeight: '600' },
   measuredDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, marginLeft: 10 },
+  editInput: { minWidth: 56, borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontWeight: '800', textAlign: 'right' },
+  editBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
   legend: { fontSize: 10, lineHeight: 15, paddingHorizontal: 10, paddingVertical: 8 },
   disclaimer: { fontSize: 12, lineHeight: 18, fontStyle: 'italic', marginTop: 16 },
 });

@@ -4439,6 +4439,45 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       composeFitProfile([{ club: '7I', yards: 140, measured: false }]).confidence === 'low',
     'confidence = measured-club count (4→medium, <4→low); disclaimer says "starting point" and nothing claims lie degrees / mph / smash');
 
+  check('Fit Profile: stated My Bag fills the ladder + lifts confidence honestly (never high on stated alone)',
+    (() => {
+      const stated = composeFitProfile([
+        { club: 'Driver', yards: 260, measured: false, stated: true },
+        { club: '3W', yards: 235, measured: false, stated: true },
+        { club: '5I', yards: 175, measured: false, stated: true },
+        { club: '6I', yards: 165, measured: false, stated: true },
+        { club: '7I', yards: 155, measured: false, stated: true },
+        { club: '8I', yards: 145, measured: false, stated: true },
+        { club: '9I', yards: 135, measured: false, stated: true },
+        { club: 'PW', yards: 120, measured: false, stated: true },
+      ]);
+      return (
+        stated.statedCount === 8 && stated.measuredCount === 0 && stated.knownCount === 8 &&
+        stated.ladder.length === 8 && stated.confidence === 'medium' && // knownCount>=8 lifts to medium...
+        composeFitProfile([{ club: '7I', yards: 155, measured: false, stated: true }]).confidence === 'low'
+      );
+    })(),
+    'a stated bag fills the ladder + reaches medium (knownCount>=8) but never high on stated-only; measured stays the gold standard');
+
+  check('My Bag: editable store path + Fit Profile read + dashboard surface + caddie yardages',
+    // 2026-06-15 (Tim — clubs gone from dashboard, no fit credit) — the editable bag
+    // is the canonical distance source: setManual writes it, distanceFor reads
+    // tracked→stated→chart, the Fit Profile ladder + dashboard card render it, and
+    // getLearnedClubDistances feeds the caddie the STATED carry when none is tracked.
+    (() => {
+      const store = read('store/clubStatsStore.ts');
+      const screen = read('app/practice/fit-profile.tsx');
+      const dash = read('app/(tabs)/dashboard.tsx');
+      return (
+        /setManual:/.test(store) && /distanceFor:/.test(store) && /hasManual:/.test(store) &&
+        /else if \(s\.manual\[club\] != null\) out\[club\] = s\.manual\[club\]!/.test(store) &&
+        /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
+        /st\.distanceFor\(c\), measured: st\.hasSamples\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
+        /MY BAG/.test(dash) && /router\.push\('\/practice\/fit-profile'/.test(dash)
+      );
+    })(),
+    'editable My Bag: store setManual/distanceFor → Fit Profile ladder + dashboard card + caddie yardages');
+
   // FLEX — honest only off a MEASURED driver carry, distance→flex (no fabricated mph).
   const flexStiff = recommendFlex(240, true);
   const flexReg = recommendFlex(205, true);
