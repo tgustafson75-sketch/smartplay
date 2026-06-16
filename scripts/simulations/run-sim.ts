@@ -1802,7 +1802,11 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
     const pose = read('services/poseAnalysisApi.ts');
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      /extractPoseFramesFromVideo\(videoUri: string, durationMs: number, trustDuration = false\)/.test(pose) &&
+      // 2026-06-15 — signature now carries an optional swing window (uploads).
+      /extractPoseFramesFromVideo\(\s*videoUri: string,\s*durationMs: number,\s*trustDuration = false,\s*window\?: \{ startMs: number; endMs: number \} \| null,/.test(pose) &&
+      // Windowed sampling: an explicit swing window samples densely across it
+      // (uploads land on the swing instead of smearing 5 frames over a minute).
+      /if \(window && window\.endMs - window\.startMs >= 500\)/.test(pose) &&
       /const canTrust = trustDuration && durationMs >= 500/.test(pose) &&
       /if \(!canTrust\) \{/.test(pose) && // probe only runs when NOT trusted
       /analyzeSwingFromVideo\([\s\S]*?trustDuration = false/.test(pose) &&
@@ -1813,6 +1817,26 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
     );
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); on-device pose latency is measurable');
+
+check('Uploads: skeleton + 4-card read windowed on the pointed swing',
+  // 2026-06-15 (Tim — "uploads aren't treated into the Smart Motion UI, can't see
+  // the skeleton") — an uploaded clip is 30-60s with the swing buried inside, so the
+  // default full-clip pose smeared 5 frames across the minute (no usable skeleton).
+  // Fix: the upload's pending CTA is "point at your swing" (onAnalyzeAtPosition
+  // windows the clip), and runPhaseKOnSession passes that window to the on-device
+  // pose so the skeleton lands on the REAL swing — same cards + skeleton as a live
+  // Smart Motion capture. Live captures keep the plain one-tap analyze.
+  (() => {
+    const up = read('services/videoUpload.ts');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /firstClipSwing\.clipEndSeconds > firstClipSwing\.clipStartSeconds/.test(up) &&
+      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, null, false, poseWindow\)/.test(up) &&
+      /session\.source === 'uploaded_video' \? \(/.test(detail) &&
+      /onPress=\{onAnalyzeAtPosition\}/.test(detail)
+    );
+  })(),
+  'uploaded swing windows the cloud read AND the on-device pose on the pointed moment → cards + skeleton');
 
 check('Conversation ingestion → CNS foundation + save-routine unblocked',
   // 2026-06-13 — Tim: "ingest what the caddie says and the back-and-forth to learn."

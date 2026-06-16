@@ -1135,21 +1135,50 @@ export default function SwingDetail() {
             analyzing_* in-flight states show the spinner. */}
         <View style={{ marginTop: 16 }}>
           {analysisStatus === 'pending' && (
-            <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-              <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Ready to analyze</Text>
-              <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                Your upload is saved. Analysis runs when you choose — tap to analyze this swing.
-              </Text>
-              <TouchableOpacity
-                onPress={onReanalyze}
-                style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
-                accessibilityRole="button"
-                accessibilityLabel="Analyze this swing"
-              >
-                <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>Analyze this swing</Text>
-              </TouchableOpacity>
-            </View>
+            // 2026-06-15 (Tim — uploads never showed the skeleton/4-card read) — an
+            // uploaded clip is usually 30-60s with the swing buried somewhere inside.
+            // The default full-clip analyze smears the pose across the whole minute
+            // (no usable skeleton). So for UPLOADS the primary action is "point at
+            // your swing": scrub the static video to your swing, then analyze THAT
+            // moment — which windows BOTH the cloud read and the on-device pose on the
+            // real swing, so you get the cards AND the moving skeleton. Live captures
+            // (cage / Smart Motion) already carve their swings, so they keep the plain
+            // one-tap analyze.
+            session.source === 'uploaded_video' ? (
+              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Point at your swing</Text>
+                <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                  Scrub the video to your swing (around impact), then analyze that moment — you&apos;ll get the full read and the moving skeleton.
+                </Text>
+                <TouchableOpacity
+                  onPress={onAnalyzeAtPosition}
+                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
+                >
+                  <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>
+                    Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Ready to analyze</Text>
+                <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                  Your swing is saved. Analysis runs when you choose — tap to analyze this swing.
+                </Text>
+                <TouchableOpacity
+                  onPress={onReanalyze}
+                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Analyze this swing"
+                >
+                  <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>Analyze this swing</Text>
+                </TouchableOpacity>
+              </View>
+            )
           )}
           {(analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') && (
             <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

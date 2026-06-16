@@ -561,8 +561,9 @@ export async function analyzeSwingFromVideo(
   durationMs: number,
   angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null,
   trustDuration = false,
+  window?: { startMs: number; endMs: number } | null,
 ): Promise<SwingBiomechanics | null> {
-  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration);
+  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration, window);
   if (!frames) return null;
   return computeBiomechanics(frames, angle);
 }
@@ -578,66 +579,87 @@ export async function analyzeSwingFromVideo(
  *  pose detection (caller falls back to StubSkeletonOverlay so there's
  *  no regression vs the existing behavior).
  */
-export async function extractPoseFramesFromVideo(videoUri: string, durationMs: number, trustDuration = false): Promise<PoseFrame[] | null> {
-  // 2026-05-28 — Fix FO: caller-supplied durationMs is unreliable on
-  // library uploads (the swing detail backfill passes 3000 when
-  // session.upload.duration_sec is null — typical for camera-roll
-  // uploads). Probe the real duration first; if probing yields a
-  // meaningfully different number, use it.
-  let effectiveDurationMs = durationMs;
-  // 2026-06-13 (SPEED) — skip the ~2-8s reprobe when the caller passes a TRUSTED
-  // real duration (e.g. the video player's onLoad durationMillis). The probe only
-  // ever overrode the unreliable 3000ms upload default or a >50% disagreement; a
-  // trusted value triggers neither, so the probe was pure cost on the Motion path.
-  const canTrust = trustDuration && durationMs >= 500;
-  if (!canTrust) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
-      const probed = await probeDurationMs(videoUri);
-      if (probed && probed >= 500) {
-        // Trust the probe when caller-supplied was the suspicious
-        // 3000ms default OR when the probe disagrees by > 50%.
-        if (durationMs === 3000 || Math.abs(probed - durationMs) / Math.max(probed, durationMs) > 0.5) {
-          console.log('[pose] duration probe correction', { caller_ms: durationMs, probed_ms: probed });
-          effectiveDurationMs = probed;
-        }
-      }
-    } catch (e) {
-      console.log('[pose] duration probe failed (non-fatal, using caller value)', e);
-    }
-  }
-
-  if (effectiveDurationMs < 500) {
-    console.warn('[pose] video too short to sample', { duration_ms: effectiveDurationMs });
-    return null;
-  }
-
-  // 2026-05-28 — Fix FO: tiered sampling so library uploads of long
-  // instructor clips actually hit swing-position frames instead of
-  // pre-swing chat. Mirrors poseDetection.ts windows.
+export async function extractPoseFramesFromVideo(
+  videoUri: string,
+  durationMs: number,
+  trustDuration = false,
+  window?: { startMs: number; endMs: number } | null,
+): Promise<PoseFrame[] | null> {
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
-  if (effectiveDurationMs > LONG_CLIP_THRESHOLD_MS) {
-    positionTimes = LONG_CLIP_POSITIONS.map(p => ({
-      key: p.key,
-      timeMs: Math.round(effectiveDurationMs * p.fraction),
-    }));
-    console.log('[pose] long-clip wide-spread sampling', { duration_ms: effectiveDurationMs });
-  } else if (effectiveDurationMs > MEDIUM_CLIP_THRESHOLD_MS) {
-    // Medium clips: back-window the last 5s (where the swing usually
-    // lives in a short demo / preroll-then-swing capture).
-    const windowStartMs = Math.max(0, effectiveDurationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
-    const windowMs = effectiveDurationMs - windowStartMs;
+
+  // 2026-06-15 (Tim — uploads never showed a skeleton) — when the caller hands us
+  // an explicit swing window (the user scrubbed to their swing and tapped "Analyze
+  // this moment"), sample DENSELY across just that window. The old path spread 5
+  // frames over the whole 30-60s upload, so they landed on walk-up / setup instead
+  // of the swing — which is exactly why uploads produced no usable pose. We already
+  // know where the swing is here, so skip the duration probe + tiered fallback.
+  if (window && window.endMs - window.startMs >= 500) {
+    const span = window.endMs - window.startMs;
     positionTimes = SWING_POSITIONS.map(p => ({
       key: p.key,
-      timeMs: windowStartMs + Math.round(windowMs * p.fraction),
+      timeMs: Math.round(window.startMs + span * p.fraction),
     }));
-    console.log('[pose] medium-clip back-window sampling', { duration_ms: effectiveDurationMs, window_start_ms: windowStartMs });
+    console.log('[pose] windowed swing sampling', { start_ms: window.startMs, end_ms: window.endMs });
   } else {
-    positionTimes = SWING_POSITIONS.map(p => ({
-      key: p.key,
-      timeMs: Math.round(effectiveDurationMs * p.fraction),
-    }));
+    // 2026-05-28 — Fix FO: caller-supplied durationMs is unreliable on
+    // library uploads (the swing detail backfill passes 3000 when
+    // session.upload.duration_sec is null — typical for camera-roll
+    // uploads). Probe the real duration first; if probing yields a
+    // meaningfully different number, use it.
+    let effectiveDurationMs = durationMs;
+    // 2026-06-13 (SPEED) — skip the ~2-8s reprobe when the caller passes a TRUSTED
+    // real duration (e.g. the video player's onLoad durationMillis). The probe only
+    // ever overrode the unreliable 3000ms upload default or a >50% disagreement; a
+    // trusted value triggers neither, so the probe was pure cost on the Motion path.
+    const canTrust = trustDuration && durationMs >= 500;
+    if (!canTrust) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
+        const probed = await probeDurationMs(videoUri);
+        if (probed && probed >= 500) {
+          // Trust the probe when caller-supplied was the suspicious
+          // 3000ms default OR when the probe disagrees by > 50%.
+          if (durationMs === 3000 || Math.abs(probed - durationMs) / Math.max(probed, durationMs) > 0.5) {
+            console.log('[pose] duration probe correction', { caller_ms: durationMs, probed_ms: probed });
+            effectiveDurationMs = probed;
+          }
+        }
+      } catch (e) {
+        console.log('[pose] duration probe failed (non-fatal, using caller value)', e);
+      }
+    }
+
+    if (effectiveDurationMs < 500) {
+      console.warn('[pose] video too short to sample', { duration_ms: effectiveDurationMs });
+      return null;
+    }
+
+    // 2026-05-28 — Fix FO: tiered sampling so library uploads of long
+    // instructor clips actually hit swing-position frames instead of
+    // pre-swing chat. Mirrors poseDetection.ts windows.
+    if (effectiveDurationMs > LONG_CLIP_THRESHOLD_MS) {
+      positionTimes = LONG_CLIP_POSITIONS.map(p => ({
+        key: p.key,
+        timeMs: Math.round(effectiveDurationMs * p.fraction),
+      }));
+      console.log('[pose] long-clip wide-spread sampling', { duration_ms: effectiveDurationMs });
+    } else if (effectiveDurationMs > MEDIUM_CLIP_THRESHOLD_MS) {
+      // Medium clips: back-window the last 5s (where the swing usually
+      // lives in a short demo / preroll-then-swing capture).
+      const windowStartMs = Math.max(0, effectiveDurationMs - MEDIUM_CLIP_BACK_WINDOW_MS);
+      const windowMs = effectiveDurationMs - windowStartMs;
+      positionTimes = SWING_POSITIONS.map(p => ({
+        key: p.key,
+        timeMs: windowStartMs + Math.round(windowMs * p.fraction),
+      }));
+      console.log('[pose] medium-clip back-window sampling', { duration_ms: effectiveDurationMs, window_start_ms: windowStartMs });
+    } else {
+      positionTimes = SWING_POSITIONS.map(p => ({
+        key: p.key,
+        timeMs: Math.round(effectiveDurationMs * p.fraction),
+      }));
+    }
   }
 
   // Sequential to be polite to the rate limit (RapidAPI throttles bursts).
@@ -646,7 +668,7 @@ export async function extractPoseFramesFromVideo(videoUri: string, durationMs: n
     const f = await poseAtTime(videoUri, timeMs, key);
     if (f) frames.push(f);
   }
-  console.log('[pose] extracted frames', { requested: positionTimes.length, got: frames.length, duration_ms: effectiveDurationMs });
+  console.log('[pose] extracted frames', { requested: positionTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) return null;
   return frames;
 }

@@ -965,12 +965,24 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     const firstClipSwing = swings.find(s => s.clipUri);
     if (firstClipSwing?.clipUri) {
       const durationSec = session.upload?.duration_sec ?? 3;
+      // 2026-06-15 (Tim — uploads never produced a usable skeleton) — if the user
+      // pointed at their swing ("Analyze this moment" sets clipStart/EndSeconds),
+      // window the on-device pose on THAT span so the skeleton lands on the swing
+      // instead of being smeared across a 30-60s clip. No boundaries → full-clip
+      // tiered sampling as before (short single-swing uploads still work).
+      const hasWindow =
+        typeof firstClipSwing.clipStartSeconds === 'number' &&
+        typeof firstClipSwing.clipEndSeconds === 'number' &&
+        firstClipSwing.clipEndSeconds > firstClipSwing.clipStartSeconds;
+      const poseWindow = hasWindow
+        ? { startMs: firstClipSwing.clipStartSeconds! * 1000, endMs: firstClipSwing.clipEndSeconds! * 1000 }
+        : null;
       void (async () => {
         try {
           const poseMod = await import('./poseAnalysisApi');
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000);
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, null, false, poseWindow);
           useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
-          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0 }, sessionId);
+          uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
         } catch (poseErr) {
           // Non-fatal — Phase K result already shown. Pose API is opt-in.
           console.log('[pose] background analysis failed', poseErr);
