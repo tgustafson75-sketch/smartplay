@@ -602,6 +602,27 @@ check('All stored local courses link to golfcourseapi',
   check('Acoustic: sustained TV burst rejected by decay-isolation',
     burstRes.kind === 'ok' && burstRes.strikes.length === 0,
     `expected ok/0 strikes, got ${burstRes.kind === 'ok' ? burstRes.strikes.length : burstRes.kind}`);
+
+  // C: 2026-06-15 (Tim — AC hum) — ADAPTIVE rolling floor. The first 2s are a
+  // loud ambient stretch (AC near the mic, ~-34dB), then it goes quiet (-60dB);
+  // a CLEAN strike (-25dB) lands in the quiet tail. A single GLOBAL-median floor
+  // is dragged up to ~-34 by the loud majority, so floor+30 = -4 and the -25
+  // strike is SUPPRESSED (missed). The rolling LOCAL floor near the strike is
+  // ~-60 (the quiet neighborhood), so it clears and is detected. This is exactly
+  // the AC-cycling case the global floor failed on.
+  const drift: MeterSample[] = [];
+  for (let i = 0; i < N; i++) {
+    const t = i * STEP;
+    let dB = -60;
+    if (t < 2000) dB = (i % 2 === 0) ? -33 : -36; // loud ambient first 2s
+    if (t === 2600) dB = -25;                       // clean strike in the quiet tail
+    else if (t === 2650) dB = -58;                  // sharp decay
+    drift.push({ timeMs: t, dB });
+  }
+  const driftRes = detectStrikes(drift);
+  check('Acoustic: rolling local floor catches a strike a global floor would suppress',
+    driftRes.kind === 'ok' && driftRes.strikes.length >= 1,
+    `expected >=1 strike (rolling floor), got ${driftRes.kind === 'ok' ? driftRes.strikes.length : driftRes.kind}`);
 }
 
 check('SmartMotion review video muted (no clip-audio feedback loop)',

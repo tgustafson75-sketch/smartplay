@@ -35,6 +35,19 @@ const NOISY_FLOOR_DB = -30;            // floor higher than this = environment t
 // strikes. Mirrors the multi-shot detector's peak-then-decay validation.
 const DECAY_WINDOW_MS = 250;           // look this far past the peak for the drop
 const MIN_DECAY_DB = 15;               // peak must fall ≥ this within the window
+// 2026-06-15 (Tim — AC hum reduced accuracy) — ADAPTIVE rolling noise floor.
+// A single global-median floor misreads any session where the ambient level
+// drifts or cycles (an AC compressor kicking on/off, a fan ramping, a loud
+// stretch then quiet): the global median gets pulled toward the loud regions and
+// then SUPPRESSES real strikes during the quiet ones (a clean strike no longer
+// clears floor+threshold). The admission threshold should ride the LOCAL baseline
+// at each peak instead. A median over a ±window is robust to the brief strike
+// spike itself (one sharp sample is a tiny minority of the window). This is the
+// user's own model: "filter out the consistent background — the spikes are the
+// strikes." Note: a constant tonal hum that genuinely lowers SNR can't be
+// recovered from dB-only metering (that needs spectral/FFT filtering on raw
+// audio, a native change) — this fixes the far-more-common drift/cycle case.
+const FLOOR_WINDOW_MS = 1000;          // ± window for the local noise-floor estimate
 
 export type MeterSample = {
   /** Milliseconds from recording start. */
@@ -113,11 +126,11 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
 
   const startMs = first.timeMs;
   const endMs = lastSample.timeMs;
-  const peakThresholdDb = floorDb + thresholdDb;
 
-  // First pass: find candidate peaks (local maxima above threshold,
-  // outside head/tail rejection windows).
-  type Candidate = { idx: number; timeMs: number; peakDb: number };
+  // First pass: find candidate peaks (local maxima above the LOCAL floor +
+  // threshold, outside head/tail rejection windows). The cheap local-max check
+  // runs first so the rolling-floor median is only computed for actual peaks.
+  type Candidate = { idx: number; timeMs: number; peakDb: number; localFloor: number };
   const candidates: Candidate[] = [];
   for (let i = 1; i < samples.length - 1; i++) {
     const s = samples[i];
@@ -127,10 +140,11 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
     const relTime = s.timeMs - startMs;
     if (relTime < REJECT_HEAD_MS) continue;
     if (endMs - s.timeMs < REJECT_TAIL_MS) continue;
-    if (s.dB < peakThresholdDb) continue;
     if (s.dB <= prev.dB) continue;
     if (s.dB <= next.dB) continue;
-    candidates.push({ idx: i, timeMs: s.timeMs, peakDb: s.dB });
+    const lf = localFloorDb(samples, s.timeMs, FLOOR_WINDOW_MS, floorDb);
+    if (s.dB < lf + thresholdDb) continue;
+    candidates.push({ idx: i, timeMs: s.timeMs, peakDb: s.dB, localFloor: lf });
   }
 
   // Second pass: attack-time filter. Walk backward from each peak and
@@ -142,7 +156,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
     let attackStartIdx = c.idx;
     for (let j = c.idx - 1; j >= 0; j--) {
       const sj = samples[j];
-      if (sj && sj.dB <= floorDb + 5) {
+      if (sj && sj.dB <= c.localFloor + 5) {
         attackStartIdx = j;
         break;
       }
@@ -186,7 +200,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   }
 
   const strikes: DetectedStrike[] = debounced.map((s) => {
-    const headroom = s.peakDb - floorDb;
+    const headroom = s.peakDb - s.localFloor;
     // 2026-06-12 — confidence is also relative to the ADMISSION threshold (thresholdDb),
     // not just absolute headroom. Chip mode lowers thresholdDb to ~18 to catch quiet
     // pitch/chip strikes; with absolute-only bands every real chip (headroom 18–30) was
@@ -202,6 +216,20 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   });
 
   return { kind: 'ok', floorDb, strikes };
+}
+
+/** Local noise floor at a point in time — median dB of samples within
+ *  ±halfWindowMs of centerMs. Robust to a brief strike inside the window (one
+ *  sharp sample is a tiny minority). Falls back to the global floor when the
+ *  window is empty. See FLOOR_WINDOW_MS for the rationale. */
+function localFloorDb(samples: MeterSample[], centerMs: number, halfWindowMs: number, globalFloor: number): number {
+  const lo = centerMs - halfWindowMs;
+  const hi = centerMs + halfWindowMs;
+  const win: number[] = [];
+  for (const s of samples) {
+    if (s.timeMs >= lo && s.timeMs <= hi) win.push(s.dB);
+  }
+  return win.length ? median(win) : globalFloor;
 }
 
 function median(xs: number[]): number {
