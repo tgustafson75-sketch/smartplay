@@ -1880,6 +1880,25 @@ check('Smart Motion record by tap-to-talk is deterministic + local (no brain loo
   })(),
   'tap→"record"/"watch my swing" arms the recorder via the bus; no cloud coin-flip, no Kevin loop');
 
+check('Smart Motion: pipelined per-swing narration with one-ahead head start',
+  // 2026-06-15 (Tim — "by the time I stop the 3rd swing it's reading the first, then
+  // tells me the second... consecutively") — multi-swing sessions narrate each swing
+  // IN ORDER while the NEXT swing's read computes in the background (swing N+1 while
+  // swing N is spoken). Reuses runWindowedAnalysis (explicit uri+seg so it can run at
+  // stop-time before state settles) + swingNarrationLine (honest deriveVerdict copy).
+  // Fired from the stop path for multi-swing, non-putt sessions only.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /const runWindowedAnalysis = useCallback/.test(sm) &&
+      /const pipelineNarrate = useCallback/.test(sm) &&
+      /function swingNarrationLine/.test(sm) &&
+      /segsForAnalysis\.length > 1 && !puttModeRef\.current/.test(sm) &&
+      /void pipelineNarrate\(recorded\.uri, segsForAnalysis\)/.test(sm)
+    );
+  })(),
+  'multi-swing reads narrate in order with a background head start; single/putt sessions unaffected');
+
 check('Conversation ingestion → CNS foundation + save-routine unblocked',
   // 2026-06-13 — Tim: "ingest what the caddie says and the back-and-forth to learn."
   // The conversation log captures every caddie + user turn (the learning input),

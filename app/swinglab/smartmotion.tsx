@@ -261,6 +261,17 @@ function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: str
   return { text: headline.replace(/_/g, ' ').toUpperCase(), tone: a.severity === 'significant' ? 'bad' : 'warn' };
 }
 
+// 2026-06-15 (Tim — pipelined per-swing narration) — a short spoken headline for
+// ONE swing in a multi-swing read. Reuses deriveVerdict's honest logic (no read /
+// no swing / clean / the named fault). One breath per swing so a 3-swing reel
+// reads "Swing 1, over the top. Swing 2, early extension. Swing 3, clean."
+function swingNarrationLine(n: number, a: SwingAnalysis): string {
+  const v = deriveVerdict(a, false);
+  if (v.text === 'NO SWING DETECTED' || v.text.startsWith('NO READ')) return `Swing ${n}, couldn't get a clean read.`;
+  if (v.text === 'GOOD SWING') return `Swing ${n}, clean.`;
+  return `Swing ${n}, ${v.text.toLowerCase()}.`;
+}
+
 // 2026-06-13 — TactilePressable: drop-in <Pressable> that makes every Smart Motion
 // icon FEEL tapped — a light haptic tick + a quick spring "wobble" (scale 1 → 0.9 →
 // overshoot back). Non-breaking: forwards all Pressable props, supports both static
@@ -684,6 +695,7 @@ export default function SmartMotion() {
   const [autoDetectingBall, setAutoDetectingBall] = useState(false);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
   const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
+  const pipelineNarratedRef = useRef(false); // 2026-06-15 — guards one-time per-session pipeline narration
 
   const cameraRef = useRef<CameraView>(null);
   // 2026-06-11 — Front/rear camera toggle ("selfie mode"). Lets the user flip to
@@ -1448,6 +1460,7 @@ export default function SmartMotion() {
     // analysis/tempo can be read for the new recording (audit #2).
     tempoCacheRef.current = {};
     analysisCacheRef.current = {};
+    pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
     setSegments([]);
     setSelectedSwing(0);
     setCoachNote('');
@@ -1519,10 +1532,13 @@ export default function SmartMotion() {
   // segment, races a 30s watchdog, caches by swing index, and returns the
   // analysis (or null). Does NOT touch any display state, so it's safe to run
   // in the background.
-  const analyzeSwingForIndex = useCallback(
-    async (idx: number): Promise<SwingAnalysis | null> => {
-      const seg = segments[idx];
-      if (!seg || !clipUri) return null;
+  // 2026-06-11 (audit) — background-safe windowed analysis for ONE swing. Takes the
+  // clip uri + segment EXPLICITLY so callers that don't yet have segments/clipUri in
+  // state (the stop-time pipeline below) can drive it. Races a 30s watchdog, caches
+  // by index, touches no display state. Shared by the on-demand reel AND the pipeline.
+  const runWindowedAnalysis = useCallback(
+    async (uri: string, seg: SwingSegment | undefined, idx: number): Promise<SwingAnalysis | null> => {
+      if (!seg || !uri) return null;
       const cachedHit = analysisCacheRef.current[idx];
       if (cachedHit) return cachedHit;
       // 2026-06-11 — multi-swing variety: hand the analyzer the DISTINCT faults
@@ -1539,7 +1555,7 @@ export default function SmartMotion() {
       const sessionPriorFaults = Array.from(priorFaultSet);
       try {
         const r = await Promise.race([
-          analyzeSwing(clipUri, {
+          analyzeSwing(uri, {
             club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
             swing_number: seg.index,
             caddie_name: caddiePersonality,
@@ -1564,7 +1580,13 @@ export default function SmartMotion() {
       } catch { /* non-fatal */ }
       return null;
     },
-    [segments, clipUri, angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
+    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
+  );
+
+  const analyzeSwingForIndex = useCallback(
+    async (idx: number): Promise<SwingAnalysis | null> =>
+      runWindowedAnalysis(clipUri ?? '', segments[idx], idx),
+    [runWindowedAnalysis, clipUri, segments],
   );
 
   // 2026-06-11 (audit opt #1) — prefetch the NEXT swing's read in the background
@@ -1581,6 +1603,52 @@ export default function SmartMotion() {
     prefetchInFlightRef.current = true;
     void analyzeSwingForIndex(idx).finally(() => { prefetchInFlightRef.current = false; });
   }, [segments.length, analyzeSwingForIndex]);
+
+  // 2026-06-15 (Tim — "by the time I stop the 3rd swing, it's reading the first;
+  // then it tells me the second... consecutively") — PIPELINED per-swing narration.
+  // True during-capture analysis isn't possible (one continuous recording file
+  // isn't readable until stop), but at stop we run the swings with a ONE-AHEAD
+  // prefetch — swing N+1 computes WHILE swing N is being spoken — and narrate them
+  // IN ORDER. Swing 0's read comes from runAnalysis (the visible review); we reuse
+  // its cache rather than re-analyze. Bounded to ~2 concurrent reads, matching the
+  // reel's rate-limit posture. Fire-and-forget; only runs for multi-swing sessions.
+  const pipelineNarrate = useCallback(
+    async (uri: string, segs: SwingSegment[]) => {
+      if (segs.length < 2 || pipelineNarratedRef.current) return;
+      pipelineNarratedRef.current = true;
+      const st = useSettingsStore.getState();
+      const speakLine = async (line: string) => {
+        if (!st.voiceEnabled) return;
+        try {
+          await configureAudioForSpeech();
+          await speak(line, st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: true });
+        } catch { /* speech non-fatal */ }
+      };
+      // Poll swing 0's cache — runAnalysis (the visible review) populates it.
+      const waitForCache0 = async (): Promise<SwingAnalysis | null> => {
+        const deadline = Date.now() + 32_000;
+        while (Date.now() < deadline) {
+          const c = analysisCacheRef.current[0];
+          if (c) return c;
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        return analysisCacheRef.current[0] ?? null;
+      };
+      const jobs: (Promise<SwingAnalysis | null> | undefined)[] = new Array(segs.length);
+      jobs[0] = waitForCache0();
+      if (segs.length > 1) jobs[1] = runWindowedAnalysis(uri, segs[1], 1); // head start
+      for (let idx = 0; idx < segs.length; idx++) {
+        // Kick off the swing TWO ahead while we wait on / narrate this one, so the
+        // next swing's read is always in flight before we need it.
+        const ahead = idx + 2;
+        if (ahead < segs.length && !jobs[ahead]) jobs[ahead] = runWindowedAnalysis(uri, segs[ahead], ahead);
+        const a = await jobs[idx];
+        if (!a) continue;
+        await speakLine(swingNarrationLine(idx + 1, a));
+      }
+    },
+    [runWindowedAnalysis],
+  );
 
   const selectSwing = useCallback(
     async (idx: number) => {
@@ -2000,13 +2068,19 @@ export default function SmartMotion() {
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, firstSeg);
+      // 2026-06-15 (Tim) — multi-swing PIPELINE: narrate each swing in order with a
+      // one-ahead head start (swing N+1 reads while swing N is spoken). Skips putts
+      // (a "Swing N, fault" read doesn't fit a putt). Single swing → no pipeline.
+      if (segsForAnalysis.length > 1 && !puttModeRef.current) {
+        void pipelineNarrate(recorded.uri, segsForAnalysis);
+      }
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
       setAnalysisError(e instanceof Error ? e.message : String(e));
       setPhase('setup');
     }
-  }, [runAnalysis, appliedCalibration]);
+  }, [runAnalysis, appliedCalibration, pipelineNarrate]);
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
   stopRecordingRef.current = stopRecording;
 
