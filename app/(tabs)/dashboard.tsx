@@ -816,20 +816,6 @@ export default function Dashboard() {
                   <TouchableOpacity
                     key={r.id}
                     onPress={() => router.push(`/recap/${r.id}` as never)}
-                    onLongPress={() => {
-                      Alert.alert(
-                        r.courseName ?? 'Round',
-                        `${dateStr} · ${r.totalScore || 0} strokes`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Delete round', style: 'destructive',
-                            onPress: () => deleteRound(r.id),
-                          },
-                        ],
-                      );
-                    }}
-                    delayLongPress={400}
                     style={[styles.roundRow, { borderColor: colors.border }]}
                     accessibilityRole="button"
                     accessibilityLabel={`Round at ${r.courseName ?? 'course'} on ${dateStr}, ${r.totalScore} strokes`}
@@ -851,6 +837,20 @@ export default function Dashboard() {
                       <Text style={[styles.roundScore, { color: colors.text_primary }]}>{r.totalScore || '—'}</Text>
                       <Text style={[styles.roundVsPar, { color: vsParColor }]}>{vsPar}</Text>
                     </View>
+                    <TouchableOpacity
+                      onPress={() => Alert.alert(
+                        'Delete round?',
+                        `${r.courseName ?? 'Round'} · ${dateStr}`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => deleteRound(r.id) },
+                        ],
+                      )}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={styles.roundDeleteBtn}
+                    >
+                      <Ionicons name="trash-outline" size={16} color="#6b7280" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 );
               })}
@@ -1236,6 +1236,7 @@ const styles = StyleSheet.create({
   roundScoreCol: { alignItems: 'flex-end' },
   roundScore: { fontSize: 20, fontWeight: '900' },
   roundVsPar: { fontSize: 13, fontWeight: '800', marginTop: 1 },
+  roundDeleteBtn: { paddingLeft: 8, justifyContent: 'center', opacity: 0.5 },
   statTile: {
     flex: 1,
     borderWidth: 1,

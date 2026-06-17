@@ -81,7 +81,7 @@ interface LauncherCardSpec {
 const HERO_CARD: LauncherCardSpec = {
   key: 'smartmotion',
   icon: 'camera-outline',
-  title: 'Smart Motion',
+  title: 'SmartMotion',
   sub: 'AI-powered swing analysis with acoustic detection & body mechanics',
   route: '/swinglab/smartmotion',
   accent: '#88F700',
@@ -351,13 +351,11 @@ function SmartMotionHero({ spec, colors, onPress }: LauncherCardProps) {
           </View>
         </View>
         <View style={styles.heroText}>
-          <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{spec.title}</Text>
-          <View style={styles.heroSubRow}>
-            <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-              <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
-            </View>
-            <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={1}>{spec.sub}</Text>
+          <Text style={[styles.heroTitle, { color: colors.text_primary }]}>{spec.title}</Text>
+          <View style={[styles.tag, { alignSelf: 'flex-start', marginBottom: 4, backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
           </View>
+          <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={2}>{spec.sub}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
       </View>
@@ -445,18 +443,17 @@ const styles = StyleSheet.create({
   },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   heroMedia: {
-    width: 96, height: 96, borderRadius: 12, borderWidth: 1,
+    width: 76, height: 76, borderRadius: 12, borderWidth: 1,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  heroMediaIcon: { width: 64, height: 64 },
+  heroMediaIcon: { width: 50, height: 50 },
   heroPlay: {
     position: 'absolute', width: 30, height: 30, borderRadius: 15,
     alignItems: 'center', justifyContent: 'center',
   },
   heroText: { flex: 1, minWidth: 0 },
-  heroTitle: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
-  heroSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  heroSub: { fontSize: 12, lineHeight: 16, flex: 1, flexShrink: 1 },
+  heroTitle: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
+  heroSub: { fontSize: 12, lineHeight: 16 },
   heroFeatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 8 },
   heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   heroFeatIcon: { width: 18, height: 18 },
