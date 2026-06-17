@@ -149,9 +149,9 @@ export default function MarkPositionScreen() {
         return;
       }
       if (isTeeMode) {
-        await setTeeOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng });
+        await setTeeOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng }, fresh.accuracy_m ?? undefined);
       } else {
-        await setGreenOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng });
+        await setGreenOverride(courseId, currentHole, { lat: fresh.lat, lng: fresh.lng }, fresh.accuracy_m ?? undefined);
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       useToastStore.getState().show(`${isTeeMode ? 'Tee' : 'Green'} marked: hole ${currentHole}`);

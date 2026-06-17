@@ -879,6 +879,7 @@ export const useRoundStore = create<RoundState>()(
           try {
             const Location = await import('expo-location');
             const perm = await Location.requestForegroundPermissionsAsync();
+            console.log(`[path2:round] gps_prewarm granted=${perm.granted}`);
             if (!perm.granted) {
               // 2026-06-01 — Fix GL: stronger handling. The previous
               // behavior left isRoundActive=true with no GPS subscription,
@@ -1808,7 +1809,8 @@ export const useRoundStore = create<RoundState>()(
         // Legacy penalties[] field intentionally NOT written — ShotResult is authoritative now.
       },
 
-      logShot: (shot) =>
+      logShot: (shot) => {
+        console.log(`[path2:round] shot logged hole=${shot.hole} club=${shot.club ?? 'none'}`);
         set(s => {
           // Phase B back-fill: if the previous shot on the same hole has no end_location,
           // set it to this shot's start_location. Mirrors the "next shot's tee = previous
@@ -1924,7 +1926,8 @@ export const useRoundStore = create<RoundState>()(
             shots: [...backfilled, enriched],
             pendingLieAnalysis: enriched.lie_analysis ? null : s.pendingLieAnalysis,
           };
-        }),
+        });
+      },
 
       // Phase 109-followup — edit a previously logged shot. Patch is a
       // partial ShotResult. Match by id; no-op if id not found.

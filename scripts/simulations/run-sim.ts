@@ -4955,6 +4955,59 @@ check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catc
   })(),
   'navigating between swing-library files aborts the prior swing\'s in-flight/queued narration (stopSpeaking bumps the speak generation + aborts the TTS fetch) so voices don\'t stack and catch up late');
 
+// ─── Scenario 13: critical-path diagnostic markers present (2026-06-16) ─────────
+//
+// Path 2 (ROUND) and Path 4 (VOICE) MIN VERIFY works by grepping logcat for the
+// flow-boundary markers documented in docs/critical-paths.md. If a marker isn't
+// emitted, the device verification silently can't confirm that boundary ran —
+// the exact "code audit passes, device run fails" gap Phase AO exists to close.
+// An earlier sweep found 5/9 Path 2 and 8/10 Path 4 markers missing from the
+// code while still documented in the spec. This scenario is the regression guard:
+// it scans the source tree and fails if any documented marker drifts out again.
+console.log('\n=== Scenario 13: critical-path diagnostic markers ===');
+{
+  const walkTs = (dir: string): string[] => {
+    const out: string[] = [];
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(path.resolve(__dirname, '../../', dir)); } catch { return out; }
+    for (const e of entries) {
+      const rel = `${dir}/${e}`;
+      let stat;
+      try { stat = fs.statSync(path.resolve(__dirname, '../../', rel)); } catch { continue; }
+      if (stat.isDirectory()) out.push(...walkTs(rel));
+      else if (/\.(ts|tsx)$/.test(e)) out.push(rel);
+    }
+    return out;
+  };
+  // Scan the dirs that own flow-boundary instrumentation (excludes scripts/ so the
+  // marker strings in THIS harness don't count as emission sites).
+  const sourceFiles = ['services', 'store', 'app', 'hooks'].flatMap(walkTs);
+  const corpus = sourceFiles.map((f) => {
+    try { return read(f); } catch { return ''; }
+  }).join('\n');
+
+  // The contract from docs/critical-paths.md. Keep in sync with that doc.
+  const PATH2_MARKERS = [
+    '[path2:round] start', '[path2:round] gps_prewarm', '[path2:round] hole transition',
+    '[path2:round] shot logged', '[path2:round] anchor_tee', '[path2:round] anchor_green',
+    '[path2:round] mark ', '[path2:round] end', '[path2:round] recap generated',
+  ];
+  const PATH4_MARKERS = [
+    '[path4:voice] tap_open', '[path4:voice] opener_done', '[path4:voice] capture_start',
+    '[path4:voice] capture_done', '[path4:voice] intent=', '[path4:voice] filler_start',
+    '[path4:voice] filler_end', '[path4:voice] response_start', '[path4:voice] response_end',
+    '[path4:voice] close',
+  ];
+  const missing2 = PATH2_MARKERS.filter((m) => !corpus.includes(m));
+  const missing4 = PATH4_MARKERS.filter((m) => !corpus.includes(m));
+  check('Path 2 ROUND: all 9 diagnostic markers emitted in source',
+    missing2.length === 0,
+    missing2.length === 0 ? 'all 9 present' : `MISSING (MIN VERIFY can\'t grep these): ${missing2.join(', ')}`);
+  check('Path 4 VOICE: all 10 diagnostic markers emitted in source',
+    missing4.length === 0,
+    missing4.length === 0 ? 'all 10 present' : `MISSING (MIN VERIFY can\'t grep these): ${missing4.join(', ')}`);
+}
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

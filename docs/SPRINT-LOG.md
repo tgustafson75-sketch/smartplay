@@ -1918,3 +1918,25 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 ## Note
 - docs/SPRINT-RESUME.md's "Feature-complete / nothing new gets added" standing rule was stale + contradicted by this session; corrected 2026-06-14.
 - Full tester reference written: docs/TEST-MANUAL.md (every tool/mode/option, with LIVE vs NATIVE-POSE vs dormant flags).
+
+
+
+---
+
+# Day N — 2026-06-16 — Critical-path instrumentation + Meta-glasses ingest hardening
+
+## Shipped today
+- **Meta-glasses ingest boundary validation (`9a1cb6f`, pushed to main + OTA production).** `services/metaGlassesIngest.ts` now Zod-validates every entry from the external Meta View JSON *at the boundary* (mirrors the `RequestSchema` pattern in `api/meta-voice.ts`) — malformed rows dropped individually + counted (`IngestResult.rejected`), non-array payloads throw a clear error. Validation lives at the boundary, NOT in roundStore (per CLAUDE.md "validate at system boundaries; trust internal code"). Reused `zod` (already a dep). Critical paths touched: none (ingest wired but not yet UI-invoked).
+- **Path 2 (ROUND) + Path 4 (VOICE) diagnostic markers completed.** Audit found the `docs/critical-paths.md` MIN VERIFY markers were mostly NOT emitted in code: Path 2 had only 4/9, Path 4 only 2/10 — device verification couldn't grep most flow boundaries (the "code-audit-passes / device-run-fails" gap Phase AO exists to close). Added the missing **5 Path 2 + 8 Path 4** markers at their boundaries:
+  - **Path 2:** `gps_prewarm` (roundStore startRound permission check), `shot logged` (roundStore.logShot), `anchor_tee`/`anchor_green` (setTeeOverride/setGreenOverride chokepoints — covers manual Mark + voice open_tool + declare-hole; accuracy threaded from mark-green.tsx via new optional `accuracyM` param), `recap generated` (recapGenerator).
+  - **Path 4:** `opener_done`/`capture_start`/`capture_done`/`intent`/`filler_start`/`filler_end` at the linear boundaries in `listeningSession.openSession`; `response_start`/`response_end` centralised in `setSessionStateMirror` (the state chokepoint) so every response branch (diagnostic / small-talk / handler / abort) emits exactly one start/end pair and they can't drift.
+- **Sim regression guard (Scenario 13 in run-sim.ts).** Scans services/store/app/hooks and FAILS the harness if any documented path marker drifts out of the code again.
+
+## Verified (programmatic — NOT device)
+- `run-sim.ts`: **501/501 pass** (+2 new marker checks). `tsc --noEmit`: 0 errors. `expo lint`: 0 errors (5 pre-existing warnings, none in touched files).
+- These are instrumentation + boundary-validation changes. The actual **Path 2 / Path 4 MIN VERIFY on a real Z Fold round is the remaining gate** — markers now exist for it to grep.
+
+## Open / carried to tomorrow
+- **Wire `ingestMetaGlassesJson` into the custom-caddie UI** (referenced at `app/profile/custom-caddie.tsx:184` but never invoked — today's hardening is inert until it has a live entry point).
+- **Run Path 2 + Path 4 MIN VERIFY on device** now that markers exist; update `critical-paths.md` "Last verification dates".
+- Declined from a second-opinion action plan (SmartPlay-ACTION_PLAN.md): P0.2 schema versioning (already done), P1.1 DI refactor of lazy requires (intentional boot-order devices), P0.1 Jest framework (conflicts with sim-based verification).

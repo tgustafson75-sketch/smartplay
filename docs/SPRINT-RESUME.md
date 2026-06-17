@@ -10,6 +10,17 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
+### LATEST (2026-06-16) — read this before the Day-5 TL;DR below
+
+**Active focus: closing the critical-path verification gate.** The dominant 1.0 blocker remains *verification on real hardware*, not more code (see BUILD-STATE-AUDIT.md §B).
+
+- **Just shipped:** (1) Meta-glasses ingest boundary validation (`9a1cb6f`, on main + OTA prod) — Zod-validates the external Meta View JSON at the ingest boundary. (2) **Completed the Path 2 / Path 4 diagnostic markers** — `critical-paths.md` documented them but only 4/9 (ROUND) and 2/10 (VOICE) were actually emitted, so MIN VERIFY couldn't grep the boundaries. All 19 now emit; added run-sim.ts Scenario 13 as a drift guard. Programmatic gates green (sim 501/501, tsc 0, lint 0). See SPRINT-LOG.md 2026-06-16.
+- **What's next (P0 queue):**
+  1. **Path 2 + Path 4 MIN VERIFY on a real Z Fold round** — markers now exist; this is the gate. Update `critical-paths.md` "Last verification dates" after.
+  2. **Wire `ingestMetaGlassesJson` into the custom-caddie UI** (`app/profile/custom-caddie.tsx:184` references it but never invokes it — the hardening is inert until then).
+  3. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY (still `_not verified_`).
+- **Not done (deliberate):** Jest framework (conflicts with the sim-based verification philosophy), store schema-versioning (already complete), DI refactor of lazy requires (intentional boot-order devices).
+
 ### TL;DR (2026-05-24)
 
 **Canonical inventory now lives at [BUILD-STATE-AUDIT.md](../BUILD-STATE-AUDIT.md)** (repo root). Read that for the full feature-by-feature breakdown across BUILT-VERIFIED / BUILT-UNVERIFIED / LEFT-FOR-1.0 / FUTURE. The list below is the running operational state — the audit is the authoritative classification.

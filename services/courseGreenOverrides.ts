@@ -74,7 +74,7 @@ export function getGreenOverride(courseId: string, hole: number): GreenOverride 
   return cached[courseId]?.[hole] ?? null;
 }
 
-export async function setGreenOverride(courseId: string, hole: number, loc: { lat: number; lng: number }): Promise<void> {
+export async function setGreenOverride(courseId: string, hole: number, loc: { lat: number; lng: number }, accuracyM?: number): Promise<void> {
   if (!hydrated) await rehydrate();
   if (!cached) cached = {};
   if (!cached[courseId]) cached[courseId] = {};
@@ -83,6 +83,8 @@ export async function setGreenOverride(courseId: string, hole: number, loc: { la
     lng: loc.lng,
     markedAt: Date.now(),
   };
+  // [path2:round] anchor capture chokepoint (see setTeeOverride for rationale).
+  console.log(`[path2:round] anchor_green hole=${hole} lat=${loc.lat.toFixed(6)} lng=${loc.lng.toFixed(6)} accuracy=${accuracyM ?? 'na'}`);
   await persist();
   notifyAll();
 }

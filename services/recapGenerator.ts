@@ -203,6 +203,7 @@ export async function generateRecap(
 
   await saveRecap(roundId, recap);
   console.log('[recap] saved for round', roundId, 'at', courseName);
+  console.log(`[path2:round] recap generated id=${roundId} kevin_summary_chars=${overallSummary?.length ?? 0}`);
 
   // CNS Phase 3 — enrich the round's durable reflection in memory with the
   // recap's LLM summary (replaces the deterministic baseline written at

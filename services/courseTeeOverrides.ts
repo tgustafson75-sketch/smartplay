@@ -69,7 +69,7 @@ export function getTeeOverride(courseId: string, hole: number): TeeOverride | nu
   return cached[courseId]?.[hole] ?? null;
 }
 
-export async function setTeeOverride(courseId: string, hole: number, loc: { lat: number; lng: number }): Promise<void> {
+export async function setTeeOverride(courseId: string, hole: number, loc: { lat: number; lng: number }, accuracyM?: number): Promise<void> {
   if (!hydrated) await rehydrate();
   if (!cached) cached = {};
   if (!cached[courseId]) cached[courseId] = {};
@@ -78,6 +78,11 @@ export async function setTeeOverride(courseId: string, hole: number, loc: { lat:
     lng: loc.lng,
     markedAt: Date.now(),
   };
+  // [path2:round] anchor capture chokepoint — every capture path (manual Mark,
+  // voice open_tool, declare-hole) funnels through here, so MIN VERIFY can grep
+  // this regardless of entry point. accuracy is optional (callers with a live
+  // fix pass it; voice/declare paths omit it).
+  console.log(`[path2:round] anchor_tee hole=${hole} lat=${loc.lat.toFixed(6)} lng=${loc.lng.toFixed(6)} accuracy=${accuracyM ?? 'na'}`);
   await persist();
   notifyAll();
 }

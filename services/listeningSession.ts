@@ -143,8 +143,24 @@ function armDormancyTimer(forState: SessionState): void {
  * 2026-05-26 — also arms/clears the dormancy watchdog so the session
  * can't get stuck in non-idle longer than DORMANCY_MAX_MS.
  */
+// path4 response-phase boundary timing. Set at capture end so the
+// response_start marker (emitted from the state chokepoint below) can
+// report ms-since-capture across every response branch.
+let lastCaptureEndMs: number | null = null;
+
 function setSessionStateMirror(next: SessionState): void {
+  const prev = state;
   state = next;
+  // [path4:voice] response phase boundaries. Centralised here (not at the
+  // ~5 scattered speak() sites) so every branch — diagnostic, small-talk,
+  // handler, abort — emits exactly one start/end pair and the markers can't
+  // drift out of sync with the flow. The precise audio-start timing still
+  // lives in the [ttfa] line; this is the coarse grep boundary for MIN VERIFY.
+  if (next === 'responding' && prev !== 'responding') {
+    console.log(`[path4:voice] response_start ms_since_capture=${lastCaptureEndMs != null ? Date.now() - lastCaptureEndMs : -1}`);
+  } else if (next === 'idle' && prev === 'responding') {
+    console.log('[path4:voice] response_end');
+  }
   // 2026-06-04 — Clear in-flight lock when the processing window
   // ends. 'responding' = Kevin starts speaking (user can interrupt
   // by tapping which routes through closeSession). 'idle' = the
@@ -325,11 +341,13 @@ async function openSession() {
     }
     if (state !== 'opening') return;  // user cancelled mid-opener
   }
+  console.log(`[path4:voice] opener_done allowed=${ttsAllowed && !!opener}`);
 
   // Phase 2 — open mic for utterance
   setSessionStateMirror('listening');
   console.log('[audit:voice] listening engaged');
   const t_capture_start = Date.now();
+  console.log('[path4:voice] capture_start');
   let utterance: string | null = null;
   try {
     // 2026-05-25 — Bumped 8s→12s. Open-mic users need room to express a
@@ -347,6 +365,8 @@ async function openSession() {
     console.log('[listeningSession] capture failed', e);
   }
   cancelMic = null;
+  const captureCancelled = state !== 'listening' || !utterance || !utterance.trim();
+  console.log(`[path4:voice] capture_done text_len=${utterance?.trim().length ?? 0} cancelled=${captureCancelled}`);
   if (state !== 'listening') return;
 
   if (!utterance || !utterance.trim()) {
@@ -354,6 +374,7 @@ async function openSession() {
     return;
   }
   const t_capture_end = Date.now();
+  lastCaptureEndMs = t_capture_end;
 
   // Phase 3 — classify + respond
   setSessionStateMirror('thinking');
@@ -404,6 +425,7 @@ async function openSession() {
       intent = await parseRes.json() as VoiceIntent;
     }
     const t_intent = Date.now();
+    console.log(`[path4:voice] intent=${intent.intent_type} topic=${(intent.parameters?.query_topic as string | undefined) ?? 'none'}`);
     if ((state as SessionState) !== 'thinking') return;
 
     setSessionStateMirror('responding');
@@ -423,7 +445,11 @@ async function openSession() {
       const clip = getClipForCategory(decision.filler);
       if (clip) {
         t_filler_start = Date.now();
-        fillerP = playLocalFile(clip.audio_path, clip.duration_ms).catch(() => {});
+        const tStart = t_filler_start;
+        console.log(`[path4:voice] filler_start category=${decision.filler} cached=true`);
+        fillerP = playLocalFile(clip.audio_path, clip.duration_ms)
+          .then(() => { console.log(`[path4:voice] filler_end ms=${Date.now() - tStart}`); })
+          .catch(() => {});
       } else {
         // Phase V.7 — local audio cache not ready (e.g. just after a
         // voiceHash bump). Fall through to live TTS so the user hears a
@@ -431,7 +457,11 @@ async function openSession() {
         const fallbackText = getFallbackTextForCategory(decision.filler);
         if (fallbackText) {
           t_filler_start = Date.now();
-          fillerP = speak(fallbackText, settings.voiceGender, settings.language, apiUrl).catch(() => {});
+          const tStart = t_filler_start;
+          console.log(`[path4:voice] filler_start category=${decision.filler} cached=false`);
+          fillerP = speak(fallbackText, settings.voiceGender, settings.language, apiUrl)
+            .then(() => { console.log(`[path4:voice] filler_end ms=${Date.now() - tStart}`); })
+            .catch(() => {});
         }
       }
     }
