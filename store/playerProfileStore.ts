@@ -199,6 +199,7 @@ interface PlayerProfileState {
   setHandicapIndex: (idx: number | null) => void;
   setHandicapGender: (g: 'm' | 'f' | 'x') => void;
   pushDifferential: (diff: number) => void;
+  resetDifferentials: (diffs: number[]) => void;
   // Phase AQ
   setKevinContext: (c: string | null) => void;
   setPersistentPatterns: (p: string | null) => void;
@@ -339,6 +340,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setHandicapGender: (g) => set({ handicap_gender: g }),
       pushDifferential: (diff) =>
         set(s => ({ recent_differentials: [...s.recent_differentials, diff].slice(-20) })),
+      resetDifferentials: (diffs) => set({ recent_differentials: diffs }),
       setKevinContext: (c) => set({ kevinContext: c }),
       setPersistentPatterns: (p) =>
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),

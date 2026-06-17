@@ -463,6 +463,9 @@ interface RoundState {
    * a practice / test session that shouldn't count.
    */
   discardRound: () => void;
+  /** Remove a completed round from history and rebuild handicap differentials
+   *  from the remaining rounds so the index stays correct. */
+  deleteRound: (id: string) => void;
   // Phase AQ — append a synthesized round insight (rolling 10).
   addRoundInsight: (round_id: string, course: string, insight: string) => void;
   /** 2026-05-24 — Append a single external-source utterance (e.g. one
@@ -1134,6 +1137,28 @@ export const useRoundStore = create<RoundState>()(
             console.log('[roundStore] discard ticker stop failed (non-fatal):', e);
           }
         })();
+      },
+
+      deleteRound: (id) => {
+        const next = get().roundHistory.filter(r => r.id !== id);
+        set({ roundHistory: next });
+        try {
+          const calcMod = require('../services/handicapCalculator');
+          const profileMod = require('./playerProfileStore');
+          const profile = profileMod.usePlayerProfileStore.getState();
+          const diffs = calcMod.rebuildDifferentialsFromHistory(
+            next.map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+          );
+          profile.resetDifferentials(diffs);
+          const result = calcMod.estimateNewIndex(diffs);
+          if (result?.newIndex != null && Number.isFinite(result.newIndex)) {
+            profile.setHandicapIndex(result.newIndex);
+          } else if (diffs.length === 0) {
+            profile.setHandicapIndex(null);
+          }
+        } catch (e) {
+          console.error('[roundStore] deleteRound handicap rebuild failed:', e);
+        }
       },
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),

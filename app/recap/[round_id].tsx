@@ -17,6 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { safeBack } from '../../services/safeBack';
 import * as Sharing from 'expo-sharing';
@@ -192,6 +193,7 @@ export default function RecapScreen() {
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
+  const deleteRound = useRoundStore(s => s.deleteRound);
   // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).
@@ -265,6 +267,23 @@ export default function RecapScreen() {
 
     return () => { cancelled = true; };
   }, [round_id, retryNonce]);
+
+  const handleDelete = useCallback(() => {
+    Alert.alert(
+      'Delete round?',
+      'This removes the round from your history and rebuilds your handicap. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: () => {
+            if (round_id) deleteRound(round_id);
+            router.replace('/(tabs)/caddie' as never);
+          },
+        },
+      ],
+    );
+  }, [round_id, deleteRound, router]);
 
   const handleShare = useCallback(async () => {
     if (!recap || sharing) return;
@@ -399,7 +418,9 @@ export default function RecapScreen() {
           <TouchableOpacity onPress={() => safeBack()} style={styles.backBtn}>
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
-          <View style={styles.backBtn} />
+          <TouchableOpacity onPress={handleDelete} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+          </TouchableOpacity>
         </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>{timedOut ? 'Recap is taking longer than usual' : 'Recap not ready yet'}</Text>
@@ -455,7 +476,9 @@ export default function RecapScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Round Recap</Text>
-        <View style={styles.backBtn} />
+        <TouchableOpacity onPress={handleDelete} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="trash-outline" size={20} color="#ef4444" />
+        </TouchableOpacity>
       </View>
 
       <FlatList

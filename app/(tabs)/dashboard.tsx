@@ -28,6 +28,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -89,6 +90,7 @@ export default function Dashboard() {
     })),
   );
   const roundHistory = useRoundStore((s) => s.roundHistory);
+  const deleteRound = useRoundStore((s) => s.deleteRound);
   const allShots = useRoundStore((s) => s.shots);
   // Conservative practice points (per-drill), surfaced here. The data is the
   // practice side of the future practice→on-course-improvement ledger.
@@ -814,6 +816,20 @@ export default function Dashboard() {
                   <TouchableOpacity
                     key={r.id}
                     onPress={() => router.push(`/recap/${r.id}` as never)}
+                    onLongPress={() => {
+                      Alert.alert(
+                        r.courseName ?? 'Round',
+                        `${dateStr} · ${r.totalScore || 0} strokes`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete round', style: 'destructive',
+                            onPress: () => deleteRound(r.id),
+                          },
+                        ],
+                      );
+                    }}
+                    delayLongPress={400}
                     style={[styles.roundRow, { borderColor: colors.border }]}
                     accessibilityRole="button"
                     accessibilityLabel={`Round at ${r.courseName ?? 'course'} on ${dateStr}, ${r.totalScore} strokes`}
