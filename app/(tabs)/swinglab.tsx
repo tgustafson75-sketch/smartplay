@@ -118,88 +118,65 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
   },
 ];
 
+// 2026-06-17 (Tim) — Play Smarter: Coach Mode + Focus Session + Shot Shapes.
+// On-Course Caddie removed (it just circled back to the Play tab).
 const PLAY_SECTION: LauncherCardSpec[] = [
   {
     key: 'coach-mode',
     icon: 'school-outline',
     title: 'Coach Mode',
-    sub: 'Watch and analyze other players + manage your team',
+    sub: 'Analyze other players and build your coaching roster',
     route: '/swinglab/coach-mode',
     accent: '#34d399',
     tag: 'COACH',
-  },
-  // 2026-06-16 (Tim — mockup) — On-Course Caddie shortcut into the live round flow.
-  {
-    key: 'oncourse',
-    icon: 'disc-outline',
-    title: 'On-Course Caddie',
-    sub: 'Real-time caddie help, club recs, wind, slopes & more',
-    route: '/(tabs)/play',
-    accent: '#22d3ee',
-    tag: 'PLAY',
-  },
-];
-
-// 2026-06-13 (Tim) — surface the Practice Engine on the practice tab where it
-// belongs (it was buried in the caddie Tools menu — discoverability gap, see memory
-// practice-engine-smartmotion). All run THROUGH Smart Motion. Copy from the spec
-// (no i18n keys yet — LauncherCard falls back to spec.title/sub).
-// ADVANCED TOOLS — compact tile grid (small icon + title + short sub, no chevron).
-const ADVANCED_GRID: LauncherCardSpec[] = [
-  ...(SETUP_CHECK_ENABLED ? [{
-    key: 'setup-check',
-    icon: 'body-outline' as const,
-    title: 'Setup Check',
-    sub: 'Verify fundamentals before you play',
-    route: '/swinglab/setup-check',
-    accent: '#88F700',
-    tag: 'PREP',
-  }] : []),
-  {
-    key: 'open-range',
-    icon: 'infinite-outline',
-    title: 'Open Range',
-    sub: 'Track all shots and get detailed stats',
-    route: '/practice/open-range',
-    accent: '#22d3ee',
-    tag: 'RANGE',
-  },
-  {
-    key: 'shot-shapes',
-    icon: 'git-network-outline',
-    title: 'Shot Shapes',
-    sub: 'Compare shot patterns & results',
-    route: '/practice/shot-shapes',
-    accent: '#fb7185',
-    tag: 'SHORT GAME',
   },
   {
     key: 'focus-session',
     icon: 'locate-outline',
     title: 'Focus Session',
-    sub: 'Stay locked in with interleaved practice',
+    sub: 'Interleaved practice that makes range work stick',
     route: '/practice/session',
     accent: '#fb7185',
     tag: 'FOCUS',
   },
   {
-    key: 'preround',
-    icon: 'timer-outline',
-    title: 'Pre-Round Warm Up',
-    sub: 'Adaptive warm-up that ends you on a good one',
-    route: '/practice/preround',
-    accent: '#88F700',
-    tag: 'PREP',
+    key: 'shot-shapes',
+    icon: 'git-network-outline',
+    title: 'Shot Shapes',
+    sub: 'Track your actual shot patterns and see trends',
+    route: '/practice/shot-shapes',
+    accent: '#fb7185',
+    tag: 'SHAPES',
   },
 ];
 
-// Full-width cards below the grid (richer one-liners).
-const FULL_SECTION: LauncherCardSpec[] = [
+// 2026-06-17 (Tim) — "Prepare Better" replaces "Advanced Tools". All full-width
+// LauncherCards — no grid, so nothing gets smashed on a narrow screen.
+// Open Range removed (not in Tim's spec). Setup Check is feature-flagged.
+const PREPARE_SECTION: LauncherCardSpec[] = [
+  ...(SETUP_CHECK_ENABLED ? [{
+    key: 'setup-check',
+    icon: 'body-outline' as const,
+    title: 'Setup Check',
+    sub: 'Address, alignment, and grip fundamentals before you play',
+    route: '/swinglab/setup-check',
+    accent: '#88F700',
+    tag: 'PREP',
+  }] : []),
+  {
+    key: 'preround',
+    icon: 'timer-outline',
+    title: 'Pre-Round Warm Up',
+    sub: 'End your warm-up session on a good swing every time',
+    route: '/practice/preround',
+    accent: '#88F700',
+    tag: 'WARM UP',
+  },
   {
     key: 'fit-profile',
     icon: 'construct-outline',
     title: 'Fit Profile',
-    sub: 'Build your bag with real data from your game',
+    sub: 'Real game data builds your ideal bag setup',
     route: '/practice/fit-profile',
     accent: '#22d3ee',
     tag: 'FITTING',
@@ -208,7 +185,7 @@ const FULL_SECTION: LauncherCardSpec[] = [
     key: 'smartplan',
     icon: 'calendar-outline',
     title: 'SmartPlan',
-    sub: 'Your personalized improvement plan',
+    sub: 'Your personalized AI improvement plan',
     route: '/practice/smartplan',
     accent: '#a3e635',
     tag: 'PLAN',
@@ -276,14 +253,9 @@ export default function SwingLab() {
         ))}
 
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
-          {t('swinglab.sec_advanced', { defaultValue: 'ADVANCED TOOLS' })}
+          {t('swinglab.sec_prepare', { defaultValue: 'PREPARE BETTER' })}
         </Text>
-        <View style={styles.grid}>
-          {ADVANCED_GRID.map((card) => (
-            <AdvancedTile key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
-          ))}
-        </View>
-        {FULL_SECTION.map((card) => (
+        {PREPARE_SECTION.map((card) => (
           <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
         ))}
        </View>
@@ -338,26 +310,6 @@ function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-    </Pressable>
-  );
-}
-
-// Compact tile for the Advanced Tools grid (small icon + title + short sub, no chevron).
-function AdvancedTile({ spec, colors, onPress }: LauncherCardProps) {
-  const accent = spec.accent;
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${spec.title}. ${spec.sub}`}
-      style={({ pressed }) => [
-        styles.advTile,
-        { backgroundColor: colors.surface_elevated, borderColor: pressed ? accent : colors.border, opacity: pressed ? 0.9 : 1 },
-      ]}
-    >
-      <Ionicons name={spec.icon} size={22} color={accent} style={{ marginBottom: 6 }} />
-      <Text style={[styles.advTitle, { color: colors.text_primary }]} numberOfLines={2}>{spec.title}</Text>
-      <Text style={[styles.advSub, { color: colors.text_muted }]} numberOfLines={2}>{spec.sub}</Text>
     </Pressable>
   );
 }
@@ -472,26 +424,6 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
-
-  // ADVANCED TOOLS grid — 2-up compact tiles (wraps cleanly; 4-up felt cramped on a
-  // phone, 2-up keeps the titles + subs legible while staying icon-led + dense).
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 4,
-  },
-  advTile: {
-    width: '48%',
-    marginBottom: 10,
-    minHeight: 92,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-  },
-  advTitle: { fontSize: 13, fontWeight: '800', marginBottom: 3 },
-  advSub: { fontSize: 11, lineHeight: 14 },
 
   // SMART MOTION hero.
   hero: {

@@ -445,21 +445,12 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
-    // 2026-06-11 — Boot-warm the brain (/api/kevin) so the FIRST ask isn't
-    // slapped by a cold Vercel Lambda. caddie.tsx keeps it warm while the
-    // Caddie tab is open (+ every 4 min); this fires at the earliest possible
-    // moment — before any tab mounts — and also covers entry via Play/SwingLab.
-    // Fire-and-forget; a failed ping is harmless.
-    void (async () => {
-      try {
-        const { getApiBaseUrl } = await import('../services/apiBase');
-        await fetch(getApiBaseUrl() + '/api/kevin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: '__ping__', language: 'en' }),
-        });
-      } catch { /* best-effort */ }
-    })();
+    // 2026-06-17 — Full 4-endpoint voice warmup fires at app start (was
+    // caddie-tab-focus only). Cold Lambdas take 3-8s to init SDKs; firing
+    // here overlaps the splash + navigation so the chain is hot before the
+    // user ever reaches the Caddie screen. caddie.tsx focus-warmup still runs
+    // (30s dedupe = no-op if within 30s) as a belt-and-suspenders.
+    void import('../services/voiceWarmup').then(m => m.prewarmVoice());
     // 2026-05-24 — Native BT media-button bridge. Funnels through
     // notifyEarbudTap() so it shares the existing earbudControl
     // pattern (no orchestrator change). Native BluetoothMediaButton

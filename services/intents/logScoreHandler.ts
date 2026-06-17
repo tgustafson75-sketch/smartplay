@@ -161,14 +161,30 @@ export const logScoreHandler: IntentHandler = {
     track('log_score_voice', { hole, strokes, par });
     const label = scoreLabel(strokes, par);
     const holePart = hole === round.currentHole ? `Got it` : `Got it, hole ${hole}`;
-    const reply = par != null
+    const scoreText = par != null
       ? `${holePart} — ${strokes} (${label}).`
       : `${holePart} — ${strokes}.`;
+
+    // If the classifier already extracted num_putts, log them now and skip the follow-up.
+    const inlinePutts = typeof params.num_putts === 'number' && params.num_putts >= 0 && params.num_putts <= 6
+      ? params.num_putts
+      : null;
+    if (inlinePutts !== null) {
+      round.logPutts(hole, inlinePutts);
+      track('log_putts_voice', { hole, putts: inlinePutts, source: 'inline' });
+      return {
+        success: true,
+        voice_response: scoreText,
+        side_effects: [`logScore:hole_${hole}:strokes_${strokes}`, `logPutts:hole_${hole}:putts_${inlinePutts}`],
+        follow_up_needed: false,
+      };
+    }
+
     return {
       success: true,
-      voice_response: reply,
+      voice_response: `${scoreText} How many putts?`,
       side_effects: [`logScore:hole_${hole}:strokes_${strokes}`],
-      follow_up_needed: false,
+      follow_up_needed: true,
     };
   },
 };

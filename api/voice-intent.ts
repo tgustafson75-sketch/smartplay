@@ -315,7 +315,7 @@ Available intents:
    - log_shot (#16), which captures a single SWING mid-hole ("I hit driver 240 left").
    - Strategy questions ("what should I hit", "how far", "where do I aim"), which are open_tool / query_status / lie_analysis — NOT score reports.
    - acknowledge ("got it", "okay"), which is a bare acknowledgment with no score/hole.
-   parameters: { strokes: number | "par" | "bogey" | "double_bogey" | "triple_bogey" | "birdie" | "eagle", hole_number?: number, raw_utterance: string }
+   parameters: { strokes: number | "par" | "bogey" | "double_bogey" | "triple_bogey" | "birdie" | "eagle", hole_number?: number, num_putts?: number, raw_utterance: string }
    Examples:
    - "I got a 4 on hole 1" -> { strokes: 4, hole_number: 1, raw_utterance: "I got a 4 on hole 1" }
    - "I got a 5" -> { strokes: 5, raw_utterance: "I got a 5" } (current hole)
@@ -332,6 +332,8 @@ Available intents:
    - "eagle" / "I eagled" -> { strokes: "eagle", raw_utterance: "eagle" }
    - "double bogey" / "I doubled" / "double" -> { strokes: "double_bogey", raw_utterance: "double bogey" }
    - "triple" / "I tripled" / "triple bogey" -> { strokes: "triple_bogey", raw_utterance: "triple" }
+   - "I got a 5 with 2 putts" -> { strokes: 5, num_putts: 2, raw_utterance: "I got a 5 with 2 putts" }
+   - "bogey, one putt" -> { strokes: "bogey", num_putts: 1, raw_utterance: "bogey, one putt" }
    IMPORTANT — number-vs-hole disambiguation:
    - When the user names ONLY a number ("got a 4", "took a 5"), that number IS the strokes. hole_number is omitted (handler uses current hole).
    - When the user names a number with explicit hole reference ("4 on hole 1", "shot a 7 on hole 4"), the FIRST number is strokes and the post-"hole" number is hole_number.
@@ -421,6 +423,31 @@ Available intents:
     - "start a round" (no course named) -> { } (handler asks which course)
     - "fast round at Mariners with Jenny" -> { course_hint: "Mariners", guest_names: ["Jenny"] }
 
+25. end_round — User wants to END (finish / wrap up) the active round. Distinct from "advance_hole" (moving to next hole). Distinct from pause / exit / go home.
+   parameters: {}
+   Examples:
+   - "end the round" / "finish the round" / "wrap up the round" -> { intent_type: "end_round" }
+   - "that's the round" / "round's over" / "the round is done" -> { intent_type: "end_round" }
+   - "let's end it" / "end it here" / "we're done" / "all done" -> { intent_type: "end_round" }
+   - "that's a wrap" / "call it" / "let's call it" -> { intent_type: "end_round" }
+   - "save the round" / "save my round" -> { intent_type: "end_round" }
+   Only match when the user is ENDING the round (not just resting, going home, or pausing). Must be in active round context.
+
+26. log_putts — User is answering the caddie's follow-up question "how many putts?" OR is proactively logging their putt count for the current hole.
+   parameters: { num_putts: integer 0..6, hole_number?: integer }
+   Examples:
+   - "2" / "two" -> { num_putts: 2 }
+   - "2 putts" / "two putts" / "I had 2 putts" / "took 2" -> { num_putts: 2 }
+   - "one putt" / "1 putt" / "I one-putted" -> { num_putts: 1 }
+   - "three putts" / "I three-putted" / "3 putts" -> { num_putts: 3 }
+   - "no putts" / "chip-in" / "0 putts" -> { num_putts: 0 }
+   Only match when the context is clearly putt-counting, not a score report or yardage statement.
+
+PENALTY STROKE NOTE — VERY IMPORTANT:
+- "I took a penalty" / "add a penalty" / "drop with penalty" / "assess me a penalty" (user actively logging an event) → log_shot with outcome containing "penalty"
+- "if I had a penalty stroke" / "what's a penalty stroke" / "explaining a penalty" / "penalty stroke rules" / "talking about penalty strokes" (rules discussion or analysis) → conversational or rules_query
+- NEVER call log_shot just because the user MENTIONS "penalty stroke" in conversation. Only when they are ACTIVELY REPORTING they incurred one right now.
+
 7. unknown — Cannot determine intent AND the words look like an ambiguous command.
    parameters: {}
    Set follow_up_question to a brief clarifying question ${caddieName} could ask.
@@ -458,7 +485,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "set_hole_note" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "social_greeting" | "conversational" | "unknown",
+   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "log_putts" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "set_hole_note" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "end_round" | "social_greeting" | "conversational" | "unknown",
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,
