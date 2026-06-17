@@ -10,7 +10,19 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
-### LATEST (2026-06-17, Session 3) — read this before the Day-5 TL;DR below
+### OTA CHANNEL RULE (discovered 2026-06-17) — read every session
+**Dev-client build (`development` profile) listens to `--branch development`.**
+**Production-APK build (`production-apk` profile) listens to `--branch production`.**
+Every OTA must be pushed to BOTH unless you know exactly which build Tim is running:
+```
+eas update --branch development --message "..."
+eas update --branch production --message "..."
+```
+All prior session OTAs went to `production` only. The `development` channel was empty until 2026-06-17 Session 4. The HEAD push (`a7ee1fe`) covers everything — force-close/reopen on the dev-client picks it all up.
+
+---
+
+### LATEST (2026-06-17, Session 4) — read this before the Day-5 TL;DR below
 
 **Active focus: verification on real hardware.** Code is landing well; dominant 1.0 blocker is Z Fold device verification, not more code.
 
