@@ -2039,4 +2039,30 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 2. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button worktree.
 3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** — still `_not verified_`.
 4. **Open Range home** — `/practice/open-range` file exists + Stack.Screen registered; just needs a Prepare Better card in swinglab.tsx.
+
+---
+
+## Day N — 2026-06-17 Session 5
+
+### Shipped today
+
+- **SmartMotion hero cleanup** — title one word "SmartMotion", tag chip moved to own line below title (gives full width to title, fixes "Smar..." truncation on Fold Z closed), hero media box 96→76px / icon 64→50px, play button overlay removed entirely.
+- **Delete round** — `deleteRound(id)` on `roundStore`: removes round, calls `rebuildDifferentialsFromHistory()` to rebuild differentials from remaining history, resets `recent_differentials` via new `resetDifferentials()` action on playerProfileStore, recomputes and sets `handicapIndex`. Confirmation alert on both dashboard trash icon and recap screen trash icon. No long-press (explicit UI delete buttons only).
+- **SmartMotion camera screen** — removed BALL AREA, TARGET, and LAUNCH overlay pills from `CageTargetingCard.tsx` (CUP/PIN kept — functionally needed for putt mode). Swing count selector moved from absolute top (overlapping header) to `bottom: insets.bottom + 64`; fades out via `Animated.timing(opacity → 0, 350ms, 600ms delay)` after tap; resets to opacity=1 when phase returns to 'setup'.
+- **iOS TestFlight build (build #8)** — first successful iOS production build. Root cause of failures: two custom plugins injecting pods from inaccessible repos at EAS build time:
+  - `withMediaPipePose.js` — iOS section disabled; EAS doesn't have access to the MediaPipeTasksVision pod in its env; iOS falls back to cloud pose API.
+  - `withMetaWearablesDAT.js` — iOS pod section (`pod 'Wearables' :git => facebook/meta-wearables-dat-ios`) now gated behind `MWDAT_IOS_ENABLED=1` env var. EAS sets `GITHUB_TOKEN` for GitHub-connected projects, which triggered the plugin to inject a pod from a private Meta repo CocoaPods couldn't clone.
+  - `eas.json` `credentialsSource` → `remote` (local .p12 has unknown password; credentials now stored + validated on EAS servers).
+  - Build submitted to TestFlight. Apple processing email received. Build visible in TestFlight.
+- **OTA** — pushed to development, preview, production channels (`50f73aa`).
+- **Commit** — `50f73aa` "Fix iOS EAS build: disable private-repo pods, switch to remote credentials"
+
+### Verified on device (Z Fold)
+- iOS build available in TestFlight — native install confirmed.
+
+### Open / carried to next session
+1. Path 2 + Path 4 MIN VERIFY (real round)
+2. EAS dev-client build for document-picker + BT media-button
+3. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY
+4. Open Range card in swinglab.tsx Prepare Better section
 5. **Acoustic target dataset** — needs 20+ labeled samples before spectral analysis makes sense.

@@ -22,14 +22,21 @@ All prior session OTAs went to `production` only. The `development` channel was 
 
 ---
 
-### LATEST (2026-06-17, Session 4) — read this before the Day-5 TL;DR below
+### LATEST (2026-06-17, Session 5) — read this before the Day-5 TL;DR below
 
-**Active focus: verification on real hardware.** Code is landing well; dominant 1.0 blocker is Z Fold device verification, not more code.
+**Active focus: verification on real hardware + iOS testing now unblocked.**
 
 **Working directory: `/Users/timothyg/smartplay`**
 
-**Just shipped this session (`e757a3f`):**
-- **Phase BX — Cage target calibration.** Data-collection mode that pairs WAV recordings with manually confirmed hit positions. Flow: LISTENING (impact detector fires) → CONFIRMING (Tim taps bullseye on canvas/net diagram) → save + auto-advance. Scatter plot after 5+ canvas shots. `CageTargetUI` (green netting, white canvas, 4-ring bullseye), `app/cage/target-calibration.tsx` screen, store extended with `CageTargetSample[]` (rolling 200). Entry button on `/cage` setup page.
+**Just shipped this session (`50f73aa`):**
+- **SmartMotion hero** — title "SmartMotion" (one word), tag on own line, media box 76px, no play overlay.
+- **Delete round** — trash icon in dashboard rows + recap screen; rebuilds handicap math after delete.
+- **SmartMotion camera** — BALL AREA/TARGET/LAUNCH pills removed; swing count selector moved to bottom, fades after tap.
+- **iOS TestFlight build #8** — first successful production iOS build. Root causes fixed: `withMediaPipePose` iOS pod disabled; `withMetaWearablesDAT` iOS pod gated behind `MWDAT_IOS_ENABLED=1` (EAS GITHUB_TOKEN was triggering injection of a private Meta pod); `credentialsSource` switched to `remote`.
+- **OTA** — pushed to development, preview, production channels.
+
+**Previously shipped (2026-06-17, Session 4 — `e757a3f`):**
+- **Phase BX — Cage target calibration.** Data-collection mode that pairs WAV recordings with manually confirmed hit positions.
 
 **Previously shipped (2026-06-17, sessions 1-2):**
 - `aca7638` / `48ac5ad` — SwingLab restructure (Prepare Better, Play Smarter), Smart Motion hero title fix, voice pipeline: end_round intent + handler, score→putts follow-up flow, penalty stroke guard, boot-time warmup.
@@ -200,4 +207,4 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 
 ---
 
-**Last refreshed:** 2026-06-17 Session 2 — SwingLab restructure, end-round voice, score+putts, penalty guard, boot warmup, scene-read timeout, Smart Play voice trigger all shipped OTA. Boot warmup now fires at launch (was caddie-tab only). Dominant 1.0 gap: Z Fold device verification + EAS dev-client build. Update this doc at the end of every session.
+**Last refreshed:** 2026-06-17 Session 5 — SmartMotion hero + camera cleanup, delete round, iOS TestFlight build #8 (first successful). iOS now testable away from home. Dominant 1.0 gap: Z Fold device verification + EAS dev-client build. Update this doc at the end of every session.
