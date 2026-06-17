@@ -152,7 +152,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
 
 // 2026-06-17 (Tim) — "Prepare Better" replaces "Advanced Tools". All full-width
 // LauncherCards — no grid, so nothing gets smashed on a narrow screen.
-// Open Range removed (not in Tim's spec). Setup Check is feature-flagged.
+// Setup Check is feature-flagged. Open Range has no 1/3/5 cadence — open session.
 const PREPARE_SECTION: LauncherCardSpec[] = [
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
@@ -163,6 +163,15 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     accent: '#88F700',
     tag: 'PREP',
   }] : []),
+  {
+    key: 'open-range',
+    icon: 'golf-outline',
+    title: 'Open Range',
+    sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
+    route: '/practice/open-range',
+    accent: '#88F700',
+    tag: 'RANGE',
+  },
   {
     key: 'preround',
     icon: 'timer-outline',
