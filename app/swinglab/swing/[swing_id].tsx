@@ -214,6 +214,28 @@ export default function SwingDetail() {
       }
     } catch { /* best-effort */ }
   }, []);
+  // 2026-06-16 (Tim) — fade the on-frame CONTROLS shortly after a pause so a
+  // paused frame screenshots clean (no play badge / seek bar / speed chip burned
+  // into the grab). They snap back the instant playback resumes. The skeleton /
+  // trace overlays + watermark are intentionally left visible — those are content
+  // you WANT in the shot. Tapping the bare frame still plays (togglePlayPause).
+  const controlsOpacity = useRef(new Animated.Value(1)).current;
+  const [controlsHidden, setControlsHidden] = useState(false);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (fadeTimerRef.current) { clearTimeout(fadeTimerRef.current); fadeTimerRef.current = null; }
+    if (isPlaying) {
+      setControlsHidden(false);
+      Animated.timing(controlsOpacity, { toValue: 1, duration: 140, useNativeDriver: true }).start();
+    } else {
+      // Paused — hold briefly so the pause reads, then fade to a clean frame.
+      fadeTimerRef.current = setTimeout(() => {
+        setControlsHidden(true);
+        Animated.timing(controlsOpacity, { toValue: 0, duration: 420, useNativeDriver: true }).start();
+      }, 1100);
+    }
+    return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
+  }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
 
@@ -1022,6 +1044,14 @@ export default function SwingDetail() {
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
+                onLoad={async () => {
+                  // 2026-06-16 — expo-av can ignore the shouldPlay PROP on first
+                  // load (the documented quirk); kick the watch-then-analyze
+                  // autoplay explicitly so the swing actually starts.
+                  if (shouldAutoplayThenAnalyze && !watchFiredRef.current) {
+                    try { await videoRef.current?.playAsync(); } catch { /* best-effort */ }
+                  }
+                }}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
               />
               </ZoomableView>
@@ -1050,6 +1080,15 @@ export default function SwingDetail() {
                 target={session?.target_norm ?? null}
               />
               <VideoWatermark position="bottomRight" size={36} />
+              {/* 2026-06-16 (Tim) — fade-on-pause wrapper for the on-frame controls
+                  (slow-mo badge, center play badge, seek bar) so a paused frame
+                  screenshots clean. box-none lets frame taps reach the player while
+                  visible; once hidden, pointerEvents:none so a tap plays the bare
+                  frame instead of hitting an invisible control. */}
+              <Animated.View
+                pointerEvents={controlsHidden ? 'none' : 'box-none'}
+                style={[StyleSheet.absoluteFill, { opacity: controlsOpacity }]}
+              >
               {/* 2026-06-11 — slow-mo toggle (1× → ½× → ¼×). Top-left corner so it
                   clears the bottom-right watermark + the bottom native scrubber and
                   doesn't intercept the pinch-zoom on the rest of the frame. Turns
@@ -1089,6 +1128,7 @@ export default function SwingDetail() {
                   <View style={{ height: 4, width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%`, backgroundColor: '#88F700' }} />
                 </View>
               </Pressable>
+              </Animated.View>
             </View>
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>

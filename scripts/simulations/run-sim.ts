@@ -2007,6 +2007,22 @@ check('GolfFix: in-flight session analysis lands on the LIVE activeSession (C3 f
   })(),
   'no_dominant_fault fix/drill populate on the live (active-only) GolfFix session, not just saved history');
 
+check('Swing review: controls fade on pause (clean screenshots) + autoplay onLoad kick',
+  // 2026-06-16 (Tim) — paused frame must screenshot clean: the on-frame controls
+  // (play badge / seek bar / speed chip) fade ~1.1s after pause and become
+  // non-interactive so a tap on the bare frame plays. Skeleton/trace + watermark
+  // stay. Plus an onLoad playAsync kick for the expo-av shouldPlay-ignored quirk.
+  (() => {
+    const f = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /const controlsOpacity = useRef\(new Animated\.Value\(1\)\)\.current/.test(f) &&
+      /setControlsHidden\(true\)[\s\S]*?Animated\.timing\(controlsOpacity, \{ toValue: 0/.test(f) &&
+      /pointerEvents=\{controlsHidden \? 'none' : 'box-none'\}/.test(f) &&
+      /if \(shouldAutoplayThenAnalyze && !watchFiredRef\.current\) \{[\s\S]*?playAsync\(\)/.test(f)
+    );
+  })(),
+  'paused controls fade to a clean frame (tap still plays); watch-autoplay gets an onLoad kick');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
