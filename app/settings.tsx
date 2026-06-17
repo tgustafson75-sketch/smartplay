@@ -246,6 +246,53 @@ export default function Settings() {
       Alert.alert('Recalculation failed', e instanceof Error ? e.message : String(e));
     }
   }, []);
+  // 2026-06-16 — Meta glasses voice-log import (v1: JSON file, active
+  // round only). Picks the Meta View export, hands the file URI to
+  // ingestMetaGlassesJson, and surfaces the IngestResult via toast.
+  // ingested:0 with no other counts means there was no active round —
+  // we message that honestly rather than a silent no-op. The service
+  // throws on unreadable / unparseable / non-array files; caught here.
+  const onImportMetaGlassesLog = useCallback(() => {
+    void (async () => {
+      try {
+        const DocumentPicker = await import('expo-document-picker');
+        const picked = await DocumentPicker.getDocumentAsync({
+          type: 'application/json',
+          copyToCacheDirectory: true,
+        });
+        if (picked.canceled) return;
+        const uri = picked.assets[0]?.uri;
+        if (!uri) {
+          useToastStore.getState().show('Could not read that file.');
+          return;
+        }
+        const { ingestMetaGlassesJson } = await import('../services/metaGlassesIngest');
+        const result = await ingestMetaGlassesJson(uri);
+
+        // ingested:0 with no parse counts ⇒ no active round (the service
+        // returns early before populating totalParsed).
+        if (result.ingested === 0 && result.totalParsed == null) {
+          useToastStore.getState().show('Start a round first — glasses log imports into the active round only.');
+          return;
+        }
+
+        if (result.ingested === 0) {
+          useToastStore.getState().show('No exchanges fell inside this round’s time window.');
+          return;
+        }
+
+        const extras: string[] = [];
+        if (result.outsideWindow) extras.push(`${result.outsideWindow} outside the round`);
+        if (result.rejected) extras.push(`${result.rejected} unreadable`);
+        const suffix = extras.length ? ` (${extras.join(', ')})` : '';
+        useToastStore.getState().show(`Imported ${result.ingested} glasses exchange${result.ingested === 1 ? '' : 's'}${suffix}.`);
+      } catch (e) {
+        console.log('[settings] Meta glasses import failed:', e);
+        useToastStore.getState().show('That file couldn’t be read as a Meta View JSON export.');
+      }
+    })();
+  }, []);
+
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
@@ -1272,6 +1319,26 @@ export default function Settings() {
               </Text>
             </View>
           </View>
+          {/* 2026-06-16 — v1 entry point for the Meta glasses voice-log
+              ingest (services/metaGlassesIngest.ts). Picks an exported
+              Meta View JSON, attributes each in-window exchange to a hole
+              via GPS, and feeds it to the caddie brain as externalContext.
+              ACTIVE ROUND only — the service returns ingested:0 when no
+              round is live, which we surface as "Start a round first". */}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={onImportMetaGlassesLog}
+            accessibilityRole="button"
+            accessibilityLabel="Import Meta glasses voice log"
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Import Meta glasses voice log</Text>
+              <Text style={subStyle}>
+                Pick a Meta View JSON export of your &quot;Hey Meta&quot; voice exchanges. We match each one to the hole you were on so {caddieName} can recall what the glasses said during this round. Start a round first — only exchanges inside the active round&apos;s window are imported.
+              </Text>
+            </View>
+            <Ionicons name="cloud-upload-outline" size={20} color={colors.accent} />
+          </TouchableOpacity>
           {/* 2026-06-10 — Health Data merged into "Devices & Health" (both are
               external integrations). Master toggle for the Health Connect
               integration + an explicit re-ask button if permissions were
