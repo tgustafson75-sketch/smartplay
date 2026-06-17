@@ -1152,15 +1152,30 @@ export const useCageStore = create<CageState>()(
           ),
         })),
 
+      // 2026-06-16 — dual-update, matching setShotAnalysis / setShot*Transcript:
+      // GolfFix session analysis routinely lands while the session is still
+      // IN-FLIGHT (activeSession), before endSession pushes it to sessionHistory.
+      // Previously this only patched sessionHistory, so on a live session the
+      // analysis found no match — activeSession.primary_issue (+ drill) stayed
+      // null and the live GolfFix card rendered empty until the session was
+      // saved. The C3 harness ("GolfFix render — no_dominant_fault") seeds an
+      // active-only session and reads activeSession, which is why it failed.
+      // Patch BOTH, exactly like the sibling shot setters above.
       setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
             session.id !== sessionId ? session : {
               ...session, primary_issue, drill_recommendation,
               analysis_status: 'ok' as AnalysisStatus, analysis_error: null,
-            }
-          ),
-        })),
+            };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId
+                ? apply(s.activeSession)
+                : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       setSessionCoachNote: (sessionId, note) =>
         set(s => ({
@@ -1248,16 +1263,25 @@ export const useCageStore = create<CageState>()(
           ),
         })),
 
+      // 2026-06-16 — dual-update like setSessionAnalysis: status (analyzing /
+      // error / pending) is set while the session is still IN-FLIGHT, so the
+      // live GolfFix card must see it too — not just the saved history entry.
       setSessionAnalysisStatus: (sessionId, status, error) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
             session.id !== sessionId ? session : {
               ...session,
               analysis_status: status,
               analysis_error: error ?? session.analysis_error ?? null,
-            }
-          ),
-        })),
+            };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId
+                ? apply(s.activeSession)
+                : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       // 2026-06-02 — Fix GN: orphan-cleanup pass. Audit found that
       // sessions where analysis was in-flight at force-close stayed

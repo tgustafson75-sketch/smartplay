@@ -1979,6 +1979,34 @@ check('Voice VAD: adaptive noise floor lifts the silence bar in noise, unchanged
   })(),
   'noise lifts the VAD silence bar so auto-stop fires; a quiet room is unchanged');
 
+check('GolfFix: in-flight session analysis lands on the LIVE activeSession (C3 fix)',
+  // 2026-06-16 (Tim — harness C3 "GolfFix render — no_dominant_fault" failing) —
+  // setSessionAnalysis/Status only patched sessionHistory, but GolfFix analysis
+  // lands while the session is still IN-FLIGHT (activeSession), before it's saved.
+  // seedCageSession produces an active-only session, so the old history-only map
+  // missed it and activeSession.primary_issue (fix/drill) stayed null. Now both
+  // setters dual-update activeSession + history, like the sibling shot setters.
+  (() => {
+    const cs = read('store/cageStore.ts');
+    const dualWired =
+      /setSessionAnalysis: \(sessionId, primary_issue, drill_recommendation\) =>[\s\S]*?apply\(s\.activeSession\)[\s\S]*?sessionHistory: s\.sessionHistory\.map\(apply\)/.test(cs) &&
+      /setSessionAnalysisStatus: \(sessionId, status, error\) =>[\s\S]*?apply\(s\.activeSession\)[\s\S]*?sessionHistory: s\.sessionHistory\.map\(apply\)/.test(cs);
+    // Behavioral: replicate the dual-update reducer against an ACTIVE-ONLY session.
+    interface Sess { id: string; primary_issue: { drill?: string } | null }
+    const apply = (sessionId: string, issue: { drill?: string }) => (sess: Sess): Sess =>
+      sess.id !== sessionId ? sess : { ...sess, primary_issue: issue };
+    const seeded: { activeSession: Sess | null; sessionHistory: Sess[] } =
+      { activeSession: { id: 'sess1', primary_issue: null }, sessionHistory: [] };
+    const fn = apply('sess1', { drill: 'Continue your current practice routine.' });
+    const after = {
+      activeSession: seeded.activeSession && seeded.activeSession.id === 'sess1'
+        ? fn(seeded.activeSession) : seeded.activeSession,
+      sessionHistory: seeded.sessionHistory.map(fn),
+    };
+    return dualWired && !!after.activeSession?.primary_issue?.drill;
+  })(),
+  'no_dominant_fault fix/drill populate on the live (active-only) GolfFix session, not just saved history');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
