@@ -19,6 +19,7 @@
 
 import { getApiBaseUrl } from './apiBase';
 import { useSettingsStore } from '../store/settingsStore';
+import { useRoundStore } from '../store/roundStore';
 import { buildSceneSensorContext } from './sceneReadContext';
 
 const SCENE_INSTRUCTION =
@@ -47,6 +48,7 @@ export async function readScene(input: {
 }): Promise<SceneReadResult | null> {
   if (!input.imageBase64) return null;
   const settings = useSettingsStore.getState();
+  const round = useRoundStore.getState();
   const ctx = buildSceneSensorContext({ targetYards: input.targetYards ?? null });
 
   try {
@@ -62,8 +64,19 @@ export async function readScene(input: {
         image_media_type: input.mediaType ?? 'image/jpeg',
         image_caption: ctx.caption,
         unified_context_block: ctx.block,
+        // Scene reads during a round use on-course mode (correct caddie
+        // posture) and inject only the current hole's data — NOT the full
+        // known-courses list that /api/kevin builds off-course. This halves
+        // the effective prompt size and respects the live-round context.
+        isRoundActive: round.isRoundActive,
+        currentHole: round.isRoundActive ? round.currentHole : null,
+        activeCourseId: round.isRoundActive ? round.activeCourseId : null,
+        activeCourse: round.isRoundActive ? round.activeCourse : null,
       }),
-      signal: AbortSignal.timeout(30_000),
+      // 60 s — Sonnet with a large system prompt + image can take 30-40 s on a
+      // cold Anthropic cache (5-min TTL). The prior 30 s was causing silent
+      // timeouts; the extra headroom prevents the call from aborting mid-stream.
+      signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) {
       console.warn('[sceneRead] api non-ok', res.status);
