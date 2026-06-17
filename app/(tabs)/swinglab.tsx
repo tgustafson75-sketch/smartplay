@@ -351,13 +351,13 @@ function SmartMotionHero({ spec, colors, onPress }: LauncherCardProps) {
           </View>
         </View>
         <View style={styles.heroText}>
-          <View style={styles.titleRow}>
-            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{spec.title}</Text>
+          <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{spec.title}</Text>
+          <View style={styles.heroSubRow}>
             <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
               <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
             </View>
+            <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={1}>{spec.sub}</Text>
           </View>
-          <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={2}>{spec.sub}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
       </View>
@@ -454,8 +454,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   heroText: { flex: 1, minWidth: 0 },
-  heroTitle: { fontSize: 20, fontWeight: '800', flex: 1, flexShrink: 1 },
-  heroSub: { fontSize: 13, lineHeight: 18 },
+  heroTitle: { fontSize: 20, fontWeight: '800', marginBottom: 4 },
+  heroSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heroSub: { fontSize: 12, lineHeight: 16, flex: 1, flexShrink: 1 },
   heroFeatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 8 },
   heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   heroFeatIcon: { width: 18, height: 18 },
