@@ -346,9 +346,6 @@ function SmartMotionHero({ spec, colors, onPress }: LauncherCardProps) {
       <View style={styles.heroTopRow}>
         <View style={[styles.heroMedia, { borderColor: hexFade(accent, 0.5), backgroundColor: hexFade(accent, 0.1) }]}>
           <Image source={ICON_FEATURE_SM} style={styles.heroMediaIcon} resizeMode="contain" />
-          <View style={[styles.heroPlay, { backgroundColor: accent }]}>
-            <Ionicons name="play" size={16} color="#06140b" />
-          </View>
         </View>
         <View style={styles.heroText}>
           <Text style={[styles.heroTitle, { color: colors.text_primary }]}>{spec.title}</Text>
@@ -447,10 +444,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   heroMediaIcon: { width: 50, height: 50 },
-  heroPlay: {
-    position: 'absolute', width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center',
-  },
+
   heroText: { flex: 1, minWidth: 0 },
   heroTitle: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
   heroSub: { fontSize: 12, lineHeight: 16 },
