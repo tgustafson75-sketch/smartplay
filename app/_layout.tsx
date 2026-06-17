@@ -1089,6 +1089,45 @@ function AppNavigator() {
           name="recap/hole/[round_id]/[hole]"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
+        {/* Nav audit — practice + swinglab routes missing headerShown:false (added Phase BX).
+            Without these, Expo Router renders its default header bar on top of each
+            screen's custom nav chrome. Files all exist; entries suppress the double header. */}
+        <Stack.Screen
+          name="swinglab/smartmotion"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="swinglab/setup-check"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="swinglab/tempo-trainer"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="practice/shot-shapes"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="practice/preround"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="practice/fit-profile"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="drills"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="drills/[issue]"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
+          name="cage/target-calibration"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
       </Stack>
       </View>
       {/* 2026-06-13 (Tim #8) — Round Rest: near-black OLED overlay after 1 min
