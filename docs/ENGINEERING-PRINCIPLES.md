@@ -85,7 +85,25 @@ For any significant change touching multiple independent surfaces, run sweeps in
 
 ---
 
-## Rule 12 — Double-check before committing
+## Rule 12 — OTA channel discipline: always push to both branches
+
+`eas update` without a branch flag defaults to whatever the CLI resolves — **never assume it reaches the device Tim is testing on.**
+
+- **Dev-client build** (`eas build --profile development`) listens to `--branch development`
+- **Production-APK build** (`eas build --profile production-apk`) listens to `--branch production`
+
+**Every OTA ships to both unless Tim has explicitly confirmed which build he's running:**
+
+```
+eas update --branch development --message "..."
+eas update --branch production --message "..."
+```
+
+Root: the `development` channel was completely empty for the entire 2026-06-17 session because every push went to `production` only. Tim's dev-client showed no changes all session.
+
+---
+
+## Rule 13 — Double-check before committing
 
 Every code-shipping prompt includes a verification step BEFORE `git add`: re-grep the file for what was supposed to change, confirm what was supposed to stay is still there, run `tsc --noEmit`, check for orphan imports of removed symbols. **Verification is part of the prompt, not a step that gets skipped.**
 
