@@ -1999,3 +1999,25 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 - **Open Range route** (`/practice/open-range` exists but is NOT in any SwingLab section after the restructure). Tim didn't include it in the spec — either intentionally retired from SwingLab or needs a section home. Verify intent.
 - **Update `critical-paths.md`** "Last verification dates" after device MIN VERIFY.
 - **Caddie mic in SmartFinder** — punted; eyeball IS the Smart Play tap trigger. Two paths work: voice ("what's the smart play" → autoread=1) + eye button tap.
+
+# Day N+3 — 2026-06-17 (Session 3) — Cage target calibration (acoustic dataset builder)
+
+## Shipped today
+
+- **Phase BX — Cage target calibration** (`e757a3f`). New screen + component for building a labeled acoustic corpus:
+  - `components/cage/CageTargetUI.tsx`: visual 10×10 cage back wall (dark green netting), centered 3×3 white canvas square with 4-ring classic bullseye. Single `Pressable` — tap anywhere. Tap inside canvas → computes (hitX, hitY) in −1..+1 canvas-centered coords, classifies center (dist ≤ 0.35) vs edge. Tap outside canvas → `hitType: 'net'`. Shows a colored dot where Tim tapped (green=center, amber=edge, red=net).
+  - `app/cage/target-calibration.tsx`: LISTENING (impact detector single-shot) → CONFIRMING (tap target) → Re-tap / Discard / Save shot → auto-advance. Each confirmed shot saves WAV uri + confirmed position. Scatter plot appears once ≥5 canvas shots accumulated, showing all dots plotted on a mini canvas-over-netting diagram.
+  - `store/acousticCalibrationStore.ts`: new `CageTargetSample` type + `TargetHitType` union, `targetSamples[]` rolling buffer (max 200), `addTargetSample()`, `clearTargetSamples()`. Store bumped v1→v2 with migrate (adds empty targetSamples[] for existing installs).
+  - `app/cage/index.tsx`: quiet secondary "Target Calibration" button below Start Session — always reachable from cage setup.
+
+## Verified (programmatic)
+- `npx tsc --noEmit`: 0 errors. `npx expo lint`: 0 new errors from new files.
+
+## Critical paths touched
+- PATH 3 CAGE: new sub-flow accessible from cage setup screen. Does NOT alter existing session recording path.
+
+## Open / carried forward
+- **Path 2 + Path 4 MIN VERIFY** — still pending real device run.
+- **EAS dev-client build** — still needed for `expo-document-picker`.
+- **Open Range home** in SwingLab (intended route: Prepare Better per prior session spec).
+- **Acoustic spectral analysis** — target calibration now builds the dataset; pattern-finding via `/api/acoustic-detect` batch analysis is a future task (needs 20+ labeled samples first).

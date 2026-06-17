@@ -10,35 +10,31 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
-### LATEST (2026-06-17, Session 2) — read this before the Day-5 TL;DR below
+### LATEST (2026-06-17, Session 3) — read this before the Day-5 TL;DR below
 
-**Active focus: verification on real hardware.** Code is landing well; the dominant 1.0 blocker is Z Fold device verification, not more code.
+**Active focus: verification on real hardware.** Code is landing well; dominant 1.0 blocker is Z Fold device verification, not more code.
 
-**Working directory: `/Users/timothyg/smartplay`** (the note below saying `~/Documents/smartplay` is stale — this IS the correct repo).
+**Working directory: `/Users/timothyg/smartplay`**
 
-**Just shipped this session (all OTA production, `aca7638` / `48ac5ad`):**
-- **SwingLab restructure** — Removed On-Course Caddie; Play Smarter = Coach Mode + Focus Session + Shot Shapes; Advanced Tools → "Prepare Better" = Setup Check + Pre-Round Warm Up + Fit Profile + SmartPlan; all full-width cards (no grid).
-- **Smart Motion hero title** — "Smart Mot…" truncation fixed (`48ac5ad`). `heroTitle` needed `flex:1, flexShrink:1`.
-- **End round voice** — "End the round" / "wrap up" etc. now calls `roundStore.endRound()` and navigates to recap. `end_round` intent + `endRoundHandler.ts` wired.
-- **Score + putts flow** — `logScoreHandler` now asks "How many putts?" after logging strokes. Inline ("5 with 2 putts") skips the follow-up. New `log_putts` intent + `logPuttsHandler.ts` using `roundStore.logPutts()`.
-- **Penalty stroke guard** — Kevin system prompt now explicitly guards `log_shot` from firing when Tim mentions penalty strokes in a rules/conversational context (only fires when actively reporting he took one).
-- **Boot-time voice warmup** — `prewarmVoice()` now fires from `app/_layout.tsx` at launch, not just caddie-tab-focus. All 4 voice pipeline endpoints warm 3-5s earlier.
+**Just shipped this session (`e757a3f`):**
+- **Phase BX — Cage target calibration.** Data-collection mode that pairs WAV recordings with manually confirmed hit positions. Flow: LISTENING (impact detector fires) → CONFIRMING (Tim taps bullseye on canvas/net diagram) → save + auto-advance. Scatter plot after 5+ canvas shots. `CageTargetUI` (green netting, white canvas, 4-ring bullseye), `app/cage/target-calibration.tsx` screen, store extended with `CageTargetSample[]` (rolling 200). Entry button on `/cage` setup page.
 
-**Previously shipped (same date, earlier micro-sessions):**
-- `e118f0c` — Scene read 60s timeout + round context pass-through (was timing out silently at 30s).
-- `ccc758c` — Tools menu Coach Mode closes correctly; Smart Play entry added.
-- `41ae781` — "What's the smart play" voice trigger routes to SmartFinder (not shot_strategy).
-- `9480a6d` — Phase AX: SmartFinder + auto scene read wired end-to-end.
-- `7ae8fc1` — Meta-glasses ingest UI in Settings (needs EAS build for expo-document-picker native dep).
-- `9a1cb6f` — Meta-glasses ingest Zod boundary validation.
-- `1bf0e77` — Path 2 + Path 4 critical-path diagnostic markers (all 19 now emitted in code).
+**Previously shipped (2026-06-17, sessions 1-2):**
+- `aca7638` / `48ac5ad` — SwingLab restructure (Prepare Better, Play Smarter), Smart Motion hero title fix, voice pipeline: end_round intent + handler, score→putts follow-up flow, penalty stroke guard, boot-time warmup.
+- `e118f0c` — Scene read 60s timeout + round context.
+- `ccc758c` — Tools menu Coach Mode fix + Smart Play entry.
+- `41ae781` — "Smart play" voice trigger → SmartFinder.
+- `9480a6d` — SmartFinder + auto scene read.
+- `7ae8fc1` / `9a1cb6f` — Meta-glasses ingest UI + Zod validation.
+- `1bf0e77` — Path 2 + Path 4 critical-path markers (all 19 instrumented).
 
 **What's next (P0 queue):**
-1. **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — markers all instrumented; run a real round, grep `[path2:round]` + `[path4:voice]`. Update `critical-paths.md` after.
-2. **EAS dev-client build** — needed for `expo-document-picker` (Meta-glasses ingest). Can bundle BT media-button worktree (`feat/bt-media-button`) at the same time.
+1. **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — markers instrumented; run a real round, grep `[path2:round]` + `[path4:voice]`. Update `critical-paths.md` after.
+2. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button worktree.
 3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** (still `_not verified_`).
-4. **Open Range route audit** — `/practice/open-range` exists but is not in any SwingLab section after restructure. Verify with Tim: intentionally retired or needs a home?
-- **Not done (deliberate):** Jest framework, DI refactor of lazy requires (intentional boot-order devices).
+4. **Open Range home in SwingLab** — `/practice/open-range` route exists but is orphaned after SwingLab restructure. Per Tim's spec it should live in Prepare Better (open 2-min free session, no 1/3/5 cadence).
+5. **Cage acoustic spectral analysis** — needs 20+ labeled samples from Target Calibration before pattern work begins.
+- **Not done (deliberate):** Jest framework, DI refactor of lazy requires.
 
 ### TL;DR (2026-05-24)
 
