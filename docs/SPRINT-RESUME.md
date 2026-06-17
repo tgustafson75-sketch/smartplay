@@ -28,12 +28,15 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 - `7ae8fc1` / `9a1cb6f` — Meta-glasses ingest UI + Zod validation.
 - `1bf0e77` — Path 2 + Path 4 critical-path markers (all 19 instrumented).
 
+**Also shipped this session (`0190b2b` — audit fix):**
+- **9 missing Stack.Screen entries** added to `_layout.tsx`. Without these, Expo Router shows its default nav header on top of each screen's custom chrome (double navigation bar). Affected: `swinglab/smartmotion`, `swinglab/setup-check`, `swinglab/tempo-trainer`, `practice/shot-shapes`, `practice/preround`, `practice/fit-profile`, `drills`, `drills/[issue]`, `cage/target-calibration`. All now have `headerShown: false` + `slide_from_right`. No startup races, no acoustic races — both confirmed clean by audit.
+
 **What's next (P0 queue):**
 1. **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — markers instrumented; run a real round, grep `[path2:round]` + `[path4:voice]`. Update `critical-paths.md` after.
 2. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button worktree.
 3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** (still `_not verified_`).
-4. **Open Range home in SwingLab** — `/practice/open-range` route exists but is orphaned after SwingLab restructure. Per Tim's spec it should live in Prepare Better (open 2-min free session, no 1/3/5 cadence).
-5. **Cage acoustic spectral analysis** — needs 20+ labeled samples from Target Calibration before pattern work begins.
+4. **Open Range card in Prepare Better** — `/practice/open-range` file + Stack.Screen both exist; just needs a `LauncherCard` added to `PREPARE_SECTION` in swinglab.tsx (5-min task).
+5. **Cage acoustic spectral analysis** — needs 20+ labeled samples from Target Calibration first.
 - **Not done (deliberate):** Jest framework, DI refactor of lazy requires.
 
 ### TL;DR (2026-05-24)

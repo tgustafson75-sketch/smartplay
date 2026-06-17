@@ -2021,3 +2021,22 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 - **EAS dev-client build** — still needed for `expo-document-picker`.
 - **Open Range home** in SwingLab (intended route: Prepare Better per prior session spec).
 - **Acoustic spectral analysis** — target calibration now builds the dataset; pattern-finding via `/api/acoustic-detect` batch analysis is a future task (needs 20+ labeled samples first).
+
+# Day N+3 — 2026-06-17 (Session 4) — Full-app audit pass + header fix
+
+## Shipped today
+
+- **Full audit: ghost routes + missing Stack.Screen entries** (`0190b2b`).
+  - Audit verified: no startup race conditions, no acoustic calibration races (recordingRef guard + unmount cleanup solid), all intent handlers registered correctly, all route strings resolve to real files.
+  - Found: 9 routes reachable from SwingLab and cage had `Stack.Screen` entries missing from `app/_layout.tsx`. Without `headerShown: false`, Expo Router renders its default nav bar on top of each screen's own custom header — double navigation chrome. Fixed by adding entries for: `swinglab/smartmotion`, `swinglab/setup-check`, `swinglab/tempo-trainer`, `practice/shot-shapes`, `practice/preround`, `practice/fit-profile`, `drills`, `drills/[issue]`, `cage/target-calibration`.
+  - False positive from audit: handler exports (logPuttsHandler, endRoundHandler not re-exported) — not a bug; handlers are registered via `registerHandler()`, not imported elsewhere.
+
+## Verified (programmatic)
+- `npx tsc --noEmit`: 0 errors. `npx expo lint`: 0 errors (5 pre-existing warnings, all unrelated).
+
+## Open / carried to next session (all P0)
+1. **Path 2 + Path 4 MIN VERIFY** — run a real Z Fold round, grep `[path2:round]` + `[path4:voice]`, update `critical-paths.md`.
+2. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button worktree.
+3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** — still `_not verified_`.
+4. **Open Range home** — `/practice/open-range` file exists + Stack.Screen registered; just needs a Prepare Better card in swinglab.tsx.
+5. **Acoustic target dataset** — needs 20+ labeled samples before spectral analysis makes sense.
