@@ -420,30 +420,14 @@ export function CageTargetingOverlay({
           )}
         </Svg>
       )}
-      {/* Pill labels with a downward caret (RN views — crisp text). In putt mode the
-          target end is the CUP — a flag pill the user drags over the real hole. */}
-      {targetLine && (
+      {/* CUP label — putt mode only, marks the hole the user drags to */}
+      {targetLine && targetKind === 'cup' && (
         <View style={[overlayStyles.pillWrap, { left: targetLine.x2, top: targetLine.y2 - 30 }]}>
-          {targetKind === 'cup' ? (
-            <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
-              <Ionicons name="flag" size={12} color="#06281b" />
-              <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>CUP</Text>
-            </View>
-          ) : (
-            <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>TARGET</Text></View>
-          )}
+          <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
+            <Ionicons name="flag" size={12} color="#06281b" />
+            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>CUP</Text>
+          </View>
           <View style={overlayStyles.caret} />
-        </View>
-      )}
-      {ballQuad && (
-        <View style={[overlayStyles.pillWrap, { left: ballQuad.cx, top: ballQuad.topY - 30 }]}>
-          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>BALL AREA</Text></View>
-          <View style={overlayStyles.caret} />
-        </View>
-      )}
-      {launchLine && (
-        <View style={[overlayStyles.pillWrap, { left: launchLine.labelX, top: launchLine.labelY - 26 }]}>
-          <View style={overlayStyles.pill}><Text style={overlayStyles.pillText}>~ LAUNCH</Text></View>
         </View>
       )}
       {puttGeom && (

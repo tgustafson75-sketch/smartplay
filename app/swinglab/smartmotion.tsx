@@ -375,6 +375,7 @@ export default function SmartMotion() {
   const [targetSwings, setTargetSwings] = useState<number | null>(null);
   const targetSwingsRef = useRef<number | null>(null);
   useEffect(() => { targetSwingsRef.current = targetSwings; }, [targetSwings]);
+  const swingCountOpacity = useRef(new Animated.Value(1)).current;
 
   const profile = usePlayerProfileStore();
   // Swinger's handedness — the active family member when recording someone
@@ -431,6 +432,11 @@ export default function SmartMotion() {
   // recording, so the first swing's analysis lands HOT (no cold-start wait). Throttled.
   useEffect(() => {
     if (phase === 'setup' || phase === 'recording') prewarmSwingAnalysis();
+  }, [phase]);
+  // Reset swing count selector opacity when returning to setup
+  useEffect(() => {
+    if (phase === 'setup') swingCountOpacity.setValue(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
   const [recordedSeconds, setRecordedSeconds] = useState(0);
@@ -2734,7 +2740,7 @@ export default function SmartMotion() {
             OPEN = the free window; 1/3/5 caps the session to exactly that many swings
             (the read + narration cover N). Sits where the drill banner would. */}
         {!isDrill && phase === 'setup' ? (
-          <View style={[styles.swingCountOuter, { top: insets.top + 46 }]}>
+          <Animated.View style={[styles.swingCountOuter, { bottom: insets.bottom + 64, opacity: swingCountOpacity }]}>
             <View style={styles.swingCountPill}>
               <Text style={styles.swingCountLabel}>SWINGS</Text>
               {([null, 1, 3, 5] as const).map((n) => {
@@ -2742,7 +2748,12 @@ export default function SmartMotion() {
                 return (
                   <TactilePressable
                     key={String(n)}
-                    onPress={() => setTargetSwings(n)}
+                    onPress={() => {
+                      setTargetSwings(n);
+                      Animated.timing(swingCountOpacity, {
+                        toValue: 0, duration: 350, delay: 600, useNativeDriver: true,
+                      }).start();
+                    }}
                     style={[styles.swingCountChip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
                     accessibilityRole="button"
                     accessibilityLabel={n == null ? 'Open swing count' : `${n} swings`}
@@ -2752,7 +2763,7 @@ export default function SmartMotion() {
                 );
               })}
             </View>
-          </View>
+          </Animated.View>
         ) : null}
 
         {/* SETUP TOOLS — 2026-06-13 (Tim): collapsed to a single chevron by default
@@ -3441,7 +3452,7 @@ const styles = StyleSheet.create({
   dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   drillBannerWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
-  swingCountOuter: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
+  swingCountOuter: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6, pointerEvents: 'box-none' },
   swingCountPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   swingCountLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 2 },
   swingCountChip: { minWidth: 30, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
