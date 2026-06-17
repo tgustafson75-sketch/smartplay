@@ -1940,3 +1940,23 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 - **Wire `ingestMetaGlassesJson` into the custom-caddie UI** (referenced at `app/profile/custom-caddie.tsx:184` but never invoked — today's hardening is inert until it has a live entry point).
 - **Run Path 2 + Path 4 MIN VERIFY on device** now that markers exist; update `critical-paths.md` "Last verification dates".
 - Declined from a second-opinion action plan (SmartPlay-ACTION_PLAN.md): P0.2 schema versioning (already done), P1.1 DI refactor of lazy requires (intentional boot-order devices), P0.1 Jest framework (conflicts with sim-based verification).
+
+---
+
+# Day N+1 — 2026-06-17 — "Hey Caddy, what's the smart play?" voice trigger → SmartFinder + auto scene read
+
+## Shipped today
+- **"What's the smart play" voice → SmartFinder + auto scene read.** `services/intents/openToolHandler.ts`: `tool_name: 'smartplay'` / `'smart_play'` now navigate to `/smartfinder?autoread=1` (was `/lie-analysis?smartplay=1`). Voice response changed to `"I'll take a look."`. `app/smartfinder.tsx`: reads `autoread` param via `useLocalSearchParams`; if the persisted mode is `'map'` (no camera), overrides to `'standard'` locally (user's stored preference unchanged); passes `autoRead` prop to `CameraSmartFinder`. In `CameraSmartFinder`: extracted scene-read logic into `runSceneRead` useCallback (eye button now calls it); added `autoFiredRef` guard + `useEffect` that fires `runSceneRead()` after a 1500ms camera-warmup delay when `autoRead=true`.
+  - **Flow:** user says "Hey Caddy, what's the smart play?" → Kevin says "I'll take a look." → SmartFinder opens in camera (standard) mode → ~1500ms after mount the caddie snaps the frame, reads the scene, and speaks the caddie opinion aloud. User doesn't need to look at the screen or tap anything.
+  - **Visual analysis fills in missing course data:** when hazard/geometry data is absent, the camera read fills the gap with what the caddie "sees" (trees, water, sky, wind in the leaves). TightLie phrasings ("analyze my lie", "check my lie") still route to `lie_analysis` / TightLie — unchanged.
+  - Critical paths touched: **Path 4 (VOICE)** — new tool_action routing for `smartplay` intent.
+
+## Verified (programmatic — NOT device)
+- `npx tsc --noEmit`: **0 errors**. `npx expo lint`: **0 errors** (5 pre-existing warnings, none in touched files).
+
+## Open / carried forward
+- **OTA push** — JS-only change, OTA-eligible after commit. Run `eas update --branch production`.
+- **Path 4 MIN VERIFY on real Z Fold** — "Hey Caddy, what's the smart play?" → SmartFinder opens → scene read fires automatically. Expected logcat: `[path4:voice] intent=open_tool topic=smart_play` then SmartFinder mounts, camera captures, Kevin speaks.
+- **Path 2 + Path 4 MIN VERIFY** (markers instrumented in 2026-06-16 session) — still pending real device run.
+- **Meta-glasses ingest UI** (`settings.tsx` wired in 7ae8fc1, but `expo-document-picker` is native → needs EAS dev-client/preview build).
+- Update `critical-paths.md` "Last verification dates" after device MIN VERIFY.

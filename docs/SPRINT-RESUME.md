@@ -10,16 +10,18 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
-### LATEST (2026-06-16) — read this before the Day-5 TL;DR below
+### LATEST (2026-06-17) — read this before the Day-5 TL;DR below
 
 **Active focus: closing the critical-path verification gate.** The dominant 1.0 blocker remains *verification on real hardware*, not more code (see BUILD-STATE-AUDIT.md §B).
 
-- **Just shipped:** (1) Meta-glasses ingest boundary validation (`9a1cb6f`, on main + OTA prod) — Zod-validates the external Meta View JSON at the ingest boundary. (2) **Completed the Path 2 / Path 4 diagnostic markers** — `critical-paths.md` documented them but only 4/9 (ROUND) and 2/10 (VOICE) were actually emitted, so MIN VERIFY couldn't grep the boundaries. All 19 now emit; added run-sim.ts Scenario 13 as a drift guard. Programmatic gates green (sim 501/501, tsc 0, lint 0). See SPRINT-LOG.md 2026-06-16.
+- **Just shipped (2026-06-17):** **"Hey Caddy, what's the smart play?" → SmartFinder + auto scene read.** `openToolHandler.ts`: `smartplay`/`smart_play` now navigate to `/smartfinder?autoread=1` (was `/lie-analysis?smartplay=1`). `smartfinder.tsx`: reads `autoread` param; CameraSmartFinder auto-fires scene read after 1500ms camera warmup via `runSceneRead` useCallback + `autoFiredRef` guard. User speaks the trigger → Kevin replies → SmartFinder opens in camera mode → caddie snaps the frame and speaks the visual read aloud, no tap required. Fills in missing hazard/geometry data visually. `tsc 0 errors, lint 0 errors`. OTA-eligible.
+- **Just shipped (2026-06-16):** (1) Meta-glasses ingest boundary validation (`9a1cb6f`, OTA prod) — Zod-validates external Meta View JSON at boundary. (2) Path 2/4 diagnostic markers completed (all 19 now emitted; Scenario 13 drift guard in run-sim.ts). (3) Meta-glasses ingest UI in Settings → Devices & Health (`7ae8fc1`; needs EAS build for expo-document-picker).
 - **What's next (P0 queue):**
-  1. **Path 2 + Path 4 MIN VERIFY on a real Z Fold round** — markers now exist; this is the gate. Update `critical-paths.md` "Last verification dates" after.
-  2. **Wire `ingestMetaGlassesJson` into the custom-caddie UI** (`app/profile/custom-caddie.tsx:184` references it but never invokes it — the hardening is inert until then).
-  3. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY (still `_not verified_`).
-- **Not done (deliberate):** Jest framework (conflicts with the sim-based verification philosophy), store schema-versioning (already complete), DI refactor of lazy requires (intentional boot-order devices).
+  1. **OTA push** for today's smart-play routing — `eas update --branch production`.
+  2. **Path 4 MIN VERIFY** — "Hey Caddy, what's the smart play?" → SmartFinder opens → caddie reads scene automatically. Grep: `[path4:voice] intent=open_tool`.
+  3. **Path 2 + Path 4 full MIN VERIFY on real Z Fold round** — markers instrumented; update `critical-paths.md` "Last verification dates" after.
+  4. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY (still `_not verified_`).
+- **Not done (deliberate):** Jest framework, DI refactor of lazy requires (intentional boot-order devices).
 
 ### TL;DR (2026-05-24)
 

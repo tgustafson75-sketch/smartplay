@@ -129,14 +129,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   library: { type: 'navigate', path: '/swinglab/library' },
   swing_library: { type: 'navigate', path: '/swinglab/library' },
   swinglibrary: { type: 'navigate', path: '/swinglab/library' },
-  // 2026-05-25 — Fix W.1: SmartPlay alias routes to the lie-analysis
-  // camera surface.
-  // 2026-05-26 — Fix W.2: pass smartplay=1 so the lie-analysis screen
-  // opens with the conversational opener (caddie asks "what do you
-  // see?" + captures voice context BEFORE the photo). Direct routes
-  // to /lie-analysis without the param keep the camera-first behavior.
-  smartplay: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
-  smart_play: { type: 'navigate', path: '/lie-analysis?smartplay=1' },
+  // 2026-06-17 — "Hey Caddy, what's the smart play?" → SmartFinder with
+  // autoread=1 so the caddie reads the scene on arrival (no tap needed).
+  // Visual analysis fills gaps when course hazard/geometry data is missing.
+  // The old /lie-analysis?smartplay=1 route is retired; TightLie phrasings
+  // ("analyze my lie", "check my lie", etc.) still land on lie_analysis.
+  smartplay: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  smart_play: { type: 'navigate', path: '/smartfinder?autoread=1' },
   // 2026-05-26 — Fix DW: voice "open / send / email / show issue log"
   // routes to /owner-logs. Issue Log is visible to ALL beta testers
   // (Fix AE). The execute() path below reads parameters.send_log to
@@ -404,6 +403,8 @@ export const openToolHandler: IntentHandler = {
         // 2026-05-24 — Hands-free Cage Mode opener — phrasing per spec
         // signals the user that auto-swing-capture is about to engage.
         voiceResponse = "Cage mode starting. I'll capture every swing.";
+      } else if (toolName === 'smartplay' || toolName === 'smart_play') {
+        voiceResponse = "I'll take a look.";
       } else if (isIssueLog) {
         voiceResponse = wantsSend ? 'Opening Issue Log to send.' : 'Opening Issue Log.';
       } else {

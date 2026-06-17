@@ -18,7 +18,7 @@ import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-g
 import { runOnJS } from 'react-native-reanimated';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { safeBack } from '../services/safeBack';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 // 2026-05-26 — Fix CM: theme the StyleSheet. Shared useStyles() hook
 // below means each of the 9 sub-components only adds one line to
@@ -98,6 +98,14 @@ export default function SmartFinder() {
 
   const mode = useSmartFinderStore(s => s.mode);
   const setMode = useSmartFinderStore(s => s.setMode);
+
+  // 2026-06-17 — "Hey Caddy, what's the smart play?" voice trigger lands here
+  // with autoread=1. If the persisted mode is 'map' (no camera), override to
+  // 'standard' so the scene read can fire. User's stored preference is not
+  // changed — displayMode is local to this navigation.
+  const { autoread } = useLocalSearchParams<{ autoread?: string }>();
+  const autoRead = autoread === '1';
+  const displayMode: SmartFinderMode = autoRead && mode === 'map' ? 'standard' : mode;
 
   const [yards, setYards] = useState<GreenYardages>(() => getGreenYardagesSync(currentHole));
   const [gps, setGps] = useState<GPSQualityReading>(() => {
@@ -218,12 +226,12 @@ export default function SmartFinder() {
   // The old flat-canvas TargetView is retained below the route for
   // surfaces that explicitly ask for top-down, but the default TARGET
   // path is now camera + overlay.
-  const isCameraMode = mode === 'standard' || mode === 'putt' || mode === 'target';
+  const isCameraMode = displayMode === 'standard' || displayMode === 'putt' || displayMode === 'target';
 
   if (isCameraMode) {
     return (
       <CameraSmartFinder
-        mode={mode}
+        mode={displayMode}
         currentHole={currentHole}
         gps={gps}
         yards={yards}
@@ -233,6 +241,7 @@ export default function SmartFinder() {
         onModeChange={setMode}
         onClose={() => safeBack()}
         height={height}
+        autoRead={autoRead}
       />
     );
   }
@@ -382,7 +391,7 @@ function zoomLabelFor(zoom: number): string {
 }
 
 function CameraSmartFinder({
-  mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, height,
+  mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, height, autoRead,
 }: {
   mode: SmartFinderMode;
   currentHole: number;
@@ -394,6 +403,7 @@ function CameraSmartFinder({
   onModeChange: (m: SmartFinderMode) => void;
   onClose: () => void;
   height: number;
+  autoRead?: boolean;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -421,6 +431,7 @@ function CameraSmartFinder({
   // /api/kevin); honest (camera = qualitative scene, weather = the wind number).
   const [sceneReading, setSceneReading] = useState(false);
   const [sceneResult, setSceneResult] = useState<string | null>(null);
+  const autoFiredRef = useRef(false);
   // Mic permission is required for video audio. Reusing the existing
   // pattern from cage-mode / quick-record (request on demand, not at
   // screen mount — keeps the GPS-only photo flow from prompting for
@@ -492,6 +503,53 @@ function CameraSmartFinder({
     });
     return () => sub.remove();
   }, [requestCameraPermission]);
+
+  // 2026-06-17 — Scene read extracted so both the eye button and the
+  // auto-read voice trigger can call the same code path.
+  const runSceneRead = useCallback(async () => {
+    if (sceneReading || !cameraRef.current) return;
+    setSceneReading(true);
+    setSceneResult(null);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
+      if (!photo?.uri) throw new Error('no photo');
+      const IM = await import('expo-image-manipulator');
+      const manip = await IM.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.7, format: IM.SaveFormat.JPEG, base64: true },
+      );
+      if (!manip.base64) throw new Error('no base64');
+      const svc = await import('../services/sceneReadService');
+      const result = await svc.readScene({ imageBase64: manip.base64 });
+      if (result) {
+        setSceneResult(result.text);
+        try {
+          const s = useSettingsStore.getState();
+          void speak(result.text, s.voiceGender, s.language ?? 'en', getApiBaseUrl(), { userInitiated: true })
+            ?.catch?.(() => undefined);
+        } catch { /* spoken is best-effort */ }
+      } else {
+        useToastStore.getState().show('Scene read unavailable — check your signal.');
+      }
+    } catch (e) {
+      console.log('[smartfinder] scene read failed', e);
+      useToastStore.getState().show('Scene read failed — try again.');
+    } finally {
+      setSceneReading(false);
+    }
+  }, [sceneReading]);
+
+  // 2026-06-17 — Auto-fire scene read when voice trigger lands with autoread=1.
+  // Guard with autoFiredRef so the effect reruns (when runSceneRead changes due
+  // to sceneReading flip) do NOT fire a second read.
+  useEffect(() => {
+    if (!autoRead || autoFiredRef.current) return;
+    autoFiredRef.current = true;
+    // 1500ms: camera hardware warmup before takePictureAsync is reliable.
+    const timer = setTimeout(() => { void runSceneRead(); }, 1500);
+    return () => clearTimeout(timer);
+  }, [autoRead, runSceneRead]);
 
   // Loading state — always render a back affordance so a stalled OS
   // dialog can never strand the user.
@@ -602,39 +660,7 @@ function CameraSmartFinder({
             (not putt). */}
         {(mode === 'standard' || mode === 'target') && (
           <TouchableOpacity
-            onPress={async () => {
-              if (sceneReading || !cameraRef.current) return;
-              setSceneReading(true);
-              setSceneResult(null);
-              try {
-                const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
-                if (!photo?.uri) throw new Error('no photo');
-                const IM = await import('expo-image-manipulator');
-                const manip = await IM.manipulateAsync(
-                  photo.uri,
-                  [{ resize: { width: 1024 } }],
-                  { compress: 0.7, format: IM.SaveFormat.JPEG, base64: true },
-                );
-                if (!manip.base64) throw new Error('no base64');
-                const svc = await import('../services/sceneReadService');
-                const result = await svc.readScene({ imageBase64: manip.base64 });
-                if (result) {
-                  setSceneResult(result.text);
-                  try {
-                    const s = useSettingsStore.getState();
-                    void speak(result.text, s.voiceGender, s.language ?? 'en', getApiBaseUrl(), { userInitiated: true })
-                      ?.catch?.(() => undefined);
-                  } catch { /* spoken is best-effort */ }
-                } else {
-                  useToastStore.getState().show('Scene read unavailable — check your signal.');
-                }
-              } catch (e) {
-                console.log('[smartfinder] scene read failed', e);
-                useToastStore.getState().show('Scene read failed — try again.');
-              } finally {
-                setSceneReading(false);
-              }
-            }}
+            onPress={() => { void runSceneRead(); }}
             accessibilityRole="button"
             accessibilityLabel="Read the scene"
             style={{
