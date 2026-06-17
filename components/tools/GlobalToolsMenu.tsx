@@ -377,8 +377,19 @@ export function GlobalToolsMenu() {
             <Row
               icon="locate-outline"
               label="SmartFinder"
-              sub="Tap-to-lock rangefinder"
+              sub="Rangefinder · tap to lock distance"
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
+              colors={colors}
+            />
+            {/* 2026-06-17 — Smart Play tap shortcut mirrors the voice trigger
+                "Hey Caddy, what's the smart play?" → SmartFinder + autoread.
+                Opens the same screen as SmartFinder but auto-fires the caddie
+                scene read so the user doesn't need to tap the eye button. */}
+            <Row
+              icon="eye-outline"
+              label="Smart Play"
+              sub="What's the smart play? · caddie reads the scene"
+              onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
               colors={colors}
             />
             {/* 2026-06-04 — Coach Mode toggle. Tap the row to flip the
@@ -389,9 +400,10 @@ export function GlobalToolsMenu() {
               icon={coachModeEnabled ? 'people' : 'people-outline'}
               label="Coach Mode"
               sub={coachModeEnabled ? 'On — shared sessions visible' : 'Off — tap to enable shared sessions'}
-              onPress={() => {
+              onPress={() => fire(() => {
                 setCoachModeEnabled(!coachModeEnabled);
-              }}
+                useToastStore.getState().show(coachModeEnabled ? 'Coach Mode off' : 'Coach Mode on');
+              })}
               colors={colors}
             />
 
@@ -438,7 +450,7 @@ export function GlobalToolsMenu() {
             <Row
               icon="cloud-download-outline"
               label="App Refresh"
-              sub="Pull the latest fix from the preview channel"
+              sub="Check for and apply the latest OTA update"
               onPress={() => fire(async () => {
                 try {
                   const Updates = await import('expo-updates');
