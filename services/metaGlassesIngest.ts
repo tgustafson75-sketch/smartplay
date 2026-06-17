@@ -37,21 +37,37 @@
  *   - No entries in round window       → return { ingested: 0 }
  */
 
+import { z } from 'zod';
 import { useRoundStore } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
 import { safeLatLng } from '../utils/coordGuard';
 
-type MetaVoiceEntry = {
-  timestamp: string;
-  transcript_user: string;
-  transcript_assistant: string;
-  location?: { lat: number; lng: number };
-};
+// System boundary: the Meta View export is third-party JSON we don't
+// control. Validate each entry here (mirrors the RequestSchema pattern
+// in api/meta-voice.ts) so malformed rows are dropped + counted rather
+// than written into roundStore.externalContext as garbage. Per CLAUDE.md
+// "validate at system boundaries" — the store method downstream is
+// internal and trusted.
+const MetaVoiceEntrySchema = z.object({
+  // Must parse to a finite epoch; the round-window filter below relies on it.
+  timestamp: z.string().refine((s) => Number.isFinite(new Date(s).getTime()), {
+    message: 'unparseable timestamp',
+  }),
+  transcript_user: z.string().min(1).max(4000),
+  transcript_assistant: z.string().min(1).max(4000),
+  location: z
+    .object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })
+    .optional(),
+});
+
+type MetaVoiceEntry = z.infer<typeof MetaVoiceEntrySchema>;
 
 export type IngestResult = {
   ingested: number;
   totalParsed?: number;
   outsideWindow?: number;
+  /** Entries dropped because they failed boundary validation. */
+  rejected?: number;
 };
 
 /**
@@ -63,7 +79,24 @@ export type IngestResult = {
 export async function ingestMetaGlassesJson(jsonPath: string): Promise<IngestResult> {
   const FS = await import('expo-file-system/legacy');
   const raw = await FS.readAsStringAsync(jsonPath);
-  const entries = JSON.parse(raw) as MetaVoiceEntry[];
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('[metaIngest] expected a JSON array of voice entries');
+  }
+
+  // Boundary validation: drop malformed rows individually so one bad
+  // entry can't poison the whole import. Count them for telemetry.
+  const entries: MetaVoiceEntry[] = [];
+  let rejected = 0;
+  for (const row of parsed) {
+    const result = MetaVoiceEntrySchema.safeParse(row);
+    if (result.success) entries.push(result.data);
+    else rejected++;
+  }
+  if (rejected > 0) {
+    console.warn(`[metaIngest] dropped ${rejected} invalid entr${rejected === 1 ? 'y' : 'ies'}`);
+  }
 
   const round = useRoundStore.getState();
 
@@ -119,5 +152,6 @@ export async function ingestMetaGlassesJson(jsonPath: string): Promise<IngestRes
     ingested: relevant.length,
     totalParsed: entries.length,
     outsideWindow: entries.length - relevant.length,
+    rejected,
   };
 }
