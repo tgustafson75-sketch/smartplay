@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   heroText: { flex: 1, minWidth: 0 },
-  heroTitle: { fontSize: 20, fontWeight: '800' },
+  heroTitle: { fontSize: 20, fontWeight: '800', flex: 1, flexShrink: 1 },
   heroSub: { fontSize: 13, lineHeight: 18 },
   heroFeatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 8 },
   heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
