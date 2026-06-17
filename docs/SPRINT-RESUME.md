@@ -10,17 +10,34 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
-### LATEST (2026-06-17) — read this before the Day-5 TL;DR below
+### LATEST (2026-06-17, Session 2) — read this before the Day-5 TL;DR below
 
-**Active focus: closing the critical-path verification gate.** The dominant 1.0 blocker remains *verification on real hardware*, not more code (see BUILD-STATE-AUDIT.md §B).
+**Active focus: verification on real hardware.** Code is landing well; the dominant 1.0 blocker is Z Fold device verification, not more code.
 
-- **Just shipped (2026-06-17):** **"Hey Caddy, what's the smart play?" → SmartFinder + auto scene read.** `openToolHandler.ts`: `smartplay`/`smart_play` now navigate to `/smartfinder?autoread=1` (was `/lie-analysis?smartplay=1`). `smartfinder.tsx`: reads `autoread` param; CameraSmartFinder auto-fires scene read after 1500ms camera warmup via `runSceneRead` useCallback + `autoFiredRef` guard. User speaks the trigger → Kevin replies → SmartFinder opens in camera mode → caddie snaps the frame and speaks the visual read aloud, no tap required. Fills in missing hazard/geometry data visually. `tsc 0 errors, lint 0 errors`. OTA-eligible.
-- **Just shipped (2026-06-16):** (1) Meta-glasses ingest boundary validation (`9a1cb6f`, OTA prod) — Zod-validates external Meta View JSON at boundary. (2) Path 2/4 diagnostic markers completed (all 19 now emitted; Scenario 13 drift guard in run-sim.ts). (3) Meta-glasses ingest UI in Settings → Devices & Health (`7ae8fc1`; needs EAS build for expo-document-picker).
-- **What's next (P0 queue):**
-  1. **OTA push** for today's smart-play routing — `eas update --branch production`.
-  2. **Path 4 MIN VERIFY** — "Hey Caddy, what's the smart play?" → SmartFinder opens → caddie reads scene automatically. Grep: `[path4:voice] intent=open_tool`.
-  3. **Path 2 + Path 4 full MIN VERIFY on real Z Fold round** — markers instrumented; update `critical-paths.md` "Last verification dates" after.
-  4. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY (still `_not verified_`).
+**Working directory: `/Users/timothyg/smartplay`** (the note below saying `~/Documents/smartplay` is stale — this IS the correct repo).
+
+**Just shipped this session (all OTA production, `aca7638` / `48ac5ad`):**
+- **SwingLab restructure** — Removed On-Course Caddie; Play Smarter = Coach Mode + Focus Session + Shot Shapes; Advanced Tools → "Prepare Better" = Setup Check + Pre-Round Warm Up + Fit Profile + SmartPlan; all full-width cards (no grid).
+- **Smart Motion hero title** — "Smart Mot…" truncation fixed (`48ac5ad`). `heroTitle` needed `flex:1, flexShrink:1`.
+- **End round voice** — "End the round" / "wrap up" etc. now calls `roundStore.endRound()` and navigates to recap. `end_round` intent + `endRoundHandler.ts` wired.
+- **Score + putts flow** — `logScoreHandler` now asks "How many putts?" after logging strokes. Inline ("5 with 2 putts") skips the follow-up. New `log_putts` intent + `logPuttsHandler.ts` using `roundStore.logPutts()`.
+- **Penalty stroke guard** — Kevin system prompt now explicitly guards `log_shot` from firing when Tim mentions penalty strokes in a rules/conversational context (only fires when actively reporting he took one).
+- **Boot-time voice warmup** — `prewarmVoice()` now fires from `app/_layout.tsx` at launch, not just caddie-tab-focus. All 4 voice pipeline endpoints warm 3-5s earlier.
+
+**Previously shipped (same date, earlier micro-sessions):**
+- `e118f0c` — Scene read 60s timeout + round context pass-through (was timing out silently at 30s).
+- `ccc758c` — Tools menu Coach Mode closes correctly; Smart Play entry added.
+- `41ae781` — "What's the smart play" voice trigger routes to SmartFinder (not shot_strategy).
+- `9480a6d` — Phase AX: SmartFinder + auto scene read wired end-to-end.
+- `7ae8fc1` — Meta-glasses ingest UI in Settings (needs EAS build for expo-document-picker native dep).
+- `9a1cb6f` — Meta-glasses ingest Zod boundary validation.
+- `1bf0e77` — Path 2 + Path 4 critical-path diagnostic markers (all 19 now emitted in code).
+
+**What's next (P0 queue):**
+1. **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — markers all instrumented; run a real round, grep `[path2:round]` + `[path4:voice]`. Update `critical-paths.md` after.
+2. **EAS dev-client build** — needed for `expo-document-picker` (Meta-glasses ingest). Can bundle BT media-button worktree (`feat/bt-media-button`) at the same time.
+3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** (still `_not verified_`).
+4. **Open Range route audit** — `/practice/open-range` exists but is not in any SwingLab section after restructure. Verify with Tim: intentionally retired or needs a home?
 - **Not done (deliberate):** Jest framework, DI refactor of lazy requires (intentional boot-order devices).
 
 ### TL;DR (2026-05-24)
@@ -147,7 +164,7 @@ Then P1 consolidation (5 swing-capture surfaces → 2; 5 haversines → 1; 3 GPS
 - **(RETRACTED 2026-06-14 — was stale)** ~~Feature-complete. Nothing new gets added this sprint.~~ The 2026-06-08→14 session was overwhelmingly new-feature work (CNS, Smart Motion rebuild, Practice Engine, course book, points, offline caddie, on-device pose). Current mode: build new features in gated OTA increments + keep the audit/honesty/perf bar. See the 2026-06-08→14 reconciliation section in SPRINT-LOG.md and docs/TEST-MANUAL.md.
 - **SwingLab and Practice are ONE feature.** Never duplicate components, routes, or services across them. Per audit they appear clean today — keep it that way.
 - **Empirical verification on Z Fold is the bar.** Code on `main` is not "done." Every P0 / P1 item closes only after on-device confirmation.
-- **The Pro app lives at `~/Documents/smartplay`.** `~/smartplaycaddie` (this working dir for Claude Code) is a different/sandbox repo — do NOT edit it. All sprint work is in `/Users/timothyg/Documents/smartplay`.
+- **The Pro app lives at `/Users/timothyg/smartplay`.** This is the canonical working directory for Claude Code sessions. (An older note referenced `~/Documents/smartplay` — that was stale and has been corrected.)
 - **Push to main on completion.** Standing rule from `~/.claude/projects/.../memory/standing-rules.md`. Never `--no-verify`, never `--force` to main.
 - **Beta wearables SDK is unblocked** (Galaxy Watch / Health Connect / Meta glasses). Native module changes require an EAS Build, not just OTA.
 - **No Grok.** Hard rule. Reference memory entry `no-grok.md`.
@@ -172,4 +189,4 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 
 ---
 
-**Last refreshed:** 2026-05-24 (Day 5 end — voice spine + Meta integration + metric honesty + GPS-verify flows + Tank rules + CourseTruth all shipped OTA. BUILD-STATE-AUDIT.md is now the canonical inventory. BT media-button native module on worktree, awaits EAS Build. Verification debt is the dominant 1.0 gap — Day 6+ should be hardware testing on a real cart round, not more code). Update this doc at the end of every session.
+**Last refreshed:** 2026-06-17 Session 2 — SwingLab restructure, end-round voice, score+putts, penalty guard, boot warmup, scene-read timeout, Smart Play voice trigger all shipped OTA. Boot warmup now fires at launch (was caddie-tab only). Dominant 1.0 gap: Z Fold device verification + EAS dev-client build. Update this doc at the end of every session.

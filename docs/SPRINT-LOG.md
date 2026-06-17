@@ -1960,3 +1960,42 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 - **Path 2 + Path 4 MIN VERIFY** (markers instrumented in 2026-06-16 session) — still pending real device run.
 - **Meta-glasses ingest UI** (`settings.tsx` wired in 7ae8fc1, but `expo-document-picker` is native → needs EAS dev-client/preview build).
 - Update `critical-paths.md` "Last verification dates" after device MIN VERIFY.
+
+---
+
+# Day N+2 — 2026-06-17 (Session 2) — Voice bugs, SwingLab restructure, warmup
+
+## Shipped today
+
+- **SwingLab restructure** (`aca7638`, OTA production). Four changes:
+  - Removed "On-Course Caddie" card from Play Smarter — it just bounced to the Play tab, no value.
+  - Play Smarter now has Coach Mode + Focus Session + Shot Shapes (Focus + Shot Shapes moved from removed Advanced Tools grid).
+  - Advanced Tools → **Prepare Better** (full rename, new section): Setup Check (feature-flagged) + Pre-Round Warm Up + Fit Profile + SmartPlan. All full-width `LauncherCard`s — no grid layout (was smashing on small screens).
+  - Removed dead `AdvancedTile` component + grid styles.
+
+- **Smart Motion hero title truncation** (`48ac5ad`, OTA production). `heroTitle` lacked `flex:1` in the title row, so "Smart Motion" showed as "Smart Mot..." with the CORE badge. Added `flex:1, flexShrink:1`.
+
+- **End round voice intent + handler** (`aca7638`). "End the round" / "wrap up" / "that's a wrap" etc. was going to `conversational` → Kevin talked about ending the round but didn't call `endRound()`. Added `end_round` intent to `api/voice-intent.ts` with 8+ phrasings. Created `services/intents/endRoundHandler.ts` that calls `roundStore.endRound()` and returns `tool_action: { type: 'navigate', path: '/recap/${roundId}' }`. Registered in `services/intents/index.ts`.
+
+- **Score + putts flow** (`aca7638`). `logScoreHandler` now asks "How many putts?" after logging strokes (`follow_up_needed: true`, voice response = `"Got it — N (label). How many putts?"`). If the classifier already extracted `num_putts` inline ("I got a 5 with 2 putts"), it logs both immediately (no follow-up). Added `log_putts` intent to `voice-intent.ts` with 6+ phrasings ("2 putts", "one-putted", "three-putted", "chip-in"). Created `services/intents/logPuttsHandler.ts` that calls `roundStore.logPutts(hole, putts)`.
+
+- **Penalty stroke guard** (`aca7638`). Kevin's brain prompt was calling `log_shot` whenever Tim mentioned "penalty stroke" — including in rules conversations. Added explicit guard to the system prompt: only call `log_shot` with penalty outcome when Tim is ACTIVELY REPORTING he took one right now (past tense, active logging). Rules discussions / questions about penalties route to conversational.
+
+- **Boot-time voice warmup** (`aca7638`). `prewarmVoice()` was only called in `caddie.tsx` on tab-focus. Added dynamic import + call in `app/_layout.tsx` useEffect at app launch. All 4 endpoints (`/api/voice`, `/api/transcribe`, `/api/voice-intent`, `/api/kevin`) now start warming before the user reaches any tab — 3-5s earlier than before. The caddie-tab warmup still runs (30s dedupe = no-op if within 30s).
+
+- **Scene read timeout + round context** (`e118f0c`, OTA production — prior micro-session). `sceneReadService.ts`: timeout raised 30s → 60s (Sonnet + 31KB prompt + image on cold Anthropic cache can take 30-40s). Also passes `isRoundActive`, `currentHole`, `activeCourseId`, `activeCourse` to Kevin so on-course scene reads get on-course mode (compact hole data, not the full 10-course list).
+
+- **Tools menu Coach Mode + Smart Play entry** (`ccc758c`, OTA production — prior micro-session). Coach Mode toggle was missing `fire()` call → menu stayed open, no haptic, no toast. Fixed. Added Smart Play entry (eye icon → `/smartfinder?autoread=1` with `navOrPaywall` gate). SmartFinder sub-text updated to "Rangefinder · tap to lock distance."
+
+- **"Smart play" voice trigger** (`41ae781`, OTA production — prior micro-session). Classifier was routing "what's the smart play" to `shot_strategy` instead of `open_tool:smartplay`. Fixed with `localIntentPrecheck.ts` fast-path regex + disambiguation NOTE in `voice-intent.ts`.
+
+## Verified (programmatic — NOT device)
+- `npx tsc --noEmit`: **0 errors** after every commit. `npx expo lint`: **0 errors**.
+- All new handler routes verified to match existing screen files (`/practice/session`, `/practice/shot-shapes`, `/swinglab/setup-check`, etc. all exist).
+
+## Open / carried forward
+- **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — still pending. All markers instrumented.
+- **EAS dev-client build** — needed for `expo-document-picker` (Meta-glasses ingest). Can also cut BT media-button worktree (`feat/bt-media-button`) at the same time.
+- **Open Range route** (`/practice/open-range` exists but is NOT in any SwingLab section after the restructure). Tim didn't include it in the spec — either intentionally retired from SwingLab or needs a section home. Verify intent.
+- **Update `critical-paths.md`** "Last verification dates" after device MIN VERIFY.
+- **Caddie mic in SmartFinder** — punted; eyeball IS the Smart Play tap trigger. Two paths work: voice ("what's the smart play" → autoread=1) + eye button tap.
