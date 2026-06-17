@@ -272,6 +272,16 @@ export default function CageIndex() {
           <Text style={styles.startBtnText}>Start Session</Text>
         </TouchableOpacity>
 
+        {/* TARGET CALIBRATION — acoustic dataset builder */}
+        <TouchableOpacity
+          style={styles.calibrateTargetBtn}
+          onPress={() => router.push('/cage/target-calibration' as never)}
+          activeOpacity={0.8}
+        >
+          <AppIcon name="radio-button-on-outline" size={18} color="#6b7280" />
+          <Text style={styles.calibrateTargetText}>Target Calibration</Text>
+        </TouchableOpacity>
+
       </ScrollView>
 
       {/* Phase J — Distance calibration modal. Walk to a reference target
@@ -550,5 +560,22 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 17,
     fontWeight: '800',
+  },
+  calibrateTargetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginTop: 4,
+  },
+  calibrateTargetText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

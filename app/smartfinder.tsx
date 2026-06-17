@@ -657,12 +657,13 @@ function CameraSmartFinder({
       >
         {/* 2026-06-13 — READ THE SCENE: snap → multimodal brain reads the meta scene
             + measured wind/temp → how to play it + how to think. Standard/target only
-            (not putt). */}
+            (not putt). This IS the Smart Play tap path — voice trigger opens SmartFinder
+            with autoread=1 (fires automatically); manual tap fires the same thing. */}
         {(mode === 'standard' || mode === 'target') && (
           <TouchableOpacity
             onPress={() => { void runSceneRead(); }}
             accessibilityRole="button"
-            accessibilityLabel="Read the scene"
+            accessibilityLabel="Smart Play — read the scene"
             style={{
               width: 48, height: 48, borderRadius: 24,
               backgroundColor: sceneReading ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.55)',

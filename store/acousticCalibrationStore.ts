@@ -65,6 +65,14 @@ interface AcousticCalibrationState {
    *  suggests running the test bench is suppressed forever (per
    *  device). Cleared by reset(). */
   calibratePromptDismissed: boolean;
+  /** Labeled hit samples from the target calibration screen. Rolling
+   *  buffer — capped at MAX_TARGET_SAMPLES. Persisted so the dataset
+   *  survives app restarts and accumulates across sessions. */
+  targetSamples: CageTargetSample[];
+  /** Append a new labeled target sample. Auto-trims to last 200. */
+  addTargetSample: (sample: Omit<CageTargetSample, 'id' | 'capturedAt'>) => string;
+  /** Remove all target samples. Owner-only utility. */
+  clearTargetSamples: () => void;
   /** Append a new calibration session. Auto-trims to last 50 to keep
    *  AsyncStorage payload bounded — beyond ~50 sessions the tail is
    *  no longer informative for tuning. */
@@ -89,9 +97,41 @@ interface AcousticCalibrationState {
 }
 
 const MAX_SESSIONS = 50;
+const MAX_TARGET_SAMPLES = 200;
 
 function newSessionId(): string {
   return 'acal_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+}
+
+// ─── Target calibration — labeled acoustic dataset ───────────────────────────
+// Each sample pairs a WAV recording with the manually confirmed hit position
+// on the cage canvas. Over time the corpus lets us find spectral features that
+// discriminate canvas center vs edge vs net — and eventually auto-classify
+// live shots.
+
+export type TargetHitType = 'canvas_center' | 'canvas_edge' | 'net';
+
+export interface CageTargetSample {
+  id: string;
+  capturedAt: number;
+  /** WAV file URI from the impact recorder. Null if recording failed. */
+  wavUri: string | null;
+  /** Peak dBFS at impact from the metering path. */
+  peakDb: number;
+  /** Milliseconds from recording start to peak. */
+  impactMs: number;
+  /** User-confirmed hit category. */
+  hitType: TargetHitType;
+  /** Relative position within the canvas (only meaningful when hitType !== 'net').
+   *  -1 = left/bottom edge, 0 = center, +1 = right/top edge. */
+  hitX: number | null;
+  hitY: number | null;
+  /** Cage geometry at time of capture — for physics calculations later. */
+  cage: {
+    widthFt: number;
+    heightFt: number;
+    canvasSizeFt: number;
+  };
 }
 
 export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
@@ -100,6 +140,15 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
       sessions: [],
       appliedCalibration: null,
       calibratePromptDismissed: false,
+      targetSamples: [],
+      addTargetSample: (input) => {
+        const id = 'tgt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+        const sample: CageTargetSample = { ...input, id, capturedAt: Date.now() };
+        set((s) => ({ targetSamples: [...s.targetSamples, sample].slice(-MAX_TARGET_SAMPLES) }));
+        console.log(`[cageTarget] sample id=${id} type=${sample.hitType} x=${sample.hitX?.toFixed(2)} y=${sample.hitY?.toFixed(2)} peak=${sample.peakDb.toFixed(1)}dB`);
+        return id;
+      },
+      clearTargetSamples: () => set({ targetSamples: [] }),
       saveSession: (input) => {
         const id = newSessionId();
         const session: CalibrationSession = {
@@ -167,11 +216,13 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
     }),
     {
       name: 'acoustic-calibration-v1',
-      version: 1,
-      // 2026-06-06 — Forward-compatible migrate scaffold. No legacy
-      // versions to coerce yet; future v2+ schema changes get their
-      // own version-branched logic here.
-      migrate: (persisted) => persisted as AcousticCalibrationState,
+      version: 2,
+      migrate: (persisted, version) => {
+        const s = persisted as AcousticCalibrationState;
+        // v1 → v2: added targetSamples array
+        if (version < 2) { (s as unknown as Record<string, unknown>).targetSamples = []; }
+        return s;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
