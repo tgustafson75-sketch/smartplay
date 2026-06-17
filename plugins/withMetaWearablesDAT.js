@@ -508,10 +508,17 @@ function withMetaWearablesDAT(config) {
   next = withAppGradle(next, ENV_FALLBACK);
   next = withManifest(next);
   next = withMainApplicationInjection(next);
-  // iOS
-  next = withIOSInfoPlist(next, ENV_FALLBACK);
-  next = withIOSPodfile(next);
-  next = withSwiftSourceCopy(next);
+  // iOS — Wearables pod is from a private Meta GitHub repo (facebook/meta-wearables-dat-ios)
+  // that EAS Build cannot access. Guard behind a separate MWDAT_IOS_ENABLED flag so the
+  // Android wiring can be toggled on (via GITHUB_TOKEN) without breaking iOS pod install.
+  if (process.env.MWDAT_IOS_ENABLED === '1') {
+    next = withIOSInfoPlist(next, ENV_FALLBACK);
+    next = withIOSPodfile(next);
+    next = withSwiftSourceCopy(next);
+  } else {
+    // Still apply Info.plist permissions (no pod dep) so camera + BT strings are present.
+    next = withIOSInfoPlist(next, ENV_FALLBACK);
+  }
   return next;
 }
 

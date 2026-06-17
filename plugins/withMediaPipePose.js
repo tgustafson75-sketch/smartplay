@@ -417,10 +417,12 @@ function withMediaPipePose(config) {
   next = withAndroidGradleDeps(next);
   next = withAndroidCameraPermission(next);
   next = withAndroidSourceCopyAndPackageReg(next);
-  // iOS
-  next = withIOSInfoPlist(next);
-  next = withIOSPodfile(next);
-  next = withIOSSourceCopyAndModel(next);
+  // iOS — pod deferred: MediaPipeTasksVision version/deployment-target
+  // conflicts with EAS build environment. iOS falls back to cloud pose API
+  // (NativeModules.MediaPipePose is null → services/poseEstimator.ts cloud path).
+  // next = withIOSInfoPlist(next);  // camera perm already set by expo-camera
+  // next = withIOSPodfile(next);
+  // next = withIOSSourceCopyAndModel(next);
   return next;
 }
 
