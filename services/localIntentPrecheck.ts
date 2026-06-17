@@ -122,6 +122,14 @@ const PATTERNS: Pattern[] = [
   },
 
   // ── TOOL OPEN (high frequency) ────────────────────────────
+  // 2026-06-17 — "Hey Caddy, what's the smart play?" is THE tagline trigger.
+  // Must be deterministic — "smart play" also appears in Haiku's shot_strategy
+  // examples, causing it to explain verbally instead of opening SmartFinder.
+  // Precheck catches the canonical phrasings before Haiku sees them.
+  {
+    rx: /\b(?:what(?:'s|s)?\s+the\s+smart\s+play|give\s+me\s+the\s+smart\s+play|the\s+smart\s+play|open\s+smart\s*play|smartplay\s+here)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
+  },
   {
     rx: /\b(open\s+smart\s*finder|smart\s*finder|rangefinder|range\s+finder|lock\s+(?:the\s+)?distance)\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),

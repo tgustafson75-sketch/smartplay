@@ -89,7 +89,8 @@ Available intents:
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
    - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
-   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "smart play" / "tell me the play" -> { query_topic: "shot_strategy" }
+   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "tell me the play" -> { query_topic: "shot_strategy" }
+   NOTE: "the smart play" / "what's the smart play" means open_tool { tool_name: "smartplay" } (opens SmartFinder visual analysis), NOT shot_strategy. Only "what's the play" / "what should I hit" without the word "smart" are shot_strategy.
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
    - "I'm 140 yards out what club should I use" / "what club for 140 yards" / "best club for 140" / "what club from 140 out" -> { query_topic: "shot_strategy", target_yards: 140 } (EXTRACT the integer yardage from the phrase into target_yards — the yardage makes this a confident classify, not the generic "what club" fallback. Works for any 20-400 yard value.)
    - "${caddieName} I'm 140 yards out what club should I use" / "Kevin what club for 165" / "hey ${caddieName} what should I hit from 200" -> { query_topic: "shot_strategy", target_yards: <integer parsed from the phrase> } (Caddie name prefix is conversational; treat as shot_strategy with target_yards extracted.)
