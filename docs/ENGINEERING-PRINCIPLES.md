@@ -90,12 +90,14 @@ For any significant change touching multiple independent surfaces, run sweeps in
 `eas update` without a branch flag defaults to whatever the CLI resolves — **never assume it reaches the device Tim is testing on.**
 
 - **Dev-client build** (`eas build --profile development`) listens to `--branch development`
+- **Preview build** (`eas build --profile preview`) listens to `--branch preview`
 - **Production-APK build** (`eas build --profile production-apk`) listens to `--branch production`
 
-**Every OTA ships to both unless Tim has explicitly confirmed which build he's running:**
+**Every OTA ships to all three unless Tim has explicitly confirmed which build he's running:**
 
 ```
 eas update --branch development --message "..."
+eas update --branch preview --message "..."
 eas update --branch production --message "..."
 ```
 
