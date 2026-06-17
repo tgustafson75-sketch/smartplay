@@ -492,10 +492,29 @@ export const useVoiceCaddie = ({
       if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
     };
     warmIfVoice(); // entering a voice surface
+
+    // 2026-06-16 (Tim — "why would we go totally cold at all") — the voice
+    // endpoints are Vercel serverless functions; Vercel spins a Lambda down after
+    // ~5 min idle, so without traffic the NEXT tap pays full cold-start. A
+    // lightweight heartbeat keeps the whole chain hot while the app is foregrounded
+    // + voice is on, so we never drift back to fully cold mid-session. 240s < the
+    // ~5 min warm window; each ping is fire-and-forget (~$0.0004). Paused on
+    // background so it never burns network/battery off-screen.
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    const startHeartbeat = () => {
+      if (heartbeat) return;
+      heartbeat = setInterval(warmIfVoice, 240_000);
+    };
+    const stopHeartbeat = () => {
+      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+    };
+    if (AppState.currentState === 'active') startHeartbeat();
+
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') warmIfVoice(); // returning to the app
+      if (next === 'active') { warmIfVoice(); startHeartbeat(); } // returning to the app
+      else stopHeartbeat(); // background/inactive — don't burn network/battery
     });
-    return () => sub.remove();
+    return () => { stopHeartbeat(); sub.remove(); };
   }, []);
 
   const {

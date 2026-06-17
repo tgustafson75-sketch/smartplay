@@ -2023,6 +2023,25 @@ check('Swing review: controls fade on pause (clean screenshots) + autoplay onLoa
   })(),
   'paused controls fade to a clean frame (tap still plays); watch-autoplay gets an onLoad kick');
 
+check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
+  // 2026-06-16 (Tim — "first try always longer" + "listens too long" + "why go cold
+  // at all") — Vercel functions idle out after ~5 min. A 240s heartbeat keeps the
+  // chain hot while foregrounded so no session goes fully cold; the caddie tab warms
+  // on focus (not just tap); silence endpoint snaps at 900ms.
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const vs = read('services/voiceService.ts');
+    return (
+      /heartbeat = setInterval\(warmIfVoice, 240_000\)/.test(vc) &&
+      /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
+      /else stopHeartbeat\(\)/.test(vc) &&
+      /if \(useSettingsStore\.getState\(\)\.voiceEnabled\) prewarmVoice\(\);/.test(caddie) &&
+      /const SILENCE_TIMEOUT_MS = 900;/.test(vs)
+    );
+  })(),
+  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; 900ms silence snap');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
@@ -3624,7 +3643,7 @@ const vcWarmSrc = read('hooks/useVoiceCaddie.ts');
 check('Voice warmup fires on voice-surface mount + app foreground (not just greeting)',
   /import \{ prewarmVoice \} from '\.\.\/services\/voiceWarmup'/.test(vcWarmSrc) &&
     /AppState\.addEventListener\('change'/.test(vcWarmSrc) &&
-    /next === 'active'\) warmIfVoice\(\)/.test(vcWarmSrc) &&
+    /next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vcWarmSrc) &&
     /voiceEnabled\) prewarmVoice\(\)/.test(vcWarmSrc),
   "useVoiceCaddie warms the four voice Lambdas whenever a voice surface mounts and whenever the app returns to the foreground (gated on voiceEnabled, 30s-deduped) so the FIRST mic tap is hot — not the third");
 

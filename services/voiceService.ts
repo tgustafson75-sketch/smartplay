@@ -140,7 +140,11 @@ const SILENCE_DB_THRESHOLD = -40;
 // inter-word gap, so it doesn't cut a brief word-search pause. This is the single
 // snap knob: lower (~900) = snappier/risk cutting slow pausers; higher (~1800) =
 // safer/laggier. All captureUtterance callers inherit.
-const SILENCE_TIMEOUT_MS = 1200;
+// 2026-06-16 (Tim — "listens too long, as fast a flow as possible") — 1200 → 900.
+// Still ~2.5–3x a normal inter-word gap (typical word-search pauses are 300–600ms),
+// so it snaps right after you stop without clipping a brief mid-thought pause. The
+// adaptive noise floor keeps background sound from holding the window open.
+const SILENCE_TIMEOUT_MS = 900;
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 // 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive

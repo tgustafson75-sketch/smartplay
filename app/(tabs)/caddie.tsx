@@ -21,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { prewarmVoice } from '../../services/voiceWarmup';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
@@ -647,6 +648,14 @@ export default function CaddieTab() {
       // Cleanup runs when this tab loses focus.
       setActiveSurface('caddie');
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+
+      // 2026-06-16 (Tim — "first try is always longer than every one after") — warm
+      // the voice endpoints the MOMENT the caddie tab is focused, not just on tap.
+      // The tap-time force-warm raced the user's (often short) utterance, so the
+      // first response still paid cold-start. Warming on focus means transcribe /
+      // voice-intent / kevin / TTS are hot by the time they tap. Passive (30s
+      // dedupe) so re-focus doesn't spam.
+      if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
 
       // Fire round_start_handoff when caddie regains focus with an active round on hole 1
       // (covers: briefing dismissed, skip_briefings path, any other entry)
