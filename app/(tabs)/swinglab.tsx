@@ -99,6 +99,15 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     tag: 'PRACTICE',
   },
   {
+    key: 'library',
+    icon: 'albums-outline',
+    title: 'Swing Library',
+    sub: 'View, compare, and analyze your captured swings',
+    route: '/swinglab/library',
+    accent: '#a78bfa',
+    tag: 'REVIEW',
+  },
+  {
     key: 'tempo',
     icon: 'musical-notes-outline',
     title: 'Tempo Trainer',
@@ -108,13 +117,13 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     tag: 'TEMPO',
   },
   {
-    key: 'library',
-    icon: 'albums-outline',
-    title: 'Swing Library',
-    sub: 'View, compare, and analyze your captured swings',
-    route: '/swinglab/library',
-    accent: '#a78bfa',
-    tag: 'REVIEW',
+    key: 'open-range',
+    icon: 'golf-outline',
+    title: 'Open Range',
+    sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
+    route: '/practice/open-range',
+    accent: '#88F700',
+    tag: 'RANGE',
   },
 ];
 
@@ -150,10 +159,18 @@ const PLAY_SECTION: LauncherCardSpec[] = [
   },
 ];
 
-// 2026-06-17 (Tim) — "Prepare Better" replaces "Advanced Tools". All full-width
-// LauncherCards — no grid, so nothing gets smashed on a narrow screen.
-// Setup Check is feature-flagged. Open Range has no 1/3/5 cadence — open session.
+// 2026-06-17 (Tim) — "Prepare Better": Fit Profile, Setup Check, SmartPlan, Pre-Round Warm Up.
+// Setup Check is feature-flagged. All full-width LauncherCards.
 const PREPARE_SECTION: LauncherCardSpec[] = [
+  {
+    key: 'fit-profile',
+    icon: 'construct-outline',
+    title: 'Fit Profile',
+    sub: 'Real game data builds your ideal bag setup',
+    route: '/practice/fit-profile',
+    accent: '#22d3ee',
+    tag: 'FITTING',
+  },
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
     icon: 'body-outline' as const,
@@ -164,13 +181,13 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     tag: 'PREP',
   }] : []),
   {
-    key: 'open-range',
-    icon: 'golf-outline',
-    title: 'Open Range',
-    sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
-    route: '/practice/open-range',
-    accent: '#88F700',
-    tag: 'RANGE',
+    key: 'smartplan',
+    icon: 'calendar-outline',
+    title: 'SmartPlan',
+    sub: 'Your personalized AI improvement plan',
+    route: '/practice/smartplan',
+    accent: '#a3e635',
+    tag: 'PLAN',
   },
   {
     key: 'preround',
@@ -180,24 +197,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     route: '/practice/preround',
     accent: '#88F700',
     tag: 'WARM UP',
-  },
-  {
-    key: 'fit-profile',
-    icon: 'construct-outline',
-    title: 'Fit Profile',
-    sub: 'Real game data builds your ideal bag setup',
-    route: '/practice/fit-profile',
-    accent: '#22d3ee',
-    tag: 'FITTING',
-  },
-  {
-    key: 'smartplan',
-    icon: 'calendar-outline',
-    title: 'SmartPlan',
-    sub: 'Your personalized AI improvement plan',
-    route: '/practice/smartplan',
-    accent: '#a3e635',
-    tag: 'PLAN',
   },
 ];
 
