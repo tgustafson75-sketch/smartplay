@@ -454,6 +454,35 @@ export const configureAudioForSpeech =
     }
   };
 
+// 2026-06-16 (Tim — "fix the first-turn slowness") — warm the MIC / audio-capture
+// pipeline once, OFF the user's path. The first Audio.Recording after app launch pays
+// a cold OS audio-HAL + mic kernel-stream init (the "first ask is a beat slower" cost);
+// a tiny throwaway record start+stop pre-pays it so the user's first real tap is warm.
+// This is the capture-side analogue of the network prewarmVoice heartbeat — a true
+// warm-up, NOT a sleep band-aid. Safe by construction: runs at most once per process,
+// only when mic permission is ALREADY granted (never prompts), never while the caddie
+// is speaking or a real capture is live, fully best-effort (never throws/blocks), and
+// restores speaker mode after so the next TTS/opener is unaffected.
+let micPipelinePrimed = false;
+export async function primeMicPipeline(): Promise<void> {
+  if (micPipelinePrimed) return;
+  try {
+    const perm = await Audio.getPermissionsAsync();
+    if (!perm.granted) return;                 // can't prime without permission — retry later
+    if (isSpeaking() || isCapturing()) return; // don't fight TTS / a live capture — retry later
+    micPipelinePrimed = true;                  // commit only once we're actually priming
+    await configureAudioForRecording();
+    const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
+    try { await recording.stopAndUnloadAsync(); } catch { /* no-op */ }
+    console.log('[voice] mic pipeline primed (first-tap warm)');
+  } catch (e) {
+    console.log('[voice] mic prime skipped (non-fatal):', e);
+  } finally {
+    // Leave the session back in speaker mode so the next opener/TTS isn't stuck in record.
+    try { await configureAudioForSpeech(); } catch { /* no-op */ }
+  }
+}
+
 // ─── SINGLETON SPEECH STATE ───────────────
 // Module-level state shared across all components and hook instances.
 // A new speechId is issued on every speak() or stopSpeaking() call;

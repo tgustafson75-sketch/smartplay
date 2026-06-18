@@ -61,7 +61,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking } from '../../services/voiceService';
+import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline } from '../../services/voiceService';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -655,7 +655,12 @@ export default function CaddieTab() {
       // first response still paid cold-start. Warming on focus means transcribe /
       // voice-intent / kevin / TTS are hot by the time they tap. Passive (30s
       // dedupe) so re-focus doesn't spam.
-      if (useSettingsStore.getState().voiceEnabled) prewarmVoice();
+      if (useSettingsStore.getState().voiceEnabled) {
+        prewarmVoice();
+        // 2026-06-16 — also warm the mic/capture pipeline (once, self-guarded) so the
+        // first tap-to-talk isn't cold. Backup to the opener-tail prime for re-entry.
+        void primeMicPipeline();
+      }
 
       // Fire round_start_handoff when caddie regains focus with an active round on hole 1
       // (covers: briefing dismissed, skip_briefings path, any other entry)
@@ -1005,6 +1010,10 @@ export default function CaddieTab() {
       } catch (e) {
         console.log('[caddie] opener failed (non-fatal):', e);
       }
+      // 2026-06-16 (Tim — "fix that first-turn slowness") — greeting + opener are done,
+      // the caddie is idle: warm the mic/audio-capture pipeline now (once, off-path) so
+      // the user's first real tap-to-talk isn't cold. Self-guarded + best-effort.
+      void primeMicPipeline();
     })();
   }, []);
 

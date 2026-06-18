@@ -2040,7 +2040,7 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       /heartbeat = setInterval\(warmIfVoice, 240_000\)/.test(vc) &&
       /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
       /else stopHeartbeat\(\)/.test(vc) &&
-      /if \(useSettingsStore\.getState\(\)\.voiceEnabled\) prewarmVoice\(\);/.test(caddie) &&
+      /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(caddie) &&
       /const SILENCE_TIMEOUT_MS = 900;/.test(vs)
     );
   })(),
@@ -2158,6 +2158,25 @@ check('Voice: first-ask failure exits leave a breadcrumb in the Issue Log (diagn
     );
   })(),
   'silent capture-failure exits now log a reason to the owner Issue Log (no more invisible first-ask misses)');
+
+check('Voice: mic/capture pipeline primed once off-path (first-tap warm)',
+  // 2026-06-16 (Tim — "fix that first-turn slowness") — the first Audio.Recording after
+  // launch pays a cold OS audio-HAL/mic init. primeMicPipeline does a throwaway record
+  // start+stop ONCE, off the user's path (after the opener / on focus), so the first real
+  // tap is warm. Permission-gated (never prompts), never while speaking/capturing,
+  // restores speaker mode. A true warm-up, not a sleep band-aid.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    return (
+      /export async function primeMicPipeline/.test(vs) &&
+      /await Audio\.getPermissionsAsync\(\)/.test(vs) &&
+      /if \(isSpeaking\(\) \|\| isCapturing\(\)\) return;/.test(vs) &&
+      /micPipelinePrimed = true;/.test(vs) &&
+      /void primeMicPipeline\(\);/.test(caddie)
+    );
+  })(),
+  'first tap-to-talk hits a warm mic (one-time off-path prime, permission-gated, restores speaker mode)');
 
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
@@ -3699,7 +3718,7 @@ check('Caddie brain is warmed whenever the tab is open (not only in a round)',
   // focus. Kevin is one of the four WARMUP_PATHS, so the brain stays hot off-course.
   /'\/api\/kevin'/.test(read('services/voiceWarmup.ts')) &&
     /export function prewarmVoice/.test(read('services/voiceWarmup.ts')) &&
-    /if \(useSettingsStore\.getState\(\)\.voiceEnabled\) prewarmVoice\(\);/.test(read('app/(tabs)/caddie.tsx')) &&
+    /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(read('app/(tabs)/caddie.tsx')) &&
     !/if \(!useRoundStore\.getState\(\)\.isRoundActive\) return;/.test(read('app/(tabs)/caddie.tsx')),
   'off-course "good morning Kevin" hits a warm Lambda (app-wide heartbeat + caddie-focus warm)');
 
