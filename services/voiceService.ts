@@ -473,12 +473,21 @@ let speakQueue: Promise<void> = Promise.resolve();
 // pair from continuing after the user taps to interrupt mid-briefing.
 let speakGeneration = 0;
 
+// 2026-06-16 (Tim — "old voices leaking from prior steps" on navigation) — stamp
+// when the most-recent utterance actually STARTED (queue body runs, not enqueue).
+// app/_layout.tsx reads this on route change: it stops stale carry-over speech but
+// leaves a JUST-started line alone (intentional speak-then-navigate: tool opens,
+// SmartFinder fire a short line right before router.push).
+let lastSpeakStartedAt = 0;
+export const getLastSpeakStartedAt = (): number => lastSpeakStartedAt;
+
 const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {
   const enqueuedAt = speakGeneration;
   speakQueue = speakQueue
     .catch(() => { /* drop prior failure */ })
     .then(() => {
       if (enqueuedAt !== speakGeneration) return; // stopSpeaking fired after enqueue
+      lastSpeakStartedAt = Date.now();
       return body();
     })
     .then(() => undefined);

@@ -13,6 +13,7 @@ import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
+import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
 // 2026-05-27 — Fix EA: screenshot mode flag drives the global StatusBar
 // hidden prop so the user can capture clean shots without the phone's
 // top chrome (time / battery / wifi).
@@ -170,6 +171,19 @@ function AppNavigator() {
       console.log('[debug-gate] redirect failed', e);
     }
   }, [pathname, ownerEmail]);
+
+  // 2026-06-16 (Tim — "old voices leaking from prior steps") — on every route change,
+  // stop any caddie speech still playing/queued from the PREVIOUS screen so it can't
+  // carry over (stopSpeaking also flushes the queue via speakGeneration and clears the
+  // caption/error text). A 2s grace protects intentional speak-then-navigate (tool
+  // opens + SmartFinder fire a short line right before router.push) and the launch
+  // greeting→caddie handoff — only stale, still-running prior-step speech is stopped.
+  useEffect(() => {
+    if (!pathname) return;
+    if (Date.now() - getLastSpeakStartedAt() > 2000) {
+      void stopSpeaking().catch(() => {});
+    }
+  }, [pathname]);
 
   // 2026-06-11 (audit 4c) — one-time migration of the custom-caddie image blobs
   // out of playerProfileStore (which re-serialized them on every profile/handicap

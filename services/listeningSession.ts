@@ -405,7 +405,33 @@ async function openSession() {
     // watch your swing?"). It also covers the usual high-frequency phrases. On a
     // miss it falls through to the cloud classifier exactly as before.
     let intent: VoiceIntent | null = precheckLocalIntent(utterance);
+    // 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — on a precheck
+    // MISS the turn is almost always conversational and routes to /api/kevin anyway;
+    // the classifier (/api/voice-intent) only decides IF a deterministic handler
+    // should run, and the brain takes the RAW utterance (not the intent). So fire a
+    // SPECULATIVE brain call in PARALLEL with the classifier instead of stacking
+    // brain-after-classify — the brain's network+LLM time overlaps the classify
+    // (~0.7-1s shaved off every conversational turn, which matters most on weak
+    // signal). If the classifier ends up routing to a handler/diagnostic, this
+    // result is just dropped. Body matches the small-talk path below exactly.
+    let speculativeBrainP: Promise<Response | null> | null = null;
     if (!intent) {
+      speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: utterance,
+          language: settings.language,
+          currentHole: round.isRoundActive ? round.currentHole : null,
+          currentYardage: round.currentYardage ?? null,
+          activeCourse: round.activeCourse,
+          holeNotes: round.holeNotes,
+          isRoundActive: round.isRoundActive,
+          voiceGender: settings.voiceGender ?? 'male',
+          persona: settings.caddiePersonality,
+        }),
+      }, KEVIN_FETCH_TIMEOUT_MS).catch(() => null);
+
       const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -582,7 +608,11 @@ async function openSession() {
           //   (3) fetch itself throws (network error, AbortController)
           let chatSpoken = false;
           try {
-            const chatRes = await fetchWithTimeout(`${apiUrl}/api/kevin`, {
+            // 2026-06-16 — prefer the SPECULATIVE brain call fired in parallel with
+            // the classifier above; it's already in flight, so the classify time was
+            // overlapped instead of stacked. Falls back to a fresh call if it wasn't
+            // fired (precheck hit) or errored. Same body either way.
+            const chatRes = (speculativeBrainP && await speculativeBrainP) || await fetchWithTimeout(`${apiUrl}/api/kevin`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({

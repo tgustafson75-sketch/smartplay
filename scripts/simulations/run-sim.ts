@@ -2072,6 +2072,37 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
+check('Voice latency: brain fired in parallel with the classifier on precheck-miss',
+  // 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — the cloud classifier
+  // sat serially in front of the brain even though the brain takes the raw utterance.
+  // On precheck-miss we now fire a speculative /api/kevin in PARALLEL with the
+  // classifier and consume it on the conversational branch (~1 round-trip saved).
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    return (
+      /let speculativeBrainP: Promise<Response \| null> \| null = null;/.test(ls) &&
+      /speculativeBrainP = fetchWithTimeout\(`\$\{apiUrl\}\/api\/kevin`/.test(ls) &&
+      /const chatRes = \(speculativeBrainP && await speculativeBrainP\) \|\| await fetchWithTimeout/.test(ls)
+    );
+  })(),
+  'conversational brain overlaps the classifier instead of stacking after it');
+
+check('Voice: stale speech cleared on navigation (no carry-over), with speak-then-nav grace',
+  // 2026-06-16 (Tim — "old voices leaking from prior steps") — route change stops
+  // prior-screen speech (queue self-invalidates via speakGeneration + caption clears);
+  // a 2s grace protects intentional speak-then-navigate + the launch greeting handoff.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const layout = read('app/_layout.tsx');
+    return (
+      /export const getLastSpeakStartedAt = \(\): number => lastSpeakStartedAt;/.test(vs) &&
+      /lastSpeakStartedAt = Date\.now\(\);/.test(vs) &&
+      /Date\.now\(\) - getLastSpeakStartedAt\(\) > 2000/.test(layout) &&
+      /void stopSpeaking\(\)\.catch/.test(layout)
+    );
+  })(),
+  'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
