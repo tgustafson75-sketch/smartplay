@@ -2123,6 +2123,26 @@ check('Voice local-first: deterministic asks answered on-device before classify+
   })(),
   'factual asks answer instantly + offline (skip classify+brain); strategic asks keep the brain');
 
+check('Voice local-first hit-rate metric: recorded at decision points + shown in Owner Tools',
+  // 2026-06-16 (Tim — "I care about that stuff") — the self-growing-agent health metric:
+  // share of spoken asks answered ON-DEVICE vs escalated to the cloud, recorded at the
+  // precheck / local-primary / cloud decision points and surfaced (live %, tap-to-reset)
+  // in Settings → Owner Tools. Pure observation — never gates the voice path.
+  (() => {
+    const store = read('store/voiceHitRateStore.ts');
+    const ls = read('services/listeningSession.ts');
+    const settings = read('app/settings.tsx');
+    return (
+      /export const useVoiceHitRateStore/.test(store) &&
+      /recordLocal:/.test(store) && /recordCloud:/.test(store) &&
+      /recordLocal\(`precheck:/.test(ls) &&
+      /recordLocal\(`local_primary:/.test(ls) &&
+      /recordCloud\(`cloud:/.test(ls) &&
+      /function VoiceHitRateRow/.test(settings) && /<VoiceHitRateRow colors=\{colors\} \/>/.test(settings)
+    );
+  })(),
+  'local-vs-cloud counter recorded at precheck/local-primary/cloud points; live % in Owner Tools');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue

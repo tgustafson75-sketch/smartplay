@@ -14,6 +14,7 @@ import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary'
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { tryLocalReply } from './localStatusResponder';
+import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { getApiBaseUrl } from './apiBase';
@@ -423,6 +424,11 @@ async function openSession() {
     // watch your swing?"). It also covers the usual high-frequency phrases. On a
     // miss it falls through to the cloud classifier exactly as before.
     let intent: VoiceIntent | null = precheckLocalIntent(utterance);
+    // Local-first health metric ([[self-growing-agent-architecture]]) — a precheck hit
+    // answered without the cloud classifier. Pure observation; never gates the flow.
+    if (intent) {
+      try { useVoiceHitRateStore.getState().recordLocal(`precheck:${intent.intent_type}`, Date.now()); } catch { /* non-fatal */ }
+    }
     // 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — on a precheck
     // MISS the turn is almost always conversational and routes to /api/kevin anyway;
     // the classifier (/api/voice-intent) only decides IF a deterministic handler
@@ -449,6 +455,7 @@ async function openSession() {
       try { localPrimary = tryLocalReply(utterance, localLang); } catch { localPrimary = null; }
       if (localPrimary && localPrimary.text && LOCAL_PRIMARY_TYPES.has(localPrimary.queryType)) {
         console.log(`[path4:voice] local_primary type=${localPrimary.queryType} (skipped classify+brain)`);
+        try { useVoiceHitRateStore.getState().recordLocal(`local_primary:${localPrimary.queryType}`, Date.now()); } catch { /* non-fatal */ }
         const localAllowed =
           settings.voiceEnabled &&
           (route !== 'phone_speaker' || allowPhoneSpeaker);
@@ -497,6 +504,10 @@ async function openSession() {
         return;
       }
       intent = await parseRes.json() as VoiceIntent;
+      // Cloud escalation — the local precheck + local-primary both missed, so we paid
+      // the classifier (and usually the brain). The metric Tim watches: this should
+      // trend DOWN relative to local as the CNS brain grows.
+      try { useVoiceHitRateStore.getState().recordCloud(`cloud:${intent.intent_type}`, Date.now()); } catch { /* non-fatal */ }
     }
     const t_intent = Date.now();
     console.log(`[path4:voice] intent=${intent.intent_type} topic=${(intent.parameters?.query_topic as string | undefined) ?? 'none'}`);

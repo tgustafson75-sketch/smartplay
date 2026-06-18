@@ -27,6 +27,7 @@ import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
+import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
@@ -1697,6 +1698,7 @@ export default function Settings() {
                       gated (flag + isOwnerEmail) — never fires for
                       production users. Review tuples at /cage-debug. */}
                   <FeelCaptureRow colors={colors} />
+                  <VoiceHitRateRow colors={colors} />
 
                   {/* 2026-06-16 (Tim — "issue log + harness should be in owner
                       tools") — Issue Log restored HERE in Owner Tools (it also
@@ -2154,6 +2156,44 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
  * site, so a leaked persisted flag from a previous account doesn't
  * accidentally fire transcription on a non-owner's audio.
  */
+// 2026-06-16 (Tim — self-growing agent metric) — the local-first health metric:
+// what share of spoken asks the caddie answered ON-DEVICE (instant/offline/0-token)
+// vs escalated to the cloud. Should trend UP as the CNS brain grows. Tap to reset.
+function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
+  const local = useVoiceHitRateStore((s) => s.local);
+  const cloud = useVoiceHitRateStore((s) => s.cloud);
+  const reset = useVoiceHitRateStore((s) => s.reset);
+  const total = local + cloud;
+  const pct = total === 0 ? 0 : Math.round((local / total) * 100);
+  return (
+    <TouchableOpacity
+      style={styles.resetRow}
+      onPress={() =>
+        Alert.alert(
+          'Reset voice hit-rate?',
+          `Local ${pct}% — ${local} on-device / ${cloud} cloud (${total} asks).`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Reset', style: 'destructive', onPress: () => reset() },
+          ],
+        )
+      }
+      accessibilityRole="button"
+      accessibilityLabel="Voice local hit-rate; tap to reset"
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Voice Local Hit-Rate</Text>
+        <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+          {total === 0
+            ? 'No voice asks yet. Answered on-device vs escalated to the cloud — should climb as the brain learns.'
+            : `${pct}% on-device · ${local} local / ${cloud} cloud (${total} asks). Tap to reset.`}
+        </Text>
+      </View>
+      <Text style={[styles.rowLabel, { color: pct >= 50 ? colors.accent : colors.text_muted, fontVariant: ['tabular-nums'] }]}>{pct}%</Text>
+    </TouchableOpacity>
+  );
+}
+
 function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
   const feelCaptureEnabled = useSettingsStore((s) => s.feelCaptureEnabled);
   const setFeelCaptureEnabled = useSettingsStore((s) => s.setFeelCaptureEnabled);
