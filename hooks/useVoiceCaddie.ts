@@ -1302,6 +1302,9 @@ export const useVoiceCaddie = ({
         const size = (info as { size?: number }).size ?? 0;
         if (!info.exists || size < 1024) {
           console.log('[voice] audio file too small (<1KB), skipping transcribe');
+          // 2026-06-16 — breadcrumb: empty/tiny recording (cold mic / speaker→record
+          // transition on the first capture) lands here. Visible in the voice log now.
+          logVoiceSilentFail('capture_file_too_small', { source: 'processAudioUri', size, exists: info.exists, sourceKind: source });
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
@@ -1372,6 +1375,10 @@ export const useVoiceCaddie = ({
         // Silent / unintelligible audio. Common when the mic was too
         // far away or background noise drowned the user out. Tell them
         // so they know to try again louder/closer.
+        // 2026-06-16 — breadcrumb: the recording HAD bytes but Whisper returned empty
+        // (near-silent capture — the classic cold first-record symptom). Distinguishes
+        // "empty recording" from "too-small file" and "transcribe error" in the log.
+        logVoiceSilentFail('empty_transcript', { source: 'processAudioUri', sourceKind: source });
         onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
@@ -1778,12 +1785,19 @@ export const useVoiceCaddie = ({
         recordingRef.current = null;
 
         if (!uri) {
+          // 2026-06-16 (Tim — "front-end path has a glitch", first-ask 90% fail) —
+          // breadcrumb so this silent exit is visible in the voice log.
+          logVoiceSilentFail('tap_no_uri', { source: 'handleMicPress', durationMs });
           wrappedOnVoiceStateChange('idle');
           return;
         }
 
         if (durationMs != null && durationMs < 300) {
+          // 2026-06-16 — was a silent console.log (gone in prod). A first-ask glitch
+          // that produces an empty/clipped recording lands HERE; now it's logged so we
+          // can tell "cold-mic empty recording" from a transcribe/network failure.
           console.log('[voice] tap-record too short (', durationMs, 'ms), skipping transcribe');
+          logVoiceSilentFail('tap_capture_too_short', { source: 'handleMicPress', durationMs });
           wrappedOnVoiceStateChange('idle');
           return;
         }

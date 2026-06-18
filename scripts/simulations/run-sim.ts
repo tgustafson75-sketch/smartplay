@@ -2143,6 +2143,22 @@ check('Voice local-first hit-rate metric: recorded at decision points + shown in
   })(),
   'local-vs-cloud counter recorded at precheck/local-primary/cloud points; live % in Owner Tools');
 
+check('Voice: first-ask failure exits leave a breadcrumb in the Issue Log (diagnosable)',
+  // 2026-06-16 (Tim — "first ask is 90% a failure", "front-end path has a glitch") — the
+  // tap-path failure exits were silent console.logs (gone in prod), so the glitch was
+  // undiagnosable. Each now logs a distinct reason to the owner Issue Log so the next
+  // failure names its exact stage: empty/clipped recording vs transcribe error vs silence.
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      /logVoiceSilentFail\('tap_no_uri'/.test(vc) &&
+      /logVoiceSilentFail\('tap_capture_too_short'/.test(vc) &&
+      /logVoiceSilentFail\('capture_file_too_small'/.test(vc) &&
+      /logVoiceSilentFail\('empty_transcript'/.test(vc)
+    );
+  })(),
+  'silent capture-failure exits now log a reason to the owner Issue Log (no more invisible first-ask misses)');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
