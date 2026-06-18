@@ -1698,9 +1698,24 @@ export default function Settings() {
                       production users. Review tuples at /cage-debug. */}
                   <FeelCaptureRow colors={colors} />
 
-                  {/* 2026-05-25 — Issue Log row moved to public Beta
-                      Feedback section above. Owner gets Claude triage
-                      buttons inside the log itself. */}
+                  {/* 2026-06-16 (Tim — "issue log + harness should be in owner
+                      tools") — Issue Log restored HERE in Owner Tools (it also
+                      still lives in the public Beta Feedback section above, but Tim
+                      expects it alongside the harness). Owner triage lives inside. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/owner-logs' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Issue Log"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Logged issues (voice &quot;log this: …&quot; + manual). Owner Claude-triage + export inside.
+                      </Text>
+                    </View>
+                    <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-05-24 — Scenario harness. Owner-gated test runner
                       for 17 scenarios covering the shipped-unverified items
                       from BUILD-STATE-AUDIT §B. */}

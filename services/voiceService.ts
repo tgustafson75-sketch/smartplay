@@ -767,6 +767,15 @@ async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', m
   // mode and the device voice would play into the mic (the caddie goes silent).
   try { await configureAudioForSpeech(); } catch { /* best-effort; speak anyway */ }
   if (myId !== currentSpeechId) return; // preempted during the audio-mode switch
+  // 2026-06-16 (Tim — "two voices racing") — stop any in-flight cloud/mp3 sound
+  // (a separate subsystem from expo-speech) before the device voice starts, so the
+  // robotic fallback can't overlap a cloud line / the opener. Mirrors the Speech.stop
+  // the cloud/mp3 paths now do, giving full mutual exclusion.
+  if (currentSound) {
+    try { await currentSound.stopAsync(); await currentSound.unloadAsync(); } catch {}
+    currentSound = null;
+  }
+  if (myId !== currentSpeechId) return; // re-check after the async stop, right before speaking
   try {
     Speech.stop(); // cancel any prior device utterance before starting a new one
     usingDeviceFallback = true;
@@ -819,6 +828,10 @@ export const playLocalFile = async (
     } catch {}
     currentSound = null;
   }
+  // 2026-06-16 (Tim — "two voices racing") — the OPENER plays through here
+  // (playLocalFile of a bundled mp3). It was racing a device-TTS greeting fallback
+  // (the robotic voice) because they're separate subsystems. Cancel device-TTS too.
+  try { Speech.stop(); } catch {}
 
   notifySpeaking(true);
   await configureAudioForSpeech();
@@ -915,6 +928,9 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     } catch {}
     currentSound = null;
   }
+  // 2026-06-16 (Tim — "two voices racing") — cancel any in-flight device-TTS too
+  // (separate subsystem from currentSound). One voice at a time across both.
+  try { Speech.stop(); } catch {}
 
   notifySpeaking(true);
   await configureAudioForSpeech();
@@ -1060,6 +1076,12 @@ export const speak = async (
     } catch {}
     currentSound = null;
   }
+  // 2026-06-16 (Tim — "two voices racing") — also cancel any in-flight DEVICE-TTS
+  // (expo-speech). It's a SEPARATE audio subsystem from currentSound (Audio.Sound),
+  // so bumping speechId + unloading the sound did NOT stop a robotic fallback that
+  // was mid-sentence — a cloud line (or the opener mp3) then played on top of it.
+  // Stopping Speech here enforces one-voice-at-a-time across both subsystems.
+  try { Speech.stop(); } catch {}
 
   notifySpeaking(true);
   // PGA HOPE follow-up (A2) — broadcast caption text for the duration
@@ -1205,7 +1227,7 @@ export const speak = async (
       currentAbortController = null;
       logVoiceSilentFail('speak_circuit_degraded', { speechId: myId, textHead: text.slice(0, 60) });
       // Breaker open = we're offline. Don't go mute — speak it on the device.
-      void deviceSpeakFallback(text, language, myId, effectiveGender);
+      await deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1240,7 +1262,7 @@ export const speak = async (
       logVoiceSilentFail('speak_api_error', { speechId: myId, status: response.status, error: errBody.slice(0, 300) });
       cbRecordFailure('voice');
       // Server TTS errored (quota / 5xx) — fall back to the device voice.
-      void deviceSpeakFallback(text, language, myId, effectiveGender);
+      await deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
     // Got bytes from the server → online; clear the breaker window.
@@ -1271,7 +1293,7 @@ export const speak = async (
       });
       logVoiceSilentFail('speak_small_payload', { speechId: myId, bytes: arrayBuffer.byteLength, language, textHead: text.slice(0, 40) });
       // Bad/empty audio blob — fall back to the device voice instead of going silent.
-      void deviceSpeakFallback(text, language, myId, effectiveGender);
+      await deviceSpeakFallback(text, language, myId, effectiveGender);
       return;
     }
 
@@ -1453,7 +1475,7 @@ export const speak = async (
       // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
       // mute — speak the line on the device instead. (AbortError = a newer
       // utterance preempted us; that correctly stays silent.)
-      void deviceSpeakFallback(text, language, myId, effectiveGender);
+      await deviceSpeakFallback(text, language, myId, effectiveGender);
     }
   }
 });

@@ -711,9 +711,13 @@ check('Ball-departure verdict is honest (departed = before && !after)',
 
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
+  // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed
+  // (commit 4c9dabb "remove BALL/TARGET/LAUNCH pills"); the green perspective
+  // ball-area trapezoid (SvgPolygon) + white target line (SvgLine) / ring
+  // (SvgEllipse) remain as the clean visual markers.
   /SvgPolygon/.test(targetOverlaySrc) && /SvgEllipse/.test(targetOverlaySrc) &&
-    />TARGET</.test(targetOverlaySrc) && />BALL AREA</.test(targetOverlaySrc),
-  'green perspective ball-area trapezoid + white target line/ring + pills');
+    /SvgLine/.test(targetOverlaySrc),
+  'green perspective ball-area trapezoid + white target line/ring (text pills removed by design)');
 
 check('Pre-record ball box: default box + verifier gated to Motion step + acoustic anchor',
   /draftBall/.test(smSrc) && /placeBallMode/.test(smSrc) &&
@@ -2042,6 +2046,37 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
   })(),
   'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; 900ms silence snap');
 
+check('Voice: one-voice-at-a-time across cloud + device subsystems (no racing)',
+  // 2026-06-16 (Tim — "two voices racing" + robotic backup at the same time) — the
+  // cloud/mp3 path (Audio.Sound) and the device-TTS fallback (expo-speech) are
+  // SEPARATE subsystems; neither cancelled the other, so the opener mp3 / a cloud
+  // line could play over an in-flight robotic fallback. Now each side stops the
+  // other on start, and the device fallback is awaited (not fire-and-forget).
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const cloudStopsDevice = (vs.match(/try \{ Speech\.stop\(\); \} catch \{\}/g) || []).length >= 3;
+    const deviceStopsCloud = /re-check after the async stop, right before speaking/.test(vs);
+    const awaited = !/void deviceSpeakFallback\(/.test(vs) && /await deviceSpeakFallback\(/.test(vs);
+    return cloudStopsDevice && deviceStopsCloud && awaited;
+  })(),
+  'cloud/mp3 cancels device-TTS, device fallback cancels cloud/mp3 + is awaited — no overlap');
+
+check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
+  // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
+  // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
+  // Log + Scenario Harness both live in Owner Tools again.
+  (() => {
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const settings = read('app/settings.tsx');
+    return (
+      !/setInterval\(keepWarm/.test(caddie) &&
+      !/message: '__ping__'/.test(caddie) &&
+      /issue log \+ harness should be in owner/i.test(settings) &&
+      /router\.push\('\/harness' as never\)/.test(settings)
+    );
+  })(),
+  'single app-wide voice heartbeat (caddie __ping__ dup removed); Issue Log + Harness in Owner Tools');
+
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes
   // HOME to the caddie via router.replace (the old router.back() white-screened when
@@ -2227,20 +2262,21 @@ check('Settings: branded icons on every category section (mockup, layout unchang
   })(),
   'every settings section header has a branded icon; logic + toggles untouched');
 
-check('SwingLab hub: mockup-driven sections + Smart Motion hero + Advanced grid',
+check('SwingLab hub: mockup-driven sections + Smart Motion hero + branded feature rows',
   // 2026-06-16 (Tim — mockup) — sectioned hierarchy: Smart Motion hero with a branded
-  // feature row, full-width colored intent cards, and a compact Advanced-tools grid.
+  // feature row + the three intent sections. NOTE: the old AdvancedTile 48% grid was
+  // refactored away in the hero-cleanup commits (5281eb7 / 9ae8cb2), so this asserts
+  // the stable structure (hero + sections + feature rows), not the grid internals.
   (() => {
     const sl = read('app/(tabs)/swinglab.tsx');
     return (
-      /function SmartMotionHero/.test(sl) && /function AdvancedTile/.test(sl) &&
-      /ANALYZE & IMPROVE/.test(sl) && /PRACTICE BETTER/.test(sl) && /PLAY SMARTER/.test(sl) && /ADVANCED TOOLS/.test(sl) &&
+      /function SmartMotionHero/.test(sl) &&
+      /ANALYZE & IMPROVE/.test(sl) && /PRACTICE BETTER/.test(sl) && /PLAY SMARTER/.test(sl) &&
       /feature-smartmotion\.png/.test(sl) &&
-      /Swing Analysis/.test(sl) && /Acoustic Detection/.test(sl) && /Body Mechanics/.test(sl) &&
-      /<View style=\{styles\.grid\}>/.test(sl) && /width: '48%'/.test(sl)
+      /Swing Analysis/.test(sl) && /Acoustic Detection/.test(sl) && /Body Mechanics/.test(sl)
     );
   })(),
-  'sectioned layout: Smart Motion hero (branded feature row) + full-width colored cards + compact Advanced grid');
+  'sectioned layout: Smart Motion hero (branded feature row) + the three intent sections');
 
 check('Course detail: API enrichment keeps the curated town (no location flap)',
   // 2026-06-16 (Tim — town flapped Temecula→Aguanga) — a bundled course keeps its
@@ -3560,9 +3596,14 @@ check('Cage-session context build is throw-proof',
   'a malformed session in history can no longer crash the brain context builder');
 
 check('Caddie brain is warmed whenever the tab is open (not only in a round)',
-  !/if \(!useRoundStore\.getState\(\)\.isRoundActive\) return;/.test(read('app/(tabs)/caddie.tsx')) &&
-    /Warm the brain whenever the Caddie tab is open/.test(read('app/(tabs)/caddie.tsx')),
-  'off-course "good morning Kevin" hits a warm Lambda so the first ask is fast');
+  // 2026-06-16 — the per-tab __ping__ keepWarm was removed; warming is now the
+  // app-wide prewarmVoice heartbeat (NOT round-gated) plus a warm on caddie-tab
+  // focus. Kevin is one of the four WARMUP_PATHS, so the brain stays hot off-course.
+  /'\/api\/kevin'/.test(read('services/voiceWarmup.ts')) &&
+    /export function prewarmVoice/.test(read('services/voiceWarmup.ts')) &&
+    /if \(useSettingsStore\.getState\(\)\.voiceEnabled\) prewarmVoice\(\);/.test(read('app/(tabs)/caddie.tsx')) &&
+    !/if \(!useRoundStore\.getState\(\)\.isRoundActive\) return;/.test(read('app/(tabs)/caddie.tsx')),
+  'off-course "good morning Kevin" hits a warm Lambda (app-wide heartbeat + caddie-focus warm)');
 
 // 2026-06-10 — Provider architecture: Anthropic spine, Gemini fast fallback,
 // OpenAI out of analysis (ears/mouth only). (swingApiSrc declared above.)

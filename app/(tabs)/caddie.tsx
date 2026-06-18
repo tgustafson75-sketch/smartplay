@@ -924,32 +924,12 @@ export default function CaddieTab() {
   const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle';
 
   // ── Keep Vercel warm ────────────────────
-  // 2026-05-26 — Batch 61: ping /api/kevin instead of /api/brain. Both
-  // accept the __ping__ sentinel with the same { text: 'ok' } shape,
-  // and brain.ts is being deprecated (canonical brain logic is now in
-  // kevin.ts — Anthropic+OpenAI fallback chain, tier classifier,
-  // vision support, etc.). The 4-minute cadence keeps the function
-  // warm so cold-start latency doesn't slap the first real call.
-  useEffect(() => {
-    const keepWarm = async () => {
-      // 2026-06-10 — Warm the brain whenever the Caddie tab is open, NOT only
-      // during a round. The caddie is used off-course too (chat / "good morning
-      // Kevin"), and gating warmup on isRoundActive meant the FIRST off-course
-      // ask always hit a cold Lambda. The ping is tiny and only runs while this
-      // tab is mounted. Best-effort; a failed ping is harmless.
-      try {
-        await fetch(apiUrl + '/api/kevin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: '__ping__', language: 'en' }),
-        });
-      } catch {}
-    };
-    keepWarm();
-    const interval = setInterval(keepWarm, 4 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // 2026-06-16 (Tim — voice cleanup) — REMOVED the per-tab keepWarm setInterval that
+  // pinged /api/kevin with {message:'__ping__'} every 4 min. It was redundant with
+  // the app-wide heartbeat in useVoiceCaddie (services/voiceWarmup.prewarmVoice),
+  // which warms ALL FOUR voice endpoints (voice/transcribe/voice-intent/kevin) on a
+  // 240s cadence while foregrounded. Two 4-minute timers = double idle chatter; the
+  // single heartbeat is the canonical keep-warm now.
 
   // ── AppState guard (battery) ─────────────
   useEffect(() => {
