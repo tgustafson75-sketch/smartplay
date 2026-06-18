@@ -237,6 +237,16 @@ export const captureUtterance = async (
   captureEarlyStop = false;
   try {
     noteAudioActivity('capture');
+    // 2026-06-16 (Tim — "did the speech leak into its mouth") — silence ANY in-flight
+    // caddie speech (cloud sound + device-TTS fallback) BEFORE opening the mic, so the
+    // recording never captures the caddie talking over the user (echo / self-record),
+    // and the audio session flips cleanly from speaker → record with nothing playing.
+    // Centralized HERE so every captureUtterance caller is covered (the follow-up loop
+    // already did this; the ~8 other callers did not). Also gives clean barge-in: a tap
+    // mid-response stops the caddie and listens. Unconditional + idempotent — isSpeaking()
+    // only tracks the cloud sound, NOT the device-TTS fallback, so always call
+    // stopSpeaking() (it covers both subsystems and is a near-noop when nothing plays).
+    try { await stopSpeaking(); } catch { /* best-effort */ }
     const { granted } = await Audio.requestPermissionsAsync();
     if (!granted) return null;
     await configureAudioForRecording();

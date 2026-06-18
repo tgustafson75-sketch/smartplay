@@ -2061,6 +2061,17 @@ check('Voice: one-voice-at-a-time across cloud + device subsystems (no racing)',
   })(),
   'cloud/mp3 cancels device-TTS, device fallback cancels cloud/mp3 + is awaited — no overlap');
 
+check('Voice: capture silences the caddie before opening the mic (no self-record)',
+  // 2026-06-16 (Tim — "did the speech leak into its mouth") — captureUtterance must
+  // stopSpeaking() (both subsystems) BEFORE configureAudioForRecording, so the mic
+  // never records the caddie talking over the user. Centralized for ALL callers; also
+  // gives clean barge-in (tap mid-response stops the caddie and listens).
+  (() => {
+    const vs = read('services/voiceService.ts');
+    return /export const captureUtterance =[\s\S]*?try \{ await stopSpeaking\(\); \} catch[\s\S]*?await configureAudioForRecording\(\)/.test(vs);
+  })(),
+  'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
