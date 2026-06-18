@@ -13,6 +13,7 @@ import { routeQuery } from './responseRouter';
 import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
+import { tryLocalReply } from './localStatusResponder';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { getApiBaseUrl } from './apiBase';
@@ -63,6 +64,23 @@ type SessionState = 'idle' | 'opening' | 'listening' | 'thinking' | 'responding'
 
 const INTENT_FETCH_TIMEOUT_MS = 8_000;
 const KEVIN_FETCH_TIMEOUT_MS = 25_000;
+
+// 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — localStatusResponder
+// query types that are DETERMINISTIC + accuracy-safe to answer INSTANTLY from device
+// state, skipping the cloud classify + brain entirely (and their network round-trips).
+// Promoted to PRIMARY (answered before the cloud) when the local precheck misses.
+// Intentionally EXCLUDED: 'hole_info' (strategic "what's the play" — the brain's
+// narrative is richer online; localStatusResponder stays its OFFLINE fallback), and
+// 'no_round'/anything not an answer. This only adds an instant path — it never blocks
+// the cloud for asks not in this set, so nothing existing is downgraded.
+const LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set([
+  'yardage_middle', 'yardage_front', 'yardage_back', 'course_memory',
+  'club_recommend', 'plays_like', 'reach', 'wind', 'last_shot',
+  'score_round', 'hole_current', 'par_current', 'holes_left',
+  'tee_box', 'course_name', 'club_current', 'handicap',
+  'routine_saved', 'routine_recall',
+]);
+const LOCAL_REPLY_LANGS = ['en', 'es', 'zh'] as const;
 
 let state: SessionState = 'idle';
 let cancelMic: (() => void) | null = null;
@@ -416,6 +434,36 @@ async function openSession() {
     // result is just dropped. Body matches the small-talk path below exactly.
     let speculativeBrainP: Promise<Response | null> | null = null;
     if (!intent) {
+      // ── LOCAL-FIRST (2026-06-16, Tim) ──────────────────────────────────────
+      // Before paying ANY cloud round-trip, try to answer the ask instantly from
+      // device state (GPS / round / bag / CNS memory) via the same responder used
+      // as the offline fallback. For the deterministic, accuracy-safe query types
+      // this skips the classifier AND the brain — the 4-5s "then he thinks" gap —
+      // and works with no signal (TTS still voices it, with the device-TTS fallback
+      // when /api/voice is unreachable). Strategic/coaching asks aren't in the set,
+      // so they still get the richer brain online. Pure win, no downgrade.
+      const localLang = (LOCAL_REPLY_LANGS as readonly string[]).includes(settings.language)
+        ? (settings.language as 'en' | 'es' | 'zh')
+        : 'en';
+      let localPrimary: { text: string; queryType: string } | null = null;
+      try { localPrimary = tryLocalReply(utterance, localLang); } catch { localPrimary = null; }
+      if (localPrimary && localPrimary.text && LOCAL_PRIMARY_TYPES.has(localPrimary.queryType)) {
+        console.log(`[path4:voice] local_primary type=${localPrimary.queryType} (skipped classify+brain)`);
+        const localAllowed =
+          settings.voiceEnabled &&
+          (route !== 'phone_speaker' || allowPhoneSpeaker);
+        if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
+        if (localAllowed && getSessionState() === 'responding') {
+          await stopSpeaking().catch(() => {});
+          if (getSessionState() === 'responding') {
+            await speak(localPrimary.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+              .catch((e) => console.log('[listeningSession] local-primary speak failed', e));
+          }
+        }
+        setSessionStateMirror('idle');
+        return;
+      }
+
       speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

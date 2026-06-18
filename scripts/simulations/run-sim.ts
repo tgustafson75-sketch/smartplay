@@ -2103,6 +2103,26 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
   })(),
   'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
 
+check('Voice local-first: deterministic asks answered on-device before classify+brain',
+  // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — the 17-type local
+  // responder (distance/club/score/wind/plays-like/reach/last-shot/hole/par/...) is now
+  // tried BEFORE the cloud classify+brain on a precheck miss, skipping ~2 round-trips
+  // and working offline. Strategic 'hole_info' is intentionally NOT promoted (the brain
+  // stays richer online; localStatusResponder remains its offline fallback).
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    const setBlock = (ls.match(/LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/) || [])[1] || '';
+    return (
+      /import \{ tryLocalReply \} from '\.\/localStatusResponder';/.test(ls) &&
+      /localPrimary = tryLocalReply\(utterance, localLang\)/.test(ls) &&
+      /LOCAL_PRIMARY_TYPES\.has\(localPrimary\.queryType\)/.test(ls) &&
+      /local_primary type=/.test(ls) &&
+      /club_recommend/.test(setBlock) && /plays_like/.test(setBlock) && /score_round/.test(setBlock) &&
+      !/hole_info/.test(setBlock) && !/no_round/.test(setBlock)
+    );
+  })(),
+  'factual asks answer instantly + offline (skip classify+brain); strategic asks keep the brain');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
