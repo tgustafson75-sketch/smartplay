@@ -15,6 +15,7 @@ import {
   isCapturing,
   endCaptureEarly,
   RECORDING_OPTIONS,
+  speakDeviceNotice,
 } from '../services/voiceService';
 import { initFillerLibrary } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
@@ -1362,7 +1363,10 @@ export const useVoiceCaddie = ({
         // badge cycle listening → idle with no clue why nothing happened
         // (no avatar bubble like Full Mode has). Text reaches the
         // CockpitCaddieScreen advice card and the Full Mode bottom bubble.
-        onResponseReceived('Network hiccup on transcribe. Try again.');
+        // 2026-06-19 (Tim — dead-zone testing) — SPEAK it via device TTS (works with no
+        // signal), not just a text bubble the user can't see while driving.
+        onResponseReceived('I had trouble hearing that — try again.');
+        if (voiceEnabled) void speakDeviceNotice('I had trouble hearing that — try again.', language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
@@ -1688,16 +1692,20 @@ export const useVoiceCaddie = ({
       // so repeated cellular weak-signal stretches degrade /api/transcribe
       // and short-circuit subsequent attempts.
       recordVoiceEndpointFailure('transcribe');
+      // 2026-06-19 (Tim — driving in sporadic cellular, "doesn't respond or anything")
+      // — these are the dead-zone failures (transcribe aborted / fetch failed). SPEAK
+      // them through device TTS (zero-signal capable) so the caddie isn't a silent void;
+      // the text bubble alone is invisible while driving. Honest about signal.
       if (aborted) {
         logTranscribeError(null, message, { source: 'process_audio_abort' });
-        onResponseReceived('That took too long. Please try again.');
+        const line = 'That took too long — weak signal. Try again in a sec.';
+        onResponseReceived(line);
+        if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       } else {
         logVoiceError('process_audio', err);
-        // Same Cockpit-visibility rationale as the transcribe/empty paths
-        // above — without a text feedback, the badge silently cycled back
-        // to idle and Tim had no way to tell whether the mic missed him
-        // or the pipeline threw. Keep it warm, not alarmy.
-        onResponseReceived('Give me one sec and ask me again.');
+        const line = "Can't reach the network — looks like weak signal. Try again when you've got bars.";
+        onResponseReceived(line);
+        if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       }
       wrappedOnVoiceStateChange('idle');
     } finally {

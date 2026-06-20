@@ -849,6 +849,23 @@ async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', m
   }
 }
 
+// 2026-06-19 (Tim — dead-zone testing: "local mode does nothing, doesn't respond or
+// anything") — speak a failure NOTICE straight through the DEVICE voice (expo-speech),
+// bypassing the cloud /api/voice attempt entirely. Used when we ALREADY KNOW the network
+// is down (transcribe aborted / fetch failed) so the caddie audibly says "no signal"
+// instead of silently rendering a text bubble the user can't see while driving. Honors
+// [[caddie-failsafe-no-walls]]: always SAY something, even with zero signal. No cloud
+// round-trip, so no doomed-fetch wait.
+export async function speakDeviceNotice(
+  text: string,
+  language: 'en' | 'es' | 'zh' = 'en',
+  gender: 'male' | 'female' = 'male',
+): Promise<void> {
+  if (!text) return;
+  currentSpeechId++;
+  await deviceSpeakFallback(text, language, currentSpeechId, gender);
+}
+
 // ─── PLAY LOCAL FILE (filler clips) ──────
 // Same singleton semantics as speak/speakFromBase64 — naturally cancelled
 // when the real response calls either of those functions.

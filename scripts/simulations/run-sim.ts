@@ -2178,6 +2178,23 @@ check('Voice: mic/capture pipeline primed once off-path (first-tap warm)',
   })(),
   'first tap-to-talk hits a warm mic (one-time off-path prime, permission-gated, restores speaker mode)');
 
+check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bubble)',
+  // 2026-06-19 (Tim — driving in sporadic cellular: "doesn't respond or anything") — the
+  // transcribe/network failure exits only DISPLAYED text. Now they also speak an honest
+  // signal notice through device TTS (zero-signal capable), gated on voiceEnabled, so the
+  // caddie audibly tells you it's a coverage issue instead of going silent.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      /export async function speakDeviceNotice/.test(vs) &&
+      /await deviceSpeakFallback\(text, language, currentSpeechId, gender\)/.test(vs) &&
+      /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
+      /Can't reach the network/.test(vc)
+    );
+  })(),
+  'transcribe/network failures speak an honest signal notice via device TTS (offline), not a silent bubble');
+
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
