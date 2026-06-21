@@ -1076,16 +1076,11 @@ ${onCourseContextBlock}${baseMessage}`
       ? image_caption.trim()
       : null;
 
-    // fast = quick tactical answers (gpt-4o-mini / gemini-2.5-flash)
-    // quality = reasoning, vision, diagnostics (gpt-4o / gemini-2.5-flash)
-    const forceTierRaw = typeof body.forceTier === 'string' ? body.forceTier : null;
-    const clientForceTactical = forceTierRaw === 'TACTICAL';
-    const aiTier: AiTier = visionBase64
-      ? 'quality'
-      : inRoundDiagnostic ? 'quality'
-      : clientForceTactical ? 'fast'
-      : sv ? 'fast'
-      : (await classifyQuestion(baseMessage, provider) === 'TACTICAL' ? 'fast' : 'quality');
+    // Always use 'fast' tier (gpt-4o-mini / gemini-2.5-flash) except for
+    // vision. Removing classifyQuestion() eliminates one full AI round-trip
+    // (2-8s) on every request — caddie gives 2-sentence answers that
+    // gpt-4o-mini handles equally well. Vision needs multimodal quality.
+    const aiTier: AiTier = visionBase64 ? 'quality' : 'fast';
 
     console.log(`[kevin] provider=${provider} tier=${aiTier} vision=${visionBase64 ? 'yes' : 'no'} q="${userMessage.slice(0, 60)}"`);
     console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));

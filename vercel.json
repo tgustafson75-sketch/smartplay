@@ -2,7 +2,7 @@
   "version": 2,
   "outputDirectory": "dist",
   "builds": [
-    { "src": "api/kevin.ts",         "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "api/kevin.ts",         "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "api/brain.ts",         "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/voice-intent.ts",  "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/swing-analysis.ts","use": "@vercel/node", "config": { "maxDuration": 60 } },
