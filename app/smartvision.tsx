@@ -593,9 +593,9 @@ export default function SmartVisionScreen() {
         resolved.middle ?? geo?.green ?? polygonCentroid(geo?.green_polygon);
       const effectiveTee =
         resolvedTee.tee ?? geo?.tee ?? polygonCentroid(geo?.tee_polygon);
-      // GPS tile only when allowed AND we have at least a green coord
-      // (real centroid or polygon-derived).
-      if (imageryMode !== 'curated' && effectiveGreen && courseId) {
+      // GPS tile only during an active round — satellite has no value pre-round
+      // and causes confusion when curated photos are the expected visual.
+      if (isRoundActive && imageryMode !== 'curated' && effectiveGreen && courseId) {
         // Phase 401 — cap Mapbox request dims at 1280 (API limit) while
         // preserving the container's aspect ratio. Without this, a
         // Galaxy Fold unfolded container (1800×1660) requests
@@ -639,18 +639,9 @@ export default function SmartVisionScreen() {
           if (cancelled) return;
           setImageUri(null);
         }
-      } else if (imageryMode !== 'curated') {
-        // 2026-05-16 — Centroid fallback for local courses that lack
-        // BOTH per-hole geometry AND a bundled curated image. Replaces
-        // the chromed Golfshot screenshots for Sunnyvale + San Jose
-        // Muni only. CRITICAL: must check getLocalHoleImage first —
-        // courses with bundled images (Palms, Lakes, Rancho, Crystal
-        // Springs, Mariners Point) MUST NOT get centroid imagery
-        // assigned here; if we did, imageUri would be set and the
-        // render path would pick it over the curated bundled image,
-        // showing a generic Mapbox tile instead of the hand-curated
-        // hole photo. That regression was caught immediately on
-        // Mariners ("measuring tool on a green screen").
+      } else if (isRoundActive && imageryMode !== 'curated') {
+        // Centroid-fallback Mapbox tile — only during an active round,
+        // only for courses with no curated image.
         const hasCurated = getLocalHoleImage(courseName, holeIndex) != null;
         if (!hasCurated) {
           const slug = getLocalCourseSlug(courseName);
@@ -1436,16 +1427,13 @@ export default function SmartVisionScreen() {
             existing imageUri (Mapbox tile) or curated bundled image. */}
         {golfbertHole?.imageryUrl ? (
           <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+        ) : curatedImage && imageryMode !== 'gps' ? (
+          // Curated bundled hole photo wins over satellite — always.
+          // Tim's hand-captured shots are the canonical visual; Mapbox
+          // satellite is a fallback only when no curated image exists.
+          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="contain" />
         ) : imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
-        ) : curatedImage && imageryMode !== 'gps' ? (
-          // Curated bundled hole screenshot (Palms hole-NN.jpg etc).
-          // Phase 401 — resizeMode "contain" (was "cover"). Curated
-          // JPGs are pre-rendered at whatever aspect Tim captured;
-          // cover was cropping top+bottom on more-portrait sources
-          // than the container. Contain guarantees the entire image is
-          // visible, letterboxing if aspect differs.
-          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="contain" />
         ) : loading ? (
           <View style={styles.canvasFallback}>
             <ActivityIndicator color="#00C896" />

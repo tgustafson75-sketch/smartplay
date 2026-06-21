@@ -7,7 +7,6 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { peekFix, getLastFix } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
-import { getHoleThumbnailUrl } from '../../services/mapboxImagery';
 
 // Curated screenshot fallback for local courses Tim has playtested. The
 // Palms set is bundled today; Lakes and Rancho California maps are
@@ -385,39 +384,23 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const greenPos = project(0, axisYards);
   const playerPos = playerProj ? project(playerProj.x, playerProj.y) : null;
 
-  // Mapbox aerial as substrate (when configured + geometry available).
-  // Falls back to the green SVG sketch when Mapbox returns null.
-  const aerialUrl = getHoleThumbnailUrl({
-    courseId: activeCourseId,
-    holeNumber: currentHole,
-    par: 4,
-    yardage: axisYards,
-    tee: geometry.tee,
-    green: geometry.green,
-  }, W, H);
-
   return (
     <SmartVisionTap onPress={onOpenSmartVision}>
     <View style={[styles.wrap, wrapDims]}>
-      {aerialUrl ? (
-        <Image source={{ uri: aerialUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      ) : null}
       <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
-        {/* Quiet sketch only when no aerial — otherwise the aerial IS the substrate */}
-        {!aerialUrl && (
-          <>
-            <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
-            <Line
-              x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
-              stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
-            />
-            <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
-            <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
-            <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
-            <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
-          </>
-        )}
-        {/* Player position overlay — lives over either substrate */}
+        {/* SVG sketch — always dark, no satellite */}
+        <>
+          <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
+          <Line
+            x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
+            stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
+          />
+          <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
+          <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
+          <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
+          <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
+        </>
+        {/* Player position overlay */}
         {playerPos && (
           <>
             <Path

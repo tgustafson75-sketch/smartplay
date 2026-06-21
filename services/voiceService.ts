@@ -1536,7 +1536,9 @@ export const speak = async (
       logVoiceSilentFail('speak_catch', { speechId: myId, error: err instanceof Error ? err.message : String(err) });
       const emsg = err instanceof Error ? err.message : String(err);
       cbRecordFailure('voice');
-      if (/network|abort|timeout|fetch/i.test(emsg)) cbReportNetworkFailure();
+      // Only a genuine connectivity failure marks you offline — not a client-side
+      // abort (timeout) or server error. "Network request failed" = real signal loss.
+      if (/network request failed|connection refused|network error/i.test(emsg)) cbReportNetworkFailure();
       // THE Lakes-round fix: a real fetch failure (no signal) no longer goes
       // mute — speak the line on the device instead. (AbortError = a newer
       // utterance preempted us; that correctly stays silent.)
