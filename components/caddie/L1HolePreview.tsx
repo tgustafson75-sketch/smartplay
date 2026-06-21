@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
@@ -14,7 +14,6 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
-import { ParallaxTilt } from '../ParallaxTilt';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 
 const REFRESH_MS = 4_000;
@@ -153,24 +152,12 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     if (defaultImg) {
       return (
         <SmartVisionTap onPress={onOpenSmartVision}>
-          {/* 2026-06-13 — gyro-parallax: the hole image floats behind the fixed label
-              as you tilt (depth illusion / "wow"). Renders static where no sensor. */}
-          <ParallaxTilt
-            style={[styles.wrap, wrapDims]}
-            radius={10}
-            background={
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1f12' }]}>
-                <Image source={defaultImg} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              </View>
-            }
-          >
+          <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
-              <Text style={styles.placeholderSubLight}>
-                {previewImg ? 'Tap to plan this hole.' : 'Pick a course to plan.'}
-              </Text>
+              <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
             </View>
-          </ParallaxTilt>
+          </ImageBackground>
         </SmartVisionTap>
       );
     }
@@ -249,35 +236,21 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
       <SmartVisionTap onPress={onOpenSmartVision}>
-        {/* 2026-06-13 — gyro-parallax: the hole photo pans behind the fixed HOLE label,
-            cart, and yardage (which stay anchored) → depth illusion. Static w/o sensor. */}
-        <ParallaxTilt
-          style={[styles.wrap, wrapDims]}
-          radius={10}
-          background={
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1f12' }]}>
-              <Image source={heroImageSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            </View>
-          }
-        >
+        <ImageBackground source={heroImageSource} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
           </View>
           {cartY != null && yardsToGreen != null ? (
             <>
-              {/* Cart icon — centered horizontally, moves vertically
-                  along the photo from tee (bottom) to pin (top). */}
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: wrapDims.width / 2 - 12 }]}>
                 <Ionicons name="navigate" size={14} color="#0d1a0d" />
               </View>
-              {/* Yards-to-green readout — top-left so it doesn't crowd
-                  the HOLE N label in top-right. */}
               <View style={styles.playerYardageBadge}>
                 <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
               </View>
             </>
           ) : null}
-        </ParallaxTilt>
+        </ImageBackground>
       </SmartVisionTap>
     );
   }

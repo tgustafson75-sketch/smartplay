@@ -72,7 +72,7 @@ import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../serv
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
-import { pointAlongHoleLine } from '../data/holeLineCalibration';
+import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
 // implementation duplicated utils/geoDistance.ts and was a maintenance
@@ -746,41 +746,45 @@ export default function SmartVisionScreen() {
   // when calibration exists, use it as the static fallback instead
   // of the dumb centered axis. User drag still wins via teeOverride /
   // pinOverride; geo projection still wins when both teeCoord and
-  // projection are present (Mapbox-rendered courses).
-  const SOURCE_IMG_W = 1768;
-  const SOURCE_IMG_H = 1450;
+  // GPS projection (from Mapbox tile parameters) is ONLY valid when the
+  // canvas is actually rendering a Mapbox or Golfbert tile. Curated bundled
+  // photos have their own framing that is NOT bearing-rotated to match the
+  // Mapbox projection math — applying it gives wrong coordinates (markers
+  // fly off-screen or land in white background areas). Calibration data
+  // (fraction-based tee/green pixel positions detected from each image) is
+  // the correct source for curated photos.
+  const onCuratedPhoto = !golfbertHole?.imageryUrl && !imageUri && !!curatedImage;
+
   const calibrationSlug = useMemo(() => getLocalCourseSlug(courseName), [courseName]);
-  const calibratedTeeCanvas = useMemo(() => {
+  const calibration = useMemo(() => {
     if (!calibrationSlug) return null;
-    const pt = pointAlongHoleLine(calibrationSlug, holeIndex, 0);
-    if (!pt) return null;
-    return { x: pt.x * (imageW / SOURCE_IMG_W), y: pt.y * (imageH / SOURCE_IMG_H) };
-  }, [calibrationSlug, holeIndex, imageW, imageH]);
-  const calibratedPinCanvas = useMemo(() => {
-    if (!calibrationSlug) return null;
-    const pt = pointAlongHoleLine(calibrationSlug, holeIndex, 1);
-    if (!pt) return null;
-    return { x: pt.x * (imageW / SOURCE_IMG_W), y: pt.y * (imageH / SOURCE_IMG_H) };
-  }, [calibrationSlug, holeIndex, imageW, imageH]);
+    return getHoleLineCalibration(calibrationSlug, holeIndex);
+  }, [calibrationSlug, holeIndex]);
+  const calibratedPoints = useMemo(() => {
+    if (!calibration) return null;
+    return calibrationToCanvas(calibration, imageW, imageH);
+  }, [calibration, imageW, imageH]);
 
   const teeOverride = teeByHole[holeIndex];
   const teeCanvas = useMemo(() => {
     if (teeOverride) return teeOverride;
-    if (teeCoord && projection) {
+    // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
+    if (!onCuratedPhoto && teeCoord && projection) {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
-    if (calibratedTeeCanvas) return calibratedTeeCanvas;
+    if (calibratedPoints) return calibratedPoints.tee;
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedTeeCanvas]);
+  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto]);
   const pinDefaultCanvas = useMemo(() => {
-    if (greenCoord && projection) {
+    // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
+    if (!onCuratedPhoto && greenCoord && projection) {
       const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
       return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     }
-    if (calibratedPinCanvas) return calibratedPinCanvas;
+    if (calibratedPoints) return calibratedPoints.green;
     return { x: imageW / 2, y: imageH * 0.15 };
-  }, [greenCoord, projection, imageW, imageH, calibratedPinCanvas]);
+  }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
@@ -1431,7 +1435,7 @@ export default function SmartVisionScreen() {
           // Curated bundled hole photo wins over satellite — always.
           // Tim's hand-captured shots are the canonical visual; Mapbox
           // satellite is a fallback only when no curated image exists.
-          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="contain" />
+          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : loading ? (
