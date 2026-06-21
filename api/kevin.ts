@@ -1192,14 +1192,24 @@ ${onCourseContextBlock}${baseMessage}`
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
     const ttsVoice = VOICE_BY_PERSONA[personaKey] ?? VOICE_BY_PERSONA.kevin;
-    const ttsResponse = await openai.audio.speech.create({
-      model: 'gpt-4o-mini-tts',
-      voice: ttsVoice,
-      input: text,
-      instructions: KEVIN_TTS_INSTRUCTIONS,
-    });
-    const arrayBuffer = await ttsResponse.arrayBuffer();
-    const audioBase64: string = Buffer.from(arrayBuffer).toString('base64');
+    // 2026-06-21 — Wrap TTS separately so a cold/slow TTS call doesn't
+    // discard Kevin's successful brain answer. Previously a TTS failure
+    // here would throw into the outer catch, returning error fallback
+    // text and losing the real response. Now: TTS failure → audioBase64
+    // null → client speaks via device TTS. Real answer preserved.
+    let audioBase64: string | null = null;
+    try {
+      const ttsResponse = await openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: ttsVoice,
+        input: text,
+        instructions: KEVIN_TTS_INSTRUCTIONS,
+      });
+      const arrayBuffer = await ttsResponse.arrayBuffer();
+      audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+    } catch (ttsErr) {
+      console.error('[kevin] TTS failed — returning text-only:', ttsErr instanceof Error ? ttsErr.message : String(ttsErr));
+    }
 
     // 2026-05-26 — Fix BT/BW: _debug surfaces provider + telemetry.
     // Lets Tim see fallback fires, tier routing, tool-round depth, and

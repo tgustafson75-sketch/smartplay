@@ -79,8 +79,12 @@ const AUTO_STOP_MS = 45_000;
 // pushed to 60s for symmetry — the brain prompt cache hit varies
 // with conversation history size, and the prior 45s could clip
 // the first cold-Sonnet turn on a long context.
-const TRANSCRIBE_TIMEOUT_MS = 40000;
-const BRAIN_TIMEOUT_MS = 60000;
+// 2026-06-21 — Tightened from 40s/60s. Server tests confirm Kevin responds
+// in 3-4s including TTS; transcribe in <1s. Waiting 40-60s before declaring
+// failure meant the user sat silent for 25s+ before hearing the error message.
+// 12s gives 3x cold-start headroom and still fails fast enough to be useful.
+const TRANSCRIBE_TIMEOUT_MS = 12000;
+const BRAIN_TIMEOUT_MS = 12000;
 
 // 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
 // SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in
@@ -1276,6 +1280,9 @@ export const useVoiceCaddie = ({
       // user has clearly disengaged.
     } catch (e) {
       console.log('[voice] follow-up listen loop failed (non-fatal):', e);
+      // 2026-06-21 — Reset state on error or voice gets stuck in 'speaking'
+      // blocking all subsequent interaction (audit HIGH-7).
+      wrappedOnVoiceStateChange('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceEnabled, voiceGender, language, apiUrl]);
@@ -1666,8 +1673,13 @@ export const useVoiceCaddie = ({
       } else if (kevinResponse.audioBase64 && voiceEnabled) {
         // Phase V.7+ — user-initiated reply, plays at L1 too.
         await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
-      } else {
-        await speakResponse(kevinResponse.text);
+      } else if (voiceEnabled) {
+        // 2026-06-21 — audioBase64 is null: Kevin either failed (catch block
+        // returned error text) or TTS failed inside kevin.ts. DON'T call
+        // speakResponse() → /api/voice here — that's another cold Lambda that
+        // takes 20s to fail and produce robot voice. Speak via device TTS
+        // immediately (<1s). Error messages don't need ElevenLabs quality.
+        void speakDeviceNotice(kevinResponse.text, language, voiceGender).catch(() => {});
       }
       // 2026-06-04 — Navigation fires AFTER speak completes (see brain
       // path comment above).

@@ -473,7 +473,7 @@ async function openSession() {
 
       speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
         body: JSON.stringify({
           message: utterance,
           language: settings.language,
@@ -489,7 +489,7 @@ async function openSession() {
 
       const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
         // 2026-05-21 — Fix Q: pass active persona so the classifier's
         // follow-up question (if any) is styled in the user's selected
         // caddie's voice, not the voiceGender-derived Kevin/Serena default.
@@ -593,7 +593,7 @@ async function openSession() {
         let diagnosticSpoken = false;
         const r = await fetchWithTimeout(`${apiUrl}/api/kevin`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settingsStore.aiProvider ?? 'gemini' },
           body: JSON.stringify(apiUrlBody),
         }, KEVIN_FETCH_TIMEOUT_MS);
         if (r.ok) {
@@ -673,7 +673,7 @@ async function openSession() {
             // fired (precheck hit) or errored. Same body either way.
             const chatRes = (speculativeBrainP && await speculativeBrainP) || await fetchWithTimeout(`${apiUrl}/api/kevin`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
               body: JSON.stringify({
                 message: utterance,
                 language: settings.language,
@@ -930,7 +930,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const apiUrl = getApiBaseUrl();
     const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
       body: JSON.stringify({
         text,
         voiceGender: settings.voiceGender ?? 'male',

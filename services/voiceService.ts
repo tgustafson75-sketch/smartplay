@@ -1258,11 +1258,11 @@ export const speak = async (
   try {
     const abortController = new AbortController();
     currentAbortController = abortController;
-    // 2026-06-11 — bumped 12s → 20s. Telemetry (speak_catch "Network request
-    // failed", Jun 10–11) included client-side aborts of the TTS fetch when a
-    // cold /api/voice Lambda or weak cellular pushed the round-trip past 12s.
-    // A silent handoff/greeting was the visible symptom. 20s matches transcribe.
-    const voiceTimeout = setTimeout(() => abortController.abort(), 20_000);
+    // 2026-06-21 — 20s → 10s. Server tests confirm /api/voice responds in ~1s.
+    // 10s gives 10x headroom; staying at 20s meant the user waited a full 20s
+    // on a cold Lambda before device TTS fired. ElevenLabs warm = ~1s, so 10s
+    // is generous without trapping the user in silence.
+    const voiceTimeout = setTimeout(() => abortController.abort(), 10_000);
 
     // (persona + effectiveGender already derived above so the catch's device-TTS
     //  fallback agrees. WRONG-VOICE-FOR-A-TURN fix: live persona, not stale param.)
