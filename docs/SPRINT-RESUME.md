@@ -209,7 +209,34 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 
 ---
 
-### LATEST (2026-06-21, Session 6) — Anthropic removed from brain path
+### LATEST (2026-06-21, Session 7) — Pre-influencer beta audit: all HIGH bugs fixed
+
+**Just shipped — commits a0b54d7 + 5e493ce (pushed to preview + development + production OTA channels):**
+
+- **HIGH-1** `api/kevin.ts`: `timeoutMs:8000` in `runAgenticLoop` (was unbounded → silent Vercel 504s). TTS client `timeout:10000, maxRetries:0`. Fast-tier `maxTokens` 200→300.
+- **HIGH-3** `api/lie-analysis.ts`: Anthropic-only guard replaced — TightLie returned 500 when Gemini/OpenAI keys were present.
+- **HIGH-5** `vercel.json`: `maxDuration` added for `lie-analysis` (60s), `image-edit` (60s), `putting-analysis` (60s), `course-geometry` (30s).
+- **HIGH-6** `hooks/useVoiceCaddie.ts`: Unmount cleanup `useEffect` clears timers on voice nav-away.
+- **HIGH-8** `app/_layout.tsx`: Trial lifecycle hydration guard (same pattern as migration+backfill effects above it).
+- **HIGH-9** `app/(tabs)/caddie.tsx`: Auto-end round navigates to recap instead of stranding user.
+- **HIGH-11** `api/putting-analysis.ts`: `maxRetries` 3→1 (3×25s exceeded 60s Vercel wall).
+- **M13** `app/smartvision.tsx`: `onCuratedPhoto` and `playerCanvas.onCurated` now true when `golfbertHole.imageryUrl` is non-null — GPS projection was mis-applying to Golfbert photos, sending T/P markers off-screen.
+- **SmartFinder scene read** `services/sceneReadService.ts`: Added `X-AI-Provider` header — scene reads always used Gemini regardless of toggle.
+
+**SmartFinder audit result:** All clear. No broken connections, all 25 imports resolve, all API routes wired, 5 nav entry points correct.
+
+**Still open:**
+- HIGH-10: Greenhill in `data/courses.ts` needs 18-hole par+yardage from Tim. Currently `courseHoles:[]`.
+- M12: Canvas Tap + marker Pan double-fire `maybeTrackShot()` — low severity.
+- M14: `calibrationSlug` derived from name not courseId — low severity (works for all current courses).
+- Phase 5: Migrate vision routes off Anthropic (`putting-analysis`, `swing-analysis`, etc.).
+- Phase 6: Remove `@anthropic-ai/sdk` from `package.json`.
+
+**Last refreshed:** 2026-06-21 Session 7 — pre-influencer beta audit shipped. Pull the latest OTA update and verify PATH 4 VOICE + TightLie before influencer rollout.
+
+---
+
+### Session 6 — Anthropic removed from brain path
 
 **Just shipped this session:**
 - **Phase 4 — Anthropic fully removed from `api/kevin.ts` + `api/cage-coach.ts`.**
