@@ -51,7 +51,7 @@ import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { isSmartMotionActive, emitSmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
-import { getCourse as getApiCourse, courseToHoles } from '../../services/golfCourseApi';
+import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
 import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
@@ -1616,6 +1616,27 @@ export default function CaddieTab() {
       const local = getCourse(localId);
       courseName = local?.name ?? picked.name;
       holes = local?.holes ?? [];
+
+      // 2026-06-21 — API fallback for local-image courses without a data/courses.ts entry.
+      // Greenhill (and future local: courses) have bundled images + centroid but no hardcoded
+      // hole data. Search the golf course API by name and pull par/yardage so Kevin, SmartFinder,
+      // and the scorecard all have real numbers. Fire before startRound() so holes is populated.
+      if (holes.length === 0) {
+        try {
+          const results = await searchCourses(courseName);
+          const match = results.find(r => !r._error && r.id);
+          if (match?.id) {
+            const apiCourse = await getApiCourse(match.id);
+            if (apiCourse && apiCourse.tees.length > 0) {
+              holes = courseToHoles(apiCourse);
+              console.log('[startRound] local API fallback: got', holes.length, 'holes for', courseName, 'via id', match.id);
+            }
+          }
+        } catch {
+          // Non-fatal — proceed with empty holes, geometry fetch covers GPS coords below
+        }
+      }
+
       // 2026-05-19 — pass the full picked.id (e.g. 'local:sunnyvale') as
       // courseId for local courses. Previously left null, which silently
       // broke fetchCourseGeometry (never fired), the SmartVision image
