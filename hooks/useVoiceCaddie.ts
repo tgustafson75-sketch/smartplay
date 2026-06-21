@@ -636,7 +636,10 @@ export const useVoiceCaddie = ({
       return { handled: true, response: kevinSaid, triggerHero: true };
     }
 
-    if (YARDAGE_PHRASES.some(p => t.includes(p))) {
+    // Non-English yardage queries skip the bypass so Kevin answers in the
+    // player's language via the full voice-intent pipeline (which sends
+    // language='es'/'zh' to Kevin). Only English gets the hardcoded shortcut.
+    if (language === 'en' && YARDAGE_PHRASES.some(p => t.includes(p))) {
       const response = currentYardage
         ? "You're " + currentYardage + ' yards to the center.' +
           (club ? ' ' + club + ' in hand.' : '')
@@ -944,6 +947,7 @@ export const useVoiceCaddie = ({
           practice_context: buildFullPracticeContext(),
           recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
           recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
+          holeNotes: useRoundStore.getState().holeNotes,
           // Phase AR — within-session conversation buffer for follow-up
           // resolution ("and the wind?" → Kevin knows you mean wind for
           // the prior shot). Cleared after 60s of no activity OR on
@@ -1303,6 +1307,10 @@ export const useVoiceCaddie = ({
     const source = opts?.source ?? 'manual';
     try {
       isProcessingRef.current = true;
+      // Reset follow-up depth for each fresh top-level mic tap so a
+      // conversation that hit HARD_FOLLOWUP_DEPTH_CAP never blocks a
+      // brand-new question in the same 2-minute idle window.
+      followUpDepthRef.current = 0;
       // 2026-06-06 — Belt-and-suspenders: clear userInterruptedRef at
       // the top of every fresh processAudioUri so the flag never
       // latches true across sessions. Already cleared at the START

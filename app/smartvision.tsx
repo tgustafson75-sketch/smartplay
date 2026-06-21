@@ -678,7 +678,7 @@ export default function SmartVisionScreen() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode]);
+  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode, isRoundActive]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared
@@ -1092,6 +1092,10 @@ export default function SmartVisionScreen() {
   // Last committed cart lat/lng — shot logging reads this on a DISCRETE
   // commit (tap-end / drag-end), never per drag frame (would log phantoms).
   const lastCartFixRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Debounce guard: Y-marker Pan.onEnd and canvasTapGesture.onEnd both fire
+  // maybeTrackShot in the same JS tick when the user taps directly on the
+  // marker. The ref blocks the second call within a 50ms window.
+  const shotTrackingInFlightRef = useRef(false);
 
   const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
     setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
@@ -1155,6 +1159,11 @@ export default function SmartVisionScreen() {
   // commit (tap-end / drag-end), so a drag can't mint phantom shots. One
   // tracked shot is pending at a time until the user confirms the sheet.
   const maybeTrackShot = useCallback(() => {
+    // Debounce: Y-marker Pan.onEnd + canvasTapGesture.onEnd both fire in the
+    // same JS tick on a direct marker tap — block the duplicate within 50ms.
+    if (shotTrackingInFlightRef.current) return;
+    shotTrackingInFlightRef.current = true;
+    setTimeout(() => { shotTrackingInFlightRef.current = false; }, 50);
     const fix = lastCartFixRef.current;
     if (!fix) return;
     if (!isRoundActive || holeIndex !== currentHole) return;

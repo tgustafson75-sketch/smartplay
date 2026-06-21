@@ -16,6 +16,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -1136,6 +1137,11 @@ export default function CaddieTab() {
         // already appended) by the handler.
         router.push(action.path as never);
         break;
+      case 'open_url': {
+        const url = (action as { type: 'open_url'; url: string }).url;
+        if (url) void Linking.openURL(url).catch(() => {});
+        break;
+      }
       default:
     }
     // Phase A.4: first-tool hint after first launch in first round.
@@ -1328,7 +1334,19 @@ export default function CaddieTab() {
   // all return 0 afterward. Previously this read straight from the
   // store and always saw 0, so every round-end fired the < 9 "Short
   // round" branch even when 18 holes were filled.
-  const generateRoundSummary = async (snapshot?: { total: number; vspar: number; played: number }) => {
+  const generateRoundSummary = async (snapshot?: {
+    total: number;
+    vspar: number;
+    played: number;
+    // 2026-06-21 — Callers must capture scores/courseHoles/activeCourse
+    // BEFORE calling endRound(), because endRound() resets them to
+    // {}/[]/null. buildContextualSummary uses these for best/worst hole
+    // analysis; without the pre-reset snapshot it always returned the
+    // "0 holes" fallback.
+    scores: Record<number, number>;
+    courseHoles: Array<{ hole: number; par: number }>;
+    activeCourse: string | null;
+  }, roundId?: string) => {
     const total = snapshot?.total ?? getTotalScore();
     const vspar = snapshot?.vspar ?? getScoreVsPar();
     const played = snapshot?.played ?? getHolesPlayed();
@@ -1341,13 +1359,16 @@ export default function CaddieTab() {
     // name, holes played, score vs par). The full AI recap arrives
     // ~5-10s later; this is the *immediate* spoken line and should
     // still sound like Kevin is in the round with you.
-    const roundState = useRoundStore.getState();
-    const cName = roundState.activeCourse ?? 'this course';
+    // 2026-06-21 — Use snapshot fields (captured pre-endRound) rather than
+    // re-reading the live store (which endRound() has already reset).
+    const snapshotScores = snapshot?.scores ?? useRoundStore.getState().scores;
+    const snapshotCourseHoles = snapshot?.courseHoles ?? useRoundStore.getState().courseHoles;
+    const cName = snapshot?.activeCourse ?? useRoundStore.getState().activeCourse ?? 'this course';
     const buildContextualSummary = (): string => {
       // Find best / worst hole vs par
-      const holesWithPar = Object.entries(roundState.scores)
+      const holesWithPar = Object.entries(snapshotScores)
         .map(([h, s]) => {
-          const par = roundState.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+          const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? 4;
           return { hole: Number(h), score: s, par, offset: s - par };
         })
         .filter(h => h.score > 0);
@@ -1439,8 +1460,10 @@ export default function CaddieTab() {
     );
 
     // Kick off recap generation asynchronously — don't block the summary
+    // 2026-06-21 — Use the roundId passed by the caller (captured BEFORE
+    // endRound() set currentRoundId → null). Reading it from the live store
+    // here always returned null, so generateRecap() never fired.
     const storeState = useRoundStore.getState();
-    const roundId = storeState.currentRoundId;
     if (roundId) {
       setRecapLoading(true);
       const patternInsights = generatePatternInsights(storeState.shots, {
@@ -1545,19 +1568,14 @@ export default function CaddieTab() {
               await ctx.maybeSynthesizePatterns();
             } catch (e) { console.log('[round-end] context synth error', e); }
           })();
-          // Phase Z/AA — post-round destination is the Scorecard tab. The
-          // restored scorecard renders Kevin's recap inline + club summary
-          // + share, so users get the round's story in one place. The
-          // standalone /recap/[id] route is still available for deep-dive
-          // hole-by-hole comparison via the Scorecard's recap link.
-          router.replace('/(tabs)/scorecard' as never);
+          // 2026-06-21 — Navigation removed from here. Callers push to
+          // /recap/[roundId] themselves; the deferred router.replace was
+          // yanking the user off the recap screen ~5-10s after arrival.
         })
         .catch(() => {
           setRecapLoading(false);
           setCaddieResponse("Round saved. Your recap will be ready next time you open the app — something went sideways on my end.");
-          // Even on recap failure, route to scorecard — the round itself
-          // saved and the user gets the all-holes view + club summary.
-          try { router.replace('/(tabs)/scorecard' as never); } catch {}
+          // Navigation left to the caller — no router.replace here.
         });
     }
   };
@@ -1629,6 +1647,7 @@ export default function CaddieTab() {
             const apiCourse = await getApiCourse(match.id);
             if (apiCourse && apiCourse.tees.length > 0) {
               holes = courseToHoles(apiCourse);
+              courseName = apiCourse.club_name;
               console.log('[startRound] local API fallback: got', holes.length, 'holes for', courseName, 'via id', match.id);
             }
           }
@@ -1858,19 +1877,24 @@ export default function CaddieTab() {
     if (currentHole >= maxHole) {
       clearShotPending();
       // Snapshot the score state BEFORE endRound() resets it. The summary
-      // copy ("Short round" / "Even par" / etc.) is driven by these
-      // three values; reading them after the reset always yields zero
-      // and triggered the "Short round" branch on completed rounds.
+      // copy ("Short round" / "Even par" / etc.) is driven by these values;
+      // reading them after the reset always yields zero/null/[].
+      // 2026-06-21 — also capture scores/courseHoles/activeCourse so
+      // buildContextualSummary has the pre-reset data for best/worst hole.
+      const preRound = useRoundStore.getState();
       const snapshot = {
         total: getTotalScore(),
         vspar: getScoreVsPar(),
         played: getHolesPlayed(),
+        scores: { ...preRound.scores },
+        courseHoles: [...preRound.courseHoles],
+        activeCourse: preRound.activeCourse,
       };
       // 2026-06-21 — Capture roundId and navigate to recap (HIGH-9 audit fix).
       // Prior code discarded endRound() return value; user was stranded on caddie screen.
       const roundId = endRound();
       setShowShotCard(false);
-      await generateRoundSummary(snapshot);
+      await generateRoundSummary(snapshot, roundId ?? undefined);
       if (roundId) router.push(`/recap/${roundId}` as never);
       return;
     }
@@ -3397,11 +3421,17 @@ export default function CaddieTab() {
                 style={styles.endRoundBtn}
                 onPress={async () => {
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  // Snapshot scores BEFORE endRound zeroes them.
+                  // Snapshot BEFORE endRound zeroes scores/course/id.
+                  // 2026-06-21 — include scores/courseHoles/activeCourse so
+                  // buildContextualSummary has pre-reset data.
+                  const preRound = useRoundStore.getState();
                   const snapshot = {
                     total: getTotalScore(),
                     vspar: getScoreVsPar(),
                     played: getHolesPlayed(),
+                    scores: { ...preRound.scores },
+                    courseHoles: [...preRound.courseHoles],
+                    activeCourse: preRound.activeCourse,
                   };
                   // 2026-06-12 (Tim) — ending from the Caddie tab spoke a line but never
                   // opened the recap screen (only play.tsx did), so a round — partial or
@@ -3411,7 +3441,7 @@ export default function CaddieTab() {
                   const roundId = endRound();
                   clearShotPending();
                   setShowShotCard(false);
-                  await generateRoundSummary(snapshot);
+                  await generateRoundSummary(snapshot, roundId ?? undefined);
                   if (roundId) router.push(`/recap/${roundId}` as never);
                 }}
               >
@@ -3546,13 +3576,19 @@ export default function CaddieTab() {
                   setShowMoreMenu(false);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                   clearShotPending();
+                  // 2026-06-21 — capture scores/courseHoles/activeCourse BEFORE
+                  // endRound() resets them so buildContextualSummary gets real data.
+                  const preRound = useRoundStore.getState();
                   const snapshot = {
                     total: getTotalScore(),
                     vspar: getScoreVsPar(),
                     played: getHolesPlayed(),
+                    scores: { ...preRound.scores },
+                    courseHoles: [...preRound.courseHoles],
+                    activeCourse: preRound.activeCourse,
                   };
                   const roundId = endRound();
-                  await generateRoundSummary(snapshot);
+                  await generateRoundSummary(snapshot, roundId ?? undefined);
                   if (roundId) router.push(`/recap/${roundId}` as never);
                 },
               }] : []),
