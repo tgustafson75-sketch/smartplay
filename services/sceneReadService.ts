@@ -54,7 +54,9 @@ export async function readScene(input: {
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/kevin`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // 2026-06-21 — SmartFinder scene read was missing X-AI-Provider, locking
+      // scene reads to Gemini regardless of user's toggle (audit finding).
+      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
       body: JSON.stringify({
         message: SCENE_INSTRUCTION,
         language: settings.language ?? 'en',
