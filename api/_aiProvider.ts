@@ -76,7 +76,10 @@ const MODELS: Record<AiProvider, Record<AiTier, string>> = {
 // ─── SDK clients (lazy-initialized per request context) ───────────────────────
 
 function getOpenAI(timeoutMs = 25_000): OpenAI {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: timeoutMs, maxRetries: 1 });
+  // When a tight per-request timeout is set, disable retries so a slow-AI
+  // round doesn't consume 2× the budget and push the loop over Vercel's 60s cap.
+  const maxRetries = timeoutMs < 25_000 ? 0 : 1;
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: timeoutMs, maxRetries });
 }
 
 function getGemini(): GoogleGenAI {
@@ -467,7 +470,7 @@ async function _geminiAgenticLoop(
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
   opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[] },
 ): Promise<AgenticLoopResult> {
-  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools } = opts;
+  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, timeoutMs } = opts;
   const model = MODELS['gemini'][tier];
   const genai = getGemini();
 
@@ -488,7 +491,7 @@ async function _geminiAgenticLoop(
 
   for (let round = 0; round < maxRounds; round++) {
     rounds = round + 1;
-    const res = await genai.models.generateContent({
+    const generatePromise = genai.models.generateContent({
       model,
       contents,
       config: {
@@ -498,6 +501,14 @@ async function _geminiAgenticLoop(
         tools: geminiToolDefs,
       },
     });
+    const res = await (timeoutMs
+      ? Promise.race([
+          generatePromise,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Gemini per-round timeout after ${timeoutMs}ms`)), timeoutMs),
+          ),
+        ])
+      : generatePromise);
 
     const candidate = res.candidates?.[0];
     const parts = (candidate?.content?.parts ?? []) as Array<Record<string, unknown>>;

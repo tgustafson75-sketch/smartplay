@@ -21,7 +21,7 @@ export const useSmartFinderStore = create<SmartFinderState>()(
       currentLock: null,
       setLock: (lock) => set({ currentLock: lock }),
       clearLock: () => set({ currentLock: null }),
-      mode: 'standard',
+      mode: 'target',
       setMode: (mode) => set({ mode }),
     }),
     {

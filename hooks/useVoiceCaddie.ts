@@ -82,9 +82,10 @@ const AUTO_STOP_MS = 45_000;
 // 2026-06-21 — Tightened from 40s/60s. Server tests confirm Kevin responds
 // in 3-4s including TTS; transcribe in <1s. Waiting 40-60s before declaring
 // failure meant the user sat silent for 25s+ before hearing the error message.
-// 12s gives 3x cold-start headroom and still fails fast enough to be useful.
 const TRANSCRIBE_TIMEOUT_MS = 12000;
-const BRAIN_TIMEOUT_MS = 12000;
+// 25s: Kevin's per-round AI timeout is 15s; on spotty LTE 12s fired before
+// the server completed, causing robot voice. Client must give server headroom.
+const BRAIN_TIMEOUT_MS = 25000;
 
 // 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
 // SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in

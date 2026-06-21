@@ -45,7 +45,6 @@ import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeDistance, buildLock } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
-import SmartFinderModeToggle from '../components/smartfinder/SmartFinderModeToggle';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
@@ -99,13 +98,11 @@ export default function SmartFinder() {
   const mode = useSmartFinderStore(s => s.mode);
   const setMode = useSmartFinderStore(s => s.setMode);
 
-  // 2026-06-17 — "Hey Caddy, what's the smart play?" voice trigger lands here
-  // with autoread=1. If the persisted mode is 'map' (no camera), override to
-  // 'standard' so the scene read can fire. User's stored preference is not
-  // changed — displayMode is local to this navigation.
+  // autoread=1: voice trigger lands here for scene read. Override 'map' to
+  // 'target' so the camera is live. User's persisted preference unchanged.
   const { autoread } = useLocalSearchParams<{ autoread?: string }>();
   const autoRead = autoread === '1';
-  const displayMode: SmartFinderMode = autoRead && mode === 'map' ? 'standard' : mode;
+  const displayMode: SmartFinderMode = autoRead && mode === 'map' ? 'target' : mode;
 
   const [yards, setYards] = useState<GreenYardages>(() => getGreenYardagesSync(currentHole));
   const [gps, setGps] = useState<GPSQualityReading>(() => {
@@ -274,7 +271,27 @@ export default function SmartFinder() {
         </View>
       </View>
 
-      <SmartFinderModeToggle mode={mode} onChange={setMode} />
+      {/* Map view: compact row — camera + putt access without a full toggle bar */}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, paddingVertical: 8, paddingHorizontal: 16 }}>
+        <TouchableOpacity
+          onPress={() => setMode('target')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#003d20', borderRadius: 20, borderWidth: 1, borderColor: '#00C896' }}
+          accessibilityRole="button"
+          accessibilityLabel="Switch to camera view"
+        >
+          <Ionicons name="camera-outline" size={16} color="#00C896" />
+          <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '700' }}>Camera</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setMode('putt')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#0a1e12', borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28' }}
+          accessibilityRole="button"
+          accessibilityLabel="Switch to putt camera"
+        >
+          <Ionicons name="golf-outline" size={16} color="#9ca3af" />
+          <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Putt</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* 2026-06-04 — Empty state "Start a round to see yardages" removed.
@@ -840,12 +857,25 @@ function CameraSmartFinder({
             <GPSQuality reading={gps} showText />
           </View>
         </View>
-        <View style={styles.cameraIconBtn} />
-      </View>
-
-      {/* Mode toggle floats over the camera, just below the top bar */}
-      <View style={[styles.cameraToggleWrap, { top: insets.top + 70 }]} pointerEvents="box-none">
-        <SmartFinderModeToggle mode={mode} onChange={onModeChange} />
+        {/* Right side: map + putt quick-access icons — replaces the 4-mode toggle bar */}
+        <View style={[styles.cameraIconBtn, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <TouchableOpacity
+            onPress={() => onModeChange(mode === 'putt' ? 'target' : 'putt')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={mode === 'putt' ? 'Back to camera' : 'Putt mode'}
+          >
+            <Ionicons name={mode === 'putt' ? 'camera-outline' : 'golf-outline'} size={20} color="#00C896" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onModeChange('map')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Map view"
+          >
+            <Ionicons name="map-outline" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* SCENE READ result — the caddie's meta read + mental approach, over a dark

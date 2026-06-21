@@ -1169,12 +1169,14 @@ ${onCourseContextBlock}${baseMessage}`
         maxTokens: aiTier === 'fast' ? 300 : 400,
         maxRounds: 3,
         continuationTools: ['lookup_course', 'lookup_hole'],
-        // 2026-06-21 — Per-attempt timeout keeps loop under Vercel 60s wall.
-        // 8s × 1 retry × 3 rounds = 48s max for agentic loop; TTS gets 10s.
-        // Together: 48+10 = 58s, safely under the 60s hard limit (HIGH-1).
-        // Also bumped fast-tier maxTokens 200→300 (M5 audit fix): 200 was
-        // truncating 3-4 sentence coaching replies mid-sentence.
-        timeoutMs: 8_000,
+        // Per-round timeout for the agentic loop. Gemini on spotty LTE can
+        // take 8-12s per response; 8s was too aggressive and caused robot
+        // voice on the course. 15s gives real-world headroom while keeping the
+        // worst-case under Vercel's 60s cap:
+        //   OpenAI: 15s × 0-retries × 3 rounds = 45s + 10s TTS = 55s ✓
+        //   Gemini: 15s × 3 rounds = 45s (no SDK retry) ✓
+        // lookup_hole short-circuits to courseHoles data so round-2 is fast.
+        timeoutMs: 15_000,
       },
     );
 
