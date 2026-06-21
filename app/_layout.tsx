@@ -247,56 +247,75 @@ function AppNavigator() {
   // when false, the entire trial lifecycle is short-circuited — every user
   // is granted lifetime so no paywall, no expire, no countdown ever fires.
   // Flip back to true once a real billing provider is wired up.
+  //
+  // 2026-06-21 (HIGH-8) — Guard against reading playerProfileStore before
+  // AsyncStorage hydration completes. Without the guard, getState() on the
+  // first render sees the Zustand default values (email='', subscription_status
+  // undefined, etc.) — when SUBSCRIPTIONS_ENABLED flips true the unguarded
+  // read would call initTrial() unconstitionally, resetting trial_started_at.
+  // Pattern mirrors the migration/backfill effects above (lines 194-235).
   useEffect(() => {
-    const profile = usePlayerProfileStore.getState();
-    const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
+    let done = false;
+    const runTrialLifecycle = (): boolean => {
+      if (done) return true;
+      if (!usePlayerProfileStore.persist.hasHydrated()) return false;
+      done = true;
 
-    // 2026-05-19 — Owner email auto-mirror. Runs BEFORE the
-    // subscriptions kill-switch so Owner Tools (Settings → Owner Tools)
-    // are reachable even when SUBSCRIPTIONS_ENABLED is false. Previously
-    // the kill-switch returned early before the env-mirror code at line
-    // 106 ran, so profile.email stayed blank and isOwnerEmail() returned
-    // false → Owner Tools section never rendered for Tim on the preview
-    // build (env var EXPO_PUBLIC_OWNER_EMAIL only lives in .env.local,
-    // not in the preview eas.json profile).
-    //
-    // Mirror order: explicit env var > single-entry OWNER_EMAILS default.
-    // The single-entry default catches the single-tester beta case so
-    // owner mode works without env or build-config hassle. When the
-    // allowlist grows past one entry, the auto-set stops and email must
-    // be set explicitly via setEmail (login / Settings text input).
-    if (!profile.email) {
+      const profile = usePlayerProfileStore.getState();
+      const { first_opened_at, trial_started_at, subscription_status, initTrial, setSubscriptionStatus, grantLifetime } = profile;
+
+      // 2026-05-19 — Owner email auto-mirror. Runs BEFORE the
+      // subscriptions kill-switch so Owner Tools (Settings → Owner Tools)
+      // are reachable even when SUBSCRIPTIONS_ENABLED is false. Previously
+      // the kill-switch returned early before the env-mirror code at line
+      // 106 ran, so profile.email stayed blank and isOwnerEmail() returned
+      // false → Owner Tools section never rendered for Tim on the preview
+      // build (env var EXPO_PUBLIC_OWNER_EMAIL only lives in .env.local,
+      // not in the preview eas.json profile).
+      //
+      // Mirror order: explicit env var > single-entry OWNER_EMAILS default.
+      // The single-entry default catches the single-tester beta case so
+      // owner mode works without env or build-config hassle. When the
+      // allowlist grows past one entry, the auto-set stops and email must
+      // be set explicitly via setEmail (login / Settings text input).
+      if (!profile.email) {
+        const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
+        if (envOwner.length > 0) {
+          profile.setEmail(envOwner);
+        } else if (OWNER_EMAILS.length === 1) {
+          profile.setEmail(OWNER_EMAILS[0]);
+        }
+      }
+
+      // 0) Global kill-switch — make everyone lifetime, skip everything else.
+      if (!SUBSCRIPTIONS_ENABLED) {
+        if (subscription_status !== 'lifetime') grantLifetime();
+        return true;
+      }
+
+      // 1) Lifetime override wins over everything. Re-asserts every boot
+      // so a corrupted/manually-edited status snaps back.
       const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
-      if (envOwner.length > 0) {
-        profile.setEmail(envOwner);
-      } else if (OWNER_EMAILS.length === 1) {
-        profile.setEmail(OWNER_EMAILS[0]);
+      if (isOwnerEmail(profile.email) || envOwner.length > 0) {
+        if (subscription_status !== 'lifetime') grantLifetime();
+        return true;
       }
-    }
-
-    // 0) Global kill-switch — make everyone lifetime, skip everything else.
-    if (!SUBSCRIPTIONS_ENABLED) {
-      if (subscription_status !== 'lifetime') grantLifetime();
-      return;
-    }
-
-    // 1) Lifetime override wins over everything. Re-asserts every boot
-    // so a corrupted/manually-edited status snaps back.
-    const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
-    if (isOwnerEmail(profile.email) || envOwner.length > 0) {
-      if (subscription_status !== 'lifetime') grantLifetime();
-      return;
-    }
-    // 2) Already lifetime — leave it alone.
-    if (subscription_status === 'lifetime') return;
-    // 3) Standard trial lifecycle.
-    if (!first_opened_at) {
-      initTrial();
-    } else if (subscription_status === 'trial' && trial_started_at) {
-      if (Date.now() - trial_started_at > TRIAL_DURATION_MS) {
-        setSubscriptionStatus('expired');
+      // 2) Already lifetime — leave it alone.
+      if (subscription_status === 'lifetime') return true;
+      // 3) Standard trial lifecycle.
+      if (!first_opened_at) {
+        initTrial();
+      } else if (subscription_status === 'trial' && trial_started_at) {
+        if (Date.now() - trial_started_at > TRIAL_DURATION_MS) {
+          setSubscriptionStatus('expired');
+        }
       }
-    }
+      return true;
+    };
+
+    if (runTrialLifecycle()) return;
+    const unsub = usePlayerProfileStore.persist.onFinishHydration(() => { runTrialLifecycle(); });
+    return () => { unsub?.(); };
   }, []);
 
   // Pre-beta — boot battery discipline lifecycles. Both are idempotent.

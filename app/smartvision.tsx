@@ -753,7 +753,11 @@ export default function SmartVisionScreen() {
   // fly off-screen or land in white background areas). Calibration data
   // (fraction-based tee/green pixel positions detected from each image) is
   // the correct source for curated photos.
-  const onCuratedPhoto = !golfbertHole?.imageryUrl && !imageUri && !!curatedImage;
+  // 2026-06-21 — Golfbert imageryUrl IS a curated photo (M13 audit fix).
+  // GPS projection is Mapbox-tile-specific; applying it to any curated image
+  // (local bundled OR Golfbert) sends T/P markers off-screen. Set the flag
+  // for both cases so calibration data is used instead of GPS projection.
+  const onCuratedPhoto = !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
 
   const calibrationSlug = useMemo(() => getLocalCourseSlug(courseName), [courseName]);
   const calibration = useMemo(() => {
@@ -814,7 +818,7 @@ export default function SmartVisionScreen() {
   const playerCanvas = useMemo(() => {
     const fix = getLastFix();
     if (!fix) return null;
-    const onCurated = !golfbertHole?.imageryUrl && !imageUri && !!curatedImage;
+    const onCurated = !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
     if (onCurated && teeCoord && greenCoord) {
       const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
       const fromPlayer = haversineYards(fix.location.lat, fix.location.lng, greenCoord.lat, greenCoord.lng);

@@ -8,7 +8,10 @@ import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-06-21 — TTS-only client. timeout 25s→10s, maxRetries 1→0:
+// TTS is idempotent and a retry on a near-timeout blows the Vercel 60s budget.
+// The agentic loop uses getOpenAI(timeoutMs) internally (HIGH-1 audit fix).
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 10_000, maxRetries: 0 });
 
 // 2026-06-04 — Persona → OpenAI TTS voice map. Mirrors the table in
 // api/voice.ts so the inline brain-response audio matches the standalone
@@ -1150,9 +1153,15 @@ ${onCourseContextBlock}${baseMessage}`
         return 'Action triggered.';
       },
       {
-        maxTokens: aiTier === 'fast' ? 200 : 400,
+        maxTokens: aiTier === 'fast' ? 300 : 400,
         maxRounds: 3,
         continuationTools: ['lookup_course', 'lookup_hole'],
+        // 2026-06-21 — Per-attempt timeout keeps loop under Vercel 60s wall.
+        // 8s × 1 retry × 3 rounds = 48s max for agentic loop; TTS gets 10s.
+        // Together: 48+10 = 58s, safely under the 60s hard limit (HIGH-1).
+        // Also bumped fast-tier maxTokens 200→300 (M5 audit fix): 200 was
+        // truncating 3-4 sentence coaching replies mid-sentence.
+        timeoutMs: 8_000,
       },
     );
 

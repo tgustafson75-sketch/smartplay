@@ -93,8 +93,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  // 2026-06-21 — Only block when NO provider key is available. The original
+  // Anthropic-only guard killed Gemini+OpenAI fallback chain (HIGH-3 audit).
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {

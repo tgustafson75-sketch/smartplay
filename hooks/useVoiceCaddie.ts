@@ -522,6 +522,15 @@ export const useVoiceCaddie = ({
     return () => { stopHeartbeat(); sub.remove(); };
   }, []);
 
+  // 2026-06-21 — Unmount guard (HIGH-6 audit fix). If the component unmounts
+  // while a recording is active (e.g. navigating away mid-utterance), both
+  // silenceVadTimer and autoStopTimer would fire on a stale closure and call
+  // stopAndUnloadAsync() on a destroyed Audio.Recording object. Clear them now.
+  useEffect(() => {
+    return () => { clearAutoStop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     name,
     firstName,

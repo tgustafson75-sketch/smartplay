@@ -1845,9 +1845,12 @@ export default function CaddieTab() {
         vspar: getScoreVsPar(),
         played: getHolesPlayed(),
       };
-      endRound();
+      // 2026-06-21 — Capture roundId and navigate to recap (HIGH-9 audit fix).
+      // Prior code discarded endRound() return value; user was stranded on caddie screen.
+      const roundId = endRound();
       setShowShotCard(false);
       await generateRoundSummary(snapshot);
+      if (roundId) router.push(`/recap/${roundId}` as never);
       return;
     }
 
