@@ -53,6 +53,7 @@ import {
   SUNNYVALE_HOLE_IMAGES,
   WESTLAKE_CC_NJ_HOLE_IMAGES,
   ECHO_HILLS_HOLE_IMAGES,
+  GREENHILL_HOLE_IMAGES,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -216,6 +217,18 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (WESTLAKE_CC_NJ_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 40.0828,
     lng: -74.3196,
+  },
+  // 2026-06-21 — Greenhill Golf Course, Worcester MA.
+  {
+    id: 'local:greenhill',
+    club_name: 'Greenhill Golf Course',
+    location: 'Worcester, MA',
+    rating: null,
+    slope: null,
+    isLocal: true,
+    thumbnail: (GREENHILL_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 42.2677,
+    lng: -71.8562,
   },
 ];
 

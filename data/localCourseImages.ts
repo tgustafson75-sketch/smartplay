@@ -216,6 +216,27 @@ export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 //   13 par 3 198y    14 par 5 500y    15 par 4 379y
 //   16 par 4 378y    17 par 3 144y    18 par 4 288y
 // Total: par 71, ~6253y from this tee box.
+export const GREENHILL_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/greenhill/hole-01.jpg'),
+  2:  require('../assets/courses/greenhill/hole-02.jpg'),
+  3:  require('../assets/courses/greenhill/hole-03.jpg'),
+  4:  require('../assets/courses/greenhill/hole-04.jpg'),
+  5:  require('../assets/courses/greenhill/hole-05.jpg'),
+  6:  require('../assets/courses/greenhill/hole-06.jpg'),
+  7:  require('../assets/courses/greenhill/hole-07.jpg'),
+  8:  require('../assets/courses/greenhill/hole-08.jpg'),
+  9:  require('../assets/courses/greenhill/hole-09.jpg'),
+  10: require('../assets/courses/greenhill/hole-10.jpg'),
+  11: require('../assets/courses/greenhill/hole-11.jpg'),
+  12: require('../assets/courses/greenhill/hole-12.jpg'),
+  13: require('../assets/courses/greenhill/hole-13.jpg'),
+  14: require('../assets/courses/greenhill/hole-14.jpg'),
+  15: require('../assets/courses/greenhill/hole-15.jpg'),
+  16: require('../assets/courses/greenhill/hole-16.jpg'),
+  17: require('../assets/courses/greenhill/hole-17.jpg'),
+  18: require('../assets/courses/greenhill/hole-18.jpg'),
+};
+
 export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   1:  require('../assets/courses/westlake-cc-nj/hole-01.jpg'),
   2:  require('../assets/courses/westlake-cc-nj/hole-02.jpg'),
@@ -253,7 +274,9 @@ export type LocalCourseSlug =
   | 'westlake-cc-nj'
   // 2026-06-04 — Echo Hills Golf Course, Hemet CA. 9-hole executive
   // course in Tim's local rotation. All 9 holes bundled.
-  | 'echo-hills';
+  | 'echo-hills'
+  // 2026-06-21 — Greenhill Golf Course, Worcester MA. Full 18-hole bundle.
+  | 'greenhill';
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -265,6 +288,7 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'sunnyvale': SUNNYVALE_HOLE_IMAGES,
   'westlake-cc-nj': WESTLAKE_CC_NJ_HOLE_IMAGES,
   'echo-hills': ECHO_HILLS_HOLE_IMAGES,
+  'greenhill': GREENHILL_HOLE_IMAGES,
   // 'journey-at-pechanga' intentionally omitted — hole imagery comes
   // from Mapbox satellite live; getLocalHoleImage() returns null which
   // the SmartVision render path already handles (falls through to the
@@ -313,6 +337,8 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // on-site via Mark Location when Tim plays there. The 800m detect
   // radius covers parking-lot + clubhouse arrival.
   'westlake-cc-nj':   { lat: 40.0828,    lng: -74.3196 },
+  // 2026-06-21 — Greenhill Golf Course, Worcester MA.
+  'greenhill':        { lat: 42.2677,    lng: -71.8562 },
 };
 
 /**
@@ -347,6 +373,8 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // Voice/UI lookup: bare "westlake" resolves here too (single bundled
   // Westlake property today; revisit if we add a sibling).
   if (c.includes('westlake')) return 'westlake-cc-nj';
+  // 2026-06-21 — Greenhill Golf Course, Worcester MA.
+  if (c.includes('greenhill')) return 'greenhill';
   return null;
 }
 
@@ -382,6 +410,7 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   // bundled Westlake property today, so the bare substring is enough.
   // Revisit if a sibling Westlake course gets bundled.
   if (c.includes('westlake')) return WESTLAKE_CC_NJ_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('greenhill')) return GREENHILL_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 
