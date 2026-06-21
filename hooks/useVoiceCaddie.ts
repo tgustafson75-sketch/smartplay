@@ -82,7 +82,9 @@ const AUTO_STOP_MS = 45_000;
 // 2026-06-21 — Tightened from 40s/60s. Server tests confirm Kevin responds
 // in 3-4s including TTS; transcribe in <1s. Waiting 40-60s before declaring
 // failure meant the user sat silent for 25s+ before hearing the error message.
-const TRANSCRIBE_TIMEOUT_MS = 12000;
+// 20s: cold Lambda (2-5s) + Whisper (3-8s) = up to 13s in field.
+// 12s was cutting off live transcription on every hole. Server cap is 30s.
+const TRANSCRIBE_TIMEOUT_MS = 20000;
 // 25s: Kevin's per-round AI timeout is 15s; on spotty LTE 12s fired before
 // the server completed, causing robot voice. Client must give server headroom.
 const BRAIN_TIMEOUT_MS = 25000;

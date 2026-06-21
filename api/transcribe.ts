@@ -3,7 +3,9 @@ import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as os from 'os';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
+// timeout 15s: Vercel cap is 30s; client aborts at 20s. No retry —
+// a second Whisper attempt would push total to 30s+ and lose to client abort.
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 15_000, maxRetries: 0 });
 // 2026-06-04 — Gemini fallback removed. Tim's Google AI Studio
 // account hit prepayment-credit depletion (429 on every call) and
 // the fallback was poisoning the transcribe chain whenever Whisper
