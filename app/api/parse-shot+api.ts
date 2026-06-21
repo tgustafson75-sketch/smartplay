@@ -1,6 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeJSON, type AiProvider } from '../../api/_aiProvider';
 
 const SYSTEM_PROMPT = `You parse a golfer's spoken description of a shot they just hit. Output a structured JSON record.
 
@@ -65,15 +63,11 @@ export async function POST(request: Request) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    const rawProvider = request.headers.get('x-ai-provider');
+    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'gemini';
+
     if (isLieFollowup) {
-      const lieResult = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: LIE_FOLLOWUP_SYSTEM,
-        messages: [{ role: 'user', content: `Player said: "${utterance}"` }],
-      });
-      const block = lieResult.content.find(b => b.type === 'text');
-      const raw = block && block.type === 'text' ? block.text.trim() : '';
+      const raw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0 });
       const parsed = safeParseJson(raw);
       return new Response(JSON.stringify({ ...parsed, raw_utterance: utterance }),
         { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -90,16 +84,7 @@ ${recentPhrases.length > 0 ? `\nThis user's recent phrasings:\n${recentPhrases.m
 
 Parse the shot. Return JSON only.`;
 
-    const result = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      temperature: 0,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const block = result.content.find(b => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const raw = await completeJSON(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
     const parsed = safeParseJson(raw);
 
     const modelDirection = parsed.direction === 'left' || parsed.direction === 'right' || parsed.direction === 'straight' ? parsed.direction : null;

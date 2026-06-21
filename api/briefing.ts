@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeText, providerFromHeader } from './_aiProvider';
 
 const MODE_DESCRIPTIONS: Record<string, string> = {
   break_100: 'Break 100 — avoid doubles, bogey is success, lay up by default',
@@ -16,17 +14,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 2026-06-15 (Tim — pre-round brief fired ~25s late) — Pre-warm. The client
   // pings this with { mode: 'warmup' } the instant "Start Round Here" is tapped,
-  // so the Lambda + Anthropic SDK + TLS to api.anthropic.com are hot by the time
-  // the hole-1 handoff actually generates the brief. Single 'ping', max_tokens:1
-  // (~$0.0001 per warmup). Mirrors api/voice-intent.ts pre-warm shape.
+  // so the Lambda + provider SDK + TLS are hot by the time the hole-1 handoff
+  // actually generates the brief. Single 'ping', max_tokens:1 (~$0.0001 per warmup).
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    const warmProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     try {
-      await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      });
-      console.log('[briefing] warmup completed (Anthropic SDK hot)');
+      await completeText(warmProvider, 'quality', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
+      console.log(`[briefing] warmup completed (${warmProvider} SDK hot)`);
     } catch (e) {
       console.log('[briefing] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
     }
@@ -121,17 +115,8 @@ ${cageBlock}
 
 Give the pre-round briefing now.`;
 
-    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
-    // prompt caching (5-min TTL).
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
-    const block = response.content.find(b => b.type === 'text');
-    const brief = (block as { type: 'text'; text: string } | undefined)?.text?.trim() ?? '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const brief = await completeText(provider, 'quality', systemPrompt, [{ role: 'user', content: userMessage }], { maxTokens: 200 });
 
     console.log('[briefing] generated for', courseName, mode, `"${brief.slice(0, 60)}..."`);
     return res.status(200).json({ brief });

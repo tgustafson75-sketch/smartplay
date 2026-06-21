@@ -21,10 +21,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeText, providerFromHeader } from './_aiProvider';
 
 type SynthesisType = 'onboarding' | 'cage_session' | 'round' | 'patterns';
 
@@ -102,10 +100,6 @@ Write the cross-session pattern summary.`,
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-  }
-
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
       type?: SynthesisType;
@@ -125,17 +119,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { system, user } = PROMPT_BY_TYPE[type](payload, caddieName);
-
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 350,
-      temperature: 0.4,
-      system,
-      messages: [{ role: 'user', content: user }],
-    });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const summary = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const summary = await completeText(provider, 'quality', system, [{ role: 'user', content: user }], { maxTokens: 350, temperature: 0.4 });
     if (!summary) return res.status(502).json({ error: 'Empty model response' });
 
     console.log(`[context-synthesis] type=${type} chars=${summary.length}`);

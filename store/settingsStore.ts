@@ -295,6 +295,14 @@ interface SettingsState {
   // audio interruption when flipped).
   cockpitMode: boolean;
 
+  // 2026-06-21 — AI provider toggle (Owner Tools). Controls which cloud
+  // AI provider drives the caddie brain, intent routing, and reasoning.
+  // TTS (gpt-4o-mini-tts) and STT (Whisper) are always OpenAI regardless.
+  // 'gemini' = Gemini 2.5-Flash (faster vision, cheaper, Google Search grounding)
+  // 'openai' = GPT-4o / GPT-4o-mini (strong reasoning, single-vendor simplicity)
+  // Default 'gemini' — matches the existing fast-path for vision routes.
+  aiProvider: 'openai' | 'gemini';
+
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
@@ -359,6 +367,8 @@ interface SettingsState {
   setChipSensitivity: (on: boolean) => void;
   // 2026-05-22 — Ghost Rounds.
   setGhostAutoActivate: (v: boolean) => void;
+  // 2026-06-21 — AI provider toggle.
+  setAiProvider: (v: 'openai' | 'gemini') => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -466,6 +476,8 @@ export const useSettingsStore = create<SettingsState>()(
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
       ghostAutoActivate: true,
+      // 2026-06-21 — AI provider default 'gemini' (fastest vision path).
+      aiProvider: 'gemini' as const,
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       // 2026-06-04 — Coach Mode toggle setter.
@@ -676,6 +688,7 @@ export const useSettingsStore = create<SettingsState>()(
       }),
       setCaddieSuggestions: (mode) => set({ caddieSuggestions: mode }),
       setGpsQualityDebugOverlay: (v) => set({ gpsQualityDebugOverlay: v }),
+      setAiProvider: (v) => set({ aiProvider: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -685,7 +698,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 12,
+      version: 13,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -814,6 +827,11 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 12) {
           p.localMode = false;
         }
+        // v13 — 2026-06-21 — AI provider toggle added. Seed 'gemini' for
+        // existing installs so they get the faster vision path by default.
+        if (version < 13) {
+          if (p.aiProvider == null) p.aiProvider = 'gemini';
+        }
         return p as SettingsState;
       },
       partialize: (s) => ({
@@ -876,6 +894,7 @@ export const useSettingsStore = create<SettingsState>()(
         chipSensitivity: s.chipSensitivity,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
+        aiProvider: s.aiProvider,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
       // 2026-05-28 — Fix FS: post-splash audio race fix. settingsStore

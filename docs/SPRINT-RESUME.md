@@ -207,4 +207,24 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 
 ---
 
-**Last refreshed:** 2026-06-17 Session 5 — SmartMotion hero + camera cleanup, delete round, iOS TestFlight build #8 (first successful). iOS now testable away from home. Dominant 1.0 gap: Z Fold device verification + EAS dev-client build. Update this doc at the end of every session.
+---
+
+### LATEST (2026-06-21, Session 6) — Anthropic removed from brain path
+
+**Just shipped this session:**
+- **Phase 4 — Anthropic fully removed from `api/kevin.ts` + `api/cage-coach.ts`.**
+  - `api/_aiProvider.ts`: Added `runAgenticLoop()` — multi-round agentic loop with vision support for both OpenAI and Gemini. Full provider abstraction is now complete.
+  - `api/cage-coach.ts`: Replaced Anthropic forced-tool-choice with `completeJSON()` + JSON schema in system prompt.
+  - `api/kevin.ts`: Full migration — `TOOLS` → `AI_TOOLS` (input_schema→parameters), `classifyQuestion()` uses `completeText()`, removed `openaiTextFallback()`, warmup uses `completeText()`, tier renamed `'TACTICAL'/'CONVERSATIONAL'` → `AiTier` (`'fast'/'quality'`), entire Anthropic agentic loop replaced with `runAgenticLoop()`, `_debug` telemetry cleaned.
+  - `CLAUDE.md` architecture invariants updated: "Kevin runs on OpenAI/Gemini, toggled via X-AI-Provider header. No Anthropic dependency in runtime path."
+  - TypeScript: zero errors.
+
+**What this fixes:** "Robot voice" bug root cause. Anthropic credit limits → brain fails → TTS gets empty string → silence that sounds like robot. Now brain always uses OpenAI or Gemini (owner-toggleable in settings). No more empty-string TTS path.
+
+**What's next:**
+1. **Phase 5** — Migrate vision routes off Anthropic: `lie-analysis`, `swing-analysis`, `swing-compare`, `swing-question`, `round-import`, `putting-analysis`.
+2. **Phase 6** — Remove `@anthropic-ai/sdk` from `package.json`.
+3. **PATH 4 VOICE checkpoint** — Verify mic tap → intent → Kevin response works on both providers.
+4. Z Fold device round verification (Path 2 + Path 4).
+
+**Last refreshed:** 2026-06-21 Session 6 — Phase 4 Anthropic brain removal complete. Robot voice root cause addressed.

@@ -15,33 +15,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
-
-const TOOL_NAME = 'cage_swing_review';
-
-const TOOL: Anthropic.Tool = {
-  name: TOOL_NAME,
-  description:
-    'Reviews a single cage practice swing using extracted acoustic and visual features. Returns a 1-2 sentence coaching response in the caddie\'s voice.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      kevin_response: {
-        type: 'string',
-        description: '1-2 sentences in the caddie\'s established voice. Companion register, not coach.',
-      },
-      confidence: {
-        type: 'string',
-        enum: ['high', 'medium', 'low'],
-        description: 'How confident the caddie is in the response given the feature quality (capture issues lower this).',
-      },
-    },
-    required: ['kevin_response', 'confidence'],
-  },
-};
+import { completeJSON, providerFromHeader } from './_aiProvider';
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildCageSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -71,8 +46,11 @@ Translate to: "clean contact", "flush", "thin", "fat", "off the toe/heel".
 Do not give swing instruction. You are a companion, not a coach. Comment
 on what just happened. Save instruction for when the user explicitly asks.
 
-You MUST respond by calling the cage_swing_review tool with kevin_response
-and confidence. Do not respond with any other content.`;
+Respond ONLY with valid JSON — no preamble, no code fences:
+{
+  "kevin_response": "<1-2 sentences in your voice>",
+  "confidence": "high" | "medium" | "low"
+}`;
 
 interface CageCoachResponse {
   kevin_response: string;
@@ -83,10 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-  }
-
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
       features?: unknown;
@@ -101,47 +75,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const personaInput: Persona | VoiceGender =
       (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
 
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     console.log('[cage-coach] features received');
 
     const userMessage =
-      `Here is the features.json from this swing. Use the priority rules ` +
-      `and respond by calling cage_swing_review.\n\n` +
+      `Here is the features.json from this swing. Use the priority rules and respond with JSON.\n\n` +
       JSON.stringify(features, null, 2);
 
-    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
-    // prompt caching (5-min TTL). Per-swing reviews fire frequently
-    // during a cage session.
-    const result = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
-      temperature: 0.6,
-      system: [{ type: 'text', text: buildCageSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
-      tools: [TOOL],
-      tool_choice: { type: 'tool', name: TOOL_NAME },
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    const rawText = await completeJSON(provider, 'quality', buildCageSystemPrompt(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 400, temperature: 0.6 });
 
-    // The forced tool_choice guarantees a tool_use block in the response.
-    const toolBlock = result.content.find(b => b.type === 'tool_use');
-    if (!toolBlock || toolBlock.type !== 'tool_use') {
-      console.error('[cage-coach] no tool_use block in response');
-      return res.status(502).json({ error: 'Model did not invoke the tool' });
+    let parsed: Record<string, unknown> = {};
+    try { parsed = JSON.parse(rawText); } catch { /* use empty fallback */ }
+
+    const kevinResponse = typeof parsed.kevin_response === 'string' ? parsed.kevin_response.trim() : '';
+    if (!kevinResponse) {
+      console.error('[cage-coach] missing kevin_response in JSON');
+      return res.status(502).json({ error: 'Model returned no kevin_response' });
     }
-    const input = toolBlock.input as Partial<CageCoachResponse>;
-    if (typeof input.kevin_response !== 'string' || !input.kevin_response.trim()) {
-      console.error('[cage-coach] tool input missing kevin_response');
-      return res.status(502).json({ error: 'Tool input missing kevin_response' });
-    }
-    // Audit — explicit allowlist check so a model typo ('mediam', 'hi')
-    // doesn't silently get coerced to 'medium' as if it were valid input.
     const VALID_CONFIDENCE = ['high', 'medium', 'low'] as const;
     const confidence: CageCoachResponse['confidence'] =
-      (VALID_CONFIDENCE as readonly string[]).includes(input.confidence ?? '')
-        ? (input.confidence as CageCoachResponse['confidence'])
+      (VALID_CONFIDENCE as readonly string[]).includes(parsed.confidence as string)
+        ? (parsed.confidence as CageCoachResponse['confidence'])
         : 'medium';
 
     const response: CageCoachResponse = {
-      kevin_response: input.kevin_response.trim(),
+      kevin_response: kevinResponse,
       confidence,
     };
     console.log('[cage-coach] response:', response);

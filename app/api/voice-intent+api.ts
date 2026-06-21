@@ -7,10 +7,8 @@
 // If they drift, voice breaks in production. You will debug for hours.
 // Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
 
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender, type Persona } from '../../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeJSON, type AiProvider } from '../../api/_aiProvider';
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildSystemPrompt = (g: Persona | VoiceGender) => {
@@ -376,24 +374,13 @@ ${JSON.stringify(context, null, 2)}
 
 Parse the intent. Return JSON only.`;
 
-    // Audit 101 / W4 — Anthropic ephemeral prompt caching (5-min TTL).
-    const result = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      temperature: 0,
-      system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const block = result.content.find(b => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const rawProvider = request.headers.get('x-ai-provider');
+    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'gemini';
+    const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
 
     let parsed: Record<string, unknown> = {};
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw;
-      parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+      parsed = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       parsed = {
         intent_type: 'unknown',

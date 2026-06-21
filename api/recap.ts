@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeJSON, providerFromHeader } from './_aiProvider';
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildRecapSystem = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -181,23 +179,10 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
     const personaInput: Persona | VoiceGender =
       (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
-    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
-    // prompt caching (5-min TTL).
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1200,
-      system: [{ type: 'text', text: buildRecapSystem(personaInput), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const rawText = await completeJSON(provider, 'quality', buildRecapSystem(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 1200 });
 
-    const block = response.content.find(b => b.type === 'text');
-    const rawText = (block as { type: 'text'; text: string } | undefined)?.text ?? '';
-
-    // Extract JSON — Claude sometimes wraps in ```json...```
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in response');
-
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(rawText) as {
       hole_summaries: Array<{ hole_number: number; summary: string }>;
       overall_summary: string;
     };

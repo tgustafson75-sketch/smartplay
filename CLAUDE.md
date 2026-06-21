@@ -138,8 +138,8 @@ is unchanged before reporting the phase complete.
 ## Architecture invariants (do not deviate)
 
 - Three pillars: ROUND (1.0 critical path), PRACTICE/SwingLab (partial 1.0), PLAY (1.1 marquee). SwingLab and Practice are the same feature.
-- Kevin runs on Anthropic Claude (Sonnet for quality, Haiku for speed/cost) + OpenAI `gpt-4o-mini-tts`.
-- Cascade pattern with abstracted LLM call layer. Anthropic `tool_use` for voice intent routing. OpenAI Realtime API is out of scope.
+- Kevin's brain runs on OpenAI (gpt-4o / gpt-4o-mini) or Gemini (gemini-2.5-flash), toggled via `X-AI-Provider` header. TTS is always OpenAI `gpt-4o-mini-tts`. No Anthropic dependency in runtime path.
+- Abstracted LLM call layer: `api/_aiProvider.ts` (`completeText`, `completeJSON`, `completeVision`, `completeWithTools`, `runAgenticLoop`). Provider toggled via Owner Tools → `settingsStore.aiProvider`. OpenAI Realtime API is out of scope.
 - Trust Spectrum: L1 Quiet → L2 Companion (default) → L3 Active → L4 Full.
 - Navigation: ONE menu via ••• top-right of Caddie screen. Top-left reserved for Kevin's badge morph when a tool is open.
 - Persistent Kevin pattern: any open tool minimizes Kevin to cap badge top-left. Badge pulses amber during thinking/speech.

@@ -1672,6 +1672,12 @@ export default function Settings() {
                       voiceService.configureAudioForSpeech (queued, no
                       race with the rest of voice stack). */}
                   <GlassesModeRow colors={colors} />
+                  {/* 2026-06-21 — AI provider A/B toggle. Switch between
+                      Gemini 2.5-Flash and OpenAI (gpt-4o) as the caddie
+                      brain + reasoning provider. TTS/STT are always OpenAI.
+                      Injects X-AI-Provider header on all API calls via
+                      services/apiFetch once routes are migrated (Phase 2+). */}
+                  <AiProviderRow colors={colors} />
                   {/* 2026-06-15 (Tim) — "Train the Trainer" — the reference-asset
                       authoring tool (capture example pics + narrative for faults
                       like open-face), moved here from the global Tools menu so it's
@@ -2213,6 +2219,33 @@ function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
       <Switch
         value={feelCaptureEnabled}
         onValueChange={setFeelCaptureEnabled}
+        trackColor={{ false: '#767577', true: colors.accent }}
+      />
+    </View>
+  );
+}
+
+function AiProviderRow({ colors }: { colors: ThemeColors }) {
+  const aiProvider = useSettingsStore((s) => s.aiProvider);
+  const setAiProvider = useSettingsStore((s) => s.setAiProvider);
+  const isOpenAI = aiProvider === 'openai';
+  return (
+    <View style={[styles.resetRow, { marginBottom: 8 }]}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>AI Brain Provider</Text>
+        <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+          {isOpenAI
+            ? 'OpenAI (gpt-4o / gpt-4o-mini) — strong reasoning, single vendor.'
+            : 'Gemini 2.5 Flash — fastest vision path, Google Search grounding.'}
+          {'\n'}TTS and STT always use OpenAI regardless of this setting.
+        </Text>
+        <Text style={[styles.rowSub, { color: colors.accent, marginTop: 4 }]}>
+          Active: {isOpenAI ? 'OpenAI' : 'Gemini'}
+        </Text>
+      </View>
+      <Switch
+        value={isOpenAI}
+        onValueChange={(v) => setAiProvider(v ? 'openai' : 'gemini')}
         trackColor={{ false: '#767577', true: colors.accent }}
       />
     </View>

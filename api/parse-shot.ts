@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeJSON, providerFromHeader } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You parse a golfer's spoken description of a shot they just hit. Output a structured JSON record.
 
@@ -106,15 +104,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+
     if (isLieFollowup) {
-      const lieResult = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: LIE_FOLLOWUP_SYSTEM,
-        messages: [{ role: 'user', content: `Player said: "${utterance}"` }],
-      });
-      const lieBlock = lieResult.content.find(b => b.type === 'text');
-      const lieRaw = lieBlock && lieBlock.type === 'text' ? lieBlock.text.trim() : '';
+      const lieRaw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0 });
       const lieParsed = safeParseJson(lieRaw);
       return res.status(200).json({
         ...lieParsed,
@@ -133,16 +126,7 @@ ${recentPhrases.length > 0 ? `\nThis user's recent phrasings:\n${recentPhrases.m
 
 Parse the shot. Return JSON only.`;
 
-    const result = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      temperature: 0,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const block = result.content.find(b => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const raw = await completeJSON(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
     const parsed = safeParseJson(raw);
 
     const club = typeof parsed.club === 'string' ? parsed.club : null;

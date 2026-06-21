@@ -2066,3 +2066,41 @@ Items Tim explicitly deferred this session. NOT regressions, NOT pending — the
 3. Path 1 ONBOARD + Path 3 CAGE MIN VERIFY
 4. Open Range card in swinglab.tsx Prepare Better section
 5. **Acoustic target dataset** — needs 20+ labeled samples before spectral analysis makes sense.
+
+## Day N — 2026-06-21 Session 6
+
+### Shipped today
+
+- **Phase 4 — Anthropic fully removed from runtime brain path** (`api/kevin.ts`, `api/cage-coach.ts`)
+  - `api/_aiProvider.ts` — Added `runAgenticLoop()` (multi-round agentic tool loop with vision support for both OpenAI + Gemini), `AgenticLoopResult` interface, and two private helpers (`_openaiAgenticLoop`, `_geminiAgenticLoop`).
+  - `api/cage-coach.ts` — Replaced `anthropic.messages.create()` + forced `tool_choice` with `completeJSON()` + JSON schema in system prompt. Zero Anthropic dependency.
+  - `api/kevin.ts` — Full migration:
+    - Removed `Anthropic` import + client; replaced with `completeText`, `runAgenticLoop`, `providerFromHeader`, `AiProvider`, `AiTier`, `AiToolDef`, `AiImageInput` from `_aiProvider.ts`.
+    - `TOOLS: Anthropic.Tool[]` → `AI_TOOLS: AiToolDef[]` (renamed `input_schema` → `parameters` on all 9 tools).
+    - `classifyQuestion()` updated to use `completeText(provider, 'fast', ...)` with provider param.
+    - Removed `openaiTextFallback()` entirely (was emergency Anthropic fallback; no longer needed).
+    - Warmup path updated to `completeText(provider, 'fast', 'ping', ...)`.
+    - Tier logic: `'TACTICAL'/'CONVERSATIONAL'` → `AiTier` (`'fast'/'quality'`).
+    - Entire Anthropic agentic loop + fallback block replaced with `runAgenticLoop(...)` call.
+    - `_debug` telemetry updated (`providerUsed`, removed `anthropic_error`).
+    - Provider detected at handler start via `providerFromHeader()`.
+  - Stale Anthropic comments updated in `api/kevin.ts` + `api/voice-intent.ts`.
+  - `CLAUDE.md` architecture invariants updated to reflect OpenAI/Gemini brain.
+
+- **TypeScript:** zero errors after all Phase 4 changes (`npx tsc --noEmit` clean).
+
+### What this fixes
+
+Root cause of "robot voice" bug: Anthropic credits limited → brain fails → TTS receives empty string → TTS speaks nothing → sounds like robot. With Anthropic gone, the brain always uses OpenAI or Gemini (owner-toggleable in settings). No more silent empty-string TTS path.
+
+### Verified
+
+- `npx tsc --noEmit` clean (zero errors).
+- No `Anthropic` import or runtime reference in any migrated file.
+
+### Open / carried to next session
+
+1. **Phase 5** — Strip Anthropic from vision routes: `lie-analysis`, `swing-analysis`, `swing-compare`, `swing-question`, `round-import`, `putting-analysis`.
+2. **Phase 6** — Remove `@anthropic-ai/sdk` from `package.json` entirely.
+3. **PATH 4 VOICE checkpoint** — Test mic tap → intent parse → Kevin response on both providers (Gemini default, OpenAI toggle via Owner Tools).
+4. Carry from previous: Path 2 + Path 4 MIN VERIFY on real Z Fold round.

@@ -8,11 +8,8 @@
 // Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-
-// 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
+import { completeJSON, providerFromHeader } from './_aiProvider';
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildSystemPrompt = (g: Persona | VoiceGender) => {
@@ -506,18 +503,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
-  // after splash completes so the Anthropic SDK + TLS to
-  // api.anthropic.com are hot when the first real classification
-  // lands. Single 'ping' message, max_tokens:1 — minimal cost
-  // (~$0.00001 per warmup). Mirrors api/voice.ts pre-warm shape.
+  // after splash completes so the brain SDK (OpenAI or Gemini) + TLS
+  // are hot when the first real classification lands. Single 'ping'
+  // message, max_tokens:1 — minimal cost. Mirrors api/voice.ts pre-warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    const warmProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     try {
-      await anthropic.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      });
-      console.log('[voice-intent] warmup completed (Anthropic SDK hot)');
+      await completeJSON(warmProvider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
+      console.log(`[voice-intent] warmup completed (${warmProvider} SDK hot)`);
     } catch (e) {
       console.log('[voice-intent] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
     }
@@ -549,26 +542,12 @@ ${JSON.stringify(context, null, 2)}
 
 Parse the intent. Return JSON only.`;
 
-    // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
-    // prompt caching (5-min TTL). Voice intent fires many times per
-    // round; identical system prompts (same persona) hit the cache.
-    const result = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      temperature: 0,
-      system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const block = result.content.find(b => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
 
     let parsed: Record<string, unknown> = {};
     try {
-      const jsonStart = raw.indexOf('{');
-      const jsonEnd = raw.lastIndexOf('}');
-      const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : raw;
-      parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+      parsed = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       parsed = {
         intent_type: 'unknown',

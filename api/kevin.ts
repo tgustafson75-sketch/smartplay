@@ -1,21 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
+import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 // 2026-06-04 — ElevenLabs path removed. OpenAI gpt-4o-mini-tts is
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 
-// 2026-05-23 — maxRetries bumped from 1 → 3 after a user-reported
-// API overload incident. Anthropic returns 529 `overloaded_error`
-// during peak capacity; the SDK's built-in retry (with exponential
-// backoff) handles transient cases without surfacing failure to
-// the user. 3 retries × backoff ≈ 4-8s worst case before our 25s
-// timeout — still fits inside the brain-call deadline budget.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 3 });
-const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
 // 2026-06-04 — Persona → OpenAI TTS voice map. Mirrors the table in
 // api/voice.ts so the inline brain-response audio matches the standalone
@@ -40,26 +33,26 @@ CONVERSATIONAL = stories, opinions, knowledge questions, multi-sentence reflecti
 
 Output ONLY the single word. No punctuation, no explanation.`
 
-const TOOLS: Anthropic.Tool[] = [
+const AI_TOOLS: AiToolDef[] = [
   {
     name: 'open_smartvision',
     description: 'Open the SmartVision tool — a visual hole layout / overhead view / hole map showing the green, fairway, hazards, and yardages. Trigger this when Tim says ANY of: "show me the hole", "let me see the layout", "what does the hole look like", "show the green", "pull up the map", "see the layout", "show me what I\'m looking at", "what am I looking at", "give me a look at this", or any phrasing meaning he wants the visual map of the hole.',
-    input_schema: { type: 'object', properties: {}, required: [] },
+    parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_smartfinder',
     description: 'Open the SmartFinder — a precise distance-locking tool / rangefinder / yardage finder. Trigger this when Tim says ANY of: "rangefinder", "use the rangefinder", "let me see the rangefinder", "lock the distance", "find the yardage", "how far is it" (when used with "let me see" or "show me"), "give me a precise distance", "let me lock that", or any phrasing meaning he wants to use a rangefinder-style tool. THIS TOOL IS THE RANGEFINDER. The word "rangefinder" should always trigger this.',
-    input_schema: { type: 'object', properties: {}, required: [] },
+    parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_swinglab',
     description: 'Open SwingLab — the swing analysis / practice / drill tool. Trigger this when Tim says ANY of: "swinglab", "practice", "let\'s work on my swing", "I want to practice", "open practice", "swing analysis", "swing drills", "let me work on something", or any phrasing meaning he wants to enter practice or analysis mode.',
-    input_schema: { type: 'object', properties: {}, required: [] },
+    parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'log_score',
     description: 'Log the score for a specific hole. Trigger when Tim names a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here", "triple on 7"). Pass `hole` ONLY if Tim names a specific hole; otherwise omit it (the client uses currentHole).',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         hole:  { type: 'number', description: 'Hole number (1-18). Omit when Tim is talking about the hole he is currently on.' },
@@ -71,7 +64,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'log_shot',
     description: 'Log a shot Tim just hit, extracting whatever he mentioned: direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit it fat and it\'s short", "pulled it left, in the trees", "striped it", "pushed it but it\'s playable", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         direction: {
@@ -98,7 +91,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'log_emotional_state',
     description: 'Note Tim\'s emotional or mental state when he expresses it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me", "this is fun"). Pass valence as positive/neutral/negative. Use only when Tim actually voices a feeling, not on every sentence.',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         state: {
@@ -117,12 +110,12 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'record_swing',
     description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
-    input_schema: { type: 'object', properties: {}, required: [] },
+    parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'lookup_course',
     description: 'Search for a golf course by name or location. Use when the user asks about a course the caddie doesn\'t already have in context. Returns matching courses with basic info.',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Course name, club name, or "name in city" (e.g. "Pebble Beach" or "Riverside in Phoenix")' },
@@ -133,7 +126,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'lookup_hole',
     description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par, yardage from each tee, hazards, GPS.',
-    input_schema: {
+    parameters: {
       type: 'object',
       properties: {
         course_id: { type: 'string' },
@@ -247,51 +240,13 @@ async function executeLookupHole(input: Record<string, unknown>): Promise<string
 
 // ─── Classifier ────────────────────────────────────────────────────────────────
 
-async function classifyQuestion(userMessage: string): Promise<'TACTICAL' | 'CONVERSATIONAL'> {
+async function classifyQuestion(userMessage: string, provider: AiProvider): Promise<'TACTICAL' | 'CONVERSATIONAL'> {
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 5,
-      system: CLASSIFIER_SYSTEM,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-    const block = response.content.find((b) => b.type === 'text');
-    const text = (block as { type: 'text'; text: string } | undefined)?.text?.trim().toUpperCase() ?? '';
-    return text.startsWith('TACTICAL') ? 'TACTICAL' : 'CONVERSATIONAL';
+    const text = await completeText(provider, 'fast', CLASSIFIER_SYSTEM, [{ role: 'user', content: userMessage }], { maxTokens: 10 });
+    return text.trim().toUpperCase().startsWith('TACTICAL') ? 'TACTICAL' : 'CONVERSATIONAL';
   } catch {
     return 'CONVERSATIONAL';
   }
-}
-
-/**
- * 2026-05-26 — Fix BT: OpenAI text-only emergency fallback.
- *
- * Fires when Anthropic's agentic loop throws (overload, network, 5xx)
- * AND we have no accumulated text or toolAction to fall back on.
- * Trades tool actions (open_smartvision etc.) for graceful degradation:
- * the user gets a real spoken answer instead of "I'm having trouble
- * connecting." Tools require restructuring the loop for OpenAI's
- * function-call shape; text-only is the 80/20 path because the
- * conversational register is what callers most often need rescued.
- *
- * Vision is skipped here too — gpt-4o supports image_url but the
- * fallback prioritizes reliability over multimodal fidelity. If
- * Anthropic is down hard, the user accepts a text-only answer.
- */
-async function openaiTextFallback(args: {
-  systemPrompt: string;
-  userMessage: string;
-  maxTokens: number;
-}): Promise<string> {
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: args.maxTokens,
-    messages: [
-      { role: 'system', content: args.systemPrompt },
-      { role: 'user', content: args.userMessage },
-    ],
-  });
-  return (completion.choices[0]?.message?.content ?? '').trim();
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -300,26 +255,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
-  // after splash completes so BOTH provider SDKs (Anthropic for brain,
-  // OpenAI for TTS at line 1291) and their TLS connections are hot
-  // when the first real /api/kevin call lands. Mirrors api/voice.ts
-  // pre-warm shape. ~$0.0001 per warmup (Anthropic ping + OpenAI
-  // single-space TTS). Distinct from the existing __ping__ keep-warm
-  // pattern below which only warms the Lambda runtime, not the SDKs.
+  // after splash completes so the brain SDK (OpenAI or Gemini) and
+  // OpenAI TTS connections are hot when the first real call lands.
+  // Mirrors api/voice.ts pre-warm shape. ~$0.0001 per warmup.
+  // Distinct from the __ping__ keep-warm pattern which only warms
+  // the Lambda runtime, not the provider SDKs.
+  const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     await Promise.allSettled([
-      anthropic.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ping' }],
-      }),
+      completeText(provider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 }),
       openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
         voice: VOICE_BY_PERSONA.kevin,
         input: ' ',
       }).then(mp3 => mp3.arrayBuffer()),
     ]);
-    console.log('[kevin] warmup completed (Anthropic + OpenAI SDKs hot)');
+    console.log(`[kevin] warmup completed (${provider} + OpenAI TTS hot)`);
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 
@@ -1124,192 +1076,96 @@ ${onCourseContextBlock}${baseMessage}`
       ? image_caption.trim()
       : null;
 
-    // SmartVision-open requests are always tactical — we have the numbers, deliver the read.
-    // Phase BH — in-round diagnostic always Sonnet (reasoning across patterns).
-    // 2026-05-22 — vision present forces Sonnet (Haiku's multimodal
-    // grounding is weaker for the kind of cues we're handing it — lie
-    // texture, body angle in glasses POV, putter face read).
-    // 2026-05-30 — Fix FY: client may pass forceTier='TACTICAL' (Local
-    // Mode) to pin Haiku 4.5 and skip the classifyQuestion auto-tier.
-    // Honored UNLESS vision is present (Haiku's multimodal too weak to
-    // ship a swing/lie read on its own) — vision still escalates to
-    // Sonnet for read quality even in Local Mode. inRoundDiagnostic also
-    // wins (Tim's spec: deep pattern reasoning is worth the tier bump).
+    // fast = quick tactical answers (gpt-4o-mini / gemini-2.5-flash)
+    // quality = reasoning, vision, diagnostics (gpt-4o / gemini-2.5-flash)
     const forceTierRaw = typeof body.forceTier === 'string' ? body.forceTier : null;
     const clientForceTactical = forceTierRaw === 'TACTICAL';
-    const tier = visionBase64
-      ? 'CONVERSATIONAL'
-      : inRoundDiagnostic ? 'CONVERSATIONAL'
-      : clientForceTactical ? 'TACTICAL'
-      : sv ? 'TACTICAL'
-      : await classifyQuestion(baseMessage);
-    const model = tier === 'TACTICAL' ? 'claude-haiku-4-5' : 'claude-sonnet-4-5';
+    const aiTier: AiTier = visionBase64
+      ? 'quality'
+      : inRoundDiagnostic ? 'quality'
+      : clientForceTactical ? 'fast'
+      : sv ? 'fast'
+      : (await classifyQuestion(baseMessage, provider) === 'TACTICAL' ? 'fast' : 'quality');
 
-    console.log(`[kevin] tier=${tier} model=${model} vision=${visionBase64 ? 'yes' : 'no'} q="${userMessage.slice(0, 60)}"`);
+    console.log(`[kevin] provider=${provider} tier=${aiTier} vision=${visionBase64 ? 'yes' : 'no'} q="${userMessage.slice(0, 60)}"`);
     console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));
     if (courseContext) console.log(`[kevin] courseContext loaded (${String(courseContext).length} chars)`);
 
-    // ─── Agentic loop: resolve data tools before generating final response ────
-    // 2026-05-22 — When the client supplied a vision frame, wrap the
-    // first user message as a multi-block content array so the model
-    // sees [image, caption, question]. The agentic loop's subsequent
-    // turns (tool results, etc.) keep their plain-text content shape;
-    // only the FIRST turn carries the image — re-sending the image on
-    // every tool round would re-bill the vision tokens with no benefit.
-    const initialUserContent: Anthropic.ContentBlockParam[] | string = visionBase64
-      ? [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: visionMediaType, data: visionBase64 },
-          },
-          ...(visionCaption ? [{ type: 'text' as const, text: `[VISION FRAME] ${visionCaption}` }] : []),
-          { type: 'text', text: userMessage },
-        ]
+    // ─── Agentic loop ────────────────────────────────────────────────────────
+    const images: AiImageInput[] = visionBase64
+      ? [{ b64: visionBase64, mimeType: visionMediaType }]
+      : [];
+    const effectiveUserMessage = visionCaption
+      ? `[VISION FRAME] ${visionCaption}\n\n${userMessage}`
       : userMessage;
-    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: initialUserContent }];
+
     let text = '';
-    let toolAction: Record<string, unknown> | null = null;
-    // 2026-05-26 — Fix BT: track which provider produced the final text
-    // so /api/kevin _debug carries it for ops triage (and so Batch 59
-    // brain telemetry can surface fallbacks the user never sees).
-    let providerUsed: 'anthropic' | 'openai-fallback' = 'anthropic';
-    let anthropicError: string | null = null;
-    // 2026-05-26 — Fix BW: telemetry counters surfaced via _debug.
-    // toolRounds = how many tool-use loop iterations actually ran
-    //   (1 = single Anthropic call, 2-3 = agentic loop fired);
-    // dataToolCalls = lookup_course / lookup_hole invocations
-    //   (proxy for course-data fetch volume);
-    // Both let Tim eyeball brain cost-per-turn in prod without
-    // needing OTEL or per-request log access.
-    let toolRounds = 0;
-    let dataToolCalls = 0;
+    type ActionPayload = { type: string; [k: string]: unknown };
+    const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
     const startedAt = Date.now();
-    const MAX_TOOL_ROUNDS = 3;
 
-    try {
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      toolRounds = round + 1;
-      // Audit 101 / W4 — opt the system prompt into Anthropic ephemeral
-      // prompt caching. Same identical prompt within the 5-minute TTL hits
-      // the cache; cache misses cost the same as before. The system prompt
-      // here is multi-thousand-token; cache hits drop input billing on
-      // repeat /api/kevin calls (typical user pattern: many calls in a
-      // round, all with the same caddieName + characterSpec + register).
-      const aiResponse = await anthropic.messages.create({
-        model,
-        max_tokens: tier === 'TACTICAL' ? 200 : 400,
-        tools: TOOLS,
-        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-        messages,
-      });
-
-      // Collect this round's text + tool calls
-      let roundText = '';
-      let hasDataTools = false;
-      const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const block of aiResponse.content) {
-        if (block.type === 'text') {
-          roundText += block.text;
-        } else if (block.type === 'tool_use') {
-          const input = block.input as Record<string, unknown>;
-
-          if (block.name === 'lookup_course') {
-            // Data tool — fetch and continue loop
-            hasDataTools = true;
-            dataToolCalls += 1;
-            console.log(`[kevin] calling lookup_course query="${input.query}"`);
-            const result = await executeLookupCourse(input);
-            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-
-          } else if (block.name === 'lookup_hole') {
-            // Data tool — fetch and continue loop
-            hasDataTools = true;
-            dataToolCalls += 1;
-            console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
-            const result = await executeLookupHole(input);
-            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-
-          } else {
-            // Action tool — capture and provide dummy result so the loop can continue
-            switch (block.name) {
-              case 'open_smartvision': toolAction = { type: 'open_smartvision' }; break;
-              case 'open_smartfinder': toolAction = { type: 'open_smartfinder' }; break;
-              case 'open_swinglab':    toolAction = { type: 'open_swinglab' };    break;
-              case 'record_swing':     toolAction = { type: 'record_swing' };     break;
-              case 'log_score': {
-                // Phase BJ — `hole` optional now. Pass through; client uses
-                // currentHole when undefined.
-                const t: Record<string, unknown> = { type: 'log_score', score: Number(input.score) };
-                if (typeof input.hole === 'number') t.hole = input.hole;
-                toolAction = t;
-                break;
-              }
-              case 'log_shot': {
-                const t: Record<string, unknown> = { type: 'log_shot' };
-                if (typeof input.direction === 'string') t.direction = input.direction;
-                if (typeof input.contactQuality === 'string') t.contactQuality = input.contactQuality;
-                if (typeof input.outcome === 'string') t.outcome = input.outcome;
-                if (typeof input.feel === 'string') t.feel = input.feel;
-                toolAction = t;
-                break;
-              }
-              case 'log_emotional_state': {
-                toolAction = {
-                  type: 'log_emotional_state',
-                  state: String(input.state ?? ''),
-                  valence: String(input.valence ?? 'neutral'),
-                };
-                break;
-              }
-            }
-            toolResultBlocks.push({ type: 'tool_result', tool_use_id: block.id, content: 'Action triggered.' });
+    const loopResult = await runAgenticLoop(
+      provider,
+      aiTier,
+      systemPrompt,
+      effectiveUserMessage,
+      images,
+      AI_TOOLS,
+      async (name, input) => {
+        if (name === 'lookup_course') {
+          capture.dataToolCalls++;
+          console.log(`[kevin] calling lookup_course query="${input.query}"`);
+          return await executeLookupCourse(input);
+        }
+        if (name === 'lookup_hole') {
+          capture.dataToolCalls++;
+          console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
+          return await executeLookupHole(input);
+        }
+        // Action tools — capture and return dummy so loop can continue
+        switch (name) {
+          case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
+          case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
+          case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
+          case 'record_swing':     capture.action = { type: 'record_swing' };     break;
+          case 'log_score': {
+            const a: ActionPayload = { type: 'log_score', score: Number(input.score) };
+            if (typeof input.hole === 'number') a.hole = input.hole;
+            capture.action = a;
+            break;
+          }
+          case 'log_shot': {
+            const a: ActionPayload = { type: 'log_shot' };
+            if (typeof input.direction === 'string') a.direction = input.direction;
+            if (typeof input.contactQuality === 'string') a.contactQuality = input.contactQuality;
+            if (typeof input.outcome === 'string') a.outcome = input.outcome;
+            if (typeof input.feel === 'string') a.feel = input.feel;
+            capture.action = a;
+            break;
+          }
+          case 'log_emotional_state': {
+            capture.action = {
+              type: 'log_emotional_state',
+              state: String(input.state ?? ''),
+              valence: String(input.valence ?? 'neutral'),
+            };
+            break;
           }
         }
-      }
+        return 'Action triggered.';
+      },
+      {
+        maxTokens: aiTier === 'fast' ? 200 : 400,
+        maxRounds: 3,
+        continuationTools: ['lookup_course', 'lookup_hole'],
+      },
+    );
 
-      text += roundText.trim();
-
-      // If no data tools fired (or stop_reason isn't tool_use), we're done
-      if (!hasDataTools || aiResponse.stop_reason !== 'tool_use') {
-        break;
-      }
-
-      // Continue: push assistant message + tool results as next user message
-      messages.push({ role: 'assistant', content: aiResponse.content });
-      messages.push({ role: 'user', content: toolResultBlocks });
-      console.log(`[kevin] tool round ${round + 1} complete, continuing with ${toolResultBlocks.length} result(s)`);
-    }
-    } catch (loopErr: unknown) {
-      // 2026-05-26 — Fix BT: Anthropic call(s) failed. If we already
-      // got partial text or a toolAction from an earlier round, keep
-      // it — partial > nothing. Otherwise, attempt OpenAI text-only
-      // fallback so the user still hears a real answer.
-      anthropicError = loopErr instanceof Error ? loopErr.message : String(loopErr);
-      console.error('[kevin] anthropic loop failed:', anthropicError);
-      if (!text.trim() && !toolAction) {
-        try {
-          console.log('[kevin] attempting OpenAI text-only fallback');
-          const fallbackText = await openaiTextFallback({
-            systemPrompt,
-            userMessage,
-            maxTokens: tier === 'TACTICAL' ? 200 : 400,
-          });
-          if (fallbackText) {
-            text = fallbackText;
-            providerUsed = 'openai-fallback';
-            console.log('[kevin] OpenAI fallback success');
-          } else {
-            throw new Error('OpenAI fallback returned empty');
-          }
-        } catch (fallbackErr) {
-          console.error('[kevin] OpenAI fallback failed:', fallbackErr);
-          // Re-throw original anthropic error so the outer catch
-          // surfaces the localized "having trouble" message.
-          throw loopErr;
-        }
-      }
-    }
+    text = loopResult.text;
+    const providerUsed = loopResult.provider;
+    const toolRounds = loopResult.rounds;
+    const toolAction = capture.action;
+    const dataToolCalls = capture.dataToolCalls;
 
     text = text.trim();
 
@@ -1323,12 +1179,12 @@ ${onCourseContextBlock}${baseMessage}`
         log_emotional_state: 'I hear you.',
         record_swing:        "I'm watching.",
       };
-      text = defaults[String(toolAction.type)] ?? 'On it.';
+      text = defaults[toolAction.type] ?? 'On it.';
     }
 
     if (!text && !toolAction) {
-      console.error('[kevin] empty response from Claude — model returned no content');
-      throw new Error('Empty response from Claude');
+      console.error('[kevin] empty response — model returned no content');
+      throw new Error('Empty response from brain');
     }
 
     console.log('[kevin] response:', text);
@@ -1356,31 +1212,27 @@ ${onCourseContextBlock}${baseMessage}`
     // access. Clients ignore unknown fields. Keep field names stable
     // so future dashboards can chart them.
     const latencyMs = Date.now() - startedAt;
-    console.log(`[kevin] done provider=${providerUsed} tier=${tier} rounds=${toolRounds} data=${dataToolCalls} ms=${latencyMs}`);
+    console.log(`[kevin] done provider=${providerUsed} tier=${aiTier} rounds=${toolRounds} data=${dataToolCalls} ms=${latencyMs}`);
     return res.status(200).json({
       text,
       audioBase64,
       toolAction,
       _debug: {
         provider: providerUsed,
-        tier,
+        tier: aiTier,
         vision: visionBase64 ? true : false,
         tool_rounds: toolRounds,
         data_tool_calls: dataToolCalls,
         latency_ms: latencyMs,
-        anthropic_error: anthropicError,
       },
     });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    // 2026-05-23 — Detect Anthropic overload specifically (the SDK
-    // exposes `.status` on APIError). Even with maxRetries:3 the
-    // SDK can run out of retries during sustained capacity events.
-    // When that happens we surface a SPECIFIC fallback string so
-    // the user knows it's transient (Anthropic is overloaded) and
-    // not a permanent app bug. Same shape for any 5xx upstream.
+    // Detect provider overload (OpenAI / Gemini expose `.status` on
+    // APIError). Surface a specific fallback string so the user knows
+    // it's transient and not a permanent app bug.
     const status = (err as { status?: number } | null)?.status;
     const isOverloaded =
       status === 529 ||
