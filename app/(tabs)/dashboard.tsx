@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -72,6 +73,9 @@ export default function Dashboard() {
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
   // unchanged.
   const { isWide } = useDeviceLayout();
+  const { width: screenW } = useWindowDimensions();
+  // Chart width = screen minus card h-margins (12+12) and card h-padding (14+14).
+  const chartW = Math.max(180, screenW - 52);
 
   // ─── Round data (useShallow keeps re-renders scoped) ──────────────
   const {
@@ -668,11 +672,15 @@ export default function Dashboard() {
             <Ionicons name="chevron-forward" size={16} color={colors.text_muted} />
           </View>
           {bagClubs.length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {bagClubs.map((c) => (
-                <View key={c.club} style={[styles.bagPill, { borderColor: c.measured ? '#3FB950' : colors.border }]}>
-                  <Text style={[styles.bagPillClub, { color: colors.text_primary }]}>{c.club}</Text>
-                  <Text style={[styles.bagPillYds, { color: colors.text_muted }]}> {c.yards}y</Text>
+            <View>
+              {Array.from({ length: Math.ceil(bagClubs.length / 3) }, (_, rowIdx) => (
+                <View key={rowIdx} style={{ flexDirection: 'row', marginBottom: 4 }}>
+                  {bagClubs.slice(rowIdx * 3, rowIdx * 3 + 3).map((c) => (
+                    <View key={c.club} style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline' }}>
+                      <Text style={[styles.bagPillClub, { color: c.measured ? '#3FB950' : colors.text_primary }]}>{c.club}</Text>
+                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}> {c.yards}y</Text>
+                    </View>
+                  ))}
                 </View>
               ))}
             </View>
@@ -689,7 +697,7 @@ export default function Dashboard() {
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE HISTORY</Text>
             {recentSessions.map((s) => {
-              const label = s.label ?? (s.focus ? s.focus : s.kind === 'open_range' ? 'Open Range' : 'Practice');
+              const label = s.label ?? (s.focus ? s.focus.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : s.kind === 'open_range' ? 'Open Range' : 'Practice');
               const balls = s.swingCount ?? s.swings.length;
               const d = (() => { try { return new Date(s.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
               return (
@@ -716,30 +724,24 @@ export default function Dashboard() {
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE → PERFORMANCE</Text>
             <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{practiceImpact.headline}</Text>
-            <View style={styles.impactCharts}>
-              <View style={styles.impactCol}>
-                <TrendChart
-                  data={practiceImpact.practiceSeries}
-                  width={140}
-                  height={56}
-                  color={colors.accent}
-                  label="PRACTICE / WK"
-                  higherIsBetter
-                  emptyText="—"
-                />
-              </View>
-              <View style={styles.impactCol}>
-                <TrendChart
-                  data={practiceImpact.scoreSeries}
-                  width={140}
-                  height={56}
-                  color={colors.accent}
-                  label="SCORE VS PAR"
-                  higherIsBetter={false}
-                  emptyText="—"
-                />
-              </View>
-            </View>
+            <TrendChart
+              data={practiceImpact.practiceSeries}
+              width={chartW}
+              height={64}
+              color={colors.accent}
+              label="PRACTICE / WK"
+              higherIsBetter
+              emptyText="—"
+            />
+            <TrendChart
+              data={practiceImpact.scoreSeries}
+              width={chartW}
+              height={64}
+              color={colors.accent}
+              label="SCORE VS PAR"
+              higherIsBetter={false}
+              emptyText="—"
+            />
           </View>
         )}
 
@@ -753,30 +755,24 @@ export default function Dashboard() {
               <Text style={[styles.practiceLabel, { color: colors.accent }]}>~{pointsPerf.totalEstimatedPoints} EST</Text>
             </View>
             <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{pointsPerf.headline}</Text>
-            <View style={styles.impactCharts}>
-              <View style={styles.impactCol}>
-                <TrendChart
-                  data={pointsPerf.pointsSeries}
-                  width={140}
-                  height={56}
-                  color={colors.accent}
-                  label="POINTS / WK"
-                  higherIsBetter
-                  emptyText="—"
-                />
-              </View>
-              <View style={styles.impactCol}>
-                <TrendChart
-                  data={pointsPerf.scoreSeries}
-                  width={140}
-                  height={56}
-                  color={colors.accent}
-                  label="SCORE VS PAR"
-                  higherIsBetter={false}
-                  emptyText="—"
-                />
-              </View>
-            </View>
+            <TrendChart
+              data={pointsPerf.pointsSeries}
+              width={chartW}
+              height={64}
+              color={colors.accent}
+              label="POINTS / WK"
+              higherIsBetter
+              emptyText="—"
+            />
+            <TrendChart
+              data={pointsPerf.scoreSeries}
+              width={chartW}
+              height={64}
+              color={colors.accent}
+              label="SCORE VS PAR"
+              higherIsBetter={false}
+              emptyText="—"
+            />
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
               {pointsBaselineMs
                 ? `Running live since ${new Date(pointsBaselineMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${pointsPerf.sessionsCounted} ${pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} so far. Watch it build — we'll re-estimate your earlier history later.`
@@ -805,7 +801,7 @@ export default function Dashboard() {
             go anywhere." Golfshot-style: date · course · score · vs-par, tap → recap. */}
         {roundHistory.length > 0 && (
           <>
-            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>Recent Rounds</Text>
+            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>RECENT ROUNDS</Text>
             <View style={styles.roundHistoryList}>
               {[...roundHistory].reverse().slice(0, 6).map((r) => {
                 const d = new Date(r.endedAt || r.startedAt);
@@ -1050,7 +1046,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  title: { fontSize: 28, fontWeight: '900' },
+  title: { fontSize: 20, fontWeight: '800' },
   welcome: { fontSize: 14, marginTop: 4 },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   streakPill: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: 'rgba(245,166,35,0.14)', borderWidth: 1, borderColor: 'rgba(245,166,35,0.4)' },
@@ -1104,12 +1100,12 @@ const styles = StyleSheet.create({
   sharedTitle: { fontSize: 16, fontWeight: '800' },
   sharedMeta: { fontSize: 12, marginTop: 2 },
   sharedAction: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
   },
-  sharedActionText: { color: '#04140c', fontSize: 12, fontWeight: '800' },
+  sharedActionText: { color: '#04140c', fontSize: 11, fontWeight: '800' },
   sharedChips: {
     gap: 10,
     paddingTop: 12,

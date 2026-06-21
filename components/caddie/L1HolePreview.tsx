@@ -159,7 +159,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
           <ParallaxTilt
             style={[styles.wrap, wrapDims]}
             radius={10}
-            background={<Image source={defaultImg} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+            background={
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1f12' }]}>
+                <Image source={defaultImg} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              </View>
+            }
           >
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
@@ -251,7 +255,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
         <ParallaxTilt
           style={[styles.wrap, wrapDims]}
           radius={10}
-          background={<Image source={heroImageSource} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+          background={
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0a1f12' }]}>
+              <Image source={heroImageSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            </View>
+          }
         >
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
