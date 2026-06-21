@@ -10,6 +10,7 @@
     { "src": "api/swing-compare.ts", "use": "@vercel/node", "config": { "maxDuration": 45 } },
     { "src": "api/round-import.ts",  "use": "@vercel/node", "config": { "maxDuration": 45 } },
     { "src": "api/cage-coach.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "api/transcribe.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/owner-triage.ts",  "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/*.ts",             "use": "@vercel/node" },
     {

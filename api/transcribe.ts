@@ -54,7 +54,7 @@ export default async function handler(
       ]);
       const warmupFile = new File([new Uint8Array(silentWav)], 'warmup.wav', { type: 'audio/wav' });
       const whisperP = openai.audio.transcriptions.create({
-        model: 'whisper-1',
+        model: 'gpt-4o-mini-transcribe',
         file: warmupFile,
       }).then(() => undefined).catch((e) => {
         console.log('[transcribe] whisper warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));
@@ -131,7 +131,7 @@ export default async function handler(
     try {
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(filePath),
-        model: 'whisper-1',
+        model: 'gpt-4o-mini-transcribe',
         language: language,
         prompt: PRIMING_PROMPT[language] ?? undefined,
       });
