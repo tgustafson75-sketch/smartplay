@@ -307,7 +307,14 @@ Available intents:
    - "putted it close" -> { club_phrase: "putter", outcome_phrase: "close", raw_utterance: "putted it close" }
    - "log a shot, 7-iron, 165, on the green" -> { club_phrase: "7-iron", distance_yards: 165, outcome_phrase: "on the green", raw_utterance: "log a shot, 7-iron, 165, on the green" }
    - "tee shot driver 290" -> { club_phrase: "driver", distance_yards: 290, raw_utterance: "tee shot driver 290" }
+   - "I went left on my drive with my 5-wood" -> { club_phrase: "5-wood", outcome_phrase: "left", raw_utterance: "I went left on my drive with my 5-wood" }
+   - "went left with my 5-wood" -> { club_phrase: "5-wood", outcome_phrase: "left" }
+   - "hit my 5-wood, went left" -> { club_phrase: "5-wood", outcome_phrase: "left" }
+   - "mark my tee shot" -> { club_phrase: "driver", raw_utterance: "mark my tee shot" } (first shot = driver default when no club named)
+   - "mark this shot, 5-wood" -> { club_phrase: "5-wood", raw_utterance: "mark this shot, 5-wood" }
+   - "mark my shot, 7-iron" -> { club_phrase: "7-iron", raw_utterance: "mark my shot, 7-iron" }
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
+   KEY: "mark my shot/tee shot/drive" = log_shot trigger even without distance. "I went left with my [club]" embedded in any sentence = log_shot for that club+outcome. Extract the club and outcome even from longer narrative sentences.
    ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
 
 21. log_score — User is REPORTING their final score for a hole they just finished. Past-tense report with a number ("I got a 4", "took a 5") OR a score name ("made par", "bogey", "birdie"). This is DISTINCT from:
@@ -393,7 +400,11 @@ Available intents:
    - "tell ${caddieName} I'm on hole 7, then refresh GPS at the tee" -> { steps: [ { intent_type: "change_setting", parameters: { setting: "currentHole", value: 7 } }, { intent_type: "in_round_diagnostic", parameters: { kind: "refresh_gps" } } ] }
    - "log a 5 on this hole and move to the next tee" -> { steps: [ { intent_type: "log_score", parameters: { strokes: 5 } }, { intent_type: "change_setting", parameters: { setting: "advance_hole" } } ] }
    - "open SmartFinder and switch to quiet mode" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
+   - "I'm on in two on hole 1, I went left on my drive with my 5-wood, but we're good to go" -> { steps: [ { intent_type: "declare_hole", parameters: { hole: 1 } }, { intent_type: "log_shot", parameters: { club_phrase: "5-wood", outcome_phrase: "left", raw_utterance: "went left on my drive with my 5-wood" } } ] } (extract hole number + shot data from narrative; ignore "on in two" and mood phrases as non-actionable context)
+   - "mark my first shot hole 1 in Greenhill" -> { steps: [ { intent_type: "declare_hole", parameters: { hole: 1 } }, { intent_type: "log_shot", parameters: { club_phrase: "driver", raw_utterance: "mark my first shot hole 1" } } ] } (first shot = tee shot = driver default; hole number extracted)
+   - "I'm on hole 5, hit my 5-wood, went right" -> { steps: [ { intent_type: "declare_hole", parameters: { hole: 5 } }, { intent_type: "log_shot", parameters: { club_phrase: "5-wood", outcome_phrase: "right", raw_utterance: "hit my 5-wood, went right" } } ] }
    Order matters: emit steps in the order they should execute. Keep steps to 2-3 max — more than that, ask for clarification with unknown.
+   CRITICAL: "I'm on in N" (on in two, on in three) is a POSITIONAL phrase describing how many shots to reach the green — it is NOT a separate intent. Extract any hole declaration and shot data from the same sentence and treat "on in N" as contextual narration only.
 
 24. open_external — User wants to launch an external music / video app (YouTube, YouTube Music, Spotify, Apple Music). Optional search query. Default service when the user says "play music" / "play some X" without naming a service is youtube_music (the user opted into a YouTube-centric default). Music plays without audio-session coordination — Caddie's voice gets drowned out while music plays; user manages that verbally / by tabbing back.
     parameters: { service: "youtube" | "youtube_music" | "spotify" | "apple_music", query?: string }
