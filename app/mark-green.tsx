@@ -19,10 +19,11 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, BackHandler } from 'react-native';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { safeBack } from '../services/safeBack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore } from '../store/roundStore';
@@ -82,6 +83,16 @@ export default function MarkPositionScreen() {
   const _gateAllowed = useDebugRouteGate();
   const router = useRouter();
   const { colors } = useTheme();
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        safeBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [])
+  );
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourse = useRoundStore(s => s.activeCourse);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -179,7 +190,7 @@ export default function MarkPositionScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity onPress={() => safeBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]}>{labelTitle}</Text>

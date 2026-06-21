@@ -523,25 +523,27 @@ const MARINERS_POINT_HOLES: CourseHole[] = [
 // Green Center distances are exact matches to prior readings. Front/Back corrected to
 // official app values. GPS coords zeroed — golfcourseapi resolves runtime geometry.
 // estimated: true until par/handicap confirmed from official scorecard.
+// GPS: GolfTraxx satellite data 2026-06-21. Yardages: GolfNow official screenshots.
+// Holes 8+11 tee = 0,0 (GolfTraxx reports tee=gc for these par 3s — data error, needs field calibration).
 export const GREENHILL_HOLES: CourseHole[] = [
-  { hole:  1, par: 4, distance: 374, front: 360, back: 388, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  2, par: 4, distance: 334, front: 321, back: 347, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  3, par: 4, distance: 395, front: 383, back: 407, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  4, par: 4, distance: 342, front: 329, back: 355, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  5, par: 4, distance: 334, front: 319, back: 348, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  6, par: 3, distance: 185, front: 172, back: 199, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  7, par: 4, distance: 328, front: 313, back: 343, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  8, par: 3, distance: 157, front: 140, back: 173, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole:  9, par: 5, distance: 450, front: 436, back: 464, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 10, par: 4, distance: 273, front: 260, back: 285, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 11, par: 3, distance: 198, front: 183, back: 214, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 12, par: 5, distance: 564, front: 552, back: 575, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 13, par: 4, distance: 382, front: 369, back: 396, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 14, par: 3, distance: 140, front: 126, back: 154, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 15, par: 4, distance: 322, front: 309, back: 336, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 16, par: 5, distance: 481, front: 465, back: 498, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 17, par: 4, distance: 253, front: 237, back: 270, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 18, par: 4, distance: 384, front: 370, back: 398, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  1, par: 4, distance: 374, front: 360, back: 388, teeLat: 42.28707404, teeLng: -71.78206086, middleLat: 42.28629224, middleLng: -71.78334564, frontLat: 42.28636169, frontLng: -71.78322226, backLat: 42.28621485, backLng: -71.78346634, note: '', estimated: false },
+  { hole:  2, par: 4, distance: 334, front: 321, back: 347, teeLat: 42.28788361, teeLng: -71.78141981, middleLat: 42.28849078, middleLng: -71.77996874, frontLat: 42.28843125, frontLng: -71.78008407, backLat: 42.28854435, backLng: -71.77986145, note: '', estimated: false },
+  { hole:  3, par: 4, distance: 395, front: 383, back: 407, teeLat: 42.28830823, teeLng: -71.78266436, middleLat: 42.28710579, middleLng: -71.78372920, frontLat: 42.28720301, frontLng: -71.78367019, backLat: 42.28700856, backLng: -71.78379357, note: '', estimated: false },
+  { hole:  4, par: 4, distance: 342, front: 329, back: 355, teeLat: 42.28527033, teeLng: -71.78437024, middleLat: 42.28411942, middleLng: -71.78495497, frontLat: 42.28420077, frontLng: -71.78490132, backLat: 42.28403607, backLng: -71.78502470, note: '', estimated: false },
+  { hole:  5, par: 4, distance: 334, front: 319, back: 348, teeLat: 42.28529612, teeLng: -71.78364605, middleLat: 42.28613151, middleLng: -71.78241491, frontLat: 42.28606404, frontLng: -71.78256243, backLat: 42.28620890, backLng: -71.78228080, note: '', estimated: false },
+  { hole:  6, par: 3, distance: 185, front: 172, back: 199, teeLat: 42.28675145, teeLng: -71.78169675, middleLat: 42.28761177, middleLng: -71.77973539, frontLat: 42.28756018, frontLng: -71.77986681, backLat: 42.28765740, backLng: -71.77961200, note: '', estimated: false },
+  { hole:  7, par: 4, distance: 328, front: 313, back: 343, teeLat: 42.28653829, teeLng: -71.78093433, middleLat: 42.28603626, middleLng: -71.78181678, frontLat: 42.28611960, frontLng: -71.78167731, backLat: 42.28596483, backLng: -71.78196162, note: '', estimated: false },
+  { hole:  8, par: 3, distance: 157, front: 140, back: 173, teeLat: 0, teeLng: 0, middleLat: 42.28452819, middleLng: -71.78327858, frontLat: 42.28464328, frontLng: -71.78320080, backLat: 42.28442897, backLng: -71.78335637, note: 'tee needs field calibration', estimated: false },
+  { hole:  9, par: 5, distance: 450, front: 436, back: 464, teeLat: 42.28605611, teeLng: -71.77998751, middleLat: 42.28692522, middleLng: -71.77809656, frontLat: 42.28686767, frontLng: -71.77823335, backLat: 42.28697284, backLng: -71.77796245, note: '', estimated: false },
+  { hole: 10, par: 4, distance: 273, front: 260, back: 285, teeLat: 42.28660575, teeLng: -71.77385598, middleLat: 42.28608984, middleLng: -71.77299231, frontLat: 42.28617516, frontLng: -71.77308619, backLat: 42.28602237, backLng: -71.77289575, note: '', estimated: false },
+  { hole: 11, par: 3, distance: 198, front: 183, back: 214, teeLat: 0, teeLng: 0, middleLat: 42.28788758, middleLng: -71.77076072, frontLat: 42.28776654, frontLng: -71.77078754, backLat: 42.28803044, backLng: -71.77074730, note: 'tee needs field calibration', estimated: false },
+  { hole: 12, par: 5, distance: 564, front: 552, back: 575, teeLat: 42.28553225, teeLng: -71.77266777, middleLat: 42.28357967, middleLng: -71.77422076, frontLat: 42.28367492, frontLng: -71.77418321, backLat: 42.28350030, backLng: -71.77425295, note: '', estimated: false },
+  { hole: 13, par: 4, distance: 382, front: 369, back: 396, teeLat: 42.28480798, teeLng: -71.77234322, middleLat: 42.28584180, middleLng: -71.77031279, frontLat: 42.28576839, frontLng: -71.77040130, backLat: 42.28590331, backLng: -71.77019745, note: '', estimated: false },
+  { hole: 14, par: 3, distance: 140, front: 126, back: 154, teeLat: 42.28557591, teeLng: -71.76948130, middleLat: 42.28657202, middleLng: -71.77031547, frontLat: 42.28645693, frontLng: -71.77021086, backLat: 42.28667719, backLng: -71.77043617, note: '', estimated: false },
+  { hole: 15, par: 4, distance: 322, front: 309, back: 336, teeLat: 42.28647479, teeLng: -71.76918626, middleLat: 42.28547868, middleLng: -71.76882684, frontLat: 42.28559575, frontLng: -71.76885903, backLat: 42.28538145, backLng: -71.76879734, note: '', estimated: false },
+  { hole: 16, par: 5, distance: 481, front: 465, back: 498, teeLat: 42.28434563, teeLng: -71.77176654, middleLat: 42.28322249, middleLng: -71.77374870, frontLat: 42.28329194, frontLng: -71.77361995, backLat: 42.28314311, backLng: -71.77386135, note: '', estimated: false },
+  { hole: 17, par: 4, distance: 253, front: 237, back: 270, teeLat: 42.28255375, teeLng: -71.77358776, middleLat: 42.28274028, middleLng: -71.77445143, frontLat: 42.28266884, frontLng: -71.77431464, backLat: 42.28281767, backLng: -71.77460432, note: '', estimated: false },
+  { hole: 18, par: 4, distance: 384, front: 370, back: 398, teeLat: 42.28571084, teeLng: -71.77622169, middleLat: 42.28667719, middleLng: -71.77725703, frontLat: 42.28663155, frontLng: -71.77712560, backLat: 42.28672679, backLng: -71.77740991, note: '', estimated: false },
 ];
 
 export const ECHO_HILLS_HOLES: CourseHole[] = [

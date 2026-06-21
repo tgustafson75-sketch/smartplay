@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  BackHandler,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -18,7 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { safeBack } from '../../services/safeBack';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -212,6 +213,20 @@ export default function RecapScreen() {
   // Must be called before any conditional return below (rules of hooks).
   const issueEntries = useIssueLogStore(s => s.entries);
   const apiUrl = getApiBaseUrl();
+
+  // Android hardware back → same as on-screen "← Back" button.
+  // Recap is often entered via navigate_replace (end-round), leaving
+  // it at the root of the stack. Without this, hardware back does
+  // nothing and users feel stuck.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        safeBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [])
+  );
 
   const cardRef = useRef<View>(null);
   const flatListRef = useRef<FlatList>(null);

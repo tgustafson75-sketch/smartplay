@@ -91,7 +91,12 @@ export function pickGreeting(context: LaunchContext): GreetingFilename {
   ];
   if (isMorning) pool.push('morning_01.mp3', 'morning_02.mp3');
   if (isEvening) pool.push('evening_01.mp3', 'evening_02.mp3');
-  if (isWeekend) pool.push('weekend_01.mp3', 'weekend_02.mp3');
+  if (isWeekend) {
+    // weekend_01 audio says "Saturday" — restrict to Saturday only so Sunday
+    // launches never play a clip that names the wrong day.
+    if (context.dayOfWeek === 6) pool.push('weekend_01.mp3');
+    pool.push('weekend_02.mp3');
+  }
 
   return pool[Math.floor(Math.random() * pool.length)];
 }

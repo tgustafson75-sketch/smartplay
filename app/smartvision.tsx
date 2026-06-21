@@ -38,8 +38,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { safeBack } from '../services/safeBack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassesStatusBadge from '../components/GlassesStatusBadge';
@@ -277,6 +279,16 @@ export default function SmartVisionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        safeBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [])
+  );
   // 2026-05-26 — Fix CD: theme tokens for the canvas fallback color.
 
   const activeCourseId = useRoundStore(s => s.activeCourseId);
@@ -1364,7 +1376,7 @@ export default function SmartVisionScreen() {
     <GestureHandlerRootView style={[styles.root, { paddingTop: insets.top }]}>
       {/* Top bar — back + hole switcher. Compact, ~56px tall. */}
       <View style={[styles.topBar, { height: TOP_BAR_H }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+        <TouchableOpacity onPress={() => safeBack()} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="chevron-back" size={26} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.holeSwitch}>
