@@ -799,7 +799,10 @@ export const useVoiceCaddie = ({
 
       const res = await fetch(apiUrl + '/api/kevin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Provider': useSettingsStore.getState().aiProvider ?? 'gemini',
+        },
         signal: controller.signal,
         body: JSON.stringify({
           message,
@@ -1032,7 +1035,10 @@ export const useVoiceCaddie = ({
         const rt = setTimeout(() => rc.abort(), BRAIN_TIMEOUT_MS);
         const retryRes = await fetch(apiUrl + '/api/kevin', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-AI-Provider': useSettingsStore.getState().aiProvider ?? 'gemini',
+          },
           signal: rc.signal,
           body: JSON.stringify({
             message,

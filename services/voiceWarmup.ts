@@ -1,33 +1,13 @@
 import { getApiBaseUrl } from './apiBase';
+import { useSettingsStore } from '../store/settingsStore';
 /**
  * 2026-06-04 — Pre-warm the FOUR voice-pipeline Vercel functions in
- * parallel after splash completes. Mirrors services/swingAnalysisWarmup.ts
- * (Fix EK pattern, 2026-05-27) — same shape, four endpoints instead
- * of one.
+ * parallel after splash completes.
  *
- * On cold launch the user tap chain is:
- *   /api/transcribe   (Whisper / Gemini fallback)
- *   /api/voice-intent (Anthropic Haiku classifier)
- *   /api/kevin        (Anthropic brain + OpenAI TTS)
- *   /api/voice        (OpenAI TTS — used for some response paths)
- *
- * Each is its own Vercel Lambda with its own cold-start (~200-800ms
- * runtime + ~1-3s provider SDK + TLS init). Sequentially that's
- * 8-12s of cold-start cost on the user's first tap. Warming all four
- * in parallel after splash collapses that to a single ~3s window the
- * user never sees — by the time they read "Press to talk to Kevin"
- * and tap, every Lambda + every provider SDK is hot.
- *
- * Each warmup is fire-and-forget with its own AbortSignal timeout.
- * Failures are silent — the user's real tap will hit the same network
- * anyway and surface its own error.
- *
- * Throttled at 30s dedupe so repeated launches don't flood.
- *
- * Each handler exposes a warmup short-circuit (req.body.mode === 'warmup'
- * OR req.query.mode === 'warmup') that runs through the SDK init path
- * with a minimal request and discards the output. Cost per warmup
- * across all four: ~$0.0002.
+ * 2026-06-21 — Fixed: warmup now sends X-AI-Provider header so it warms
+ * the provider the user actually has selected (OpenAI or Gemini). Without
+ * this, providerFromHeader() defaulted to Gemini, so switching to OpenAI
+ * in Owner Tools left the OpenAI SDK cold → first tap paid full cold-start.
  */
 
 const WARMUP_DEDUPE_MS = 30_000;
@@ -40,11 +20,8 @@ const WARMUP_PATHS = [
   '/api/kevin',
 ] as const;
 
-// 2026-06-16 (Tim — voice latency, "impress people") — `force` bypasses the dedupe.
-// Boot/idle warmups keep the 30s dedupe (don't spam), but an EXPLICIT user action
-// (tapping to talk → openSession) forces a fresh warm so a borderline-cold chain
-// heats up the instant the user engages — it overlaps their ~5s of speech, so by
-// the time transcribe/kevin/voice are hit they're warm. Fire-and-forget, ~$0.0004.
+// `force` bypasses the 30s dedupe — used on explicit user tap so the chain
+// heats up overlapping the user's speech window (see useVoiceCaddie openSession).
 export function prewarmVoice(force = false): void {
   const now = Date.now();
   if (!force && now - lastWarmupAt < WARMUP_DEDUPE_MS) return;
@@ -53,27 +30,25 @@ export function prewarmVoice(force = false): void {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl) return;
 
-  // Query param AND body both carry `mode: 'warmup'` so handlers can
-  // check either. /api/transcribe disables bodyParser (formidable
-  // parses multipart later) so the query check is required there;
-  // the others use the body check. Both present = every config works.
+  // Read the user's current AI provider so the warmup pings the RIGHT
+  // provider SDK. Defaults to 'gemini' to match server-side default.
+  const aiProvider = useSettingsStore.getState().aiProvider ?? 'gemini';
+
   const warmup = (path: string): Promise<unknown> =>
     fetch(`${apiUrl}${path}?mode=warmup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-AI-Provider': aiProvider,
+      },
       body: JSON.stringify({ mode: 'warmup' }),
-      // 2026-06-04 — Bumped 5s → 15s. The prior 5s was ABORTING truly-
-      // cold Vercel Lambdas (8-12s SDK init + TLS handshake) before
-      // the warmup completed — so the user's first tap still paid full
-      // cold-start cost. 15s lets every endpoint genuinely warm; cost
-      // of the extra budget is zero (warmup is fire-and-forget and
-      // hits aborted-anyway endpoints when Vercel is fully degraded).
+      // 15s: enough for a cold Lambda (2-5s) + provider SDK init + TLS (3-10s).
       signal: AbortSignal.timeout(15_000),
     }).catch(() => {
       // Silent — warmup is opportunistic.
     });
 
   void Promise.all(WARMUP_PATHS.map(warmup))
-    .then(() => { console.log('[voiceWarmup] all four endpoints warmed'); })
+    .then(() => { console.log('[voiceWarmup] all four endpoints warmed (provider:', aiProvider, ')'); })
     .catch(() => { /* Promise.all with .catch'd children won't reject — defensive */ });
 }
