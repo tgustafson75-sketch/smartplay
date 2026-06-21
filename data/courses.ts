@@ -518,6 +518,34 @@ const MARINERS_POINT_HOLES: CourseHole[] = [
 // par 35). Yardages from Tim's Golfshot Green Center captures
 // (IMG 7635-7643). Coords zero — geometry comes from golfcourseapi
 // at runtime + Mapbox satellite for SmartVision.
+// Greenhill Golf Course — 18-hole par 71 (5,896y whites).
+// Yardages extracted from GolfShot aerial screenshots (assets/courses/greenhill/).
+// Blue dot = white tee; cyan ring = green center → tee-to-center = distance.
+// Par inferred from yardage (4 par-3s, 3 par-5s, 11 par-4s = par 71).
+// GPS coords zeroed — golfcourseapi resolves runtime geometry; bundled
+// screenshots drive SmartVision calibration via holeLineCalibration.ts.
+// estimated: true until par/handicap confirmed from an official scorecard.
+export const GREENHILL_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 374, front: 359, back: 389, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  2, par: 4, distance: 334, front: 319, back: 349, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  3, par: 4, distance: 395, front: 380, back: 410, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  4, par: 4, distance: 342, front: 327, back: 357, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  5, par: 4, distance: 334, front: 319, back: 349, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  6, par: 3, distance: 185, front: 170, back: 200, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  7, par: 4, distance: 328, front: 313, back: 343, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  8, par: 3, distance: 157, front: 142, back: 172, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  9, par: 5, distance: 450, front: 435, back: 465, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 273, front: 258, back: 288, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 198, front: 183, back: 213, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 5, distance: 564, front: 549, back: 579, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 382, front: 367, back: 397, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 3, distance: 140, front: 125, back: 155, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 4, distance: 322, front: 307, back: 337, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 5, distance: 481, front: 466, back: 496, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 4, distance: 253, front: 238, back: 268, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 384, front: 369, back: 399, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const ECHO_HILLS_HOLES: CourseHole[] = [
   { hole: 1, par: 4, distance: 322, front: 313, back: 331, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
   { hole: 2, par: 3, distance: 135, front: 126, back: 144, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
@@ -640,6 +668,19 @@ export const COURSES: Course[] = [
     par: 71,
     totalYards: 6251, // sum of distance column (par 71)
     holes: WESTLAKE_NJ_HOLES,
+  },
+  // Greenhill Golf Course — 18-hole par 71, 5,896y whites.
+  // Yardages from GolfShot aerials bundled in assets/courses/greenhill/.
+  // Par estimated from distance (confirm handicap indices on next visit).
+  {
+    id: 'greenhill',
+    name: 'Green Hill',
+    fullName: 'Green Hill Golf Course',
+    rating: '',
+    slope: '',
+    par: 71,
+    totalYards: 5896,
+    holes: GREENHILL_HOLES,
   },
   // 2026-06-04 — Echo Hills Golf Course, Hemet CA. 9-hole executive
   // par 35 in Tim's local rotation. Per-hole par/distance from Golfshot
