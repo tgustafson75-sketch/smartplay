@@ -90,12 +90,14 @@ function AnimatedHoleCard({
   index,
   highlightedHole,
   onViewHole,
+  parByHole,
 }: {
   hc: HoleComparison;
   ghostResult?: GhostHoleResult;
   index: number;
   highlightedHole: number | null;
   onViewHole: (hole: number) => void;
+  parByHole: Record<number, number>;
 }) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -113,22 +115,23 @@ function AnimatedHoleCard({
 
   const isHighlighted = highlightedHole === hc.hole_number;
   const hasScore = hc.actual_score != null;
-  // 2026-06-04 — HolePlan removed: no planned-vs-actual variance.
-  // The score pill now renders the raw score in a neutral color.
+  // Compute vs-par delta so score pills reflect real performance color.
+  const par = parByHole[hc.hole_number] ?? null;
+  const vspar = hasScore && par != null ? (hc.actual_score as number) - par : null;
 
   return (
     <Animated.View style={[styles.holeCard, isHighlighted && styles.holeCardHighlighted, animStyle]}>
       <View style={styles.holeCardHeader}>
         <Text style={styles.holeNum}>Hole {hc.hole_number}</Text>
         {hasScore && !ghostResult && (
-          <View style={[styles.variancePill, { backgroundColor: varianceColor(null) + '22', borderColor: varianceColor(null) }]}>
-            <Text style={[styles.variancePillText, { color: varianceColor(null) }]}>
+          <View style={[styles.variancePill, { backgroundColor: varianceColor(vspar) + '22', borderColor: varianceColor(vspar) }]}>
+            <Text style={[styles.variancePillText, { color: varianceColor(vspar) }]}>
               {hc.actual_score}
             </Text>
           </View>
         )}
         {hasScore && ghostResult && (
-          <Text style={[styles.variancePillText, { color: varianceColor(null) }]}>
+          <Text style={[styles.variancePillText, { color: varianceColor(vspar) }]}>
             Score: {hc.actual_score}
           </Text>
         )}
@@ -194,6 +197,16 @@ export default function RecapScreen() {
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
   const deleteRound = useRoundStore(s => s.deleteRound);
+  // Build a hole→par lookup so score pills can show vs-par color
+  // (green under, amber bogey, red double+). courseHoles lives on the
+  // active store state — valid for just-ended rounds and any round
+  // whose course hasn't been overwritten by a new one. Falls back to
+  // an empty map (neutral gray) for older history rounds.
+  const parByHole = useRoundStore(s => {
+    const map: Record<number, number> = {};
+    for (const h of s.courseHoles) map[h.hole] = h.par;
+    return map;
+  });
   // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).
@@ -631,7 +644,13 @@ export default function RecapScreen() {
                       }}
                     >
                       <Text style={styles.keyMomentHole}>Hole {hc.hole_number}</Text>
-                      <Text style={[styles.keyMomentScore, { color: varianceColor(null) }]}>
+                      <Text style={[styles.keyMomentScore, {
+                        color: varianceColor(
+                          hc.actual_score != null && parByHole[hc.hole_number] != null
+                            ? hc.actual_score - parByHole[hc.hole_number]
+                            : null,
+                        ),
+                      }]}>
                         {hc.actual_score ?? '—'}
                       </Text>
                       <Text style={styles.keyMomentSummary} numberOfLines={3}>
@@ -681,6 +700,7 @@ export default function RecapScreen() {
             index={index}
             highlightedHole={highlightedHole}
             onViewHole={(h) => router.push(`/recap/hole/${round_id}/${h}` as never)}
+            parByHole={parByHole}
           />
         )}
         ListFooterComponent={<View style={{ height: 48 }} />}

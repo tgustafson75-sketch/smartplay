@@ -48,12 +48,14 @@ Available intents:
    - "open library" / "open swing library" / "swing library" / "show me my swings" / "open my swings" / "show my swing library" / "let me see my swings" -> { tool_name: "library" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green" | "what_did_meta_say", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green" | "what_did_meta_say", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good", spoken_read?: string }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
    - "how am I doing vs last time" / "how am I doing against the ghost" / "what's my ghost match" / "where am I vs last round" -> { query_topic: "ghost_match" }
    - "analyze my putt" / "how's my putting stroke" / "how's my read" / "look at my putt" -> { query_topic: "putt_analysis" }
+   - "analyze my putt, left edge 8 inches of break" -> { query_topic: "putt_analysis", spoken_read: "left edge 8 inches of break" } (extract the player's green read verbatim into spoken_read)
+   spoken_read: optional string — player's spoken green read (e.g. 'left edge, 8 inches of break'). Extract verbatim when the user describes break or line alongside a putt query.
    - "how's Emma's progress" / "show me her progress" / "how's my daughter doing" -> { query_topic: "family_progress", member_name: "Emma" }
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }

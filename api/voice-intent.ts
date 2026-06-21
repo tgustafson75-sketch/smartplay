@@ -56,7 +56,7 @@ Available intents:
    IMPORTANT: "smartmotion" is the COURSE-MODE simplified swing capture (no setup, acoustic auto-stop). "swinglab" is the full practice/analysis hub. Default casual "record a swing" to "smartmotion" since it's the quicker path; only emit "swinglab" if the user explicitly says SwingLab / practice / drills. When the user names the angle ("down the line" / "DTL" / "face on" / "face-on" / "front view"), emit BOTH the angle parameter AND auto_start:true so the camera fires immediately on the right orientation.
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "what_did_meta_say", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good" }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "what_did_meta_say", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good", spoken_read?: string }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }
@@ -82,6 +82,8 @@ Available intents:
    - "look at last Tuesday's swing" / "show me Friday's swing" / "pull up that upload from last week" -> { query_topic: "look_at_swing", swing_phrase: "last tuesday" } (carry the date phrase verbatim)
    - "can I carry the bunker" / "can I carry that water" / "can I clear the trees" / "can I get over it" -> { query_topic: "carry_check", hazard_phrase: "bunker" } (extract the hazard noun)
    - "analyze my putt" / "how's my putting stroke" / "how's my read" / "look at my putt" -> { query_topic: "putt_analysis" }
+   - "analyze my putt, left edge 8 inches of break" -> { query_topic: "putt_analysis", spoken_read: "left edge 8 inches of break" } (extract the player's green read verbatim into spoken_read)
+   spoken_read: optional string — player's spoken green read (e.g. 'left edge, 8 inches of break'). Extract verbatim when the user describes break or line alongside a putt query.
    - "how's Emma's progress" / "show me her progress" / "how's my daughter doing" -> { query_topic: "family_progress", member_name: "Emma" }
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }

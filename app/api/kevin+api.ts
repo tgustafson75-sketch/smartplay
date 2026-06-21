@@ -151,7 +151,10 @@ export type ToolAction =
   // openToolHandler.ts called router.push synchronously inside the handler,
   // which raced TTS for screens that claim audio/camera resources on mount
   // (SmartMotion quick-record, Coach Mode, cage mode, SmartFinder).
-  | { type: 'navigate'; path: string };
+  | { type: 'navigate'; path: string }
+  // navigate_replace uses router.replace instead of router.push so the
+  // back button doesn't return to the active-caddie screen after round end.
+  | { type: 'navigate_replace'; path: string };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 
@@ -551,14 +554,30 @@ Remember: You are ${caddieName}. Not an app. Not an AI assistant. ${caddieName}.
 
     // ── OpenAI TTS ──────────────────────────────────────────────────────────
 
-    const ttsResponse = await openai.audio.speech.create({
-      model: 'gpt-4o-mini-tts',
-      voice: 'onyx',
-      input: text,
-    });
+    // Persona-aware voice selection (mirrors api/kevin.ts VOICE_BY_PERSONA).
+    // In the dev twin, persona comes through the request body the same way
+    // it does in the canonical handler.
+    const VOICE_BY_PERSONA: Record<string, string> = {
+      tank: 'ash', serena: 'nova', harry: 'fable',
+    };
+    const ttsVoice = VOICE_BY_PERSONA[persona?.toLowerCase() ?? ''] ?? 'onyx';
 
-    const arrayBuffer = await ttsResponse.arrayBuffer();
-    const audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+    // TTS failures must NOT discard the brain's answer. Wrap in its own
+    // try/catch so a TTS error returns the text response without audio
+    // rather than falling through to the generic outer catch (which
+    // replaces the real answer with "One shot at a time").
+    let audioBase64: string | null = null;
+    try {
+      const ttsResponse = await openai.audio.speech.create({
+        model: 'gpt-4o-mini-tts',
+        voice: ttsVoice,
+        input: text,
+      });
+      const arrayBuffer = await ttsResponse.arrayBuffer();
+      audioBase64 = Buffer.from(arrayBuffer).toString('base64');
+    } catch (ttsErr) {
+      console.log('[kevin] TTS error (non-fatal):', ttsErr instanceof Error ? ttsErr.message : String(ttsErr));
+    }
 
     return Response.json({ text, audioBase64, toolAction });
 

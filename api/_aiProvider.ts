@@ -415,16 +415,32 @@ async function _openaiAgenticLoop(
   for (let round = 0; round < maxRounds; round++) {
     rounds = round + 1;
     const res = await oai.chat.completions.create({ model, max_tokens: maxTokens, temperature, tools: oaiTools, messages: msgs });
-    const msg = res.choices[0]?.message;
+    const choice = res.choices[0];
+    const msg = choice?.message;
     if (!msg) break;
-
-    text += msg.content ?? '';
 
     const toolCalls = (msg.tool_calls ?? []).filter(
       (tc): tc is OpenAI.Chat.ChatCompletionMessageFunctionToolCall => tc.type === 'function',
     );
 
-    if (toolCalls.length === 0 || res.choices[0]?.finish_reason !== 'tool_calls') break;
+    // Only accumulate text from final-answer rounds, not tool-call rounds.
+    // When finish_reason is 'tool_calls', any partial content ("Let me check
+    // that...") is discarded so it doesn't prepend the real answer next round.
+    if (choice?.finish_reason !== 'tool_calls') {
+      text += msg.content ?? '';
+    }
+
+    if (choice?.finish_reason === 'length') {
+      // Response hit the token limit — cap cleanly rather than cutting mid-word.
+      text = text.trimEnd();
+      if (!text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
+        text += '.';
+      }
+      console.warn('[aiProvider] response truncated at token limit — finish_reason:length');
+      break;
+    }
+
+    if (toolCalls.length === 0 || choice?.finish_reason !== 'tool_calls') break;
 
     msgs.push({ role: 'assistant', content: msg.content, tool_calls: msg.tool_calls });
 
@@ -483,11 +499,27 @@ async function _geminiAgenticLoop(
       },
     });
 
-    const parts = (res.candidates?.[0]?.content?.parts ?? []) as Array<Record<string, unknown>>;
+    const candidate = res.candidates?.[0];
+    const parts = (candidate?.content?.parts ?? []) as Array<Record<string, unknown>>;
     const textParts = parts.filter(p => typeof p.text === 'string');
     const fnParts = parts.filter(p => p.functionCall != null);
 
-    text += textParts.map(p => p.text as string).join('');
+    // Only accumulate text from final-answer rounds, not tool-call rounds.
+    // When the model is invoking a function, any partial text before the call
+    // is discarded so it doesn't prepend the real answer in the next round.
+    if (fnParts.length === 0) {
+      text += textParts.map(p => p.text as string).join('');
+    }
+
+    if ((candidate as { finishReason?: string } | undefined)?.finishReason === 'MAX_TOKENS') {
+      // Response hit the token limit — cap cleanly rather than cutting mid-word.
+      text = text.trimEnd();
+      if (!text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
+        text += '.';
+      }
+      console.warn('[aiProvider] Gemini response truncated at token limit — finishReason:MAX_TOKENS');
+      break;
+    }
 
     if (fnParts.length === 0) break;
 

@@ -229,6 +229,12 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
               console.log('[videoUpload] putt frame extract failed (non-fatal):', e);
             }
           }
+          // 2026-06-21 — pass hole_number so the brain can anchor the read
+          // to the correct hole context. distance_feet has no source in the
+          // session; analyzePutt estimates it server-side when omitted.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const roundState = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+          const holeNumber = roundState.isRoundActive ? (roundState.currentHole ?? null) : null;
           const result = await putting.analyzePutt({
             video_url: videoUri,
             frames_base64,
@@ -238,6 +244,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             // the vision model anchors its read to the real setup.
             ball_area_norm: session.ball_area_norm ?? null,
             target_norm: session.target_norm ?? null,
+            hole_number: holeNumber,
           });
           // 2026-05-22 — Persist the PuttingAnalysis on the session so
           // the cage-review Putting tab can render it without re-running

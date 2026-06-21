@@ -227,6 +227,9 @@ export default function LieAnalysisScreen() {
         setAnalysis(result.analysis);
         setPhase('result');
         speakAnalysis(result.analysis);
+      } else if (result.kind === 'cancelled') {
+        // Cancel-and-replace: a newer analysis is already in flight. Do
+        // nothing — the stale result should not update UI state.
       } else if (result.kind === 'no_network') {
         setPhase('no_network');
       } else if (result.kind === 'low_quality') {

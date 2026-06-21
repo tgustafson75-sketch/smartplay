@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
+import { providerFromHeader } from './_aiProvider';
 
 // 2026-05-26 — Fix BS: lie-analysis Gemini-first resilience chain.
 // Was Anthropic-only — single-provider outage blocked all lie reads.
@@ -181,6 +182,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // narrower than swing-analysis (single image, single confidence
     // dimension); any provider that successfully reads the photo is
     // good enough to ship to the player.
+    // 2026-06-21 — Respect X-AI-Provider header. If the client prefers
+    // OpenAI, skip Gemini and start with OpenAI (avoids latency of a
+    // Gemini attempt that the user has opted out of). Fallback chain
+    // continues for robustness regardless of preference.
+    const preferredProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const skipGemini = preferredProvider === 'openai';
+
     let parsed: AnalysisResponse | null = null;
     let providerUsed: 'gemini' | 'openai' | 'anthropic' | null = null;
     const errors: Record<string, string | null> = {
@@ -190,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     // ── Stage 1: Gemini 2.5 Flash (speed path) ───────────────────
-    if (gemini) {
+    if (!skipGemini && gemini) {
       try {
         const gem = await gemini.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -219,7 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.warn('[lie-analysis] gemini primary failed:', errors.gemini);
       }
     } else {
-      errors.gemini = 'GOOGLE_API_KEY not configured';
+      errors.gemini = skipGemini ? 'skipped (client prefers openai)' : 'GOOGLE_API_KEY not configured';
     }
 
     // ── Stage 2: OpenAI gpt-4o (mid fallback) ────────────────────

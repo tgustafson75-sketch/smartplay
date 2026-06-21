@@ -28,12 +28,21 @@ export const endRoundHandler: IntentHandler = {
     const roundId = round.endRound();
     track('end_round_voice', { round_id: roundId });
 
+    const history = useRoundStore.getState().roundHistory;
+    const rec = history[history.length - 1];
+    let summaryLine = "Round's in the books.";
+    if (rec && rec.holesPlayed >= 9) {
+      const vp = rec.scoreVsPar ?? 0;
+      const vpStr = vp === 0 ? 'even' : vp > 0 ? `+${vp}` : `${vp}`;
+      summaryLine = `Round's in the books — ${rec.totalScore} at ${rec.courseName ?? 'the course'}, ${vpStr}. Check your recap for the full breakdown.`;
+    }
+
     return {
       success: true,
-      voice_response: "Round's in the books. Let's see how you played.",
+      voice_response: summaryLine,
       side_effects: [`endRound:${roundId}`],
       follow_up_needed: false,
-      tool_action: { type: 'navigate', path: `/recap/${roundId}` },
+      tool_action: { type: 'navigate_replace', path: `/recap/${roundId}` },
     };
   },
 };

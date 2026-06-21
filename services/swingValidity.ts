@@ -56,7 +56,16 @@ export function evaluateSwingValidity(analysis: SwingAnalysis | null): SwingVali
   }
   // Legacy fallback — sniff the observation text.
   const obs = (analysis.observation ?? '').toLowerCase();
-  const hit = NO_SWING_PHRASES.find(p => obs.includes(p));
+  // Body-part guard: if the matched phrase appears within 20 chars of a body-part
+  // word it's likely describing the player's anatomy ("hips not in the frame at
+  // address"), not a no-player condition. Skip that phrase.
+  const BODY_PART_RE = /\b(hip|shoulder|knee|elbow|wrist|foot|feet|head|arm|chest|back|hand|club)\b/i;
+  const hit = NO_SWING_PHRASES.find(p => {
+    const idx = obs.indexOf(p);
+    if (idx < 0) return false;
+    const window = obs.slice(Math.max(0, idx - 20), idx + p.length + 20);
+    return !BODY_PART_RE.test(window);
+  });
   if (hit) {
     return { valid: false, reason: capitalize(analysis.observation) };
   }

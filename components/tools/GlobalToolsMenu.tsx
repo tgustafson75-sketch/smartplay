@@ -392,6 +392,13 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
               colors={colors}
             />
+            <Row
+              icon="golf-outline"
+              label="PuttingLab"
+              sub="Upload putt video · face / stroke / read analysis"
+              onPress={() => nav('/swinglab/upload')}
+              colors={colors}
+            />
             {/* 2026-06-04 — Coach Mode toggle. Tap the row to flip the
                 setting (no nav). When ON, shared-session surfaces appear
                 on Caddie + Dashboard; when OFF, both hide. Sub-label

@@ -31,7 +31,10 @@ export type LieAnalysisResult =
   | { kind: 'no_network' }
   | { kind: 'too_large' }
   | { kind: 'low_quality'; follow_up: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string }
+  // Returned when a cancel-and-replace aborts this request. The caller
+  // should ignore this result — a newer analysis is already in flight.
+  | { kind: 'cancelled' };
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -144,8 +147,17 @@ export async function analyzeLie(
 
     return { kind: 'ok', analysis: data };
   } catch (err) {
+    const errName = err instanceof Error ? err.name : '';
     const msg = err instanceof Error ? err.message : String(err);
-    if (/network|abort|timeout|fetch/i.test(msg)) {
+    // An AbortError caused by our own VisionRequestController (cancel-and-
+    // replace) must NOT be reported as no_network. Distinguish it by name:
+    // both our abort() calls and AbortSignal.timeout set err.name='AbortError',
+    // but genuine network failures arrive as TypeError with 'network' in the
+    // message. Return 'cancelled' so callers silently ignore the stale result.
+    if (errName === 'AbortError') {
+      return { kind: 'cancelled' };
+    }
+    if (/network|timeout|fetch/i.test(msg)) {
       return { kind: 'no_network' };
     }
     return { kind: 'error', message: msg };

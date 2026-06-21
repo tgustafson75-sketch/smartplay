@@ -71,7 +71,7 @@ import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
-import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug } from '../data/localCourseImages';
+import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug, type LocalCourseSlug } from '../data/localCourseImages';
 import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
@@ -759,7 +759,12 @@ export default function SmartVisionScreen() {
   // for both cases so calibration data is used instead of GPS projection.
   const onCuratedPhoto = !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
 
-  const calibrationSlug = useMemo(() => getLocalCourseSlug(courseName), [courseName]);
+  const calibrationSlug = useMemo(() => {
+    // Use courseId directly when it's a local: course — avoids fragile
+    // substring name-match that can return the wrong slug for similarly-named courses.
+    if (courseId?.startsWith('local:')) return courseId.replace('local:', '') as LocalCourseSlug;
+    return getLocalCourseSlug(courseName);
+  }, [courseId, courseName]);
   const calibration = useMemo(() => {
     if (!calibrationSlug) return null;
     return getHoleLineCalibration(calibrationSlug, holeIndex);
@@ -818,7 +823,7 @@ export default function SmartVisionScreen() {
   const playerCanvas = useMemo(() => {
     const fix = getLastFix();
     if (!fix) return null;
-    const onCurated = !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
+    const onCurated = onCuratedPhoto;
     if (onCurated && teeCoord && greenCoord) {
       const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
       const fromPlayer = haversineYards(fix.location.lat, fix.location.lng, greenCoord.lat, greenCoord.lng);
@@ -836,7 +841,7 @@ export default function SmartVisionScreen() {
     return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
     // markBumpTick listed so the memo recomputes when fix-change fires.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projection, imageW, imageH, markBumpTick, golfbertHole, imageUri, curatedImage, teeCoord, greenCoord]);
+  }, [projection, imageW, imageH, markBumpTick, onCuratedPhoto, teeCoord, greenCoord]);
 
   // Bounds clamper used in drag handlers — keep markers visible.
   const clampToCanvas = useCallback((p: { x: number; y: number }) => ({

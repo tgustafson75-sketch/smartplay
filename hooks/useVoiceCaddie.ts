@@ -1190,6 +1190,35 @@ export const useVoiceCaddie = ({
         return;
       }
 
+      // Bug fix: when Kevin's last reply asked "How many putts?" and the
+      // user responds with a small number, intercept it here and call
+      // logPutts directly — don't route to the brain (which says "noted"
+      // but never persists the count).
+      const PUTT_WORDS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5 };
+      const turns = getRecentTurns();
+      const lastKevinTurn = [...turns].reverse().find(t => t.role === 'kevin');
+      const lastKevinText = lastKevinTurn?.text ?? '';
+      const awaitingPutts = /putt/i.test(lastKevinText) && /\?/.test(lastKevinText);
+      if (awaitingPutts) {
+        const lower = trimmed.toLowerCase();
+        const num = parseInt(lower, 10);
+        const parsed = Number.isFinite(num) && num >= 0 && num <= 10
+          ? num
+          : (PUTT_WORDS[lower] !== undefined ? PUTT_WORDS[lower] : null);
+        if (parsed !== null) {
+          useRoundStore.getState().logPutts(currentHole, parsed);
+          recordUserTurn(trimmed);
+          const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
+          onResponseReceived(confirmLine);
+          recordKevinTurn(confirmLine);
+          wrappedOnVoiceStateChange('speaking');
+          await stopSpeaking();
+          void speakDeviceNotice(confirmLine, language, voiceGender);
+          wrappedOnVoiceStateChange('idle');
+          return;
+        }
+      }
+
       // Match the manual-tap pattern: record the user turn, send to
       // brain, speak, then check if Kevin asked ANOTHER question —
       // recurse via this same loop so a multi-turn back-and-forth
@@ -1746,7 +1775,7 @@ export const useVoiceCaddie = ({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode]);
+  }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode, courseHoles, currentPar]);
 
   // ── MAIN MIC HANDLER ─────────────────────
 

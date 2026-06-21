@@ -762,6 +762,15 @@ export default function CaddieTab() {
   // commitShot before React flushes the state update that would hide the outcome row.
   const shotCommittedRef = useRef(false);
 
+  // Clear the 15s OB/lost outcome timer whenever the round ends or is discarded
+  // so a stale timer can't fire after the round is gone.
+  useEffect(() => {
+    if (!isRoundActive && outcomeAutoTimerRef.current) {
+      clearTimeout(outcomeAutoTimerRef.current);
+      outcomeAutoTimerRef.current = null;
+    }
+  }, [isRoundActive]);
+
   // ── Ghost rehydration on mount ───────────
   useEffect(() => {
     if (!isRoundActive || !active_ghost) return;
@@ -1136,6 +1145,11 @@ export default function CaddieTab() {
         // SmartFinder). Path is fully constructed (query params
         // already appended) by the handler.
         router.push(action.path as never);
+        break;
+      case 'navigate_replace':
+        // Used after end_round so the back button doesn't return to the
+        // active-caddie screen — replace instead of push.
+        router.replace(action.path as never);
         break;
       case 'open_url': {
         const url = (action as { type: 'open_url'; url: string }).url;

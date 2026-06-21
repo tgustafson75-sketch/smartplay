@@ -14,9 +14,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName } from '../lib/persona';
 
-// 2026-06-21 — maxRetries 3→1: 3×25s = 75s worst-case, exceeds Vercel Pro 60s wall.
-// 1 retry = 50s max, safely within budget (HIGH-11 audit fix).
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-06-21 — maxRetries 3→1→0: 1 retry = 50s worst-case, which exceeds the
+// client's 30s AbortSignal.timeout in puttingAnalysisService.ts. With 0 retries
+// the server worst-case is 25s, well within the client's 30s budget. The client
+// already catches transport failures and returns a graceful fallback analysis.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
 const MAX_FRAMES = 6;
 
 interface RequestBody {

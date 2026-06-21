@@ -18,7 +18,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName } from '../../lib/persona';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-06-21 — maxRetries 1→0: 1 retry = 50s worst-case, which exceeds the
+// client's 30s AbortSignal.timeout in puttingAnalysisService.ts. With 0 retries
+// the server worst-case is 25s, well within the client's 30s budget.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
 const MAX_FRAMES = 6;
 
 interface RequestBody {

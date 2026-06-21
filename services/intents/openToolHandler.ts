@@ -136,6 +136,12 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // ("analyze my lie", "check my lie", etc.) still land on lie_analysis.
   smartplay: { type: 'navigate', path: '/smartfinder?autoread=1' },
   smart_play: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  // 2026-06-21 — PuttingLab voice route. "Open PuttingLab", "putting lab",
+  // "putting analysis" all land on the upload screen (swinglab/upload) where
+  // the user picks their putt video and the Putt tag is self-selected.
+  putting_lab: { type: 'navigate', path: '/swinglab/upload' },
+  puttinglab:  { type: 'navigate', path: '/swinglab/upload' },
+  putting_analysis: { type: 'navigate', path: '/swinglab/upload' },
   // 2026-05-26 — Fix DW: voice "open / send / email / show issue log"
   // routes to /owner-logs. Issue Log is visible to ALL beta testers
   // (Fix AE). The execute() path below reads parameters.send_log to
@@ -179,6 +185,9 @@ const TOOL_LABEL: Record<string, string> = {
   swinglibrary: 'Swing Library',
   smartplay: 'SmartPlay',
   smart_play: 'SmartPlay',
+  putting_lab: 'PuttingLab',
+  puttinglab: 'PuttingLab',
+  putting_analysis: 'PuttingLab',
   issue_log: 'Issue Log',
   issuelog: 'Issue Log',
   issues_log: 'Issue Log',

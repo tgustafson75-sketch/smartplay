@@ -431,6 +431,10 @@ function CameraSmartFinder({
   // /api/kevin); honest (camera = qualitative scene, weather = the wind number).
   const [sceneReading, setSceneReading] = useState(false);
   const [sceneResult, setSceneResult] = useState<string | null>(null);
+  // 2026-06-21 — targetYards lifted from TargetCameraOverlay so runSceneRead
+  // can pass the locked distance to the brain. TargetCameraOverlay calls
+  // onTargetYardsChange whenever the user taps a new distance.
+  const [sceneTargetYards, setSceneTargetYards] = useState<number | null>(null);
   const autoFiredRef = useRef(false);
   // Mic permission is required for video audio. Reusing the existing
   // pattern from cage-mode / quick-record (request on demand, not at
@@ -521,7 +525,7 @@ function CameraSmartFinder({
       );
       if (!manip.base64) throw new Error('no base64');
       const svc = await import('../services/sceneReadService');
-      const result = await svc.readScene({ imageBase64: manip.base64 });
+      const result = await svc.readScene({ imageBase64: manip.base64, targetYards: sceneTargetYards });
       if (result) {
         setSceneResult(result.text);
         try {
@@ -538,7 +542,7 @@ function CameraSmartFinder({
     } finally {
       setSceneReading(false);
     }
-  }, [sceneReading]);
+  }, [sceneReading, sceneTargetYards]);
 
   // 2026-06-17 — Auto-fire scene read when voice trigger lands with autoread=1.
   // Guard with autoFiredRef so the effect reruns (when runSceneRead changes due
@@ -634,6 +638,7 @@ function CameraSmartFinder({
               weather={weather}
               shotBearingDeg={shotBearingDeg}
               locked={locked}
+              onTargetYardsChange={setSceneTargetYards}
             />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
@@ -1304,6 +1309,7 @@ function TargetCameraOverlay({
   weather,
   shotBearingDeg,
   locked,
+  onTargetYardsChange,
 }: {
   yards: GreenYardages;
   gps: GPSQualityReading;
@@ -1311,10 +1317,12 @@ function TargetCameraOverlay({
   weather: WeatherSnapshot | null;
   shotBearingDeg: number | null;
   locked?: boolean;
+  onTargetYardsChange?: (yards: number | null) => void;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
+  useEffect(() => { onTargetYardsChange?.(targetYards); }, [targetYards, onTargetYardsChange]);
   const [targetBearing, setTargetBearing] = useState<number | null>(shotBearingDeg);
   const [reticleConfidence, setReticleConfidence] = useState<'high' | 'medium' | 'low'>('medium');
   const [playerLoc, setPlayerLoc] = useState<{ lat: number; lng: number } | null>(null);

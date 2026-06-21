@@ -27,7 +27,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { getHoleGeometry } from './courseGeometryService';
 import { getActiveVisionContext } from './glassesVisionInput';
-import { getCaddieName } from '../lib/persona';
+import { getCaddieName, personaToVoiceGender } from '../lib/persona';
 import { devLog } from './devLog';
 import { getApiBaseUrl } from './apiBase';
 
@@ -250,9 +250,12 @@ export async function speakPuttingAnalysis(spokenRead: string | null): Promise<P
   try {
     const settings = useSettingsStore.getState();
     const voiceMod = await import('./voiceService');
+    // Phase 100: pass caddiePersonality (not voiceGender) so Tank / Harry
+    // use their correct male voice, not Kevin's default.
+    const persona = (settings.caddiePersonality ?? 'kevin') as import('../lib/persona').Persona;
     void voiceMod.speak?.(
       result.caddieComment,
-      settings.voiceGender,
+      personaToVoiceGender(persona),
       settings.language ?? 'en',
       apiUrl(),
       { userInitiated: true },

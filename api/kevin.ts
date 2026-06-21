@@ -128,7 +128,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'lookup_hole',
-    description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par, yardage from each tee, hazards, GPS.',
+    description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par and yardage from each tee box.',
     parameters: {
       type: 'object',
       properties: {
@@ -189,11 +189,24 @@ async function executeLookupCourse(input: Record<string, unknown>): Promise<stri
   }
 }
 
-async function executeLookupHole(input: Record<string, unknown>): Promise<string> {
+async function executeLookupHole(
+  input: Record<string, unknown>,
+  bodyHoles?: Array<{ hole: number; par: number; distance: number }>,
+): Promise<string> {
   const courseId = String(input.course_id ?? '').trim();
   const holeNumber = Number(input.hole_number ?? 0);
   const teeName = input.tee_name ? String(input.tee_name) : null;
   if (!courseId) return JSON.stringify({ error: 'No course_id provided' });
+
+  // Short-circuit: if the request body already has courseHoles, use them
+  if (bodyHoles && bodyHoles.length > 0) {
+    const match = bodyHoles.find((h) => h.hole === holeNumber);
+    if (match) {
+      console.log(`[golfcourseapi] lookup_hole short-circuit via round_context hole=${holeNumber}`);
+      return JSON.stringify({ hole_number: holeNumber, par: match.par, yardage: match.distance, source: 'round_context' });
+    }
+  }
+
   try {
     const data = await serverFetchCourse(`/v1/courses/${encodeURIComponent(courseId)}`);
     console.log('[golfcourseapi] lookup_hole response keys:', Object.keys(data as object));
@@ -1118,7 +1131,7 @@ ${onCourseContextBlock}${baseMessage}`
         if (name === 'lookup_hole') {
           capture.dataToolCalls++;
           console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
-          return await executeLookupHole(input);
+          return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined);
         }
         // Action tools — capture and return dummy so loop can continue
         switch (name) {
