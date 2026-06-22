@@ -163,6 +163,15 @@ const PLAY_SECTION: LauncherCardSpec[] = [
 // Setup Check is feature-flagged. All full-width LauncherCards.
 const PREPARE_SECTION: LauncherCardSpec[] = [
   {
+    key: 'range-import',
+    icon: 'stats-chart-outline',
+    title: 'Import Range Session',
+    sub: 'Scan a TopTracer screenshot — carry distances go straight to Kevin',
+    route: '/swinglab/range-import',
+    accent: '#22d3ee',
+    tag: 'CALIBRATE',
+  },
+  {
     key: 'fit-profile',
     icon: 'construct-outline',
     title: 'Fit Profile',
