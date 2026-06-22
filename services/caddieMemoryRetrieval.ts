@@ -153,7 +153,13 @@ export function getCaddieContext(input: {
       } catch { /* book optional */ }
     }
     if (tendencies) lines.push(tendencies);
-    if (recentReflection) lines.push(`Last round takeaway: ${recentReflection}`);
+    if (recentReflection) {
+      lines.push(`Last round takeaway: ${recentReflection}`);
+      const keyTakeaways = p.reflections[0]?.keyTakeaways;
+      if (keyTakeaways && keyTakeaways.length > 0) {
+        lines.push(`Key takeaways: ${keyTakeaways.slice(0, 2).map((t) => t.trim().replace(/\.?$/, '.')).join(' ')}`);
+      }
+    }
 
     const promptBlock = lines.length > 0
       ? `CADDIE MEMORY (learned over time — treat as strong priors; live GPS still wins on the working distance):\n${lines.join('\n')}`
