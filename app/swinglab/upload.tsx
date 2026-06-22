@@ -6,7 +6,7 @@
  * confirmation and can browse the new entry in My Swing Library.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, ActivityIndicator, Alert,
@@ -52,6 +52,7 @@ export default function UploadSwing() {
   }, []);
 
   const [step, setStep] = useState<'pick' | 'metadata' | 'saving'>('pick');
+  const saveInFlightRef = useRef(false);
   const [uri, setUri] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const [durationSec, setDurationSec] = useState<number | null>(null);
@@ -146,7 +147,8 @@ export default function UploadSwing() {
   };
 
   const onSave = async () => {
-    if (!uri) return;
+    if (!uri || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setStep('saving');
     uploadLog('save-tap', { club, has_audio: hasAudio, duration_sec: durationSec });
     // 2026-05-22 — When the user flagged Meta glasses but didn't pick

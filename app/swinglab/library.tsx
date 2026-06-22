@@ -127,7 +127,7 @@ export default function SwingLibrary() {
     });
   }, [sourceFilteredEntries, dateFilter, clubFilter, swingerFilter]);
 
-  const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all';
+  const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all' || swingerFilter !== 'all';
   const filtersActive = filter !== 'all' || advancedFiltersActive || swingerFilter !== 'all';
 
   // 2026-05-27 — Fix EN: defensive file-existence probe per row.

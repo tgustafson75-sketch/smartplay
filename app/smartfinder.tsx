@@ -453,6 +453,17 @@ function CameraSmartFinder({
   // onTargetYardsChange whenever the user taps a new distance.
   const [sceneTargetYards, setSceneTargetYards] = useState<number | null>(null);
   const autoFiredRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Stop any in-progress video recording on unmount so CameraView releases.
+      if (cameraRef.current) {
+        try { cameraRef.current.stopRecording(); } catch { /* best effort */ }
+      }
+    };
+  }, []);
   // Mic permission is required for video audio. Reusing the existing
   // pattern from cage-mode / quick-record (request on demand, not at
   // screen mount — keeps the GPS-only photo flow from prompting for
@@ -543,6 +554,7 @@ function CameraSmartFinder({
       if (!manip.base64) throw new Error('no base64');
       const svc = await import('../services/sceneReadService');
       const result = await svc.readScene({ imageBase64: manip.base64, targetYards: sceneTargetYards });
+      if (!mountedRef.current) return;
       if (result) {
         setSceneResult(result.text);
         try {
@@ -554,10 +566,11 @@ function CameraSmartFinder({
         useToastStore.getState().show('Scene read unavailable — check your signal.');
       }
     } catch (e) {
+      if (!mountedRef.current) return;
       console.log('[smartfinder] scene read failed', e);
       useToastStore.getState().show('Scene read failed — try again.');
     } finally {
-      setSceneReading(false);
+      if (mountedRef.current) setSceneReading(false);
     }
   }, [sceneReading, sceneTargetYards]);
 

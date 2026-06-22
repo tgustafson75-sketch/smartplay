@@ -377,7 +377,9 @@ export default function SwingDetail() {
   // 2026-06-15 (Tim — manual analyze) — clear the in-flight guard once a manual
   // analyze leaves the brief 'pending' window (runPhaseK moves status to
   // analyzing_*). MUST live above the early returns (rules-of-hooks).
-  useEffect(() => { if (analysisStatus !== 'pending') analyzeInFlightRef.current = false; }, [analysisStatus]);
+  useEffect(() => {
+    if (analysisStatus === 'ok' || analysisStatus === 'failed') analyzeInFlightRef.current = false;
+  }, [analysisStatus]);
 
   useEffect(() => {
     if (analysisStatus === 'ok') {
@@ -542,6 +544,23 @@ export default function SwingDetail() {
     return () => clearTimeout(timer);
   }, [swing_id, shouldAutoplayThenAnalyze, analysisStatus]);
 
+  // P1-D — analysis timeout for manual-analyze path (LIBRARY_AUTO_PROCESS = false
+  // disables the auto-fire watchdog above, so stuck-on-analyzing has no recovery).
+  // If status stays in any analyzing_* state for 2 minutes, surface 'failed' so the
+  // user gets the Re-analyze button instead of being stranded forever.
+  useEffect(() => {
+    if (!swing_id) return;
+    const stuck = analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern';
+    if (!stuck) return;
+    const timer = setTimeout(() => {
+      const cur = useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status;
+      if (cur === 'analyzing_frames' || cur === 'analyzing_pose' || cur === 'analyzing_pattern') {
+        useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', 'Analysis is taking too long — tap Re-analyze to try again.');
+      }
+    }, 120_000);
+    return () => clearTimeout(timer);
+  }, [swing_id, analysisStatus]);
+
   // Phase BZ-v1 — when in compare-picker mode, tapping a row picks the
   // right-pane swing instead of scrubbing the main video. Otherwise
   // scrubs as before.
@@ -606,6 +625,7 @@ export default function SwingDetail() {
       });
     } catch (e) {
       console.log('[swing-detail] session share failed', e);
+      Alert.alert('Share failed', 'Could not share the video. The file may no longer be on this device.');
     }
   };
 
@@ -1226,7 +1246,8 @@ export default function SwingDetail() {
                 </Text>
                 <TouchableOpacity
                   onPress={onAnalyzeAtPosition}
-                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
+                  disabled={analyzeInFlightRef.current}
+                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
                   accessibilityRole="button"
                   accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
                 >
@@ -1244,7 +1265,8 @@ export default function SwingDetail() {
                 </Text>
                 <TouchableOpacity
                   onPress={onReanalyze}
-                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start' }]}
+                  disabled={analyzeInFlightRef.current}
+                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
                   accessibilityRole="button"
                   accessibilityLabel="Analyze this swing"
                 >
@@ -1424,6 +1446,43 @@ export default function SwingDetail() {
             </TouchableOpacity>
           )}
 
+          {/* Bilateral link picker — hoisted out of analysisStatus==='ok' block so a
+              re-analyze or status change doesn't unmount it mid-interaction. */}
+          <Modal visible={linkPickerOpen} transparent animationType="slide" onRequestClose={() => setLinkPickerOpen(false)}>
+            <View style={styles.linkBackdrop}>
+              <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Pick the other angle</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Choose the same swing from the other camera (one down-the-line, one face-on).</Text>
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {otherSessions.length === 0 ? (
+                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other swings yet — upload the second angle first.</Text>
+                  ) : otherSessions.map((os) => {
+                    const ang = os.upload?.angleOverride;
+                    const angLabel = ang === 'face_on' ? 'FACE-ON' : ang === 'down_the_line' ? 'DTL' : '—';
+                    const club = os.currentClub ?? os.club ?? 'swing';
+                    const d = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
+                    return (
+                      <TouchableOpacity
+                        key={os.id}
+                        style={[styles.linkRow, { borderColor: colors.border }]}
+                        onPress={() => {
+                          setLinkPickerOpen(false);
+                          router.push(`/swinglab/bilateral?a=${swing_id}&b=${os.id}` as never);
+                        }}
+                      >
+                        <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{club} · {d}</Text>
+                        <Text style={[styles.linkRowBadge, { color: colors.accent }]}>{angLabel}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity onPress={() => setLinkPickerOpen(false)} style={styles.linkCancel}>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
           {analysisStatus === 'ok' && (
             <Animated.View style={{ opacity: cardsFade }}>
               {/* 2026-05-22 — PuttingLab card. Renders when the session
@@ -1501,40 +1560,6 @@ export default function SwingDetail() {
                 <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
                 <Text style={[styles.linkAngleText, { color: colors.text_primary }]}>Link a second angle (bilateral)</Text>
               </TouchableOpacity>
-              <Modal visible={linkPickerOpen} transparent animationType="slide" onRequestClose={() => setLinkPickerOpen(false)}>
-                <View style={styles.linkBackdrop}>
-                  <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Pick the other angle</Text>
-                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Choose the same swing from the other camera (one down-the-line, one face-on).</Text>
-                    <ScrollView style={{ maxHeight: 360 }}>
-                      {otherSessions.length === 0 ? (
-                        <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other swings yet — upload the second angle first.</Text>
-                      ) : otherSessions.map((os) => {
-                        const ang = os.upload?.angleOverride;
-                        const angLabel = ang === 'face_on' ? 'FACE-ON' : ang === 'down_the_line' ? 'DTL' : '—';
-                        const club = os.currentClub ?? os.club ?? 'swing';
-                        const d = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
-                        return (
-                          <TouchableOpacity
-                            key={os.id}
-                            style={[styles.linkRow, { borderColor: colors.border }]}
-                            onPress={() => {
-                              setLinkPickerOpen(false);
-                              router.push(`/swinglab/bilateral?a=${swing_id}&b=${os.id}` as never);
-                            }}
-                          >
-                            <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{club} · {d}</Text>
-                            <Text style={[styles.linkRowBadge, { color: colors.accent }]}>{angLabel}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                    <TouchableOpacity onPress={() => setLinkPickerOpen(false)} style={styles.linkCancel}>
-                      <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </Modal>
               {/* 2026-05-23 (Fix #5) — DrillCard gated on
                   drill_recommendation being non-null for putting
                   sessions so no empty drill placeholder appears

@@ -68,6 +68,13 @@ export default function TargetingOverlay({
     }
   }, [reportPoint]);
 
+  // PanResponder is created once (useRef), so it captures stale closures for
+  // reportThrottled/reportPoint. After orientation changes, width/height/callback
+  // identity change but PanResponder never re-creates. Fix: stable ref that the
+  // PanResponder reads through — always gets the latest values.
+  const cbRef = useRef({ reportThrottled, reportPoint });
+  useEffect(() => { cbRef.current = { reportThrottled, reportPoint }; }, [reportThrottled, reportPoint]);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -77,14 +84,14 @@ export default function TargetingOverlay({
         const y = evt.nativeEvent.locationY;
         tx.value = x;
         ty.value = y;
-        reportThrottled(x, y);
+        cbRef.current.reportThrottled(x, y);
       },
       onPanResponderRelease: (evt) => {
         const x = evt.nativeEvent.locationX;
         const y = evt.nativeEvent.locationY;
         tx.value = x;
         ty.value = y;
-        reportPoint(x, y); // always report the final resting point
+        cbRef.current.reportPoint(x, y);
       },
     }),
   ).current;
