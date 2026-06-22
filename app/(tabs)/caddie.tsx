@@ -105,6 +105,7 @@ import {
   markProactiveFired,
   resetProactiveState,
 } from '../../services/proactiveKevin';
+import { useMovementModeStore } from '../../services/movementModeDetector';
 import { resolvePenalty } from '../../services/rulesEngine';
 import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
@@ -764,6 +765,10 @@ export default function CaddieTab() {
   // commitShot before React flushes the state update that would hide the outcome row.
   const shotCommittedRef = useRef(false);
 
+  // FIX M6 — GPS stop-detection proactive: debounce timer + single-fire gate.
+  const stopDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopTriggeredRef = useRef(false);
+
   // Clear the 15s OB/lost outcome timer whenever the round ends or is discarded
   // so a stale timer can't fire after the round is gone.
   useEffect(() => {
@@ -1013,6 +1018,59 @@ export default function CaddieTab() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHole, isRoundActive, _proactive_kevin_enabled, apiUrl]);
+
+  // FIX M6 — GPS stop-detection proactive: subscribe to movementMode and fire a
+  // proactive shot_strategy when the player stops walking mid-round.
+  // Logic: stationary → 5s debounce → check guards → analyze → speak.
+  //        walking     → clear debounce + reset gate so the next stop can re-fire.
+  const movementMode = useMovementModeStore(s => s.mode);
+  useEffect(() => {
+    if (!isRoundActive || !_proactive_kevin_enabled || currentHole < 1) return;
+
+    if (movementMode === 'walking') {
+      // Clear any pending debounce and reset gate so the NEXT stop can fire.
+      if (stopDebounceRef.current) {
+        clearTimeout(stopDebounceRef.current);
+        stopDebounceRef.current = null;
+      }
+      stopTriggeredRef.current = false;
+      return;
+    }
+
+    if (movementMode === 'stationary') {
+      if (stopTriggeredRef.current) return; // already fired this stop cycle
+      if (stopDebounceRef.current) return;  // debounce already running
+      stopDebounceRef.current = setTimeout(() => {
+        stopDebounceRef.current = null;
+        // Guards: don't interrupt an active Kevin session.
+        if (isSpeaking()) return;
+        if (voiceState !== 'idle') return;
+        if (stopTriggeredRef.current) return;
+        stopTriggeredRef.current = true;
+        void (async () => {
+          try {
+            const engine = await import('../../services/smartAnalysisEngine');
+            const env = await engine.analyze({ kind: 'shot_strategy' });
+            const text = env.voice_summary;
+            if (!text) return;
+            setCaddieResponse(text);
+            setVoiceState('proactive');
+            const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+            if (ve) {
+              speak(text, vg, lang, apiUrl)
+                .catch(() => {})
+                .finally(() => setVoiceState('idle'));
+            } else {
+              setTimeout(() => setVoiceState('idle'), 3000);
+            }
+          } catch (e) {
+            console.log('[caddie] M6 stop-detection shot_strategy failed (non-fatal):', e);
+          }
+        })();
+      }, 5000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, apiUrl]);
 
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every
