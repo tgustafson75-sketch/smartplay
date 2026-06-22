@@ -45,6 +45,9 @@ import { forceMarkPosition } from '../../services/positionMarkBus';
 import { canAccess, type FeatureKey } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
+import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
+import { usePointsStore } from '../../store/pointsStore';
+import { getApiBaseUrl } from '../../services/apiBase';
 
 export function GlobalToolsMenu() {
   const router = useRouter();
@@ -62,6 +65,8 @@ export function GlobalToolsMenu() {
   // Toggles
   const voiceEnabled = useSettingsStore((s) => s.voiceEnabled);
   const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
+  const voiceGender = useSettingsStore((s) => s.voiceGender);
+  const language = useSettingsStore((s) => s.language);
   const castMode = useSettingsStore((s) => s.castMode);
   const setCastMode = useSettingsStore((s) => s.setCastMode);
   const yardageMode = useSettingsStore((s) => s.yardageMode);
@@ -195,9 +200,61 @@ export function GlobalToolsMenu() {
         { text: 'Keep playing', style: 'cancel' },
         {
           text: 'Save & end',
-          onPress: () => {
+          onPress: async () => {
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+            // Snapshot BEFORE endRound() resets scores/courseHoles/activeCourse.
+            const preRound = useRoundStore.getState();
+            const snapshotScores = { ...preRound.scores };
+            const snapshotCourseHoles = [...preRound.courseHoles];
+            const cName = preRound.activeCourse ?? 'the course';
+            const total = preRound.getTotalScore();
+            const vspar = preRound.getScoreVsPar();
+            const played = preRound.getHolesPlayed();
             const roundId = endRound();
+            // Award points matching caddie.tsx generateRoundSummary.
+            usePointsStore.getState().addPoints(
+              Math.max(10, 50 - Math.max(0, vspar * 2)),
+              'Round completed',
+            );
+            // Build contextual spoken summary mirroring caddie.tsx buildContextualSummary.
+            const holesWithPar = Object.entries(snapshotScores)
+              .map(([h, s]) => {
+                const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+                return { hole: Number(h), score: s as number, par, offset: (s as number) - par };
+              })
+              .filter(h => h.score > 0);
+            let summary: string;
+            if (holesWithPar.length === 0) {
+              summary = `${played} holes at ${cName} — let's see what the recap says.`;
+            } else {
+              const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
+              const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
+              const birdies = holesWithPar.filter(h => h.offset < 0).length;
+              const pars = holesWithPar.filter(h => h.offset === 0).length;
+              const bogeys = holesWithPar.filter(h => h.offset === 1).length;
+              const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
+              if (vspar <= -3) {
+                summary = `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
+              } else if (vspar === 0) {
+                summary = `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
+              } else if (vspar <= 3 && played >= 9) {
+                const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
+                summary = `${total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${played} holes at or under par.`;
+              } else if (played < 9) {
+                summary = `${played} hole${played === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
+              } else {
+                const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
+                summary = `${total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
+              }
+            }
+            if (voiceEnabled) {
+              try {
+                await configureAudioForSpeech();
+                await speakChunked(summary, voiceGender, language, getApiBaseUrl());
+              } catch (e) {
+                console.log('[tools] round-summary speak failed (non-fatal):', e);
+              }
+            }
             useToastStore.getState().show('Round saved');
             try { router.push(`/recap/${roundId}` as never); }
             catch (e) { console.log('[tools] recap nav failed', e); }
