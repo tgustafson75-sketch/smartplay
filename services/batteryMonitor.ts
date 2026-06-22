@@ -10,6 +10,7 @@
  * the module degrades silently — no battery telemetry, no prompt.
  */
 
+import { Platform } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { useRoundStore } from '../store/roundStore';
 import { setBatterySaverFloor } from './gpsManager';
@@ -102,6 +103,9 @@ function resetForNewRound(): void {
 
 export function initBatteryMonitor(): void {
   if (unsubBattery) return;
+  // expo-battery native methods don't exist on web — the stubs throw at call-site
+  // rather than failing the typeof guard, so bail out before touching the module.
+  if (Platform.OS === 'web') return;
   let Battery: typeof import('expo-battery') | null = null;
   try {
     Battery = require('expo-battery') as typeof import('expo-battery');
