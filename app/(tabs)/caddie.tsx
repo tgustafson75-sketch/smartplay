@@ -257,6 +257,7 @@ export default function CaddieTab() {
     notes: string;
     mode: RoundMode;
     ghostRoundId: string | null;
+    mentalState?: string;
   }) => Promise<void>) | null>(null);
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const clearPendingStart = useRoundStore(s => s.setPendingStartCourse);
@@ -310,6 +311,7 @@ export default function CaddieTab() {
           notes: factors?.notes ?? '',
           mode: factors?.mode ?? 'free_play',
           ghostRoundId: null,
+          mentalState: factors?.mentalState,
         });
       }
     })();
@@ -915,6 +917,103 @@ export default function CaddieTab() {
     try { evaluateRoundProgress(); } catch (e) { console.warn('[teamIntelligence] round-eval threw:', e); }
   }, [currentHole, isRoundActive]);
 
+  // FIX M9 — proactive Kevin: score-streak triggers evaluated after each score write.
+  // Covers: miss_streak_3, good_streak_3, rough_streak_3.
+  // Must use _scores (the subscribed reactive value) as the dep so the effect fires
+  // on every score write, not just on hole transitions.
+  useEffect(() => {
+    if (!isRoundActive || !_proactive_kevin_enabled) return;
+    const storeNow = useRoundStore.getState();
+    const holesPlayed = Object.keys(storeNow.scores).length;
+    if (holesPlayed < 3) return; // streaks require at least 3 holes
+    // Build recentScores (last 3, relative to par) for the proactive engine.
+    const scoreEntries = Object.entries(storeNow.scores)
+      .map(([h, s]) => {
+        const par = storeNow.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+        return { hole: Number(h), offset: s - par };
+      })
+      .sort((a, b) => a.hole - b.hole);
+    const recentScores = scoreEntries.slice(-3).map(e => e.offset);
+    const ghostDelta = useGhostStore.getState().overall_delta ?? null;
+    const trigger = shouldFireProactive({
+      holesPlayed,
+      currentHole: storeNow.currentHole,
+      recentScores,
+      ghostDelta,
+      dominantMiss: usePlayerProfileStore.getState().dominantMiss ?? null,
+      firstName: usePlayerProfileStore.getState().firstName || '',
+      mode: storeNow.mode,
+      trustLevel: useTrustLevelStore.getState().level,
+    });
+    if (trigger) {
+      markProactiveFired(trigger.id);
+      setCaddieResponse(trigger.message);
+      setVoiceState('proactive');
+      const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+      if (ve) {
+        speak(trigger.message, vg, lang, apiUrl)
+          .catch(() => {})
+          .finally(() => setVoiceState('idle'));
+      } else {
+        setTimeout(() => setVoiceState('idle'), 3000);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_scores, isRoundActive, _proactive_kevin_enabled, apiUrl]);
+
+  // FIX M9 — proactive Kevin: hole-transition triggers (front_9_summary at hole 10,
+  // hole_transition_pattern_aware on every hole change). Augments the existing
+  // focus-effect which only fires the round_start_handoff on hole 1.
+  useEffect(() => {
+    if (!isRoundActive || !_proactive_kevin_enabled) return;
+    const storeNow = useRoundStore.getState();
+    const holesPlayed = Object.keys(storeNow.scores).length;
+    const scoreEntries = Object.entries(storeNow.scores)
+      .map(([h, s]) => {
+        const par = storeNow.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+        return { hole: Number(h), offset: s - par };
+      })
+      .sort((a, b) => a.hole - b.hole);
+    const recentScores = scoreEntries.slice(-3).map(e => e.offset);
+    const ghostDelta = useGhostStore.getState().overall_delta ?? null;
+    const baseCtx = {
+      holesPlayed,
+      currentHole,
+      recentScores,
+      ghostDelta,
+      dominantMiss: usePlayerProfileStore.getState().dominantMiss ?? null,
+      firstName: usePlayerProfileStore.getState().firstName || '',
+      mode: storeNow.mode,
+      trustLevel: useTrustLevelStore.getState().level as 1 | 2 | 3,
+    };
+    // front_9_summary fires exactly when currentHole advances to 10.
+    // hole_transition_pattern_aware fires on any hole change (holes 2+).
+    const triggerType = currentHole === 10 ? 'front_9_summary' : currentHole > 1 ? 'hole_transition_pattern_aware' : null;
+    if (!triggerType) return;
+    const trigger = shouldFireProactive({ ...baseCtx });
+    // shouldFireProactive picks the highest-priority eligible trigger, which may
+    // be front_9_summary or hole_transition_pattern_aware. Only act if the
+    // returned trigger matches a hole-transition type so we don't double-fire
+    // streak triggers (those are handled by the _scores effect above).
+    if (
+      trigger &&
+      (trigger.id === 'front_9_summary' || trigger.id === 'hole_transition_pattern_aware')
+    ) {
+      markProactiveFired(trigger.id);
+      setCaddieResponse(trigger.message);
+      setVoiceState('proactive');
+      const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+      if (ve) {
+        speak(trigger.message, vg, lang, apiUrl)
+          .catch(() => {})
+          .finally(() => setVoiceState('idle'));
+      } else {
+        setTimeout(() => setVoiceState('idle'), 3000);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHole, isRoundActive, _proactive_kevin_enabled, apiUrl]);
+
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every
   // score write because [scores] is a Record (new ref each write), and the
@@ -1080,6 +1179,7 @@ export default function CaddieTab() {
           contactQuality?: string;
           outcome?: string;
           feel?: string;
+          club?: string;
         };
         const dirMap: Record<string, 'left' | 'straight' | 'right' | null> = {
           left: 'left', pull: 'left', hook: 'left',
@@ -1099,17 +1199,31 @@ export default function CaddieTab() {
         const direction: ShotResult['direction'] = a.direction ? dirMap[a.direction] ?? null : null;
         const shape: ShotResult['shape'] = a.direction ? shapeMap[a.direction] ?? null : null;
         const feel: ShotResult['feel'] = a.contactQuality ? feelMap[a.contactQuality] ?? null : null;
+        // FIX B9 — use the club from the tool args first; fall back to the store's
+        // last-known club so the shot is never silently de-clubbed when Kevin
+        // extracts a club name from the player's utterance.
+        const shotClub: string | null = a.club ?? useRoundStore.getState().club ?? null;
+        // FIX B9 — snapshot GPS position at log time so start_location is the
+        // player's actual position when the shot was hit, not stale or null.
+        let shotStartLocation: ShotLocation | null = null;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const gpsMod = require('../../services/gpsManager') as typeof import('../../services/gpsManager');
+          const fix = gpsMod.getLastFix();
+          if (fix) shotStartLocation = { lat: fix.lat, lng: fix.lng };
+        } catch { /* non-fatal — start_location stays null */ }
         const shot: ShotResult = {
           hole: currentHole,
           timestamp: Date.now(),
           feel,
           direction,
           shape,
-          club: club ?? null,
+          club: shotClub,
           acousticContact: null,
           outcome_text: a.outcome ?? null,
           swing_feel: a.feel ?? null,
           logged_via: 'voice',
+          start_location: shotStartLocation,
         };
         logShot(shot);
         break;
@@ -1611,6 +1725,7 @@ export default function CaddieTab() {
       notes: string;
       mode: RoundMode;
       ghostRoundId: string | null;
+      mentalState?: string;
     },
   ): Promise<void> => {
     if (!canAccess('round_start', subscription_status)) {
@@ -1619,6 +1734,12 @@ export default function CaddieTab() {
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    // FIX B5 — snapshot selectedTee and transportMode from store at call time so
+    // the values reflect the user's current selection rather than ambient state
+    // that may change between the time the opts were built and startRound fires.
+    const storeSnap = useRoundStore.getState();
+    const selectedTeeSnapshot = storeSnap.selectedTee ?? 'unspecified';
+    const transportModeSnapshot = storeSnap.transportMode ?? 'walking';
 
     let courseName = picked.name ?? 'Unknown Course';
     // 2026-05-31 — Fix FZ: NO MORE PALMS FALLBACK.
@@ -1743,7 +1864,15 @@ export default function CaddieTab() {
       courseId,
       courseLocation,
       mode: opts.mode,
+      // FIX B5 — pass snapshotted tee/transport so startRound never falls back to ambient store.
+      selectedTee: selectedTeeSnapshot,
+      transportMode: transportModeSnapshot,
     });
+    // FIX B1 — apply mentalState from pendingStartFactors so the player's
+    // pre-round mental check-in survives into Kevin's first-hole context.
+    if (opts.mentalState) {
+      useRoundStore.getState().setMentalState(opts.mentalState);
+    }
 
     if (courseId) {
       fetchCourseGeometry(courseId, { courseLocation }).catch(err => console.log('[caddie] geometry warm failed:', err));
@@ -1905,11 +2034,12 @@ export default function CaddieTab() {
         activeCourse: preRound.activeCourse,
       };
       // 2026-06-21 — Capture roundId and navigate to recap (HIGH-9 audit fix).
-      // Prior code discarded endRound() return value; user was stranded on caddie screen.
+      // FIX M15 — route through feelings screen first so player can log
+      // post-round energy/focus/vibe before the recap renders.
       const roundId = endRound();
       setShowShotCard(false);
       await generateRoundSummary(snapshot, roundId ?? undefined);
-      if (roundId) router.push(`/recap/${roundId}` as never);
+      if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
       return;
     }
 
@@ -3452,11 +3582,12 @@ export default function CaddieTab() {
                   // full — "didn't summarize". Capture the id and open the recap, matching
                   // play.tsx. endRound builds the RoundRecord from whatever holes were
                   // played, so a 9-of-18 round recaps fine.
+                  // FIX M15 — route through feelings screen first.
                   const roundId = endRound();
                   clearShotPending();
                   setShowShotCard(false);
                   await generateRoundSummary(snapshot, roundId ?? undefined);
-                  if (roundId) router.push(`/recap/${roundId}` as never);
+                  if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
                 }}
               >
                 <Text style={styles.endRoundText}>End Round</Text>
@@ -3603,7 +3734,8 @@ export default function CaddieTab() {
                   };
                   const roundId = endRound();
                   await generateRoundSummary(snapshot, roundId ?? undefined);
-                  if (roundId) router.push(`/recap/${roundId}` as never);
+                  // FIX M15 — route through feelings screen first.
+                  if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
                 },
               }] : []),
               { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => { setShowMoreMenu(false); setCastMode(!castMode); } },

@@ -89,6 +89,13 @@ interface RecapRequest {
   // send only voiceGender ('male'|'female'); supported as fallback.
   voiceGender?: VoiceGender;
   persona?: string;
+  // FIX M15 — post-round feelings collected on the feelings screen.
+  post_round_feelings?: {
+    energy?: string;
+    focus?: string;
+    vibe?: string;
+    weather?: string;
+  } | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -165,10 +172,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\n${body.practice_context.trim()}\n\nReinforcement logic for the recap: where round shots clearly applied a practiced technique, name the connection ("on those wedge approaches, you stayed low through impact like Marc's been teaching"). Where the round shows the player reverted to old patterns on the practiced clubs/situations, call it out honestly ("wedge approaches went back to the steeper attack — worth refocusing next round"). Don't fabricate connections; only cite when the shot data supports it.`
       : '';
 
+    // FIX M15 — post-round feelings injection
+    let feelingsBlock = '';
+    if (body.post_round_feelings) {
+      const f = body.post_round_feelings;
+      const parts: string[] = [];
+      if (f.energy)  parts.push(`energy=${f.energy}`);
+      if (f.focus)   parts.push(`focus=${f.focus}`);
+      if (f.vibe)    parts.push(`vibe=${f.vibe}`);
+      if (f.weather) parts.push(`weather=${f.weather}`);
+      if (parts.length > 0) {
+        feelingsBlock = `\nPost-round player felt: ${parts.join(', ')}. Factor this into the overall_summary tone — acknowledge if energy or vibe were a factor in performance, but only when the round data supports it.`;
+      }
+    }
+
     const userMessage = `Recap for ${body.player_name || 'the player'} at ${body.course_name}.
 Mode: ${modeLabel[body.mode] ?? body.mode}
 Total: ${body.total_score} (${body.score_vs_par >= 0 ? '+' : ''}${body.score_vs_par}) over ${body.holes_played} holes
-${patternBlock}${cageBlock}${arenaBlock}${notesBlock}${practiceBlock}
+${patternBlock}${cageBlock}${arenaBlock}${notesBlock}${practiceBlock}${feelingsBlock}
 
 ${holesBlock}
 

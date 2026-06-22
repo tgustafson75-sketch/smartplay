@@ -103,6 +103,8 @@ export async function generateRecap(
     // the user's selected caddie's voice + perspective, not the server's
     // voiceGender→Kevin fallback.
     persona?: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+    // FIX M15 — post-round feelings collected on the feelings screen.
+    postRoundFeelings?: { energy?: string; focus?: string; vibe?: string; weather?: string } | null;
   },
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, shots, courseHoles } = round;
@@ -162,6 +164,8 @@ export async function generateRecap(
         practice_context: round.practiceContext ?? null,
         voiceGender: round.voiceGender ?? 'male',
         persona: round.persona,
+        // FIX M15 — post-round feelings from the feelings screen.
+        post_round_feelings: round.postRoundFeelings ?? null,
       }),
     }).finally(() => clearTimeout(timeout));
 

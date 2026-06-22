@@ -234,6 +234,12 @@ export interface RoundRecord {
   // deterministic baseline, also backfilled onto past in-app rounds that predate
   // the recap feature (see backfillRoundSummaries).
   summary?: string;
+  // Phase BJ — emotional state log for the round (valence pattern detection).
+  // Optional: pre-BJ rounds omit it.
+  emotionalLog?: { state: string; valence: 'positive' | 'neutral' | 'negative'; hole: number; timestamp: number }[];
+  // FIX M14 — round goal (e.g. "break 90") persisted onto the record so recap
+  // and tee-goal evaluation can read it without live store access.
+  goal?: string | null;
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
   // 2026-05-17 — Phase 413 — wearable / health-data round enrichment.
@@ -251,6 +257,14 @@ export interface RoundRecord {
     /** True when at least one watch sample landed during the round
      *  (vs zero because permission was denied or no watch present). */
     hasWatchData: boolean;
+  };
+  // FIX M15 — post-round feelings captured on the feelings screen
+  // before the recap. Optional: rounds that predate this omit it.
+  postRoundFeelings?: {
+    energy?: string;
+    focus?: string;
+    vibe?: string;
+    weather?: string;
   };
 }
 
@@ -479,6 +493,10 @@ interface RoundState {
   setLocationContext: (coords: ShotLocation) => void;
   /** Phase R — capture a memory photo at the current hole during an active round. */
   addRoundPhoto: (uri: string) => void;
+  /** FIX M15 — merge a partial patch into a completed RoundRecord by id.
+   *  Used by the post-round feelings screen to persist feelings before
+   *  opening the recap. No-op when the id isn't found in roundHistory. */
+  updateRoundRecord: (roundId: string, patch: Partial<RoundRecord>) => void;
   /** Phase Q.5b — pending course id signaled by Play tab / Course Detail
    *  for Caddie tab to consume on focus. Set then auto-cleared. */
   pendingStartCourseId: string | null;
@@ -709,7 +727,13 @@ export const useRoundStore = create<RoundState>()(
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
         const courseLocation = options.courseLocation ?? null;
+        // FIX B5 — explicitly bind selectedTee and transportMode from opts so
+        // they are never sourced from ambient store state. prev.selectedTee /
+        // prev.transportMode are only used as secondary fallbacks here and are
+        // explicitly named — a future caller refactor won't accidentally shadow them.
         const prev = get();
+        const resolvedTee = options.selectedTee ?? prev.selectedTee ?? 'unspecified';
+        const resolvedTransport = options.transportMode ?? prev.transportMode ?? 'walking';
         const updatedRecent = courseId
           ? [courseId, ...prev.recentCourseIds.filter(id => id !== courseId)].slice(0, 5)
           : prev.recentCourseIds;
@@ -741,11 +765,10 @@ export const useRoundStore = create<RoundState>()(
           roundNotes: options.notes,
           goal: options.goal,
           preRoundYardageSnapshot: preRoundSnapshot,
-          // Phase 405 wave 3 — honor explicit tee from options, else keep
-          // the prior selection (if user picked one on the Play tab),
-          // else 'unspecified' for back-compat with callers predating wave 3.
-          selectedTee: options.selectedTee ?? prev.selectedTee ?? 'unspecified',
-          transportMode: options.transportMode ?? prev.transportMode ?? 'walking',
+          // FIX B5 — use pre-resolved values (see above) so selectedTee and
+          // transportMode are always sourced from opts, not ambient store state.
+          selectedTee: resolvedTee,
+          transportMode: resolvedTransport,
           currentHole: 1,
           holeNotes: {},
           currentYardage: holes[0]?.distance ?? null,
@@ -762,6 +785,35 @@ export const useRoundStore = create<RoundState>()(
         });
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // FIX B6 — hole 1 voice intro. startRound sets currentHole:1 via direct
+        // set() which bypasses setCurrentHole's TTS block (prevHole===clamped guard
+        // would fire with both equal to 1). Fire the same intro inline here so the
+        // player hears "Hole 1. Par 4. 380 yards." at round start without requiring
+        // a manual hole-advance. No double-fire risk: setCurrentHole only speaks when
+        // prevHole !== clamped, so a subsequent auto-advance to hole 2 won't repeat it.
+        void (async () => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const trustMod = require('./trustLevelStore') as typeof import('./trustLevelStore');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
+            const settings = settingsMod.useSettingsStore.getState();
+            const trustLevel = trustMod.useTrustLevelStore.getState().level;
+            if (settings.voiceEnabled && trustLevel !== 1) {
+              const holeOne = holes.find(h => h.hole === 1);
+              let text = 'Hole 1.';
+              if (holeOne?.par) text += ` Par ${holeOne.par}.`;
+              if (holeOne?.distance) text += ` ${holeOne.distance} yards.`;
+              const apiUrl = getApiBaseUrl();
+              void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+                ?.catch?.(() => {});
+            }
+          } catch (e) {
+            console.log('[roundStore] hole-1 intro failed (non-fatal):', e);
+          }
+        })();
         // 2026-05-22 — Course Data Orchestrator: clear sustained-fix buffer
         // so a heading carried over from a prior round can't bias the
         // first reconciliation on this round.
@@ -1228,6 +1280,13 @@ export const useRoundStore = create<RoundState>()(
           selectedTee: s.selectedTee,
           transportMode: s.transportMode,
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
+          // FIX B13 — persist emotional log onto the record so recap + future
+          // pattern analysis ("you push right when stressed") can correlate
+          // valence with shot outcomes without needing a live round.
+          emotionalLog: s.emotionalLog.length > 0 ? [...s.emotionalLog] : undefined,
+          // FIX M14 — persist the player's stated goal ("break 90") so recap
+          // surfaces it and evaluateTeeGoal / post-round analysis can read it.
+          goal: s.goal ?? undefined,
         };
         // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
         // per-hole memory (rounds played, scoring avg, tee club, par). Additive
@@ -1588,6 +1647,54 @@ export const useRoundStore = create<RoundState>()(
           }
         })();
 
+        // FIX M13 — evaluate active tee-box score goals at round end so the player
+        // gets a TTS celebration when they hit their goal. Pure sync read from
+        // teeGoalStore (already persisted) + evaluateTeeGoal (pure fn, no network).
+        // Only fires when voice is enabled, trust > 1, and at least one goal is active.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const teeGoalMod = require('./teeGoalStore') as typeof import('./teeGoalStore');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const evalMod = require('../services/goals/teeScoreGoal') as typeof import('../services/goals/teeScoreGoal');
+          const goals = teeGoalMod.useTeeGoalStore.getState().goals;
+          if (goals.length > 0) {
+            // Build updated history including the just-saved record for evaluation.
+            const updatedHistory = get().roundHistory;
+            const settingsForGoal = (() => {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const mod = require('./settingsStore');
+                return mod.useSettingsStore.getState();
+              } catch { return null; }
+            })();
+            const trustForGoal = (() => {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const mod = require('./trustLevelStore');
+                return mod.useTrustLevelStore.getState().level;
+              } catch { return 2; }
+            })();
+            if (settingsForGoal?.voiceEnabled && trustForGoal !== 1) {
+              for (const goal of goals) {
+                const progress = evalMod.evaluateTeeGoal(goal, updatedHistory);
+                // Celebrate only when this round tipped the goal into achieved for the first time.
+                if (progress.achieved && progress.achievedAt === record.endedAt) {
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
+                    const celebText = `Goal achieved! ${evalMod.describeTeeGoal(goal)} — you did it!`;
+                    const apiUrl = getApiBaseUrl();
+                    void voiceMod.speak(celebText, settingsForGoal.voiceGender, settingsForGoal.language, apiUrl, { userInitiated: true })
+                      ?.catch?.(() => {});
+                  } catch { /* non-fatal */ }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.log('[roundStore] tee-goal evaluation failed (non-fatal):', e);
+        }
+
         return record.id;
       },
 
@@ -1631,6 +1738,13 @@ export const useRoundStore = create<RoundState>()(
             ],
           };
         }),
+
+      updateRoundRecord: (roundId, patch) =>
+        set(s => ({
+          roundHistory: s.roundHistory.map(r =>
+            r.id === roundId ? { ...r, ...patch } : r,
+          ),
+        })),
 
       setCurrentHole: (hole) => {
         const state = get();
@@ -1719,6 +1833,31 @@ export const useRoundStore = create<RoundState>()(
                 const apiUrl = getApiBaseUrl();
                 void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
                   ?.catch?.(() => {});
+              }
+              // FIX M12 — per-hole AI briefing for holes 2-18. If courseIntelligence
+              // is cached and contains a sentence referencing this hole, speak it as
+              // a one-sentence Kevin insight. No API call — reads from the
+              // getCachedCourseIntelligenceSync sync accessor (AsyncStorage-backed,
+              // warmed by roundPrefetch at round start). Guards: voice on, trust > 1,
+              // hole > 1, courseId known, intel cached. Lightweight: no network.
+              if (settings.voiceEnabled && trustLevel !== 1 && clamped > 1 && state.activeCourseId) {
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
+                  const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
+                  const intel = intelMod.getCachedCourseIntelligenceSync(state.activeCourseId);
+                  if (intel) {
+                    const holeRef = new RegExp(`hole\\s+${clamped}\\b`, 'i');
+                    const sentences = intel.split(/(?<=[.!?])\s+/);
+                    const match = sentences.find(sen => holeRef.test(sen));
+                    if (match) {
+                      const apiUrl2 = getApiBaseUrl();
+                      void voiceMod.speak(match.trim(), settings.voiceGender, settings.language, apiUrl2, { userInitiated: true })
+                        ?.catch?.(() => {});
+                    }
+                  }
+                } catch (e) {
+                  console.log('[roundStore] per-hole intel insight failed (non-fatal):', e);
+                }
               }
             } catch (e) {
               console.log('[roundStore] per-hole intro failed (non-fatal):', e);
