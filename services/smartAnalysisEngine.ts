@@ -133,6 +133,10 @@ export interface ShotStrategyRequest extends BaseRequest {
   lie_hint?: string | null;
   /** Optional explicit yardage override. */
   target_yards?: number | null;
+  /** Pre-computed plays-like yardage (wind + temp + elevation already applied).
+   *  When provided, recommendShot uses it as the base for club selection instead
+   *  of computing wind adjustments internally. */
+  plays_like_yards?: number | null;
 }
 
 export interface SwingCompareRequest extends BaseRequest {
@@ -801,6 +805,7 @@ async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: 
   const result = await meta.recommendShot({
     lie_hint: req.lie_hint ?? null,
     target_yards: inferredTarget,
+    plays_like_yards: req.plays_like_yards ?? null,
     hole_number: ctx.holeNumber,
     player_location: ctx.holeView?.player_location ?? null,
   });

@@ -94,7 +94,8 @@ export const queryStatusHandler: IntentHandler = {
     // GPS to active so the next answer reads from a fresh fix.
     if (topic === 'distance_to_green' || topic === 'green_front' || topic === 'green_back' ||
         topic === 'green_middle' || topic === 'wind' || topic === 'plays_like' ||
-        topic === 'carry_check' || topic === 'shot_distance' || topic === 'hole_progress') {
+        topic === 'carry_check' || topic === 'shot_distance' || topic === 'hole_progress' ||
+        topic === 'shot_strategy') {
       try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
     }
 
@@ -151,6 +152,25 @@ export const queryStatusHandler: IntentHandler = {
         // metaCourseIntelligence.recommendShot which composes 8 signals
         // (geometry, GPS, wind, vision, lie, ghost, golfer model, recent
         // shots) into one strategic recommendation.
+        // FIX B12 — guard: no active round / no course context
+        if (!round.isRoundActive || !round.activeCourseId) {
+          return {
+            success: true,
+            voice_response: "I need an active round and a course loaded to give you a play recommendation.",
+            side_effects: ['query:shot_strategy:no_round'],
+            follow_up_needed: false,
+          };
+        }
+        // FIX B12 — guard: stale GPS (mirror distance_to_green presenceFill path)
+        const stratFix = await getOneShotFix({ maxAgeMs: 5_000 });
+        if (!stratFix) {
+          return {
+            success: true,
+            voice_response: "I need a fresh GPS fix before I can call the play — give it a few seconds and try again.",
+            side_effects: ['query:shot_strategy:no_gps'],
+            follow_up_needed: false,
+          };
+        }
         const engine = await import('../smartAnalysisEngine');
         const lieHint = typeof intent.parameters.lie_hint === 'string'
           ? intent.parameters.lie_hint
@@ -158,10 +178,36 @@ export const queryStatusHandler: IntentHandler = {
         const targetYards = typeof intent.parameters.target_yards === 'number'
           ? intent.parameters.target_yards
           : null;
+        // Compute plays-like yardage (wind + temp + elevation) so Kevin's
+        // club recommendation reflects the effective distance, not raw GPS.
+        let shotStrategyPlaysLike: number | null = null;
+        try {
+          const here = await import('../shotLocationService').then(m => m.getCurrentLocation());
+          const hole = context.current_hole ?? round.currentHole;
+          const green = here ? (await import('../shotLocationService').then(m => m.getGreenCentroid(hole))) : null;
+          const rawYds = targetYards ?? (here && green ? Math.round((await import('../../utils/geoDistance').then(m => m.haversineYards))(here, green)) : null);
+          if (rawYds != null && here) {
+            const w = (await import('../weatherService').then(m => m.getCachedWeather))(here)
+              ?? await (await import('../weatherService')).fetchWeatherAt(here).catch(() => null);
+            if (w) {
+              const bearing = currentShotBearingDeg(round, hole);
+              let elevFeet = 0;
+              if (green) {
+                try {
+                  const { getPlaysLikeElevationDeltaFeet } = await import('../elevationService');
+                  elevFeet = await getPlaysLikeElevationDeltaFeet(here, green);
+                } catch { /* flat */ }
+              }
+              const breakdown = playsLikeDistance(rawYds, w, bearing, elevFeet);
+              shotStrategyPlaysLike = breakdown.plays_like_yards;
+            }
+          }
+        } catch { /* non-fatal — recommendShot degrades gracefully without it */ }
         const env = await engine.analyze({
           kind: 'shot_strategy',
           lie_hint: lieHint,
           target_yards: targetYards,
+          plays_like_yards: shotStrategyPlaysLike,
         });
         return {
           success: env.status !== 'error',

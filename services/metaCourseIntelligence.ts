@@ -108,6 +108,10 @@ export interface MetaIntelInput {
   hole_number?: number | null;
   /** Optional explicit yardage override. Defaults to haversine to green. */
   target_yards?: number | null;
+  /** Pre-computed plays-like yardage (wind + temp + elevation already applied).
+   *  When provided, computeEffectiveTargetYards uses this as the base distance
+   *  instead of target_yards, then applies lie adjustments on top. */
+  plays_like_yards?: number | null;
   /** Optional lie hint from the player ("fairway", "rough", "sand", etc).
    *  Pulled from the player's last spoken context when present. */
   lie_hint?: string | null;
@@ -197,10 +201,11 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   if (recentShots.length > 0) sources.push('recent_shots');
 
   // ─── Strategic synthesis ──────────────────────────────────────────
-  const baselineClub = recommendClub(yardsToTarget, windFactor, lieHint);
+  const playsLikeYards = input.plays_like_yards ?? null;
+  const baselineClub = recommendClub(yardsToTarget, windFactor, lieHint, playsLikeYards);
   const roundForEvidence = useRoundStore.getState();
   const practice = usePracticeStore.getState();
-  const effectiveTarget = computeEffectiveTargetYards(yardsToTarget, windFactor, lieHint);
+  const effectiveTarget = computeEffectiveTargetYards(yardsToTarget, windFactor, lieHint, playsLikeYards);
   const equipmentResult = recommendClubFromEquipmentIntelligence({
     targetYards: effectiveTarget ?? yardsToTarget ?? 0,
     fallbackClub: baselineClub ?? '7 iron',
@@ -251,7 +256,7 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   ]);
   const confNote = confidenceNote(confidence);
   const clarify = clarifyingQuestion(confidence);
-  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim, rationale, confNote, clarify);
+  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim, rationale, confNote, clarify, playsLikeYards);
   const adaptedVoice = adaptOnCourseVoice(
     voice,
     deriveComplexityLevel(profile),
@@ -316,9 +321,10 @@ function recommendClub(
   yards: number | null,
   wind: WindFactor | null,
   lieHint: string | null,
+  playsLikeYards: number | null = null,
 ): string | null {
   if (yards == null || yards <= 0) return null;
-  const effective = computeEffectiveTargetYards(yards, wind, lieHint) ?? yards;
+  const effective = computeEffectiveTargetYards(yards, wind, lieHint, playsLikeYards) ?? yards;
 
   // Adult-amateur club distance ladder.
   if (effective >= 240) return 'Driver';
@@ -341,10 +347,14 @@ function computeEffectiveTargetYards(
   yards: number | null,
   wind: WindFactor | null,
   lieHint: string | null,
+  playsLikeYards: number | null = null,
 ): number | null {
   if (yards == null || yards <= 0) return null;
-  let effective = yards;
-  if (wind) effective += -wind.along_mph * 1.5;
+  // When a pre-computed plays-like yardage is supplied (wind + temp + elevation
+  // already baked in), use it as the base and skip the internal wind adjustment.
+  // Only lie modifiers are applied on top.
+  let effective = playsLikeYards != null && playsLikeYards > 0 ? playsLikeYards : yards;
+  if (playsLikeYards == null && wind) effective += -wind.along_mph * 1.5;
   if (lieHint?.toLowerCase().includes('rough')) effective += 8;
   if (lieHint?.toLowerCase().includes('sand') || lieHint?.toLowerCase().includes('bunker')) effective += 12;
   return effective;
@@ -492,6 +502,7 @@ function buildVoiceSummary(
   rationale: string[],
   confNote: string,
   clarify: string | null,
+  playsLikeYards: number | null = null,
 ): string {
   if (yards == null || !club) {
     return `${caddieName} — not enough info to call a shot yet.`;
@@ -501,7 +512,13 @@ function buildVoiceSummary(
     shape === 'high_cut' ? 'high cut' :
     shape === 'draw' ? 'soft draw' :
     shape === 'fade' ? 'controlled fade' : 'straight';
-  const lead = `${caddieName} — ${yards} yards, ${club}, ${shapePhrase}.`;
+  // Append "plays like N" when the pre-computed plays-like differs from raw GPS by
+  // more than 5 yards so Kevin's voice read reflects the actual club distance.
+  const playsLikeSuffix =
+    playsLikeYards != null && Math.abs(playsLikeYards - yards) > 5
+      ? `, plays like ${playsLikeYards}`
+      : '';
+  const lead = `${caddieName} — ${yards} yards${playsLikeSuffix}, ${club}, ${shapePhrase}.`;
   const focus = `Aim ${aim}.`;
   const because = rationale.length > 0 ? ` ${rationale.slice(0, 2).join(' ')}` : '';
   const conf = ` ${confNote}`;
