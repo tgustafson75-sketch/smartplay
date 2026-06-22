@@ -33,6 +33,16 @@ interface BriefingParams {
   // in the user's selected caddie's voice + system prompt. Without it the
   // backend resolves voiceGender → Kevin/Serena and ignores Tank.
   persona?: Persona;
+  // Fix B2 — player's focus note for the round
+  roundNotes?: string;
+  // Fix M3 — course scorecard data
+  courseHoles?: Array<{ hole: number; par: number; yards: number }>;
+  courseRating?: number;
+  courseSlope?: number;
+  // Fix M4 — web-search course intelligence brief
+  courseIntelligence?: string;
+  // Fix M16 — most recent round reflection summary
+  recentReflection?: string;
 }
 
 // In-memory cache: `${roundId}|${language}` → briefing text. Keyed by

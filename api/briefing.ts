@@ -54,6 +54,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
       persona = null,
+      // Fix B2 — player's focus note for today
+      roundNotes = null,
+      // Fix M3 — course scorecard data
+      courseHoles = [],
+      courseRating = null,
+      courseSlope = null,
+      // Fix M4 — web-search course intelligence brief
+      courseIntelligence = null,
+      // Fix M16 — most recent round reflection
+      recentReflection = null,
     } = req.body;
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -80,6 +90,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `Recent cage practice (factor in silently — reference at most one of these naturally if it actually fits the round ahead, never list them):\n${(recentCageSessions as CageSessionLite[]).map(s =>
           `- ${s.date}: ${s.club}${s.dominantMiss ? ', tending ' + s.dominantMiss : ''}${s.rootCause ? '. ' + s.rootCause : ''}`
         ).join('\n')}`
+      : '';
+
+    const roundNotesBlock = roundNotes
+      ? `Player's focus for today: ${roundNotes}`
+      : '';
+    type BriefingHole = { hole: number; par: number; yards: number };
+    const courseInfoBlock = (() => {
+      const lines: string[] = [];
+      if (courseRating != null && courseSlope != null) {
+        const totalPar = (courseHoles as BriefingHole[]).reduce((sum: number, h: BriefingHole) => sum + h.par, 0) || 72;
+        lines.push(`Course: par ${totalPar}, rating ${courseRating}/slope ${courseSlope}`);
+      }
+      if ((courseHoles as BriefingHole[]).length >= 9) {
+        const front9 = (courseHoles as BriefingHole[]).slice(0, 9)
+          .map((h: BriefingHole) => `H${h.hole} par${h.par} ${h.yards}y`).join(', ');
+        lines.push(`Front 9: ${front9}`);
+      }
+      return lines.join('\n');
+    })();
+    const courseIntelligenceBlock = courseIntelligence
+      ? `Course notes: ${courseIntelligence}`
+      : '';
+    const recentReflectionBlock = recentReflection
+      ? `Last round takeaway: ${recentReflection}`
       : '';
 
     const systemPrompt = `${characterSpec}
@@ -112,6 +146,10 @@ ${ghostBlock}
 ${handicapBlock}
 ${patternShiftBlock}
 ${cageBlock}
+${roundNotesBlock}
+${courseInfoBlock}
+${courseIntelligenceBlock}
+${recentReflectionBlock}
 
 Give the pre-round briefing now.`;
 

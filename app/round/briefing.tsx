@@ -23,6 +23,8 @@ import { generatePatternInsights } from '../../services/patternDetection';
 import { getFirstTeeHint } from '../../services/voiceOnboardingService';
 import { ROUND_MODE_LABELS } from '../../types/patterns';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
+import { getCachedCourseIntelligenceSync } from '../../services/courseIntelligenceService';
 
 type Phase = 'thinking' | 'speaking' | 'done';
 
@@ -30,7 +32,7 @@ export default function BriefingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const { activeCourse, mode, active_ghost, courseHoles: _courseHoles, shots: _shots, scores: _scores, currentRoundId } =
+  const { activeCourse, activeCourseId, mode, active_ghost, courseHoles: _courseHoles, shots: _shots, scores: _scores, currentRoundId, roundNotes } =
     useRoundStore();
   const { firstName, handicap, goal, dominantMiss } = usePlayerProfileStore();
   const { roundsTogether } = useRelationshipStore();
@@ -143,6 +145,22 @@ export default function BriefingScreen() {
           }),
         }));
 
+      // Fix M4 — read course intelligence from in-memory cache (populated at round start by roundPrefetch)
+      const courseIntelligence = activeCourseId
+        ? getCachedCourseIntelligenceSync(activeCourseId) ?? undefined
+        : undefined;
+
+      // Fix M16 — most recent round reflection from caddie memory
+      const memState = useCaddieMemoryStore.getState();
+      const memPlayer = memState.getPlayer();
+      const recentReflection = memPlayer.reflections[0]?.summary ?? undefined;
+
+      // Fix M3 — course scorecard: map CourseHole[] → { hole, par, yards } using .distance
+      const roundState2 = useRoundStore.getState();
+      const courseHolesForBriefing = roundState2.courseHoles.length > 0
+        ? roundState2.courseHoles.map(h => ({ hole: h.hole, par: h.par, yards: h.distance }))
+        : undefined;
+
       try {
         const rawText = await generateBriefing({
           roundId: currentRoundId ?? 'unknown',
@@ -160,6 +178,14 @@ export default function BriefingScreen() {
           recentCageSessions,
           voiceGender,
           persona: caddiePersonality,
+          // Fix B2 — player's focus note
+          roundNotes: roundNotes || undefined,
+          // Fix M3 — course scorecard
+          courseHoles: courseHolesForBriefing,
+          // Fix M4 — course intelligence
+          courseIntelligence,
+          // Fix M16 — last round takeaway
+          recentReflection,
         });
 
         if (cancelled) return;
