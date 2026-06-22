@@ -1192,17 +1192,18 @@ export default function SmartMotion() {
       try {
         // Watchdog so a hung network call can't strand the screen on the
         // "Analyzing…" overlay. BOUNDED clips (a segment was passed) skip
-        // analyzeSwing's internal locate, so 30s is plenty. UNBOUNDED clips
-        // (course single-shot, single-swing upload) run an internal
-        // probe(≤8s)+locate(≤25s) BEFORE the analysis fetch — 30s would fire
-        // before the real read even starts and discard it — so give them ~70s.
+        // analyzeSwing's internal locate. UNBOUNDED clips run an internal
+        // probe(≤8s)+locate(≤25s) BEFORE the analysis fetch so they need ~70s.
         // (audit 2026-06-11)
-        // 2026-06-12 (analysis speed) — BOUNDED clips (the live cage demo path) skip
-        // analyzeSwing's internal locate, so a warm Haiku quick read is ~2-6s. Fail FAST
-        // at 15s and auto-retry ONCE rather than making the user stare at "Analyzing…"
-        // for 30-70s before a NO READ forces a re-record — the retry hits a now-warm
-        // Lambda and usually succeeds. UNBOUNDED clips still get the 70s ceiling + 1 try.
-        const watchdogMs = boundaries ? 15_000 : 70_000;
+        // 2026-06-22 — Phase 5 migrated quick-tier from Haiku (2-6s warm) to
+        // Gemini 2.5 Flash. On a cold Lambda or a complex real-world scene
+        // (driving range, busy background), Gemini can take 10-25s. The old
+        // 15s watchdog fired consistently before Gemini responded → NO READ on
+        // every swing. The server-side tryGemini now caps at 13s (fails fast →
+        // tier=quick 502 retry in poseDetection.ts fires on the now-warm Lambda
+        // → succeeds in 3-8s). Total path: 13s + 1.2s retry wait + 8s warm =
+        // ~22s worst case. 30s gives comfortable headroom. UNBOUNDED still 70s.
+        const watchdogMs = boundaries ? 30_000 : 70_000;
         const maxAttempts = boundaries ? 2 : 1;
         const analyzeOpts = {
           // Thread the tagged club so the analyst has club context (a driver

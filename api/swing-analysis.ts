@@ -1132,11 +1132,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { text: systemPrompt + '\n\n' + userText },
           ...frames.map(f => ({ inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } })),
         ];
-        const gem = await gemini.models.generateContent({
+        // 13s server-side cap: a cold Lambda + complex scene (real driving range,
+        // busy background) can push Gemini to 15-25s. Without this the server
+        // hangs until Vercel kills it at 60s. With this cap the server returns a
+        // fast 502, the client tier=quick retry fires after 1.2s on the now-warm
+        // Lambda, and Gemini responds in 3-8s — well within the 30s client watchdog.
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: geminiContent }],
           config: { temperature: 0.2, maxOutputTokens: 650, responseMimeType: 'application/json' },
-        });
+        }), 13_000);
         const rawText = (gem.text ?? '').trim();
         const parsed = normalizeAnalysis(rawText, frames.length, mode);
         return {

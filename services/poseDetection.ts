@@ -297,9 +297,9 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
  */
 // 2026-06-07 — quickTier sampling. Trims default 5-frame extraction
 // to a 3-frame (address / impact / finish) sample with smaller
-// 640px resize for the speed-path callers (SmartMotion, Cage Mode
-// shot review, library Quick uploads). Anthropic Haiku 4.5 vision
-// latency scales near-linearly with image count; 5 → 3 frames saves
+// 512px resize for the speed-path callers (SmartMotion, Cage Mode
+// shot review, library Quick uploads). Gemini / OpenAI vision
+// latency scales with image count and payload; 5 → 3 frames saves
 // ~30-45% of model time and ~40% of per-frame upload payload.
 // Used via the optional `quickTier` arg below.
 const QUICK_TIER_FRAME_TIME_FRACTIONS = [0.10, 0.55, 0.85];
@@ -776,12 +776,12 @@ export async function analyzeSwing(
     ball_area_norm?: { x: number; y: number; r: number } | null;
     target_norm?: { x: number; y: number } | null;
     // 2026-05-28 — Fix FM: tier='quick' = SmartMotion's speed path.
-    // Server runs Anthropic Haiku 4.5 only and returns whatever it
-    // gets (no escalation to gpt-4o / Sonnet). Trades occasional
-    // low-confidence reads for the ~2-5s Haiku latency Tim's voice
-    // path needs vs the 30-50s full chain. 'full' (or omitted) is
-    // the existing library / Cage upload behavior — full Haiku →
-    // OpenAI → Sonnet escalation chain.
+    // Server runs Gemini 2.5 Flash only (no OpenAI escalation). A
+    // 13s server-side timeout caps a cold Lambda + complex scene so
+    // the server returns 502 fast → poseDetection.ts tier=quick retry
+    // fires on the now-warm Lambda (3-8s). 'full' (or omitted) is
+    // the existing library / Cage upload behavior — Gemini → OpenAI
+    // escalation chain.
     tier?: 'quick' | 'full';
     // 2026-05-28 — Fix FP: spoken-audio transcript from the same clip
     // (Whisper via /api/transcribe, written to shot.commentary_transcript
