@@ -29,22 +29,23 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 25_000,
+  timeout: 30_000,
   maxRetries: 1,
 });
 
 const SYSTEM_PROMPT = `You are a senior React Native / Expo / TypeScript engineer triaging a bug report from inside the SmartPlay Caddie Pro app.
 
-Your job: given the user's report + context snapshot + recent app events, produce a TIGHT triage hypothesis the owner can read on their phone mid-round and decide what to do next.
+Your job: given the user's report + context snapshot + recent app events, produce a TIGHT triage hypothesis the owner can read on their phone and decide what to do next.
 
 What you know about the codebase (broad strokes):
 - React Native + Expo SDK 54 + TypeScript, Zustand state stores, expo-router.
 - Three pillars: Round (GPS / SmartFinder / scoring / recap), SwingLab (SmartMotion / Cage Mode), Play (course discovery / ghost play).
-- Four caddie personas (Kevin, Serena, Tank, Harry) — Harry soft-removed from UI.
-- Voice path: ElevenLabs TTS primary, OpenAI fallback. Claude Sonnet 4.5 brain at /api/kevin. Claude Haiku at /api/voice-intent.
-- Key stores: roundStore, settingsStore, playerProfileStore, watchStore, issueLogStore, teamIntelligenceStore, trustLevelStore.
+- Five caddie personas: Kevin, Serena, Tank, Harry (soft-removed from UI), and 'custom' (user's AI-generated portrait + recorded voice clips).
+- AI provider layer: all production routes now use Gemini 2.5 Flash (primary) + OpenAI gpt-4o (fallback) via api/_aiProvider.ts. Anthropic Sonnet powers /api/kevin brain and /api/owner-triage. /api/voice-intent uses Gemini.
+- Voice path: ElevenLabs TTS primary, OpenAI TTS fallback. Kevin brain at /api/kevin. Voice intent classification at /api/voice-intent (Gemini).
+- Key stores: roundStore, settingsStore, playerProfileStore, cageStore, customCaddieMediaStore, issueLogStore, caddieMemoryStore.
 - Key gates that cause silent failures: voiceEnabled, trustLevel (L1 Quiet suppresses scripted speech), voiceOnPhoneSpeaker, skip_briefings.
-- Recent fix history (Day 3, 2026-05-21): Fix Q (one persona everywhere + opt-in handoff), Fix R (recap Notes section), Fix N-3 (Health Connect off round-start path — fixed Z Fold Start Round crash), Fix S (per-hole intro on transition), Fix T (briefing fetch failure honest-fallback).
+- SmartMotion: RANGE + CAGE capture modes, Gemini vision for swing fault detection, tier='quick' short-circuits OpenAI escalation.
 
 Output format (markdown, ~150 words max):
 
@@ -52,15 +53,13 @@ Output format (markdown, ~150 words max):
 
 **Where to look:** file path + ~line area (best guess, mark as guess). Up to 3 candidate locations.
 
-**Quick check first:** the one setting/state the owner should verify on-device before any code change (e.g. "is voiceEnabled on?", "what's the current trustLevel?").
+**Quick check first:** the one setting/state the owner should verify on-device before any code change.
 
 **If real, fix scope:** one-line description of the change shape. NO code blocks. If you'd need more context to be confident, say what context.
 
 **Severity:** P0 (round-killer) / P1 (frustrating but workaround exists) / P2 (cosmetic).
 
-Be honest about uncertainty. If the report is too vague or the context is insufficient, say so plainly and ask for one specific clarifying detail. Don't fabricate file paths — if you don't know, name the subsystem ("likely in services/intents/* or app/api/voice-intent+api.ts").
-
-Do NOT propose multi-day refactors. Do NOT write code. Do NOT suggest disabling features. The owner is mid-round; they need a quick read.`;
+Be honest about uncertainty. Don't fabricate file paths — if you don't know, name the subsystem. Do NOT propose multi-day refactors. Do NOT write code.`;
 
 interface TriageRequestBody {
   entry?: {
@@ -131,7 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     ].join('\n');
 
     const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 800,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPayload }],

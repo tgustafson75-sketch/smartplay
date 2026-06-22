@@ -72,7 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       prompt,
       // n=1 — single edit per call. Caller can re-invoke for variants.
       n: 1,
-      // size omitted to match the source image dimensions.
+      // gpt-image-1 does not support response_format:'url' (URL is dall-e only).
+      // Must request b64_json explicitly or the response carries neither field.
+      response_format: 'b64_json',
     });
 
     const first = result.data?.[0];
