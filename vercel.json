@@ -12,6 +12,7 @@
     { "src": "api/cage-coach.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/transcribe.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/owner-triage.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "api/meta-voice.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/lie-analysis.ts",    "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "api/image-edit.ts",      "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "api/putting-analysis.ts","use": "@vercel/node", "config": { "maxDuration": 60 } },
