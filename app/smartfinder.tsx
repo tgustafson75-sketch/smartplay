@@ -502,19 +502,11 @@ function CameraSmartFinder({
 
   // 2026-06-14 (Tim) — track the live compass heading so SmartFinder captures are
   // tagged with the direction the camera faced (the key field for green-facing
-  // selection + future geometry/3D rebuild). The capture component had no heading
-  // source, so every ingest landed heading:null. Mirrors StandardCameraOverlay.
+  // Heading from the active child overlay (Standard or Target) — threaded up via
+  // onHeadingUpdate prop instead of a separate parent DeviceMotion subscription
+  // (which was a redundant 3rd/4th subscriber competing with child setUpdateInterval calls).
   const headingRef = useRef<number | null>(null);
-  useEffect(() => {
-    DeviceMotion.setUpdateInterval(200);
-    const sub = DeviceMotion.addListener((data) => {
-      if (data.rotation) {
-        const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
-        headingRef.current = ((alphaDeg % 360) + 360) % 360;
-      }
-    });
-    return () => sub.remove();
-  }, []);
+  const onHeadingUpdate = useCallback((h: number) => { headingRef.current = h; }, []);
 
   useEffect(() => {
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
@@ -659,6 +651,7 @@ function CameraSmartFinder({
               height={height}
               zoomLabel={zoomLabel}
               yards={yards}
+              onHeadingUpdate={onHeadingUpdate}
             />
           ) : mode === 'target' ? (
             <TargetCameraOverlay
@@ -669,6 +662,7 @@ function CameraSmartFinder({
               shotBearingDeg={shotBearingDeg}
               locked={locked}
               onTargetYardsChange={setSceneTargetYards}
+              onHeadingUpdate={onHeadingUpdate}
             />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
@@ -921,12 +915,13 @@ function CameraSmartFinder({
 // ─── Standard mode (camera AR, tilt-based distance lock) ─────────────────────
 
 function StandardCameraOverlay({
-  locationGranted, height, zoomLabel, yards,
+  locationGranted, height, zoomLabel, yards, onHeadingUpdate,
 }: {
   locationGranted: boolean;
   height: number;
   zoomLabel: string;
   yards: GreenYardages;
+  onHeadingUpdate?: (h: number) => void;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -944,11 +939,13 @@ function StandardCameraOverlay({
         const pitchDeg = ((data.rotation.beta ?? 0) * 180) / Math.PI;
         pitchRef.current = pitchDeg;
         const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
-        headingRef.current = ((alphaDeg % 360) + 360) % 360;
+        const heading = ((alphaDeg % 360) + 360) % 360;
+        headingRef.current = heading;
+        onHeadingUpdate?.(heading);
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [onHeadingUpdate]);
 
   const clearLock = useCallback(() => {
     setLock(null);
@@ -1353,6 +1350,7 @@ function TargetCameraOverlay({
   shotBearingDeg,
   locked,
   onTargetYardsChange,
+  onHeadingUpdate,
 }: {
   yards: GreenYardages;
   gps: GPSQualityReading;
@@ -1361,6 +1359,7 @@ function TargetCameraOverlay({
   shotBearingDeg: number | null;
   locked?: boolean;
   onTargetYardsChange?: (yards: number | null) => void;
+  onHeadingUpdate?: (h: number) => void;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1391,11 +1390,13 @@ function TargetCameraOverlay({
         const pitchDeg = ((data.rotation.beta ?? 0) * 180) / Math.PI;
         pitchRef.current = pitchDeg;
         const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
-        headingRef.current = ((alphaDeg % 360) + 360) % 360;
+        const heading = ((alphaDeg % 360) + 360) % 360;
+        headingRef.current = heading;
+        onHeadingUpdate?.(heading);
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [onHeadingUpdate]);
 
   const onTargetPointNormalized = useCallback((point: { xNorm: number; yNorm: number }) => {
     const fix = getLastFix();
@@ -1908,8 +1909,12 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
     const tappedYx = (locationX - xPad) / scale - xRange / 2;
     const tappedYy = (yRange - (locationY - halfPad) / scale) - 30;
     const tapLoc = unprojectFromAxis({ x: tappedYx, y: tappedYy }, tee, green);
-    const yards = Math.max(1, Math.round(haversineYards(fix.location, tapLoc)));
-    const approx = (fix.accuracy_m ?? 0) > 15;
+    // Fresh GPS read at tap time — getLastFix() at render scope is stale if GPS
+    // updated after the component rendered (singleton doesn't trigger re-renders).
+    const currentFix = getLastFix();
+    if (!currentFix) return;
+    const yards = Math.max(1, Math.round(haversineYards(currentFix.location, tapLoc)));
+    const approx = (currentFix.accuracy_m ?? 0) > 15;
     setTap({ xPx: locationX, yPx: locationY, yards, approx });
   };
 

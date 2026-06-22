@@ -199,6 +199,10 @@ export function stopSmartFinderGpsTracking(): void {
   // subscriptions. The position cache is owned by gpsManager and gets
   // cleared by stopGpsManager() in the round-end teardown.
   calcLog = [];
+  // Reset notification throttle so the first fix of the next round always
+  // fires a notification (stale lastNotifiedFix would suppress it otherwise).
+  lastNotifiedFix = null;
+  lastNotifyAt = 0;
 }
 
 export function getLastFix(): LastFix | null {

@@ -1,3 +1,11 @@
+/**
+ * Smart Motion analysis endpoint.
+ * DORMANT — registered in vercel.json but not yet called by any client path.
+ * The /swinglab/smartmotion route is a local screen; server-side analysis
+ * for motion detection is handled by /api/swing-analysis. This endpoint is
+ * reserved for when Smart Motion gets its own dedicated server-side pass
+ * (e.g. real-time ball-departure + smash-factor from video frames).
+ */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { getCaddieName } from '../lib/persona';

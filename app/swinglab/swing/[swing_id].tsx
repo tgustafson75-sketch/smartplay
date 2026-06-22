@@ -702,7 +702,7 @@ export default function SwingDetail() {
             }}
             style={{ marginBottom: 12, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
           >
-            <Text style={{ color: colors.error ?? '#ef4444' }}>Delete Entry</Text>
+            <Text style={{ color: colors.error }}>Delete Entry</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={{ color: colors.accent }}>‹ Back</Text>
@@ -788,8 +788,8 @@ export default function SwingDetail() {
         }
       } catch { /* fall through — let analysis try */ }
       useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
-      spokenForRef.current = null;
       void runPhaseKOnSession(swing_id);
+      spokenForRef.current = null; // cleared after analysis commits, not before
     })();
   };
 
