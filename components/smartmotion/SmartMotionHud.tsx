@@ -60,15 +60,17 @@ function toneColor(tone: SmTone, colors: ThemeColors): string {
 
 export function SmartMotionHeader({
   mode,
+  isPutt = false,
   onSettings,
   style,
 }: {
   mode: Angle;
+  isPutt?: boolean;
   onSettings?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const subtitle = mode === 'down_the_line' ? 'DOWN THE LINE ANALYSIS' : 'FACE-ON ANALYSIS';
+  const subtitle = isPutt ? 'PUTT ANALYSIS' : mode === 'down_the_line' ? 'DOWN THE LINE ANALYSIS' : 'FACE-ON ANALYSIS';
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>

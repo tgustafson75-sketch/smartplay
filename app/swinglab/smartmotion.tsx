@@ -2766,7 +2766,7 @@ export default function SmartMotion() {
             <Ionicons name="chevron-back" size={26} color={colors.accent} />
           </Pressable>
           <CaddieMicBadge size={36} />
-          <SmartMotionHeader mode={angle} style={{ flex: 1, borderBottomWidth: 0, paddingVertical: 0, paddingHorizontal: 6 }} />
+          <SmartMotionHeader mode={angle} isPutt={isPutt} style={{ flex: 1, borderBottomWidth: 0, paddingVertical: 0, paddingHorizontal: 6 }} />
           <View style={styles.dotsRow}>
             {Array.from({ length: pageCount }).map((_, i) => (
               <View key={i} style={[styles.dot, { backgroundColor: page === i ? colors.accent : 'rgba(255,255,255,0.35)' }]} />
