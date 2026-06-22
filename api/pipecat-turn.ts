@@ -17,11 +17,29 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { runAgenticLoop, type AiToolDef } from './_aiProvider';
-import { searchCourses, getCourse } from '../services/golfCourseApi';
-import type { Course } from '../types/course';
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
-const MAX_HISTORY_PAIRS = 6; // keep last 6 user+assistant pairs in context
+const MAX_HISTORY_PAIRS = 6;
+const GOLFCOURSE_BASE = 'https://api.golfcourseapi.com';
+const COURSE_TIMEOUT_MS = 8_000;
+
+async function fetchCourse(path: string): Promise<unknown> {
+  const apiKey = process.env.GOLFCOURSE_API_KEY;
+  if (!apiKey) throw new Error('GOLFCOURSE_API_KEY not set');
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), COURSE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${GOLFCOURSE_BASE}${path}`, {
+      headers: { Authorization: `Key ${apiKey}`, Accept: 'application/json' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (!res.ok) throw new Error(`golfcourseapi ${res.status}`);
+    return res.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 // ── UI tools dispatched to client; data tools executed server-side ─────────
 const UI_TOOLS = new Set([
@@ -224,24 +242,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       [],              // no images on the turn path
       KEVIN_TOOLS,
       async (toolName, toolInput) => {
-        // Lookup tools execute server-side (need API keys)
+        // Lookup tools execute server-side (need API keys, no expo deps)
         if (toolName === 'lookup_course') {
-          const courses = await searchCourses(String(toolInput.query ?? ''));
-          if (!courses.length || courses[0]?._error) return `No courses found matching "${toolInput.query}".`;
-          return courses.filter(c => !c._error).slice(0, 3)
-            .map(c => `${c.club_name} (${c.location})`).join('; ');
+          try {
+            const data = await fetchCourse(`/v1/search?search_query=${encodeURIComponent(String(toolInput.query ?? ''))}`);
+            const raw = data as Record<string, unknown>;
+            const list: unknown[] = (raw.courses as unknown[]) ?? (raw.data as unknown[]) ?? (Array.isArray(raw) ? raw : []);
+            if (!list.length) return `No courses found matching "${toolInput.query}".`;
+            return list.slice(0, 3).map((r) => {
+              const c = r as Record<string, unknown>;
+              return `${c.club_name ?? c.name} (${[c.city, c.state_code ?? c.state].filter(Boolean).join(', ')}) id:${c.id}`;
+            }).join('; ');
+          } catch (e) { return `Course lookup failed: ${e instanceof Error ? e.message : String(e)}`; }
         }
 
         if (toolName === 'lookup_hole') {
-          const course: Course | null = await getCourse(String(toolInput.course_id ?? ''));
-          if (!course) return `Course not found.`;
-          const tee = typeof toolInput.tee_name === 'string'
-            ? (course.tees.find(t => t.tee_name.toLowerCase() === (toolInput.tee_name as string).toLowerCase()) ?? course.tees[0])
-            : course.tees[0];
-          if (!tee) return `No tee data at ${course.club_name}.`;
-          const hole = tee.holes.find(h => h.hole_number === toolInput.hole_number);
-          if (!hole) return `Hole ${toolInput.hole_number} not found.`;
-          return `Hole ${hole.hole_number} at ${course.club_name}: par ${hole.par}, ${hole.yardage}y from ${tee.tee_name}.`;
+          try {
+            const data = await fetchCourse(`/v1/courses/${encodeURIComponent(String(toolInput.course_id ?? ''))}`);
+            const raw = data as Record<string, unknown>;
+            const course = (raw.course ?? raw.data ?? raw) as Record<string, unknown>;
+            type RawTee = { tee_name?: string; name?: string; holes?: Array<Record<string, unknown>> };
+            let tees: RawTee[] = [];
+            const teesRaw = course.tees;
+            if (Array.isArray(teesRaw)) tees = teesRaw as RawTee[];
+            else if (teesRaw && typeof teesRaw === 'object') {
+              for (const arr of Object.values(teesRaw as Record<string, unknown>)) {
+                if (Array.isArray(arr)) { tees = arr as RawTee[]; break; }
+              }
+            }
+            const tee = typeof toolInput.tee_name === 'string'
+              ? (tees.find(t => (t.tee_name ?? t.name ?? '').toLowerCase() === (toolInput.tee_name as string).toLowerCase()) ?? tees[0])
+              : tees[0];
+            if (!tee?.holes?.length) return `No tee data found.`;
+            const hole = tee.holes.find(h => Number(h.hole_number ?? h.hole) === Number(toolInput.hole_number));
+            if (!hole) return `Hole ${toolInput.hole_number} not found.`;
+            return `Hole ${toolInput.hole_number}: par ${hole.par}, ${hole.yardage ?? hole.distance}y from ${tee.tee_name ?? tee.name}.`;
+          } catch (e) { return `Hole lookup failed: ${e instanceof Error ? e.message : String(e)}`; }
         }
 
         if (toolName === 'configure_drill') {
