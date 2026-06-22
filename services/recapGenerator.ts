@@ -109,6 +109,13 @@ export async function generateRecap(
 ): Promise<RoundRecap> {
   const { courseName, courseId, mode, startedAt, endedAt, totalScore, scoreVsPar, scores, shots, courseHoles } = round;
 
+  // FIX M8 — compute Kevin adherence rate from shots that have a rec.
+  const recShots = shots.filter(s => s.kevin_adhered != null);
+  const kevinAdherenceRate: number | null =
+    recShots.length > 0
+      ? recShots.filter(s => s.kevin_adhered === true).length / recShots.length
+      : null;
+
   // Build hole comparisons for every scored hole
   const holeParsMap: Record<number, number> = {};
   for (const ch of courseHoles) holeParsMap[ch.hole] = ch.par;
@@ -166,6 +173,8 @@ export async function generateRecap(
         persona: round.persona,
         // FIX M15 — post-round feelings from the feelings screen.
         post_round_feelings: round.postRoundFeelings ?? null,
+        // FIX M8 — Kevin club-call adherence rate (0-1). Null when no recs were given.
+        kevin_adherence_rate: kevinAdherenceRate,
       }),
     }).finally(() => clearTimeout(timeout));
 

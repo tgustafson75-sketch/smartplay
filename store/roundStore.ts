@@ -190,6 +190,14 @@ export interface ShotResult {
   // the user records a shot on this hole. Optional; null when no clip.
   clip_uri?: string | null;
   is_highlight?: boolean;
+  // FIX M8 — Kevin's recommendation at the time this shot was taken.
+  // Stamped by log_shot handlers from pendingKevinRec; null when Kevin
+  // hadn't given a club call before this shot was logged.
+  kevin_rec_club?: string | null;
+  kevin_rec_shape?: string | null;
+  // True when actualClub === kevin_rec_club (both non-null). Null when
+  // either side is missing (no rec, or club not captured in the log).
+  kevin_adhered?: boolean | null;
 }
 
 export interface HoleStats {
@@ -347,6 +355,11 @@ interface RoundState {
   // gets answered with the lie reality without the user re-stating it.
   pendingLieAnalysis: import('../services/lieAnalysisService').LieAnalysis | null;
 
+  // FIX M8 — Kevin's last shot recommendation, held until the next log_shot
+  // fires so adherence (did the player follow the club call?) can be stamped
+  // onto the ShotResult. Cleared by clearPendingKevinRec after each shot.
+  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null } | null;
+
   roundStartTime: number | null;
   roundNumber: number;
   roundHistory: RoundRecord[];
@@ -422,6 +435,10 @@ interface RoundState {
   // Phase 409 — TightLie pending lie analysis.
   setPendingLieAnalysis: (analysis: import('../services/lieAnalysisService').LieAnalysis | null) => void;
   clearPendingLieAnalysis: () => void;
+
+  // FIX M8 — Kevin recommendation adherence tracking.
+  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null } | null) => void;
+  clearPendingKevinRec: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
 
@@ -650,10 +667,15 @@ export const useRoundStore = create<RoundState>()(
       // logged (its value is copied onto the shot.lie_analysis).
       pendingLieAnalysis: null,
 
+      // FIX M8 — Kevin's last recommendation, cleared after each shot is logged.
+      pendingKevinRec: null,
+
       setSelectedTee: (color) => set({ selectedTee: color }),
       setTransportMode: (m) => set({ transportMode: m }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
+      setPendingKevinRec: (rec) => set({ pendingKevinRec: rec }),
+      clearPendingKevinRec: () => set({ pendingKevinRec: null }),
 
       // 2026-05-24 — Append + soft-cap. 500-entry FIFO keeps the
       // persisted footprint bounded across multiple rounds of imports.
@@ -1149,6 +1171,7 @@ export const useRoundStore = create<RoundState>()(
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
+          pendingKevinRec: null,
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
@@ -1388,6 +1411,7 @@ export const useRoundStore = create<RoundState>()(
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
+          pendingKevinRec: null,
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,

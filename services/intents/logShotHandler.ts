@@ -136,6 +136,15 @@ export const logShotHandler: IntentHandler = {
     const shotInHoleIndex = shotsThisHole.length + 1;
     const shotInRoundIndex = round.shots.length + 1;
 
+    // FIX M8 — snapshot Kevin's pending rec before building the shot so
+    // adherence is stamped on this shot, then clear the slot.
+    const pendingRec = round.pendingKevinRec ?? null;
+    const kevinRecClub = pendingRec?.club ?? null;
+    const kevinAdhered =
+      kevinRecClub != null && parsedClub.club_id != null
+        ? parsedClub.club_id === kevinRecClub
+        : null;
+
     const shot: ShotResult = {
       id: `${Date.now()}_voice`,
       hole: round.currentHole,
@@ -155,9 +164,13 @@ export const logShotHandler: IntentHandler = {
       end_location: null,
       shot_in_hole_index: shotInHoleIndex,
       shot_in_round_index: shotInRoundIndex,
+      kevin_rec_club: kevinRecClub,
+      kevin_rec_shape: pendingRec?.shape ?? null,
+      kevin_adhered: kevinAdhered,
     };
 
     round.logShot(shot);
+    round.clearPendingKevinRec();
     track('shot_logged_voice', {
       club_id: parsedClub.club_id,
       club_type: parsedClub.club_type,

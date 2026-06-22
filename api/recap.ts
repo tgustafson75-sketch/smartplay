@@ -96,6 +96,8 @@ interface RecapRequest {
     vibe?: string;
     weather?: string;
   } | null;
+  // FIX M8 — fraction of shots where player followed Kevin's club call (0-1). Null when no recs were given.
+  kevin_adherence_rate?: number | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -172,6 +174,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\n${body.practice_context.trim()}\n\nReinforcement logic for the recap: where round shots clearly applied a practiced technique, name the connection ("on those wedge approaches, you stayed low through impact like Marc's been teaching"). Where the round shows the player reverted to old patterns on the practiced clubs/situations, call it out honestly ("wedge approaches went back to the steeper attack — worth refocusing next round"). Don't fabricate connections; only cite when the shot data supports it.`
       : '';
 
+    // FIX M8 — Kevin adherence injection
+    let adherenceBlock = '';
+    if (body.kevin_adherence_rate != null && body.kevin_adherence_rate > 0) {
+      const pct = Math.round(body.kevin_adherence_rate * 100);
+      adherenceBlock = `\nKevin club-call adherence: the player followed Kevin's club recommendation on ${pct}% of tracked shots. If this is notably high (≥70%) or low (≤30%), mention it briefly in the overall_summary — e.g. "you trusted the bag" or "you went your own way on club selection." Only one sentence; never fabricate specific shot examples.`;
+    }
+
     // FIX M15 — post-round feelings injection
     let feelingsBlock = '';
     if (body.post_round_feelings) {
@@ -189,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userMessage = `Recap for ${body.player_name || 'the player'} at ${body.course_name}.
 Mode: ${modeLabel[body.mode] ?? body.mode}
 Total: ${body.total_score} (${body.score_vs_par >= 0 ? '+' : ''}${body.score_vs_par}) over ${body.holes_played} holes
-${patternBlock}${cageBlock}${arenaBlock}${notesBlock}${practiceBlock}${feelingsBlock}
+${patternBlock}${cageBlock}${arenaBlock}${notesBlock}${practiceBlock}${adherenceBlock}${feelingsBlock}
 
 ${holesBlock}
 

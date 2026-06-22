@@ -809,6 +809,16 @@ async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: 
     hole_number: ctx.holeNumber,
     player_location: ctx.holeView?.player_location ?? null,
   });
+  // FIX M8 — stamp Kevin's rec so adherence can be tracked when the next
+  // shot is logged. Only stamp when a real club was recommended.
+  try {
+    const { useRoundStore } = await import('../store/roundStore');
+    useRoundStore.getState().setPendingKevinRec({
+      club: result.recommended_club ?? null,
+      shape: result.shot_shape ?? null,
+      aimPoint: result.aim_point ?? null,
+    });
+  } catch { /* non-fatal */ }
   // Surface the unified promptBlock onto the envelope's voice_summary
   // when it adds information the meta engine didn't already include.
   // The promptBlock is concise + tagged so spoken delivery stays under

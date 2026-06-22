@@ -1270,6 +1270,14 @@ export default function CaddieTab() {
           const fix = gpsMod.getLastFix();
           if (fix) shotStartLocation = { lat: fix.lat, lng: fix.lng };
         } catch { /* non-fatal — start_location stays null */ }
+        // FIX M8 — snapshot Kevin's pending rec before building the shot so
+        // adherence is stamped, then clear the slot.
+        const brainPendingRec = useRoundStore.getState().pendingKevinRec ?? null;
+        const brainKevinRecClub = brainPendingRec?.club ?? null;
+        const brainKevinAdhered =
+          brainKevinRecClub != null && shotClub != null
+            ? shotClub === brainKevinRecClub
+            : null;
         const shot: ShotResult = {
           hole: currentHole,
           timestamp: Date.now(),
@@ -1282,8 +1290,12 @@ export default function CaddieTab() {
           swing_feel: a.feel ?? null,
           logged_via: 'voice',
           start_location: shotStartLocation,
+          kevin_rec_club: brainKevinRecClub,
+          kevin_rec_shape: brainPendingRec?.shape ?? null,
+          kevin_adhered: brainKevinAdhered,
         };
         logShot(shot);
+        useRoundStore.getState().clearPendingKevinRec();
         break;
       }
       case 'log_emotional_state': {
