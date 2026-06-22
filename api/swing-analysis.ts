@@ -8,7 +8,9 @@ import OpenAI from 'openai';
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
-const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22_000, maxRetries: 1 });
+// 30 s: Gemini exhausts its 13 s cap, retry fires, then OpenAI picks up the
+// rest of the budget. 22 s left barely enough; 30 s gives real headroom.
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
 
 function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -706,11 +708,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // is the right long-term fix; awaiting is the safe interim.
       try {
         if (gemini) {
-          await gemini.models.generateContent({
+          // 5 s cap: warmup is a single-token ping — if it hangs longer the
+          // Lambda is unhealthy anyway and the real request will 502 cleanly.
+          await geminiWithTimeout(gemini.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: [{ role: 'user', parts: [{ text: 'warmup' }] }],
             config: { maxOutputTokens: 1 },
-          });
+          }), 5_000);
         }
       } catch (e) {
         console.log('[swing-analysis] warmup gemini ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
@@ -822,7 +826,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (e) {
         console.error('[swing-analysis] locate_swing failed', e);
-        return res.status(200).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
+        // 502 (not 200) so the client knows this was an error, not "model found
+        // no swing" — client falls back to wide-spread sampling on any !res.ok.
+        return res.status(502).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
       }
     }
     // 2026-06-10 — Range mode: find EVERY swing in a multi-swing clip (acoustics
@@ -869,7 +875,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ swings });
       } catch (e) {
         console.error('[swing-analysis] locate_swings failed', e);
-        return res.status(200).json({ swings: [], error: e instanceof Error ? e.message : 'locate failed' });
+        // 502 so the client falls back to acoustic-only segments, not silently
+        // treats this as "model found no swings" (which is a 200 {swings:[]}).
+        return res.status(502).json({ swings: [], error: e instanceof Error ? e.message : 'locate failed' });
       }
     }
     const frames = (body.frames ?? []) as { b64: string; media_type?: string }[];

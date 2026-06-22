@@ -930,7 +930,10 @@ export async function analyzeSwing(
     // the intended trigger; anything slow has already failed
     // meaningfully and the retry won't help.
     const RETRY_ELIGIBILITY_CAP_MS = 30_000;
-    if (!res.ok && res.status === 502 && context.tier === 'quick' && elapsedMs < RETRY_ELIGIBILITY_CAP_MS) {
+    // Also retry 503 (Service Unavailable) — Vercel emits this on brief cold
+    // restarts just as it emits 502 on Lambda timeouts; both resolve on the
+    // second attempt once the instance is warm.
+    if (!res.ok && (res.status === 502 || res.status === 503) && context.tier === 'quick' && elapsedMs < RETRY_ELIGIBILITY_CAP_MS) {
       V6('STAGE 4 — tier=quick 502 (fast-fail), auto-retry once after 1200ms', {
         first_attempt_elapsed_ms: elapsedMs,
       });

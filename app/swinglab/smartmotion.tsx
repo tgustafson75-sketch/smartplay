@@ -2037,14 +2037,17 @@ export default function SmartMotion() {
             }
             if (s0 && (s0.peakDb ?? 0) !== 0) {
               if (audioUriRef.current) {
-                try {
-                  const speed = await detectBallSpeed({
+                // 4 s cap so ball-speed never delays the runAnalysis call.
+                // Race resolves null on timeout; .catch handles any throw.
+                const speed = await Promise.race([
+                  detectBallSpeed({
                     audioUri: audioUriRef.current,
                     impact_ms: s0.strikeMs,
                     club: clubIdToServerKey(clubRef.current),
-                  });
-                  if (speed) setBallSpeed(speed);
-                } catch { /* non-fatal */ }
+                  }),
+                  new Promise<null>(resolve => setTimeout(() => resolve(null), 4_000)),
+                ]).catch(() => null);
+                if (speed) setBallSpeed(speed);
               }
             }
           }

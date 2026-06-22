@@ -18,6 +18,15 @@ const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 0 });
+
+function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
 const MAX_FRAMES = 6;
 
 interface RequestBody {
@@ -92,11 +101,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { text: system + '\n\n' + userText },
           ...frames.map(b64 => ({ inlineData: { mimeType: 'image/jpeg', data: b64 } })),
         ];
-        const gem = await gemini.models.generateContent({
+        // 13 s cap: cold Lambda + vision frames can push Gemini to 15-25s;
+        // cap fast-fails so OpenAI fallback fires on the now-warm instance.
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts }],
           config: { temperature: 0.2, maxOutputTokens: 1000, responseMimeType: 'application/json' },
-        });
+        }), 13_000);
         raw = (gem.text ?? '').trim();
         if (!raw) geminiError = 'empty_response';
       } catch (e) {
