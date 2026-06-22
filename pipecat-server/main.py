@@ -4,16 +4,16 @@ SmartPlay Caddie — Pipecat voice server.
 Endpoints:
   GET  /health                    — health check for Railway
   POST /session                   — create a session token (called by React Native before connecting)
-  WS   /ws/{session_id}           — WebSocket audio stream; React Native connects here
+  POST /turn                      — Phase 2 text-in / text+tools-out (Claude brain, no audio pipeline)
+  WS   /ws/{session_id}           — Phase 3 WebSocket audio stream; React Native connects here
 
-Session lifecycle:
-  1. RN calls POST /session with player/round context → gets session_id + ws_url
-  2. RN opens WebSocket to /ws/{session_id}
-  3. RN immediately sends a `context` message with full state
-  4. Audio streams bidirectionally; Kevin responds via TTS audio frames
-  5. Tool calls arrive as JSON push frames on the WebSocket
-  6. RN sends `gps_update` or `hole_transition` delta messages as state changes
-  7. RN closes the WebSocket to end the session (or sends `end_session`)
+/turn flow (Phase 2):
+  React Native records audio → Whisper STT → transcript text → POST /turn
+  Claude processes with tool_use → returns response_text + tool_actions
+  React Native plays TTS via existing speak() and dispatches tool_actions
+
+/ws flow (Phase 3):
+  Real-time audio: Silero VAD → Deepgram STT → Claude → OpenAI TTS streamed back
 """
 
 import asyncio
@@ -29,6 +29,7 @@ from pipecat.pipeline.runner import PipelineRunner
 
 from kevin_pipeline import build_pipeline
 from session_context import SessionContext
+from turn_handler import handle_turn
 
 load_dotenv()
 
@@ -83,6 +84,41 @@ async def create_session(body: dict):
 
     ws_base = os.environ.get("PIPECAT_WS_BASE", "ws://localhost:8080")
     return {"sessionId": session_id, "wsUrl": f"{ws_base}/ws/{session_id}"}
+
+
+# ── Turn handler (Phase 2 text path) ─────────────────────────────────────────
+
+@app.post("/turn")
+async def turn(body: dict):
+    """
+    Phase 2 voice brain endpoint.
+    Body: { secret, text, history, context, sessionId? }
+    Returns: { response_text, tool_actions, updated_history }
+    """
+    if body.get("secret") != SESSION_SECRET:
+        raise HTTPException(status_code=403, detail="bad secret")
+
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    history = body.get("history", [])
+    context = body.get("context", {})
+    session_id = body.get("sessionId")
+
+    # Merge session context if we have one open
+    if session_id and session_id in _sessions:
+        live_ctx = _sessions[session_id].snapshot()
+        # Live session context wins over stale client snapshot for GPS/hole
+        context = {**context, **live_ctx}
+
+    result = await handle_turn(
+        text=text,
+        history=history,
+        context=context,
+        session_id=session_id,
+    )
+    return result
 
 
 # ── WebSocket handler ─────────────────────────────────────────────────────────

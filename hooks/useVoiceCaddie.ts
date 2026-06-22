@@ -242,6 +242,10 @@ interface UseVoiceCaddieOptions {
   onVisionTrigger?: () => void;
   onHeroReelView?: () => void;
   onToolAction?: (action: ToolAction) => void;
+  // When set, bypasses the intent router + Kevin API entirely.
+  // Called with the raw transcript; caller owns TTS and tool dispatch.
+  // Used when voiceOrchestrator === 'pipecat'.
+  processTranscriptOverride?: (transcript: string) => Promise<void>;
 }
 
 /**
@@ -351,6 +355,7 @@ export const useVoiceCaddie = ({
   onVisionTrigger,
   onHeroReelView,
   onToolAction,
+  processTranscriptOverride,
 }: UseVoiceCaddieOptions) => {
 
   const currentPathname = usePathname();
@@ -1582,6 +1587,21 @@ export const useVoiceCaddie = ({
       const skipIntentRouter = isAwaitingFollowUp();
       if (skipIntentRouter) {
         devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
+      }
+
+      // ── Pipecat override — bypasses intent router + Kevin API ─────────────
+      // When voiceOrchestrator === 'pipecat', the caller passes processTranscriptOverride
+      // which handles Claude brain + tool dispatch + TTS internally.
+      if (processTranscriptOverride) {
+        wrappedOnVoiceStateChange('thinking');
+        try {
+          await processTranscriptOverride(transcript);
+        } catch (e) {
+          console.log('[voice] pipecat override error:', e);
+        }
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
       }
 
       // ── Voice command routing — runs after bypasses, before brain ──

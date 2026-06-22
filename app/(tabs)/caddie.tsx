@@ -58,6 +58,7 @@ import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
+import { usePipecatVoice } from '../../hooks/usePipecatVoice';
 import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -593,6 +594,7 @@ export default function CaddieTab() {
     autoListenEnabled,
     setVoiceEnabled,
     setCastMode,
+    voiceOrchestrator,
   } = useSettingsStore(useShallow((s) => ({
     voiceGender: s.voiceGender,
     voiceEnabled: s.voiceEnabled,
@@ -601,6 +603,7 @@ export default function CaddieTab() {
     autoListenEnabled: s.autoListenEnabled,
     setVoiceEnabled: s.setVoiceEnabled,
     setCastMode: s.setCastMode,
+    voiceOrchestrator: s.voiceOrchestrator,
   })));
 
   const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
@@ -1456,6 +1459,22 @@ export default function CaddieTab() {
     if (suggested != null) setHoleScore(suggested);
   }, [showShotCard]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Pipecat voice orchestrator (Phase 2) ─
+  const pipecatVoice = usePipecatVoice({
+    onUIEvent: (event) => {
+      // UI tool events from Claude → dispatch through existing handleToolAction
+      handleToolAction({ type: event } as Parameters<typeof handleToolAction>[0]);
+    },
+    onKevinSpoke: (text) => {
+      setCaddieResponse(text);
+    },
+    onToolAction: handleToolAction,
+    onVoiceStateChange: (state) => {
+      setVoiceState(state);
+      if (state !== 'listening') setKevinEmotion(null);
+    },
+  });
+
   // ── Voice hook ───────────────────────────
   const { handleMicPress: _handleMicPress, processAudioUri } = useVoiceCaddie({
     onVoiceStateChange: (state) => {
@@ -1475,6 +1494,10 @@ export default function CaddieTab() {
       router.push('/(tabs)/dashboard' as never);
     },
     onToolAction: handleToolAction,
+    // Pipecat override — when active, Claude handles brain + TTS + tools
+    processTranscriptOverride: voiceOrchestrator === 'pipecat'
+      ? pipecatVoice.processTurn
+      : undefined,
   });
 
   const handleMicPress = () => {
