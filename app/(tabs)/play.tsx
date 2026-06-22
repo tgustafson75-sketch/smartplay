@@ -41,6 +41,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useTournamentStore } from '../../store/tournamentStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse } from '../../services/golfCourseApi';
+import { getBundledHoles } from '../../data/courses';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
@@ -368,12 +369,36 @@ export default function PlayTab() {
     }
   }, []);
 
+  // M1 — GPS auto-select on first launch. If neither a persisted
+  // previewCourseId nor an active round gives us a default, request
+  // location permission and kick the nearest-course sort so the first
+  // mount lands on the closest course rather than the static catalog top.
+  // Runs once; the closestLocal/userPosition chain in the seeding effect
+  // (below) handles the actual selectSummary() call once userPosition is set.
+  const hasAutoLocatedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoLocatedRef.current) return;
+    if (previewCourseId || isRoundActive) return;
+    hasAutoLocatedRef.current = true;
+    void refreshLocation();
+    // refreshLocation is stable (useCallback with no deps that change) —
+    // intentionally not in deps to run exactly once at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Hydrate recent courses from store
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       const out: CourseSummary[] = [];
       for (const id of recentCourseIds.slice(0, 4)) {
+        // B3 — local: IDs return null from the external API. Resolve them
+        // from the bundled LOCAL_COURSES catalog instead; skip the network call.
+        if (id.startsWith('local:')) {
+          const local = LOCAL_COURSES.find(l => l.id === id);
+          if (local) out.push(local);
+          continue;
+        }
         const c = await getCourse(id);
         if (cancelled) return;
         if (c) {
@@ -565,6 +590,14 @@ export default function PlayTab() {
   }, [query]);
 
   const selectSummary = useCallback(async (s: CourseSummary) => {
+    // M2 — auto-toggle 9-Hole chip when the selected course has exactly
+    // 9 bundled holes (e.g. Echo Hills, Mariners Point). getBundledHoles
+    // returns [] for non-local or unknown ids, so this is a no-op for
+    // 18-hole and API-only courses.
+    const bundledHoles = getBundledHoles(s.id);
+    if (bundledHoles.length === 9) {
+      setSetupNineHole(true);
+    }
     if (s.isLocal) {
       // Local courses — synthesize a minimal Course object for display.
       setSelected({

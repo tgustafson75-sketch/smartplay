@@ -449,6 +449,19 @@ export const useVoiceCaddie = ({
     }
     courseContextCourseIdRef.current = activeCourseId;
     courseContextRef.current = null;
+    // Fix B4 — local:* courses return null from getApiCourse (no API record).
+    // Build courseContext directly from bundled courseHoles so Kevin has
+    // per-hole par/yardage data for local courses without an API call.
+    if (activeCourseId.startsWith('local:')) {
+      const holes = useRoundStore.getState().courseHoles;
+      if (holes.length > 0) {
+        courseContextRef.current = holes
+          .sort((a, b) => a.hole - b.hole)
+          .map(h => `Hole ${h.hole}: Par ${h.par}, ${h.distance} yds`)
+          .join('. ') + '.';
+      }
+      return () => {};
+    }
     void (async () => {
       try {
         const course = await getApiCourse(activeCourseId);

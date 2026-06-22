@@ -13,6 +13,7 @@
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
 import { useCageStore } from '../../store/cageStore';
+import { useRoundStore } from '../../store/roundStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecordBus';
@@ -83,6 +84,27 @@ export const clubChangeHandler: IntentHandler = {
         voice_response: 'Which club — say the club or show it and say scan.',
         side_effects: ['smartmotion:club_ambiguous'],
         follow_up_needed: true,
+      };
+    }
+
+    const round = useRoundStore.getState();
+    if (round.isRoundActive) {
+      if (!parsed) {
+        track('club_voice_ambiguous', { phrase: phrase.slice(0, 60) });
+        return {
+          success: false,
+          voice_response: "Which one — pitching, gap, sand, or lob wedge?",
+          side_effects: ['round:club_ambiguous'],
+          follow_up_needed: true,
+        };
+      }
+      round.setClub(parsed.club_id);
+      track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
+      return {
+        success: true,
+        voice_response: `Got it, ${clubLabel(parsed.club_id)}.`,
+        side_effects: [`round:club_switched:${parsed.club_id}`],
+        follow_up_needed: false,
       };
     }
 

@@ -444,7 +444,7 @@ export const useSettingsStore = create<SettingsState>()(
       // cockpit stepper, DataStrip ◀/▶ arrows, or voice ("I'm on hole 4"
       // / "I made a 5"). Both default FALSE — auto features are opt-in
       // for the few users who actually want them.
-      autoHoleAdvance: false,
+      autoHoleAdvance: true, // FIX M5 — default true; GPS auto-advance is the expected behavior for new installs
       autoShotDetection: false,
       hasAskedHealthPermission: false,
       healthDataEnabled: true,

@@ -62,6 +62,10 @@ const AI_TOOLS: AiToolDef[] = [
     parameters: {
       type: 'object',
       properties: {
+        club: {
+          type: 'string',
+          description: "Club the player used for this shot (e.g. '7I', 'Driver', 'PW'). Include if player mentioned it or if Kevin recommended it.",
+        },
         direction: {
           type: 'string',
           enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],

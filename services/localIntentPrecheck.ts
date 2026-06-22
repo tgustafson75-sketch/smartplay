@@ -121,11 +121,26 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'navigate', { direction: 'home' }),
   },
 
+  // ── SHOT STRATEGY ("what's the play" = query_status, NOT open_tool) ─────
+  // B11 fix 2026-06-22 — "what's the play" was ambiguous: it appeared under
+  // open_tool { lie_analysis } in Haiku's prompt AND under query_status {
+  // shot_strategy }, causing a coin-flip route that sometimes opened TightLie
+  // camera instead of returning a verbal strategy answer. Deterministic precheck
+  // catches all canonical "play" phrasings BEFORE Haiku sees them, routing
+  // every one to shot_strategy. The only exclusion is "smart play" (see below).
+  {
+    rx: /\b(?:what(?:'s|s)?\s+(?:my|the)\s+play(?:\s+here)?|what\s+should\s+I\s+play(?:\s+here)?|what\s+do\s+I\s+play\s+here)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'shot_strategy' }),
+  },
+
   // ── TOOL OPEN (high frequency) ────────────────────────────
   // 2026-06-17 — "Hey Caddy, what's the smart play?" is THE tagline trigger.
   // Must be deterministic — "smart play" also appears in Haiku's shot_strategy
   // examples, causing it to explain verbally instead of opening SmartFinder.
   // Precheck catches the canonical phrasings before Haiku sees them.
+  // NOTE: this pattern is ordered AFTER the shot_strategy pattern above so
+  // "what's the play" (no "smart") hits shot_strategy, while "what's the
+  // SMART play" falls through to here.
   {
     rx: /\b(?:what(?:'s|s)?\s+the\s+smart\s+play|give\s+me\s+the\s+smart\s+play|the\s+smart\s+play|open\s+smart\s*play|smartplay\s+here)\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
