@@ -15,6 +15,11 @@
  * The `active` flag tells voice handlers whether the Smart Motion screen is
  * mounted, so "record my swing" controls the open window instead of trying to
  * open a new capture surface.
+ *
+ * 2026-06-22 — Voice layer additions:
+ *  - DrillConfig: Kevin → SmartMotion (club + shot count from voice setup)
+ *  - SmartMotionVoiceEvent: SmartMotion → Kevin (entered, session_complete)
+ *  - 'close' added to SmartMotionCommand
  */
 
 // 'puttOn' / 'puttOff' let a hands-free voice club change ("switch to putter" /
@@ -22,7 +27,7 @@
 // screen, matching what picking the putter in the picker or a club scan does —
 // so a voice putter change is analyzed AS A PUTT, and any non-putter club
 // change clears putt mode back to a full-swing read.
-export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff';
+export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff' | 'close';
 
 type Listener = (cmd: SmartMotionCommand) => void;
 
@@ -61,3 +66,50 @@ export function setSmartMotionRecording(v: boolean): void { recording = v; }
 
 /** True while a swing is actively recording (camera owns the mic). */
 export function isSmartMotionRecording(): boolean { return recording; }
+
+// ── Drill config: Kevin → SmartMotion ────────────────────────────────────────
+
+export interface DrillConfig {
+  /** Club ID (e.g. '7I', 'DR'). Undefined = keep current. */
+  club?: string;
+  /** Number of swings in the session (1, 3, or 5). Undefined = keep current. */
+  shotCount?: number;
+}
+
+const drillConfigListeners: Set<(cfg: DrillConfig) => void> = new Set();
+
+/** Kevin fires this after processing the user's drill setup voice turn. */
+export function emitDrillConfig(cfg: DrillConfig): void {
+  for (const cb of drillConfigListeners) {
+    try { cb(cfg); } catch (e) { console.log('[smartMotionRecordBus] drillConfig error:', e); }
+  }
+}
+
+/** SmartMotion subscribes to receive Kevin's drill configuration. */
+export function subscribeDrillConfig(cb: (cfg: DrillConfig) => void): () => void {
+  drillConfigListeners.add(cb);
+  return () => { drillConfigListeners.delete(cb); };
+}
+
+// ── Voice events: SmartMotion → Kevin ────────────────────────────────────────
+
+export type SmartMotionVoiceEvent =
+  | { type: 'entered' }
+  | { type: 'session_complete'; swingCount: number; summary: string };
+
+const voiceEventListeners: Set<(e: SmartMotionVoiceEvent) => void> = new Set();
+
+/** SmartMotion emits this when Kevin should react (on open, on session done). */
+export function emitSmartMotionVoiceEvent(e: SmartMotionVoiceEvent): void {
+  for (const cb of voiceEventListeners) {
+    try { cb(e); } catch (e2) { console.log('[smartMotionRecordBus] voiceEvent error:', e2); }
+  }
+}
+
+/** caddie.tsx subscribes to drive Kevin's voice responses. */
+export function subscribeSmartMotionVoiceEvent(
+  cb: (e: SmartMotionVoiceEvent) => void,
+): () => void {
+  voiceEventListeners.add(cb);
+  return () => { voiceEventListeners.delete(cb); };
+}

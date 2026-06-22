@@ -101,6 +101,22 @@ const KEVIN_TOOLS: AiToolDef[] = [
     },
   },
   {
+    name: 'configure_drill',
+    description: 'Configure the SmartMotion drill session the player just described — set the club and number of swings. Call this whenever the player says what they want to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
+    parameters: {
+      type: 'object',
+      properties: {
+        club:       { type: 'string', description: 'Club ID (e.g. "7I", "DR", "PW", "PT"). Omit if not mentioned.' },
+        shot_count: { type: 'number', enum: [1, 3, 5], description: 'Number of swings. Default 3 if not specified.' },
+      },
+    },
+  },
+  {
+    name: 'close_swinglab',
+    description: 'Close SmartMotion / SwingLab and return to the caddie screen. Use when the player says "close", "done", "go back", or "that\'s enough".',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
     name: 'lookup_hole',
     description: 'Get hole details (par, yardage) for a known course.',
     parameters: {
@@ -226,6 +242,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const hole = tee.holes.find(h => h.hole_number === toolInput.hole_number);
           if (!hole) return `Hole ${toolInput.hole_number} not found.`;
           return `Hole ${hole.hole_number} at ${course.club_name}: par ${hole.par}, ${hole.yardage}y from ${tee.tee_name}.`;
+        }
+
+        if (toolName === 'configure_drill') {
+          toolActions.push({ type: 'configure_drill', club: toolInput.club, shot_count: toolInput.shot_count ?? 3 });
+          return `Drill configured: ${toolInput.club ?? 'current club'}, ${toolInput.shot_count ?? 3} swings.`;
+        }
+
+        if (toolName === 'close_swinglab') {
+          toolActions.push({ type: 'close_swinglab' });
+          return 'SwingLab closed.';
         }
 
         // All other tools: collect for client dispatch, return an acknowledgment

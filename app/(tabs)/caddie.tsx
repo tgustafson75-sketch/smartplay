@@ -50,7 +50,7 @@ import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
-import { isSmartMotionActive, emitSmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { isSmartMotionActive, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -817,6 +817,24 @@ export default function CaddieTab() {
   const [_saverActive, setSaverActive] = useState(false);
   useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
 
+  // SmartMotion voice layer — Kevin greets on open and reacts to session results.
+  useEffect(() => {
+    return subscribeSmartMotionVoiceEvent((event) => {
+      const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+      if (!ve) return;
+      if (event.type === 'entered') {
+        configureAudioForSpeech()
+          .then(() => speak("What are we working on today?", vg, lang, apiUrl, { userInitiated: true }))
+          .catch(() => {});
+      } else if (event.type === 'session_complete') {
+        const line = `${event.summary} Want to try another drill, or are we done?`;
+        configureAudioForSpeech()
+          .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
+          .catch(() => {});
+      }
+    });
+  }, [apiUrl]);
+
   // Phase AT follow-up — L4 long-press inline expand for SmartVision
   // and SmartFinder removed; both icons now live inside the green-arrow
   // dropdown row and short-tap routes to their full screens.
@@ -1316,6 +1334,15 @@ export default function CaddieTab() {
         } else {
           router.push('/swinglab/smartmotion' as never);
         }
+        break;
+      case 'configure_drill':
+        emitDrillConfig({
+          club: (action as { type: string; club?: string }).club,
+          shotCount: (action as { type: string; shot_count?: number }).shot_count,
+        });
+        break;
+      case 'close_swinglab':
+        emitSmartMotionCommand('close');
         break;
       case 'open_smartfinder':
         if (!canAccess('smartfinder', subscription_status)) {

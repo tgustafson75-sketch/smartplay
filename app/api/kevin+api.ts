@@ -154,7 +154,10 @@ export type ToolAction =
   | { type: 'navigate'; path: string }
   // navigate_replace uses router.replace instead of router.push so the
   // back button doesn't return to the active-caddie screen after round end.
-  | { type: 'navigate_replace'; path: string };
+  | { type: 'navigate_replace'; path: string }
+  // 2026-06-22 — SmartMotion voice layer: Kevin configures the drill or closes SwingLab.
+  | { type: 'configure_drill'; club?: string; shot_count?: number }
+  | { type: 'close_swinglab' };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 

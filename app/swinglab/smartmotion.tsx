@@ -112,7 +112,7 @@ import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { ensureSwingThumbnail } from '../../services/videoUpload';
-import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
@@ -1681,16 +1681,30 @@ export default function SmartMotion() {
       const jobs: (Promise<SwingAnalysis | null> | undefined)[] = new Array(segs.length);
       jobs[0] = waitForCache0();
       if (segs.length > 1) jobs[1] = runWindowedAnalysis(uri, segs[1], 1); // head start
+      const resolvedAnalyses: (SwingAnalysis | null)[] = [];
       for (let idx = 0; idx < segs.length; idx++) {
         if (cancelled()) return; // left the screen / new session — stop narrating
         // Kick off the swing TWO ahead while we wait on / narrate this one, so the
         // next swing's read is always in flight before we need it.
         const ahead = idx + 2;
         if (ahead < segs.length && !jobs[ahead]) jobs[ahead] = runWindowedAnalysis(uri, segs[ahead], ahead);
-        const a = await jobs[idx];
+        const a = (await jobs[idx]) ?? null;
         if (cancelled()) return;
+        resolvedAnalyses.push(a);
         if (!a) continue;
         await speakLine(swingNarrationLine(idx + 1, a));
+      }
+      // Session complete — let Kevin offer a next drill or close.
+      if (!cancelled() && st.voiceEnabled) {
+        const issues = resolvedAnalyses
+          .filter((a): a is SwingAnalysis => a != null)
+          .map((a) => { const v = deriveVerdict(a, false); return v.text === 'GOOD SWING' ? null : v.text.toLowerCase(); })
+          .filter((t): t is string => !!t);
+        const clean = resolvedAnalyses.length - issues.length;
+        const summary = issues.length === 0
+          ? `${segs.length} swings — all clean.`
+          : `${segs.length} swings — ${clean} clean, ${issues.length} with ${issues[0]}${issues.length > 1 ? ' and others' : ''}.`;
+        emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: segs.length, summary });
       }
     },
     [runWindowedAnalysis],
@@ -2341,7 +2355,10 @@ export default function SmartMotion() {
   };
   useEffect(() => {
     setSmartMotionActive(true);
-    const unsub = subscribeSmartMotionCommand((cmd) => recordCmdRef.current(cmd));
+    const unsub = subscribeSmartMotionCommand((cmd) => {
+      if (cmd === 'close') { router.back(); return; }
+      recordCmdRef.current(cmd);
+    });
     // Warm /api/swing-analysis the moment SmartMotion opens so the FIRST
     // recording's analysis hits a hot Lambda (no cold-start latency that could
     // push it toward the client timeout). Mirrors the upload/cage screens.
@@ -2349,8 +2366,20 @@ export default function SmartMotion() {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true });
     } catch { /* non-fatal */ }
-    return () => { setSmartMotionActive(false); unsub(); };
-  }, []);
+    // Voice layer: tell Kevin we're open so he can greet + ask what to work on.
+    if (useSettingsStore.getState().voiceEnabled) {
+      emitSmartMotionVoiceEvent({ type: 'entered' });
+    }
+    // Kevin → SmartMotion: apply drill config (club + shot count) from voice setup.
+    const unsubDrill = subscribeDrillConfig((cfg) => {
+      if (cfg.club) setClub(cfg.club as Parameters<typeof setClub>[0]);
+      if (cfg.shotCount != null) {
+        setTargetSwings(cfg.shotCount);
+        targetSwingsRef.current = cfg.shotCount;
+      }
+    });
+    return () => { setSmartMotionActive(false); unsub(); unsubDrill(); };
+  }, [router, setClub]);
 
   // ── permission gate ──
   if (!camPerm) {
