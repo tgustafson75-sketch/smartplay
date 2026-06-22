@@ -5,7 +5,7 @@
  * mergeBilateral; honest about angle gaps + the 2D (not 3D) ceiling.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -120,15 +120,16 @@ export default function BilateralReview() {
   // Side-by-side biplane strip: the two angles' representative frames together.
   const FrameTile = ({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) => {
     const uri = frameUri(session);
+    const [imgErr, setImgErr] = useState(false);
     return (
       <View style={[styles.tile, { borderColor: colors.border, backgroundColor: colors.surface }]}>
         <Text style={[styles.tileLabel, { color: colors.accent }]}>{fallbackLabel}</Text>
-        {uri ? (
-          <Image source={{ uri }} style={styles.tileImg} resizeMode="cover" />
+        {uri && !imgErr ? (
+          <Image source={{ uri }} style={styles.tileImg} resizeMode="cover" onError={() => setImgErr(true)} />
         ) : (
           <View style={[styles.tileImg, styles.tilePlaceholder]}>
             <Ionicons name="image-outline" size={22} color={colors.text_muted} />
-            <Text style={[styles.tilePlaceholderText, { color: colors.text_muted }]}>no frame</Text>
+            <Text style={[styles.tilePlaceholderText, { color: colors.text_muted }]}>{imgErr ? 'unavailable' : 'no frame'}</Text>
           </View>
         )}
       </View>

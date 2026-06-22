@@ -270,6 +270,32 @@ export default function CoachMode() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>PLAYER</Text>
         {roster.length > 0 && (
           <View style={styles.rosterWrap}>
+            {/* "Me" card — resets perspective to the account holder */}
+            {(() => {
+              const meSelected = activeMember === null;
+              return (
+                <View key="__me__" style={styles.memberCardWrap}>
+                  <TouchableOpacity
+                    onPress={() => setActiveMember(null)}
+                    style={[
+                      styles.memberCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: meSelected ? colors.accent : colors.border,
+                      },
+                      meSelected && { backgroundColor: colors.accent_muted },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Switch to your own swings"
+                    accessibilityState={{ selected: meSelected }}
+                  >
+                    <GolferAvatar firstName="Me" photoUri={null} size={40} ringColor={meSelected ? colors.accent : undefined} />
+                    <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>Me</Text>
+                    {meSelected && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
             {roster.map(m => {
               const selected = activeMember?.id === m.id;
               return (

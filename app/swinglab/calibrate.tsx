@@ -52,6 +52,8 @@ export default function CalibrateAcoustics() {
   const meteringRef = useRef<MeteringHandle | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stoppingRef = useRef(false);
+  // Prevents double-save when auto-apply fires in stop() and user also taps "Save & apply".
+  const autoAppliedRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -102,7 +104,11 @@ export default function CalibrateAcoustics() {
       // 2026-06-15 (Tim — caught 4/6) — calibration strikes land ~300-400ms apart;
       // the default 500ms debounce merged adjacent ones. Tighten to 350ms here so
       // a rapid 6-strike calibration counts them all.
-      res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350 });
+      // noisyFloorDb: outdoor environments (range, course) have higher ambient noise
+      // floors. Raise the threshold from the default -30 dBFS so calibration isn't
+      // blocked by wind / bay neighbors / range machinery.
+      const noisyFloorDb = (env === 'range' || env === 'course') ? -18 : -28;
+      res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350, noisyFloorDb });
     } catch (e) {
       setPhase('idle');
       Alert.alert('Calibration failed', e instanceof Error ? e.message : String(e));
@@ -114,11 +120,17 @@ export default function CalibrateAcoustics() {
       return;
     }
     if (res.kind === 'noisy-environment') {
-      setWarn('Too noisy to read cleanly. Move somewhere quieter or closer to the strike, then retry.');
+      setWarn('Too noisy to read cleanly. Move closer to the ball or try shielding the phone from ambient noise, then retry.');
       setPhase('idle');
       return;
     }
     const r = { floorDb: res.floorDb, strikes: res.strikes, durationMs, sampleCount };
+    // Guard: no strikes detected means there's nothing to calibrate from.
+    if (r.strikes.length === 0) {
+      setWarn('No strikes detected — make sure the phone is near the impact zone and tap Stop after hitting several balls.');
+      setPhase('idle');
+      return;
+    }
     setResult(r);
     setPhase('done');
     // 2026-06-09 — Auto-apply: the user shouldn't have to tap a separate "save"
@@ -131,6 +143,7 @@ export default function CalibrateAcoustics() {
       sampleCount: r.sampleCount,
       notes: `10-strike calibration · ${env}`,
     });
+    autoAppliedRef.current = true;
     const ok = applyCalibration(id);
     if (ok) {
       Alert.alert(
@@ -145,6 +158,7 @@ export default function CalibrateAcoustics() {
 
   const saveAndApply = useCallback(() => {
     if (!result) return;
+    if (autoAppliedRef.current) return; // already saved via auto-apply in stop()
     const id = saveSession({
       durationMs: result.durationMs,
       floorDb: result.floorDb,

@@ -140,9 +140,6 @@ ${language === 'es' ? 'Respond in Spanish.' : language === 'zh' ? 'Respond in Ch
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log('[smartmotion] error:', msg);
-    return res.status(200).json({
-      fix: 'Camera angle was off. Set up again and try.',
-      fault: null,
-    });
+    return res.status(502).json({ error: msg });
   }
 }

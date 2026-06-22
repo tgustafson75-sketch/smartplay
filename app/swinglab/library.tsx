@@ -80,9 +80,11 @@ export default function SwingLibrary() {
     return ['all', ...Array.from(set).sort()];
   }, [sourceFilteredEntries]);
 
-  if (clubFilter !== 'all' && !availableClubs.includes(clubFilter)) {
-    setClubFilter('all');
-  }
+  useEffect(() => {
+    if (clubFilter !== 'all' && !availableClubs.includes(clubFilter)) {
+      setClubFilter('all');
+    }
+  }, [availableClubs, clubFilter]);
 
   // 2026-05-26 — Available swingers, case-insensitive dedup. Cage
   // sessions without an explicit swinger fall under "Me" (matches the
@@ -102,9 +104,11 @@ export default function SwingLibrary() {
     return ['all', ...names];
   }, [sourceFilteredEntries]);
 
-  if (swingerFilter !== 'all' && !availableSwingers.some(n => n.toLowerCase() === swingerFilter.toLowerCase())) {
-    setSwingerFilter('all');
-  }
+  useEffect(() => {
+    if (swingerFilter !== 'all' && !availableSwingers.some(n => n.toLowerCase() === swingerFilter.toLowerCase())) {
+      setSwingerFilter('all');
+    }
+  }, [availableSwingers, swingerFilter]);
 
   const entries = useMemo(() => {
     const now = Date.now();

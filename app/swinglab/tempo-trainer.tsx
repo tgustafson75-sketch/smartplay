@@ -17,7 +17,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,6 +111,16 @@ export default function TempoTrainerScreen() {
     timersRef.current.forEach(clearTimeout); timersRef.current = [];
     setBeat(null);
   }, []);
+
+  // Stop the metronome when the app backgrounds (phone call, home button).
+  // Without this, the recursive setTimeout loop keeps draining battery
+  // and the audio session stays open against OS policy.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', next => {
+      if (next !== 'active') stop();
+    });
+    return () => sub.remove();
+  }, [stop]);
 
   // Changing the tempo while running restarts cleanly on the new ratio.
   const selectPreset = useCallback((k: typeof PRESETS[number]['key']) => {

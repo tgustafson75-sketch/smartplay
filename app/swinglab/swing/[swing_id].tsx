@@ -653,12 +653,38 @@ export default function SwingDetail() {
       </SafeAreaView>
     );
   }
-  if (!session || !shot?.clipUri) {
+  if (!session) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
           <Text style={{ color: colors.text_primary }}>Swing not found.</Text>
           <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+            <Text style={{ color: colors.accent }}>‹ Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  if (!shot?.clipUri) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.center}>
+          <Text style={{ color: colors.text_primary, fontWeight: '600', marginBottom: 8 }}>Video unavailable</Text>
+          <Text style={{ color: colors.text_muted, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>
+            The video file is missing from this device. You can delete this entry or re-upload the clip.
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert('Delete this swing?', 'The metadata will be removed. You can re-upload the clip later.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => { useCageStore.getState().deleteSession(swing_id); router.back(); } },
+              ]);
+            }}
+            style={{ marginBottom: 12, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
+          >
+            <Text style={{ color: colors.error ?? '#ef4444' }}>Delete Entry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()}>
             <Text style={{ color: colors.accent }}>‹ Back</Text>
           </TouchableOpacity>
         </View>
