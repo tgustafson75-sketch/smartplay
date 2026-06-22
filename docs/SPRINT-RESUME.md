@@ -22,41 +22,33 @@ All prior session OTAs went to `production` only. The `development` channel was 
 
 ---
 
-### LATEST (2026-06-17, Session 5) — read this before the Day-5 TL;DR below
+### LATEST (2026-06-22, Session 9) — Phase BM pre-review hardening — `233cd99`
 
-**Active focus: verification on real hardware + iOS testing now unblocked.**
+**Active focus: backend hardened for professional AI engineer review this week.**
 
 **Working directory: `/Users/timothyg/smartplay`**
 
-**Just shipped this session (`50f73aa`):**
-- **SmartMotion hero** — title "SmartMotion" (one word), tag on own line, media box 76px, no play overlay.
-- **Delete round** — trash icon in dashboard rows + recap screen; rebuilds handicap math after delete.
-- **SmartMotion camera** — BALL AREA/TARGET/LAUNCH pills removed; swing count selector moved to bottom, fades after tap.
-- **iOS TestFlight build #8** — first successful production iOS build. Root causes fixed: `withMediaPipePose` iOS pod disabled; `withMetaWearablesDAT` iOS pod gated behind `MWDAT_IOS_ENABLED=1` (EAS GITHUB_TOKEN was triggering injection of a private Meta pod); `credentialsSource` switched to `remote`.
-- **OTA** — pushed to development, preview, production channels.
+**Just shipped this session (`233cd99` — 25 files, 338 insertions, 793 deletions):**
 
-**Previously shipped (2026-06-17, Session 4 — `e757a3f`):**
-- **Phase BX — Cage target calibration.** Data-collection mode that pairs WAV recordings with manually confirmed hit positions.
+All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
+- **Security:** `kevin.ts` prompt injection caps + security policy prefix; `brain.ts` → 410 Gone (no more deployed injection surface); all image/audio size caps (413); `weather.ts` key fingerprint removed from error responses
+- **Gemini timeouts:** `_aiProvider.ts` `withGeminiTimeout()` on all 4 single-call helpers; `swing-analysis.ts` sub-mode timeouts
+- **Error handling:** `recap.ts` guarded JSON.parse; `putting-analysis.ts` fabricated 200s → 502; `briefing.ts` empty response → 502; `course-intelligence.ts` auth guard
+- **Provider migration:** 8 remaining Anthropic-SDK routes migrated → `_aiProvider.ts` (cage-review, meta-voice's 1.3s timeout eliminated, cv-scoring, club-recognition, space-scan, junior-swing-analysis, tutorial-analysis)
+- **Voice races:** speculative Kevin fetch now aborted on handler-routed intents (`listeningSession.ts`); `processFollowUp` gated on `isProcessingRef` (`useVoiceCaddie.ts`)
+- **Stale JSDoc:** swing-analysis, swing-compare, swing-question, round-import, _aiProvider.ts all updated to reflect Gemini+OpenAI architecture
 
-**Previously shipped (2026-06-17, sessions 1-2):**
-- `aca7638` / `48ac5ad` — SwingLab restructure (Prepare Better, Play Smarter), Smart Motion hero title fix, voice pipeline: end_round intent + handler, score→putts follow-up flow, penalty stroke guard, boot-time warmup.
-- `e118f0c` — Scene read 60s timeout + round context.
-- `ccc758c` — Tools menu Coach Mode fix + Smart Play entry.
-- `41ae781` — "Smart play" voice trigger → SmartFinder.
-- `9480a6d` — SmartFinder + auto scene read.
-- `7ae8fc1` / `9a1cb6f` — Meta-glasses ingest UI + Zod validation.
-- `1bf0e77` — Path 2 + Path 4 critical-path markers (all 19 instrumented).
-
-**Also shipped this session (`0190b2b` — audit fix):**
-- **9 missing Stack.Screen entries** added to `_layout.tsx`. Without these, Expo Router shows its default nav header on top of each screen's custom chrome (double navigation bar). Affected: `swinglab/smartmotion`, `swinglab/setup-check`, `swinglab/tempo-trainer`, `practice/shot-shapes`, `practice/preround`, `practice/fit-profile`, `drills`, `drills/[issue]`, `cage/target-calibration`. All now have `headerShown: false` + `slide_from_right`. No startup races, no acoustic races — both confirmed clean by audit.
+**Previously shipped (2026-06-21 Session 7 — bug fixes):**
+- Lie-analysis startup guard (removed ANTHROPIC_API_KEY from condition)
+- Swing-analysis `locate_swing` + `locate_swings` blocks fully migrated to Gemini inlineData
 
 **What's next (P0 queue):**
 1. **Path 2 + Path 4 MIN VERIFY on real Z Fold round** — markers instrumented; run a real round, grep `[path2:round]` + `[path4:voice]`. Update `critical-paths.md` after.
-2. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button worktree.
-3. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** (still `_not verified_`).
-4. **Open Range card in Prepare Better** — `/practice/open-range` file + Stack.Screen both exist; just needs a `LauncherCard` added to `PREPARE_SECTION` in swinglab.tsx (5-min task).
-5. **Cage acoustic spectral analysis** — needs 20+ labeled samples from Target Calibration first.
-- **Not done (deliberate):** Jest framework, DI refactor of lazy requires.
+2. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** (still `_not verified_`).
+3. **EAS dev-client build** — for `expo-document-picker` (Meta-glasses ingest) + BT media-button.
+4. **Open Range card in Prepare Better** — 5-min task: `LauncherCard` in `PREPARE_SECTION` in swinglab.tsx.
+5. **Remaining medium audit findings** (deferred, lower risk): raw error messages in 13 catch blocks; `owner-triage.ts` auth; `kevin.ts` 60s budget math; `kevin-read.ts` fallback 200.
+- **Not done (deliberate):** Phase 6 full `@anthropic-ai/sdk` removal (only `course-intelligence.ts` + a few health/admin routes remain); Jest framework, DI refactor.
 
 ### TL;DR (2026-05-24)
 

@@ -2162,3 +2162,59 @@ Root cause of "robot voice" bug: Anthropic credits limited → brain fails → T
 2. **Path 2 + Path 4 MIN VERIFY** on real Z Fold round (markers already instrumented).
 3. Commit + push Phase 5 changes.
 4. Carry from previous: Path 2 + Path 4 MIN VERIFY on real Z Fold round.
+
+---
+
+## Day N — 2026-06-22 Session 9 (Phase BM — pre-review hardening)
+
+### Context
+
+30-agent workflow audit identified 23 confirmed HIGH findings + 31 medium. Professional AI engineers expected to review the app this week. All HIGH findings fixed this session.
+
+### Shipped today — `233cd99`
+
+**Security / prompt injection:**
+- `kevin.ts` — `cap()`/`capOrNull()` helpers; all user-supplied prompt fields capped (200–4000 chars); security policy meta-instruction added as first line of system prompt; dead `classifyQuestion()` + `CLASSIFIER_SYSTEM` deleted
+- `brain.ts` — stripped to 10-line 410 Gone stub; eliminates active prompt injection surface on a deployed deprecated route
+- `lie-analysis.ts` — `player_notes` capped to 500 chars before prompt insertion
+- `cage-review.ts` — transcript capped to 1000 chars (handleExtract); transcripts sliced to 20×200 chars (handleVocab)
+- `smartmotion.ts` + `vision.ts` — 7 MB base64 size cap → 413
+- `acoustic-detect.ts` — 10 MB audio size cap → 413
+- `weather.ts` — API key fingerprint removed from client-facing error response
+
+**Gemini timeouts (no more silent 60s Lambda hangs):**
+- `_aiProvider.ts` — `withGeminiTimeout()` helper; applied to all 4 single-call helpers (`completeText`, `completeJSON`, `completeVision`, `completeWithTools`); `_geminiAgenticLoop` refactored to use same helper
+- `swing-analysis.ts` — `geminiWithTimeout()` applied to `detect_ball`, `locate_swing`, `locate_swings` sub-mode call sites (20s each)
+
+**Error handling (fabricated 200s eliminated):**
+- `recap.ts` — `JSON.parse` wrapped in try/catch; `Array.isArray(parsed.hole_summaries)` guard → 502
+- `putting-analysis.ts` — all-providers-fail → 502; parse-fail → 502; outer catch → 500
+- `briefing.ts` — empty AI response → 502 (was silent `{ brief: '' }` HTTP 200)
+- `course-intelligence.ts` — explicit `ANTHROPIC_API_KEY` guard → `{ source: 'unconfigured' }` (prevents auth error leak in 200 response)
+
+**Provider migration (8 remaining Anthropic-SDK routes → `_aiProvider.ts`):**
+- `cage-review.ts` — all 3 handlers → `completeText`/`completeJSON`; startup guard updated
+- `meta-voice.ts` — dangerously short 1.3s Anthropic timeout eliminated; → `completeJSON` (Gemini primary + OpenAI fallback)
+- `cv-scoring.ts`, `club-recognition.ts`, `space-scan.ts`, `tutorial-analysis.ts` → `completeVision`
+- `junior-swing-analysis.ts` → `completeVision`; catch block: `console.log` → `console.error`; return 500 not 200
+
+**Voice pipeline races:**
+- `services/listeningSession.ts` — `AbortController` on speculative Kevin fetch; abort fires immediately when classifier routes to a registered handler (eliminates guaranteed double-LLM-call on every handler-routed intent)
+- `hooks/useVoiceCaddie.ts` — `isProcessingRef.current` guard added to `processFollowUp` inside `runFollowUpListenLoop`; closes race where mid-`sendToBrain` mic tap bypassed all guards and started a new recording
+
+**Documentation cleanup:**
+- `swing-analysis.ts` — module JSDoc, architecture comment block, warmup comment, `normalizeAnalysis` comment all updated to reflect Phase 5 Gemini+OpenAI chain
+- `swing-compare.ts`, `swing-question.ts`, `round-import.ts` — "→ Anthropic Sonnet" removed from provider chain JSDoc
+- `_aiProvider.ts` — stale "no routes call this yet" Phase 1 header updated
+
+### Verified
+
+- `npx tsc --noEmit` — zero errors after all changes
+- 25 files changed, 338 insertions, 793 deletions
+
+### Open / carried forward
+
+1. **Phase 2 + Path 4 MIN VERIFY** on real Z Fold round (markers instrumented; still pending device run).
+2. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** — not yet verified on device.
+3. **`course-intelligence.ts`** — still on Anthropic web_search tool (no migration path yet; needs a Gemini-compatible web-search approach). Guard added this session prevents auth error leakage; functional Anthropic dependency remains.
+4. **Medium audit findings** deferred: raw provider error messages in 13 file catch blocks; `owner-triage.ts` unauthenticated with unsanitized AI prompt; `kevin.ts` 60s budget overrun calculation; `kevin-read.ts` silent fallback 200; `smartmotion.ts` fabricated 200 on catch.
