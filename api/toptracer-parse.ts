@@ -15,22 +15,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
-import OpenAI from 'openai';
-
-const gemini = process.env.GOOGLE_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
-  : null;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
-
-function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
-    ),
-  ]);
-}
+import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You are reading a screenshot from TopTracer Range — a ball-tracking system used at golf driving ranges. The image will be one of two views:
 
@@ -67,35 +52,83 @@ CLUB NAME MAPPING — translate TopTracer display names to these EXACT SmartPlay
   "LW" (for LW, LOB WEDGE)
   "Putter" (for PT, PUTTER)
 
-Output ONLY this JSON — no preamble, no code fences:
-
-{
-  "view_type": "table" | "radar" | "unknown",
-  "consistency_pct": <integer 0-100 if visible, else null>,
-  "clubs": [
-    {
-      "display_name": "<exactly as shown on screen, e.g. '9-IRON'>",
-      "club_id": "<SmartPlay ID from mapping above, or null if no match>",
-      "flat_carry_yds": <integer if readable, else null>,
-      "total_yds": <integer if readable, else null>,
-      "ball_speed_mph": <number if readable, else null>,
-      "launch_deg": <number if readable, else null>,
-      "height_ft": <integer if readable, else null>,
-      "hang_time_sec": <number if readable, else null>,
-      "landing_deg": <number if readable, else null>,
-      "curve_yds": <number — positive=left, negative=right — if readable, else null>
-    }
-  ],
-  "confidence": "high" | "medium" | "low",
-  "warnings": ["<short string for each column or row you were uncertain about>"]
-}
-
 Rules:
 - Only return clubs you can actually read from the image. Don't fabricate data.
 - The highlighted/bold row (the currently selected club) is still a valid row — include it.
 - For radar view (VIEW TYPE B): clubs[] will usually be empty or have consistency_pct only — extract what you can from the legend if visible.
-- If the image is NOT a TopTracer screen, return: { "view_type": "unknown", "clubs": [], "confidence": "low", "warnings": ["This doesn't look like a TopTracer screenshot."] }
-- Output ONLY valid JSON.`;
+- If the image is NOT a TopTracer screen, return: { "view_type": "unknown", "clubs": [], "confidence": "low", "warnings": ["This doesn't look like a TopTracer screenshot."] }`;
+
+const TOPTRACER_SCHEMA: StructuredSchema = {
+  name: 'toptracer_parse',
+  openai: {
+    type: 'object',
+    properties: {
+      view_type: { type: 'string', enum: ['table', 'radar', 'unknown'] },
+      consistency_pct: { type: ['integer', 'null'] },
+      clubs: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            display_name: { type: 'string' },
+            club_id: { type: 'string' },
+            flat_carry_yds: { type: ['number', 'null'] },
+            total_yds: { type: ['number', 'null'] },
+            ball_speed_mph: { type: ['number', 'null'] },
+            launch_deg: { type: ['number', 'null'] },
+            height_ft: { type: ['number', 'null'] },
+            hang_time_sec: { type: ['number', 'null'] },
+            landing_deg: { type: ['number', 'null'] },
+            curve_yds: { type: ['number', 'null'] },
+          },
+          required: [
+            'display_name', 'club_id',
+            'flat_carry_yds', 'total_yds', 'ball_speed_mph', 'launch_deg',
+            'height_ft', 'hang_time_sec', 'landing_deg', 'curve_yds',
+          ],
+          additionalProperties: false,
+        },
+      },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['view_type', 'consistency_pct', 'clubs', 'confidence', 'warnings'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      view_type: { type: 'STRING', enum: ['table', 'radar', 'unknown'] },
+      consistency_pct: { type: 'INTEGER', nullable: true },
+      clubs: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            display_name: { type: 'STRING' },
+            club_id: { type: 'STRING' },
+            flat_carry_yds: { type: 'NUMBER', nullable: true },
+            total_yds: { type: 'NUMBER', nullable: true },
+            ball_speed_mph: { type: 'NUMBER', nullable: true },
+            launch_deg: { type: 'NUMBER', nullable: true },
+            height_ft: { type: 'NUMBER', nullable: true },
+            hang_time_sec: { type: 'NUMBER', nullable: true },
+            landing_deg: { type: 'NUMBER', nullable: true },
+            curve_yds: { type: 'NUMBER', nullable: true },
+          },
+          required: [
+            'display_name', 'club_id',
+            'flat_carry_yds', 'total_yds', 'ball_speed_mph', 'launch_deg',
+            'height_ft', 'hang_time_sec', 'landing_deg', 'curve_yds',
+          ],
+        },
+      },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['view_type', 'consistency_pct', 'clubs', 'confidence', 'warnings'],
+  },
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
@@ -109,58 +142,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge' });
   }
 
-  const mimeType = (body.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp';
-  const userText = 'Extract all TopTracer club data from this screenshot. Return JSON only.';
+  const mimeType = (body.media_type ?? 'image/jpeg') as string;
+  const userText = 'Extract all TopTracer club data from this screenshot.';
+
+  // Primary: Gemini. Fallback: OpenAI (via X-AI-Provider header or explicit fallback).
+  const requestedProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+  const primaryProvider = process.env.GOOGLE_API_KEY ? 'gemini' : requestedProvider;
 
   let raw = '';
-  let provider: 'gemini' | 'openai' = 'gemini';
+  let provider = primaryProvider;
   let geminiErr: string | null = null;
 
-  if (gemini) {
-    try {
-      const gem = await geminiWithTimeout(gemini.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: SYSTEM_PROMPT + '\n\n' + userText },
-            { inlineData: { mimeType, data: body.image_b64 } },
-          ],
-        }],
-        config: { temperature: 0.1, maxOutputTokens: 800, responseMimeType: 'application/json' },
-      }), 20_000);
-      raw = (gem.text ?? '').trim();
-      if (!raw) geminiErr = 'empty_response';
-    } catch (e) {
-      geminiErr = e instanceof Error ? e.message : 'unknown';
-      console.warn('[toptracer-parse] gemini failed:', geminiErr);
-    }
-  } else {
-    geminiErr = 'GOOGLE_API_KEY not set';
+  try {
+    raw = await completeVision(
+      primaryProvider,
+      'quality',
+      SYSTEM_PROMPT,
+      userText,
+      [{ b64: body.image_b64, mimeType }],
+      { maxTokens: 800, temperature: 0.1, timeoutMs: 20_000, schema: TOPTRACER_SCHEMA },
+    );
+  } catch (e) {
+    geminiErr = e instanceof Error ? e.message : 'unknown';
+    console.warn(`[toptracer-parse] ${primaryProvider} failed:`, geminiErr);
   }
 
-  if (!raw && process.env.OPENAI_API_KEY) {
+  // Fallback to OpenAI if primary failed and it wasn't already OpenAI.
+  if (!raw && primaryProvider !== 'openai' && process.env.OPENAI_API_KEY) {
     try {
-      const oai = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        max_tokens: 800,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${body.image_b64}`, detail: 'high' } },
-              { type: 'text', text: userText },
-            ],
-          },
-        ],
-      });
-      raw = (oai.choices[0]?.message?.content ?? '').trim();
+      raw = await completeVision(
+        'openai',
+        'quality',
+        SYSTEM_PROMPT,
+        userText,
+        [{ b64: body.image_b64, mimeType }],
+        { maxTokens: 800, temperature: 0.1, schema: TOPTRACER_SCHEMA },
+      );
       provider = 'openai';
     } catch (e) {
-      console.warn('[toptracer-parse] openai failed:', e instanceof Error ? e.message : e);
+      console.warn('[toptracer-parse] openai fallback failed:', e instanceof Error ? e.message : e);
     }
   }
 
@@ -170,10 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let parsed: Record<string, unknown>;
   try {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) throw new Error('no JSON object');
-    parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+    parsed = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return res.status(502).json({ error: 'Model returned non-JSON', provider, raw: raw.slice(0, 300) });
   }

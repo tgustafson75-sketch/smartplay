@@ -19,7 +19,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { completeJSON, providerFromHeader, type AiProvider } from './_aiProvider';
+import { completeJSON, providerFromHeader, type AiProvider, type StructuredSchema } from './_aiProvider';
 
 // ─── Schemas ────────────────────────────────────────────────────────────
 
@@ -58,6 +58,39 @@ const ResponseSchema = z.object({
 });
 
 type ResponsePayload = z.infer<typeof ResponseSchema>;
+
+// ─── Structured output schema ────────────────────────────────────────────
+//
+// Passed to completeJSON so the LLM returns a schema-validated object.
+// The `state` field is computed server-side by buildNextState() and must
+// NOT appear here — the LLM only produces the five fields below.
+
+const META_VOICE_SCHEMA: StructuredSchema = {
+  name: 'meta_voice_response',
+  openai: {
+    type: 'object',
+    properties: {
+      speak:     { type: 'string' },
+      details:   { type: 'string' },
+      alt:       { type: 'string' },
+      tone:      { type: 'string', enum: ['neutral', 'hype', 'calm', 'coach'] },
+      user_note: { type: 'string' },
+    },
+    required: ['speak', 'tone'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      speak:     { type: 'STRING' },
+      details:   { type: 'STRING' },
+      alt:       { type: 'STRING' },
+      tone:      { type: 'STRING', enum: ['neutral', 'hype', 'calm', 'coach'] },
+      user_note: { type: 'STRING' },
+    },
+    required: ['speak', 'tone'],
+  },
+};
 
 // ─── Intent classification ──────────────────────────────────────────────
 
@@ -257,18 +290,16 @@ ${payload.image_base64 ? '/* TODO: vision frame attached — multimodal Sonnet c
 Give me the JSON.`;
 
   try {
-    const raw = await completeJSON(provider, 'fast', sys, [{ role: 'user', content: userMsg }], { maxTokens: 220, temperature: 0.2 });
-    const parsed = safeParse(raw);
-    if (!parsed) return fallbackResponse(payload, state, intent, 'parse_failed');
-    const speak = clampWords(String(parsed.speak ?? ''), 15) || `Standing by.`;
-    return {
-      speak,
-      details: typeof parsed.details === 'string' ? parsed.details.slice(0, 240) : undefined,
-      alt: typeof parsed.alt === 'string' ? clampWords(parsed.alt, 12) : undefined,
-      tone: pickTone(parsed.tone),
+    const raw = await completeJSON(provider, 'fast', sys, [{ role: 'user', content: userMsg }], { maxTokens: 220, temperature: 0.2, schema: META_VOICE_SCHEMA });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const validated = ResponseSchema.omit({ state: true }).parse({
+      speak:     clampWords(String(parsed.speak ?? ''), 15) || 'Standing by.',
+      details:   typeof parsed.details === 'string' ? parsed.details.slice(0, 240) : undefined,
+      alt:       typeof parsed.alt === 'string' ? clampWords(parsed.alt, 12) : undefined,
+      tone:      pickTone(parsed.tone),
       user_note: typeof parsed.user_note === 'string' ? parsed.user_note.slice(0, 160) : undefined,
-      state: {},
-    };
+    });
+    return { ...validated, state: {} };
   } catch {
     return fallbackResponse(payload, state, intent, 'llm_error');
   }
@@ -302,17 +333,6 @@ function computeEmotionalSignal(payload: RequestPayload, state: z.infer<typeof S
 function clampWords(s: string, n: number): string {
   const words = s.trim().split(/\s+/);
   return words.length <= n ? s.trim() : words.slice(0, n).join(' ');
-}
-
-function safeParse(raw: string): Record<string, unknown> | null {
-  try {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }
 
 // ─── State updater ──────────────────────────────────────────────────────

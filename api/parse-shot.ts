@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeJSON, providerFromHeader } from './_aiProvider';
+import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You parse a golfer's spoken description of a shot they just hit. Output a structured JSON record.
 
@@ -66,19 +66,78 @@ const LIE_FOLLOWUP_SYSTEM = `You are parsing a golfer's response to "How's the l
 
 Output JSON only:
 {
-  "lie_quality": "clean" | "rough" | "buried" | "tight" | "fluffy" | "hardpan" | "bunker" | "other" | null,
-  "confidence": "high" | "medium" | "low"
+  "lie_quality": "perfect" | "good" | "fair" | "divot" | "rough" | "bunker" | "water" | "other" | null,
+  "confidence": "high" | "medium" | "low",
+  "raw_utterance": string
 }
 
 Examples:
-- "clean lie" / "sitting up" / "good lie" -> "clean"
-- "in the rough" / "wispy rough" -> "rough"
-- "buried" / "down" / "deep" -> "buried"
-- "tight" / "bare" -> "tight"
-- "fluffy" / "perched" -> "fluffy"
-- "hardpan" / "dirt" -> "hardpan"
+- "clean lie" / "sitting up" / "good lie" / "perfect" -> "perfect"
+- "decent" / "not bad" / "okay lie" -> "good"
+- "in the rough" / "wispy rough" / "not great" -> "fair" or "rough"
+- "divot" / "in a divot" -> "divot"
+- "buried" / "down" / "deep" / "thick rough" -> "rough"
 - "in the bunker" / "sand" -> "bunker"
+- "in the water" / "wet" -> "water"
 - unclear or off-topic -> "other" with low confidence`;
+
+// ─── Structured schemas ───────────────────────────────────────────────────────
+
+const SHOT_PARSE_SCHEMA: StructuredSchema = {
+  name: 'shot_parse',
+  openai: {
+    type: 'object',
+    properties: {
+      club: { type: ['string', 'null'] },
+      distance: { type: ['number', 'null'] },
+      direction: { type: ['string', 'null'], enum: ['left', 'straight', 'right', null] },
+      outcome: { type: ['string', 'null'], enum: ['good', 'neutral', 'bad', null] },
+      lie_followup: { type: 'boolean' },
+      raw_utterance: { type: 'string' },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      follow_up_question: { type: ['string', 'null'] },
+    },
+    required: ['club', 'distance', 'direction', 'outcome', 'lie_followup', 'raw_utterance', 'confidence', 'follow_up_question'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      club: { type: 'STRING', nullable: true },
+      distance: { type: 'NUMBER', nullable: true },
+      direction: { type: 'STRING', nullable: true, enum: ['left', 'straight', 'right'] },
+      outcome: { type: 'STRING', nullable: true, enum: ['good', 'neutral', 'bad'] },
+      lie_followup: { type: 'BOOLEAN' },
+      raw_utterance: { type: 'STRING' },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      follow_up_question: { type: 'STRING', nullable: true },
+    },
+    required: ['club', 'distance', 'direction', 'outcome', 'lie_followup', 'raw_utterance', 'confidence', 'follow_up_question'],
+  },
+};
+
+const LIE_FOLLOWUP_SCHEMA: StructuredSchema = {
+  name: 'lie_followup_parse',
+  openai: {
+    type: 'object',
+    properties: {
+      lie_quality: { type: ['string', 'null'], enum: ['perfect', 'good', 'fair', 'divot', 'rough', 'bunker', 'water', 'other', null] },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      raw_utterance: { type: 'string' },
+    },
+    required: ['lie_quality', 'confidence', 'raw_utterance'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      lie_quality: { type: 'STRING', nullable: true, enum: ['perfect', 'good', 'fair', 'divot', 'rough', 'bunker', 'water', 'other'] },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      raw_utterance: { type: 'STRING' },
+    },
+    required: ['lie_quality', 'confidence', 'raw_utterance'],
+  },
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -107,10 +166,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
 
     if (isLieFollowup) {
-      const lieRaw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0 });
-      const lieParsed = safeParseJson(lieRaw);
+      const lieRaw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0, schema: LIE_FOLLOWUP_SCHEMA });
+      const lieParsed = JSON.parse(lieRaw) as { lie_quality: string | null; confidence: string; raw_utterance: string };
       return res.status(200).json({
-        ...lieParsed,
+        lie_quality: lieParsed.lie_quality ?? null,
+        confidence: lieParsed.confidence ?? 'low',
         raw_utterance: utterance,
       });
     }
@@ -126,8 +186,8 @@ ${recentPhrases.length > 0 ? `\nThis user's recent phrasings:\n${recentPhrases.m
 
 Parse the shot. Return JSON only.`;
 
-    const raw = await completeJSON(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
-    const parsed = safeParseJson(raw);
+    const raw = await completeJSON(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0, schema: SHOT_PARSE_SCHEMA });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
 
     const club = typeof parsed.club === 'string' ? parsed.club : null;
     const distance = typeof parsed.distance === 'number' ? parsed.distance : null;
@@ -184,17 +244,6 @@ function directionInUtterance(utterance: string, modelDirection: string | null):
   if (modelDirection === 'straight' && DIRECTION_KEYWORDS_STRAIGHT.test(utterance)) return 'straight';
   // Model output not backed by an explicit keyword in the utterance — drop it.
   return null;
-}
-
-function safeParseJson(raw: string): Record<string, unknown> {
-  try {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) return {};
-    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
 }
 
 export const SHARED_SYSTEM_PROMPT = SYSTEM_PROMPT;

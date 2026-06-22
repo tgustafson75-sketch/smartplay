@@ -1,6 +1,48 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-import { completeJSON, providerFromHeader } from './_aiProvider';
+import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
+
+const RECAP_SCHEMA: StructuredSchema = {
+  name: 'recap',
+  openai: {
+    type: 'object',
+    properties: {
+      hole_summaries: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            hole_number: { type: 'integer' },
+            summary: { type: 'string' },
+          },
+          required: ['hole_number', 'summary'],
+          additionalProperties: false,
+        },
+      },
+      overall_summary: { type: 'string' },
+    },
+    required: ['hole_summaries', 'overall_summary'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'object',
+    properties: {
+      hole_summaries: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            hole_number: { type: 'integer' },
+            summary: { type: 'string' },
+          },
+          required: ['hole_number', 'summary'],
+        },
+      },
+      overall_summary: { type: 'string' },
+    },
+    required: ['hole_summaries', 'overall_summary'],
+  },
+};
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildRecapSystem = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -210,7 +252,7 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     const personaInput: Persona | VoiceGender =
       (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
-    const rawText = await completeJSON(provider, 'quality', buildRecapSystem(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 1200 });
+    const rawText = await completeJSON(provider, 'quality', buildRecapSystem(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 1200, schema: RECAP_SCHEMA });
 
     let parsed: { hole_summaries: Array<{ hole_number: number; summary: string }>; overall_summary: string };
     try {

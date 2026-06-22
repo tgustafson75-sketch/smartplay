@@ -16,7 +16,28 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-import { completeJSON, providerFromHeader } from './_aiProvider';
+import { completeWithTools, providerFromHeader, type AiToolDef } from './_aiProvider';
+
+const CAGE_SWING_REVIEW_TOOL: AiToolDef = {
+  name: 'cage_swing_review',
+  description: 'Return a structured coaching response for the cage swing.',
+  parameters: {
+    type: 'object',
+    properties: {
+      kevin_response: {
+        type: 'string',
+        description: '1-2 sentences in the caddie\'s established voice commenting on the swing.',
+      },
+      confidence: {
+        type: 'string',
+        enum: ['high', 'medium', 'low'],
+        description: 'Confidence in the assessment based on detection quality.',
+      },
+    },
+    required: ['kevin_response', 'confidence'],
+    additionalProperties: false,
+  },
+};
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildCageSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -44,13 +65,7 @@ Never use the words "spectral", "centroid", "decay ratio", "sustain".
 Translate to: "clean contact", "flush", "thin", "fat", "off the toe/heel".
 
 Do not give swing instruction. You are a companion, not a coach. Comment
-on what just happened. Save instruction for when the user explicitly asks.
-
-Respond ONLY with valid JSON — no preamble, no code fences:
-{
-  "kevin_response": "<1-2 sentences in your voice>",
-  "confidence": "high" | "medium" | "low"
-}`;
+on what just happened. Save instruction for when the user explicitly asks.`;
 
 interface CageCoachResponse {
   kevin_response: string;
@@ -82,20 +97,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `Here is the features.json from this swing. Use the priority rules and respond with JSON.\n\n` +
       JSON.stringify(features, null, 2);
 
-    const rawText = await completeJSON(provider, 'quality', buildCageSystemPrompt(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 400, temperature: 0.6 });
+    const result = await completeWithTools(
+      provider,
+      'quality',
+      buildCageSystemPrompt(personaInput),
+      [{ role: 'user', content: userMessage }],
+      [CAGE_SWING_REVIEW_TOOL],
+      [],
+      { maxTokens: 400, temperature: 0.6 },
+    );
 
-    let parsed: Record<string, unknown> = {};
-    try { parsed = JSON.parse(rawText); } catch { /* use empty fallback */ }
+    const toolCall = result.toolCalls.find(tc => tc.name === 'cage_swing_review');
+    const input = toolCall?.input ?? {};
 
-    const kevinResponse = typeof parsed.kevin_response === 'string' ? parsed.kevin_response.trim() : '';
+    const kevinResponse = typeof input.kevin_response === 'string' ? input.kevin_response.trim() : '';
     if (!kevinResponse) {
-      console.error('[cage-coach] missing kevin_response in JSON');
+      console.error('[cage-coach] missing kevin_response in tool call');
       return res.status(502).json({ error: 'Model returned no kevin_response' });
     }
     const VALID_CONFIDENCE = ['high', 'medium', 'low'] as const;
     const confidence: CageCoachResponse['confidence'] =
-      (VALID_CONFIDENCE as readonly string[]).includes(parsed.confidence as string)
-        ? (parsed.confidence as CageCoachResponse['confidence'])
+      (VALID_CONFIDENCE as readonly string[]).includes(input.confidence as string)
+        ? (input.confidence as CageCoachResponse['confidence'])
         : 'medium';
 
     const response: CageCoachResponse = {

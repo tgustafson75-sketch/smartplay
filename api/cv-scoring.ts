@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeVision, providerFromHeader } from './_aiProvider';
+import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
 
 /**
  * Phase L — CV scoring endpoint.
@@ -31,6 +31,42 @@ type CVScoringResponse = {
   follow_up_question?: string | null;
 };
 
+const CV_SCORING_SCHEMA: StructuredSchema = {
+  name: 'cv_scoring_response',
+  openai: {
+    type: 'object',
+    properties: {
+      challenge: { type: 'string', enum: ['ctp', 'skills', 'sim', 'scramble'] },
+      proximity_feet: { type: ['number', 'null'] },
+      proximity_bucket: {
+        type: ['string', 'null'],
+        enum: ['inside_3', 'inside_6', 'inside_10', 'inside_20', 'outside_20', 'missed_green', null],
+      },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      observation: { type: 'string' },
+      follow_up_question: { type: ['string', 'null'] },
+    },
+    required: ['challenge', 'proximity_feet', 'proximity_bucket', 'confidence', 'observation', 'follow_up_question'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      challenge: { type: 'STRING' },
+      proximity_feet: { type: 'NUMBER', nullable: true },
+      proximity_bucket: {
+        type: 'STRING',
+        nullable: true,
+        enum: ['inside_3', 'inside_6', 'inside_10', 'inside_20', 'outside_20', 'missed_green'],
+      },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      observation: { type: 'STRING' },
+      follow_up_question: { type: 'STRING', nullable: true },
+    },
+    required: ['challenge', 'proximity_feet', 'proximity_bucket', 'confidence', 'observation', 'follow_up_question'],
+  },
+};
+
 const CTP_SYSTEM_PROMPT = `You are scoring a Closest-to-Pin shot from a single photo. The player took the photo on the green showing their ball position relative to the pin (flagstick).
 
 Your job: estimate the distance from the ball to the pin in feet, and bucket it into one of the standard CTP categories. Use the flagstick as your scale reference — a regulation flagstick is ~7 feet (84 inches) tall.
@@ -43,21 +79,12 @@ Buckets:
 - outside_20: more than 20 feet but on the green
 - missed_green: ball not on the green
 
-Output ONLY a JSON object:
-{
-  "challenge": "ctp",
-  "proximity_feet": <integer estimate, or null if you can't see both ball and pin>,
-  "proximity_bucket": "<one of the buckets above, or null if low confidence>",
-  "confidence": "high" | "medium" | "low",
-  "observation": "<one short sentence — what's visible in the photo>",
-  "follow_up_question": "<short retake suggestion ONLY when confidence: low; else null>"
-}
-
 Rules:
 - BE CONSERVATIVE. The user has manual-bucket fallback if this fails. Wrong "Inside 3" calls when the ball is 12 feet away damages trust faster than declining.
-- If you can see only the ball OR only the pin (not both), confidence: 'low' + follow_up_question asking for a wider photo.
-- The flagstick is your scale anchor. If it's not visible, confidence: 'low'.
-- Output ONLY valid JSON. No code fences, no preamble.`;
+- If you can see only the ball OR only the pin (not both), set confidence to low and follow_up_question to a short retake suggestion asking for a wider photo.
+- The flagstick is your scale anchor. If it is not visible, set confidence to low.
+- Set proximity_feet and proximity_bucket to null when confidence is low.
+- Set follow_up_question to null when confidence is high or medium.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -91,23 +118,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(provider, 'quality', CTP_SYSTEM_PROMPT, userText,
       [{ b64: image_b64, mimeType: image_media_type }],
-      { maxTokens: 400, temperature: 0.2, forceJSON: true },
+      { maxTokens: 400, temperature: 0.2, schema: CV_SCORING_SCHEMA },
     );
     if (!text) return res.status(502).json({ error: 'Empty model response' });
 
     let parsed: CVScoringResponse;
     try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as CVScoringResponse;
+      parsed = JSON.parse(text) as CVScoringResponse;
     } catch {
       return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
     }
 
-    parsed.challenge = 'ctp';
-    if (!['high', 'medium', 'low'].includes(parsed.confidence)) parsed.confidence = 'low';
-    if (parsed.proximity_feet != null && (typeof parsed.proximity_feet !== 'number' || parsed.proximity_feet < 0)) {
-      parsed.proximity_feet = null;
-    }
     return res.status(200).json(parsed);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';

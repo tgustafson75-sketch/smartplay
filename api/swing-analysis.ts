@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // Phase 5 (2026-06-22) — Anthropic fully removed from swing-analysis.
 // Provider architecture: Gemini 2.5 Flash = speed primary,
 // OpenAI gpt-4o = quality escalation (full-tier only).
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import OpenAI from 'openai';
 
 const gemini = process.env.GOOGLE_API_KEY
@@ -85,6 +85,64 @@ const PRIMARY_FAULTS = [
   'inconclusive',      // unreadable footage / model can't read the frames
 ] as const;
 type PrimaryFault = typeof PRIMARY_FAULTS[number];
+
+// ── Structured-output schemas ─────────────────────────────────────────────
+// OpenAI json_schema mode — strict, additionalProperties: false.
+// Mirrors SwingAnalysisResponse exactly so normalizeAnalysis() is still the
+// defense layer but the model never emits fences or extra keys.
+const SWING_ANALYSIS_SCHEMA = {
+  type: 'object',
+  properties: {
+    detected_issue: { type: 'string', enum: [...CANONICAL_ISSUES] },
+    severity: { type: 'string', enum: ['minor', 'moderate', 'significant', 'none'] },
+    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+    primary_fault: { type: 'string', enum: [...PRIMARY_FAULTS] },
+    valid_swing: { type: 'boolean' },
+    fault_frame_index: { type: 'integer' },
+    observation: { type: 'string' },
+    cause: { type: 'string' },
+    fix: { type: 'string' },
+    drill: { type: 'string' },
+    evidence: { type: 'string' },
+    layman_explanation: { type: 'string' },
+    validity_reason: { type: ['string', 'null'] },
+    follow_up_question: { type: ['string', 'null'] },
+    strengths: { type: 'array', items: { type: 'string' } },
+  },
+  required: [
+    'detected_issue', 'severity', 'confidence', 'primary_fault',
+    'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
+    'drill', 'evidence', 'layman_explanation', 'strengths',
+  ],
+  additionalProperties: false,
+} as const;
+
+// Gemini responseSchema — uses SchemaType enums (SDK requirement).
+const SWING_ANALYSIS_GEMINI_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    detected_issue: { type: Type.STRING, enum: [...CANONICAL_ISSUES] },
+    severity: { type: Type.STRING, enum: ['minor', 'moderate', 'significant', 'none'] },
+    confidence: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+    primary_fault: { type: Type.STRING, enum: [...PRIMARY_FAULTS] },
+    valid_swing: { type: Type.BOOLEAN },
+    fault_frame_index: { type: Type.INTEGER },
+    observation: { type: Type.STRING },
+    cause: { type: Type.STRING },
+    fix: { type: Type.STRING },
+    drill: { type: Type.STRING },
+    evidence: { type: Type.STRING },
+    layman_explanation: { type: Type.STRING },
+    validity_reason: { type: Type.STRING, nullable: true },
+    follow_up_question: { type: Type.STRING, nullable: true },
+    strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: [
+    'detected_issue', 'severity', 'confidence', 'primary_fault',
+    'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
+    'drill', 'evidence', 'layman_explanation', 'strengths',
+  ],
+};
 
 type SwingAnalysisResponse = {
   detected_issue: CanonicalIssue;
@@ -471,21 +529,14 @@ function normalizeAnalysis(
 ): SwingAnalysisResponse | null {
   if (!rawText) return null;
   let parsed: SwingAnalysisResponse;
-  // 2026-05-26 — Fix DC: robust JSON extraction. OpenAI's
-  // response_format:json_object guarantees clean JSON, but Gemini
-  // (when responseMimeType is not enforced) sometimes prepends prose
-  // ("Looking at this swing, I see...") before the JSON. The prior
-  // approach only stripped ``` code fences, so prose-prefixed valid
-  // JSON was silently dropped → forced unnecessary re-escalation. Try
-  // the greedy match for the outermost {...} block first; fall back to
-  // fence-strip if no braces found.
+  // Structured-output schemas guarantee clean JSON from both providers.
+  // Brace-match is kept as a defense layer in case any non-schema path
+  // (tentative mode, warmup paths) ever returns prose-prefixed output.
   try {
     let cleaned = rawText.trim();
     const braceMatch = cleaned.match(/\{[\s\S]*\}/);
     if (braceMatch) {
       cleaned = braceMatch[0];
-    } else {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
     }
     parsed = JSON.parse(cleaned) as SwingAnalysisResponse;
   } catch {
@@ -752,7 +803,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               { inlineData: { mimeType: detectFrames[0].media_type ?? 'image/jpeg', data: detectFrames[0].b64 } },
             ],
           }],
-          config: { temperature: 0.0, maxOutputTokens: 200, responseMimeType: 'application/json' },
+          config: {
+            temperature: 0.0,
+            maxOutputTokens: 200,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                found: { type: Type.BOOLEAN },
+                x: { type: Type.NUMBER, nullable: true },
+                y: { type: Type.NUMBER, nullable: true },
+                r: { type: Type.NUMBER, nullable: true },
+              },
+              required: ['found'],
+            },
+          },
         }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; x?: number; y?: number; r?: number } = {};
@@ -808,7 +873,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: locParts }],
-          config: { temperature: 0.0, maxOutputTokens: 120, responseMimeType: 'application/json' },
+          config: {
+            temperature: 0.0,
+            maxOutputTokens: 120,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                found: { type: Type.BOOLEAN },
+                swing_time_sec: { type: Type.NUMBER, nullable: true },
+                confidence: { type: Type.STRING, enum: ['high', 'low'], nullable: true },
+              },
+              required: ['found'],
+            },
+          },
         }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; swing_time_sec?: number; confidence?: string } = {};
@@ -858,7 +936,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: locParts }],
-          config: { temperature: 0.0, maxOutputTokens: 400, responseMimeType: 'application/json' },
+          config: {
+            temperature: 0.0,
+            maxOutputTokens: 400,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                swings: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      time_sec: { type: Type.NUMBER },
+                      confidence: { type: Type.STRING, enum: ['high', 'low'] },
+                    },
+                    required: ['time_sec', 'confidence'],
+                  },
+                },
+              },
+              required: ['swings'],
+            },
+          },
         }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { swings?: Array<{ time_sec?: number; confidence?: string }> } = {};
@@ -1148,7 +1247,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: geminiContent }],
-          config: { temperature: 0.2, maxOutputTokens: 650, responseMimeType: 'application/json' },
+          config: { temperature: 0.2, maxOutputTokens: 800, responseMimeType: 'application/json', responseSchema: SWING_ANALYSIS_GEMINI_SCHEMA },
         }), 13_000);
         const rawText = (gem.text ?? '').trim();
         const parsed = normalizeAnalysis(rawText, frames.length, mode);
@@ -1178,7 +1277,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model: 'gpt-4o',
           max_tokens: 650,
           temperature: 0.2,
-          response_format: { type: 'json_object' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'swing_analysis',
+              strict: true,
+              schema: SWING_ANALYSIS_SCHEMA,
+            },
+          },
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: [...imageContent, { type: 'text' as const, text: userText }] },

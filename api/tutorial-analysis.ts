@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-import { completeVision, providerFromHeader, type AiImageInput } from './_aiProvider';
+import { completeVision, providerFromHeader, type AiImageInput, type StructuredSchema } from './_aiProvider';
 
 /**
  * Phase BR — Tutorial teaching-content extraction.
@@ -39,6 +39,50 @@ type TutorialAnalysisResponse = {
   target_situations: string[];
   instructor: string | null;
   confidence: 'high' | 'medium' | 'low';
+};
+
+const tutorialSchema: StructuredSchema = {
+  name: 'tutorial_analysis',
+  openai: {
+    type: 'object',
+    properties: {
+      teaching_focus:     { type: 'string' },
+      key_cues:           { type: 'array', items: { type: 'string' } },
+      target_clubs:       { type: 'array', items: { type: 'string', enum: [...VALID_CLUBS] } },
+      target_situations:  { type: 'array', items: { type: 'string' } },
+      instructor:         { type: ['string', 'null'] },
+      confidence:         { type: 'string', enum: ['high', 'medium', 'low'] },
+    },
+    required: ['teaching_focus', 'key_cues', 'target_clubs', 'target_situations', 'instructor', 'confidence'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      teaching_focus:     { type: 'STRING' },
+      key_cues:           { type: 'ARRAY', items: { type: 'STRING' } },
+      target_clubs:       { type: 'ARRAY', items: { type: 'STRING', enum: [...VALID_CLUBS] } },
+      target_situations:  { type: 'ARRAY', items: { type: 'STRING' } },
+      instructor:         { type: 'STRING', nullable: true },
+      confidence:         { type: 'STRING', enum: ['high', 'medium', 'low'] },
+    },
+    required: ['teaching_focus', 'key_cues', 'target_clubs', 'target_situations', 'instructor', 'confidence'],
+  },
+  anthropic: {
+    input_schema: {
+      type: 'object',
+      properties: {
+        teaching_focus:     { type: 'string' },
+        key_cues:           { type: 'array', items: { type: 'string' } },
+        target_clubs:       { type: 'array', items: { type: 'string', enum: [...VALID_CLUBS] } },
+        target_situations:  { type: 'array', items: { type: 'string' } },
+        instructor:         { type: ['string', 'null'] },
+        confidence:         { type: 'string', enum: ['high', 'medium', 'low'] },
+      },
+      required: ['teaching_focus', 'key_cues', 'target_clubs', 'target_situations', 'instructor', 'confidence'],
+      additionalProperties: false,
+    },
+  },
 };
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
@@ -124,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
       inputLines.join('\n'), images,
-      { maxTokens: 600, temperature: 0.2, forceJSON: true },
+      { maxTokens: 600, temperature: 0.2, schema: tutorialSchema },
     );
     if (!text) {
       return res.status(502).json({ error: 'Empty model response' });
@@ -132,28 +176,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let parsed: TutorialAnalysisResponse;
     try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as TutorialAnalysisResponse;
+      parsed = JSON.parse(text) as TutorialAnalysisResponse;
     } catch {
       return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
     }
-
-    // Sanitise the response so client gets clean shapes regardless of
-    // any model creativity. Validation is permissive — we'd rather ship
-    // a partial summary than reject the whole call.
-    if (typeof parsed.teaching_focus !== 'string') parsed.teaching_focus = title;
-    if (!Array.isArray(parsed.key_cues)) parsed.key_cues = [];
-    parsed.key_cues = parsed.key_cues.filter((s): s is string => typeof s === 'string').slice(0, 8);
-    if (!Array.isArray(parsed.target_clubs)) parsed.target_clubs = [];
-    parsed.target_clubs = parsed.target_clubs
-      .filter((c): c is ClubId => typeof c === 'string' && (VALID_CLUBS as readonly string[]).includes(c))
-      .slice(0, 14);
-    if (!Array.isArray(parsed.target_situations)) parsed.target_situations = [];
-    parsed.target_situations = parsed.target_situations
-      .filter((s): s is string => typeof s === 'string')
-      .slice(0, 6);
-    if (typeof parsed.instructor !== 'string' || !parsed.instructor.trim()) parsed.instructor = null;
-    if (!['high', 'medium', 'low'].includes(parsed.confidence)) parsed.confidence = 'low';
 
     return res.status(200).json(parsed);
   } catch (e) {

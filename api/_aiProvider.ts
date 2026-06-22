@@ -1,20 +1,21 @@
 /**
  * _aiProvider.ts — unified AI provider abstraction for SmartPlay API routes.
  *
- * Wraps OpenAI and Google Gemini behind a single interface so routes can
- * switch providers via the X-AI-Provider request header without touching
- * business logic. TTS (gpt-4o-mini-tts) and STT (Whisper) are NOT routed
- * through here — they are always OpenAI.
+ * Wraps OpenAI, Google Gemini, and Anthropic behind a single interface so
+ * routes can switch providers via the X-AI-Provider request header without
+ * touching business logic. TTS (gpt-4o-mini-tts) and STT (Whisper) are NOT
+ * routed through here — they are always OpenAI.
  *
  * Stable provider abstraction used by the majority of API routes.
  */
 
 import OpenAI from 'openai';
 import { GoogleGenAI, type Part } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AiProvider = 'openai' | 'gemini';
+export type AiProvider = 'openai' | 'gemini' | 'anthropic';
 export type AiTier = 'fast' | 'quality';
 
 export interface AiMessage {
@@ -30,7 +31,7 @@ export interface AiImageInput {
 
 /** Normalized tool call from either provider. */
 export interface AiToolCall {
-  /** Unique call ID (from OpenAI) or derived name key (from Gemini). */
+  /** Unique call ID (from OpenAI) or derived name key (from Gemini/Anthropic). */
   id: string;
   name: string;
   input: Record<string, unknown>;
@@ -51,11 +52,34 @@ export interface AiToolDef {
   parameters: Record<string, unknown>;
 }
 
+/**
+ * Structured schema for json_schema_mode (stricter than json_object_mode).
+ * Pass this to completeJSON or completeVision to get guaranteed-schema output.
+ */
+export interface StructuredSchema {
+  /** Used as json_schema.name for OpenAI and tool name for Anthropic. */
+  name: string;
+  /** JSON Schema object for OpenAI response_format.json_schema.schema. */
+  openai: { [key: string]: unknown };
+  /** Gemini Schema object for config.responseSchema. */
+  gemini: { [key: string]: unknown };
+  /** Anthropic tool input_schema (for tool_use pattern). Falls back to openai schema if omitted. */
+  anthropic?: {
+    input_schema: { [key: string]: unknown };
+  };
+}
+
 export interface CompleteOpts {
   maxTokens?: number;
   temperature?: number;
   /** Timeout in ms. Defaults: OpenAI 25 000, Gemini 20 000. */
   timeoutMs?: number;
+  /**
+   * Optional structured output schema. When provided, uses json_schema_mode
+   * (OpenAI), responseSchema (Gemini), or tool_use pattern (Anthropic)
+   * instead of plain json_object / responseMimeType modes.
+   */
+  schema?: StructuredSchema;
 }
 
 export interface CompleteWithToolsResult {
@@ -70,6 +94,7 @@ export interface CompleteWithToolsResult {
 const MODELS: Record<AiProvider, Record<AiTier, string>> = {
   openai: { fast: 'gpt-4o-mini', quality: 'gpt-4o' },
   gemini: { fast: 'gemini-2.5-flash', quality: 'gemini-2.5-flash' },
+  anthropic: { fast: 'claude-haiku-4-5-20251001', quality: 'claude-sonnet-4-6' },
 };
 
 // ─── SDK clients (lazy-initialized per request context) ───────────────────────
@@ -84,6 +109,11 @@ function getOpenAI(timeoutMs = 25_000): OpenAI {
 function getGemini(): GoogleGenAI {
   if (!process.env.GOOGLE_API_KEY) throw new Error('GOOGLE_API_KEY not configured');
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+}
+
+function getAnthropic(): Anthropic {
+  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
 // ─── Gemini timeout helper ────────────────────────────────────────────────────
@@ -126,6 +156,19 @@ export async function completeText(
     return res.choices[0]?.message?.content ?? '';
   }
 
+  if (provider === 'anthropic') {
+    const ant = getAnthropic();
+    const res = await ant.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    });
+    const block = res.content.find(b => b.type === 'text');
+    return block?.type === 'text' ? block.text : '';
+  }
+
   // Gemini
   const genai = getGemini();
   const res = await withGeminiTimeout(genai.models.generateContent({
@@ -145,6 +188,7 @@ export async function completeText(
 /**
  * Like completeText but forces the model to return valid JSON.
  * Parse the result yourself — this only guarantees the format, not the schema.
+ * Pass opts.schema to get json_schema_mode (stricter, schema-validated output).
  */
 export async function completeJSON(
   provider: AiProvider,
@@ -153,16 +197,19 @@ export async function completeJSON(
   messages: AiMessage[],
   opts: CompleteOpts = {},
 ): Promise<string> {
-  const { maxTokens = 1024, temperature = 0, timeoutMs } = opts;
+  const { maxTokens = 1024, temperature = 0, timeoutMs, schema } = opts;
   const model = MODELS[provider][tier];
 
   if (provider === 'openai') {
     const oai = getOpenAI(timeoutMs);
+    const responseFormat = schema
+      ? { type: 'json_schema' as const, json_schema: { name: schema.name, strict: true, schema: schema.openai } }
+      : { type: 'json_object' as const };
     const res = await oai.chat.completions.create({
       model,
       max_tokens: maxTokens,
       temperature,
-      response_format: { type: 'json_object' },
+      response_format: responseFormat,
       messages: [
         { role: 'system', content: system },
         ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -171,17 +218,59 @@ export async function completeJSON(
     return res.choices[0]?.message?.content ?? '{}';
   }
 
+  if (provider === 'anthropic') {
+    const ant = getAnthropic();
+    if (schema) {
+      // Tool-use pattern: forces Anthropic to fill the schema exactly.
+      const inputSchema = schema.anthropic?.input_schema ?? schema.openai;
+      const tool: Anthropic.Tool = {
+        name: schema.name,
+        description: `Return a JSON object matching the ${schema.name} schema.`,
+        input_schema: inputSchema as Anthropic.Tool['input_schema'],
+      };
+      const res = await ant.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system,
+        tools: [tool],
+        tool_choice: { type: 'tool', name: schema.name },
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      });
+      const block = res.content.find(b => b.type === 'tool_use');
+      if (block?.type === 'tool_use') {
+        return JSON.stringify(block.input);
+      }
+      return '{}';
+    } else {
+      // Plain JSON mode: instruct via system prompt.
+      const jsonSystem = system + '\n\nRespond with valid JSON only. No markdown, no prose.';
+      const res = await ant.messages.create({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        system: jsonSystem,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      });
+      const block = res.content.find(b => b.type === 'text');
+      return block?.type === 'text' ? block.text.trim() : '{}';
+    }
+  }
+
   // Gemini
   const genai = getGemini();
+  const geminiConfig: Record<string, unknown> = {
+    systemInstruction: { role: 'user', parts: [{ text: system }] },
+    temperature,
+    maxOutputTokens: maxTokens,
+    responseMimeType: 'application/json',
+  };
+  if (schema) {
+    geminiConfig.responseSchema = schema.gemini;
+  }
   const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents: messages.map(m => ({ role: m.role, parts: [{ text: m.content }] })),
-    config: {
-      systemInstruction: { role: 'user', parts: [{ text: system }] },
-      temperature,
-      maxOutputTokens: maxTokens,
-      responseMimeType: 'application/json',
-    },
+    config: geminiConfig,
   }), timeoutMs ?? 25_000);
   return (res.text ?? '{}').trim();
 }
@@ -191,6 +280,7 @@ export async function completeJSON(
 /**
  * Vision completion — image(s) + text prompt → string response.
  * Pass forceJSON: true to get JSON output (uses json_object / responseMimeType).
+ * Pass opts.schema to get json_schema_mode (stricter, schema-validated output).
  */
 export async function completeVision(
   provider: AiProvider,
@@ -200,7 +290,7 @@ export async function completeVision(
   images: AiImageInput[],
   opts: CompleteOpts & { forceJSON?: boolean } = {},
 ): Promise<string> {
-  const { maxTokens = 1024, temperature = 0.3, timeoutMs, forceJSON = false } = opts;
+  const { maxTokens = 1024, temperature = 0.3, timeoutMs, forceJSON = false, schema } = opts;
   const model = MODELS[provider][tier];
 
   if (provider === 'openai') {
@@ -209,11 +299,17 @@ export async function completeVision(
       type: 'image_url' as const,
       image_url: { url: `data:${img.mimeType};base64,${img.b64}`, detail: 'high' as const },
     }));
+    let responseFormat: OpenAI.ResponseFormatJSONSchema | OpenAI.ResponseFormatJSONObject | undefined;
+    if (schema) {
+      responseFormat = { type: 'json_schema', json_schema: { name: schema.name, strict: true, schema: schema.openai } };
+    } else if (forceJSON) {
+      responseFormat = { type: 'json_object' };
+    }
     const res = await oai.chat.completions.create({
       model,
       max_tokens: maxTokens,
       temperature,
-      ...(forceJSON ? { response_format: { type: 'json_object' as const } } : {}),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
       messages: [
         { role: 'system', content: system },
         {
@@ -228,9 +324,71 @@ export async function completeVision(
     return res.choices[0]?.message?.content ?? '';
   }
 
+  if (provider === 'anthropic') {
+    const ant = getAnthropic();
+    const imageBlocks: Anthropic.ImageBlockParam[] = images.map(img => ({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.mimeType as Anthropic.Base64ImageSource['media_type'],
+        data: img.b64,
+      },
+    }));
+    const userContent: Anthropic.ContentBlockParam[] = [
+      ...imageBlocks,
+      { type: 'text', text: prompt },
+    ];
+
+    if (schema) {
+      // Tool-use pattern for structured vision output.
+      const inputSchema = schema.anthropic?.input_schema ?? schema.openai;
+      const tool: Anthropic.Tool = {
+        name: schema.name,
+        description: `Analyze the image(s) and return a JSON object matching the ${schema.name} schema.`,
+        input_schema: inputSchema as Anthropic.Tool['input_schema'],
+      };
+      const res = await ant.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system,
+        tools: [tool],
+        tool_choice: { type: 'tool', name: schema.name },
+        messages: [{ role: 'user', content: userContent }],
+      });
+      const block = res.content.find(b => b.type === 'tool_use');
+      if (block?.type === 'tool_use') {
+        return JSON.stringify(block.input);
+      }
+      return forceJSON ? '{}' : '';
+    } else {
+      const jsonSystem = forceJSON
+        ? system + '\n\nRespond with valid JSON only. No markdown, no prose.'
+        : system;
+      const res = await ant.messages.create({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        system: jsonSystem,
+        messages: [{ role: 'user', content: userContent }],
+      });
+      const block = res.content.find(b => b.type === 'text');
+      return block?.type === 'text' ? block.text.trim() : '';
+    }
+  }
+
   // Gemini
   const genai = getGemini();
   const imageParts = images.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.b64 } }));
+  const geminiConfig: Record<string, unknown> = {
+    temperature,
+    maxOutputTokens: maxTokens,
+  };
+  if (schema) {
+    geminiConfig.responseMimeType = 'application/json';
+    geminiConfig.responseSchema = schema.gemini;
+  } else if (forceJSON) {
+    geminiConfig.responseMimeType = 'application/json';
+  }
   const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents: [{
@@ -240,11 +398,7 @@ export async function completeVision(
         ...imageParts,
       ],
     }],
-    config: {
-      temperature,
-      maxOutputTokens: maxTokens,
-      ...(forceJSON ? { responseMimeType: 'application/json' } : {}),
-    },
+    config: geminiConfig,
   }), timeoutMs ?? 25_000);
   return (res.text ?? '').trim();
 }
@@ -306,6 +460,51 @@ export async function completeWithTools(
         input: (() => { try { return JSON.parse(tc.function.arguments); } catch { return {}; } })(),
       }));
     return { text, toolCalls, provider: 'openai' };
+  }
+
+  if (provider === 'anthropic') {
+    const ant = getAnthropic();
+    const antTools: Anthropic.Tool[] = tools.map(t => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.parameters as Anthropic.Tool['input_schema'],
+    }));
+
+    // Build messages, inserting tool results as tool_result content blocks.
+    const antMessages: Anthropic.MessageParam[] = messages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+    if (toolResults.length > 0) {
+      antMessages.push({
+        role: 'user',
+        content: toolResults.map(tr => ({
+          type: 'tool_result' as const,
+          tool_use_id: tr.id,
+          content: tr.content,
+        })),
+      });
+    }
+
+    const res = await ant.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system,
+      tools: antTools,
+      messages: antMessages,
+    });
+
+    const textBlock = res.content.find(b => b.type === 'text');
+    const text = textBlock?.type === 'text' ? textBlock.text : '';
+    const toolCalls: AiToolCall[] = res.content
+      .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        input: b.input as Record<string, unknown>,
+      }));
+    return { text, toolCalls, provider: 'anthropic' };
   }
 
   // Gemini
@@ -384,6 +583,9 @@ export async function runAgenticLoop(
 ): Promise<AgenticLoopResult> {
   if (provider === 'openai') {
     return _openaiAgenticLoop(tier, system, userMessage, images, tools, onToolCall, opts);
+  }
+  if (provider === 'anthropic') {
+    return _anthropicAgenticLoop(tier, system, userMessage, images, tools, onToolCall, opts);
   }
   return _geminiAgenticLoop(tier, system, userMessage, images, tools, onToolCall, opts);
 }
@@ -469,6 +671,93 @@ async function _openaiAgenticLoop(
   }
 
   return { text: text.trim(), provider: 'openai', rounds };
+}
+
+async function _anthropicAgenticLoop(
+  tier: AiTier,
+  system: string,
+  userMessage: string,
+  images: AiImageInput[],
+  tools: AiToolDef[],
+  onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
+  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[] },
+): Promise<AgenticLoopResult> {
+  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools } = opts;
+  const model = MODELS['anthropic'][tier];
+  const ant = getAnthropic();
+
+  const antTools: Anthropic.Tool[] = tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.parameters as Anthropic.Tool['input_schema'],
+  }));
+
+  // Build initial user content — images first, then text.
+  const initialContent: Anthropic.ContentBlockParam[] = [
+    ...images.map(img => ({
+      type: 'image' as const,
+      source: {
+        type: 'base64' as const,
+        media_type: img.mimeType as Anthropic.Base64ImageSource['media_type'],
+        data: img.b64,
+      },
+    })),
+    { type: 'text' as const, text: userMessage },
+  ];
+
+  const msgs: Anthropic.MessageParam[] = [
+    { role: 'user', content: initialContent },
+  ];
+
+  let text = '';
+  let rounds = 0;
+
+  for (let round = 0; round < maxRounds; round++) {
+    rounds = round + 1;
+    const res = await ant.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system,
+      tools: antTools,
+      messages: msgs,
+    });
+
+    const textBlock = res.content.find(b => b.type === 'text');
+    const toolUseBlocks = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+
+    // Only accumulate text from final-answer rounds (no tool_use in response).
+    if (toolUseBlocks.length === 0) {
+      text += textBlock?.type === 'text' ? textBlock.text : '';
+    }
+
+    if (res.stop_reason === 'max_tokens') {
+      text = text.trimEnd();
+      if (!text.endsWith('.') && !text.endsWith('!') && !text.endsWith('?')) {
+        text += '.';
+      }
+      console.warn('[aiProvider] Anthropic response truncated at token limit — stop_reason:max_tokens');
+      break;
+    }
+
+    if (toolUseBlocks.length === 0 || res.stop_reason !== 'tool_use') break;
+
+    // Append assistant turn with all content blocks (text + tool_use).
+    msgs.push({ role: 'assistant', content: res.content });
+
+    let hasContinuationTool = false;
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      const result = await onToolCall(block.name, block.input as Record<string, unknown>);
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
+      if (!continuationTools || continuationTools.includes(block.name)) hasContinuationTool = true;
+    }
+    msgs.push({ role: 'user', content: toolResults });
+
+    if (!hasContinuationTool) break;
+  }
+
+  return { text: text.trim(), provider: 'anthropic', rounds };
 }
 
 async function _geminiAgenticLoop(
@@ -564,5 +853,5 @@ async function _geminiAgenticLoop(
 export function providerFromHeader(headers: Record<string, string | string[] | undefined>): AiProvider {
   const raw = headers['x-ai-provider'];
   const val = Array.isArray(raw) ? raw[0] : raw;
-  return val === 'openai' || val === 'gemini' ? val : 'gemini';
+  return val === 'openai' || val === 'gemini' || val === 'anthropic' ? val : 'gemini';
 }

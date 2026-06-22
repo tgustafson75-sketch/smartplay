@@ -12,9 +12,125 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName } from '../lib/persona';
-import { completeVision, providerFromHeader, type AiImageInput } from './_aiProvider';
+import { completeVision, providerFromHeader, type AiImageInput, type StructuredSchema } from './_aiProvider';
 
 const MAX_FRAMES = 6;
+
+const JUNIOR_SWING_SCHEMA: StructuredSchema = {
+  name: 'junior_swing_analysis',
+  openai: {
+    type: 'object',
+    properties: {
+      swingId:       { type: 'string' },
+      timestamp:     { type: 'string' },
+      club:          { type: ['string', 'null'] },
+      fundamentals: {
+        type: 'object',
+        properties: {
+          grip:          { type: 'string', enum: ['square', 'strong', 'weak', 'too_tight', 'too_loose', 'unknown'] },
+          stance:        { type: 'string', enum: ['balanced', 'too_wide', 'too_narrow', 'tilted', 'unknown'] },
+          head_movement: { type: 'string', enum: ['still', 'slight', 'lifting', 'swaying', 'unknown'] },
+          tempo:         { type: 'string', enum: ['smooth', 'quick', 'rushed', 'jerky', 'unknown'] },
+          balance:       { type: 'string', enum: ['finished_balanced', 'fell_back', 'fell_forward', 'spun_out', 'unknown'] },
+        },
+        required: ['grip', 'stance', 'head_movement', 'tempo', 'balance'],
+        additionalProperties: false,
+      },
+      wins:         { type: 'array', items: { type: 'string' } },
+      next_focus:   { type: ['string', 'null'] },
+      fun_drill:    { type: ['string', 'null'] },
+      vs_previous:  {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              direction: { type: 'string', enum: ['improved', 'same', 'declined'] },
+              summary:   { type: 'string' },
+            },
+            required: ['direction', 'summary'],
+            additionalProperties: false,
+          },
+          { type: 'null' },
+        ],
+      },
+      overallScore:  { type: 'integer', minimum: 0, maximum: 100 },
+      coachComment:  { type: 'string' },
+    },
+    required: ['swingId', 'timestamp', 'club', 'fundamentals', 'wins', 'next_focus', 'fun_drill', 'vs_previous', 'overallScore', 'coachComment'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      swingId:       { type: 'STRING' },
+      timestamp:     { type: 'STRING' },
+      club:          { type: 'STRING', nullable: true },
+      fundamentals: {
+        type: 'OBJECT',
+        properties: {
+          grip:          { type: 'STRING' },
+          stance:        { type: 'STRING' },
+          head_movement: { type: 'STRING' },
+          tempo:         { type: 'STRING' },
+          balance:       { type: 'STRING' },
+        },
+      },
+      wins:         { type: 'ARRAY', items: { type: 'STRING' } },
+      next_focus:   { type: 'STRING', nullable: true },
+      fun_drill:    { type: 'STRING', nullable: true },
+      vs_previous:  {
+        type: 'OBJECT',
+        nullable: true,
+        properties: {
+          direction: { type: 'STRING' },
+          summary:   { type: 'STRING' },
+        },
+      },
+      overallScore:  { type: 'INTEGER' },
+      coachComment:  { type: 'STRING' },
+    },
+  },
+  anthropic: {
+    input_schema: {
+      type: 'object',
+      properties: {
+        swingId:       { type: 'string' },
+        timestamp:     { type: 'string' },
+        club:          { type: ['string', 'null'] },
+        fundamentals: {
+          type: 'object',
+          properties: {
+            grip:          { type: 'string', enum: ['square', 'strong', 'weak', 'too_tight', 'too_loose', 'unknown'] },
+            stance:        { type: 'string', enum: ['balanced', 'too_wide', 'too_narrow', 'tilted', 'unknown'] },
+            head_movement: { type: 'string', enum: ['still', 'slight', 'lifting', 'swaying', 'unknown'] },
+            tempo:         { type: 'string', enum: ['smooth', 'quick', 'rushed', 'jerky', 'unknown'] },
+            balance:       { type: 'string', enum: ['finished_balanced', 'fell_back', 'fell_forward', 'spun_out', 'unknown'] },
+          },
+          required: ['grip', 'stance', 'head_movement', 'tempo', 'balance'],
+        },
+        wins:         { type: 'array', items: { type: 'string' } },
+        next_focus:   { type: ['string', 'null'] },
+        fun_drill:    { type: ['string', 'null'] },
+        vs_previous:  {
+          oneOf: [
+            {
+              type: 'object',
+              properties: {
+                direction: { type: 'string', enum: ['improved', 'same', 'declined'] },
+                summary:   { type: 'string' },
+              },
+              required: ['direction', 'summary'],
+            },
+            { type: 'null' },
+          ],
+        },
+        overallScore:  { type: 'integer', minimum: 0, maximum: 100 },
+        coachComment:  { type: 'string' },
+      },
+      required: ['swingId', 'timestamp', 'club', 'fundamentals', 'wins', 'next_focus', 'fun_drill', 'vs_previous', 'overallScore', 'coachComment'],
+    },
+  },
+};
 
 interface MemberInfo {
   first_name: string;
@@ -101,10 +217,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const raw = await completeVision(provider, 'quality', buildSystem(body.age_band, caddieName, body.member),
       userText, images,
-      { maxTokens: 1200, temperature: 0.3, forceJSON: true },
+      { maxTokens: 1200, temperature: 0.3, schema: JUNIOR_SWING_SCHEMA },
     );
-    const parsed = safeParse(raw);
-    if (!parsed) {
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
       console.warn('[junior-swing] parse failed; returning warm shell');
       return res.status(200).json(warmShell(body.member, body.age_band, caddieName, body.prior_swing ?? null));
     }
@@ -220,15 +338,4 @@ function warmShell(member: MemberInfo, band: RequestBody['age_band'], caddieName
     overallScore: 50,
     coachComment: fallback,
   };
-}
-
-function safeParse(raw: string): Record<string, unknown> | null {
-  try {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
 }

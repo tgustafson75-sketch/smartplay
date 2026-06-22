@@ -60,26 +60,6 @@ You are ${getCaddieName(g)} generating Course Detail content — a thoughtful ca
 
 Write as a caddie who has actually played this course many times. Specific over generic. Course character over scorecard recitation. Plain English over marketing copy.
 
-Output ONLY a JSON object with this exact shape:
-{
-  "about": "<2 to 4 sentence paragraph capturing the course's character>",
-  "caddie_tips": [
-    "<specific actionable tip>",
-    "<specific actionable tip>",
-    "<4 to 6 tips total>"
-  ],
-  "hole_notes": [
-    { "hole_number": 1, "note": "<one short specific phrase about this hole>" },
-    { "hole_number": 2, "note": "<one short specific phrase>" }
-    // ... one entry per hole in the input
-  ],
-  "hole_descriptions": [
-    { "hole_number": 1, "description": "<2 to 3 sentence preview a first-time player would want>" },
-    { "hole_number": 2, "description": "<2 to 3 sentence preview>" }
-    // ... one entry per hole in the input
-  ]
-}
-
 Rules:
 - About: 2-4 sentences. What kind of course is this? What does it ask of the player? Skip cliches like "challenging yet enjoyable" or "for golfers of all skill levels".
 - Caddie Tips: 4-6 entries. Each one must be SPECIFIC. "Aim center on long par 4s" passes. "Play smart" fails. Tie to the course's actual character (length, par mix, region/conditions you can infer from the name).
@@ -97,9 +77,51 @@ HOLE DESCRIPTIONS (most important rules — read carefully):
 - Skip if a hole has weird input data (yardage=0 or par=0 or hole_number<=0). Return an honest description if you can; OK to write "Limited data — play your standard plan" rather than invent.
 - This is "from public data" framing, not "I have walked this course." Sound like a caddie summarizing what's known, not making things up.
 
-- No app-speak. No "metrics", "sessions", "features", "data".
-- No bullet points, no headers, no commentary outside the JSON.
-- Output ONLY valid JSON. No code fences, no preamble.`;
+- No app-speak. No "metrics", "sessions", "features", "data".`;
+
+const COURSE_CONTENT_TOOL: Anthropic.Tool = {
+  name: 'generate_course_content',
+  description: 'Generate course detail content: about paragraph, caddie tips, per-hole notes, and per-hole descriptions.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      about: {
+        type: 'string',
+        description: '2-4 sentence paragraph capturing the course character.',
+      },
+      caddie_tips: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '4-6 specific, actionable caddie tips tied to the course character.',
+      },
+      hole_notes: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            hole_number: { type: 'number' },
+            note: { type: 'string' },
+          },
+          required: ['hole_number', 'note'],
+        },
+        description: 'One 6-12 word note per hole.',
+      },
+      hole_descriptions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            hole_number: { type: 'number' },
+            description: { type: 'string' },
+          },
+          required: ['hole_number', 'description'],
+        },
+        description: '2-3 sentence first-timer preview per hole.',
+      },
+    },
+    required: ['about', 'caddie_tips', 'hole_notes', 'hole_descriptions'],
+  },
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -152,23 +174,22 @@ Generate the JSON.`;
       temperature: 0.7,
       system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userPrompt }],
+      tools: [COURSE_CONTENT_TOOL],
+      tool_choice: { type: 'tool', name: 'generate_course_content' },
     });
 
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
-    if (!text) {
-      console.error('[course-content] empty response');
-      return res.status(502).json({ error: 'Empty model response' });
+    const toolBlock = completion.content.find(b => b.type === 'tool_use');
+    if (!toolBlock || toolBlock.type !== 'tool_use') {
+      console.error('[course-content] no tool_use block in response');
+      return res.status(502).json({ error: 'Model did not invoke generate_course_content' });
     }
 
     let parsed: CourseContent;
     try {
-      // Strip code fences if model added them despite instructions
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as CourseContent;
+      parsed = toolBlock.input as CourseContent;
     } catch (e) {
-      console.error('[course-content] JSON parse failed:', text.slice(0, 300));
-      return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
+      console.error('[course-content] tool input extraction failed');
+      return res.status(502).json({ error: 'Failed to extract tool input' });
     }
 
     // Defensive normalization

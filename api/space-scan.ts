@@ -16,7 +16,127 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-import { completeVision, providerFromHeader } from './_aiProvider';
+import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
+
+const SPACE_ASSESSMENT_SCHEMA: StructuredSchema = {
+  name: 'space_assessment',
+  openai: {
+    type: 'object',
+    properties: {
+      space_type: { type: 'string', enum: ['cage', 'range_bay', 'backyard', 'basement', 'garage', 'other'] },
+      summary: { type: 'string' },
+      recommended_setup: {
+        type: 'object',
+        properties: {
+          mat_position: { type: 'string' },
+          aim_direction: { type: 'string' },
+        },
+        required: ['mat_position', 'aim_direction'],
+        additionalProperties: false,
+      },
+      camera_position: {
+        type: 'object',
+        properties: {
+          dtl_placement: { type: ['string', 'null'] },
+          face_on_placement: { type: ['string', 'null'] },
+        },
+        required: ['dtl_placement', 'face_on_placement'],
+        additionalProperties: false,
+      },
+      recommended_drills: { type: 'array', items: { type: 'string' } },
+      avoid_drills: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            drill_id: { type: 'string' },
+            reason: { type: 'string' },
+          },
+          required: ['drill_id', 'reason'],
+          additionalProperties: false,
+        },
+      },
+      safety_notes: { type: 'array', items: { type: 'string' } },
+      limitations: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['space_type', 'summary', 'recommended_setup', 'camera_position', 'recommended_drills', 'avoid_drills', 'safety_notes', 'limitations'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      space_type: { type: 'STRING', enum: ['cage', 'range_bay', 'backyard', 'basement', 'garage', 'other'] },
+      summary: { type: 'STRING' },
+      recommended_setup: {
+        type: 'OBJECT',
+        properties: {
+          mat_position: { type: 'STRING' },
+          aim_direction: { type: 'STRING' },
+        },
+      },
+      camera_position: {
+        type: 'OBJECT',
+        properties: {
+          dtl_placement: { type: 'STRING', nullable: true },
+          face_on_placement: { type: 'STRING', nullable: true },
+        },
+      },
+      recommended_drills: { type: 'ARRAY', items: { type: 'STRING' } },
+      avoid_drills: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            drill_id: { type: 'STRING' },
+            reason: { type: 'STRING' },
+          },
+        },
+      },
+      safety_notes: { type: 'ARRAY', items: { type: 'STRING' } },
+      limitations: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+  },
+  anthropic: {
+    input_schema: {
+      type: 'object',
+      properties: {
+        space_type: { type: 'string', enum: ['cage', 'range_bay', 'backyard', 'basement', 'garage', 'other'] },
+        summary: { type: 'string' },
+        recommended_setup: {
+          type: 'object',
+          properties: {
+            mat_position: { type: 'string' },
+            aim_direction: { type: 'string' },
+          },
+          required: ['mat_position', 'aim_direction'],
+        },
+        camera_position: {
+          type: 'object',
+          properties: {
+            dtl_placement: { type: ['string', 'null'] },
+            face_on_placement: { type: ['string', 'null'] },
+          },
+          required: ['dtl_placement', 'face_on_placement'],
+        },
+        recommended_drills: { type: 'array', items: { type: 'string' } },
+        avoid_drills: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              drill_id: { type: 'string' },
+              reason: { type: 'string' },
+            },
+            required: ['drill_id', 'reason'],
+          },
+        },
+        safety_notes: { type: 'array', items: { type: 'string' } },
+        limitations: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['space_type', 'summary', 'recommended_setup', 'camera_position', 'recommended_drills', 'avoid_drills', 'safety_notes', 'limitations'],
+    },
+  },
+};
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -111,29 +231,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
       'Read this practice space and tell me how to use it.',
       [{ b64: image_b64, mimeType: image_media_type }],
-      { maxTokens: 800, temperature: 0.4, forceJSON: true },
+      { maxTokens: 800, temperature: 0.4, schema: SPACE_ASSESSMENT_SCHEMA },
     );
     if (!text) return res.status(502).json({ error: 'Empty model response' });
 
     let parsed: SpaceAssessment;
     try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as SpaceAssessment;
+      parsed = JSON.parse(text) as SpaceAssessment;
     } catch {
       console.error('[space-scan] JSON parse failed:', text.slice(0, 300));
       return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
     }
 
-    // Defensive normalization
-    const validTypes = ['cage', 'range_bay', 'backyard', 'basement', 'garage', 'other'] as const;
-    if (!validTypes.includes(parsed.space_type)) parsed.space_type = 'other';
-    if (typeof parsed.summary !== 'string') parsed.summary = '';
-    parsed.recommended_setup = parsed.recommended_setup ?? { mat_position: '', aim_direction: '' };
-    parsed.camera_position = parsed.camera_position ?? { dtl_placement: null, face_on_placement: null };
-    parsed.recommended_drills = Array.isArray(parsed.recommended_drills) ? parsed.recommended_drills.slice(0, 4) : [];
-    parsed.avoid_drills = Array.isArray(parsed.avoid_drills) ? parsed.avoid_drills.slice(0, 3) : [];
-    parsed.safety_notes = Array.isArray(parsed.safety_notes) ? parsed.safety_notes.slice(0, 3) : [];
-    parsed.limitations = Array.isArray(parsed.limitations) ? parsed.limitations.slice(0, 3) : [];
+    // Enforce list-length caps the system prompt requests.
+    parsed.recommended_drills = parsed.recommended_drills.slice(0, 4);
+    parsed.avoid_drills = parsed.avoid_drills.slice(0, 3);
+    parsed.safety_notes = parsed.safety_notes.slice(0, 3);
+    parsed.limitations = parsed.limitations.slice(0, 3);
 
     return res.status(200).json(parsed);
   } catch (e) {

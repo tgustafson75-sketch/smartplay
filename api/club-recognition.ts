@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeVision, providerFromHeader } from './_aiProvider';
+import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
 
 /**
  * Phase BL — Club recognition endpoint.
@@ -42,6 +42,45 @@ type ClubRecognitionResponse = {
   club_type: ClubType;
   confidence: 'high' | 'medium' | 'low';
   reasoning: string;
+};
+
+const CONFIDENCE_VALUES = ['high', 'medium', 'low'] as const;
+
+const CLUB_RECOGNITION_SCHEMA: StructuredSchema = {
+  name: 'club_recognition',
+  openai: {
+    type: 'object',
+    properties: {
+      club_id:    { type: 'string', enum: [...VALID_CLUB_IDS] },
+      club_type:  { type: 'string', enum: [...VALID_CLUB_TYPES] },
+      confidence: { type: 'string', enum: [...CONFIDENCE_VALUES] },
+      reasoning:  { type: 'string' },
+    },
+    required: ['club_id', 'club_type', 'confidence', 'reasoning'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      club_id:    { type: 'STRING', enum: [...VALID_CLUB_IDS] },
+      club_type:  { type: 'STRING', enum: [...VALID_CLUB_TYPES] },
+      confidence: { type: 'STRING', enum: [...CONFIDENCE_VALUES] },
+      reasoning:  { type: 'STRING' },
+    },
+    required: ['club_id', 'club_type', 'confidence', 'reasoning'],
+  },
+  anthropic: {
+    input_schema: {
+      type: 'object',
+      properties: {
+        club_id:    { type: 'string', enum: [...VALID_CLUB_IDS] },
+        club_type:  { type: 'string', enum: [...VALID_CLUB_TYPES] },
+        confidence: { type: 'string', enum: [...CONFIDENCE_VALUES] },
+        reasoning:  { type: 'string' },
+      },
+      required: ['club_id', 'club_type', 'confidence', 'reasoning'],
+    },
+  },
 };
 
 const SYSTEM_PROMPT = `You are reading the bottom (sole) of a golf club shown to a camera. The player wants to identify which club they are about to hit. Read the number or letters stamped on the sole — this is OCR-style reading, not visual classification of club type.
@@ -107,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const text = await completeVision(provider, 'quality', SYSTEM_PROMPT,
       'Read the number or letters stamped on the sole. Return JSON.',
       [{ b64, mimeType: mediaType }],
-      { maxTokens: 200, temperature: 0.1, forceJSON: true },
+      { maxTokens: 200, temperature: 0.1, schema: CLUB_RECOGNITION_SCHEMA },
     );
     if (!text) {
       return res.status(502).json({ error: 'Empty model response' });
@@ -115,23 +154,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let parsed: ClubRecognitionResponse;
     try {
-      const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-      parsed = JSON.parse(cleaned) as ClubRecognitionResponse;
+      parsed = JSON.parse(text) as ClubRecognitionResponse;
     } catch {
       return res.status(502).json({ error: 'Model returned non-JSON', raw: text.slice(0, 300) });
     }
-
-    if (!VALID_CLUB_IDS.includes(parsed.club_id)) {
-      parsed.club_id = 'unknown';
-      parsed.confidence = 'low';
-    }
-    if (!VALID_CLUB_TYPES.includes(parsed.club_type)) {
-      parsed.club_type = 'unknown';
-    }
-    if (!['high', 'medium', 'low'].includes(parsed.confidence)) {
-      parsed.confidence = 'low';
-    }
-    if (typeof parsed.reasoning !== 'string') parsed.reasoning = '';
 
     return res.status(200).json(parsed);
   } catch (e) {

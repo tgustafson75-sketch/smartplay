@@ -68,17 +68,41 @@ async function handleExtract(body: Record<string, unknown>, provider: AiProvider
 
 Response: "${transcript}"
 
-Return a JSON object with these exact keys:
-- strike_location: one of "center", "heel", "toe", "top", "thin", "fat", "unknown"
-- contact_quality: one of "pure", "good", "okay", "bad", "unknown"
-- self_diagnosis: string or null — what they think caused the miss or made it good (e.g. "came over the top", "stayed behind it")
-- intent: string or null — what they were trying to do (e.g. "draw it", "just make solid contact")
-- mental_state: string or null — emotional/mental cue if mentioned (e.g. "felt rushed", "very confident")
-- notable_phrases: array of verbatim phrases worth remembering about their feel vocabulary (max 3)
+self_diagnosis: what they think caused the miss or made it good (e.g. "came over the top", "stayed behind it"), or null.
+intent: what they were trying to do (e.g. "draw it", "just make solid contact"), or null.
+mental_state: emotional/mental cue if mentioned (e.g. "felt rushed", "very confident"), or null.
+notable_phrases: verbatim phrases worth remembering about their feel vocabulary (max 3).`;
 
-Return ONLY valid JSON. No markdown, no explanation.`;
+  const extractSchema = {
+    name: 'shot_labels',
+    openai: {
+      type: 'object',
+      properties: {
+        strike_location: { type: 'string', enum: ['sweet_spot', 'toe', 'heel', 'thin', 'fat', 'top', 'unknown'] },
+        contact_quality: { type: 'string', enum: ['pure', 'solid', 'ok', 'mishit', 'unknown'] },
+        self_diagnosis: { type: ['string', 'null'] },
+        intent: { type: ['string', 'null'] },
+        mental_state: { type: ['string', 'null'] },
+        notable_phrases: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['strike_location', 'contact_quality', 'self_diagnosis', 'intent', 'mental_state', 'notable_phrases'],
+      additionalProperties: false,
+    },
+    gemini: {
+      type: 'OBJECT',
+      properties: {
+        strike_location: { type: 'STRING', enum: ['sweet_spot', 'toe', 'heel', 'thin', 'fat', 'top', 'unknown'] },
+        contact_quality: { type: 'STRING', enum: ['pure', 'solid', 'ok', 'mishit', 'unknown'] },
+        self_diagnosis: { type: 'STRING', nullable: true },
+        intent: { type: 'STRING', nullable: true },
+        mental_state: { type: 'STRING', nullable: true },
+        notable_phrases: { type: 'ARRAY', items: { type: 'STRING' } },
+      },
+      required: ['strike_location', 'contact_quality', 'self_diagnosis', 'intent', 'mental_state', 'notable_phrases'],
+    },
+  };
 
-  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 200, temperature: 0 });
+  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 200, temperature: 0, schema: extractSchema });
 
   try {
     const labels = JSON.parse(raw) as Record<string, unknown>;
@@ -124,18 +148,58 @@ async function handleVocab(body: Record<string, unknown>, provider: AiProvider):
 
 Their responses across ${total_reviewed} shots: "${combined}"
 
-Return a JSON object with:
-- observed_terminology: object with arrays:
-  - strike_terms: words they use to describe where they hit the face (e.g. "heel", "toe", "pure", "off the middle")
-  - contact_terms: words for quality of contact (e.g. "flush", "chunked", "thin", "caught it fat")
-  - diagnostic_terms: cause/effect language they use (e.g. "came over it", "stayed behind", "early release")
-  - feel_terms: sensation words (e.g. "heavy", "light", "rushed", "stuck")
-- kevin_summary: 1-2 sentences ${caddieName} would say to this player about what they heard. Warm, observant, not preachy.
-- total_clips_reviewed: ${total_reviewed}
+observed_terminology arrays:
+- strike_terms: words they use to describe where they hit the face (e.g. "heel", "toe", "pure", "off the middle")
+- contact_terms: words for quality of contact (e.g. "flush", "chunked", "thin", "caught it fat")
+- diagnostic_terms: cause/effect language (e.g. "came over it", "stayed behind", "early release")
+- feel_terms: sensation words (e.g. "heavy", "light", "rushed", "stuck")
 
-Return ONLY valid JSON. No markdown, no explanation.`;
+kevin_summary: 1-2 sentences ${caddieName} would say about what they heard. Warm, observant, not preachy.
+total_clips_reviewed: ${total_reviewed}`;
 
-  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 400, temperature: 0 });
+  const vocabSchema = {
+    name: 'vocab_profile',
+    openai: {
+      type: 'object',
+      properties: {
+        observed_terminology: {
+          type: 'object',
+          properties: {
+            strike_terms: { type: 'array', items: { type: 'string' } },
+            contact_terms: { type: 'array', items: { type: 'string' } },
+            diagnostic_terms: { type: 'array', items: { type: 'string' } },
+            feel_terms: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['strike_terms', 'contact_terms', 'diagnostic_terms', 'feel_terms'],
+          additionalProperties: false,
+        },
+        kevin_summary: { type: 'string' },
+        total_clips_reviewed: { type: 'number' },
+      },
+      required: ['observed_terminology', 'kevin_summary', 'total_clips_reviewed'],
+      additionalProperties: false,
+    },
+    gemini: {
+      type: 'OBJECT',
+      properties: {
+        observed_terminology: {
+          type: 'OBJECT',
+          properties: {
+            strike_terms: { type: 'ARRAY', items: { type: 'STRING' } },
+            contact_terms: { type: 'ARRAY', items: { type: 'STRING' } },
+            diagnostic_terms: { type: 'ARRAY', items: { type: 'STRING' } },
+            feel_terms: { type: 'ARRAY', items: { type: 'STRING' } },
+          },
+          required: ['strike_terms', 'contact_terms', 'diagnostic_terms', 'feel_terms'],
+        },
+        kevin_summary: { type: 'STRING' },
+        total_clips_reviewed: { type: 'NUMBER' },
+      },
+      required: ['observed_terminology', 'kevin_summary', 'total_clips_reviewed'],
+    },
+  };
+
+  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 400, temperature: 0, schema: vocabSchema });
 
   try {
     const data = JSON.parse(raw) as Record<string, unknown>;

@@ -9,7 +9,47 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-import { completeJSON, providerFromHeader } from './_aiProvider';
+import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
+
+// ─── Structured output schema ─────────────────────────────────────────────────
+
+const INTENT_TYPE_ENUM = [
+  'open_tool', 'query_status', 'change_setting', 'navigate', 'help', 'acknowledge',
+  'rules_query', 'handicap_query', 'set_trust_quiet', 'set_trust_companion',
+  'in_round_diagnostic', 'club_change', 'club_query', 'club_menu',
+  'log_shot', 'log_score', 'log_putts', 'media_capture', 'media_playback',
+  'at_my_ball', 'log_issue', 'sequence', 'declare_hole', 'set_hole_note',
+  'putt_watch', 'ask_golf_father', 'quick_round', 'open_external',
+  'state_yardage', 'refresh_gps', 'coach_refine', 'position_declaration',
+  'confirm_position', 'end_round', 'social_greeting', 'conversational', 'unknown',
+] as const;
+
+const VOICE_INTENT_SCHEMA: StructuredSchema = {
+  name: 'voice_intent',
+  openai: {
+    type: 'object',
+    properties: {
+      intent_type: { type: 'string', enum: [...INTENT_TYPE_ENUM] },
+      parameters: { type: 'object', additionalProperties: true },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      follow_up_question: { type: ['string', 'null'] },
+      language: { type: 'string', enum: ['en', 'es', 'zh'] },
+    },
+    required: ['intent_type', 'parameters', 'confidence', 'follow_up_question', 'language'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      intent_type: { type: 'STRING', enum: [...INTENT_TYPE_ENUM] },
+      parameters: { type: 'OBJECT' },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      follow_up_question: { type: 'STRING', nullable: true },
+      language: { type: 'STRING', enum: ['en', 'es', 'zh'] },
+    },
+    required: ['intent_type', 'parameters', 'confidence', 'follow_up_question', 'language'],
+  },
+};
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildSystemPrompt = (g: Persona | VoiceGender) => {
@@ -556,9 +596,9 @@ ${JSON.stringify(context, null, 2)}
 Parse the intent. Return JSON only.`;
 
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
-    const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0 });
+    const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0, schema: VOICE_INTENT_SCHEMA });
 
-    let parsed: Record<string, unknown> = {};
+    let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(raw) as Record<string, unknown>;
     } catch {
@@ -567,23 +607,16 @@ Parse the intent. Return JSON only.`;
         parameters: {},
         confidence: 'low',
         follow_up_question: 'I didn\'t catch that — try again?',
+        language: 'en',
       };
     }
 
-    const intent_type = typeof parsed.intent_type === 'string' ? parsed.intent_type : 'unknown';
-    const parameters = (parsed.parameters && typeof parsed.parameters === 'object') ? parsed.parameters : {};
-    const confidence = (parsed.confidence === 'high' || parsed.confidence === 'medium' || parsed.confidence === 'low')
-      ? parsed.confidence
-      : 'low';
-    const follow_up_question = typeof parsed.follow_up_question === 'string' ? parsed.follow_up_question : null;
-    const language: 'en' | 'es' | 'zh' = parsed.language === 'es' || parsed.language === 'zh' ? parsed.language : 'en';
-
     return res.status(200).json({
-      intent_type,
-      parameters,
-      confidence,
-      follow_up_question,
-      language,
+      intent_type: parsed.intent_type ?? 'unknown',
+      parameters: parsed.parameters ?? {},
+      confidence: parsed.confidence ?? 'low',
+      follow_up_question: parsed.follow_up_question ?? null,
+      language: parsed.language ?? 'en',
     });
 
   } catch (err) {

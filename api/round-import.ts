@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
-import OpenAI from 'openai';
+import { completeVision, type StructuredSchema } from './_aiProvider';
 
 /**
  * 2026-05-26 — Fix AA: Round screenshot import.
@@ -20,11 +19,6 @@ import OpenAI from 'openai';
  * Output shape — defensive: every field nullable, parser drops bad
  * holes. Caller's confirmation UI is the truth-gate.
  */
-
-const gemini = process.env.GOOGLE_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
-  : null;
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
 const SYSTEM_PROMPT = `You are reading a screenshot of a golf round scorecard. The image may come from any source: Golfshot, 18Birdies, GHIN, USGA Tournament Center, the player's own paper scorecard photographed in good light, a screenshot of a scorecard email, etc.
 
@@ -103,6 +97,120 @@ Rules:
 - Read the date in the row's local format and normalize to YYYY-MM-DD. If only a year-less date is shown, use the most plausible recent year visible elsewhere on screen, else null.
 - If the image is NOT a round-history list (it's a single scorecard, a photo, something unrelated), return { "rounds": [], "confidence": "low", "warnings": ["This doesn't look like a round-history list."] }
 - Output ONLY valid JSON. No code fences. No preamble.`;
+
+// ─── Structured output schemas ────────────────────────────────────────────────
+
+const HOLE_SCHEMA = {
+  type: 'object',
+  properties: {
+    hole: { type: 'integer' },
+    par: { type: ['integer', 'null'] },
+    score: { type: ['integer', 'null'] },
+    putts: { type: ['integer', 'null'] },
+    fairway_hit: { type: ['boolean', 'null'] },
+    gir: { type: ['boolean', 'null'] },
+  },
+  required: ['hole', 'par', 'score', 'putts', 'fairway_hit', 'gir'],
+};
+
+const GEMINI_HOLE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    hole: { type: 'INTEGER' },
+    par: { type: 'INTEGER', nullable: true },
+    score: { type: 'INTEGER', nullable: true },
+    putts: { type: 'INTEGER', nullable: true },
+    fairway_hit: { type: 'BOOLEAN', nullable: true },
+    gir: { type: 'BOOLEAN', nullable: true },
+  },
+  required: ['hole', 'par', 'score', 'putts', 'fairway_hit', 'gir'],
+};
+
+const SCORECARD_SCHEMA: StructuredSchema = {
+  name: 'imported_round',
+  openai: {
+    type: 'object',
+    properties: {
+      course_name: { type: ['string', 'null'] },
+      played_date: { type: ['string', 'null'] },
+      tee_color: { type: ['string', 'null'] },
+      holes_played: { type: ['integer', 'null'] },
+      total_score: { type: ['integer', 'null'] },
+      total_par: { type: ['integer', 'null'] },
+      score_vs_par: { type: ['integer', 'null'] },
+      holes: { type: 'array', items: HOLE_SCHEMA },
+      notes: { type: ['string', 'null'] },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['course_name', 'played_date', 'tee_color', 'holes_played', 'total_score', 'total_par', 'score_vs_par', 'holes', 'notes', 'confidence', 'warnings'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      course_name: { type: 'STRING', nullable: true },
+      played_date: { type: 'STRING', nullable: true },
+      tee_color: { type: 'STRING', nullable: true },
+      holes_played: { type: 'INTEGER', nullable: true },
+      total_score: { type: 'INTEGER', nullable: true },
+      total_par: { type: 'INTEGER', nullable: true },
+      score_vs_par: { type: 'INTEGER', nullable: true },
+      holes: { type: 'ARRAY', items: GEMINI_HOLE_SCHEMA },
+      notes: { type: 'STRING', nullable: true },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['course_name', 'played_date', 'tee_color', 'holes_played', 'total_score', 'total_par', 'score_vs_par', 'holes', 'notes', 'confidence', 'warnings'],
+  },
+};
+
+const GEMINI_LISTED_ROUND_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    played_date: { type: 'STRING', nullable: true },
+    course_name: { type: 'STRING', nullable: true },
+    total_score: { type: 'INTEGER', nullable: true },
+    score_vs_par: { type: 'INTEGER', nullable: true },
+    holes_played: { type: 'INTEGER', nullable: true },
+  },
+  required: ['played_date', 'course_name', 'total_score', 'score_vs_par', 'holes_played'],
+};
+
+const LISTED_ROUND_SCHEMA = {
+  type: 'object',
+  properties: {
+    played_date: { type: ['string', 'null'] },
+    course_name: { type: ['string', 'null'] },
+    total_score: { type: ['integer', 'null'] },
+    score_vs_par: { type: ['integer', 'null'] },
+    holes_played: { type: ['integer', 'null'] },
+  },
+  required: ['played_date', 'course_name', 'total_score', 'score_vs_par', 'holes_played'],
+};
+
+const LIST_SCHEMA: StructuredSchema = {
+  name: 'round_list_result',
+  openai: {
+    type: 'object',
+    properties: {
+      rounds: { type: 'array', items: LISTED_ROUND_SCHEMA },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['rounds', 'confidence', 'warnings'],
+    additionalProperties: false,
+  },
+  gemini: {
+    type: 'OBJECT',
+    properties: {
+      rounds: { type: 'ARRAY', items: GEMINI_LISTED_ROUND_SCHEMA },
+      confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+      warnings: { type: 'ARRAY', items: { type: 'STRING' } },
+    },
+    required: ['rounds', 'confidence', 'warnings'],
+  },
+};
 
 interface ImportedRound {
   course_name: string | null;
@@ -189,33 +297,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // List screenshots can hold ~15-25 rows; give the JSON room to breathe.
     const maxOut = mode === 'list' ? 3000 : 1500;
 
+    const schema = mode === 'list' ? LIST_SCHEMA : SCORECARD_SCHEMA;
+    const visionOpts = { maxTokens: maxOut, temperature: 0.1, forceJSON: true, schema };
+    const images = [{ b64: imageB64, mimeType: imageMediaType }];
+
     let raw = '';
     let providerUsed: 'gemini' | 'openai' = 'gemini';
     let geminiError: string | null = null;
     let openaiError: string | null = null;
 
-    if (gemini) {
+    if (process.env.GOOGLE_API_KEY) {
       try {
-        const gem = await gemini.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: [{
-            role: 'user',
-            parts: [
-              { text: systemPrompt + '\n\n' + userText },
-              { inlineData: { mimeType: imageMediaType, data: imageB64 } },
-            ],
-          }],
-          config: {
-            temperature: 0.1,
-            maxOutputTokens: maxOut,
-            responseMimeType: 'application/json',
-          },
-        });
-        raw = (gem.text ?? '').trim();
+        raw = await completeVision('gemini', 'quality', systemPrompt, userText, images, visionOpts);
         if (!raw) geminiError = 'empty_response';
       } catch (e) {
         geminiError = e instanceof Error ? e.message : 'unknown';
         console.warn('[round-import] gemini primary failed:', geminiError);
+        raw = '';
       }
     } else {
       geminiError = 'GOOGLE_API_KEY not configured';
@@ -223,28 +321,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!raw && process.env.OPENAI_API_KEY) {
       try {
-        const oai = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          max_tokens: maxOut,
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            {
-              role: 'user',
-              content: [
-                { type: 'image_url', image_url: { url: `data:${imageMediaType};base64,${imageB64}`, detail: 'high' } },
-                { type: 'text', text: userText },
-              ],
-            },
-          ],
-        });
-        raw = (oai.choices[0]?.message?.content ?? '').trim();
+        raw = await completeVision('openai', 'quality', systemPrompt, userText, images, visionOpts);
         providerUsed = 'openai';
         if (!raw) openaiError = 'empty_response';
       } catch (e) {
         openaiError = e instanceof Error ? e.message : 'unknown';
         console.warn('[round-import] openai fallback failed:', openaiError);
+        raw = '';
       }
     }
 

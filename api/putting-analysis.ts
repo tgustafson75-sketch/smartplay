@@ -10,9 +10,204 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Schema } from '@google/genai';
 import OpenAI from 'openai';
 import { getCaddieName } from '../lib/persona';
+
+// ── Structured output contract ────────────────────────────────────────────────
+
+export interface PuttingAnalysis {
+  puttId: string;
+  timestamp: string;
+  holeNumber?: number;
+  distanceFeet: number;
+  greenSlope: {
+    direction: 'left-to-right' | 'right-to-left' | 'uphill' | 'downhill' | 'flat';
+    severity: 'mild' | 'moderate' | 'steep';
+    breakInches: number;
+    confidence: number;
+  };
+  setup: {
+    alignment: 'open' | 'closed' | 'square';
+    ballPosition: 'forward' | 'center' | 'back';
+    stanceWidth: 'narrow' | 'normal' | 'wide';
+    gripPressure: 'light' | 'medium' | 'firm';
+    quality: number;
+  };
+  stroke: {
+    path: 'inside-out' | 'outside-in' | 'straight';
+    tempo: 'slow' | 'normal' | 'fast';
+    faceAngleAtImpact: 'open' | 'closed' | 'square';
+    deceleration: boolean;
+    quality: number;
+  };
+  readAccuracy: {
+    wasCorrect: boolean;
+    suggestedAdjustment: string;
+    confidence: number;
+  };
+  recommendation: {
+    line: string;
+    speedFeel: string;
+    mentalCue: string;
+    technicalCue: string;
+  };
+  overallScore: number;
+  caddieComment: string;
+}
+
+// ── OpenAI json_schema ────────────────────────────────────────────────────────
+
+const PUTTING_ANALYSIS_SCHEMA: OpenAI.ResponseFormatJSONSchema = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'PuttingAnalysis',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: [
+        'puttId', 'timestamp', 'distanceFeet', 'greenSlope',
+        'setup', 'stroke', 'readAccuracy', 'recommendation',
+        'overallScore', 'caddieComment',
+      ],
+      properties: {
+        puttId:       { type: 'string' },
+        timestamp:    { type: 'string' },
+        holeNumber:   { type: 'number' },
+        distanceFeet: { type: 'number' },
+        greenSlope: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['direction', 'severity', 'breakInches', 'confidence'],
+          properties: {
+            direction:   { type: 'string', enum: ['left-to-right', 'right-to-left', 'uphill', 'downhill', 'flat'] },
+            severity:    { type: 'string', enum: ['mild', 'moderate', 'steep'] },
+            breakInches: { type: 'number' },
+            confidence:  { type: 'number' },
+          },
+        },
+        setup: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['alignment', 'ballPosition', 'stanceWidth', 'gripPressure', 'quality'],
+          properties: {
+            alignment:    { type: 'string', enum: ['open', 'closed', 'square'] },
+            ballPosition: { type: 'string', enum: ['forward', 'center', 'back'] },
+            stanceWidth:  { type: 'string', enum: ['narrow', 'normal', 'wide'] },
+            gripPressure: { type: 'string', enum: ['light', 'medium', 'firm'] },
+            quality:      { type: 'number' },
+          },
+        },
+        stroke: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['path', 'tempo', 'faceAngleAtImpact', 'deceleration', 'quality'],
+          properties: {
+            path:               { type: 'string', enum: ['inside-out', 'outside-in', 'straight'] },
+            tempo:              { type: 'string', enum: ['slow', 'normal', 'fast'] },
+            faceAngleAtImpact:  { type: 'string', enum: ['open', 'closed', 'square'] },
+            deceleration:       { type: 'boolean' },
+            quality:            { type: 'number' },
+          },
+        },
+        readAccuracy: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['wasCorrect', 'suggestedAdjustment', 'confidence'],
+          properties: {
+            wasCorrect:          { type: 'boolean' },
+            suggestedAdjustment: { type: 'string' },
+            confidence:          { type: 'number' },
+          },
+        },
+        recommendation: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['line', 'speedFeel', 'mentalCue', 'technicalCue'],
+          properties: {
+            line:         { type: 'string' },
+            speedFeel:    { type: 'string' },
+            mentalCue:    { type: 'string' },
+            technicalCue: { type: 'string' },
+          },
+        },
+        overallScore:   { type: 'number' },
+        caddieComment:  { type: 'string' },
+      },
+    },
+  },
+};
+
+// ── Gemini responseSchema ─────────────────────────────────────────────────────
+
+const PUTTING_ANALYSIS_GEMINI_SCHEMA: Schema = {
+  type: 'OBJECT' as never,
+  properties: {
+    puttId:       { type: 'STRING' as never },
+    timestamp:    { type: 'STRING' as never },
+    holeNumber:   { type: 'NUMBER' as never },
+    distanceFeet: { type: 'NUMBER' as never },
+    greenSlope: {
+      type: 'OBJECT' as never,
+      properties: {
+        direction:   { type: 'STRING' as never, enum: ['left-to-right', 'right-to-left', 'uphill', 'downhill', 'flat'] },
+        severity:    { type: 'STRING' as never, enum: ['mild', 'moderate', 'steep'] },
+        breakInches: { type: 'NUMBER' as never },
+        confidence:  { type: 'NUMBER' as never },
+      },
+      required: ['direction', 'severity', 'breakInches', 'confidence'],
+    },
+    setup: {
+      type: 'OBJECT' as never,
+      properties: {
+        alignment:    { type: 'STRING' as never, enum: ['open', 'closed', 'square'] },
+        ballPosition: { type: 'STRING' as never, enum: ['forward', 'center', 'back'] },
+        stanceWidth:  { type: 'STRING' as never, enum: ['narrow', 'normal', 'wide'] },
+        gripPressure: { type: 'STRING' as never, enum: ['light', 'medium', 'firm'] },
+        quality:      { type: 'NUMBER' as never },
+      },
+      required: ['alignment', 'ballPosition', 'stanceWidth', 'gripPressure', 'quality'],
+    },
+    stroke: {
+      type: 'OBJECT' as never,
+      properties: {
+        path:              { type: 'STRING' as never, enum: ['inside-out', 'outside-in', 'straight'] },
+        tempo:             { type: 'STRING' as never, enum: ['slow', 'normal', 'fast'] },
+        faceAngleAtImpact: { type: 'STRING' as never, enum: ['open', 'closed', 'square'] },
+        deceleration:      { type: 'BOOLEAN' as never },
+        quality:           { type: 'NUMBER' as never },
+      },
+      required: ['path', 'tempo', 'faceAngleAtImpact', 'deceleration', 'quality'],
+    },
+    readAccuracy: {
+      type: 'OBJECT' as never,
+      properties: {
+        wasCorrect:          { type: 'BOOLEAN' as never },
+        suggestedAdjustment: { type: 'STRING' as never },
+        confidence:          { type: 'NUMBER' as never },
+      },
+      required: ['wasCorrect', 'suggestedAdjustment', 'confidence'],
+    },
+    recommendation: {
+      type: 'OBJECT' as never,
+      properties: {
+        line:         { type: 'STRING' as never },
+        speedFeel:    { type: 'STRING' as never },
+        mentalCue:    { type: 'STRING' as never },
+        technicalCue: { type: 'STRING' as never },
+      },
+      required: ['line', 'speedFeel', 'mentalCue', 'technicalCue'],
+    },
+    overallScore:  { type: 'NUMBER' as never },
+    caddieComment: { type: 'STRING' as never },
+  },
+  required: [
+    'puttId', 'timestamp', 'distanceFeet', 'greenSlope',
+    'setup', 'stroke', 'readAccuracy', 'recommendation',
+    'overallScore', 'caddieComment',
+  ],
+};
 
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -106,7 +301,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts }],
-          config: { temperature: 0.2, maxOutputTokens: 1000, responseMimeType: 'application/json' },
+          config: { temperature: 0.2, maxOutputTokens: 1000, responseMimeType: 'application/json', responseSchema: PUTTING_ANALYSIS_GEMINI_SCHEMA },
         }), 13_000);
         raw = (gem.text ?? '').trim();
         if (!raw) geminiError = 'empty_response';
@@ -131,7 +326,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model: 'gpt-4o',
           max_tokens: 1000,
           temperature: 0.2,
-          response_format: { type: 'json_object' },
+          response_format: PUTTING_ANALYSIS_SCHEMA,
           messages: [
             { role: 'system', content: system },
             {
@@ -248,10 +443,7 @@ Never invent numbers you can't see. If unsure on a category, pick the most conse
 
 function safeParse(raw: string): Record<string, unknown> | null {
   try {
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start < 0 || end <= start) return null;
-    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+    return JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return null;
   }

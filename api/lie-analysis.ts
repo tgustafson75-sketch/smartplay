@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 import { providerFromHeader } from './_aiProvider';
 
@@ -40,6 +40,66 @@ type AnalysisResponse = {
   // Phase H v2 — populated only when goal context affected the call.
   // Short note Mike reads as "with your buffer toward 89, this is the play".
   goal_aware_note?: string | null;
+};
+
+// ── Structured output schemas ─────────────────────────────────────────────────
+
+/** OpenAI JSON Schema for json_schema response_format mode. */
+const LIE_ANALYSIS_SCHEMA: OpenAI.ResponseFormatJSONSchema = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'lie_analysis',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        situation_description: { type: 'string' },
+        tactical_advice: { type: 'string' },
+        recommended_club: { type: ['string', 'null'] },
+        alternative_play: { type: ['string', 'null'] },
+        confidence_level: { type: 'string', enum: ['high', 'medium', 'low'] },
+        conservative_call: { type: 'boolean' },
+        follow_up_question: { type: ['string', 'null'] },
+        goal_aware_note: { type: ['string', 'null'] },
+      },
+      required: [
+        'situation_description',
+        'tactical_advice',
+        'recommended_club',
+        'alternative_play',
+        'confidence_level',
+        'conservative_call',
+        'follow_up_question',
+        'goal_aware_note',
+      ],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** Gemini responseSchema for structured JSON output. */
+const LIE_ANALYSIS_GEMINI_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    situation_description: { type: Type.STRING },
+    tactical_advice: { type: Type.STRING },
+    recommended_club: { type: Type.STRING, nullable: true },
+    alternative_play: { type: Type.STRING, nullable: true },
+    confidence_level: { type: Type.STRING, enum: ['high', 'medium', 'low'] },
+    conservative_call: { type: Type.BOOLEAN },
+    follow_up_question: { type: Type.STRING, nullable: true },
+    goal_aware_note: { type: Type.STRING, nullable: true },
+  },
+  required: [
+    'situation_description',
+    'tactical_advice',
+    'recommended_club',
+    'alternative_play',
+    'confidence_level',
+    'conservative_call',
+    'follow_up_question',
+    'goal_aware_note',
+  ],
 };
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
@@ -203,6 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             temperature: 0.3,
             maxOutputTokens: 500,
             responseMimeType: 'application/json',
+            responseSchema: LIE_ANALYSIS_GEMINI_SCHEMA,
           },
         });
         const rawText = (gem.text ?? '').trim();
@@ -227,7 +288,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model: 'gpt-4o',
           max_tokens: 500,
           temperature: 0.3,
-          response_format: { type: 'json_object' },
+          response_format: LIE_ANALYSIS_SCHEMA,
           messages: [
             { role: 'system', content: systemPrompt },
             {
@@ -283,8 +344,7 @@ function normalizeLieAnalysis(rawText: string): AnalysisResponse | null {
   if (!rawText) return null;
   let parsed: AnalysisResponse;
   try {
-    const cleaned = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-    parsed = JSON.parse(cleaned) as AnalysisResponse;
+    parsed = JSON.parse(rawText) as AnalysisResponse;
   } catch {
     return null;
   }
