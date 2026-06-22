@@ -18,10 +18,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 1_300, maxRetries: 0 });
+import { completeJSON, providerFromHeader, type AiProvider } from './_aiProvider';
 
 // ─── Schemas ────────────────────────────────────────────────────────────
 
@@ -194,10 +192,11 @@ async function runLLMRecommendation(input: {
   course: CourseContext;
   weather: WeatherContext;
   state: z.infer<typeof StateSchema>;
+  provider: AiProvider;
 }): Promise<ResponsePayload> {
-  const { payload, intent, course, weather, state } = input;
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return fallbackResponse(payload, state, intent, 'no_anthropic_key');
+  const { payload, intent, course, weather, state, provider } = input;
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return fallbackResponse(payload, state, intent, 'no_ai_provider');
   }
   const sys = `You are a tour caddie on a Meta Ray-Ban call. Your output is read aloud verbatim. RULES:
 - "speak" MUST be <=15 words. Use natural speech ("one forty five" not "145 yds").
@@ -258,15 +257,7 @@ ${payload.image_base64 ? '/* TODO: vision frame attached — multimodal Sonnet c
 Give me the JSON.`;
 
   try {
-    const result = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 220,
-      temperature: 0.2,
-      system: [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userMsg }],
-    });
-    const block = result.content.find((b) => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const raw = await completeJSON(provider, 'fast', sys, [{ role: 'user', content: userMsg }], { maxTokens: 220, temperature: 0.2 });
     const parsed = safeParse(raw);
     if (!parsed) return fallbackResponse(payload, state, intent, 'parse_failed');
     const speak = clampWords(String(parsed.speak ?? ''), 15) || `Standing by.`;
@@ -457,10 +448,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ),
   );
 
+  const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+
   const work = (async (): Promise<ResponsePayload> => {
     const course = await getCourseContext(payload.gps, state);
     const weather = await getWind(payload.gps);
-    const result = await runLLMRecommendation({ payload, intent, course, weather, state });
+    const result = await runLLMRecommendation({ payload, intent, course, weather, state, provider });
     const nextState = buildNextState(payload, state, intent, result.speak);
     return { ...result, state: nextState };
   })();

@@ -1175,109 +1175,114 @@ export const useVoiceCaddie = ({
       const trimmed = transcript.trim();
       if (!trimmed) return;
 
-      // 2026-05-26 — Fix BA: client-side close-intent gate. The brain
-      // is smart enough to NOT ask follow-up questions when the user
-      // says "I'm good", but "no, I'm good" gets parsed as a negation
-      // + content, often eliciting "OK, what wasn't right?" That's a
-      // bad loop. Catch the explicit close phrases here and bail
-      // BEFORE the brain call so the conversation actually ends.
-      //
-      // Phrasing is conservative — only matches utterances that ARE
-      // a close intent on their own (the entire transcript). A real
-      // question like "no idea, stop slicing for me?" wouldn't match
-      // any of these because they require the close phrase to be
-      // essentially the whole utterance.
-      if (isCloseIntent(trimmed)) {
-        console.log('[voice] follow-up close intent matched — ending loop', { transcript: trimmed });
-        recordUserTurn(trimmed);
-        return;
-      }
-
-      // Bug fix: when Kevin's last reply asked "How many putts?" and the
-      // user responds with a small number, intercept it here and call
-      // logPutts directly — don't route to the brain (which says "noted"
-      // but never persists the count).
-      const PUTT_WORDS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5 };
-      const turns = getRecentTurns();
-      const lastKevinTurn = [...turns].reverse().find(t => t.role === 'kevin');
-      const lastKevinText = lastKevinTurn?.text ?? '';
-      const awaitingPutts = /putt/i.test(lastKevinText) && /\?/.test(lastKevinText);
-      if (awaitingPutts) {
-        const lower = trimmed.toLowerCase();
-        const num = parseInt(lower, 10);
-        const parsed = Number.isFinite(num) && num >= 0 && num <= 10
-          ? num
-          : (PUTT_WORDS[lower] !== undefined ? PUTT_WORDS[lower] : null);
-        if (parsed !== null) {
-          useRoundStore.getState().logPutts(currentHole, parsed);
+      isProcessingRef.current = true;
+      try {
+        // 2026-05-26 — Fix BA: client-side close-intent gate. The brain
+        // is smart enough to NOT ask follow-up questions when the user
+        // says "I'm good", but "no, I'm good" gets parsed as a negation
+        // + content, often eliciting "OK, what wasn't right?" That's a
+        // bad loop. Catch the explicit close phrases here and bail
+        // BEFORE the brain call so the conversation actually ends.
+        //
+        // Phrasing is conservative — only matches utterances that ARE
+        // a close intent on their own (the entire transcript). A real
+        // question like "no idea, stop slicing for me?" wouldn't match
+        // any of these because they require the close phrase to be
+        // essentially the whole utterance.
+        if (isCloseIntent(trimmed)) {
+          console.log('[voice] follow-up close intent matched — ending loop', { transcript: trimmed });
           recordUserTurn(trimmed);
-          const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
-          onResponseReceived(confirmLine);
-          recordKevinTurn(confirmLine);
-          wrappedOnVoiceStateChange('speaking');
-          await stopSpeaking();
-          void speakDeviceNotice(confirmLine, language, voiceGender);
-          wrappedOnVoiceStateChange('idle');
           return;
         }
-      }
 
-      // Match the manual-tap pattern: record the user turn, send to
-      // brain, speak, then check if Kevin asked ANOTHER question —
-      // recurse via this same loop so a multi-turn back-and-forth
-      // works ("you good?" → "actually one more thing" → ...).
-      recordUserTurn(trimmed);
-      wrappedOnVoiceStateChange('thinking');
-      const reply = await sendToBrain(trimmed);
-      const checked = { ...reply, ...checkContent(reply.text, reply.audioBase64) };
-      // 2026-06-04 — Speak BEFORE navigating; see the intent-router branch
-      // for the rationale (audio-session race when destination claims mic
-      // or camera on mount).
-      onResponseReceived(checked.text);
-      recordKevinTurn(checked.text);
-      wrappedOnVoiceStateChange('speaking');
-      await stopSpeaking();
-      if (checked.audioBase64 && voiceEnabled) {
-        await speakFromBase64(checked.audioBase64, { userInitiated: true });
-      } else {
-        await speakResponse(checked.text);
-      }
-      if (checked.toolAction) onToolAction?.(checked.toolAction);
-      // Recurse one level if Kevin asked yet another question.
-      // 2026-05-26 — Fix AP Phase 2: when continuousConversationMode
-      // is ON, ALSO recurse when the reply doesn't end with `?` — but
-      // honor the safety rails (turn cap + session-time cap). Recursion
-      // still terminates naturally on close-intent (handled above)
-      // or on silence-twice (handled in the calling loop body).
-      const kevinAskedFollowUp = (checked.text ?? '').trim().endsWith('?');
-      const continuous = useSettingsStore.getState().continuousConversationMode;
-      let shouldRecurse = kevinAskedFollowUp;
-      if (continuous && !kevinAskedFollowUp) {
-        const turnsSoFar = continuousTurnCountRef.current;
-        const elapsedMs = continuousSessionStartedAtRef.current === 0
-          ? 0
-          : Date.now() - continuousSessionStartedAtRef.current;
-        if (turnsSoFar >= CONTINUOUS_MAX_TURNS) {
-          console.log('[voice] continuous-mode turn cap reached — ending loop', { turnsSoFar });
-        } else if (elapsedMs >= CONTINUOUS_MAX_SESSION_MS) {
-          console.log('[voice] continuous-mode session-time cap reached — ending loop', { elapsedMs });
-        } else {
-          continuousTurnCountRef.current = turnsSoFar + 1;
-          shouldRecurse = true;
+        // Bug fix: when Kevin's last reply asked "How many putts?" and the
+        // user responds with a small number, intercept it here and call
+        // logPutts directly — don't route to the brain (which says "noted"
+        // but never persists the count).
+        const PUTT_WORDS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5 };
+        const turns = getRecentTurns();
+        const lastKevinTurn = [...turns].reverse().find(t => t.role === 'kevin');
+        const lastKevinText = lastKevinTurn?.text ?? '';
+        const awaitingPutts = /putt/i.test(lastKevinText) && /\?/.test(lastKevinText);
+        if (awaitingPutts) {
+          const lower = trimmed.toLowerCase();
+          const num = parseInt(lower, 10);
+          const parsed = Number.isFinite(num) && num >= 0 && num <= 10
+            ? num
+            : (PUTT_WORDS[lower] !== undefined ? PUTT_WORDS[lower] : null);
+          if (parsed !== null) {
+            useRoundStore.getState().logPutts(currentHole, parsed);
+            recordUserTurn(trimmed);
+            const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
+            onResponseReceived(confirmLine);
+            recordKevinTurn(confirmLine);
+            wrappedOnVoiceStateChange('speaking');
+            await stopSpeaking();
+            void speakDeviceNotice(confirmLine, language, voiceGender);
+            wrappedOnVoiceStateChange('idle');
+            return;
+          }
         }
-      }
-      // 2026-06-06 — Hard recursion cap (always applies, not just
-      // continuous mode). Prevents the runaway-mic state Tim reported.
-      // After 5 turns, the loop ends cleanly; user can tap mic to
-      // continue if they want — but the conversation no longer chains
-      // mic cycles indefinitely on long question/answer exchanges.
-      if (shouldRecurse && followUpDepthRef.current >= HARD_FOLLOWUP_DEPTH_CAP) {
-        console.log('[voice] follow-up depth cap reached — ending loop', { depth: followUpDepthRef.current });
-        shouldRecurse = false;
-      }
-      if (shouldRecurse && !userInterruptedRef.current) {
-        followUpDepthRef.current += 1;
-        await runFollowUpListenLoop();
+
+        // Match the manual-tap pattern: record the user turn, send to
+        // brain, speak, then check if Kevin asked ANOTHER question —
+        // recurse via this same loop so a multi-turn back-and-forth
+        // works ("you good?" → "actually one more thing" → ...).
+        recordUserTurn(trimmed);
+        wrappedOnVoiceStateChange('thinking');
+        const reply = await sendToBrain(trimmed);
+        const checked = { ...reply, ...checkContent(reply.text, reply.audioBase64) };
+        // 2026-06-04 — Speak BEFORE navigating; see the intent-router branch
+        // for the rationale (audio-session race when destination claims mic
+        // or camera on mount).
+        onResponseReceived(checked.text);
+        recordKevinTurn(checked.text);
+        wrappedOnVoiceStateChange('speaking');
+        await stopSpeaking();
+        if (checked.audioBase64 && voiceEnabled) {
+          await speakFromBase64(checked.audioBase64, { userInitiated: true });
+        } else {
+          await speakResponse(checked.text);
+        }
+        if (checked.toolAction) onToolAction?.(checked.toolAction);
+        // Recurse one level if Kevin asked yet another question.
+        // 2026-05-26 — Fix AP Phase 2: when continuousConversationMode
+        // is ON, ALSO recurse when the reply doesn't end with `?` — but
+        // honor the safety rails (turn cap + session-time cap). Recursion
+        // still terminates naturally on close-intent (handled above)
+        // or on silence-twice (handled in the calling loop body).
+        const kevinAskedFollowUp = (checked.text ?? '').trim().endsWith('?');
+        const continuous = useSettingsStore.getState().continuousConversationMode;
+        let shouldRecurse = kevinAskedFollowUp;
+        if (continuous && !kevinAskedFollowUp) {
+          const turnsSoFar = continuousTurnCountRef.current;
+          const elapsedMs = continuousSessionStartedAtRef.current === 0
+            ? 0
+            : Date.now() - continuousSessionStartedAtRef.current;
+          if (turnsSoFar >= CONTINUOUS_MAX_TURNS) {
+            console.log('[voice] continuous-mode turn cap reached — ending loop', { turnsSoFar });
+          } else if (elapsedMs >= CONTINUOUS_MAX_SESSION_MS) {
+            console.log('[voice] continuous-mode session-time cap reached — ending loop', { elapsedMs });
+          } else {
+            continuousTurnCountRef.current = turnsSoFar + 1;
+            shouldRecurse = true;
+          }
+        }
+        // 2026-06-06 — Hard recursion cap (always applies, not just
+        // continuous mode). Prevents the runaway-mic state Tim reported.
+        // After 5 turns, the loop ends cleanly; user can tap mic to
+        // continue if they want — but the conversation no longer chains
+        // mic cycles indefinitely on long question/answer exchanges.
+        if (shouldRecurse && followUpDepthRef.current >= HARD_FOLLOWUP_DEPTH_CAP) {
+          console.log('[voice] follow-up depth cap reached — ending loop', { depth: followUpDepthRef.current });
+          shouldRecurse = false;
+        }
+        if (shouldRecurse && !userInterruptedRef.current) {
+          followUpDepthRef.current += 1;
+          await runFollowUpListenLoop();
+        }
+      } finally {
+        isProcessingRef.current = false;
       }
     };
 

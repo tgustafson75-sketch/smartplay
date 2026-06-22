@@ -15,7 +15,7 @@ import OpenAI from 'openai';
  *   - what changed for the worse
  *   - the ONE thing to keep working on
  *
- * Provider chain: Gemini 2.5 Flash → OpenAI gpt-4o → Anthropic Sonnet.
+ * Provider chain: Gemini 2.5 Flash → OpenAI gpt-4o.
  * Same shape as /api/swing-question — caddie-voice baked into the
  * system prompt, JSON-free conversational output that goes straight
  * to speak() on the client.

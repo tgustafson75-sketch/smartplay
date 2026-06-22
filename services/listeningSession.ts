@@ -439,6 +439,7 @@ async function openSession() {
     // signal). If the classifier ends up routing to a handler/diagnostic, this
     // result is just dropped. Body matches the small-talk path below exactly.
     let speculativeBrainP: Promise<Response | null> | null = null;
+    let speculativeController: AbortController | null = null;
     if (!intent) {
       // ── LOCAL-FIRST (2026-06-16, Tim) ──────────────────────────────────────
       // Before paying ANY cloud round-trip, try to answer the ask instantly from
@@ -471,9 +472,11 @@ async function openSession() {
         return;
       }
 
+      speculativeController = new AbortController();
       speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
+        signal: speculativeController.signal,
         body: JSON.stringify({
           message: utterance,
           language: settings.language,
@@ -738,6 +741,8 @@ async function openSession() {
 
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
+      speculativeController?.abort();
+      speculativeBrainP = null;
       // Phase V.6 — race the handler against filler completion. If the
       // handler hasn't resolved by the time the first filler ends, play
       // an extension filler ('Still working through this...') and re-check.

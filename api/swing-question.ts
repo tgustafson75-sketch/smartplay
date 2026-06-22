@@ -15,7 +15,7 @@ import OpenAI from 'openai';
  * returns a conversational caddie-voice answer that REFERENCES what's
  * visible in the frames.
  *
- * Provider order: Gemini 2.5 Flash → OpenAI gpt-4o → Anthropic Sonnet.
+ * Provider order: Gemini 2.5 Flash → OpenAI gpt-4o.
  * Gemini-first deliberately — it's the model the public associates
  * with "ask your video a question" (the Bryson ad), and gemini-flash
  * is the cheapest/fastest of the three for image-grounded Q&A.
@@ -25,7 +25,7 @@ import OpenAI from 'openai';
  *     context: { caddie_name?, club?, prior_fault?, prior_cause?,
  *                prior_fix?, language? } }
  * Output:
- *   { answer: string, provider: 'gemini'|'openai'|'anthropic',
+ *   { answer: string, provider: 'gemini'|'openai',
  *     _debug: { fallback_reason } }
  */
 

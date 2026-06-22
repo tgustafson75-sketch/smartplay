@@ -11,7 +11,7 @@ import OpenAI from 'openai';
  * statistics + handicap calc include past data the player has
  * accumulated on other platforms.
  *
- * Provider chain: Gemini 2.5 Flash → OpenAI gpt-4o → Anthropic Sonnet.
+ * Provider chain: Gemini 2.5 Flash → OpenAI gpt-4o.
  * Same resilience pattern as /api/swing-analysis (Batch 23-24).
  * Gemini-first because scorecard OCR (mixed layout, varying labels,
  * occasional handwriting) is exactly the task Gemini's vision excels

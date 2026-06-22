@@ -32,6 +32,9 @@ export default async function handler(
     if (!image) {
       return res.status(200).json({ message: 'No image provided.' });
     }
+    if (typeof image === 'string' && image.length > 7_000_000) {
+      return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge.' });
+    }
 
     if (mode === 'hole') {
       const missContext = dominantMiss

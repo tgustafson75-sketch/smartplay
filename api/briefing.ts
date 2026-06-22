@@ -118,6 +118,11 @@ Give the pre-round briefing now.`;
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     const brief = await completeText(provider, 'quality', systemPrompt, [{ role: 'user', content: userMessage }], { maxTokens: 200 });
 
+    if (!brief) {
+      console.error('[briefing] empty response from AI provider for', courseName, mode);
+      return res.status(502).json({ error: 'Empty brief from AI provider' });
+    }
+
     console.log('[briefing] generated for', courseName, mode, `"${brief.slice(0, 60)}..."`);
     return res.status(200).json({ brief });
 

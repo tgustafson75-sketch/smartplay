@@ -10,15 +10,13 @@
  * Failure modes mirror /api/lie-analysis:
  *   400 — missing image
  *   413 — image too large (>5MB after base64 decode)
- *   500 — Anthropic key not configured / vision call failed
+ *   500 — no AI provider configured / vision call failed
  *   502 — model returned non-JSON
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeVision, providerFromHeader } from './_aiProvider';
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
 const buildSystemPrompt = (g: Persona | VoiceGender) => `${getCharacterSpec(g)}
@@ -90,8 +88,8 @@ export interface SpaceAssessment {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -109,24 +107,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const personaInput: Persona | VoiceGender =
       (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 800,
-      temperature: 0.4,
-      system: buildSystemPrompt(personaInput),
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: image_media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: image_b64 } },
-            { type: 'text', text: 'Read this practice space and tell me how to use it.' },
-          ],
-        },
-      ],
-    });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
+      'Read this practice space and tell me how to use it.',
+      [{ b64: image_b64, mimeType: image_media_type }],
+      { maxTokens: 800, temperature: 0.4, forceJSON: true },
+    );
     if (!text) return res.status(502).json({ error: 'Empty model response' });
 
     let parsed: SpaceAssessment;

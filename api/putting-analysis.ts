@@ -142,19 +142,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!raw) {
-      console.warn('[putting] all providers failed, returning shell');
-      return res.status(200).json(unknownShell(caddieName, body));
+      console.warn('[putting] all providers failed');
+      return res.status(502).json({ error: 'All providers failed', gemini_error: geminiError, openai_error: openaiError });
     }
 
     const parsed = safeParse(raw);
     if (!parsed) {
-      console.warn('[putting] parse failed, returning shell. provider:', providerUsed);
-      return res.status(200).json(unknownShell(caddieName, body));
+      console.warn('[putting] parse failed. provider:', providerUsed);
+      return res.status(502).json({ error: 'Model returned non-JSON', provider: providerUsed });
     }
     return res.status(200).json({ ...parsed, _debug: { provider: providerUsed, gemini_error: geminiError, openai_error: openaiError } });
   } catch (err) {
     console.log('[putting] error:', err);
-    return res.status(200).json(unknownShell('Kevin', null));
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 }
 

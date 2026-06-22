@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeVision, providerFromHeader } from './_aiProvider';
 
 /**
  * Phase L — CV scoring endpoint.
@@ -63,8 +61,8 @@ Rules:
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -90,22 +88,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `Target was ${target_distance_yards} yards from tee. Estimate ball-to-pin proximity from the photo.`
       : 'Estimate ball-to-pin proximity from the photo.';
 
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 400,
-      temperature: 0.2,
-      system: CTP_SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: image_media_type as 'image/jpeg' | 'image/png', data: image_b64 } },
-          { type: 'text', text: userText },
-        ],
-      }],
-    });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const text = await completeVision(provider, 'quality', CTP_SYSTEM_PROMPT, userText,
+      [{ b64: image_b64, mimeType: image_media_type }],
+      { maxTokens: 400, temperature: 0.2, forceJSON: true },
+    );
     if (!text) return res.status(502).json({ error: 'Empty model response' });
 
     let parsed: CVScoringResponse;

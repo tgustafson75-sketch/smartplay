@@ -137,7 +137,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // intent). Weight it: a verbal "I'm 140 to a back-left pin behind
     // bunkers" beats trying to infer the same from a tight lie photo.
     if (typeof ctx.player_notes === 'string' && ctx.player_notes.trim().length > 0) {
-      contextLines.push(`Player's verbal context (spoken before the photo): "${ctx.player_notes.trim()}". Use this — it carries situational info the photo can't show on its own. When the lie photo and the verbal context point different directions, name BOTH and reconcile honestly ("you said back-left pin; I see a tight uphill lie — that combo says...").`);
+      const playerNotesSafe = ctx.player_notes.trim().slice(0, 500);
+      contextLines.push(`Player's verbal context (spoken before the photo): "${playerNotesSafe}". Use this — it carries situational info the photo can't show on its own. When the lie photo and the verbal context point different directions, name BOTH and reconcile honestly ("you said back-left pin; I see a tight uphill lie — that combo says...").`);
     }
     if (ctx.play_intent === 'aggressive') contextLines.push('Player is leaning aggressive — they want to know if going for it is on.');
     if (ctx.play_intent === 'conservative') contextLines.push('Player is leaning conservative — they want to know if laying up is the right call.');

@@ -1,12 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeText, completeJSON, providerFromHeader, type AiProvider } from './_aiProvider';
 
 // ─── Action: generate a caddie question for a shot ───────────────────────────
 
-async function handleQuestion(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function handleQuestion(body: Record<string, unknown>, provider: AiProvider): Promise<Record<string, unknown>> {
   const {
     clip_index = 0,
     total_clips = 1,
@@ -45,21 +43,14 @@ Mode: ${modeDescription}
 
 Generate exactly one question to ask the player about this shot. Be casual, sound like a real conversation. No fluff. No "Hey" or opener phrases — just the question.`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 80,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const block = response.content.find(b => b.type === 'text');
-  const question = (block as { type: 'text'; text: string } | undefined)?.text?.trim() ?? 'How did that feel?';
+  const question = (await completeText(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 80, temperature: 0 })).trim() || 'How did that feel?';
   return { question };
 }
 
 // ─── Action: extract labels from a voice transcript ──────────────────────────
 
-async function handleExtract(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const transcript = String(body.transcript ?? '').trim();
+async function handleExtract(body: Record<string, unknown>, provider: AiProvider): Promise<Record<string, unknown>> {
+  const transcript = String(body.transcript ?? '').trim().slice(0, 1000);
   if (!transcript) {
     return {
       labels: {
@@ -87,14 +78,7 @@ Return a JSON object with these exact keys:
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 200,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const block = response.content.find(b => b.type === 'text');
-  const raw = (block as { type: 'text'; text: string } | undefined)?.text?.trim() ?? '{}';
+  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 200, temperature: 0 });
 
   try {
     const labels = JSON.parse(raw) as Record<string, unknown>;
@@ -115,9 +99,10 @@ Return ONLY valid JSON. No markdown, no explanation.`;
 
 // ─── Action: build vocabulary profile from session transcripts ────────────────
 
-async function handleVocab(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const transcripts = (body.transcripts as string[]) ?? [];
-  const total_reviewed = Number(body.total_reviewed ?? transcripts.length);
+async function handleVocab(body: Record<string, unknown>, provider: AiProvider): Promise<Record<string, unknown>> {
+  const rawTranscripts = (body.transcripts as string[]) ?? [];
+  const transcripts = rawTranscripts.slice(0, 20).map(t => String(t).slice(0, 200));
+  const total_reviewed = Number(body.total_reviewed ?? rawTranscripts.length);
   // Audit 101 / B4 — prefer body.persona; fall back to body.voiceGender for legacy.
   const caddieName = getCaddieName(
     typeof body.persona === 'string'
@@ -150,14 +135,7 @@ Return a JSON object with:
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 400,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const block = response.content.find(b => b.type === 'text');
-  const raw = (block as { type: 'text'; text: string } | undefined)?.text?.trim() ?? '{}';
+  const raw = await completeJSON(provider, 'fast', '', [{ role: 'user', content: prompt }], { maxTokens: 400, temperature: 0 });
 
   try {
     const data = JSON.parse(raw) as Record<string, unknown>;
@@ -181,19 +159,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(200).json({ configured: false, reason: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(200).json({ configured: false, reason: 'No AI provider configured' });
   }
 
   try {
     const body = req.body as Record<string, unknown>;
     const action = String(body.action ?? '');
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
 
     console.log(`[cage-review] action=${action}`);
 
-    if (action === 'question') return res.status(200).json(await handleQuestion(body));
-    if (action === 'extract')  return res.status(200).json(await handleExtract(body));
-    if (action === 'vocab')    return res.status(200).json(await handleVocab(body));
+    if (action === 'question') return res.status(200).json(await handleQuestion(body, provider));
+    if (action === 'extract')  return res.status(200).json(await handleExtract(body, provider));
+    if (action === 'vocab')    return res.status(200).json(await handleVocab(body, provider));
 
     return res.status(400).json({ error: `Unknown action: ${action}` });
   } catch (err: unknown) {

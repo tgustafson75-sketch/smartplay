@@ -10,18 +10,28 @@ const gemini = process.env.GOOGLE_API_KEY
   : null;
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22_000, maxRetries: 1 });
 
+function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 /**
  * Phase K — Swing analysis endpoint.
  *
- * Cloud-based pose-aware swing fault detection via Anthropic Claude Sonnet
- * vision. Input: 1-5 base64-encoded JPEGs sampled from a swing video clip
- * (address, top of backswing, transition, impact, follow-through ideally).
- * Plus context (club, swing number, prior issues if any). Output: structured
- * canonical-issue classification with confidence.
+ * Cloud-based pose-aware swing fault detection via Gemini 2.5 Flash (primary)
+ * + OpenAI gpt-4o (quality escalation fallback). Input: 1-5 base64-encoded
+ * JPEGs sampled from a swing video clip (address, top of backswing,
+ * transition, impact, follow-through ideally). Plus context (club, swing
+ * number, prior issues if any). Output: structured canonical-issue
+ * classification with confidence.
  *
  * Per the Phase K spec, this is option (a) cloud-based pose detection.
- * Privacy implication: swing video frames go to Anthropic. The future swap
- * to local TFJS pose detection is a one-file change in
+ * Privacy implication: swing video frames go to Gemini / OpenAI. The future
+ * swap to local TFJS pose detection is a one-file change in
  * services/poseDetection.ts (this endpoint becomes optional).
  *
  * Canonical issue catalog matches services/swingIssueClassifier.ts and
@@ -420,22 +430,15 @@ Rules:
 /**
  * 2026-05-26 — Fix AX: Gemini-first speed-with-escalation orchestration.
  *
- * 2026-06-10 — Architecture: Anthropic is the SPINE, Gemini is the FAST
- * FALLBACK, OpenAI is OUT of analysis (ears/mouth only).
- *
- *   1. Anthropic Haiku 4.5 (speed path, ~2-5s). Most reads (clean clip,
- *      person in frame, common faults) land here and return immediately.
- *   2. If it doesn't meet the confidence bar AND this is a full-tier read
- *      (library upload, not SmartMotion quick) — escalate to Anthropic
- *      Sonnet (deepest temporal reasoning, the strong backstop).
- *   3. Only if Anthropic produced NO parseable read at all — fall back to
- *      Gemini 2.5 Flash (fast, funded). A quick Gemini answer beats a 502.
- *   4. Among providers that ran, return the BEST result (highest confidence
- *      + diagnostic primary_fault + non-empty evidence).
+ * Phase 5 orchestration:
+ *   Stage 1 — Gemini 2.5 Flash (speed primary, ~2-5s). Most reads (clean
+ *     clip, person in frame, common faults) land here and return immediately.
+ *   Stage 2 — OpenAI gpt-4o (quality escalation). If Stage 1 doesn't meet
+ *     the confidence bar AND this is a full-tier read (library upload, not
+ *     SmartMotion quick) — escalate to gpt-4o for deeper temporal reasoning.
  *
  * No cross-provider quality ladder = far lower p50 latency, so a read never
- * approaches the client timeout (the old Gemini→gpt-4o→Sonnet chain could
- * take 30-50s and get mislabeled as "lost connection").
+ * approaches the client timeout.
  */
 
 interface AttemptResult {
@@ -467,12 +470,12 @@ function normalizeAnalysis(
   if (!rawText) return null;
   let parsed: SwingAnalysisResponse;
   // 2026-05-26 — Fix DC: robust JSON extraction. OpenAI's
-  // response_format:json_object guarantees clean JSON, but Anthropic
-  // (prompt-instructed only) sometimes prepends prose ("Looking at
-  // this swing, I see...") before the JSON. The prior approach only
-  // stripped ``` code fences, so prose-prefixed valid JSON was
-  // silently dropped → forced unnecessary re-escalation. Try the
-  // greedy match for the outermost {...} block first; fall back to
+  // response_format:json_object guarantees clean JSON, but Gemini
+  // (when responseMimeType is not enforced) sometimes prepends prose
+  // ("Looking at this swing, I see...") before the JSON. The prior
+  // approach only stripped ``` code fences, so prose-prefixed valid
+  // JSON was silently dropped → forced unnecessary re-escalation. Try
+  // the greedy match for the outermost {...} block first; fall back to
   // fence-strip if no braces found.
   try {
     let cleaned = rawText.trim();
@@ -687,8 +690,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Returns 200 in <50ms without doing AI work; ideal for fire-and-
     // forget client calls.
     if (body.mode === 'warmup') {
-      // 2026-06-07 — Real-warm Anthropic Haiku (1 token, no images)
-      // to actually open the HTTP/2 pool to Anthropic. Prior path
+      // 2026-06-07 — Real-warm Gemini 2.5 Flash (1 token, no images)
+      // to actually open the HTTP/2 pool to Gemini. Prior path
       // returned 200 in <50ms which warmed only the Lambda runtime,
       // not the SDK's TLS+H2 connection — leaving the FIRST real
       // swing-analysis paying ~0.5-2s of HTTPS setup.
@@ -736,7 +739,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         if (!gemini) return res.status(200).json({ found: false, error: 'GOOGLE_API_KEY not configured' });
         const detectSystem = 'You are a precise image-coordinate detector. You will be shown one image from a golf swing setup. Find the golf ball (a small white sphere sitting on the ground, mat, tee, or grass). Return ONLY a JSON object with the ball\'s normalized coordinates relative to the image: { "found": true, "x": <0-1 from left>, "y": <0-1 from top>, "r": <0.01-0.2 normalized radius> }. If you can\'t see a golf ball with high confidence, return { "found": false }. No prose, no markdown, just the JSON.';
-        const gem = await gemini.models.generateContent({
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{
             role: 'user',
@@ -746,7 +749,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ],
           }],
           config: { temperature: 0.0, maxOutputTokens: 200, responseMimeType: 'application/json' },
-        });
+        }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; x?: number; y?: number; r?: number } = {};
         try {
@@ -798,11 +801,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }),
           { text: 'At which timestamp is the actual golf swing happening? Return JSON only.' },
         ];
-        const gem = await gemini.models.generateContent({
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: locParts }],
           config: { temperature: 0.0, maxOutputTokens: 120, responseMimeType: 'application/json' },
-        });
+        }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; swing_time_sec?: number; confidence?: string } = {};
         try {
@@ -846,11 +849,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }),
           { text: 'List all distinct swings. Return JSON only.' },
         ];
-        const gem = await gemini.models.generateContent({
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: locParts }],
           config: { temperature: 0.0, maxOutputTokens: 400, responseMimeType: 'application/json' },
-        });
+        }), 20_000);
         const raw = (gem.text ?? '').trim();
         let parsed: { swings?: Array<{ time_sec?: number; confidence?: string }> } = {};
         try {

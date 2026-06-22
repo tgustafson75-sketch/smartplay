@@ -82,6 +82,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!audio || audio.length < 200) {
     return res.status(400).json({ error: 'audioBase64 missing or too small' } as ErrorBody);
   }
+  if (audio.length > 10_000_000) {
+    return res.status(413).json({ error: 'Audio too large; max ~7 MB WAV.' } as ErrorBody);
+  }
 
   let pcm: { samples: Int16Array; sampleRate: number };
   try {

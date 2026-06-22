@@ -11,10 +11,9 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName } from '../lib/persona';
+import { completeVision, providerFromHeader, type AiImageInput } from './_aiProvider';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
 const MAX_FRAMES = 6;
 
 interface MemberInfo {
@@ -51,8 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -80,13 +79,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(warmShell(body.member, body.age_band, caddieName, body.prior_swing ?? null));
     }
 
-    const userContent: Anthropic.Messages.ContentBlockParam[] = [];
-    for (const b64 of frames) {
-      userContent.push({
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
-      });
-    }
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const images: AiImageInput[] = frames.map(b64 => ({ b64, mimeType: 'image/jpeg' }));
     const ctx: string[] = [];
     ctx.push(`Golfer: ${body.member.first_name}${body.member.nickname ? ` ("${body.member.nickname}")` : ''}`);
     if (body.member.age != null) ctx.push(`Age: ${body.member.age}`);
@@ -103,21 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ` fundamentals=${JSON.stringify(body.prior_swing.fundamentals)}.`,
       );
     }
-    userContent.push({
-      type: 'text',
-      text: ctx.join('\n') + '\n\nReturn ONLY the JSON object described in the system prompt. No preamble.',
-    });
+    const userText = ctx.join('\n') + '\n\nReturn ONLY the JSON object described in the system prompt. No preamble.';
 
-    const result = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1200,
-      temperature: 0.3,
-      system: [{ type: 'text', text: buildSystem(body.age_band, caddieName, body.member), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const block = result.content.find((b) => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
+    const raw = await completeVision(provider, 'quality', buildSystem(body.age_band, caddieName, body.member),
+      userText, images,
+      { maxTokens: 1200, temperature: 0.3, forceJSON: true },
+    );
     const parsed = safeParse(raw);
     if (!parsed) {
       console.warn('[junior-swing] parse failed; returning warm shell');
@@ -125,16 +110,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(200).json(parsed);
   } catch (err) {
-    console.log('[junior-swing] error:', err);
-    return res.status(200).json({
-      coachComment: 'Coach had trouble with that one — let\'s try again.',
-      overallScore: 50,
-      wins: ['You took the swing.'],
-      next_focus: null,
-      fun_drill: null,
-      fundamentals: { grip: 'unknown', stance: 'unknown', head_movement: 'unknown', tempo: 'unknown', balance: 'unknown' },
-      vs_previous: null,
-    });
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[junior-swing] error:', msg);
+    return res.status(500).json({ error: msg });
   }
 }
 

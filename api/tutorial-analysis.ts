@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeVision, providerFromHeader, type AiImageInput } from './_aiProvider';
 
 /**
  * Phase BR — Tutorial teaching-content extraction.
@@ -93,8 +91,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -119,29 +117,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (transcript) inputLines.push(`Transcript (auto-extracted): ${transcript.slice(0, 4000)}`);
     inputLines.push(`\nReturn the structured teaching content as JSON.`);
 
-    const userContent: Anthropic.Messages.ContentBlockParam[] = [];
-    if (frame?.b64) {
-      userContent.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: (frame.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: frame.b64,
-        },
-      });
-    }
-    userContent.push({ type: 'text', text: inputLines.join('\n') });
+    const images: AiImageInput[] = frame?.b64
+      ? [{ b64: frame.b64, mimeType: frame.media_type ?? 'image/jpeg' }]
+      : [];
 
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      temperature: 0.2,
-      system: buildSystemPrompt(personaInput),
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
+      inputLines.join('\n'), images,
+      { maxTokens: 600, temperature: 0.2, forceJSON: true },
+    );
     if (!text) {
       return res.status(502).json({ error: 'Empty model response' });
     }

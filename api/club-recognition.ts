@@ -1,7 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+import { completeVision, providerFromHeader } from './_aiProvider';
 
 /**
  * Phase BL — Club recognition endpoint.
@@ -87,8 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -105,27 +103,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(413).json({ error: 'image too large; resize to ~1024px on long edge' });
     }
 
-    const userContent = [
-      {
-        type: 'image' as const,
-        source: { type: 'base64' as const, media_type: mediaType, data: b64 },
-      },
-      {
-        type: 'text' as const,
-        text: 'Read the number or letters stamped on the sole. Return JSON.',
-      },
-    ];
-
-    const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      temperature: 0.1,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const block = completion.content.find(c => c.type === 'text');
-    const text = block && block.type === 'text' ? block.text.trim() : '';
+    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const text = await completeVision(provider, 'quality', SYSTEM_PROMPT,
+      'Read the number or letters stamped on the sole. Return JSON.',
+      [{ b64, mimeType: mediaType }],
+      { maxTokens: 200, temperature: 0.1, forceJSON: true },
+    );
     if (!text) {
       return res.status(502).json({ error: 'Empty model response' });
     }

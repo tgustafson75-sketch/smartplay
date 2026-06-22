@@ -6,8 +6,7 @@
  * business logic. TTS (gpt-4o-mini-tts) and STT (Whisper) are NOT routed
  * through here — they are always OpenAI.
  *
- * Phase 1 infrastructure: no routes call this yet. Phase 2+ migrates routes
- * one by one to replace direct Anthropic calls.
+ * Stable provider abstraction used by the majority of API routes.
  */
 
 import OpenAI from 'openai';
@@ -87,6 +86,17 @@ function getGemini(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 }
 
+// ─── Gemini timeout helper ────────────────────────────────────────────────────
+
+function withGeminiTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 // ─── Text completion ──────────────────────────────────────────────────────────
 
 /**
@@ -118,7 +128,7 @@ export async function completeText(
 
   // Gemini
   const genai = getGemini();
-  const res = await genai.models.generateContent({
+  const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents: messages.map(m => ({ role: m.role, parts: [{ text: m.content }] })),
     config: {
@@ -126,7 +136,7 @@ export async function completeText(
       temperature,
       maxOutputTokens: maxTokens,
     },
-  });
+  }), timeoutMs ?? 25_000);
   return (res.text ?? '').trim();
 }
 
@@ -163,7 +173,7 @@ export async function completeJSON(
 
   // Gemini
   const genai = getGemini();
-  const res = await genai.models.generateContent({
+  const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents: messages.map(m => ({ role: m.role, parts: [{ text: m.content }] })),
     config: {
@@ -172,7 +182,7 @@ export async function completeJSON(
       maxOutputTokens: maxTokens,
       responseMimeType: 'application/json',
     },
-  });
+  }), timeoutMs ?? 25_000);
   return (res.text ?? '{}').trim();
 }
 
@@ -221,7 +231,7 @@ export async function completeVision(
   // Gemini
   const genai = getGemini();
   const imageParts = images.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.b64 } }));
-  const res = await genai.models.generateContent({
+  const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents: [{
       role: 'user',
@@ -235,7 +245,7 @@ export async function completeVision(
       maxOutputTokens: maxTokens,
       ...(forceJSON ? { responseMimeType: 'application/json' } : {}),
     },
-  });
+  }), timeoutMs ?? 25_000);
   return (res.text ?? '').trim();
 }
 
@@ -315,7 +325,7 @@ export async function completeWithTools(
     });
   }
 
-  const res = await genai.models.generateContent({
+  const res = await withGeminiTimeout(genai.models.generateContent({
     model,
     contents,
     config: {
@@ -324,7 +334,7 @@ export async function completeWithTools(
       maxOutputTokens: maxTokens,
       tools: geminiTools,
     },
-  });
+  }), timeoutMs ?? 25_000);
 
   const parts: Part[] = res.candidates?.[0]?.content?.parts ?? [];
   const textParts = parts.filter(p => typeof p.text === 'string');
@@ -491,7 +501,7 @@ async function _geminiAgenticLoop(
 
   for (let round = 0; round < maxRounds; round++) {
     rounds = round + 1;
-    const generatePromise = genai.models.generateContent({
+    const res = await withGeminiTimeout(genai.models.generateContent({
       model,
       contents,
       config: {
@@ -500,15 +510,7 @@ async function _geminiAgenticLoop(
         maxOutputTokens: maxTokens,
         tools: geminiToolDefs,
       },
-    });
-    const res = await (timeoutMs
-      ? Promise.race([
-          generatePromise,
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Gemini per-round timeout after ${timeoutMs}ms`)), timeoutMs),
-          ),
-        ])
-      : generatePromise);
+    }), timeoutMs ?? 25_000);
 
     const candidate = res.candidates?.[0];
     const parts = (candidate?.content?.parts ?? []) as Array<Record<string, unknown>>;

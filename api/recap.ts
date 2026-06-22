@@ -182,10 +182,18 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
     const rawText = await completeJSON(provider, 'quality', buildRecapSystem(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 1200 });
 
-    const parsed = JSON.parse(rawText) as {
-      hole_summaries: Array<{ hole_number: number; summary: string }>;
-      overall_summary: string;
-    };
+    let parsed: { hole_summaries: Array<{ hole_number: number; summary: string }>; overall_summary: string };
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      console.error('[recap] AI returned unparseable JSON:', JSON.stringify(rawText).slice(0, 200));
+      return res.status(502).json({ error: 'Recap model returned invalid JSON' });
+    }
+
+    if (!Array.isArray(parsed.hole_summaries)) {
+      console.error('[recap] AI response missing hole_summaries:', JSON.stringify(parsed).slice(0, 200));
+      return res.status(502).json({ error: 'Recap model returned unexpected shape' });
+    }
 
     console.log('[recap] generated', parsed.hole_summaries.length, 'hole summaries');
     return res.status(200).json(parsed);

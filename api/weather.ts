@@ -43,9 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const fingerprint = `len=${apiKey.length} suffix=…${apiKey.slice(-4)}`;
       console.error('[weather] upstream', upstream.status, fingerprint, text.slice(0, 200));
       return res.status(upstream.status).json({
-        error: `Upstream ${upstream.status}`,
-        upstream_message: text.slice(0, 200),
-        key_fingerprint: fingerprint,
+        error: 'Upstream weather service error',
+        status: upstream.status,
       });
     }
     const data = (await upstream.json()) as Record<string, unknown>;

@@ -43,6 +43,9 @@ export default async function handler(
         fault: null,
       });
     }
+    if (typeof frameBase64 === 'string' && frameBase64.length > 7_000_000) {
+      return res.status(413).json({ error: 'Image too large; resize to ~1024px on long edge.' });
+    }
 
     const missContext = dominantMiss
       ? ' This player tends to miss ' + dominantMiss + '.'
