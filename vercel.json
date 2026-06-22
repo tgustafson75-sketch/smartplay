@@ -31,6 +31,7 @@
     { "src": "api/tutorial-analysis.ts",     "use": "@vercel/node", "config": { "maxDuration": 45 } },
     { "src": "api/vision.ts",                "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/voice.ts",                 "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "api/pipecat-turn.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/pipecat-tool.ts",    "use": "@vercel/node", "config": { "maxDuration": 15 } },
     { "src": "api/*.ts",               "use": "@vercel/node" },
     {
@@ -53,6 +54,7 @@
     { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },
     { "src": "/api/cage-review",  "dest": "/api/cage-review.ts" },
     { "src": "/api/voice-intent",   "dest": "/api/voice-intent.ts" },
+    { "src": "/api/pipecat-turn",   "dest": "/api/pipecat-turn.ts" },
     { "src": "/api/pipecat-tool",   "dest": "/api/pipecat-tool.ts" },
     { "src": "/api/parse-shot",   "dest": "/api/parse-shot.ts" },
     { "src": "/api/health",          "dest": "/api/health.ts" },

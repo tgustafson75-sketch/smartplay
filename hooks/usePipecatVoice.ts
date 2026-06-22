@@ -234,17 +234,12 @@ export function usePipecatVoice({
   }, []);
 
   /**
-   * Phase 2 brain — send a text transcript to Pipecat /turn, get Claude's
+   * Phase 2 brain — POST to Vercel /api/pipecat-turn, get Claude's
    * response + tool actions back, speak the response, dispatch tool actions.
+   * No Railway or Python server needed for Phase 2.
    */
   const processTurn = useCallback(async (transcript: string): Promise<void> => {
-    const serverUrl = useSettingsStore.getState().pipecatServerUrl;
-    if (!serverUrl) {
-      devLog('[pipecat] pipecatServerUrl not set');
-      return;
-    }
-
-    const httpBase = serverUrl.replace(/^wss?:\/\//, 'https://').replace(/\/+$/, '');
+    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
     const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
 
     onVoiceStateChange?.('thinking');
@@ -253,7 +248,7 @@ export function usePipecatVoice({
     const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
 
     try {
-      const resp = await fetch(`${httpBase}/turn`, {
+      const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
