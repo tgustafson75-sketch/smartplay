@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * 2026-05-26 — Fix AA: Round screenshot import.
@@ -26,7 +25,6 @@ const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
 
 const SYSTEM_PROMPT = `You are reading a screenshot of a golf round scorecard. The image may come from any source: Golfshot, 18Birdies, GHIN, USGA Tournament Center, the player's own paper scorecard photographed in good light, a screenshot of a scorecard email, etc.
 
@@ -192,10 +190,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const maxOut = mode === 'list' ? 3000 : 1500;
 
     let raw = '';
-    let providerUsed: 'gemini' | 'openai' | 'anthropic' = 'gemini';
+    let providerUsed: 'gemini' | 'openai' = 'gemini';
     let geminiError: string | null = null;
     let openaiError: string | null = null;
-    let anthropicError: string | null = null;
 
     if (gemini) {
       try {
@@ -251,40 +248,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (!raw && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const completion = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: maxOut,
-          temperature: 0.1,
-          system: systemPrompt,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: imageMediaType, data: imageB64 },
-              },
-              { type: 'text', text: userText },
-            ],
-          }],
-        });
-        const block = completion.content.find(c => c.type === 'text');
-        raw = block && block.type === 'text' ? block.text.trim() : '';
-        providerUsed = 'anthropic';
-        if (!raw) anthropicError = 'empty_response';
-      } catch (e) {
-        anthropicError = e instanceof Error ? e.message : 'unknown';
-        console.error('[round-import] anthropic last-resort failed:', anthropicError);
-      }
-    }
-
     if (!raw) {
       return res.status(502).json({
         error: 'All providers failed',
         gemini_error: geminiError,
         openai_error: openaiError,
-        anthropic_error: anthropicError,
       });
     }
 
@@ -356,7 +324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       score_vs_par: scoreVsPar,
       _debug: {
         provider: providerUsed,
-        fallback_reason: providerUsed === 'gemini' ? null : { gemini: geminiError, openai: providerUsed === 'anthropic' ? openaiError : null },
+        fallback_reason: providerUsed === 'gemini' ? null : { gemini: geminiError },
       },
     });
   } catch (e) {

@@ -1,19 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 import { providerFromHeader } from './_aiProvider';
 
-// 2026-05-26 — Fix BS: lie-analysis Gemini-first resilience chain.
-// Was Anthropic-only — single-provider outage blocked all lie reads.
-// Now mirrors /api/swing-analysis pattern: Gemini 2.5 Flash (speed
-// + cheapest) → OpenAI gpt-4o (mid) → Anthropic Sonnet 4.6 (deepest
-// reasoning, last resort). Same defensive normalization in each path.
-// Anthropic timeout tightened to 22s + maxRetries dropped from 3 → 1
-// because we now have OpenAI as the primary fallback — burning 75s
-// on retries before falling through was the wrong trade-off.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -190,11 +180,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const skipGemini = preferredProvider === 'openai';
 
     let parsed: AnalysisResponse | null = null;
-    let providerUsed: 'gemini' | 'openai' | 'anthropic' | null = null;
+    let providerUsed: 'gemini' | 'openai' | null = null;
     const errors: Record<string, string | null> = {
       gemini: null,
       openai: null,
-      anthropic: null,
     };
 
     // ── Stage 1: Gemini 2.5 Flash (speed path) ───────────────────
@@ -263,52 +252,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // ── Stage 3: Anthropic Sonnet 4.6 (deepest reasoning, last) ──
-    if (!parsed && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const completion = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 500,
-          temperature: 0.3,
-          system: systemPrompt,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: image_media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                  data: image_b64,
-                },
-              },
-              { type: 'text', text: userText },
-            ],
-          }],
-        });
-        const block = completion.content.find(c => c.type === 'text');
-        const rawText = block && block.type === 'text' ? block.text.trim() : '';
-        parsed = normalizeLieAnalysis(rawText);
-        if (parsed) {
-          providerUsed = 'anthropic';
-          console.log('[lie-analysis] anthropic last-resort succeeded:',
-            { gemini: errors.gemini, openai: errors.openai });
-        } else {
-          errors.anthropic = rawText ? 'non_json_response' : 'empty_response';
-        }
-      } catch (e) {
-        errors.anthropic = e instanceof Error ? e.message : 'unknown';
-        console.error('[lie-analysis] anthropic last-resort failed:', errors.anthropic);
-      }
-    }
-
     if (!parsed || !providerUsed) {
       console.error('[lie-analysis] all providers failed', errors);
       return res.status(502).json({
         error: 'All providers failed',
         gemini_error: errors.gemini,
         openai_error: errors.openai,
-        anthropic_error: errors.anthropic,
       });
     }
 

@@ -2103,4 +2103,62 @@ Root cause of "robot voice" bug: Anthropic credits limited → brain fails → T
 1. **Phase 5** — Strip Anthropic from vision routes: `lie-analysis`, `swing-analysis`, `swing-compare`, `swing-question`, `round-import`, `putting-analysis`.
 2. **Phase 6** — Remove `@anthropic-ai/sdk` from `package.json` entirely.
 3. **PATH 4 VOICE checkpoint** — Test mic tap → intent parse → Kevin response on both providers (Gemini default, OpenAI toggle via Owner Tools).
+
+## Day N — 2026-06-21 Session 7 (pre-influencer beta audit)
+
+### Shipped today
+
+- **HIGH bug fixes** (`a0b54d7` + `5e493ce`) — all 11 confirmed HIGH findings from pre-influencer audit:
+  - HIGH-1: `api/kevin.ts` `timeoutMs:8000` in `runAgenticLoop`; TTS `timeout:10000,maxRetries:0`; fast-tier `maxTokens` 200→300.
+  - HIGH-3: `api/lie-analysis.ts` Anthropic-only startup guard replaced — TightLie returned 500 when only Gemini/OpenAI keys present.
+  - HIGH-5: `vercel.json` `maxDuration` added for `lie-analysis` (60s), `image-edit` (60s), `putting-analysis` (60s), `course-geometry` (30s).
+  - HIGH-6: `hooks/useVoiceCaddie.ts` unmount cleanup `useEffect` clears timers on voice nav-away.
+  - HIGH-8: `app/_layout.tsx` trial lifecycle hydration guard.
+  - HIGH-9: `app/(tabs)/caddie.tsx` auto-end round navigates to recap instead of stranding user.
+  - HIGH-11: `api/putting-analysis.ts` `maxRetries` 3→1 (3×25s exceeded 60s Vercel wall).
+  - M13: `app/smartvision.tsx` `onCuratedPhoto` mis-sending GPS overlay on Golfbert photos.
+  - Scene read: `sceneReadService.ts` `X-AI-Provider` header added (`5e493ce`).
+- **Sprint save-point commit** (`860966d`).
+
+- **Phase BL — GolfTraxx satellite GPS for 6 additional courses** (`6b5ffc7` + `dc878bb` + `169332b`):
+  - Populated real GPS coordinates (green center/front/back + tee) from GolfTraxx satellite data for: Crystal Springs, Sunnyvale GC, San Jose Municipal, Mariners Point, Echo Hills, Westlake CC.
+  - Greenhill F/B yardages corrected from official screenshots; voice-intent examples added.
+  - Nav + GPS + greeting fixes: BackHandler, Greenhill coords, image crop.
+- HIGH-10 (Greenhill `courseHoles:[]`) — Greenhill 18-hole data added in earlier commits.
+
+### Open / carried to next session
+
+1. Phase 5: Strip Anthropic from vision routes (`swing-analysis` remaining).
+2. Phase 6: Remove `@anthropic-ai/sdk` from `package.json` once all routes migrated.
+3. Path 2 + Path 4 MIN VERIFY (real Z Fold round).
+
+## Day N — 2026-06-22 Session 8 (Phase 5 completion — swing-analysis.ts)
+
+### Shipped today
+
+- **Phase 5 — `api/swing-analysis.ts` Anthropic removal complete:**
+  - Fixed broken `locate_swing` block: replaced Anthropic-format `locContent` building with Gemini `inlineData` parts array.
+  - Rewrote `locate_swings` block: same Gemini `inlineData` approach (was using `anthropicHaiku.messages.create()`).
+  - Removed `tryHaiku()` and `tryAnthropic()` helpers entirely.
+  - Added `tryOpenAI()` helper using gpt-4o with `response_format: json_object`.
+  - Rewrote `tryGemini()` — preserved, now the primary provider.
+  - Updated `AttemptResult.provider` union: `'gemini' | 'openai' | 'anthropic' | 'anthropic_haiku'` → `'gemini' | 'openai'`.
+  - New orchestration: Gemini 2.5 Flash (Stage 1, speed primary) → OpenAI gpt-4o (Stage 2, quality escalation, full-tier only). Removed `USE_GEMINI` constant. Fixed `winner` init from `anthropic_haiku` to `gemini`. Updated all escalation reason strings.
+  - `userContent` (Anthropic format) removed; Gemini content built inline in `tryGemini()`.
+  - TypeScript: `npx tsc --noEmit` zero errors.
+
+- **Phase 5 scope note:** 6 of 6 vision routes done (`lie-analysis`, `swing-compare`, `swing-question`, `round-import`, `putting-analysis`, `swing-analysis`). Phase 5 is complete.
+
+- **Phase 6 attempted and reverted:** 14 other routes still import `@anthropic-ai/sdk` (ball-departure, cage-review, club-recognition, course-content, course-intelligence, cv-scoring, health, junior-swing-analysis, meta-voice, owner-triage, space-scan, tutorial-analysis, kevin+api, meta-voice+api). Package restored; Phase 6 requires a separate sprint pass on all remaining routes.
+
+### Verified
+
+- `npx tsc --noEmit` zero errors (both before and after Phase 6 revert).
+- No `Anthropic` import or runtime reference in any Phase 5 target file.
+
+### Open / carried to next session
+
+1. **Phase 6** — Migrate remaining 14 routes off Anthropic, then remove `@anthropic-ai/sdk`.
+2. **Path 2 + Path 4 MIN VERIFY** on real Z Fold round (markers already instrumented).
+3. Commit + push Phase 5 changes.
 4. Carry from previous: Path 2 + Path 4 MIN VERIFY on real Z Fold round.

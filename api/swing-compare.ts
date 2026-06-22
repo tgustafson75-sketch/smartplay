@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 
 /**
  * 2026-05-26 — Fix AU: Cross-analyze two swings.
@@ -26,9 +25,6 @@ const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
-// 2026-05-26 — Fix AW: tightened to 18s. Same reasoning as
-// swing-question.ts — last in the chain, user has already waited.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 18_000, maxRetries: 1 });
 
 interface FrameInput { b64: string; media_type?: string }
 
@@ -90,10 +86,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userText = 'Compare the OLDER swing (first image) to the NEWER swing (second image). What changed?';
 
     let answer = '';
-    let providerUsed: 'gemini' | 'openai' | 'anthropic' = 'gemini';
+    let providerUsed: 'gemini' | 'openai' = 'gemini';
     let geminiError: string | null = null;
     let openaiError: string | null = null;
-    let anthropicError: string | null = null;
 
     if (gemini) {
       try {
@@ -142,50 +137,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    if (!answer && process.env.ANTHROPIC_API_KEY) {
-      try {
-        const content = [
-          {
-            type: 'image' as const,
-            source: {
-              type: 'base64' as const,
-              media_type: (older.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: older.b64,
-            },
-          },
-          {
-            type: 'image' as const,
-            source: {
-              type: 'base64' as const,
-              media_type: (newer.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: newer.b64,
-            },
-          },
-          { type: 'text' as const, text: userText },
-        ];
-        const completion = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 400,
-          temperature: 0.4,
-          system: systemPrompt,
-          messages: [{ role: 'user', content }],
-        });
-        const block = completion.content.find(c => c.type === 'text');
-        answer = block && block.type === 'text' ? block.text.trim() : '';
-        providerUsed = 'anthropic';
-        if (!answer) anthropicError = 'empty_response';
-      } catch (e) {
-        anthropicError = e instanceof Error ? e.message : 'unknown';
-        console.error('[swing-compare] anthropic last-resort failed:', anthropicError);
-      }
-    }
-
     if (!answer) {
       return res.status(502).json({
         error: 'All providers failed',
         gemini_error: geminiError,
         openai_error: openaiError,
-        anthropic_error: anthropicError,
       });
     }
 

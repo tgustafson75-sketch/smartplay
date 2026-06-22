@@ -1,39 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
-// 2026-06-10 — OpenAI removed from the analysis path entirely. Provider
-// architecture: Anthropic = spine (primary), Gemini = fast fallback, OpenAI =
-// ears/mouth only (STT/TTS live in api/kevin.ts + api/voice.ts, not here).
+// Phase 5 (2026-06-22) — Anthropic fully removed from swing-analysis.
+// Provider architecture: Gemini 2.5 Flash = speed primary,
+// OpenAI gpt-4o = quality escalation (full-tier only).
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 
-// 2026-05-23 — maxRetries 1 → 3 to absorb Anthropic 529 overloaded_error spikes.
-// 2026-05-26 — Fix AW: cut back to maxRetries: 1 now that we have
-// OpenAI + Gemini fallbacks. 25s × 3 = 75s blew Vercel's 60s budget
-// before the fallback chain could fire. 22s × 1 + OpenAI 20s + Gemini
-// ~10s fits comfortably under 60s with grace.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
-// 2026-05-27 — Fix EK: dedicated Haiku client with a tighter timeout.
-// Haiku 4.5 vision typically responds in 2-5s; capping it catches
-// pathological slow responses early and lets us escalate to OpenAI
-// before the user notices a hang. Same API key, same SDK — only
-// model + timeout differ vs the Sonnet client above.
-//
-// 2026-06-02 — Fix GM: bumped 10s → 13s. SwingLab QA audit found the
-// 10s cap was too tight for slow-network / cold-start Haiku calls,
-// triggering unnecessary OpenAI escalation that adds 15-20s to the
-// total budget (worse than just waiting 1-2s more for Haiku). 13s
-// keeps fast-path responsive while absorbing the long-tail without
-// burning the budget on a fallback that's NOT needed. Quick-tier
-// short-circuit at line ~1135 still saves the chain when Haiku
-// produces parseable output even at the upper edge of this window.
-const anthropicHaiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 13_000, maxRetries: 1 });
-// 2026-05-26 — Fix AT: Gemini 2.5 Flash as a third resilience layer.
-// Bryson DeChambeau's ad used Gemini for swing analysis Q&A — adding
-// it here means we match (and exceed) that capability with our own
-// structured pipeline. Constructed lazily inside the handler so the
-// process boots even when GOOGLE_API_KEY isn't configured.
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
   : null;
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 22_000, maxRetries: 1 });
 
 /**
  * Phase K — Swing analysis endpoint.
@@ -464,12 +439,8 @@ Rules:
  */
 
 interface AttemptResult {
-  // 'anthropic_haiku' is the speed-path provider (claude-haiku-4-5, vision,
-  // ~2-5s) catching the common-case reads; 'anthropic' (Sonnet) backstops the
-  // hard ones; 'gemini' is the fast fallback when Anthropic returns nothing.
-  // 'openai' is retained in the union for back-compat telemetry only — OpenAI
-  // is no longer called in the analysis path.
-  provider: 'gemini' | 'openai' | 'anthropic' | 'anthropic_haiku';
+  // Phase 5: Gemini 2.5 Flash = speed primary, OpenAI gpt-4o = quality escalation.
+  provider: 'gemini' | 'openai';
   parsed: SwingAnalysisResponse | null;
   rawText: string;
   error: string | null;
@@ -702,8 +673,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -731,19 +702,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // lands on a hot connection. waitUntil() from @vercel/functions
       // is the right long-term fix; awaiting is the safe interim.
       try {
-        await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'warmup' }],
-        });
+        if (gemini) {
+          await gemini.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: 'warmup' }] }],
+            config: { maxOutputTokens: 1 },
+          });
+        }
       } catch (e) {
-        console.log('[swing-analysis] warmup haiku ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
+        console.log('[swing-analysis] warmup gemini ping failed (non-fatal):', e instanceof Error ? e.message : String(e));
       }
       return res.status(200).json({
         warmed: true,
         timestamp: Date.now(),
         providers_configured: {
-          anthropic: !!process.env.ANTHROPIC_API_KEY,
           openai: !!process.env.OPENAI_API_KEY,
           gemini: !!process.env.GOOGLE_API_KEY,
         },
@@ -762,21 +734,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'frames[0] (single address-frame image) required' });
       }
       try {
-        const completion = await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 200,
-          temperature: 0.0,
-          system: `You are a precise image-coordinate detector. You will be shown one image from a golf swing setup. Find the golf ball (a small white sphere sitting on the ground, mat, tee, or grass). Return ONLY a JSON object with the ball's normalized coordinates relative to the image: { "found": true, "x": <0-1 from left>, "y": <0-1 from top>, "r": <0.01-0.2 normalized radius> }. If you can't see a golf ball with high confidence, return { "found": false }. No prose, no markdown, just the JSON.`,
-          messages: [{
+        if (!gemini) return res.status(200).json({ found: false, error: 'GOOGLE_API_KEY not configured' });
+        const detectSystem = 'You are a precise image-coordinate detector. You will be shown one image from a golf swing setup. Find the golf ball (a small white sphere sitting on the ground, mat, tee, or grass). Return ONLY a JSON object with the ball\'s normalized coordinates relative to the image: { "found": true, "x": <0-1 from left>, "y": <0-1 from top>, "r": <0.01-0.2 normalized radius> }. If you can\'t see a golf ball with high confidence, return { "found": false }. No prose, no markdown, just the JSON.';
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{
             role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: (detectFrames[0].media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif', data: detectFrames[0].b64 } },
-              { type: 'text', text: 'Locate the golf ball.' },
+            parts: [
+              { text: detectSystem + '\n\nLocate the golf ball.' },
+              { inlineData: { mimeType: detectFrames[0].media_type ?? 'image/jpeg', data: detectFrames[0].b64 } },
             ],
           }],
+          config: { temperature: 0.0, maxOutputTokens: 200, responseMimeType: 'application/json' },
         });
-        const block = completion.content.find(c => c.type === 'text');
-        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; x?: number; y?: number; r?: number } = {};
         try {
           const m = raw.match(/\{[\s\S]*\}/);
@@ -815,35 +786,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'maximum 16 locate frames' });
       }
       try {
-        const locContent = [
+        if (!gemini) return res.status(200).json({ found: false, error: 'GOOGLE_API_KEY not configured' });
+        const locParts = [
+          { text: 'You are a precise golf-swing temporal locator. Identify WHEN the actual swing happens (downswing through impact/follow-through, body rotated, club in motion). NOT address, waggles, walk-ups, or post-shot. Return ONLY JSON: { "found": true, "swing_time_sec": <number>, "confidence": "high"|"low" }. No swing visible → { "found": false }.' },
           ...locFrames.flatMap((f, i) => {
             const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
             return [
-              { type: 'text' as const, text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
-              {
-                type: 'image' as const,
-                source: {
-                  type: 'base64' as const,
-                  media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                  data: f.b64,
-                },
-              },
+              { text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
+              { inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } },
             ];
           }),
-          {
-            type: 'text' as const,
-            text: 'Across these timestamped frames, at which timestamp is the golfer ACTUALLY SWINGING — the downswing through impact and follow-through, body rotated and club in motion? NOT standing at address over the ball, NOT a practice waggle, NOT walking up, NOT waiting or posing after the shot. Return ONLY JSON: { "found": true, "swing_time_sec": <number>, "confidence": "high"|"low" }. If no real swing motion is visible in any frame, return { "found": false }. No prose, no markdown.',
-          },
+          { text: 'At which timestamp is the actual golf swing happening? Return JSON only.' },
         ];
-        const completion = await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 120,
-          temperature: 0.0,
-          system: 'You are a precise golf-swing temporal locator. You are given a sequence of timestamped frames from ONE video and must identify WHEN the actual swing happens. The swing is the moment of motion — backswing/downswing/impact/follow-through with the body rotated and the club moving — distinct from address (standing still over the ball), practice waggles, walk-ups, or post-shot standing. Pick the timestamp closest to impact/follow-through. Return only JSON.',
-          messages: [{ role: 'user', content: locContent }],
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: locParts }],
+          config: { temperature: 0.0, maxOutputTokens: 120, responseMimeType: 'application/json' },
         });
-        const block = completion.content.find(c => c.type === 'text');
-        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        const raw = (gem.text ?? '').trim();
         let parsed: { found?: boolean; swing_time_sec?: number; confidence?: string } = {};
         try {
           const m = raw.match(/\{[\s\S]*\}/);
@@ -859,7 +819,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (e) {
         console.error('[swing-analysis] locate_swing failed', e);
-        // 200 + found:false so the client gracefully falls back to wide spread.
         return res.status(200).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
       }
     }
@@ -875,35 +834,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'maximum 24 locate frames' });
       }
       try {
-        const locContent = [
+        if (!gemini) return res.status(200).json({ swings: [], error: 'GOOGLE_API_KEY not configured' });
+        const locParts = [
+          { text: 'You are a precise golf-swing temporal locator. List the timestamp of EVERY distinct swing (impact/follow-through moment) in this range-practice video, excluding address, waggles, walk-ups, post-shot standing. Never report the same swing twice. Return ONLY JSON: { "swings": [ { "time_sec": <number>, "confidence": "high"|"low" } ] } ordered by time. No swings visible → { "swings": [] }.' },
           ...locFrames.flatMap((f, i) => {
             const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
             return [
-              { type: 'text' as const, text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
-              {
-                type: 'image' as const,
-                source: {
-                  type: 'base64' as const,
-                  media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                  data: f.b64,
-                },
-              },
+              { text: `Frame ${i + 1} — timestamp ${t.toFixed(1)}s:` },
+              { inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } },
             ];
           }),
-          {
-            type: 'text' as const,
-            text: 'These timestamped frames span ONE continuous range-practice video with MULTIPLE swings. List EVERY distinct swing — each downswing-through-impact/follow-through, body rotated and club in motion. Distinct swings are separated by the golfer resetting (standing, addressing a new ball, walking up). Do NOT count address, practice waggles, walk-ups, or post-shot standing, and do NOT report the same swing twice. Return ONLY JSON: { "swings": [ { "time_sec": <number>, "confidence": "high"|"low" } ] } ordered by time. If no real swing is visible, return { "swings": [] }. No prose, no markdown.',
-          },
+          { text: 'List all distinct swings. Return JSON only.' },
         ];
-        const completion = await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 400,
-          temperature: 0.0,
-          system: 'You are a precise golf-swing temporal locator. Given timestamped frames from ONE continuous range-practice video, list the timestamp of EVERY distinct swing (the impact/follow-through moment), excluding address, waggles, walk-ups, and post-shot standing. Never report the same swing twice. Return only JSON.',
-          messages: [{ role: 'user', content: locContent }],
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: locParts }],
+          config: { temperature: 0.0, maxOutputTokens: 400, responseMimeType: 'application/json' },
         });
-        const block = completion.content.find(c => c.type === 'text');
-        const raw = block && block.type === 'text' ? block.text.trim() : '';
+        const raw = (gem.text ?? '').trim();
         let parsed: { swings?: Array<{ time_sec?: number; confidence?: string }> } = {};
         try {
           const m = raw.match(/\{[\s\S]*\}/);
@@ -1147,27 +1095,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : (ctxLines.length > 0 ? ctxLines.join('\n') + '\n\n' : '') +
           `Look at the ${frames.length} frame${frames.length === 1 ? '' : 's'} from this swing. Classify the primary fault, return JSON.`;
 
-    const userContent = [
-      ...frames.map(f => ({
-        type: 'image' as const,
-        source: {
-          type: 'base64' as const,
-          media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-          data: f.b64,
-        },
-      })),
-      { type: 'text' as const, text: userText },
-    ];
-
-    // 2026-05-24 (BUG #1 fix) — Telemetry: surface the real count of
-    // image blocks Sonnet receives, alongside the text-block count.
-    // Pairs with the client-side V6 log at poseDetection.ts:299 so the
-    // pipeline is self-verifying on every real run: if a future
-    // regression collapses multi-frame input at this boundary, the
-    // mismatch (client posted 5, server saw 1) will be visible without
-    // any synthetic test. Additive, zero behavior change.
-    const imageBlocks = userContent.filter(b => b.type === 'image').length;
-    const textBlocks = userContent.filter(b => b.type === 'text').length;
+    // Telemetry: frame + text counts (still useful for pipeline diagnostics).
+    const imageBlocks = frames.length;
+    const textBlocks = 1;
     console.log('[swing-analysis] image blocks ->',
       imageBlocks,
       '· text blocks ->',
@@ -1183,17 +1113,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? PUTT_SYSTEM_PROMPT
           : SYSTEM_PROMPT;
 
-    // 2026-05-26 — Fix AX: Gemini-first speed-with-escalation chain.
-    // See doc-comment on `meetsSpeedBar` + `scoreAttempt` helpers above
-    // for the architecture. Order: Gemini (fast) → OpenAI (mid) →
-    // Anthropic (deepest); each provider's output runs through the
-    // shared normalizer; early-exit when the speed bar is met.
+    // Phase 5 orchestration: Gemini 2.5 Flash (speed primary) →
+    // OpenAI gpt-4o (quality escalation, full-tier only).
+    // Budget: 48s total. Gemini ~5-10s, OpenAI ~15-22s.
 
     const attempts: AttemptResult[] = [];
-
-    // ── PROVIDER HELPERS — each returns raw text + error string, no
-    //                       state mutation, no normalization. The
-    //                       outer orchestrator runs the bar check.
 
     const tryGemini = async (): Promise<AttemptResult> => {
       const t0 = Date.now();
@@ -1203,25 +1127,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const geminiContent = [
           { text: systemPrompt + '\n\n' + userText },
-          ...frames.map(f => ({
-            inlineData: {
-              mimeType: f.media_type ?? 'image/jpeg',
-              data: f.b64,
-            },
-          })),
+          ...frames.map(f => ({ inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } })),
         ];
         const gem = await gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: geminiContent }],
-          config: {
-            temperature: 0.2,
-            // 2026-06-11 (audit opt #2) — 800→650. Output is JSON-only
-            // (responseMimeType application/json) with one-sentence schema
-            // fields, so the real max is ~250-450 tokens. 650 trims output-token
-            // cost on the highest-volume call while keeping a safe margin.
-            maxOutputTokens: 650,
-            responseMimeType: 'application/json',
-          },
+          config: { temperature: 0.2, maxOutputTokens: 650, responseMimeType: 'application/json' },
         });
         const rawText = (gem.text ?? '').trim();
         const parsed = normalizeAnalysis(rawText, frames.length, mode);
@@ -1233,235 +1144,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           elapsedMs: Date.now() - t0,
         };
       } catch (e) {
-        return {
-          provider: 'gemini',
-          parsed: null,
-          rawText: '',
-          error: e instanceof Error ? e.message : 'unknown',
-          elapsedMs: Date.now() - t0,
-        };
+        return { provider: 'gemini', parsed: null, rawText: '', error: e instanceof Error ? e.message : 'unknown', elapsedMs: Date.now() - t0 };
       }
     };
 
-    const tryAnthropic = async (): Promise<AttemptResult> => {
+    const tryOpenAI = async (): Promise<AttemptResult> => {
       const t0 = Date.now();
+      if (!process.env.OPENAI_API_KEY) {
+        return { provider: 'openai', parsed: null, rawText: '', error: 'OPENAI_API_KEY not configured', elapsedMs: 0 };
+      }
       try {
-        // 2026-06-07 — Ephemeral prompt caching. The system prompt
-        // (PUTT_SYSTEM_PROMPT or SYSTEM_PROMPT) is ~6-8 KB / ~2K
-        // tokens of stable text re-sent on every swing. Wrapping
-        // it with cache_control:'ephemeral' means the first call
-        // writes the cache; subsequent calls within 5 min read it,
-        // cutting input-token cost by ~90% and time-to-first-token
-        // by 30-50%. Compounds with the Haiku speed path below.
-        const completion = await anthropic.messages.create({
-          model: 'claude-sonnet-4-6',
-          // 2026-06-11 (audit opt #2) — 800→650. JSON-only, one-sentence schema
-          // (real max ~250-450 tokens); trims output cost with a safe margin.
+        const imageContent = frames.map(f => ({
+          type: 'image_url' as const,
+          image_url: { url: `data:${f.media_type ?? 'image/jpeg'};base64,${f.b64}`, detail: 'high' as const },
+        }));
+        const oai = await openaiClient.chat.completions.create({
+          model: 'gpt-4o',
           max_tokens: 650,
           temperature: 0.2,
-          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: userContent }],
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: [...imageContent, { type: 'text' as const, text: userText }] },
+          ],
         });
-        const block = completion.content.find(c => c.type === 'text');
-        const rawText = block && block.type === 'text' ? block.text.trim() : '';
+        const rawText = (oai.choices[0]?.message?.content ?? '').trim();
         const parsed = normalizeAnalysis(rawText, frames.length, mode);
         return {
-          provider: 'anthropic',
+          provider: 'openai',
           parsed,
           rawText,
           error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
           elapsedMs: Date.now() - t0,
         };
       } catch (e) {
-        return {
-          provider: 'anthropic',
-          parsed: null,
-          rawText: '',
-          error: e instanceof Error ? e.message : 'unknown',
-          elapsedMs: Date.now() - t0,
-        };
-      }
-    };
-
-    // 2026-05-27 — Fix EK: Haiku 4.5 speed-path. Same SDK as the Sonnet
-    // helper above but uses claude-haiku-4-5 (vision-capable, much
-    // faster — typically 2-5s vs Sonnet's 8-15s on the same frames).
-    // Output flows through the SAME normalizer + scoreAttempt + speed-
-    // bar checks; any low-confidence / inconclusive Haiku read
-    // automatically escalates to OpenAI then Sonnet.
-    const tryHaiku = async (): Promise<AttemptResult> => {
-      const t0 = Date.now();
-      try {
-        // 2026-06-07 — Ephemeral prompt caching (same as Sonnet path
-        // above). Haiku 4.5 supports prompt caching natively; the
-        // shared SYSTEM_PROMPT becomes a cache hit on every swing
-        // within the 5-min TTL — drops time-to-first-token ~30-50%.
-        const completion = await anthropicHaiku.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          // 2026-06-11 (audit opt #2) — 800→650. JSON-only, one-sentence schema
-          // (real max ~250-450 tokens). Quick-tier (SmartMotion) path; a rare
-          // truncation falls through to the Gemini fast fallback (null-read
-          // path below), so 650 is safe with deliberate margin.
-          max_tokens: 650,
-          temperature: 0.2,
-          system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: userContent }],
-        });
-        const block = completion.content.find(c => c.type === 'text');
-        const rawText = block && block.type === 'text' ? block.text.trim() : '';
-        const parsed = normalizeAnalysis(rawText, frames.length, mode);
-        return {
-          provider: 'anthropic_haiku',
-          parsed,
-          rawText,
-          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
-          elapsedMs: Date.now() - t0,
-        };
-      } catch (e) {
-        return {
-          provider: 'anthropic_haiku',
-          parsed: null,
-          rawText: '',
-          error: e instanceof Error ? e.message : 'unknown',
-          elapsedMs: Date.now() - t0,
-        };
+        return { provider: 'openai', parsed: null, rawText: '', error: e instanceof Error ? e.message : 'unknown', elapsedMs: Date.now() - t0 };
       }
     };
 
     // ── ORCHESTRATION ────────────────────────────────────────────
-
-    // ── ORCHESTRATION TOTAL DEADLINE ─────────────────────────────
-    // 2026-05-26 — Fix CU: hard cap on total orchestration time.
-    // Vercel function maxDuration = 60s; client AbortSignal = 55s.
-    // If sequential providers (Gemini 30s + OpenAI 20s + Anthropic
-    // 22s) overflow either, the server response never arrives →
-    // client sees 'Lost connection' even though earlier providers
-    // produced valid output. Tim's repro: 14s 8i clip, 3 attempts,
-    // all fail. Cap total at 42s so we always have time to return
-    // SOMETHING before client/Vercel timeouts. Also: if Gemini
-    // returns ANY parsed result (even low-confidence), use it as
-    // the fallback — better than "Couldn't analyze." Escalation
-    // only happens when there's budget left.
     const orchestrationStart = Date.now();
-    // 2026-05-26 — Fix DM: 42_000 → 48_000 now that Gemini is bypassed.
-    // The 42s budget was sized for the 3-provider chain (Gemini 6s +
-    // OpenAI 20s + Anthropic 22s = ~48s worst case, capped at 42s
-    // for safety). With Gemini bypassed (Fix CY), the chain is now
-    // OpenAI (~12s) + Anthropic (~18s) = ~30s typical — we have room
-    // to extend budget to 48s. Still 7s under client's 55s abort
-    // (Fix CO) and 12s under Vercel's 60s function maxDuration. The
-    // extra budget makes Anthropic less likely to be skipped on slow-
-    // OpenAI runs, raising successful-completion rate.
     const ORCHESTRATION_TOTAL_MS = 48_000;
     const budgetRemaining = () => ORCHESTRATION_TOTAL_MS - (Date.now() - orchestrationStart);
 
-    // 2026-06-10 — Provider architecture (Tim's call): Anthropic is the SPINE
-    // (primary analysis), Gemini is the FAST FALLBACK (re-enabled — Google
-    // billing funded + auto-reload, so the old 429 "credits depleted" era is
-    // over), and OpenAI is OUT of analysis entirely (it's ears/mouth = STT/TTS
-    // only now). Flow: Anthropic Haiku (speed) → Anthropic Sonnet (deep,
-    // full-tier only) → Gemini (fast fallback, only when Anthropic produced no
-    // parseable read). No cross-provider quality ladder = far lower latency,
-    // so analysis no longer approaches the client timeout.
-    const USE_GEMINI = true;
-
-    let winner: AttemptResult = { provider: 'anthropic_haiku', parsed: null, rawText: '', error: 'not_attempted', elapsedMs: 0 };
+    let winner: AttemptResult = { provider: 'gemini', parsed: null, rawText: '', error: 'not_attempted', elapsedMs: 0 };
     let escalationReason: string | null = null;
 
-    // 2026-05-27 — Fix EK: Stage 1 (NEW) — Anthropic Haiku 4.5.
-    // Haiku has vision, runs in ~2-5s vs gpt-4o's 10-20s, and catches
-    // the common-case clean reads (obvious contact, clear pose, single
-    // unambiguous fault). High-confidence Haiku reads bypass the rest
-    // of the chain entirely. Low-confidence / inconclusive full-tier reads
-    // escalate to Anthropic Sonnet; a null Anthropic read falls back to Gemini.
-    //
-    // Budget gate: need ≥12s remaining (10s Haiku timeout + 2s headroom).
-    if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 12_000) {
-      console.log('[swing-analysis] running Anthropic Haiku speed-path; budget_ms:', budgetRemaining());
-      const haikuAttempt = await tryHaiku();
-      attempts.push(haikuAttempt);
-      if (scoreAttempt(haikuAttempt.parsed) > scoreAttempt(winner.parsed)) {
-        winner = haikuAttempt;
+    // Stage 1 — Gemini 2.5 Flash (speed primary, replaces Haiku).
+    // Typically 5-10s. Catches the common-case reads; high/medium
+    // confidence reads bypass OpenAI entirely.
+    if (!meetsSpeedBar(winner.parsed) && budgetRemaining() >= 8_000) {
+      console.log('[swing-analysis] running Gemini speed-path; budget_ms:', budgetRemaining());
+      const geminiAttempt = await tryGemini();
+      attempts.push(geminiAttempt);
+      if (scoreAttempt(geminiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = geminiAttempt;
       }
-      if (meetsSpeedBar(haikuAttempt.parsed)) {
-        console.log('[swing-analysis] haiku speed-path hit', {
-          elapsedMs: haikuAttempt.elapsedMs,
-          confidence: haikuAttempt.parsed?.confidence,
-          primary_fault: haikuAttempt.parsed?.primary_fault,
+      if (meetsSpeedBar(geminiAttempt.parsed)) {
+        console.log('[swing-analysis] gemini speed-path hit', {
+          elapsedMs: geminiAttempt.elapsedMs,
+          confidence: geminiAttempt.parsed?.confidence,
+          primary_fault: geminiAttempt.parsed?.primary_fault,
         });
-      } else if (haikuAttempt.parsed) {
+      } else if (geminiAttempt.parsed) {
         escalationReason = (escalationReason ?? '') + (
-          haikuAttempt.parsed.primary_fault === 'inconclusive'
-            ? '_haiku_inconclusive'
-            : haikuAttempt.parsed.confidence !== 'high'
-              ? `_haiku_low_confidence:${haikuAttempt.parsed.confidence}`
-              : '_haiku_missing_evidence'
+          geminiAttempt.parsed.primary_fault === 'inconclusive'
+            ? '_gemini_inconclusive'
+            : `_gemini_low_confidence:${geminiAttempt.parsed.confidence}`
         );
       } else {
-        escalationReason = (escalationReason ?? '') + `_haiku_${haikuAttempt.error ?? 'unknown_failure'}`;
+        escalationReason = (escalationReason ?? '') + `_gemini_${geminiAttempt.error ?? 'unknown_failure'}`;
       }
     }
 
-    // 2026-05-28 — Fix FM: tier='quick' short-circuit. SmartMotion's
-    // speed path (Quick Record / voice "open SmartMotion") prioritizes
-    // ~2-5s Haiku latency over deep escalation. Whatever Haiku
-    // returned — high, medium, low confidence, even no_dominant_fault —
-    // ship it now and skip the OpenAI + Sonnet 20-40s climb. Library
-    // uploads (no tier or tier='full') stay on the full chain.
-    // 2026-06-07 — Quick-tier fast-fail extended to cover Haiku-null.
-    // Previously only short-circuited when winner.parsed != null;
-    // null Haiku output fell through to 30-40s OpenAI+Sonnet
-    // escalation. For tier=quick the user already opted into "speed
-    // wins" — a fast 502 (~5s) lets the user retry on warm Haiku
-    // immediately, much better than waiting 35s for a chain that
-    // often produces the same null result. Library uploads (tier=
-    // 'full') still benefit from full escalation safety net.
+    // tier=quick: SmartMotion speed path ships Gemini's read immediately,
+    // skipping OpenAI escalation — same latency contract as old Haiku path.
     const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
     const quickShortCircuit = tier === 'quick';
     if (quickShortCircuit) {
-      console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI + Sonnet escalation', {
+      console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI escalation', {
         winner_provider: winner.provider,
         winner_confidence: winner.parsed?.confidence,
         winner_fault: winner.parsed?.primary_fault,
         winner_null: winner.parsed == null,
       });
       escalationReason = (escalationReason ?? '') + (
-        winner.parsed != null
-          ? '_quick_tier_short_circuit'
-          : '_quick_tier_fast_fail_haiku_null'
+        winner.parsed != null ? '_quick_tier_short_circuit' : '_quick_tier_fast_fail'
       );
     }
 
-    // Stage 2 — Anthropic Sonnet (DEEP quality escalation, the spine's
-    // strong read). Full-tier only; quick-tier (SmartMotion) already shipped
-    // Haiku's read for speed via the short-circuit above.
+    // Stage 2 — OpenAI gpt-4o (quality escalation, full-tier only).
+    // Fires when Gemini didn't meet the speed bar and budget allows.
     if (!quickShortCircuit && !meetsSpeedBar(winner.parsed) && budgetRemaining() >= 18_000) {
-      console.log('[swing-analysis] escalating to Anthropic Sonnet; budget_ms:', budgetRemaining());
-      const sonnetAttempt = await tryAnthropic();
-      attempts.push(sonnetAttempt);
-      if (scoreAttempt(sonnetAttempt.parsed) > scoreAttempt(winner.parsed)) {
-        winner = sonnetAttempt;
+      console.log('[swing-analysis] escalating to OpenAI gpt-4o; budget_ms:', budgetRemaining());
+      const openaiAttempt = await tryOpenAI();
+      attempts.push(openaiAttempt);
+      if (scoreAttempt(openaiAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = openaiAttempt;
       }
       if (!meetsSpeedBar(winner.parsed)) {
-        escalationReason = (escalationReason ?? '') + '_sonnet_no_pass';
+        escalationReason = (escalationReason ?? '') + '_openai_no_pass';
       }
     } else if (!quickShortCircuit && !meetsSpeedBar(winner.parsed)) {
-      escalationReason = (escalationReason ?? '') + '_sonnet_skipped_budget';
-    }
-
-    // Stage 3 — Gemini FAST FALLBACK. Fires only when Anthropic produced NO
-    // parseable read at all (errors / null on every Anthropic attempt) — a
-    // fast Gemini answer beats a 502 + a forced re-record. Runs for BOTH tiers
-    // (this also replaces the old quick-tier fast-fail: a null Haiku now falls
-    // through to Gemini instead of erroring out). Funded + auto-reload.
-    if (USE_GEMINI && !winner.parsed && budgetRemaining() >= 8_000) {
-      console.log('[swing-analysis] Anthropic produced no parseable read — Gemini fast fallback; budget_ms:', budgetRemaining());
-      const geminiAttempt = await tryGemini();
-      attempts.push(geminiAttempt);
-      if (scoreAttempt(geminiAttempt.parsed) > scoreAttempt(winner.parsed)) {
-        winner = geminiAttempt;
-      }
-      escalationReason = (escalationReason ?? '') + '_gemini_fallback';
+      escalationReason = (escalationReason ?? '') + '_openai_skipped_budget';
     }
 
     // No provider produced parseable output → 502 with full diagnostics
@@ -1469,10 +1254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const errs: Record<string, string | null> = {};
       for (const a of attempts) errs[`${a.provider}_error`] = a.error;
       console.error('[swing-analysis] all attempted providers failed', errs);
-      return res.status(502).json({
-        error: 'All providers failed',
-        ...errs,
-      });
+      return res.status(502).json({ error: 'All providers failed', ...errs });
     }
 
     // 2026-05-26 — Telemetry: provider used + escalation reason +

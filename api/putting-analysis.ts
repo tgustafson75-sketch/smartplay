@@ -1,24 +1,23 @@
 /**
  * 2026-05-22 — Vercel handler: PuttingLab analysis.
  *
- * Mirror of app/api/putting-analysis+api.ts (the Expo Router version
- * used in local dev) for the production Vercel deployment. The two
- * MUST stay in lockstep — when one changes, update the other.
+ * Phase 5 (2026-06-22) — Migrated off Anthropic. Provider chain:
+ * Gemini 2.5 Flash (primary) → OpenAI gpt-4o (fallback).
  *
  * Receives frames + spoken read + course context + optional distance,
- * runs Claude Sonnet 4.5 vision tuned for PUTTING cues, and returns
- * the structured PuttingAnalysis JSON the client's normalize() expects.
+ * runs vision analysis tuned for PUTTING cues, and returns the
+ * structured PuttingAnalysis JSON the client's normalize() expects.
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import { getCaddieName } from '../lib/persona';
 
-// 2026-06-21 — maxRetries 3→1→0: 1 retry = 50s worst-case, which exceeds the
-// client's 30s AbortSignal.timeout in puttingAnalysisService.ts. With 0 retries
-// the server worst-case is 25s, well within the client's 30s budget. The client
-// already catches transport failures and returns a graceful fallback analysis.
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
+const gemini = process.env.GOOGLE_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
+  : null;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 0 });
 const MAX_FRAMES = 6;
 
 interface RequestBody {
@@ -42,8 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No AI provider configured' });
   }
 
   try {
@@ -68,13 +67,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(unknownShell(caddieName, body));
     }
 
-    const userContent: Anthropic.Messages.ContentBlockParam[] = [];
-    for (const b64 of frames) {
-      userContent.push({
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: b64 },
-      });
-    }
     const ctx: string[] = [];
     if (hasRead) ctx.push(`Player's spoken read: "${body.spoken_read!.trim()}"`);
     if (body.notes) ctx.push(`Notes: ${body.notes}`);
@@ -82,33 +74,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.hole_number) ctx.push(`Hole: ${body.hole_number}`);
     if (body.video_url) ctx.push(`Video URL: ${body.video_url}`);
     if (body.green_centroid) ctx.push(`Green centroid: ${JSON.stringify(body.green_centroid)}`);
-    // 2026-06-08 (audit #12) — user-marked ball + aim (normalized 0..1 frame
-    // coords). Anchor the read to these: ball is where it sat, target is
-    // where the player aimed; judge start line / face vs that target.
     if (body.ball_area_norm) ctx.push(`Ball position in frame (x,y,r normalized 0-1): ${JSON.stringify(body.ball_area_norm)} — this is where the ball sat.`);
     if (body.target_norm) ctx.push(`Player's aim target in frame (x,y normalized 0-1): ${JSON.stringify(body.target_norm)} — judge start line and face relative to this.`);
-    userContent.push({
-      type: 'text',
-      text: (ctx.length ? ctx.join('\n') + '\n\n' : '') +
-        'Return ONLY the JSON object described in the system prompt. No preamble.',
-    });
+    const userText = (ctx.length ? ctx.join('\n') + '\n\n' : '') +
+      'Return ONLY the JSON object described in the system prompt. No preamble.';
 
-    const result = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1000,
-      temperature: 0.2,
-      system: [{ type: 'text', text: buildSystem(caddieName), cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userContent }],
-    });
+    const system = buildSystem(caddieName);
+    let raw = '';
+    let providerUsed: 'gemini' | 'openai' = 'gemini';
+    let geminiError: string | null = null;
+    let openaiError: string | null = null;
 
-    const block = result.content.find((b) => b.type === 'text');
-    const raw = block && block.type === 'text' ? block.text.trim() : '';
-    const parsed = safeParse(raw);
-    if (!parsed) {
-      console.warn('[putting] parse failed, returning shell');
+    // ── Stage 1: Gemini 2.5 Flash ────────────────────────────────
+    if (gemini && frames.length > 0) {
+      try {
+        const parts = [
+          { text: system + '\n\n' + userText },
+          ...frames.map(b64 => ({ inlineData: { mimeType: 'image/jpeg', data: b64 } })),
+        ];
+        const gem = await gemini.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts }],
+          config: { temperature: 0.2, maxOutputTokens: 1000, responseMimeType: 'application/json' },
+        });
+        raw = (gem.text ?? '').trim();
+        if (!raw) geminiError = 'empty_response';
+      } catch (e) {
+        geminiError = e instanceof Error ? e.message : 'unknown';
+        console.warn('[putting] gemini primary failed:', geminiError);
+      }
+    } else if (!gemini) {
+      geminiError = 'GOOGLE_API_KEY not configured';
+    } else {
+      geminiError = 'no_frames';
+    }
+
+    // ── Stage 2: OpenAI gpt-4o ───────────────────────────────────
+    if (!raw && process.env.OPENAI_API_KEY) {
+      try {
+        const imageContent = frames.map(b64 => ({
+          type: 'image_url' as const,
+          image_url: { url: `data:image/jpeg;base64,${b64}`, detail: 'high' as const },
+        }));
+        const oai = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          max_tokens: 1000,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: system },
+            {
+              role: 'user',
+              content: [
+                ...imageContent,
+                { type: 'text' as const, text: userText },
+              ],
+            },
+          ],
+        });
+        raw = (oai.choices[0]?.message?.content ?? '').trim();
+        providerUsed = 'openai';
+        if (!raw) openaiError = 'empty_response';
+      } catch (e) {
+        openaiError = e instanceof Error ? e.message : 'unknown';
+        console.warn('[putting] openai fallback failed:', openaiError);
+      }
+    }
+
+    if (!raw) {
+      console.warn('[putting] all providers failed, returning shell');
       return res.status(200).json(unknownShell(caddieName, body));
     }
-    return res.status(200).json(parsed);
+
+    const parsed = safeParse(raw);
+    if (!parsed) {
+      console.warn('[putting] parse failed, returning shell. provider:', providerUsed);
+      return res.status(200).json(unknownShell(caddieName, body));
+    }
+    return res.status(200).json({ ...parsed, _debug: { provider: providerUsed, gemini_error: geminiError, openai_error: openaiError } });
   } catch (err) {
     console.log('[putting] error:', err);
     return res.status(200).json(unknownShell('Kevin', null));
@@ -207,9 +250,6 @@ function unknownShell(caddieName: string, body: RequestBody | null): Record<stri
   return {
     puttId: 'putt_' + Date.now().toString(36),
     timestamp: new Date().toISOString(),
-    // Honesty: this is a no-input fallback — every value below is a generic
-    // default, NOT a measurement. partialCapture flags the UI to show the
-    // "—"/caveat treatment instead of presenting these as real reads.
     partialCapture: true,
     holeNumber: body?.hole_number ?? undefined,
     distanceFeet: body?.distance_feet ?? 0,

@@ -226,13 +226,12 @@ Sprint isn't done until ALL of these are confirmed on a real Z Fold (from the Sp
 **SmartFinder audit result:** All clear. No broken connections, all 25 imports resolve, all API routes wired, 5 nav entry points correct.
 
 **Still open:**
-- HIGH-10: Greenhill in `data/courses.ts` needs 18-hole par+yardage from Tim. Currently `courseHoles:[]`.
 - M12: Canvas Tap + marker Pan double-fire `maybeTrackShot()` — low severity.
-- M14: `calibrationSlug` derived from name not courseId — low severity (works for all current courses).
-- Phase 5: Migrate vision routes off Anthropic (`putting-analysis`, `swing-analysis`, etc.).
-- Phase 6: Remove `@anthropic-ai/sdk` from `package.json`.
+- M14: `calibrationSlug` derived from name not courseId — low severity.
+- Phase 6: Migrate remaining 14 routes off Anthropic (ball-departure, cage-review, club-recognition, course-content, course-intelligence, cv-scoring, health, junior-swing-analysis, meta-voice, owner-triage, space-scan, tutorial-analysis, kevin+api, meta-voice+api), then remove `@anthropic-ai/sdk`.
+- Path 2 + Path 4 MIN VERIFY on real Z Fold round.
 
-**Last refreshed:** 2026-06-21 Session 7 — pre-influencer beta audit shipped. Pull the latest OTA update and verify PATH 4 VOICE + TightLie before influencer rollout.
+**Last refreshed:** 2026-06-22 Session 8 — Phase 5 Anthropic vision-route removal complete (all 6 routes). Phase 6 needs remaining 14 routes first.
 
 ---
 
