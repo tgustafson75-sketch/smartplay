@@ -369,6 +369,15 @@ interface SettingsState {
   setGhostAutoActivate: (v: boolean) => void;
   // 2026-06-21 — AI provider toggle.
   setAiProvider: (v: 'openai' | 'gemini') => void;
+
+  // ─── PIPECAT VOICE ORCHESTRATOR ─────────────────────────────────
+  // 'legacy' = existing batch STT → intent classify → Kevin API chain
+  // 'pipecat' = real-time Pipecat server (Deepgram + Claude + OpenAI TTS)
+  voiceOrchestrator: 'legacy' | 'pipecat';
+  // URL of the deployed Pipecat server (e.g. https://kevin.up.railway.app)
+  pipecatServerUrl: string;
+  setVoiceOrchestrator: (v: 'legacy' | 'pipecat') => void;
+  setPipecatServerUrl: (v: string) => void;
 }
 
 // ─── STORE ────────────────────────────────
@@ -478,6 +487,9 @@ export const useSettingsStore = create<SettingsState>()(
       ghostAutoActivate: true,
       // 2026-06-21 — AI provider default 'gemini' (fastest vision path).
       aiProvider: 'gemini' as const,
+      // Pipecat voice orchestrator — off by default until server is deployed.
+      voiceOrchestrator: 'legacy' as const,
+      pipecatServerUrl: '',
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       // 2026-06-04 — Coach Mode toggle setter.
@@ -689,6 +701,8 @@ export const useSettingsStore = create<SettingsState>()(
       setCaddieSuggestions: (mode) => set({ caddieSuggestions: mode }),
       setGpsQualityDebugOverlay: (v) => set({ gpsQualityDebugOverlay: v }),
       setAiProvider: (v) => set({ aiProvider: v }),
+      setVoiceOrchestrator: (v) => set({ voiceOrchestrator: v }),
+      setPipecatServerUrl: (v) => set({ pipecatServerUrl: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -698,7 +712,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 13,
+      version: 14,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -832,6 +846,12 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 13) {
           if (p.aiProvider == null) p.aiProvider = 'gemini';
         }
+        // v14 — 2026-06-22 — Pipecat voice orchestrator added. Default 'legacy'
+        // so existing installs are unaffected until the server is deployed.
+        if (version < 14) {
+          if (p.voiceOrchestrator == null) p.voiceOrchestrator = 'legacy';
+          if (p.pipecatServerUrl == null) p.pipecatServerUrl = '';
+        }
         return p as SettingsState;
       },
       partialize: (s) => ({
@@ -895,6 +915,8 @@ export const useSettingsStore = create<SettingsState>()(
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         aiProvider: s.aiProvider,
+        voiceOrchestrator: s.voiceOrchestrator,
+        pipecatServerUrl: s.pipecatServerUrl,
         // watchConnected / glassesConnected not persisted — rechecked on mount
       }),
       // 2026-05-28 — Fix FS: post-splash audio race fix. settingsStore
