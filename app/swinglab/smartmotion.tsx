@@ -1021,6 +1021,11 @@ export default function SmartMotion() {
   const runAnalysis = useCallback(
     async (rawUri: string, segment?: SwingSegment) => {
       setPhase('analyzing');
+      // try/finally ensures setPhase('review') fires even if something throws
+      // before the normal call sites (putt return / swing path exit). Without
+      // this, any uncaught synchronous throw above the existing calls leaves
+      // the screen stuck on "Analyzing…" forever.
+      try {
       // Prewarm the TTS function NOW (analysis takes seconds) so the spoken
       // verdict that follows fires hot, not cold (Tim's report-read lag).
       // Throttled + breaker-guarded inside warmVoice, so this is ~free.
@@ -1174,7 +1179,6 @@ export default function SmartMotion() {
         } catch (e) {
           setAnalysisError(e instanceof Error ? e.message : String(e));
         }
-        setPhase('review');
         return;
       }
 
@@ -1283,7 +1287,9 @@ export default function SmartMotion() {
         setAnalysisError(e instanceof Error ? e.message : String(e));
       }
 
-      setPhase('review');
+      } finally {
+        setPhase('review');
+      }
     },
     [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount],
   );
@@ -2080,7 +2086,14 @@ export default function SmartMotion() {
       let firstSeg = segsForAnalysis[0];
       if (!firstSeg) {
         const durMs = meteredDurationMs ?? 0;
-        if (durMs > 0 && durMs <= 12_000) {
+        // 2026-06-22 — removed `durMs <= 12_000` cap. The old cap meant any
+        // clip >12 s where both acoustic AND vision locate failed received NO
+        // segment, forcing the unbounded analysis path (70 s watchdog). For
+        // a 19 s RANGE clip with a cold Lambda (locateSwings 502 at 13 s),
+        // the unbounded path timed out → NO READ. Synthesizing a whole-clip
+        // bounded window is ALWAYS better than going unbounded: the 30 s
+        // watchdog is sufficient, and extractKeyFrames samples proportionally.
+        if (durMs > 0) {
           firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false };
           // 2026-06-14 (audit fix) — surface the synthesized whole-clip segment to
           // state too, so the review's per-swing effects see segments[0] instead of
@@ -2537,6 +2550,12 @@ export default function SmartMotion() {
                     .finally(() => { loopSeekGuardRef.current = false; });
                 }
               }
+            }}
+            onError={(e) => {
+              // Surface video load failures so "black screen / won't play" is
+              // diagnosable in logcat instead of silently swallowed.
+              console.log('[smartmotion] video load error:', JSON.stringify(e));
+              setAnalysisError('Video failed to load — try re-recording');
             }}
           />
         ) : (
