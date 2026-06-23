@@ -1250,7 +1250,14 @@ export async function analyzeSwingTentative(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     V6('TENTATIVE STAGE 4 — fetch threw', { error: msg });
-    if (/network|abort|timeout|fetch/i.test(msg)) return { kind: 'no_network' };
+    // 2026-06-23 (smoke-test) — mirror the primary classifier: an abort/timeout =
+    // slow server (cold Lambda), NOT signal loss. Only genuine connectivity errors
+    // are no_network; a timeout must read as "took too long", not "no network".
+    const name = err instanceof Error ? err.name : '';
+    const isTimeout = name === 'TimeoutError' || name === 'AbortError' ||
+      (/abort|timeout|timed out/i.test(msg) && !/network request failed|connection|unreachable|dns|offline/i.test(msg));
+    if (isTimeout) return { kind: 'error', message: 'That took too long to analyze. Tap Re-analyze to try again.' };
+    if (/network|connection|fetch|unreachable|dns|offline/i.test(msg)) return { kind: 'no_network' };
     return { kind: 'error', message: msg };
   }
 }

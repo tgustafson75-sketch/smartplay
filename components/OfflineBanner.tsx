@@ -38,7 +38,7 @@ export function OfflineBanner() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: '__ping__', language: 'en' }),
-          signal: AbortSignal.timeout(6000),
+          signal: AbortSignal.timeout(12000),
         });
         if (!cancelled) reportOnline();
       } catch {

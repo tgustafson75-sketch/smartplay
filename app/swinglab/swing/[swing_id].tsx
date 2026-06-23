@@ -643,7 +643,10 @@ export default function SwingDetail() {
         Alert.alert('Sharing unavailable', 'Sharing is not available on this device.');
         return;
       }
-      await Sharing.shareAsync(shot.clipUri, {
+      // 2026-06-23 (smoke-test) — re-anchor the clip URI before sharing so a stale
+      // post-reinstall absolute path doesn't "share" a non-existent file.
+      const shareUri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
+      await Sharing.shareAsync(shareUri, {
         mimeType: 'video/mp4',
         dialogTitle: 'Share session',
       });

@@ -2178,7 +2178,10 @@ export default function SmartMotion() {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
       setAnalysisError(e instanceof Error ? e.message : String(e));
-      setPhase('setup');
+      // 2026-06-23 (smoke-test) — a segmentation throw used to drop to 'setup',
+      // DISCARDING the just-recorded clip and forcing a full re-record. The clip is
+      // already in state with a Re-analyze affordance, so land on 'review' instead.
+      setPhase('review');
     }
   }, [runAnalysis, appliedCalibration, pipelineNarrate]);
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).

@@ -106,6 +106,9 @@ const MODELS: Record<AiProvider, Record<AiTier, string>> = {
 // ─── SDK clients (lazy-initialized per request context) ───────────────────────
 
 function getOpenAI(timeoutMs = 25_000): OpenAI {
+  // 2026-06-23 (smoke-test) — fail fast + honest when the key is unset, matching
+  // the Gemini/Anthropic guards (otherwise the SDK throws a cryptic deep error).
+  if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
   // When a tight per-request timeout is set, disable retries so a slow-AI
   // round doesn't consume 2× the budget and push the loop over Vercel's 60s cap.
   const maxRetries = timeoutMs < 25_000 ? 0 : 1;

@@ -338,13 +338,11 @@ export function usePipecatVoice({
     const apiUrl = opts?.apiUrl ?? useSettingsStore.getState().pipecatServerUrl
       ? useSettingsStore.getState().pipecatServerUrl.replace(/^wss?:\/\//, 'https://').replace(/\/+$/, '')
       : '';
-    // STT: use existing Whisper transcribe endpoint (same as legacy path)
-    const whisperUrl = (() => {
-      // apiUrl here is the Vercel deployment URL, not the Pipecat server
-      // The Pipecat server URL is for /turn; Vercel handles /api/transcribe
-      const vercelBase = process.env.EXPO_PUBLIC_API_URL ?? '';
-      return vercelBase ? `${vercelBase}/api/transcribe` : '/api/transcribe';
-    })();
+    // STT: use existing transcribe endpoint (same as legacy path).
+    // 2026-06-23 (smoke-test) — EXPO_PUBLIC_API_URL is EMPTY in eas-update bundles,
+    // so the old fallback produced a relative '/api/transcribe' → "Invalid URL" (the
+    // api-base-url spine bug). Always resolve through getApiBaseUrl() (prod fallback).
+    const whisperUrl = `${getApiBaseUrl().replace(/\/+$/, '')}/api/transcribe`;
 
     onVoiceStateChange?.('thinking');
 

@@ -1507,14 +1507,16 @@ export default function SmartVisionScreen() {
             (has hazard outlines baked in), otherwise fall back to the
             existing imageUri (Mapbox tile) or curated bundled image. */}
         {golfbertHole?.imageryUrl ? (
-          <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+          // 2026-06-23 (smoke-test) — onError falls through to curated/Mapbox/empty
+          // instead of a permanent blank-white tile when the remote image 404s/times out.
+          <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setGolfbertHole(null)} />
         ) : curatedImage && imageryMode !== 'gps' ? (
           // Curated bundled hole photo wins over satellite — always.
           // Tim's hand-captured shots are the canonical visual; Mapbox
           // satellite is a fallback only when no curated image exists.
           <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : imageUri ? (
-          <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+          <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setImageUri(null)} />
         ) : loading ? (
           <View style={styles.canvasFallback}>
             <ActivityIndicator color="#00C896" />

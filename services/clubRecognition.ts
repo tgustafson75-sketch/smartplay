@@ -52,7 +52,10 @@ export type ClubRecognitionOutcome =
   | { kind: 'no_network'; latency_ms: number }
   | { kind: 'error'; message: string; latency_ms: number };
 
-const REQUEST_TIMEOUT_MS = 15_000;
+// 2026-06-23 (smoke-test) — 15s aborted BEFORE the 30s server cap on a cold
+// Lambda, so a healthy-but-slow recognition was killed client-side on good
+// signal and mislabeled no_network. 28s keeps the client UNDER the server cap.
+const REQUEST_TIMEOUT_MS = 28_000;
 
 /**
  * Convert a local image URI (as returned by expo-image-picker /
@@ -135,7 +138,10 @@ export async function recognizeClubFromBase64(
     const latency_ms = Date.now() - startedAt;
     const message = e instanceof Error ? e.message : 'Unknown error';
 
-    if (message.includes('Aborted') || message.includes('aborted') || message.includes('Network request')) {
+    // 2026-06-23 (smoke-test) — only a GENUINE connectivity failure is no_network.
+    // An abort/timeout = the server was slow (cold Lambda), NOT signal loss; it must
+    // surface as an error, not a false "check your network" on good signal.
+    if (message.includes('Network request failed') || message.includes('Network request')) {
       track('club_recognition_no_network', { latency_ms });
       return { kind: 'no_network', latency_ms };
     }

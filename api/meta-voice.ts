@@ -194,13 +194,17 @@ interface WeatherContext {
 }
 
 async function getWind(gps: RequestPayload['gps'] | undefined): Promise<WeatherContext> {
-  if (!gps || !process.env.OPENWEATHER_API_KEY) {
+  // 2026-06-23 (smoke-test) — env-name skew: api/weather.ts reads WEATHER_API_KEY
+  // but this read OPENWEATHER_API_KEY, so meta-voice wind was dead whenever only the
+  // former was set in prod. Accept either name.
+  const owmKey = process.env.OPENWEATHER_API_KEY ?? process.env.WEATHER_API_KEY ?? '';
+  if (!gps || !owmKey) {
     return { wind_mph: null, wind_dir_deg: null, temp_f: null };
   }
   try {
     const url =
       `https://api.openweathermap.org/data/2.5/weather?` +
-      `lat=${gps.lat}&lon=${gps.lng}&units=imperial&appid=${process.env.OPENWEATHER_API_KEY}`;
+      `lat=${gps.lat}&lon=${gps.lng}&units=imperial&appid=${owmKey}`;
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 800);
     const res = await fetch(url, { signal: ctl.signal });

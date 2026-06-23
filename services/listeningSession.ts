@@ -64,7 +64,9 @@ function isAllowedExternalUrl(url: string): boolean {
 type SessionState = 'idle' | 'opening' | 'listening' | 'thinking' | 'responding';
 
 const INTENT_FETCH_TIMEOUT_MS = 8_000;
-const KEVIN_FETCH_TIMEOUT_MS = 25_000;
+// 2026-06-23 (smoke-test) — match useVoiceCaddie BRAIN_TIMEOUT_MS (30s) so the
+// active-listen path doesn't abort a healthy-but-slow brain the tap path would keep.
+const KEVIN_FETCH_TIMEOUT_MS = 30_000;
 
 // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — localStatusResponder
 // query types that are DETERMINISTIC + accuracy-safe to answer INSTANTLY from device
