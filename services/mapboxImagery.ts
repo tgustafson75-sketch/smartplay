@@ -33,7 +33,14 @@ import { File, Paths } from 'expo-file-system';
 import { haversineMeters, bearingDegrees } from '../utils/geoDistance';
 import { isValidGolfCoord } from '../utils/coordGuard';
 
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+// 2026-06-23 — EXPO_PUBLIC_* is inlined at BUILD time, so eas-update OTA bundles
+// built without it get '' and all satellite imagery goes dark (same trap as the
+// API base-URL spine). A Mapbox `pk.` token is a PUBLIC client token — designed to
+// ship in client code — so a hardcoded fallback is safe and makes imagery work over
+// OTA with no native rebuild. Rotate via the Mapbox dashboard if ever needed.
+const MAPBOX_PUBLIC_FALLBACK =
+  'pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w';
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || MAPBOX_PUBLIC_FALLBACK;
 const MAPBOX_STYLE = 'mapbox/satellite-v9';
 const CACHE_DIR_NAME = 'mapbox_holes';
 

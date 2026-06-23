@@ -88,27 +88,28 @@ export const HOLE_LINE_CALIBRATION: Partial<Record<LocalCourseSlug, Record<numbe
     9: { tee: { fx: 0.665, fy: 0.907 }, green: { fx: 0.648, fy: 0.110 } },
   },
   'palms': {
-    // Calibrated from bundled GolfShot aerial screenshots (2026-06-22).
-    // Pin = white flag dot at the top of the aim line; tee = bottom of
-    // fairway. Refine with "mark tee" / "mark green" voice commands on course.
-    1:  { tee: { fx: 0.530, fy: 0.910 }, green: { fx: 0.520, fy: 0.175 } },
-    2:  { tee: { fx: 0.490, fy: 0.910 }, green: { fx: 0.490, fy: 0.125 } },
-    3:  { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.500, fy: 0.110 } },
-    4:  { tee: { fx: 0.480, fy: 0.930 }, green: { fx: 0.520, fy: 0.095 } },
-    5:  { tee: { fx: 0.540, fy: 0.910 }, green: { fx: 0.500, fy: 0.140 } },
-    6:  { tee: { fx: 0.510, fy: 0.910 }, green: { fx: 0.500, fy: 0.120 } },
-    7:  { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.510, fy: 0.115 } },
-    8:  { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.430, fy: 0.130 } },
-    9:  { tee: { fx: 0.460, fy: 0.880 }, green: { fx: 0.490, fy: 0.120 } },
-    10: { tee: { fx: 0.490, fy: 0.910 }, green: { fx: 0.455, fy: 0.130 } },
-    11: { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.490, fy: 0.120 } },
-    12: { tee: { fx: 0.490, fy: 0.920 }, green: { fx: 0.490, fy: 0.100 } },
-    13: { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.500, fy: 0.120 } },
-    14: { tee: { fx: 0.495, fy: 0.920 }, green: { fx: 0.500, fy: 0.110 } },
-    15: { tee: { fx: 0.500, fy: 0.930 }, green: { fx: 0.500, fy: 0.120 } },
-    16: { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.495, fy: 0.135 } },
-    17: { tee: { fx: 0.500, fy: 0.910 }, green: { fx: 0.490, fy: 0.110 } },
-    18: { tee: { fx: 0.500, fy: 0.920 }, green: { fx: 0.495, fy: 0.115 } },
+    // 2026-06-23 — re-derived for the NEW clean Golfshot crops (7422-7439, holes
+    // 1-18, cropped 2:3 + inpainted). Detected from the aim-line endpoints (green
+    // dot at top, tee marker at bottom) in the pre-inpaint crops, clamped for
+    // sanity. Refine on course with "mark tee" / "mark green".
+    1:  { tee: { fx: 0.427, fy: 0.832 }, green: { fx: 0.586, fy: 0.157 } },
+    2:  { tee: { fx: 0.576, fy: 0.852 }, green: { fx: 0.444, fy: 0.145 } },
+    3:  { tee: { fx: 0.541, fy: 0.870 }, green: { fx: 0.514, fy: 0.165 } },
+    4:  { tee: { fx: 0.336, fy: 0.764 }, green: { fx: 0.509, fy: 0.055 } },
+    5:  { tee: { fx: 0.429, fy: 0.865 }, green: { fx: 0.607, fy: 0.205 } },
+    6:  { tee: { fx: 0.526, fy: 0.782 }, green: { fx: 0.370, fy: 0.160 } },
+    7:  { tee: { fx: 0.376, fy: 0.702 }, green: { fx: 0.520, fy: 0.040 } },
+    8:  { tee: { fx: 0.469, fy: 0.878 }, green: { fx: 0.350, fy: 0.187 } },
+    9:  { tee: { fx: 0.354, fy: 0.885 }, green: { fx: 0.488, fy: 0.165 } },
+    10: { tee: { fx: 0.439, fy: 0.787 }, green: { fx: 0.410, fy: 0.072 } },
+    11: { tee: { fx: 0.485, fy: 0.866 }, green: { fx: 0.523, fy: 0.138 } },
+    12: { tee: { fx: 0.305, fy: 0.896 }, green: { fx: 0.388, fy: 0.067 } },
+    13: { tee: { fx: 0.568, fy: 0.873 }, green: { fx: 0.517, fy: 0.140 } },
+    14: { tee: { fx: 0.521, fy: 0.863 }, green: { fx: 0.480, fy: 0.150 } },
+    15: { tee: { fx: 0.385, fy: 0.868 }, green: { fx: 0.385, fy: 0.053 } },
+    16: { tee: { fx: 0.519, fy: 0.827 }, green: { fx: 0.543, fy: 0.202 } },
+    17: { tee: { fx: 0.619, fy: 0.822 }, green: { fx: 0.599, fy: 0.144 } },
+    18: { tee: { fx: 0.560, fy: 0.866 }, green: { fx: 0.621, fy: 0.158 } },
   },
   'rancho-california': {
     1:  { tee: { fx: 0.666, fy: 0.970 }, green: { fx: 0.607, fy: 0.050 } },

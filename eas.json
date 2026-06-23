@@ -9,6 +9,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
@@ -26,6 +27,7 @@
       "developmentClient": false,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
@@ -43,6 +45,7 @@
       "credentialsSource": "remote",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
@@ -62,6 +65,7 @@
       "developmentClient": false,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://smartplay-beta.vercel.app",
+        "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w",
         "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
