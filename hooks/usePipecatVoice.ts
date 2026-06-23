@@ -16,6 +16,8 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { getLastFix } from '../services/gpsManager';
+import { bagDistances } from '../services/shotStrategy';
+import { recordKevinTurn } from '../services/conversationState';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 import { devLog } from '../services/devLog';
@@ -95,7 +97,7 @@ export function usePipecatVoice({
         goal: round.goal ?? undefined,
       },
       bag: {
-        club_distances: {} as Record<string, number>,
+        club_distances: bagDistances() as Record<string, number>,
       },
       settings: {
         trustLevel,
@@ -295,10 +297,13 @@ export function usePipecatVoice({
 
       const text = data.response_text ?? '';
 
+      if (text.trim()) { try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch {} }
+
       // TTS via existing speak() path
       if (text) {
         onVoiceStateChange?.('speaking');
         onKevinSpoke?.(text);
+        recordKevinTurn(text);
         try {
           const settings = useSettingsStore.getState();
           await speak(text, settings.voiceGender, settings.language, getApiBaseUrl());
@@ -337,9 +342,6 @@ export function usePipecatVoice({
     uri: string,
     opts?: { apiUrl?: string; language?: string },
   ): Promise<void> => {
-    const apiUrl = opts?.apiUrl ?? useSettingsStore.getState().pipecatServerUrl
-      ? useSettingsStore.getState().pipecatServerUrl.replace(/^wss?:\/\//, 'https://').replace(/\/+$/, '')
-      : '';
     // STT: use existing transcribe endpoint (same as legacy path).
     // 2026-06-23 (smoke-test) — EXPO_PUBLIC_API_URL is EMPTY in eas-update bundles,
     // so the old fallback produced a relative '/api/transcribe' → "Invalid URL" (the

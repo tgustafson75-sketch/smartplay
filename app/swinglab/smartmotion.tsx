@@ -1179,10 +1179,14 @@ export default function SmartMotion() {
             const sid = ingestedSessionIdRef.current;
             if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
           } else {
-            setAnalysisError('Putt analysis timed out');
+            const msg = 'Putt analysis timed out';
+            setAnalysisError(msg);
+            try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
           }
         } catch (e) {
-          setAnalysisError(e instanceof Error ? e.message : String(e));
+          const msg = e instanceof Error ? e.message : String(e);
+          setAnalysisError(msg);
+          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
         }
         return;
       }
@@ -1246,11 +1250,14 @@ export default function SmartMotion() {
         // 30s watchdog DISCARDED a read that landed a hair late (race returns
         // 'error', the real 'ok' resolving at 32s was thrown away → review showed a
         // false failure), and the 2× retry DOUBLED the wait. The server now runs its
-        // OWN 3-way provider fallback + tier retry, so one awaited call is right.
+        // OWN 2-way provider fallback (Gemini→OpenAI, quick-tier short-circuits after Gemini)
+        // + tier retry, so one awaited call is right.
         // Keep only a GENEROUS outer hang-guard so a true hang still can't strand
-        // the "Analyzing…" screen, but a real read is shown, not thrown away.
+        // the "Analyzing…" screen, but a real read is shown, not thrown away. The
+        // 130s value must exceed the inner per-fetch ceiling (63+1.2+63s) so a valid
+        // late analysis read is never discarded.
         void watchdogMs; void maxAttempts; // superseded by hangGuardMs
-        const hangGuardMs = boundaries ? 60_000 : 90_000;
+        const hangGuardMs = 130_000;
         const result: Awaited<ReturnType<typeof analyzeSwing>> = await Promise.race([
           analyzeSwing(uri, analyzeOpts, boundaries),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
@@ -1292,10 +1299,14 @@ export default function SmartMotion() {
             }
           }
         } else {
-          setAnalysisError(`Analysis ${result.kind.replace('_', ' ')}`);
+          const msg = `Analysis ${result.kind.replace('_', ' ')}`;
+          setAnalysisError(msg);
+          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
         }
       } catch (e) {
-        setAnalysisError(e instanceof Error ? e.message : String(e));
+        const msg = e instanceof Error ? e.message : String(e);
+        setAnalysisError(msg);
+        try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
       }
 
       } finally {
@@ -1449,6 +1460,10 @@ export default function SmartMotion() {
           const segs = segmentsFromVideoSwings(swings, durMs);
           setSegments(segs);
           setSelectedSwing(0);
+          // Sync the ref SYNCHRONOUSLY (mirrors the cage path) so runAnalysis's
+          // multi-swing carve sees the full segment set, not a stale one — else
+          // multi-swing uploads collapse to 1 shot.
+          segmentsRef.current = segs;
           void runAnalysis(clipUriParam, segs[0]);
           return;
         }
@@ -1618,7 +1633,7 @@ export default function SmartMotion() {
             target_norm: targetPointRef.current ?? null,
           }, { startSec: seg.startMs / 1000, endSec: seg.endMs / 1000 }),
           new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
-            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 30000),
+            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 60000),
           ),
         ]);
         if (r.kind === 'ok') { analysisCacheRef.current[idx] = r.analysis; return r.analysis; }

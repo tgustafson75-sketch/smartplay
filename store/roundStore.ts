@@ -2339,6 +2339,7 @@ export const useRoundStore = create<RoundState>()(
         // partialized above.
         pendingLieAnalysis: s.pendingLieAnalysis,
         selectedTee: s.selectedTee,
+        transportMode: s.transportMode,
         // 2026-06-05 — third audit pass: four more in-round fields
         // that were initialized + mutated mid-round but missing from
         // partialize, so a crash + relaunch silently lost them.

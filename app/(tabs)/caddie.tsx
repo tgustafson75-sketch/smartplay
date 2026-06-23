@@ -1599,9 +1599,10 @@ export default function CaddieTab() {
     },
     onSpeechEnd: (uri) => {
       setKevinEmotion(null);
-      // source: 'vad' enables the wake-word gate — utterances without
-      // tank/kevin/serena/harry/caddie are silently dropped so spectators
-      // and cart partners don't accidentally route through the brain.
+      // source: 'vad' is a breadcrumb only — there is NO wake-word gate.
+      // The gate was removed because it broke nameless queries like "how
+      // are you". VAD-detected speech is routed to the brain exactly like a
+      // tap; VAD itself is already scoped to in-round idle.
       processAudioUri(uri, { source: 'vad' });
     },
   });

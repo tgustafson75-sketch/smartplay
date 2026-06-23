@@ -165,6 +165,12 @@ export default function SwingDetail() {
   } | null>(null);
   const [leftCompareShotId, setLeftCompareShotId] = useState<string | null>(null);
   const [rightCompareShotId, setRightCompareShotId] = useState<string | null>(null);
+  // 2026-06-23 (RP-1) — compare panes must re-anchor stored clipUris too, exactly
+  // like the main player (lines ~139-152). Without this, persisted absolute paths
+  // break after iOS regenerates the container UUID on reinstall and both compare
+  // panes render black while the main player works.
+  const [leftPlaybackUri, setLeftPlaybackUri] = useState<string | null>(null);
+  const [rightPlaybackUri, setRightPlaybackUri] = useState<string | null>(null);
   // 2026-05-22 — Compare-to-Reference picker sheet open/close.
   const [compareSheetOpen, setCompareSheetOpen] = useState(false);
   // 2026-06-14 (Tim — bilateral) — link a SECOND ANGLE of the same swing. Picks
@@ -200,6 +206,33 @@ export default function SwingDetail() {
   const rightShot = rightCompareShotId
     ? session?.shots.find(s => s.id === rightCompareShotId) ?? null
     : null;
+
+  // 2026-06-23 (RP-1) — re-anchor each compare pane's clipUri, mirroring the main
+  // player's resolve pattern (lines ~139-152) so reinstalled containers don't black out.
+  useEffect(() => {
+    let cancelled = false;
+    const raw = leftShot?.clipUri ?? null;
+    setLeftPlaybackUri(raw);
+    if (raw && raw.startsWith('file://')) {
+      void resolveClipUri(raw).then((r) => {
+        if (cancelled) return;
+        if (r) setLeftPlaybackUri(r);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [leftShot?.clipUri]);
+  useEffect(() => {
+    let cancelled = false;
+    const raw = rightShot?.clipUri ?? null;
+    setRightPlaybackUri(raw);
+    if (raw && raw.startsWith('file://')) {
+      void resolveClipUri(raw).then((r) => {
+        if (cancelled) return;
+        if (r) setRightPlaybackUri(r);
+      });
+    }
+    return () => { cancelled = true; };
+  }, [rightShot?.clipUri]);
 
   const videoRef = useRef<Video>(null);
   // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
@@ -1045,7 +1078,7 @@ export default function SwingDetail() {
                 </Text>
                 <Video
                   ref={leftCompareVideoRef}
-                  source={{ uri: leftShot.clipUri ?? '' }}
+                  source={{ uri: leftPlaybackUri ?? leftShot?.clipUri ?? '' }}
                   style={styles.compareVideo}
                   resizeMode={ResizeMode.CONTAIN}
                   shouldPlay={false}
@@ -1062,7 +1095,7 @@ export default function SwingDetail() {
                 </Text>
                 <Video
                   ref={rightCompareVideoRef}
-                  source={{ uri: rightShot.clipUri ?? '' }}
+                  source={{ uri: rightPlaybackUri ?? rightShot?.clipUri ?? '' }}
                   style={styles.compareVideo}
                   resizeMode={ResizeMode.CONTAIN}
                   shouldPlay={false}
@@ -1718,37 +1751,6 @@ export default function SwingDetail() {
                   colors={colors}
                 />
               )}
-              {/* Render legacy fallback path so existing layout flows
-                  through. The original card structure has been replaced
-                  by the component above — kept this section heading so
-                  any diff readers can find the seam. */}
-              {false && (
-                <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.label, { color: colors.accent }]}>SUGGESTED COMPARISONS</Text>
-                  <Text style={[styles.subtleHint, { color: colors.text_muted }]}>
-                    Closest matches in your library. Tap to compare.
-                  </Text>
-                  <View style={styles.suggestRow}>
-                    {autoSuggestions?.map((m) => (
-                      <TouchableOpacity
-                        key={m.reference.id}
-                        onPress={() => onCompareToSelect(m)}
-                        style={[styles.suggestChip, { borderColor: colors.accent }]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Compare to ${m.reference.label} — ${m.similarity}% match`}
-                      >
-                        <Text style={[styles.suggestPct, { color: colors.accent }]} numberOfLines={1}>
-                          {m.similarity}%
-                        </Text>
-                        <Text style={[styles.suggestName, { color: colors.text_primary }]} numberOfLines={1}>
-                          {m.reference.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-
               {/* 2026-05-22 — Phase 2 Compare action. Renders ONLY when
                   this is a full-swing session (not putting) with usable
                   biomechanics. Fires searchSimilarSwings → opens a

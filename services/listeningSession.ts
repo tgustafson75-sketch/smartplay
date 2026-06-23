@@ -505,6 +505,7 @@ async function openSession() {
         }),
       }, INTENT_FETCH_TIMEOUT_MS);
       if (!parseRes.ok) {
+        speculativeController?.abort();
         setSessionStateMirror('idle');
         return;
       }

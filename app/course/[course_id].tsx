@@ -111,19 +111,27 @@ export default function CourseDetailScreen() {
           slug === 'mariners-point' ? 'Mariners Point Golf Center' :
           slug === 'san-jose-muni' ? 'San Jose Municipal Golf Course' :
           slug === 'sunnyvale' ? 'Sunnyvale Golf Course' :
+          slug === 'echo-hills' ? 'Echo Hills Golf Course' :
+          slug === 'greenhill' ? 'Greenhill Golf Course' :
+          slug === 'westlake-cc-nj' ? 'Westlake Country Club' :
           slug;
         // 2026-05-16 — Pull real per-hole data from data/courses.ts when
         // we have it. The slug map below resolves the route's local
-        // slug to that file's course id (mostly identity, but
-        // 'rancho-california' -> 'rancho').
+        // slug to that file's course id (now all identity — the bundled
+        // 'rancho' id was renamed to 'rancho-california' on 2026-05-17,
+        // so the old 'rancho-california' -> 'rancho' mapping went stale
+        // and dropped Rancho to the fabricated stub layout — audit DP-1).
         const dataCourseId =
-          slug === 'rancho-california' ? 'rancho' :
+          slug === 'rancho-california' ? 'rancho-california' :
           slug === 'palms' ? 'palms' :
           slug === 'lakes' ? 'lakes' :
           slug === 'crystal-springs' ? 'crystal-springs' :
           slug === 'mariners-point' ? 'mariners-point' :
           slug === 'sunnyvale' ? 'sunnyvale' :
           slug === 'san-jose-muni' ? 'san-jose-muni' :
+          slug === 'echo-hills' ? 'echo-hills' :
+          slug === 'greenhill' ? 'greenhill' :
+          slug === 'westlake-cc-nj' ? 'westlake-cc-nj' :
           null;
         const dataCourse = dataCourseId ? getLocalCourseData(dataCourseId) : null;
 
@@ -326,6 +334,9 @@ export default function CourseDetailScreen() {
     localSlug === 'mariners-point' ? 'Mariners Point' :
     localSlug === 'san-jose-muni' ? 'San Jose Municipal' :
     localSlug === 'sunnyvale' ? 'Sunnyvale Golf Course' :
+    localSlug === 'echo-hills' ? 'Echo Hills Golf Course' :
+    localSlug === 'greenhill' ? 'Greenhill Golf Course' :
+    localSlug === 'westlake-cc-nj' ? 'Westlake Country Club' :
     null;
   const displayClubName = localFriendlyName ?? course?.club_name ?? '';
   const noteByHole = useMemo(() => {

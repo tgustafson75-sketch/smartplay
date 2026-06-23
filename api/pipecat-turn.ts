@@ -45,6 +45,7 @@ async function fetchCourse(path: string): Promise<unknown> {
 const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'log_score', 'log_emotional_state',
+  'mark_tee', 'mark_green',
 ]);
 
 // ── Kevin's tools (same definitions as api/kevin.ts AI_TOOLS) ─────────────
@@ -105,6 +106,16 @@ const KEVIN_TOOLS: AiToolDef[] = [
   {
     name: 'record_swing',
     description: 'Open SwingLab in record mode to film the next swing.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'mark_tee',
+    description: 'Mark the tee box position for the current hole in SmartVision. Trigger when user says "mark tee", "mark the tee box", "mark my position at the tee", "save the tee", or similar. User must be standing at the tee when they say this.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'mark_green',
+    description: 'Mark the green / pin position for the current hole in SmartVision. Trigger when user says "mark the green", "mark the pin", "mark the hole", "save pin position", "mark position at the green", or similar. User must be standing at or near the green when they say this.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {

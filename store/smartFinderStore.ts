@@ -29,8 +29,17 @@ export const useSmartFinderStore = create<SmartFinderState>()(
       // 2026-05-26 Fix BZ — __BZ_baseline__ version + passthrough migrate so future
       // version bumps don't wipe state. Replace `as never` with the real
       // state type when adding actual migration logic.
-      version: 1,
-      migrate: (s) => s as never,
+      // 2026-06-23 SF-3 — v2: retire the dead, ungated 'standard' camera path
+      // (no longer UI-selectable) by mapping any persisted mode to 'target'.
+      // All other persisted fields are preserved.
+      version: 2,
+      migrate: (s) => {
+        const prev = (s ?? {}) as Partial<SmartFinderState>;
+        if (prev.mode === 'standard') {
+          return { ...prev, mode: 'target' } as never;
+        }
+        return prev as never;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
       partialize: (s) => ({ mode: s.mode }),
     },

@@ -184,7 +184,7 @@ import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
 // signal with the voice paths so weak-signal range sessions short-circuit
 // instead of paying full timeout+retry per swing.
-import { isDegraded, recordSuccess, recordFailure, degradedReason } from './voiceCircuitBreaker';
+import { recordSuccess, recordFailure } from './voiceCircuitBreaker';
 import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 
 // Phase V.6 diagnostic — single grep target. Filter via:
@@ -846,17 +846,11 @@ export async function analyzeSwing(
     return { kind: 'no_frames' };
   }
 
-  // Circuit breaker: if swing-analysis is degraded (3 recent failures),
-  // short-circuit before paying the radio-wake + timeout cost again.
-  if (isDegraded('swing-analysis')) {
-    // Honest short-circuit: only a genuine NETWORK trip is "lost connection".
-    // A timeout/5xx trip (server slowness, not connectivity) returns an error
-    // with copy that doesn't blame the user's Wi-Fi.
-    const reason = degradedReason('swing-analysis');
-    V6('STAGE 3 SKIP — swing-analysis degraded (circuit breaker), short-circuit', { reason });
-    if (reason === 'network') return { kind: 'no_network' };
-    return { kind: 'error', message: 'Analyzer is catching up — give it a few seconds, then tap Re-analyze.' };
-  }
+  // No-walls policy: the swing-analysis circuit breaker is telemetry-only. We
+  // still record success/failure below (for diagnostics + the connectivity
+  // signal), but we never short-circuit on a degraded breaker — the caddie/
+  // analysis path always attempts and degrades gracefully rather than walling
+  // off the user on prior failures.
 
   const apiUrl = getApiBaseUrl();
   try {
