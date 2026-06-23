@@ -153,7 +153,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
   type Sharp = Candidate & { attackMs: number };
   const sharp: Sharp[] = [];
   for (const c of candidates) {
-    let attackStartIdx = c.idx;
+    let attackStartIdx = -1;
     for (let j = c.idx - 1; j >= 0; j--) {
       const sj = samples[j];
       if (sj && sj.dB <= c.localFloor + 5) {
@@ -161,6 +161,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
         break;
       }
     }
+    if (attackStartIdx === -1) continue;
     const peakSample = samples[c.idx];
     const startSample = samples[attackStartIdx];
     if (!peakSample || !startSample) continue;

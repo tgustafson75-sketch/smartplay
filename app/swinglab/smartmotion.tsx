@@ -523,7 +523,7 @@ export default function SmartMotion() {
   const cycleMode = () => {
     const cur = isPutt ? 'putt' : angle;
     if (cur === 'down_the_line') { setAngle('face_on'); setPuttMode(false); lastChosenAngleRef.current = 'face_on'; showModeFade('FACE-ON'); }
-    else if (cur === 'face_on') { setPuttMode(true); setAngle('down_the_line'); showModeFade('PUTTING'); }
+    else if (cur === 'face_on') { setPuttMode(true); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('PUTTING'); }
     else { setPuttMode(false); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('DOWN THE LINE'); }
   };
   // A club value is needed by detectBallSpeed (server key) at stop time;
@@ -1849,6 +1849,7 @@ export default function SmartMotion() {
       stoppingRef.current = false;
       void meteringRef.current?.cancel().catch(() => undefined);
       meteringRef.current = null;
+      setSmartMotionRecording(false);
       setAnalysisError(e instanceof Error ? e.message : String(e));
       setPhase('setup');
       return;
@@ -2168,6 +2169,10 @@ export default function SmartMotion() {
       // (a "Swing N, fault" read doesn't fit a putt). Single swing → no pipeline.
       if (segsForAnalysis.length > 1 && !puttModeRef.current) {
         void pipelineNarrate(recorded.uri, segsForAnalysis);
+      } else if (segsForAnalysis.length === 1 && !puttModeRef.current) {
+        // Single-swing session — pipeline doesn't run, so emit session_complete here
+        // so subscribers (e.g. voice UI) receive the event.
+        emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: 1, summary: '1 swing recorded.' });
       }
     } catch (e) {
       recordingPromiseRef.current = null;

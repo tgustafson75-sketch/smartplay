@@ -10,7 +10,7 @@
  */
 
 import OpenAI from 'openai';
-import { GoogleGenAI, type Part } from '@google/genai';
+import { GoogleGenAI, FunctionCallingConfigMode, type Part } from '@google/genai';
 import Anthropic from '@anthropic-ai/sdk';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,6 +80,12 @@ export interface CompleteOpts {
    * instead of plain json_object / responseMimeType modes.
    */
   schema?: StructuredSchema;
+  /**
+   * Force the model to call a specific tool by name. When set, the provider
+   * will use tool_choice (OpenAI), tool_choice (Anthropic), or
+   * functionCallingConfig ANY (Gemini) to guarantee the named tool fires.
+   */
+  forceTool?: string;
 }
 
 export interface CompleteWithToolsResult {
@@ -448,6 +454,7 @@ export async function completeWithTools(
       model, max_tokens: maxTokens, temperature,
       tools: oaiTools,
       messages: msgList,
+      ...(opts?.forceTool ? { tool_choice: { type: 'function', function: { name: opts.forceTool } } } : {}),
     });
 
     const msg = res.choices[0]?.message;
@@ -493,6 +500,7 @@ export async function completeWithTools(
       system,
       tools: antTools,
       messages: antMessages,
+      ...(opts?.forceTool ? { tool_choice: { type: 'tool', name: opts.forceTool } } : {}),
     });
 
     const textBlock = res.content.find(b => b.type === 'text');
@@ -532,6 +540,7 @@ export async function completeWithTools(
       temperature,
       maxOutputTokens: maxTokens,
       tools: geminiTools,
+      ...(opts?.forceTool ? { toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [opts.forceTool] } } } : {}),
     },
   }), timeoutMs ?? 25_000);
 

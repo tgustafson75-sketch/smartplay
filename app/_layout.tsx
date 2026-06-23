@@ -1138,6 +1138,10 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
         <Stack.Screen
+          name="swinglab/range-import"
+          options={{ animation: 'slide_from_right', headerShown: false }}
+        />
+        <Stack.Screen
           name="practice/shot-shapes"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />

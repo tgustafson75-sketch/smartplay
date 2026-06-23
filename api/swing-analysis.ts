@@ -1275,7 +1275,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }));
         const oai = await openaiClient.chat.completions.create({
           model: 'gpt-4o',
-          max_tokens: 650,
+          max_tokens: 1000,
           temperature: 0.2,
           response_format: {
             type: 'json_schema',

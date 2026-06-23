@@ -104,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       [{ role: 'user', content: userMessage }],
       [CAGE_SWING_REVIEW_TOOL],
       [],
-      { maxTokens: 400, temperature: 0.6 },
+      { maxTokens: 400, temperature: 0.6, forceTool: 'cage_swing_review' },
     );
 
     const toolCall = result.toolCalls.find(tc => tc.name === 'cage_swing_review');
