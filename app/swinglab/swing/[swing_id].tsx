@@ -251,23 +251,16 @@ export default function SwingDetail() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const [controlsHidden, setControlsHidden] = useState(false);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Only fade after the user has played at least once — keeps controls visible on open.
+  // 2026-06-23 (Tim — "no play/pause or slow-mo controls") — with auto-play now
+  // on, the old "fade controls after play for a clean screenshot" hid every
+  // control. Keep them PERSISTENTLY visible; the play/pause toggle below shows
+  // the live state. (Clean-grab fade dropped — functional controls win.)
   const hasEverPlayedRef = useRef(false);
   useEffect(() => {
     if (fadeTimerRef.current) { clearTimeout(fadeTimerRef.current); fadeTimerRef.current = null; }
-    if (isPlaying) {
-      hasEverPlayedRef.current = true;
-      setControlsHidden(false);
-      Animated.timing(controlsOpacity, { toValue: 1, duration: 140, useNativeDriver: true }).start();
-    } else {
-      if (!hasEverPlayedRef.current) return; // don't fade controls on initial load
-      // Paused after play — hold briefly so the pause reads, then fade for clean screenshot.
-      fadeTimerRef.current = setTimeout(() => {
-        setControlsHidden(true);
-        Animated.timing(controlsOpacity, { toValue: 0, duration: 420, useNativeDriver: true }).start();
-      }, 1100);
-    }
-    return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
+    if (isPlaying) hasEverPlayedRef.current = true;
+    setControlsHidden(false);
+    controlsOpacity.setValue(1);
   }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
@@ -1210,12 +1203,18 @@ export default function SwingDetail() {
                 <Image source={ICON_CTRL.slowmo} style={{ width: 42, height: 42 }} resizeMode="contain" />
                 {playbackRate < 1 ? <Text style={{ position: 'absolute', bottom: 2, right: 4, fontSize: 9, fontWeight: '900', color: '#88F700' }}>{playbackRate === 0.5 ? '½' : '¼'}</Text> : null}
               </TouchableOpacity>
-              {/* Center play badge when paused (tap-to-play reads as a control). */}
-              {!isPlaying ? (
-                <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-                  <Image source={ICON_CTRL.playpause} style={{ width: 60, height: 60 }} resizeMode="contain" />
-                </View>
-              ) : null}
+              {/* 2026-06-23 (Tim) — always-visible play/pause toggle. Shows the
+                  live state (pause while playing, play while paused) and is itself
+                  tappable, so there's an obvious control even during auto-play.
+                  Semi-transparent while playing so it doesn't bury the swing. */}
+              <TouchableOpacity
+                onPress={togglePlayPause}
+                style={{ position: 'absolute', alignSelf: 'center', top: '50%', marginTop: -32, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)', opacity: isPlaying ? 0.55 : 1 }}
+                accessibilityRole="button"
+                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              >
+                <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#ffffff" />
+              </TouchableOpacity>
               {/* Tap-to-seek bar — replaces the native scrubber. Tap anywhere on it
                   to jump to that fraction of the clip. Thin, bottom edge, clear of
                   the watermark; doesn't interfere with the tap-to-pause on the frame. */}

@@ -999,8 +999,8 @@ function StatTile({
   return (
     <View style={[styles.statTile, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
       {icon ? <Ionicons name={icon} size={18} color={colors.accent} style={{ marginBottom: 2 }} /> : null}
-      <Text style={[styles.statTileValue, { color: colors.accent }]}>{value}</Text>
-      <Text style={[styles.statTileLabel, { color: colors.text_muted }]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.statTileValue, { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{value}</Text>
+      <Text style={[styles.statTileLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </View>
   );
 }

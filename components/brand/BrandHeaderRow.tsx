@@ -89,22 +89,16 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
     <View style={styles.wrap}>
       <CaddieMicBadge size={BRAND_BADGE_SIZE} onPress={onLogoPress ?? undefined} hideMicIcon={hideLogoMicIcon} />
       <View style={styles.titleBlock}>
-        <View style={styles.wordmarkRow}>
-          <Text style={[styles.name1, { color: colors.accent }]}>SMARTPLAY</Text>
-          {/* 2026-05-26 — Fix BF: pure-white in dark / pure-black in
-              light for "CADDIE". Was colors.text_primary which is
-              technically pure white in the default dark palette but
-              rendered grey/washed-out at the wordmark's letter-spacing
-              + weight on Tim's Z Fold ("on the play tab in the header
-              bar, smartplay caddy, caddy is pretty gray, and you
-              can't see it"). Detect dark via background darkness and
-              force the extreme — guarantees max contrast on every
-              theme + high-contrast combo. */}
-          <Text style={[
-            styles.name2,
-            { color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' },
-          ]}> CADDIE</Text>
-        </View>
+        {/* 2026-06-23 (Tim — wordmark cut off on small screens) — ONE
+            auto-shrinking line so "SMARTPLAY CADDIE" always fits the available
+            width (badge + tools pill take the rest) instead of clipping "CADDIE".
+            Nested Text keeps the accent/white split; the outer Text drives the
+            single-line fit. CADDIE stays pure white in dark / black in light for
+            max contrast (the Z-Fold grey-wordmark fix). */}
+        <Text style={styles.name1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+          <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
+          <Text style={{ color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' }}> CADDIE</Text>
+        </Text>
         <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1}>
           {tagline}
         </Text>
