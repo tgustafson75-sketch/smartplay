@@ -1236,16 +1236,22 @@ export default function SmartMotion() {
           ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
           target_norm: targetPointRef.current ?? null,
         };
-        let result: Awaited<ReturnType<typeof analyzeSwing>> = { kind: 'error', message: 'Analysis timed out' };
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          result = await Promise.race([
-            analyzeSwing(uri, analyzeOpts, boundaries),
-            new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
-              setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), watchdogMs),
-            ),
-          ]);
-          if (result.kind === 'ok') break; // success — don't retry
-        }
+        // 2026-06-23 (Tim — "failure states wrapped in analysis delay it; you get
+        // the analysis eventually but there's a bug in the parse/review") — the old
+        // 30s watchdog DISCARDED a read that landed a hair late (race returns
+        // 'error', the real 'ok' resolving at 32s was thrown away → review showed a
+        // false failure), and the 2× retry DOUBLED the wait. The server now runs its
+        // OWN 3-way provider fallback + tier retry, so one awaited call is right.
+        // Keep only a GENEROUS outer hang-guard so a true hang still can't strand
+        // the "Analyzing…" screen, but a real read is shown, not thrown away.
+        void watchdogMs; void maxAttempts; // superseded by hangGuardMs
+        const hangGuardMs = boundaries ? 60_000 : 90_000;
+        const result: Awaited<ReturnType<typeof analyzeSwing>> = await Promise.race([
+          analyzeSwing(uri, analyzeOpts, boundaries),
+          new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
+            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), hangGuardMs),
+          ),
+        ]);
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
