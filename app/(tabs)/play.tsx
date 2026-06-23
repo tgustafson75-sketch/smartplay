@@ -56,6 +56,7 @@ import {
   WESTLAKE_CC_NJ_HOLE_IMAGES,
   ECHO_HILLS_HOLE_IMAGES,
   GREENHILL_HOLE_IMAGES,
+  getLocalHoleImageById,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -333,6 +334,15 @@ export default function PlayTab() {
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [selectedHero, setSelectedHero] = useState<string | null>(null);
+  // DP-3 — resolve the selected LOCAL course's real bundled thumbnail
+  // (hole-1 image) from its `local:<slug>` id via the canonical
+  // courseId-keyed resolver — the same registry the closest-local rows
+  // draw their thumbnails from. Returns null for API/non-local courses
+  // and for local slugs without bundled imagery (genuine placeholder).
+  const selectedLocalThumb = useMemo(
+    () => getLocalHoleImageById(selected?.id ?? null, 1),
+    [selected?.id],
+  );
   // Phase 407 — GPS position for course-locator default sort.
   // One-shot Balanced-accuracy fix at mount; refreshed when the tab
   // regains focus. Null when permission denied or fix unavailable —
@@ -1011,8 +1021,8 @@ export default function PlayTab() {
             <View style={styles.selectedCard}>
               <View style={styles.selectedHeader}>
                 <View style={styles.selectedThumb}>
-                  {selected.club_name.toLowerCase().includes('palms') && PALMS_IMAGES[1] ? (
-                    <Image source={PALMS_IMAGES[1] as ImageSourcePropType} style={styles.selectedThumbImg} resizeMode="cover" />
+                  {selectedLocalThumb ? (
+                    <Image source={selectedLocalThumb as ImageSourcePropType} style={styles.selectedThumbImg} resizeMode="cover" />
                   ) : selectedHero ? (
                     <Image source={{ uri: selectedHero }} style={styles.selectedThumbImg} resizeMode="cover" />
                   ) : (
