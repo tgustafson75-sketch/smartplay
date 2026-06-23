@@ -486,6 +486,11 @@ export default function SmartMotion() {
   const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [scanningClub, setScanningClub] = useState(false);
+  // 2026-06-23 (Tim) — guided Scan-club: a framing box + 3-2-1 hold so the user
+  // presents the club SOLE steadily (a quick pass gives the vision a blurry,
+  // unreadable frame — the "8-iron" only reads from a crisp held frame).
+  const [clubScanActive, setClubScanActive] = useState(false);
+  const [clubScanCount, setClubScanCount] = useState(0);
   // 2026-06-11 — periodic auto club detection (Tim: "every ~3 cycles"). A completed
   // recording bumps cycleCountRef; every Nth cycle marks a scan due, fired silently
   // once we settle back in setup (see the effect below detectClubFromCamera).
@@ -2243,6 +2248,49 @@ export default function SmartMotion() {
     }
   }, [scanningClub, setClub]);
 
+  // 2026-06-23 (Tim — guided Scan-club) — the manual path now shows a framing box +
+  // a 3-2-1 hold so the SOLE is presented steadily, then captures a CRISP processed
+  // frame (skipProcessing:false, higher quality) instead of the low-q immediate snap
+  // that produced motion-blurred, unreadable frames on a quick pass. One steady frame
+  // → club-recognition → auto-select. Falls back to the picker on a low-confidence read.
+  const startClubScan = useCallback(async () => {
+    if (scanningClub || clubScanActive) return;
+    if (recordingPromiseRef.current || stoppingRef.current) return;
+    setClubScanActive(true);
+    try {
+      // Countdown 3 → 2 → 1 (≈0.7s each) so the user can present + steady the sole.
+      for (let n = 3; n >= 1; n--) {
+        setClubScanCount(n);
+        await new Promise((r) => setTimeout(r, 700));
+      }
+      setClubScanCount(0); // "Reading…"
+      setScanningClub(true);
+      const apiUrl = getApiBaseUrl();
+      const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.75, skipProcessing: false });
+      const b64 = pic?.base64;
+      if (!apiUrl || !b64) { setClubMenuOpen(true); return; }
+      const res = await recognizeClubFromBase64(b64, apiUrl);
+      if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
+        setClub(res.club_id);
+        setPuttMode(res.club_id === 'PT');
+        try {
+          const s = useSettingsStore.getState();
+          await configureAudioForSpeech();
+          await speak(`Got it — ${clubLabel(res.club_id)}.`, s.voiceGender, s.language, apiUrl, { userInitiated: true });
+        } catch { /* speech non-fatal */ }
+      } else {
+        setClubMenuOpen(true); // couldn't confirm — let the user pick/correct
+      }
+    } catch (e) {
+      console.log('[smartmotion] guided club scan failed:', e);
+      setClubMenuOpen(true);
+    } finally {
+      setScanningClub(false);
+      setClubScanActive(false);
+      setClubScanCount(0);
+    }
+  }, [scanningClub, clubScanActive, setClub]);
+
   // ── hands-free voice control (the money shot) ──────────────────────────
   // Active-listening "caddie, record / start / stop" drives capture without
   // touching the screen. The screen owns the decision: a command toggles by
@@ -2356,7 +2404,7 @@ export default function SmartMotion() {
 
   const recordCmdRef = useRef<(cmd: SmartMotionCommand) => void>(() => {});
   recordCmdRef.current = (cmd) => {
-    if (cmd === 'scanClub') { void detectClubFromCamera(); return; }
+    if (cmd === 'scanClub') { void startClubScan(); return; }
     // Voice club change set putt mode (parity with the picker / club scan).
     if (cmd === 'puttOn') { setPuttMode(true); setAngle('down_the_line'); return; }
     if (cmd === 'puttOff') { setPuttMode(false); return; }
@@ -2661,6 +2709,19 @@ export default function SmartMotion() {
           ]}
         />
 
+        {/* 2026-06-23 (Tim) — guided Scan-club overlay: framing box + 3-2-1 hold so
+            the SOLE is presented steadily for a crisp, readable frame. */}
+        {clubScanActive && (
+          <View pointerEvents="none" style={styles.clubScanOverlay}>
+            <View style={styles.clubScanBox}>
+              {clubScanCount > 0
+                ? <Text style={styles.clubScanCount}>{clubScanCount}</Text>
+                : <Text style={styles.clubScanReading}>Reading…</Text>}
+            </View>
+            <Text style={styles.clubScanHint}>Hold the club SOLE flat in the box · keep it steady</Text>
+          </View>
+        )}
+
         {/* LEFT RAIL — ball/result metric badges (review): tempo · ball speed · ball
             result. Mirrors the right rail so the metrics flank the video and the
             centre stays clear (Tim). Honest "—" until measured. Hide-toggle gated. */}
@@ -2862,9 +2923,9 @@ export default function SmartMotion() {
                 <ToolCardRow
                   icon={scanningClub ? <Ionicons name="sync" size={26} color={colors.accent} /> : <Image source={ICON_CLUB} style={styles.toolCardIcon} resizeMode="contain" />}
                   title="Scan club"
-                  desc="Detect the club you're hitting"
-                  disabled={scanningClub}
-                  onPress={() => void detectClubFromCamera()}
+                  desc="Hold the sole to the camera"
+                  disabled={scanningClub || clubScanActive}
+                  onPress={() => { setRailExpanded(false); void startClubScan(); }}
                 />
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.ballbox} style={styles.toolCardIcon} resizeMode="contain" />}
@@ -3511,6 +3572,21 @@ const styles = StyleSheet.create({
 
   captureRoot: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   statusBorder: { borderWidth: 2.5, borderRadius: 2, zIndex: 4 },
+  // 2026-06-23 (Tim) — guided Scan-club framing overlay.
+  clubScanOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 30,
+  },
+  clubScanBox: {
+    width: 230, height: 165, borderRadius: 16,
+    borderWidth: 2.5, borderColor: '#88F700', borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(136,247,0,0.06)',
+  },
+  clubScanCount: { color: '#88F700', fontSize: 64, fontWeight: '900' },
+  clubScanReading: { color: '#88F700', fontSize: 20, fontWeight: '800', letterSpacing: 0.5 },
+  clubScanHint: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginTop: 18, textAlign: 'center', paddingHorizontal: 24 },
 
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 5,
