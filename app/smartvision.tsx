@@ -82,6 +82,7 @@ import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // Single source of truth now lives in utils/geoDistance.ts.
 import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
 import { planAimLines, layupFraction } from '../utils/layupPlan';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -1483,6 +1484,33 @@ export default function SmartVisionScreen() {
           </View>
         )}
 
+        {/* Edge vignette — dark side + top gradients that frame the fairway
+            and suppress the bright rough/sky content at the image edges.
+            Only shown on curated photos (which have light peripheral content);
+            GPS satellite tiles are typically darker at the edges already. */}
+        {(curatedImage && imageryMode !== 'gps') && (<>
+          <LinearGradient
+            colors={['rgba(6,15,9,0.82)', 'transparent']}
+            start={{ x: 0, y: 0.5 }} end={{ x: 0.28, y: 0.5 }}
+            style={StyleSheet.absoluteFill} pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(6,15,9,0.82)']}
+            start={{ x: 0.72, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill} pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['rgba(6,15,9,0.55)', 'transparent']}
+            start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.12 }}
+            style={StyleSheet.absoluteFill} pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(6,15,9,0.65)']}
+            start={{ x: 0.5, y: 0.82 }} end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFill} pointerEvents="none"
+          />
+        </>)}
+
         {/* 2026-05-17 — SVG overlay rebuilt to Bluegolf-class.
             Bottom: fairway polygons (translucent green tint over satellite).
             Above that: green polygon (darker fill + bright stroke).
@@ -1627,7 +1655,7 @@ export default function SmartVisionScreen() {
                 strokeWidth={3}
                 fontSize={13}
                 fontWeight="900"
-              >{`LAY UP · ${aimPlan.leaveYards} in`}</SvgText>
+              >{`LAY UP · ${aimPlan.leaveYards}y in`}</SvgText>
             </>
           )}
         </Svg>
