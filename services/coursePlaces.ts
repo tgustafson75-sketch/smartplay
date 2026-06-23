@@ -26,7 +26,17 @@
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 import { isValidGolfCoord } from '../utils/coordGuard';
 
-const KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ?? '';
+// 2026-06-23 (Tim — "how do I fix coursePlaces") — EXPO_PUBLIC_* is inlined at
+// BUILD time, so eas-update OTA bundles get '' and Course Book website/phone go
+// dead on the preview channel (same trap as the Mapbox token). This key already
+// ships in the native build via eas.json, so a fallback constant doesn't change
+// the exposure and makes it work over OTA. REMAINING (Tim, Google Cloud Console):
+//   1. Enable the "Places API" on the project that owns this key (the one toggle
+//      that actually activates this — it 403s until then).
+//   2. Restrict the key (Android app restriction: package + SHA-1, and API
+//      restriction to Places + Maps) so the shipped key can't be abused.
+const GOOGLE_MAPS_PUBLIC_FALLBACK = 'AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4';
+const KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || GOOGLE_MAPS_PUBLIC_FALLBACK;
 const PLACES_TIMEOUT_MS = 8_000;
 
 export interface CoursePlaces {
