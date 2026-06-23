@@ -103,6 +103,29 @@ const BRAIN_TIMEOUT_MS = 30000;
 // 45s hard cap.
 const MIC_SILENCE_DB_THRESHOLD = -40;
 const MIC_SPEECH_DETECT_DB = -30;
+
+// 2026-06-23 (Tim — "Serena asks 'how are you feeling?' but isn't listening
+// anymore, I have to re-tap the mic. Went through this multiple times").
+// ROOT CAUSE: the four re-arm sites all used `text.trim().endsWith('?')`, which
+// is FALSE the moment the caddie's question has ANY trailing text —
+// "How are you feeling today? Take your time." / "...today?\"" / "...today? 🙂".
+// That left the user stranded after a perfectly valid question. This robust
+// check counts it as awaiting an answer if, after stripping trailing
+// quotes/emoji/space, the text ends with '?', OR a '?' sits near the end with
+// only a short closer after it (a second short sentence like "Take your time.").
+export function endsAsQuestion(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim();
+  if (!t) return false;
+  // Strip trailing whitespace / closing quotes / brackets (Hermes-safe — no
+  // \p{Emoji} unicode-property escape, which can throw on RN's engine).
+  const stripped = t.replace(/[\s"'’”)\]}]+$/, '');
+  if (stripped.endsWith('?')) return true;
+  const lastQ = t.lastIndexOf('?');
+  if (lastQ === -1) return false;
+  // A question followed by only a SHORT closer (or trailing emoji) still wants
+  // an answer: "How are you feeling today? Take your time." / "...today? 🙂".
+  return t.slice(lastQ + 1).trim().length <= 30;
+}
 const MIC_SILENCE_TIMEOUT_MS = 4000;
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
@@ -1273,7 +1296,7 @@ export const useVoiceCaddie = ({
         // honor the safety rails (turn cap + session-time cap). Recursion
         // still terminates naturally on close-intent (handled above)
         // or on silence-twice (handled in the calling loop body).
-        const kevinAskedFollowUp = (checked.text ?? '').trim().endsWith('?');
+        const kevinAskedFollowUp = endsAsQuestion(checked.text);
         const continuous = useSettingsStore.getState().continuousConversationMode;
         let shouldRecurse = kevinAskedFollowUp;
         if (continuous && !kevinAskedFollowUp) {
@@ -1560,7 +1583,7 @@ export const useVoiceCaddie = ({
           await speakResponse(result.voice_response);
         }
         if (result.tool_action) onToolAction?.(result.tool_action);
-        const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
+        const replyEndsWithQuestion = endsAsQuestion(result.voice_response);
         if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
           await runFollowUpListenLoop();
         }
@@ -1714,7 +1737,7 @@ export const useVoiceCaddie = ({
           // log_shot says "Got the shot — which club?" then went idle
           // and left the user stranded — "Hole 6 / Hole 6 / Hole 6"
           // entries with no enrichment.
-          const replyEndsWithQuestion = (result.voice_response ?? '').trim().endsWith('?');
+          const replyEndsWithQuestion = endsAsQuestion(result.voice_response);
           if (replyEndsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
             await runFollowUpListenLoop();
           }
@@ -1798,7 +1821,7 @@ export const useVoiceCaddie = ({
       // again → quietly idle. Eliminates the "Kevin asks but isn't
       // listening" gap Tim flagged tonight.
       const kevinText = (kevinResponse.text ?? '').trim();
-      const endsWithQuestion = kevinText.endsWith('?');
+      const endsWithQuestion = endsAsQuestion(kevinText);
       if (endsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
         await runFollowUpListenLoop();
       }
