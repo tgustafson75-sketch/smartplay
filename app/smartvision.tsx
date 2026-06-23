@@ -810,12 +810,17 @@ export default function SmartVisionScreen() {
   // vanish (also hard-clipped now by the canvasBox overflow:hidden). Clamp BOTH
   // markers to stay fully visible (marker radius ≈ 20px). On curated holes the
   // calibrated points are already in-bounds, so this is a no-op there.
+  // 2026-06-23 (Tim — T box "goes missing") — the screenshots show the tee
+  // projecting BELOW the image (the hole's tee box sits past the bottom of the
+  // satellite frame), so a clamp to imageH-22 parked it behind the floating
+  // AI-rec bar. Reserve the bottom band (AI-rec bar height ≈ 56px) and the top
+  // band (the "tap to place" banner ≈ 44px) so BOTH markers stay in clear view.
   const clampMarker = useCallback((p: { x: number; y: number }) => ({
     x: Math.max(22, Math.min(imageW - 22, p.x)),
-    y: Math.max(22, Math.min(imageH - 22, p.y)),
+    y: Math.max(46, Math.min(imageH - 58, p.y)),
   }), [imageW, imageH]);
   const teeCanvas = useMemo(() => {
-    if (teeOverride) return teeOverride;
+    if (teeOverride) return clampMarker(teeOverride);
     // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
     if (!onCuratedPhoto && teeCoord && projection) {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
