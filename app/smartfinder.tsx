@@ -1425,6 +1425,14 @@ function TargetCameraOverlay({
       }
       return;
     }
+    // 2026-06-23 (Tim — "moving the target never gets accurate, defaults to 250
+    // or 10") — the camera-TILT rangefinder is unreliable near the horizon (most
+    // golf targets): tiny pitch errors explode the projected point to 250+ or
+    // collapse it to ~10. On LOW confidence, do NOT overwrite the target with
+    // that garbage — keep the last RELIABLE value (initial = the GPS distance to
+    // the green) so the number stays honest. CONF already shows 'low' so the
+    // user sees it's a soft read; a medium/high tilt read still updates live.
+    if (result.confidence === 'low') return;
     const target = { lat: result.target_lat, lng: result.target_lng };
     const geodesicYards = Math.max(1, Math.round(haversineYards(fix.location, target)));
     if (lastYardsRef.current !== geodesicYards) {
