@@ -55,6 +55,7 @@ import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useSmartVisionSignalStore } from '../store/smartVisionSignalStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 // 2026-06-06 — Phase 4.3: reactive reads of marked tee/green geo
 // anchors. When both exist for a Mode 2 (curated bundled-image) hole,
@@ -1357,6 +1358,51 @@ export default function SmartVisionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeIndex, usingGpsTile, projection?.center, projection?.zoom, projection?.bearing, imageW, imageH, markBumpTick]);
 
+  // ── Voice mark-tee / mark-green signal ─────────────────────────
+  // caddie.tsx fires the signal when Kevin returns mark_tee / mark_green.
+  // We consume it here and execute the same GPS-anchor logic that the
+  // old buttons used, then clear so it doesn't re-fire on re-render.
+  const pendingMark = useSmartVisionSignalStore(s => s.pendingMark);
+  const clearMark   = useSmartVisionSignalStore(s => s.clearMark);
+  useEffect(() => {
+    if (!pendingMark || !courseId) return;
+    clearMark();
+    const kind = pendingMark.kind;
+    try {
+      const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
+      if (kind === 'tee') {
+        let teeGeo: { lat: number; lng: number } | null = null;
+        if (usingGpsTile && projection) {
+          const g = pixelsToLatLng(teePx, projection.center, projection.zoom, projection.bearing);
+          if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) teeGeo = { lat: g.lat, lng: g.lng };
+        } else {
+          const fix = getLastFix();
+          if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) teeGeo = { lat: fix.location.lat, lng: fix.location.lng };
+        }
+        if (!teeGeo) { toastMod.useToastStore.getState().show('No GPS — stand at the tee and try again'); return; }
+        const teeMod = require('../services/courseTeeOverrides') as typeof import('../services/courseTeeOverrides');
+        void teeMod.setTeeOverride(courseId, holeIndex, teeGeo);
+        if (!usingGpsTile) setTeeByHole(prev => ({ ...prev, [holeIndex]: { x: teeCanvas.x, y: teeCanvas.y } }));
+        toastMod.useToastStore.getState().show(`Tee marked for hole ${holeIndex}`);
+      } else {
+        let pinGeo: { lat: number; lng: number } | null = null;
+        if (usingGpsTile && projection) {
+          const g = pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing);
+          if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) pinGeo = { lat: g.lat, lng: g.lng };
+        } else {
+          const fix = getLastFix();
+          if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) pinGeo = { lat: fix.location.lat, lng: fix.location.lng };
+        }
+        if (!pinGeo) { toastMod.useToastStore.getState().show('No GPS — stand near the green and try again'); return; }
+        const greenMod = require('../services/courseGreenOverrides') as typeof import('../services/courseGreenOverrides');
+        void greenMod.setGreenOverride(courseId, holeIndex, pinGeo);
+        if (!usingGpsTile) setPinByHole(prev => ({ ...prev, [holeIndex]: { x: pinCanvas.x, y: pinCanvas.y } }));
+        toastMod.useToastStore.getState().show(`Green marked for hole ${holeIndex}`);
+      }
+    } catch (e) { console.log('[smartvision] voice mark failed:', e); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMark]);
+
   // ── Hole nav ────────────────────────────────────────────────────
   const goPrev = () => setHoleIndex(i => Math.max(1, i - 1));
   const goNext = () => setHoleIndex(i => Math.min(totalHoles, i + 1));
@@ -1766,106 +1812,8 @@ export default function SmartVisionScreen() {
       </View>
       </GestureDetector>
 
-      {/* 2026-06-06 — Phase 4.2 + 4.3: inline Mark Tee / Mark Pin buttons.
-          - Mode 1 (Mapbox geometry, usingGpsTile): T/P markers already
-            have real lat/lng via projection. Buttons invert the marker
-            pixel via pixelsToLatLng → write to course overrides.
-          - Mode 2 (curated bundled image, no projection): no pixel→geo
-            available, so we use the user's CURRENT GPS fix as the geo
-            anchor — user is expected to be physically standing at the
-            tee (or near the green) when they tap. The marker's canvas
-            position acts as the pixel anchor; with both T and P marked,
-            calibration2Anchor activates and downstream haversine math
-            (yardages + carryYards) becomes real, not pixel-interpolated. */}
-      {courseId && (
-        <View style={[styles.markRow, { bottom: BOTTOM_PANEL_H }]}>
-          <TouchableOpacity
-            style={styles.markBtn}
-            onPress={() => {
-              try {
-                let teeGeoCoords: { lat: number; lng: number } | null = null;
-                if (usingGpsTile && projection) {
-                  const g = pixelsToLatLng(teePx, projection.center, projection.zoom, projection.bearing);
-                  if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) {
-                    teeGeoCoords = { lat: g.lat, lng: g.lng };
-                  }
-                } else {
-                  // Mode 2: use current GPS fix (user stands at the tee).
-                  const fix = getLastFix();
-                  if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) {
-                    teeGeoCoords = { lat: fix.location.lat, lng: fix.location.lng };
-                  }
-                }
-                if (!teeGeoCoords) {
-                  // eslint-disable-next-line @typescript-eslint/no-require-imports
-                  const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
-                  toastMod.useToastStore.getState().show('No GPS fix — stand at the tee and try again');
-                  return;
-                }
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const teeMod = require('../services/courseTeeOverrides') as typeof import('../services/courseTeeOverrides');
-                void teeMod.setTeeOverride(courseId, holeIndex, teeGeoCoords);
-                // Phase 4.3 — lock the marker's canvas position into
-                // teeByHole so subsequent drags of T don't shift the
-                // calibration anchor unexpectedly. User can re-mark to
-                // re-anchor.
-                if (!usingGpsTile) {
-                  setTeeByHole(prev => ({ ...prev, [holeIndex]: { x: teeCanvas.x, y: teeCanvas.y } }));
-                }
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
-                toastMod.useToastStore.getState().show(`Tee marked for hole ${holeIndex}`);
-              } catch (e) {
-                console.log('[smartvision] mark tee failed (non-fatal):', e);
-              }
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="flag-outline" size={16} color="#ffffff" />
-            <Text style={styles.markBtnText}>Mark T</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.markBtn}
-            onPress={() => {
-              try {
-                let pinGeoCoords: { lat: number; lng: number } | null = null;
-                if (usingGpsTile && projection) {
-                  const g = pixelsToLatLng(pinPx, projection.center, projection.zoom, projection.bearing);
-                  if (Number.isFinite(g.lat) && Number.isFinite(g.lng)) {
-                    pinGeoCoords = { lat: g.lat, lng: g.lng };
-                  }
-                } else {
-                  const fix = getLastFix();
-                  if (fix && Number.isFinite(fix.location.lat) && Number.isFinite(fix.location.lng)) {
-                    pinGeoCoords = { lat: fix.location.lat, lng: fix.location.lng };
-                  }
-                }
-                if (!pinGeoCoords) {
-                  // eslint-disable-next-line @typescript-eslint/no-require-imports
-                  const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
-                  toastMod.useToastStore.getState().show('No GPS fix — stand near the green and try again');
-                  return;
-                }
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const greenMod = require('../services/courseGreenOverrides') as typeof import('../services/courseGreenOverrides');
-                void greenMod.setGreenOverride(courseId, holeIndex, pinGeoCoords);
-                if (!usingGpsTile) {
-                  setPinByHole(prev => ({ ...prev, [holeIndex]: { x: pinCanvas.x, y: pinCanvas.y } }));
-                }
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
-                const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
-                toastMod.useToastStore.getState().show(`Pin marked for hole ${holeIndex}`);
-              } catch (e) {
-                console.log('[smartvision] mark pin failed (non-fatal):', e);
-              }
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="location-outline" size={16} color="#ffffff" />
-            <Text style={styles.markBtnText}>Mark P</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Mark T/P is voice-only — "mark tee" / "mark the green". No visible buttons.
+          The signal store is set by caddie.tsx's handleToolAction and consumed here. */}
 
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
           on landscape, this becomes a right-side column (flexDirection
@@ -1985,22 +1933,6 @@ const styles = StyleSheet.create({
   },
   premiumBadgeText: {
     color: '#F5A623', fontSize: 10, fontWeight: '900', letterSpacing: 0.6,
-  },
-  // 2026-06-06 — Phase 4.2: Mark Tee / Mark Pin button row.
-  markRow: {
-    position: 'absolute', left: 0, right: 0, zIndex: 20,
-    flexDirection: 'row', justifyContent: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-  },
-  markBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: 'rgba(0, 200, 150, 0.85)',
-    borderRadius: 8,
-  },
-  markBtnText: {
-    color: '#ffffff', fontSize: 13, fontWeight: '700', letterSpacing: 0.3,
   },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },

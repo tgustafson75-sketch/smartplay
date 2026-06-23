@@ -1352,6 +1352,14 @@ export default function CaddieTab() {
       case 'close_swinglab':
         emitSmartMotionCommand('close');
         break;
+      case 'mark_tee':
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('tee');
+        break;
+      case 'mark_green':
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('pin');
+        break;
       case 'open_smartfinder':
         if (!canAccess('smartfinder', subscription_status)) {
           setCaddieResponse("SmartFinder is part of the Pro plan. Want to unlock it?");

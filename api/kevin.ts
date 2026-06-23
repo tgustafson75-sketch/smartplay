@@ -112,6 +112,16 @@ const AI_TOOLS: AiToolDef[] = [
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
+    name: 'mark_tee',
+    description: 'Mark the tee box position for the current hole in SmartVision. Trigger when user says "mark tee", "mark the tee box", "mark my position at the tee", "save the tee", or similar. User must be standing at the tee when they say this.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'mark_green',
+    description: 'Mark the green / pin position for the current hole in SmartVision. Trigger when user says "mark the green", "mark the pin", "mark the hole", "save pin position", "mark position at the green", or similar. User must be standing at or near the green when they say this.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
     name: 'lookup_course',
     description: 'Search for a golf course by name or location. Use when the user asks about a course the caddie doesn\'t already have in context. Returns matching courses with basic info.',
     parameters: {
@@ -1121,9 +1131,15 @@ ${onCourseContextBlock}${baseMessage}`
     const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
     const startedAt = Date.now();
 
-    // Cross-provider fallback: if the selected provider errors, auto-retry
-    // with the other one before returning any failure text to the user.
-    const fallbackProvider: AiProvider = provider === 'openai' ? 'gemini' : 'openai';
+    // 3-way provider chain: Gemini → OpenAI → Anthropic (or rotated from the
+    // user's selected primary). Each error auto-advances to the next before
+    // the outer catch returns any failure text to the user.
+    const PROVIDER_ORDER: AiProvider[] = ['gemini', 'openai', 'anthropic'];
+    const primaryIdx = PROVIDER_ORDER.indexOf(provider);
+    const [fallback1, fallback2] = [
+      PROVIDER_ORDER[(primaryIdx + 1) % 3],
+      PROVIDER_ORDER[(primaryIdx + 2) % 3],
+    ];
     const loopOpts = {
       maxTokens: aiTier === 'fast' ? 300 : 400,
       maxRounds: 3,
@@ -1154,6 +1170,8 @@ ${onCourseContextBlock}${baseMessage}`
         case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
         case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
         case 'record_swing':     capture.action = { type: 'record_swing' };     break;
+        case 'mark_tee':         capture.action = { type: 'mark_tee' };         break;
+        case 'mark_green':       capture.action = { type: 'mark_green' };       break;
         case 'log_score': {
           const a: ActionPayload = { type: 'log_score', score: Number(input.score) };
           if (typeof input.hole === 'number') a.hole = input.hole;
@@ -1184,13 +1202,18 @@ ${onCourseContextBlock}${baseMessage}`
     let loopResult;
     try {
       loopResult = await runAgenticLoop(provider, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-    } catch (primaryErr) {
-      const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      console.warn(`[kevin] provider=${provider} failed (${primaryMsg}) — retrying with ${fallbackProvider}`);
-      capture.action = null;
-      capture.dataToolCalls = 0;
-      loopResult = await runAgenticLoop(fallbackProvider, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-      console.log(`[kevin] fallback provider=${fallbackProvider} succeeded`);
+    } catch (err1) {
+      console.warn(`[kevin] provider=${provider} failed (${err1 instanceof Error ? err1.message : String(err1)}) — trying ${fallback1}`);
+      capture.action = null; capture.dataToolCalls = 0;
+      try {
+        loopResult = await runAgenticLoop(fallback1, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+        console.log(`[kevin] fallback1 provider=${fallback1} succeeded`);
+      } catch (err2) {
+        console.warn(`[kevin] provider=${fallback1} failed (${err2 instanceof Error ? err2.message : String(err2)}) — trying ${fallback2}`);
+        capture.action = null; capture.dataToolCalls = 0;
+        loopResult = await runAgenticLoop(fallback2, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+        console.log(`[kevin] fallback2 provider=${fallback2} succeeded`);
+      }
     }
 
     text = loopResult.text;

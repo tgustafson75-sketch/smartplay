@@ -157,7 +157,10 @@ export type ToolAction =
   | { type: 'navigate_replace'; path: string }
   // 2026-06-22 — SmartMotion voice layer: Kevin configures the drill or closes SwingLab.
   | { type: 'configure_drill'; club?: string; shot_count?: number }
-  | { type: 'close_swinglab' };
+  | { type: 'close_swinglab' }
+  // SmartVision voice calibration — user stands at tee/green and says "mark tee/green"
+  | { type: 'mark_tee' }
+  | { type: 'mark_green' };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 
