@@ -481,6 +481,10 @@ function CameraSmartFinder({
   // a conflict because they're handled at different finger counts.
   const [zoom, setZoom] = useState(0);
   const baseZoomRef = useRef(0);
+  // 2026-06-23 (Tim) — collapse the right-side controls into a SmartMotion-style
+  // TOOLS pop-out (sliders chevron → labeled themed rows) so the camera view
+  // stays clear and the icons are learnable.
+  const [toolsOpen, setToolsOpen] = useState(false);
   const zoomLabel = zoomLabelFor(zoom);
   const setZoomFromPinch = useCallback((next: number) => {
     setZoom(next);
@@ -684,39 +688,61 @@ function CameraSmartFinder({
         style={{ position: 'absolute', right: 16, bottom: insets.bottom + 110, gap: 12, alignItems: 'center' }}
         pointerEvents="box-none"
       >
-        {/* 2026-06-13 — READ THE SCENE: snap → multimodal brain reads the meta scene
-            + measured wind/temp → how to play it + how to think. Standard/target only
-            (not putt). This IS the Smart Play tap path — voice trigger opens SmartFinder
-            with autoread=1 (fires automatically); manual tap fires the same thing. */}
+        {/* 2026-06-23 (Tim) — TOOLS pop-out (SmartMotion SETUP TOOLS style): a
+            single sliders chevron collapses the scene-read + lock controls into a
+            labeled themed card, keeping the camera view clear. */}
         {(mode === 'standard' || mode === 'target') && (
-          <TouchableOpacity
-            onPress={() => { void runSceneRead(); }}
-            accessibilityRole="button"
-            accessibilityLabel="Smart Play — read the scene"
-            style={{
-              width: 48, height: 48, borderRadius: 24,
-              backgroundColor: sceneReading ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.55)',
-              borderWidth: 1.5, borderColor: '#88F700',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name={sceneReading ? 'sync' : 'eye'} size={20} color="#88F700" />
-          </TouchableOpacity>
-        )}
-        {mode === 'target' && (
-          <TouchableOpacity
-            onPress={() => setLocked(v => !v)}
-            accessibilityRole="button"
-            accessibilityLabel={locked ? 'Unlock target' : 'Lock target'}
-            style={{
-              width: 48, height: 48, borderRadius: 24,
-              backgroundColor: locked ? '#F0C030' : 'rgba(0,0,0,0.55)',
-              borderWidth: 1.5, borderColor: '#F0C030',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={20} color={locked ? '#0d1a0d' : '#F0C030'} />
-          </TouchableOpacity>
+          <>
+            {toolsOpen && (
+              <View style={sfStyles.toolsCard}>
+                <Text style={sfStyles.toolsHeader}>TOOLS</Text>
+                <TouchableOpacity
+                  style={sfStyles.toolRow}
+                  onPress={() => { setToolsOpen(false); void runSceneRead(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Smart Play — read the scene"
+                >
+                  <View style={sfStyles.toolIcon}>
+                    <Ionicons name={sceneReading ? 'sync' : 'eye'} size={20} color="#88F700" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={sfStyles.toolTitle}>AI Read</Text>
+                    <Text style={sfStyles.toolDesc}>Snap → how to play this shot</Text>
+                  </View>
+                </TouchableOpacity>
+                {mode === 'target' && (
+                  <TouchableOpacity
+                    style={sfStyles.toolRow}
+                    onPress={() => { setLocked(v => !v); setToolsOpen(false); }}
+                    accessibilityRole="button"
+                    accessibilityLabel={locked ? 'Unlock target' : 'Lock target'}
+                  >
+                    <View style={[sfStyles.toolIcon, locked && { backgroundColor: 'rgba(240,192,48,0.18)', borderColor: '#F0C030' }]}>
+                      <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={20} color={locked ? '#F0C030' : '#88F700'} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={sfStyles.toolTitle}>{locked ? 'Locked' : 'Lock target'}</Text>
+                      <Text style={sfStyles.toolDesc}>Hold the distance reading</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={() => setToolsOpen(v => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={toolsOpen ? 'Hide tools' : 'Show tools'}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 2,
+                paddingHorizontal: 12, height: 44, borderRadius: 22,
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                borderWidth: 1.5, borderColor: '#88F700',
+              }}
+            >
+              <Ionicons name="options-outline" size={18} color="#88F700" />
+              <Ionicons name={toolsOpen ? 'chevron-down' : 'chevron-up'} size={14} color="#88F700" />
+            </TouchableOpacity>
+          </>
         )}
         {/* Mode toggle pill — photo / video. Sits above the capture
             button so it's easy to switch before pressing record.
@@ -2454,3 +2480,34 @@ return StyleSheet.create({
   pickerCloseText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
 });
 }
+
+// 2026-06-23 (Tim) — SmartMotion SETUP-TOOLS-style pop-out for the SmartFinder
+// right-side controls. Themed green-on-dark, icon + title + description rows.
+const sfStyles = StyleSheet.create({
+  toolsCard: {
+    width: 248,
+    backgroundColor: 'rgba(8,20,12,0.96)',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(136,247,0,0.45)',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginBottom: 4,
+  },
+  toolsHeader: {
+    color: '#9ca3af', fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
+    paddingHorizontal: 8, paddingTop: 4, paddingBottom: 6,
+  },
+  toolRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 9, paddingHorizontal: 8, borderRadius: 12,
+  },
+  toolIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.55)',
+    backgroundColor: 'rgba(136,247,0,0.10)',
+  },
+  toolTitle: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+  toolDesc: { color: '#9ca3af', fontSize: 12, fontWeight: '600', marginTop: 1 },
+});

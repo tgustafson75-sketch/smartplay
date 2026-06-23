@@ -460,6 +460,15 @@ export default function SmartVisionScreen() {
   // a viewer across the whole course without forcing the round to follow.
   const [holeIndex, setHoleIndex] = useState<number>(currentHole || 1);
 
+  // 2026-05-17 — Curated bundled image. Prefer the courseId-keyed lookup
+  // (canonical) and fall back to courseName-based substring matching
+  // only when courseId is missing. Hoisted ABOVE the canvas sizing (2026-06-23)
+  // so the box can match the image's aspect.
+  const curatedImage = useMemo(
+    () => getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex),
+    [courseId, courseName, holeIndex],
+  );
+
   // Image area: leaves room for back chevron + hole switcher at top, F/M/B
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
   const TOP_BAR_H = 56;
@@ -473,24 +482,23 @@ export default function SmartVisionScreen() {
   const isSplit = layout.isLandscape;
   const SIDE_PANEL_W = isSplit ? Math.floor(W * 0.35) : 0;
   const imageW = isSplit ? W - SIDE_PANEL_W : W;
-  const imageH = isSplit
+  const availH = isSplit
     ? H - insets.top - insets.bottom - TOP_BAR_H
     : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H;
+  // 2026-06-23 (Tim — "image must stay in its box and not cut off") — our curated
+  // hole crops are 2:3 portrait (1024×1536). If the canvas box isn't that aspect,
+  // resizeMode:cover chops the top/bottom — exactly what cut the TEE (bottom ~83%)
+  // off-frame while calibration still mapped to the full image. Cap the portrait
+  // canvas height to the image's 2:3 aspect so cover == contain (no crop) and the
+  // markers (calibration × imageW × imageH) align with the visible image 1:1.
+  const CURATED_ASPECT = 1536 / 1024; // = 1.5
+  const imageH = (!isSplit && curatedImage)
+    ? Math.min(availH, Math.round(imageW * CURATED_ASPECT))
+    : availH;
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // 2026-05-17 — Curated bundled image. Prefer the courseId-keyed lookup
-  // (canonical) and fall back to courseName-based substring matching
-  // only when courseId is missing. Without the ID-first lookup, a brief
-  // null on activeCourseName during state transitions caused Palms
-  // imagery to leak into Crystal Springs / SJM / Mariners rounds via
-  // the home-course-name fallback.
-  const curatedImage = useMemo(
-    () => getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex),
-    [courseId, courseName, holeIndex],
-  );
 
   // Per-hole yellow target marker offset (relative to image center, in pixels).
   // Defaults to the midpoint of the bearing axis (50% of the way from tee
