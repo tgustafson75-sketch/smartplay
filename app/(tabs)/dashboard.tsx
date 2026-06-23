@@ -543,7 +543,7 @@ export default function Dashboard() {
                   styles.activeStatValue,
                   {
                     color:
-                      scoreVsPar < 0 ? colors.accent
+                      scoreVsPar < 0 ? colors.accent_lime
                       : scoreVsPar === 0 ? colors.text_primary
                       : '#fbbf24',
                   },
@@ -807,7 +807,7 @@ export default function Dashboard() {
                 const d = new Date(r.endedAt || r.startedAt);
                 const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
                 const vsPar = r.scoreVsPar === 0 ? 'E' : r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
-                const vsParColor = r.scoreVsPar > 0 ? '#E5484D' : r.scoreVsPar < 0 ? '#30A46C' : colors.text_muted;
+                const vsParColor = r.scoreVsPar > 0 ? '#E5484D' : r.scoreVsPar < 0 ? colors.accent_lime : colors.text_muted;
                 return (
                   <TouchableOpacity
                     key={r.id}

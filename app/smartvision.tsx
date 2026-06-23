@@ -1588,7 +1588,7 @@ export default function SmartVisionScreen() {
             <SvgText
               x={(teeCanvas.x + targetCanvas.x) / 2 + 14}
               y={(teeCanvas.y + targetCanvas.y) / 2 + 5}
-              fill="#facc15"
+              fill="#88F700"
               stroke="#000"
               strokeWidth={3}
               fontSize={18}

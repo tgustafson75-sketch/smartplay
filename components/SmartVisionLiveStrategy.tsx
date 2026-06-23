@@ -117,7 +117,7 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
 }
 
 function YardageChip({ label, value, primary = false }: { label: string; value: number | null; primary?: boolean }) {
-  const color = primary ? '#00C896' : '#cbd5e1';
+  const color = primary ? '#88F700' : '#cbd5e1';
   return (
     <View style={[styles.yardageChip, primary && { borderColor: color, borderWidth: 1.5 }]}>
       <Text style={[styles.yardageLabel, { color }]}>{label}</Text>

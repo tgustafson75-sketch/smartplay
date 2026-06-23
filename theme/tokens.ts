@@ -7,6 +7,9 @@ export interface ThemeColors {
   text_muted: string;
   accent: string;
   accent_muted: string;
+  /** Neon lime #88F700 — used for positive deltas, hero carry numbers, and
+   *  SmartMotion icon highlights. Distinct from the teal primary accent. */
+  accent_lime: string;
   success: string;
   warning: string;
   error: string;
@@ -91,6 +94,7 @@ export const darkTheme: ThemeTokens = {
     text_muted:       '#9ca3af',
     accent:           '#00C896',
     accent_muted:     '#003d20',
+    accent_lime:      '#88F700',
     success:          '#00C896',
     warning:          '#fbbf24',
     error:            '#ef4444',
@@ -117,6 +121,7 @@ export const lightTheme: ThemeTokens = {
     text_muted:       '#4b5563',
     accent:           '#009e7a',
     accent_muted:     '#d0f0e6',
+    accent_lime:      '#5a9e1a',
     success:          '#009e7a',
     warning:          '#d97706',
     error:            '#dc2626',
