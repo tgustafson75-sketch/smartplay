@@ -2277,14 +2277,14 @@ export default function SmartMotion() {
   }, [phase, scanningClub, detectClubFromCamera]);
 
   // Review video transport + keep/discard for the control bar.
-  const togglePlay = useCallback(() => {
-    setVideoPaused((p) => {
-      const next = !p;
-      if (next) void videoRef.current?.pauseAsync().catch(() => undefined);
-      else void videoRef.current?.playAsync().catch(() => undefined);
-      return next;
-    });
-  }, []);
+  const togglePlay = useCallback(async () => {
+    const next = !videoPaused;
+    setVideoPaused(next);
+    try {
+      if (next) await videoRef.current?.pauseAsync();
+      else await videoRef.current?.playAsync();
+    } catch { /* ignore */ }
+  }, [videoPaused]);
   // 2026-06-11 — was a dead-end toast (deferred-wiring placeholder). The session
   // already auto-ingests at record time and the analysis/biomech attach to it, so
   // the data IS persisted — but the user's explicit "Save" tap did nothing visible
@@ -2424,8 +2424,10 @@ export default function SmartMotion() {
       // slow-mo · save · delete · record-again. Each uses its own circle (no border);
       // slow-mo fills when slowed + keeps a tiny rate tag so ½/¼ stays visible.
       <View style={styles.barRow}>
-        <TactilePressable onPress={togglePlay} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
-          <Image source={ICON_CTRL.playpause} style={styles.toolIconFull} resizeMode="contain" />
+        <TactilePressable onPress={() => void togglePlay()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={videoPaused ? 'Play' : 'Pause'}>
+          {videoPaused
+            ? <Image source={ICON_CTRL.playpause} style={styles.toolIconFull} resizeMode="contain" />
+            : <Ionicons name="pause" size={40} color="rgba(255,255,255,0.9)" />}
         </TactilePressable>
         <TactilePressable onPress={cycleSpeed} style={[styles.toolBtnBare, playbackRate < 1 && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={`Playback speed ${playbackRate}x`}>
           <Image source={ICON_CTRL.slowmo} style={styles.toolIconFull} resizeMode="contain" />

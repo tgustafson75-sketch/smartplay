@@ -122,6 +122,7 @@ export default function ZoomableView({
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
     .maxDuration(250)
+    .requireExternalGestureToFail(doubleTap) // Android: prevents doubleTap hold from reporting success=false
     .onEnd((_e, success) => { if (success) runOnJS(fireSingleTap)(); });
 
   // Compose: pinch + pan are simultaneous; doubleTap is exclusive

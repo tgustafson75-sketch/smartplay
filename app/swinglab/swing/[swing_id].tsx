@@ -198,7 +198,6 @@ export default function SwingDetail() {
     const v = videoRef.current;
     if (!v) return;
     try {
-      await configureAudioForSpeech(); // ensure audio session is in playback mode
       const st = await v.getStatusAsync();
       if (st.isLoaded && st.isPlaying) {
         await v.pauseAsync();
