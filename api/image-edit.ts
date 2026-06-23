@@ -66,19 +66,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // from the buffer using the SDK's `toFile` helper.
     const file = await OpenAI.toFile(buffer, 'selfie.png', { type: 'image/png' });
 
-    const result = await openai.images.edit({
+    // gpt-image-1 always returns b64_json and does not accept response_format.
+    // Cast as any to bypass the SDK union type (stream vs response) that
+    // appears when response_format is omitted.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result: any = await openai.images.edit({
       model: 'gpt-image-1',
       image: file,
       prompt,
-      // n=1 — single edit per call. Caller can re-invoke for variants.
       n: 1,
-      // gpt-image-1 does not support response_format:'url' (URL is dall-e only).
-      // Must request b64_json explicitly or the response carries neither field.
-      response_format: 'b64_json',
-    });
+    } as Parameters<typeof openai.images.edit>[0]);
 
     const first = result.data?.[0];
-    const b64 = first?.b64_json;
+    const b64 = first?.b64_json ?? first?.url;
     if (!b64) {
       return res.status(502).json({ error: 'Empty image-edit response' });
     }
