@@ -773,11 +773,20 @@ export default function SmartVisionScreen() {
   // fly off-screen or land in white background areas). Calibration data
   // (fraction-based tee/green pixel positions detected from each image) is
   // the correct source for curated photos.
+  // 2026-06-23 (Tim) — PREFER our own clean curated images over Golfbert for
+  // courses we've cropped+calibrated (e.g. Palms). Golfbert's satellite has a
+  // DIFFERENT framing than our crops, so our per-hole calibration (tee/green
+  // pixel fractions, derived FROM our crops) misplaced the tee off-screen and
+  // scattered the hazard overlays. Using our image makes the image+calibration
+  // a matched pair → tee/pin anchor correctly. Trade-off (Tim's call): Golfbert
+  // hazard overlays are suppressed on these holes until re-mapped onto our image.
+  const preferCurated = !!curatedImage && imageryMode !== 'gps';
+
   // 2026-06-21 — Golfbert imageryUrl IS a curated photo (M13 audit fix).
   // GPS projection is Mapbox-tile-specific; applying it to any curated image
   // (local bundled OR Golfbert) sends T/P markers off-screen. Set the flag
-  // for both cases so calibration data is used instead of GPS projection.
-  const onCuratedPhoto = !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
+  // for all curated cases so calibration data is used instead of GPS projection.
+  const onCuratedPhoto = preferCurated || !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
 
   const calibrationSlug = useMemo(() => {
     // Use courseId directly when it's a local: course — avoids fragile
@@ -1517,16 +1526,22 @@ export default function SmartVisionScreen() {
           touch priority because they're attached to individual marker
           subviews; Tap only fires on background taps. */}
       <GestureDetector gesture={canvasTapGesture}>
-      <View style={{ width: imageW, height: imageH, backgroundColor: '#0a1f12' }}>
+      {/* 2026-06-23 (Tim) — glowing-green bordered box, like the caddie UI. The
+          rounded border + overflow:hidden CONTAINS the hole image + markers
+          inside a defined frame so nothing bleeds off the physical screen edge
+          when the device aspect changes (Fold open/closed). Brand-consistent
+          with the AI-rec bar. */}
+      <View style={[styles.canvasBox, { width: imageW, height: imageH }]}>
         {/* 2026-06-23 (Tim) — "Golfbert premium" pill removed: it's internal
             data-sourcing detail, not something the player needs on the map, and
             it collided with the tap-to-place banner. */}
-        {/* Prefer the Golfbert per-hole satellite image when available
-            (has hazard outlines baked in), otherwise fall back to the
-            existing imageUri (Mapbox tile) or curated bundled image. */}
-        {golfbertHole?.imageryUrl ? (
-          // 2026-06-23 (smoke-test) — onError falls through to curated/Mapbox/empty
-          // instead of a permanent blank-white tile when the remote image 404s/times out.
+        {/* 2026-06-23 (Tim) — our clean curated image wins over Golfbert (matched
+            to our calibration → correct anchoring). Golfbert only when we have no
+            curated image; Mapbox tile last. */}
+        {preferCurated ? (
+          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
+        ) : golfbertHole?.imageryUrl ? (
+          // onError falls through to curated/Mapbox/empty instead of blank-white.
           <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setGolfbertHole(null)} />
         ) : curatedImage && imageryMode !== 'gps' ? (
           // Curated bundled hole photo wins over satellite — always.
@@ -1593,7 +1608,11 @@ export default function SmartVisionScreen() {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         >
-          {projection && geometry && (() => {
+          {/* 2026-06-23 (Tim) — hazard/green/fairway polygons are projected via the
+              Mapbox tile geometry; on our curated image (different framing) they'd
+              land in the wrong spots, so suppress them when preferCurated. They
+              return for Golfbert/Mapbox tiles where the projection matches. */}
+          {!preferCurated && projection && geometry && (() => {
             const polyToPoints = (poly: { lat: number; lng: number }[]): string => {
               return poly
                 .map(p => {
@@ -1804,7 +1823,25 @@ export default function SmartVisionScreen() {
           F/M/B panel (portrait only). Honest signals only: club from the real
           bag + plays-like + top "why" line. No fabricated success %. */}
       {!isSplit && aiRead?.club && yardages.middle != null && (
-        <View style={[styles.aiRecBar, { bottom: BOTTOM_PANEL_H + Math.max(insets.bottom, 8) }]} pointerEvents="none">
+        <TouchableOpacity
+          activeOpacity={0.8}
+          style={[styles.aiRecBar, { bottom: BOTTOM_PANEL_H + Math.max(insets.bottom, 8) }]}
+          onPress={() => {
+            // 2026-06-23 (Tim — "Explain the pick") — tap the bar → show WHY this club.
+            const r = aiRead;
+            if (!r) return;
+            const parts: string[] = [`${r.club} — ${r.playsLikeYards}y to pin`];
+            if (r.deltaYards !== 0) parts.push(`plays like ${r.playsLikeYards} (${r.rawYards} actual)`);
+            r.why.forEach(w => parts.push(w));
+            if (r.hazardNote) parts.push(`watch the ${r.hazardNote}`);
+            if (r.tendencyNote) parts.push(r.tendencyNote);
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const toast = require('../store/toastStore') as typeof import('../store/toastStore');
+              toast.useToastStore.getState().show(parts.join('  ·  '));
+            } catch { /* non-fatal */ }
+          }}
+        >
           <Ionicons name="sparkles" size={15} color="#88F700" />
           <Text style={styles.aiRecClub}>{aiRead.club}</Text>
           <View style={styles.aiRecDivider} />
@@ -1813,7 +1850,8 @@ export default function SmartVisionScreen() {
             {aiRead.why[0] ? `  ·  ${aiRead.why[0]}` : ''}
             {aiRead.hazardNote ? `  ·  ${aiRead.hazardNote}` : ''}
           </Text>
-        </View>
+          <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.5)" />
+        </TouchableOpacity>
       )}
 
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
@@ -1937,6 +1975,16 @@ const styles = StyleSheet.create({
   },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
+  // 2026-06-23 (Tim) — glowing-green bordered container for the map canvas (caddie
+  // style). overflow:hidden + radius clip the image + markers to the box so nothing
+  // bleeds off the physical screen edge when the device aspect changes.
+  canvasBox: {
+    backgroundColor: '#0a1f12',
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(136,247,0,0.55)',
+  },
   // 2026-06-23 (Phase 3b) — AI recommendation bar (floats above F/M/B panel).
   aiRecBar: {
     position: 'absolute', left: 10, right: 10, zIndex: 25,
