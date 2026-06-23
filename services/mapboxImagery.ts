@@ -141,8 +141,13 @@ export function computeFitView(input: {
   const cosLat = Math.cos((center.lat * Math.PI) / 180);
   const targetTwoPow = (height * MAPBOX_BASE_MPP * cosLat) / requiredMeters;
   const rawZoom = Math.log2(targetTwoPow);
-  // Floor to nearest integer so we err on the side of MORE margin, never less.
-  let zoom = Math.floor(rawZoom);
+  // 2026-06-23 (Tim — "it zooms the hell out, we don't isolate the holes") —
+  // Math.floor() discarded up to a FULL zoom level, and zoom is log2, so the
+  // worst case rendered the hole ~2× too far out (tee/pin pushed toward the
+  // edges, clipped on wide Fold-open aspect). Mapbox accepts fractional zoom,
+  // and the 15% margin already guards the endpoints, so keep the PRECISE zoom
+  // (rounded to 0.1 for stable cache keys) — the hole now fills the frame.
+  let zoom = Math.round(rawZoom * 10) / 10;
   if (!Number.isFinite(zoom)) zoom = 17;
   zoom = Math.max(13, Math.min(19, zoom));
   // Sanity: verify the width also fits (a strongly diagonal hole could

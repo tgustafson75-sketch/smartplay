@@ -1518,15 +1518,9 @@ export default function SmartVisionScreen() {
           subviews; Tap only fires on background taps. */}
       <GestureDetector gesture={canvasTapGesture}>
       <View style={{ width: imageW, height: imageH, backgroundColor: '#0a1f12' }}>
-        {/* Premium course data badge — visible only when Golfbert
-            mapping returned data for this hole. Tells the user the map
-            is using paid premium geometry (greens / bunkers / water)
-            instead of point-only golfcourseapi data. */}
-        {golfbertHole && (
-          <View style={styles.premiumBadge} pointerEvents="none">
-            <Text style={styles.premiumBadgeText}>★ Golfbert premium</Text>
-          </View>
-        )}
+        {/* 2026-06-23 (Tim) — "Golfbert premium" pill removed: it's internal
+            data-sourcing detail, not something the player needs on the map, and
+            it collided with the tap-to-place banner. */}
         {/* Prefer the Golfbert per-hole satellite image when available
             (has hazard outlines baked in), otherwise fall back to the
             existing imageUri (Mapbox tile) or curated bundled image. */}
@@ -1702,15 +1696,10 @@ export default function SmartVisionScreen() {
                 stroke="#ffffff"
                 strokeWidth={2}
               />
-              <SvgText
-                x={layupCanvas.x + 12}
-                y={layupCanvas.y - 9}
-                fill="#f97316"
-                stroke="#000"
-                strokeWidth={3}
-                fontSize={13}
-                fontWeight="900"
-              >{`LAY UP · ${aimPlan.leaveYards}y in`}</SvgText>
+              {/* 2026-06-23 (Tim) — the "LAY UP · Ny in" SvgText was an orange
+                  fill + black stroke that rendered as a smeared, unreadable
+                  overlap on the green. Removed; the orange waypoint dot conveys
+                  the layup point, and the AI-rec bar carries the club/strategy. */}
             </>
           )}
         </Svg>
@@ -1793,22 +1782,9 @@ export default function SmartVisionScreen() {
           </>
         ) : null}
 
-        {/* Measure label — floats above-right of yellow marker. */}
-        {carryYards != null && yardages.middle != null && (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.measureLabel,
-              {
-                left: Math.min(imageW - 100, targetCanvas.x + 28),
-                top: Math.max(8, targetCanvas.y - 30),
-              },
-            ]}
-          >
-            <Text style={styles.measureLabelTop}>{carryYards}y carry</Text>
-            <Text style={styles.measureLabelBot}>{yardages.middle}y to pin</Text>
-          </View>
-        )}
+        {/* 2026-06-23 (Tim — "a little noisy") — the floating "Ny carry / Ny to
+            pin" box was a third copy of the same distance already in the AI-rec
+            bar ("4 Iron · 184y to pin") AND the MIDDLE cell. Removed. */}
 
         {/* First-time hint. Phase 4.1 — updated copy: tap-to-place is
             the new primary interaction; drag still works. */}
@@ -1903,7 +1879,7 @@ function YdCell({ label, value, emphasis = false, stacked = false }: {
         stacked && styles.ydValueStacked,
         stacked && emphasis && styles.ydValueStackedEmph,
       ]}>
-        {value != null ? value : '—'}
+        {value != null ? Math.round(value) : '—'}
       </Text>
     </View>
   );
