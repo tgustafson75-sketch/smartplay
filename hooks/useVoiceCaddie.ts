@@ -1839,6 +1839,15 @@ export const useVoiceCaddie = ({
   // ── MAIN MIC HANDLER ─────────────────────
 
   const handleMicPress = useCallback(async () => {
+    // 2026-06-23 (Tim — "first time I ask, quite a delay... always seems to
+    // have been there") — fire a warm the INSTANT the mic is tapped. The
+    // brain Lambda goes cold after a few idle minutes; the foreground/heartbeat
+    // prewarm misses that window. Warming here runs in PARALLEL while the user
+    // speaks (~3-5s of recording + transcription), so by the time the utterance
+    // reaches /api/kevin the Lambda is hot — killing the first-turn delay.
+    // prewarmVoice is idempotent + 30s-deduped, so a rapid re-tap is free.
+    try { prewarmVoice(true); } catch { /* non-fatal */ }
+
     // 2026-06-04 — Belt-and-suspenders guard: floating KevinBadge
     // routes through this handler instead of listeningSession.toggle,
     // so the toggle-level sessionInFlight check doesn't apply here.
