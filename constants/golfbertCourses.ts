@@ -49,6 +49,20 @@ export const LOCAL_COURSE_TO_GOLFBERT: Record<string, GolfbertMapping> = {
   },
 };
 
+/** 2026-06-23 (Tim — out-of-round Palms) — reverse lookup: given a raw course id
+ *  in ANY form (our `local:<slug>`, or the upstream Golfbert numeric id like
+ *  '17345'), return the local slug if it's one of our bundled+calibrated courses.
+ *  Lets SmartVision resolve our curated image + calibration even when a round was
+ *  opened via a Golfbert/search id instead of `local:palms`. */
+export function localSlugFromAnyCourseId(courseId: string | null | undefined): string | null {
+  if (!courseId) return null;
+  if (courseId.startsWith('local:')) return courseId.slice('local:'.length);
+  for (const [localId, m] of Object.entries(LOCAL_COURSE_TO_GOLFBERT)) {
+    if (m.golfbertCourseId && courseId === m.golfbertCourseId) return localId.slice('local:'.length);
+  }
+  return null;
+}
+
 /** Returns the Golfbert mapping for a SmartPlay course id, or null when
  *  no mapping exists (caller falls back to existing geometry). */
 export function getGolfbertMapping(smartplayCourseId: string | null | undefined): GolfbertMapping | null {

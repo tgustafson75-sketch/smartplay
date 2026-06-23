@@ -464,10 +464,17 @@ export default function SmartVisionScreen() {
   // (canonical) and fall back to courseName-based substring matching
   // only when courseId is missing. Hoisted ABOVE the canvas sizing (2026-06-23)
   // so the box can match the image's aspect.
-  const curatedImage = useMemo(
-    () => getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex),
-    [courseId, courseName, holeIndex],
-  );
+  const curatedImage = useMemo(() => {
+    const direct = getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
+    if (direct) return direct;
+    // 2026-06-23 (Tim — out-of-round Palms) — a course opened via its Golfbert
+    // numeric id (e.g. 17345) still maps to our bundled crop. localSlugFromAnyCourseId
+    // recognizes both `local:<slug>` and the upstream Golfbert id.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
+    const slug = localSlugFromAnyCourseId(courseId);
+    return slug ? getLocalHoleImageById(`local:${slug}`, holeIndex) : null;
+  }, [courseId, courseName, holeIndex]);
 
   // Image area: leaves room for back chevron + hole switcher at top, F/M/B
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
@@ -800,6 +807,12 @@ export default function SmartVisionScreen() {
     // Use courseId directly when it's a local: course — avoids fragile
     // substring name-match that can return the wrong slug for similarly-named courses.
     if (courseId?.startsWith('local:')) return courseId.replace('local:', '') as LocalCourseSlug;
+    // 2026-06-23 (Tim — out-of-round Palms) — also recognize the Golfbert numeric id
+    // so calibration resolves regardless of how the course was opened.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
+    const fromId = localSlugFromAnyCourseId(courseId);
+    if (fromId) return fromId as LocalCourseSlug;
     return getLocalCourseSlug(courseName);
   }, [courseId, courseName]);
   const calibration = useMemo(() => {
