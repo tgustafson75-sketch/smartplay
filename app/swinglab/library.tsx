@@ -161,15 +161,18 @@ export default function SwingLibrary() {
           const thumbUri = entry.thumbnail_uri;
           let videoOk = clipUri == null;
           let thumbOk = thumbUri == null;
+          // 2026-06-23 (audit) — hoist the RE-ANCHORED clip path so the thumbnail
+          // backfill below uses the live-container URI, not the stale clipUri (a
+          // re-anchored card otherwise stayed imageless).
+          let playableUri = clipUri;
           if (clipUri && clipUri.startsWith('file://')) {
-            // 2026-06-23 — re-anchor under the CURRENT container before judging a
-            // clip "missing": a stale absolute UUID prefix from a prior install
-            // makes getInfoAsync(clipUri) lie. resolveClipUri finds the surviving
-            // file under the live documentDirectory. (Tim: library videos won't play.)
+            // re-anchor under the CURRENT container before judging a clip "missing":
+            // a stale absolute UUID prefix from a prior install makes getInfoAsync lie.
             try {
               const { resolveClipUri } = await import('../../services/videoUpload');
               const resolved = await resolveClipUri(clipUri);
               videoOk = resolved != null;
+              if (resolved) playableUri = resolved;
             } catch { videoOk = false; }
           } else if (clipUri && !clipUri.startsWith('file://')) {
             videoOk = true;
@@ -187,7 +190,7 @@ export default function SwingLibrary() {
           // representative frame, copy to documentDirectory so it survives cache
           // clears, and persist it on the session. Runs once per session — next pass
           // the entry already carries thumbnail_uri, so it won't regenerate.
-          if (!thumbOk && videoOk && clipUri) {
+          if (!thumbOk && videoOk && playableUri) {
             try {
               const VT = await import('expo-video-thumbnails');
               // 2026-06-12 — robust for LARGE 60fps clips (Tim's are ~180MB): the first
@@ -196,7 +199,7 @@ export default function SwingLibrary() {
               let tmp: string | null = null;
               for (const time of [0, 600]) {
                 try {
-                  const r = await VT.getThumbnailAsync(clipUri, { time, quality: 0.6 });
+                  const r = await VT.getThumbnailAsync(playableUri, { time, quality: 0.6 });
                   tmp = r.uri; break;
                 } catch { /* try next time offset */ }
               }

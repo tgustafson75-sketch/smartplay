@@ -2161,9 +2161,14 @@ return StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.78)',
-    paddingHorizontal: 16,
+    paddingLeft: 16,
+    // 2026-06-23 (Tim — "crowded... settles hidden behind the shutter") — the
+    // right-side capture controls (shutter / eye / lock) overlap the panel's
+    // right edge. Inset the panel content past that control column so nothing
+    // hides behind them.
+    paddingRight: 92,
     paddingTop: 12,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   targetToLabel: {
     color: '#FFE600',

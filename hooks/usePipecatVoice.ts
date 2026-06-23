@@ -38,7 +38,9 @@ export type PipecatUIEvent =
 
 export type PipecatSessionState = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
 
-const TURN_TIMEOUT_MS = 20_000;
+// 2026-06-23 (audit) — was 20s but the server turn budget is 30s, so a
+// healthy-but-slow turn got aborted client-side on good signal. Match 30s.
+const TURN_TIMEOUT_MS = 30_000;
 const MAX_HISTORY_TURNS = 6; // keep last 6 exchanges (~12 messages) for context
 
 interface UsePipecatVoiceOpts {

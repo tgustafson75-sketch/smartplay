@@ -33,18 +33,23 @@ async function geminiImageEdit(imageBase64: string, prompt: string): Promise<str
   if (!process.env.GOOGLE_API_KEY) return null;
   try {
     const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
-    const res = await genai.models.generateContent({
-      model: GEMINI_IMAGE_MODEL,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: 'image/png', data: imageBase64 } },
-          ],
-        },
-      ],
-    });
+    // 2026-06-23 (audit) — cap Gemini at 22s via Promise.race so a hang doesn't
+    // burn the whole 60s function wall before the OpenAI fallback gets a turn.
+    const res = await Promise.race([
+      genai.models.generateContent({
+        model: GEMINI_IMAGE_MODEL,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType: 'image/png', data: imageBase64 } },
+            ],
+          },
+        ],
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini image timeout')), 22_000)),
+    ]);
     const parts = res.candidates?.[0]?.content?.parts ?? [];
     for (const p of parts) {
       const data = (p as { inlineData?: { data?: string } }).inlineData?.data;

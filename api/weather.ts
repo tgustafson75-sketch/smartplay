@@ -23,7 +23,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Defensive: trim whitespace and surrounding quotes that copy-paste sometimes
   // smuggles into Vercel env vars. A leading/trailing space or " is the most
   // common cause of "key set in dashboard but OWM returns 401".
-  const rawKey = process.env.WEATHER_API_KEY ?? '';
+  // 2026-06-23 (audit) — accept either env name (meta-voice reads OPENWEATHER_API_KEY)
+  // so a name mismatch in prod doesn't silently kill wind/temp.
+  const rawKey = process.env.WEATHER_API_KEY ?? process.env.OPENWEATHER_API_KEY ?? '';
   const apiKey = rawKey.trim().replace(/^["']|["']$/g, '');
   if (!apiKey) {
     return res.status(500).json({ error: 'WEATHER_API_KEY not configured' });
