@@ -1109,13 +1109,18 @@ const styles = StyleSheet.create({
   sharedChips: {
     gap: 10,
     paddingTop: 12,
+    // 2026-06-23 (Tim — chips clip "Lu… sh…" at the edge) — trailing pad so a
+    // partially-scrolled chip reads as a clean peek, not a hard cut.
+    paddingRight: 16,
   },
   sharedChip: {
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    minWidth: 110,
+    // 2026-06-23 — narrower min so the common 3-golfer group fits a small screen
+    // without horizontal scroll (names are short; numberOfLines guards long ones).
+    minWidth: 92,
   },
   sharedChipName: { fontSize: 13, fontWeight: '800' },
   sharedChipMeta: { fontSize: 11, marginTop: 2 },

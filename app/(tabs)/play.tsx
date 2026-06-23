@@ -31,6 +31,7 @@ import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLa
 import { useTheme } from '../../contexts/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -666,20 +667,20 @@ export default function PlayTab() {
   // "no detailed data" empty state).
   const onTapInfo = useCallback(async (c: CourseSummary) => {
     if (!c.isLocal) {
-      router.push(`/course/${c.id}` as never);
+      pushCourseGuarded(router, c.id);
       return;
     }
     try {
       const found = await searchCourses(c.club_name);
       const real = found.find(r => !r._error);
       if (real) {
-        router.push(`/course/${real.id}` as never);
+        pushCourseGuarded(router, real.id);
         return;
       }
     } catch (e) {
       console.log('[play] local-course info resolve failed:', e);
     }
-    router.push(`/course/${c.id}` as never);
+    pushCourseGuarded(router, c.id);
   }, [router]);
 
   // 2026-05-24 — One-tap Tournament Mode launch with course pre-filled.
@@ -730,7 +731,7 @@ export default function PlayTab() {
 
   const handleRangeBook = () => {
     if (!selected) return;
-    router.push(`/course/${selected.id}` as never);
+    pushCourseGuarded(router, selected.id);
   };
 
   return (
@@ -989,7 +990,7 @@ export default function PlayTab() {
               <Text style={styles.localMeta} numberOfLines={1}>{r.location}</Text>
             </View>
             <TouchableOpacity
-              onPress={() => router.push(`/course/${r.id}` as never)}
+              onPress={() => pushCourseGuarded(router, r.id)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={styles.infoBtn}
             >

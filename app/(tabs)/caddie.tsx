@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { pushCourseGuarded } from '../../utils/courseNav';
 import { prewarmVoice } from '../../services/voiceWarmup';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -3376,7 +3377,7 @@ export default function CaddieTab() {
               onSelect={setSelectedPickedCourse}
               onInfo={(courseId) => {
                 setShowRoundSetup(false);
-                router.push(`/course/${courseId}` as never);
+                pushCourseGuarded(router, courseId);
               }}
             />
 
