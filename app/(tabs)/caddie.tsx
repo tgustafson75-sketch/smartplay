@@ -817,6 +817,10 @@ export default function CaddieTab() {
   const [_saverActive, setSaverActive] = useState(false);
   useEffect(() => subscribeBattery((s) => setSaverActive(s.saverActive)), []);
 
+  // Stable ref to handleMicPress — allows SmartMotion voice events and
+  // onReadyToListen to call the latest version without a stale closure.
+  const handleMicPressRef = useRef<() => void>(() => {});
+
   // SmartMotion voice layer — Kevin greets on open and reacts to session results.
   useEffect(() => {
     return subscribeSmartMotionVoiceEvent((event) => {
@@ -825,11 +829,15 @@ export default function CaddieTab() {
       if (event.type === 'entered') {
         configureAudioForSpeech()
           .then(() => speak("What are we working on today?", vg, lang, apiUrl, { userInitiated: true }))
+          .then(() => new Promise<void>((r) => setTimeout(r, 500)))
+          .then(() => { handleMicPressRef.current(); })
           .catch(() => {});
       } else if (event.type === 'session_complete') {
         const line = `${event.summary} Want to try another drill, or are we done?`;
         configureAudioForSpeech()
           .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
+          .then(() => new Promise<void>((r) => setTimeout(r, 500)))
+          .then(() => { handleMicPressRef.current(); })
           .catch(() => {});
       }
     });
@@ -1500,6 +1508,7 @@ export default function CaddieTab() {
       setVoiceState(state);
       if (state !== 'listening') setKevinEmotion(null);
     },
+    onReadyToListen: () => { handleMicPressRef.current(); },
   });
 
   // ── Voice hook ───────────────────────────
@@ -1533,6 +1542,9 @@ export default function CaddieTab() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     _handleMicPress();
   };
+  // Keep the ref in sync with the latest handleMicPress closure so that
+  // SmartMotion events and onReadyToListen always call the current version.
+  handleMicPressRef.current = handleMicPress;
 
   // ── Conversational shot logging — Phase A.2 / Phase Y ──
   // Phase Y — start/stop now lives in app/_layout.tsx so the lifecycle

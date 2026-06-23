@@ -47,6 +47,7 @@ interface UsePipecatVoiceOpts {
   onKevinSpoke?: (text: string) => void;
   onToolAction?: (action: ToolAction) => void;
   onVoiceStateChange?: (state: 'idle' | 'listening' | 'thinking' | 'speaking') => void;
+  onReadyToListen?: () => void;
 }
 
 export function usePipecatVoice({
@@ -55,6 +56,7 @@ export function usePipecatVoice({
   onKevinSpoke,
   onToolAction,
   onVoiceStateChange,
+  onReadyToListen,
 }: UsePipecatVoiceOpts = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -303,6 +305,12 @@ export function usePipecatVoice({
       }
 
       onVoiceStateChange?.('idle');
+
+      // Auto-listen when the caddie's response ends with a question.
+      if (text.trim() && text.includes('?')) {
+        await new Promise<void>((r) => setTimeout(r, 500));
+        onReadyToListen?.();
+      }
     } catch (e) {
       clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
@@ -311,7 +319,7 @@ export function usePipecatVoice({
       await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl()).catch(() => {});
       onVoiceStateChange?.('idle');
     }
-  }, [buildContext, onKevinSpoke, onToolAction, onVoiceStateChange]);
+  }, [buildContext, onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
 
   /**
    * Phase 2 full pipeline: audio URI → Whisper STT → processTurn → speak.

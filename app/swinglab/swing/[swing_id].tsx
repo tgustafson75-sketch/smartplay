@@ -198,6 +198,7 @@ export default function SwingDetail() {
     const v = videoRef.current;
     if (!v) return;
     try {
+      await configureAudioForSpeech(); // ensure audio session is in playback mode
       const st = await v.getStatusAsync();
       if (st.isLoaded && st.isPlaying) {
         await v.pauseAsync();
@@ -210,10 +211,13 @@ export default function SwingDetail() {
         if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(0);
         await v.playAsync();
       } else {
+        await v.loadAsync({ uri: shot?.clipUri ?? '' }, {}, false);
         await v.playAsync();
       }
-    } catch { /* best-effort */ }
-  }, []);
+    } catch (e) {
+      console.error('[swing-detail] play error:', e);
+    }
+  }, [shot?.clipUri]);
   // 2026-06-16 (Tim) — fade the on-frame CONTROLS shortly after a pause so a
   // paused frame screenshots clean (no play badge / seek bar / speed chip burned
   // into the grab). They snap back the instant playback resumes. The skeleton /
@@ -1103,6 +1107,7 @@ export default function SwingDetail() {
                   }
                 }}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
+                onError={(e) => console.error('[swing-detail] video error:', e)}
               />
               </ZoomableView>
               {/* 2026-05-25 — Fix AH: coach annotation overlay. DRAW
