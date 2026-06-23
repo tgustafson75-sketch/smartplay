@@ -1144,14 +1144,18 @@ ${onCourseContextBlock}${baseMessage}`
       maxTokens: aiTier === 'fast' ? 300 : 400,
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
-      // Per-round timeout for the agentic loop. Gemini on spotty LTE can
-      // take 8-12s per response; 8s was too aggressive and caused robot
-      // voice on the course. 15s gives real-world headroom while keeping the
-      // worst-case under Vercel's 60s cap:
-      //   OpenAI: 15s × 0-retries × 3 rounds = 45s + 10s TTS = 55s ✓
-      //   Gemini: 15s × 3 rounds = 45s (no SDK retry) ✓
-      // lookup_hole short-circuits to courseHoles data so round-2 is fast.
-      timeoutMs: 15_000,
+      // 2026-06-23 (Tim — "I have signal but it gives a failure state") —
+      // per-round timeout TIGHTENED 15s → 12s to keep the brain's realistic
+      // worst-case UNDER the client's BRAIN_TIMEOUT_MS (30s). The old 15s × 3
+      // rounds = 45s exceeded the client's 25s patience, so a healthy-but-slow
+      // brain (cold Lambda + a tool round) got ABORTED client-side on perfect
+      // signal and logged as a failure. Realistic path now: cold round ~12s +
+      // local-short-circuit rounds ~3-5s ≈ 20s < 30s client. maxRounds stays 3
+      // so legitimate lookup_course→lookup_hole→answer chains aren't truncated;
+      // lookup_hole short-circuits to courseHoles so round-2 is fast.
+      //   OpenAI/Gemini: 12s × 3 rounds = 36s pathological cap (rare; the
+      //   client's graceful minimal-retry + local responder catch it).
+      timeoutMs: 12_000,
     };
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
       if (name === 'lookup_course') {

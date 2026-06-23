@@ -85,9 +85,13 @@ const AUTO_STOP_MS = 45_000;
 // cold Lambda + Deepgram margin was too tight. 45s = generous headroom with
 // no UX cost (device-TTS fallback fires immediately when abort fires).
 const TRANSCRIBE_TIMEOUT_MS = 45000;
-// 25s: Kevin's per-round AI timeout is 15s; on spotty LTE 12s fired before
-// the server completed, causing robot voice. Client must give server headroom.
-const BRAIN_TIMEOUT_MS = 25000;
+// 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
+// realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
+// The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
+// mid-flight on good signal (Tim: "I have signal but it gives a failure state").
+// 30s covers the realistic path + network margin; the pathological 36s server
+// cap is rare and falls through to the graceful minimal-retry + local responder.
+const BRAIN_TIMEOUT_MS = 30000;
 
 // 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
 // SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in
