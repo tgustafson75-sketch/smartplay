@@ -265,6 +265,10 @@ export function usePipecatVoice({
 
       if (!resp.ok) {
         devLog('[pipecat] /turn error:', resp.status);
+        onVoiceStateChange?.('speaking');
+        const settings = useSettingsStore.getState();
+        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl()).catch(() => {});
+        onVoiceStateChange?.('idle');
         return;
       }
 
@@ -302,6 +306,9 @@ export function usePipecatVoice({
     } catch (e) {
       clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
+      onVoiceStateChange?.('speaking');
+      const settings = useSettingsStore.getState();
+      await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl()).catch(() => {});
       onVoiceStateChange?.('idle');
     }
   }, [buildContext, onKevinSpoke, onToolAction, onVoiceStateChange]);

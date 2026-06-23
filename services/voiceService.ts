@@ -1258,11 +1258,10 @@ export const speak = async (
   try {
     const abortController = new AbortController();
     currentAbortController = abortController;
-    // 2026-06-21 — 20s → 10s. Server tests confirm /api/voice responds in ~1s.
-    // 10s gives 10x headroom; staying at 20s meant the user waited a full 20s
-    // on a cold Lambda before device TTS fired. ElevenLabs warm = ~1s, so 10s
-    // is generous without trapping the user in silence.
-    const voiceTimeout = setTimeout(() => abortController.abort(), 10_000);
+    // 2026-06-22 — reverted to 20s. The 10s cap caused robot-voice fallback on
+    // cold Lambda starts (~8s) + TTS generation (~5s) for longer clips. Total can
+    // legitimately be 12-15s on a cold instance; 20s gives real headroom.
+    const voiceTimeout = setTimeout(() => abortController.abort(), 20_000);
 
     // (persona + effectiveGender already derived above so the catch's device-TTS
     //  fallback agrees. WRONG-VOICE-FOR-A-TURN fix: live persona, not stale param.)
