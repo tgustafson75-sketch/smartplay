@@ -307,7 +307,7 @@ export default function SwingLibrary() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       {/* HEADER — chevron / centered title / upload icon button */}
       <View style={styles.header}>
         <TouchableOpacity

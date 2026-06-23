@@ -456,7 +456,7 @@ export default function SmartVisionScreen() {
   // Image area: leaves room for back chevron + hole switcher at top, F/M/B
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
   const TOP_BAR_H = 56;
-  const BOTTOM_PANEL_H = 96;
+  const BOTTOM_PANEL_H = 100;
   // Phase 406 — split-screen on landscape (Fold-open inner, phone
   // rotated, tablet). The hole image takes 65% of the width on the
   // left and the F/M/B panel becomes a 35% right-side column, both
@@ -1778,7 +1778,7 @@ export default function SmartVisionScreen() {
             calibration2Anchor activates and downstream haversine math
             (yardages + carryYards) becomes real, not pixel-interpolated. */}
       {courseId && (
-        <View style={styles.markRow}>
+        <View style={[styles.markRow, { bottom: BOTTOM_PANEL_H }]}>
           <TouchableOpacity
             style={styles.markBtn}
             onPress={() => {
@@ -1876,7 +1876,7 @@ export default function SmartVisionScreen() {
           isSplit ? styles.sidePanel : styles.bottomPanel,
           isSplit
             ? { width: SIDE_PANEL_W, height: imageH, paddingBottom: insets.bottom + 12 }
-            : { height: BOTTOM_PANEL_H, paddingBottom: insets.bottom },
+            : { height: BOTTOM_PANEL_H, paddingBottom: Math.max(insets.bottom, 8) },
         ]}
       >
         <YdCell label="FRONT" value={yardages.front} stacked={isSplit} />
@@ -1988,10 +1988,10 @@ const styles = StyleSheet.create({
   },
   // 2026-06-06 — Phase 4.2: Mark Tee / Mark Pin button row.
   markRow: {
+    position: 'absolute', left: 0, right: 0, zIndex: 20,
     flexDirection: 'row', justifyContent: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   markBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

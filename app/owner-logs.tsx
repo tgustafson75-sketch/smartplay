@@ -255,7 +255,7 @@ export default function OwnerLogsScreen() {
   }, [params.send, entries.length]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
