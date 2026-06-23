@@ -1121,70 +1121,77 @@ ${onCourseContextBlock}${baseMessage}`
     const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
     const startedAt = Date.now();
 
-    const loopResult = await runAgenticLoop(
-      provider,
-      aiTier,
-      systemPrompt,
-      effectiveUserMessage,
-      images,
-      AI_TOOLS,
-      async (name, input) => {
-        if (name === 'lookup_course') {
-          capture.dataToolCalls++;
-          console.log(`[kevin] calling lookup_course query="${input.query}"`);
-          return await executeLookupCourse(input);
+    // Cross-provider fallback: if the selected provider errors, auto-retry
+    // with the other one before returning any failure text to the user.
+    const fallbackProvider: AiProvider = provider === 'openai' ? 'gemini' : 'openai';
+    const loopOpts = {
+      maxTokens: aiTier === 'fast' ? 300 : 400,
+      maxRounds: 3,
+      continuationTools: ['lookup_course', 'lookup_hole'],
+      // Per-round timeout for the agentic loop. Gemini on spotty LTE can
+      // take 8-12s per response; 8s was too aggressive and caused robot
+      // voice on the course. 15s gives real-world headroom while keeping the
+      // worst-case under Vercel's 60s cap:
+      //   OpenAI: 15s × 0-retries × 3 rounds = 45s + 10s TTS = 55s ✓
+      //   Gemini: 15s × 3 rounds = 45s (no SDK retry) ✓
+      // lookup_hole short-circuits to courseHoles data so round-2 is fast.
+      timeoutMs: 15_000,
+    };
+    const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
+      if (name === 'lookup_course') {
+        capture.dataToolCalls++;
+        console.log(`[kevin] calling lookup_course query="${input.query}"`);
+        return await executeLookupCourse(input);
+      }
+      if (name === 'lookup_hole') {
+        capture.dataToolCalls++;
+        console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
+        return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined);
+      }
+      // Action tools — capture and return dummy so loop can continue
+      switch (name) {
+        case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
+        case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
+        case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
+        case 'record_swing':     capture.action = { type: 'record_swing' };     break;
+        case 'log_score': {
+          const a: ActionPayload = { type: 'log_score', score: Number(input.score) };
+          if (typeof input.hole === 'number') a.hole = input.hole;
+          capture.action = a;
+          break;
         }
-        if (name === 'lookup_hole') {
-          capture.dataToolCalls++;
-          console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
-          return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined);
+        case 'log_shot': {
+          const a: ActionPayload = { type: 'log_shot' };
+          if (typeof input.direction === 'string') a.direction = input.direction;
+          if (typeof input.contactQuality === 'string') a.contactQuality = input.contactQuality;
+          if (typeof input.outcome === 'string') a.outcome = input.outcome;
+          if (typeof input.feel === 'string') a.feel = input.feel;
+          capture.action = a;
+          break;
         }
-        // Action tools — capture and return dummy so loop can continue
-        switch (name) {
-          case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
-          case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
-          case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
-          case 'record_swing':     capture.action = { type: 'record_swing' };     break;
-          case 'log_score': {
-            const a: ActionPayload = { type: 'log_score', score: Number(input.score) };
-            if (typeof input.hole === 'number') a.hole = input.hole;
-            capture.action = a;
-            break;
-          }
-          case 'log_shot': {
-            const a: ActionPayload = { type: 'log_shot' };
-            if (typeof input.direction === 'string') a.direction = input.direction;
-            if (typeof input.contactQuality === 'string') a.contactQuality = input.contactQuality;
-            if (typeof input.outcome === 'string') a.outcome = input.outcome;
-            if (typeof input.feel === 'string') a.feel = input.feel;
-            capture.action = a;
-            break;
-          }
-          case 'log_emotional_state': {
-            capture.action = {
-              type: 'log_emotional_state',
-              state: String(input.state ?? ''),
-              valence: String(input.valence ?? 'neutral'),
-            };
-            break;
-          }
+        case 'log_emotional_state': {
+          capture.action = {
+            type: 'log_emotional_state',
+            state: String(input.state ?? ''),
+            valence: String(input.valence ?? 'neutral'),
+          };
+          break;
         }
-        return 'Action triggered.';
-      },
-      {
-        maxTokens: aiTier === 'fast' ? 300 : 400,
-        maxRounds: 3,
-        continuationTools: ['lookup_course', 'lookup_hole'],
-        // Per-round timeout for the agentic loop. Gemini on spotty LTE can
-        // take 8-12s per response; 8s was too aggressive and caused robot
-        // voice on the course. 15s gives real-world headroom while keeping the
-        // worst-case under Vercel's 60s cap:
-        //   OpenAI: 15s × 0-retries × 3 rounds = 45s + 10s TTS = 55s ✓
-        //   Gemini: 15s × 3 rounds = 45s (no SDK retry) ✓
-        // lookup_hole short-circuits to courseHoles data so round-2 is fast.
-        timeoutMs: 15_000,
-      },
-    );
+      }
+      return 'Action triggered.';
+    };
+
+    let loopResult;
+    try {
+      loopResult = await runAgenticLoop(provider, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+    } catch (primaryErr) {
+      const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+      console.warn(`[kevin] provider=${provider} failed (${primaryMsg}) — retrying with ${fallbackProvider}`);
+      capture.action = null;
+      capture.dataToolCalls = 0;
+      loopResult = await runAgenticLoop(fallbackProvider, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+      console.log(`[kevin] fallback provider=${fallbackProvider} succeeded`);
+    }
 
     text = loopResult.text;
     const providerUsed = loopResult.provider;
