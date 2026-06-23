@@ -1630,6 +1630,40 @@ export const useVoiceCaddie = ({
         devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
       }
 
+      // ── Local-first (AUTO — always on, NOT a user toggle) ─────────────────
+      // 2026-06-23 (Tim) — answer deterministic status queries (yardage, hole,
+      // par, score, club, handicap, holes-left) from local round state + GPS with
+      // ZERO network, BEFORE any cloud path (pipecat OR brain). Simple questions
+      // are then instant and work on weak/no signal; the cloud is pinged only on a
+      // local MISS (the self-growing-agent rule — brain grows, tokens+network fall).
+      // tryLocalReply is conservative (matches only clear status patterns; returns
+      // null otherwise → falls through), and outside a round it no-ops, so it never
+      // short-circuits a real conversational query.
+      if (!skipIntentRouter) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
+          const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
+            ? (language as 'en' | 'es' | 'zh') : 'en';
+          const local = responder.tryLocalReply(transcript, langSafe);
+          if (local) {
+            devLog('[voice] LOCAL-FIRST hit:', local.queryType);
+            onResponseReceived(local.text);
+            recordKevinTurn(local.text);
+            wrappedOnVoiceStateChange('speaking');
+            await speakResponse(local.text);
+            if (endsAsQuestion(local.text) && voiceEnabled && !userInterruptedRef.current) {
+              await runFollowUpListenLoop();
+            }
+            wrappedOnVoiceStateChange('idle');
+            isProcessingRef.current = false;
+            return;
+          }
+        } catch (e) {
+          console.log('[voice] local-first precheck threw (non-fatal):', e);
+        }
+      }
+
       // ── Pipecat override — bypasses intent router + Kevin API ─────────────
       // When voiceOrchestrator === 'pipecat', the caller passes processTranscriptOverride
       // which handles Claude brain + tool dispatch + TTS internally.

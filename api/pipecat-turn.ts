@@ -246,14 +246,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const system = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
 
-    const result = await runAgenticLoop(
-      'anthropic',
-      'quality',       // claude-sonnet-4-6
-      system,
-      text,
-      [],              // no images on the turn path
-      KEVIN_TOOLS,
-      async (toolName, toolInput) => {
+    // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
+    // provider hiccup, so the live-voice caddie said "give me one sec" every turn
+    // when Anthropic blipped. Mirror kevin's resilience: try anthropic → openai →
+    // gemini, each capped so a hang fails over fast (stays under the 30s client
+    // budget), and return a graceful 200 (never 502) if all three miss.
+    const toolDispatch = async (toolName: string, toolInput: Record<string, unknown>): Promise<string> => {
         // Lookup tools execute server-side (need API keys, no expo deps)
         if (toolName === 'lookup_course') {
           try {
@@ -309,9 +307,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         return 'Done.';
-      },
-      { maxTokens: 256, temperature: 0.7, maxRounds: 4 },
-    );
+    };
+
+    const PROVIDER_ORDER = ['anthropic', 'openai', 'gemini'] as const;
+    const cap = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+      Promise.race([p, new Promise<never>((_, r) => setTimeout(() => r(new Error('provider timeout')), ms))]);
+
+    let result: Awaited<ReturnType<typeof runAgenticLoop>> | null = null;
+    let lastErr: unknown = null;
+    for (const provider of PROVIDER_ORDER) {
+      try {
+        toolActions.length = 0; // reset captured actions on a retry
+        result = await cap(
+          runAgenticLoop(provider, 'quality', system, text, [], KEVIN_TOOLS, toolDispatch,
+            { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
+          13_000,
+        );
+        if (provider !== 'anthropic') console.log(`[pipecat-turn] fell back to ${provider}`);
+        break;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[pipecat-turn] ${provider} failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    if (!result) {
+      // All providers missed — graceful 200 so the client speaks a warm line and
+      // re-prompts, instead of tripping the voice circuit breaker on a 502.
+      console.error('[pipecat-turn] all providers failed:', lastErr instanceof Error ? lastErr.message : String(lastErr));
+      return res.status(200).json({
+        response_text: 'Give me one sec and ask me again.',
+        tool_actions: [],
+        updated_history: history,
+      });
+    }
 
     // Build updated history (cap to keep payload small)
     const updatedHistory: HistoryMsg[] = [
@@ -329,6 +358,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[pipecat-turn] error:', msg);
-    return res.status(502).json({ error: msg });
+    // 2026-06-23 (audit) — return 200 graceful, not 502: a 502 trips the client
+    // voice circuit breaker as if the network died. The client speaks the warm
+    // line + re-prompts instead.
+    return res.status(200).json({
+      response_text: 'Give me one sec and ask me again.',
+      tool_actions: [],
+      updated_history: (req.body as { history?: unknown })?.history ?? [],
+      error: msg,
+    });
   }
 }
