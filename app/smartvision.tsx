@@ -1654,32 +1654,15 @@ export default function SmartVisionScreen() {
             strokeWidth={2}
             opacity={0.75}
           />
-          {/* 2026-05-17 — Bluegolf-style running yardage labels at the
-              midpoints of (tee→target) and (target→pin) line segments.
-              Stroke-then-fill gives a halo for legibility on whatever
-              the satellite tile happens to be underneath. */}
-          {carryYards != null && (
-            <SvgText
-              x={(teeCanvas.x + targetCanvas.x) / 2 + 14}
-              y={(teeCanvas.y + targetCanvas.y) / 2 + 5}
-              fill="#88F700"
-              stroke="#000"
-              strokeWidth={3}
-              fontSize={18}
-              fontWeight="900"
-            >{carryYards}</SvgText>
-          )}
-          {yardages.middle != null && (
-            <SvgText
-              x={(targetCanvas.x + pinCanvas.x) / 2 + 14}
-              y={(targetCanvas.y + pinCanvas.y) / 2 + 5}
-              fill="#fff"
-              stroke="#000"
-              strokeWidth={3}
-              fontSize={18}
-              fontWeight="900"
-            >{yardages.middle}</SvgText>
-          )}
+          {/* 2026-06-23 (Tim — SmartVision clutter / clean Hole-7 mockup) — REMOVED
+              the two bare on-canvas running yardage numbers (carryYards green +
+              yardages.middle white) that sat on the line midpoints. They were a
+              THIRD, label-less copy of the same distances already shown in (a) the
+              labeled "{carry}y carry / {} to pin" box below and (b) the F/M/B panel —
+              and they were exactly what collided with the "LAY UP · Ny in" label in
+              Tim's screenshot. The mockup shows a clean aim line with no on-canvas
+              numbers; the labeled box + panel carry the data. LAY UP marker stays
+              (it's unique strategic info, par-5 200y+ only). */}
           {/* 2026-06-13 (Tim #6) — layup waypoint. Only drawn when the green is
               200y+ away (the two-line plan); under 200y the view stays a single
               direct line. The "leaves Ny" label = the approach you set up. */}
