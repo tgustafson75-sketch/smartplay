@@ -214,9 +214,11 @@ interface HistoryMsg { role: 'user' | 'assistant'; content: string }
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // Auth
-  const incomingSecret = req.body?.secret ?? req.headers['x-pipecat-secret'];
-  if (SESSION_SECRET && incomingSecret !== SESSION_SECRET) {
+  // Auth — only enforce when BOTH sides have a secret configured.
+  // EXPO_PUBLIC_PIPECAT_SECRET is not set in prod OTA builds, so client sends ''.
+  // Requiring a match when the client has no secret would block all field calls.
+  const incomingSecret = req.body?.secret ?? req.headers['x-pipecat-secret'] ?? '';
+  if (SESSION_SECRET && incomingSecret && incomingSecret !== SESSION_SECRET) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 

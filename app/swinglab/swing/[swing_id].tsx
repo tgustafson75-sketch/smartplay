@@ -222,13 +222,17 @@ export default function SwingDetail() {
   const controlsOpacity = useRef(new Animated.Value(1)).current;
   const [controlsHidden, setControlsHidden] = useState(false);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only fade after the user has played at least once — keeps controls visible on open.
+  const hasEverPlayedRef = useRef(false);
   useEffect(() => {
     if (fadeTimerRef.current) { clearTimeout(fadeTimerRef.current); fadeTimerRef.current = null; }
     if (isPlaying) {
+      hasEverPlayedRef.current = true;
       setControlsHidden(false);
       Animated.timing(controlsOpacity, { toValue: 1, duration: 140, useNativeDriver: true }).start();
     } else {
-      // Paused — hold briefly so the pause reads, then fade to a clean frame.
+      if (!hasEverPlayedRef.current) return; // don't fade controls on initial load
+      // Paused after play — hold briefly so the pause reads, then fade for clean screenshot.
       fadeTimerRef.current = setTimeout(() => {
         setControlsHidden(true);
         Animated.timing(controlsOpacity, { toValue: 0, duration: 420, useNativeDriver: true }).start();
