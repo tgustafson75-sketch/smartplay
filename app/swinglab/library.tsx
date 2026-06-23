@@ -162,9 +162,14 @@ export default function SwingLibrary() {
           let videoOk = clipUri == null;
           let thumbOk = thumbUri == null;
           if (clipUri && clipUri.startsWith('file://')) {
+            // 2026-06-23 — re-anchor under the CURRENT container before judging a
+            // clip "missing": a stale absolute UUID prefix from a prior install
+            // makes getInfoAsync(clipUri) lie. resolveClipUri finds the surviving
+            // file under the live documentDirectory. (Tim: library videos won't play.)
             try {
-              const info = await FS.getInfoAsync(clipUri);
-              videoOk = !!info.exists;
+              const { resolveClipUri } = await import('../../services/videoUpload');
+              const resolved = await resolveClipUri(clipUri);
+              videoOk = resolved != null;
             } catch { videoOk = false; }
           } else if (clipUri && !clipUri.startsWith('file://')) {
             videoOk = true;

@@ -28,7 +28,7 @@ import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
-import { runPhaseKOnSession } from '../../../services/videoUpload';
+import { runPhaseKOnSession, resolveClipUri } from '../../../services/videoUpload';
 // 2026-05-28 — Fix FI: presence fill when analysis fails. Instead of
 // leaving the user staring at "Couldn't analyze this one" with no
 // caddie voice, the caddie speaks a short context-aware line
@@ -125,6 +125,23 @@ export default function SwingDetail() {
   const hasHydrated = useCageStore(s => s.hasHydrated);
   const shot = session?.shots[0];
 
+  // 2026-06-23 (Tim — "still can't play my swing library videos") — resolve the
+  // stored clipUri to a path that exists under the CURRENT app container before
+  // handing it to <Video>. Persisted absolute paths break when iOS regenerates
+  // the container UUID on a native build/reinstall; resolveClipUri re-anchors the
+  // basename under the live documentDirectory. Falls back to the raw clipUri
+  // while resolving so first paint isn't blocked.
+  const [playbackUri, setPlaybackUri] = useState<string | null>(shot?.clipUri ?? null);
+  useEffect(() => {
+    let cancelled = false;
+    const raw = shot?.clipUri ?? null;
+    setPlaybackUri(raw);
+    if (raw && raw.startsWith('file://')) {
+      void resolveClipUri(raw).then((r) => { if (!cancelled && r) setPlaybackUri(r); });
+    }
+    return () => { cancelled = true; };
+  }, [shot?.clipUri]);
+
   // Phase BZ-v1 — per-shot action sheet + compare mode state.
   const [actionShotId, setActionShotId] = useState<string | null>(null);
   // Phase 403b — "See the moment" modal. Holds the URI of the fault
@@ -210,7 +227,7 @@ export default function SwingDetail() {
         if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(0);
         await v.playAsync();
       } else {
-        await v.loadAsync({ uri: shot?.clipUri ?? '' }, {}, false);
+        await v.loadAsync({ uri: playbackUri ?? shot?.clipUri ?? '' }, {}, false);
         await v.playAsync();
       }
     } catch (e) {
@@ -1077,7 +1094,7 @@ export default function SwingDetail() {
               <ZoomableView style={StyleSheet.absoluteFill} onSingleTap={togglePlayPause}>
               <Video
                 ref={videoRef}
-                source={{ uri: shot.clipUri }}
+                source={{ uri: playbackUri ?? shot.clipUri }}
                 style={styles.video}
                 resizeMode={ResizeMode.CONTAIN}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause

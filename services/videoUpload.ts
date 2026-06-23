@@ -95,6 +95,46 @@ export async function pickVideo(): Promise<PickResult> {
 }
 
 /**
+ * 2026-06-23 (Tim — "still can't play my swing library videos") — read-time
+ * clip-URI resolver. ROOT CAUSE: clips are persisted as ABSOLUTE paths under
+ * `${documentDirectory}swing_clips/<key>.<ext>`. On iOS the app-container UUID
+ * (`/var/mobile/Containers/Data/Application/<UUID>/`) is REGENERATED on every
+ * native build / reinstall, so a stored absolute path silently points at the
+ * OLD UUID and the player gets a non-existent file → "won't play / scrub stuck
+ * at 0:00" — even though the file itself survived (Documents is preserved, just
+ * under the NEW UUID prefix).
+ *
+ * Fix: never trust the stored absolute prefix. Try it as-is, and if it's gone,
+ * RE-ANCHOR the basename under the CURRENT documentDirectory (the file is almost
+ * certainly there). This heals every already-broken entry with no migration —
+ * resolution happens on read. Returns null only when the file is genuinely gone.
+ */
+export async function resolveClipUri(stored: string | null | undefined): Promise<string | null> {
+  if (!stored) return null;
+  // Non-file uris (remote http(s), Android content://, iOS ph://) — hand back
+  // untouched; the UUID-reshuffle problem is file:// only.
+  if (!stored.startsWith('file://')) return stored;
+  try {
+    const FS = await import('expo-file-system/legacy');
+    // 1. Stored path still valid? (common case — same install)
+    try { if ((await FS.getInfoAsync(stored)).exists) return stored; } catch { /* fall through */ }
+    const dir = FS.documentDirectory;
+    if (!dir) return null;
+    const base = stored.split('/').pop();
+    if (!base) return null;
+    // 2. Re-anchor the basename under the CURRENT container's Documents. Check
+    //    the canonical swing_clips subdir first, then the doc root, then thumbs.
+    const candidates = [`${dir}swing_clips/${base}`, `${dir}${base}`];
+    for (const c of candidates) {
+      try { if ((await FS.getInfoAsync(c)).exists) return c; } catch { /* try next */ }
+    }
+    return null; // genuinely gone
+  } catch {
+    return stored; // FS unavailable — don't regress, hand back the original
+  }
+}
+
+/**
  * 2026-06-10 — Persist a freshly-captured/picked clip into the app's DOCUMENT
  * directory so it survives OS cache eviction. The picker (and the camera
  * recorder) hand back a TEMPORARY uri in cache/tmp; the OS clears those, so an
