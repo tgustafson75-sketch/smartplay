@@ -1003,6 +1003,23 @@ export default function SmartVisionScreen() {
   //      Y position along tee→pin axis maps proportionally to yardage.
   //   3) Neither → static bundled values.
   const yardages = useMemo(() => {
+    // 2026-06-23 (SV-2) — Owner decision: "Full hole distance from tee."
+    // Until the user explicitly places/drags the cart (target) marker,
+    // the default target sits at the tee→pin MIDPOINT, so MIDDLE reads
+    // ~half the hole and the AI club rec comes out ~2 clubs short. When
+    // NO marker has been placed yet (targetOverride undefined — this is
+    // the same flag set by commitCartCanvas on tap/drag AND by GPS
+    // auto-init), force MIDDLE to the hole's FULL tee→pin distance.
+    // We override the REPORTED number only (not targetCanvas), so the
+    // yellow marker stays at its midpoint default position — the
+    // headline reads full-distance without yanking the marker graphic.
+    // Once the user places the marker, targetOverride is set and every
+    // branch below reads the real marker-derived distance as it does
+    // today (no change).
+    const hasPlacedTarget = !!targetOverride;
+    const fullHoleDistance = courseHoles.find(x => x.hole === holeIndex)?.distance ?? null;
+    const withDefaultMiddle = (r: { front: number | null; middle: number | null; back: number | null }) =>
+      hasPlacedTarget || fullHoleDistance == null ? r : { ...r, middle: fullHoleDistance };
     if (usingGpsTile && targetPx && geometry && pinPx) {
       const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
       const pinGeo = pixelsToLatLng(pinPx, projection!.center, projection!.zoom, projection!.bearing);
@@ -1020,7 +1037,7 @@ export default function SmartVisionScreen() {
       const front = geometry.green_front ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
       const middle = cell(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng));
       const back = geometry.green_back ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
-      return { front, middle, back };
+      return withDefaultMiddle({ front, middle, back });
     }
     // Phase 4.3 — Mode 2 calibrated branch. When the user has marked
     // both tee and green on this curated-image hole, project the
@@ -1034,7 +1051,7 @@ export default function SmartVisionScreen() {
     if (calibratedTargetGeo && greenOverrideGeo) {
       const yds = haversineYards(calibratedTargetGeo.lat, calibratedTargetGeo.lng, greenOverrideGeo.lat, greenOverrideGeo.lng);
       const middle = Number.isFinite(yds) ? Math.round(yds) : null;
-      return { front: null as number | null, middle, back: null as number | null };
+      return withDefaultMiddle({ front: null as number | null, middle, back: null as number | null });
     }
     const h = courseHoles.find(x => x.hole === holeIndex);
     if (h && targetPx && teePx && pinPx) {
@@ -1060,10 +1077,10 @@ export default function SmartVisionScreen() {
         typeof h.front === 'number' && typeof h.back === 'number' &&
         h.front > 0 && h.back > 0 && h.back > h.front;
       if (!hasRealGreenSpread) {
-        return { front: null as number | null, middle: middleYd, back: null as number | null };
+        return withDefaultMiddle({ front: null as number | null, middle: middleYd, back: null as number | null });
       }
       const greenDepth = (h.back - h.front) / 2;
-      return { front: Math.max(0, middleYd - greenDepth), middle: middleYd, back: middleYd + greenDepth };
+      return withDefaultMiddle({ front: Math.max(0, middleYd - greenDepth), middle: middleYd, back: middleYd + greenDepth });
     }
     if (h) {
       // 2026-06-01 — Fix GH: same honesty for the static fallback
@@ -1082,7 +1099,7 @@ export default function SmartVisionScreen() {
     // Phase 4.3 — calibration2Anchor + greenOverrideGeo + targetCanvas
     // added to deps so the calibrated Mode 2 branch recomputes when
     // user re-marks or drags the cart.
-  }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor]);
+  }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor, targetOverride]);
 
   // 2026-06-23 (Phase 3b) — honest AI recommendation read. Pure/local/offline:
   // the player's real bag (ladder fallback) picks the club for the MIDDLE

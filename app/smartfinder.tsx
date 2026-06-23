@@ -43,7 +43,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
-import { computeDistance, buildLock } from '../services/rangefinder';
+import { computeDistance } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -67,7 +67,6 @@ import { ingestCapture } from '../services/courseCaptureIngest';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
-const LOCK_DURATION_MS = 30_000;
 
 /**
  * Phase D-2 SmartFinder — four modes:
@@ -223,7 +222,7 @@ export default function SmartFinder() {
   // The old flat-canvas TargetView is retained below the route for
   // surfaces that explicitly ask for top-down, but the default TARGET
   // path is now camera + overlay.
-  const isCameraMode = displayMode === 'standard' || displayMode === 'putt' || displayMode === 'target';
+  const isCameraMode = displayMode === 'putt' || displayMode === 'target';
 
   if (isCameraMode) {
     return (
@@ -364,7 +363,7 @@ export default function SmartFinder() {
   );
 }
 
-// ─── Camera-mode wrapper (Standard + Putt) ────────────────────────────────────
+// ─── Camera-mode wrapper (Target + Putt) ────────────────────────────────────
 
 /**
  * Continuous zoom via two-finger pinch. expo-camera's `zoom` prop is 0..1
@@ -373,9 +372,7 @@ export default function SmartFinder() {
  * phones 8×).
  *
  * 2026-05-18 — replaced the previous ZOOM_STOPS index + ± buttons with
- * pinch-to-zoom (matches native camera apps). Labels are cosmetic and
- * approximate the visual zoom factor at each `zoom` value; tuned for
- * Z Fold but should read sensibly on any device.
+ * pinch-to-zoom (matches native camera apps).
  */
 // 2026-05-24 — Bumped from 0.4 → 1.0 (native camera ratio). User reported
 // "I can't zoom" on Z Fold — at 0.4 sensitivity a 3.5x finger spread was
@@ -383,29 +380,6 @@ export default function SmartFinder() {
 // pinch range. 1.0 means a 2x finger spread covers the full range, same
 // as the stock Android camera app.
 const PINCH_SENSITIVITY = 1.0;
-
-function zoomLabelFor(zoom: number): string {
-  // Approximate visible zoom factor across the 0..1 range. expo-camera
-  // maps zoom=1 to the device's reported max — Z Fold ≈ 30×, most
-  // flagships 10–20×, base phones 8×. Anchors extend to 30× at the top
-  // so the label tracks Z Fold's actual reach; on lower-max devices the
-  // label still reads sensibly because the device's hardware caps the
-  // visible result regardless of the label.
-  const anchors: [number, number][] = [
-    [0.00,  1], [0.10,  2], [0.20,  3], [0.30,  5],
-    [0.45,  8], [0.60, 12], [0.80, 20], [1.00, 30],
-  ];
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const [z0, x0] = anchors[i];
-    const [z1, x1] = anchors[i + 1];
-    if (zoom <= z1) {
-      const t = (zoom - z0) / (z1 - z0);
-      const x = x0 + t * (x1 - x0);
-      return `${x.toFixed(1)}x`;
-    }
-  }
-  return '30.0x';
-}
 
 function CameraSmartFinder({
   mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, height, autoRead,
@@ -475,17 +449,16 @@ function CameraSmartFinder({
   // 2026-05-19 — Switched from legacy PinchGestureHandler to the new
   // Gesture API (Gesture.Pinch + GestureDetector). The legacy handler
   // required GestureHandlerRootView at the screen root (added below)
-  // AND its events were swallowed by the StandardCameraOverlay's
-  // full-screen TouchableOpacity for tap-to-lock. The new API composes
-  // pinch (multi-touch) with the existing tap (single-touch) without
-  // a conflict because they're handled at different finger counts.
+  // AND its events were swallowed by a child overlay's full-screen
+  // TouchableOpacity. The new API composes pinch (multi-touch) with the
+  // existing tap (single-touch) without a conflict because they're
+  // handled at different finger counts.
   const [zoom, setZoom] = useState(0);
   const baseZoomRef = useRef(0);
   // 2026-06-23 (Tim) — collapse the right-side controls into a SmartMotion-style
   // TOOLS pop-out (sliders chevron → labeled themed rows) so the camera view
   // stays clear and the icons are learnable.
   const [toolsOpen, setToolsOpen] = useState(false);
-  const zoomLabel = zoomLabelFor(zoom);
   const setZoomFromPinch = useCallback((next: number) => {
     setZoom(next);
   }, []);
@@ -649,15 +622,7 @@ function CameraSmartFinder({
             videoQuality="720p"
           />
 
-          {mode === 'standard' ? (
-            <StandardCameraOverlay
-              locationGranted={locationGranted}
-              height={height}
-              zoomLabel={zoomLabel}
-              yards={yards}
-              onHeadingUpdate={onHeadingUpdate}
-            />
-          ) : mode === 'target' ? (
+          {mode === 'target' ? (
             <TargetCameraOverlay
               yards={yards}
               gps={gps}
@@ -691,7 +656,7 @@ function CameraSmartFinder({
         {/* 2026-06-23 (Tim) — TOOLS pop-out (SmartMotion SETUP TOOLS style): a
             single sliders chevron collapses the scene-read + lock controls into a
             labeled themed card, keeping the camera view clear. */}
-        {(mode === 'standard' || mode === 'target') && (
+        {mode === 'target' && (
           <>
             {toolsOpen && (
               <View style={sfStyles.toolsCard}>
@@ -935,247 +900,6 @@ function CameraSmartFinder({
         </TouchableOpacity>
       )}
     </GestureHandlerRootView>
-  );
-}
-
-// ─── Standard mode (camera AR, tilt-based distance lock) ─────────────────────
-
-function StandardCameraOverlay({
-  locationGranted, height, zoomLabel, yards, onHeadingUpdate,
-}: {
-  locationGranted: boolean;
-  height: number;
-  zoomLabel: string;
-  yards: GreenYardages;
-  onHeadingUpdate?: (h: number) => void;
-}) {
-  const styles = useStyles();
-  const insets = useSafeAreaInsets();
-  const headingRef = useRef(0);
-  const pitchRef = useRef(-10);
-  const [lock, setLock] = useState<{ distance_yards: number; confidence: 'high' | 'medium' | 'low' } | null>(null);
-  const [countdown, setCountdown] = useState(0);
-  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    DeviceMotion.setUpdateInterval(200);
-    const sub = DeviceMotion.addListener(data => {
-      if (data.rotation) {
-        const pitchDeg = ((data.rotation.beta ?? 0) * 180) / Math.PI;
-        pitchRef.current = pitchDeg;
-        const alphaDeg = ((data.rotation.alpha ?? 0) * 180) / Math.PI;
-        const heading = ((alphaDeg % 360) + 360) % 360;
-        headingRef.current = heading;
-        onHeadingUpdate?.(heading);
-      }
-    });
-    return () => sub.remove();
-  }, [onHeadingUpdate]);
-
-  const clearLock = useCallback(() => {
-    setLock(null);
-    setCountdown(0);
-    useSmartFinderStore.getState().clearLock();
-    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    lockTimerRef.current = null;
-    countdownRef.current = null;
-  }, []);
-
-  const handleTap = useCallback(async (event: { nativeEvent: { locationX: number; locationY: number } }) => {
-    if (!locationGranted) {
-      Alert.alert('Location needed', 'SmartFinder uses your GPS position to calculate distance. Please grant location access in Settings.');
-      return;
-    }
-    // Phase AH — wrap the whole measure path so any rejection (GPS hang,
-    // math edge case, store mutation throw) surfaces a user-readable
-    // alert instead of an unhandled promise rejection that crashes the
-    // RN bridge or shows a red-screen toast in dev.
-    try {
-      // Race getCurrentPositionAsync against an 8s timeout so a hung GPS
-      // call doesn't leave the user staring at nothing.
-      let position: Location.LocationObject;
-      try {
-        position = await Promise.race([
-          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-          new Promise<Location.LocationObject>((_, reject) =>
-            setTimeout(() => reject(new Error('gps_timeout')), 8000),
-          ),
-        ]);
-      } catch (gpsErr) {
-        const msg = gpsErr instanceof Error ? gpsErr.message : String(gpsErr);
-        if (msg === 'gps_timeout') {
-          Alert.alert('GPS taking too long', "Couldn't get a fresh position in 8 seconds. Step into open sky and try again.");
-        } else {
-          Alert.alert('GPS unavailable', 'Could not get your position. Try moving to open sky.');
-        }
-        return;
-      }
-      const tapY = event.nativeEvent.locationY;
-      const tapYNorm = Math.max(0, Math.min(1, tapY / height));
-      const userPos = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? 10,
-      };
-      // Defensive: nonsense lat/lng (the 0,0 case Tim hit) → clear msg
-      if (Math.abs(userPos.lat) < 0.01 && Math.abs(userPos.lng) < 0.01) {
-        Alert.alert("Couldn't measure", 'GPS position not ready yet. Wait a moment and try again.');
-        return;
-      }
-      const result = computeDistance({
-        user_position: userPos,
-        compass_heading: headingRef.current,
-        tap_y_normalized: tapYNorm,
-        device_pitch_degrees: pitchRef.current,
-      });
-      // 2026-05-19 — when the phone is held near-level, the tilt math
-      // can't compute distance. Previously the rangefinder stubbed 250yd
-      // and the user saw it as a real lock. Now: surface the limit and
-      // point them at a tool that actually works for far targets.
-      if (result.unmeasurable) {
-        Alert.alert(
-          "Can't measure this target",
-          "Tilt the phone DOWN at the ground in front of the target, OR switch to TARGET mode for far targets (uses GPS).",
-        );
-        return;
-      }
-      const newLock = buildLock({
-        user_position: userPos,
-        compass_heading: headingRef.current,
-        tap_y_normalized: tapYNorm,
-        device_pitch_degrees: pitchRef.current,
-      }, result);
-      useSmartFinderStore.getState().setLock(newLock);
-      setLock({ distance_yards: result.distance_yards, confidence: result.confidence });
-      setCountdown(30);
-      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-      if (countdownRef.current) clearInterval(countdownRef.current);
-      lockTimerRef.current = setTimeout(clearLock, LOCK_DURATION_MS);
-      let remaining = 30;
-      countdownRef.current = setInterval(() => {
-        remaining -= 1;
-        setCountdown(remaining);
-        if (remaining <= 0 && countdownRef.current) clearInterval(countdownRef.current);
-      }, 1000);
-    } catch (err) {
-      // Phase AH catch-all — never let a measure rejection escape unhandled.
-      const msg = err instanceof Error ? err.message : String(err);
-      console.log('[smartfinder] measure error:', msg);
-      Alert.alert("Couldn't measure", 'Something went wrong reading the tap. Try again, or check your GPS signal.');
-    }
-  }, [locationGranted, height, clearLock]);
-
-  useEffect(() => () => {
-    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-  }, []);
-
-  const confidenceColor = lock
-    ? (lock.confidence === 'high' ? '#00C896' : lock.confidence === 'medium' ? '#F5A623' : '#ef4444')
-    : '#6b7280';
-
-  return (
-    <>
-      {/* Tap surface — full-screen, behind overlays */}
-      <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={handleTap} />
-
-      {/* Yellow corner focus brackets — legacy v2 frame */}
-      <View pointerEvents="none" style={styles.focusFrame}>
-        <View style={[styles.focusCorner, styles.focusCornerTL]} />
-        <View style={[styles.focusCorner, styles.focusCornerTR]} />
-        <View style={[styles.focusCorner, styles.focusCornerBL]} />
-        <View style={[styles.focusCorner, styles.focusCornerBR]} />
-      </View>
-
-      {/* Phase 502 — reticle with corner brackets ported from V3's
-          TargetingOverlay. The 4 L-shaped brackets frame the crosshair
-          so the target "lock" feels tactile and intentional, not a
-          floating dot. Same yellow accent palette throughout. */}
-      <View style={styles.reticleContainer} pointerEvents="none">
-        <View style={styles.reticleFrame}>
-          <View style={styles.reticleH} />
-          <View style={styles.reticleV} />
-          <View style={styles.reticleCenterDot} />
-          <View style={[styles.reticleBracket, styles.reticleBracketTL]} />
-          <View style={[styles.reticleBracket, styles.reticleBracketTR]} />
-          <View style={[styles.reticleBracket, styles.reticleBracketBL]} />
-          <View style={[styles.reticleBracket, styles.reticleBracketBR]} />
-        </View>
-      </View>
-
-      {/* 2026-05-18 — Zoom is now pinch-driven (two-finger gesture on
-          the camera surface). The ± buttons + dot row were removed
-          per Tim's request — feels more like a real rangefinder /
-          native camera app. The readout label is kept so the user
-          knows the current magnification at a glance. */}
-      <View pointerEvents="none" style={[styles.zoomCol, { top: insets.top + 130 }]}>
-        <Text style={styles.zoomLabel}>{zoomLabel}</Text>
-      </View>
-
-      {/* Bottom panel — legacy v2 layout: locked badge + big yardage row,
-           "club · commit to the shot" yellow-bordered pill, big shutter
-           capture button.
-           2026-05-18 — F/M/B reference strip added above the lock /
-           instruction text so the user always sees GPS yardages to
-           the green, whether or not they've locked a target. Mirrors
-           the Target mode strip. */}
-      <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
-        <View style={styles.fmbStrip}>
-          <View style={styles.fmbItem}>
-            <Text style={styles.fmbLabel}>F</Text>
-            <Text style={styles.fmbValue}>{yards.front ?? '—'}</Text>
-          </View>
-          <View style={styles.fmbDivider} />
-          <View style={styles.fmbItem}>
-            <Text style={styles.fmbLabel}>M</Text>
-            <Text style={[styles.fmbValue, styles.fmbValueAccent]}>{yards.middle ?? '—'}</Text>
-          </View>
-          <View style={styles.fmbDivider} />
-          <View style={styles.fmbItem}>
-            <Text style={styles.fmbLabel}>B</Text>
-            <Text style={styles.fmbValue}>{yards.back ?? '—'}</Text>
-          </View>
-        </View>
-
-        {lock ? (
-          <>
-            <View style={styles.distanceRow}>
-              <Text style={styles.lockedBadge}>🔒 LOCKED</Text>
-              <Text style={[styles.distanceNumber, { color: confidenceColor }]}>{lock.distance_yards}</Text>
-              <Text style={styles.distanceUnit}>yds</Text>
-            </View>
-            <View style={styles.commitPill}>
-              <Text style={styles.commitPillIcon}>🔒</Text>
-              <Text style={styles.commitPillText}>commit to the shot</Text>
-            </View>
-            <View style={styles.lockFooter}>
-              <Text style={styles.countdownText}>Clears in {countdown}s</Text>
-              <TouchableOpacity style={styles.clearBtn} onPress={clearLock}>
-                <Text style={styles.clearBtnText}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.instructionText}>Aim at target · tap anywhere to lock distance</Text>
-        )}
-
-        {/* Shutter capture button — visible cue that the screen is the
-             capture surface. Tapping it does the same thing as tapping
-             anywhere on the camera (handleTap via the full-screen
-             TouchableOpacity above). */}
-        <View style={styles.shutterRow}>
-          <TouchableOpacity
-            style={styles.shutterOuter}
-            onPress={() => handleTap({ nativeEvent: { locationX: 0, locationY: height / 2 } })}
-            activeOpacity={0.85}
-          >
-            <View style={styles.shutterInner} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </>
   );
 }
 
@@ -1443,24 +1167,36 @@ function TargetCameraOverlay({
       tap_y_normalized: point.yNorm,
       device_pitch_degrees: pitchRef.current,
     });
-    setReticleConfidence(result.confidence);
     if (result.unmeasurable) {
-      if (lastYardsRef.current !== null) {
-        lastYardsRef.current = null;
-        setTargetYards(null);
-      }
+      // Near-level hold: no usable tilt input. Keep the GPS green-middle
+      // baseline and flag the read as soft rather than blanking.
+      setReticleConfidence('low');
       return;
     }
     // 2026-06-23 (Tim — "moving the target never gets accurate, defaults to 250
     // or 10") — the camera-TILT rangefinder is unreliable near the horizon (most
     // golf targets): tiny pitch errors explode the projected point to 250+ or
-    // collapse it to ~10. On LOW confidence, do NOT overwrite the target with
-    // that garbage — keep the last RELIABLE value (initial = the GPS distance to
-    // the green) so the number stays honest. CONF already shows 'low' so the
-    // user sees it's a soft read; a medium/high tilt read still updates live.
-    if (result.confidence === 'low') return;
+    // collapse it to ~10.
+    //
+    // SF-1 (owner: "Keep GPS, gate the tilt read") — only let a tilt read
+    // OVERWRITE the displayed distance when it is PLAUSIBLE relative to the
+    // honest GPS green-middle distance (within a 60yd window). When the tilt
+    // read is implausible — or there's no GPS baseline to compare against —
+    // KEEP the GPS distance and drop the confidence to Low so the user sees a
+    // soft read instead of a clobbered garbage number. The geodesic/tilt math
+    // itself is unchanged; this is purely a display gate.
     const target = { lat: result.target_lat, lng: result.target_lng };
     const geodesicYards = Math.max(1, Math.round(haversineYards(fix.location, target)));
+    const gpsMiddleYards = yards.reason === 'ok' ? yards.middle : null;
+    const plausible =
+      gpsMiddleYards != null && Math.abs(geodesicYards - gpsMiddleYards) < 60;
+    if (!plausible) {
+      // Tilt off by >60yd of the GPS baseline (or no GPS middle to compare):
+      // keep the GPS distance shown, mark confidence Low, don't overwrite.
+      setReticleConfidence('low');
+      return;
+    }
+    setReticleConfidence(result.confidence);
     if (lastYardsRef.current !== geodesicYards) {
       lastYardsRef.current = geodesicYards;
       setTargetYards(geodesicYards);
@@ -1482,7 +1218,10 @@ function TargetCameraOverlay({
       lastPlayerLocRef.current = fix.location;
       setPlayerLoc(fix.location);
     }
-  }, []);
+    // SF-1: yards.reason / yards.middle are read above for the plausibility
+    // gate, so they must be in deps — otherwise the callback closes over a
+    // stale GPS baseline and the 60yd window compares against an old number.
+  }, [yards.reason, yards.middle]);
 
   const playsLike = useMemo(() => {
     if (targetYards == null || !weather) return null;
@@ -1609,6 +1348,15 @@ function TargetCameraOverlay({
             <Text style={styles.targetToYards}>{targetYards}</Text>
             <Text style={styles.targetToLabelMuted}> yds</Text>
           </Text>
+        )}
+        {/* SF-2 (owner: "Caption 'scorecard · aim not live'") — when the
+            displayed distance is NOT a live GPS read (the static scorecard
+            fallback: reason !== 'ok'), caption it so the off-round club rec is
+            shown WITH the caveat rather than implying a live aim. Mirrors the
+            MapView path's static-distance caption copy/style (geometryMsgText).
+            Hidden when reason === 'ok' (live). */}
+        {yards.reason !== 'ok' && targetYards != null && (
+          <Text style={styles.targetStaticCaption}>scorecard distance · aim not live</Text>
         )}
         <View style={styles.targetIntelCard}>
           {/* 2026-06-13 — THE MOAT: the brain's answer-first read leads the card.
@@ -2162,24 +1910,6 @@ return StyleSheet.create({
   cameraTopTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
   cameraToggleWrap: { position: 'absolute', left: 0, right: 0 },
 
-  // Reticle
-  reticleContainer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  // Phase 502 — 80px frame matches V3's CROSS_SIZE so corner brackets
-  // sit at the outer edges of the reticle area.
-  reticleFrame: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
-  reticleH: { position: 'absolute', width: 60, height: 1.5, backgroundColor: 'rgba(245,166,35,0.7)' },
-  reticleV: { position: 'absolute', width: 1.5, height: 60, backgroundColor: 'rgba(245,166,35,0.7)' },
-  reticleCenterDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: '#F5A623' },
-  reticleBracket: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderColor: '#F5A623',
-  },
-  reticleBracketTL: { top: 0, left: 0, borderTopWidth: 2.5, borderLeftWidth: 2.5 },
-  reticleBracketTR: { top: 0, right: 0, borderTopWidth: 2.5, borderRightWidth: 2.5 },
-  reticleBracketBL: { bottom: 0, left: 0, borderBottomWidth: 2.5, borderLeftWidth: 2.5 },
-  reticleBracketBR: { bottom: 0, right: 0, borderBottomWidth: 2.5, borderRightWidth: 2.5 },
   // Phase 502 — TARGET-mode bottom F/M/B strip.
   targetBottomStrip: {
     position: 'absolute',
@@ -2205,6 +1935,17 @@ return StyleSheet.create({
   },
   targetToLabelMuted: { color: 'rgba(255,230,0,0.85)' },
   targetToYards: { color: '#FFE600', fontSize: 18 },
+  // SF-2 — static-distance caption. Mirrors the MapView path's geometryMsgText
+  // (amber, 12px, 600) so the "not live" framing reads consistently across the
+  // camera + map surfaces; nudged up under the TO TARGET label.
+  targetStaticCaption: {
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    marginTop: -4,
+    marginBottom: 8,
+  },
   targetIntelCard: {
     alignSelf: 'stretch',
     backgroundColor: 'rgba(5,18,11,0.88)',
@@ -2262,74 +2003,6 @@ return StyleSheet.create({
   targetFmbValue: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.4, marginTop: 2 },
   targetFmbValueMid: { color: '#00C896', fontSize: 20, fontWeight: '900', letterSpacing: 0.4, marginTop: 2 },
 
-  // Legacy v2 yellow corner focus brackets
-  focusFrame: {
-    position: 'absolute',
-    top: '34%',
-    bottom: '38%',
-    left: '20%',
-    right: '20%',
-  },
-  focusCorner: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderColor: '#F5A623',
-  },
-  focusCornerTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
-  focusCornerTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
-  focusCornerBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
-  focusCornerBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
-
-  // Top-right zoom column (visual only)
-  zoomCol: {
-    position: 'absolute',
-    right: 16,
-    alignItems: 'center',
-    gap: 6,
-  },
-  zoomLabel: { color: '#F5A623', fontSize: 13, fontWeight: '800' },
-  zoomDots: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  zoomDotBg: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  zoomDotBgDisabled: { opacity: 0.35 },
-  zoomDotActive: {
-    width: 10, height: 10, borderRadius: 5, backgroundColor: '#F5A623',
-  },
-  zoomDotMinus: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
-  zoomDotPlus: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
-
-  // "club · commit to the shot" yellow pill
-  commitPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderColor: '#F5A623',
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginTop: 8,
-    backgroundColor: 'rgba(245,166,35,0.08)',
-  },
-  commitPillIcon: { fontSize: 14 },
-  commitPillText: { color: '#F5A623', fontSize: 13, fontWeight: '700' },
-
-  // Shutter button
-  shutterRow: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
-  shutterOuter: {
-    width: 64, height: 64, borderRadius: 32,
-    borderWidth: 4, borderColor: '#ffffff',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  shutterInner: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: '#ffffff',
-  },
-
   // Bottom panel (camera modes)
   bottomPanel: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -2338,29 +2011,6 @@ return StyleSheet.create({
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
   },
   instructionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', paddingBottom: 10 },
-  // 2026-05-18 — F/M/B strip used in Standard mode's bottom panel.
-  fmbStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 4,
-    paddingBottom: 10,
-    marginBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.10)',
-  },
-  fmbItem: { flex: 1, alignItems: 'center' },
-  fmbLabel: { color: '#9ca3af', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 2 },
-  fmbValue: { color: '#ffffff', fontSize: 22, fontWeight: '800' },
-  fmbValueAccent: { color: '#00C896' },
-  fmbDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.15)' },
-  distanceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  lockedBadge: { color: '#F5A623', fontSize: 13, fontWeight: '900', letterSpacing: 1.4, marginRight: 6, alignSelf: 'center' },
-  distanceNumber: { fontSize: 64, fontWeight: '900', lineHeight: 70 },
-  distanceUnit: { color: '#9ca3af', fontSize: 22, fontWeight: '600', paddingBottom: 8 },
-  lockFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 10 },
-  countdownText: { color: '#9ca3af', fontSize: 13 },
   clearBtn: { borderWidth: 1, borderColor: '#ef4444', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, marginTop: 8 },
   clearBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '700' },
 
