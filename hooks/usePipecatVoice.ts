@@ -99,6 +99,7 @@ export function usePipecatVoice({
         trustLevel,
         language: settings.language ?? 'en',
         aiProvider: 'anthropic',
+        continuousConversationMode: settings.continuousConversationMode ?? false,
       },
       gps: {
         lat: getLastFix()?.lat ?? undefined,
@@ -306,10 +307,15 @@ export function usePipecatVoice({
 
       onVoiceStateChange?.('idle');
 
-      // Auto-listen when the caddie's response ends with a question.
-      if (text.trim() && text.includes('?')) {
-        await new Promise<void>((r) => setTimeout(r, 500));
-        onReadyToListen?.();
+      // Auto-listen: always in continuous mode; on any question otherwise.
+      // Mirrors the legacy continuousConversationMode behavior for the pipecat path.
+      if (text.trim() && onReadyToListen) {
+        const { continuousConversationMode } = useSettingsStore.getState();
+        const isQuestion = text.includes('?');
+        if (continuousConversationMode || isQuestion) {
+          await new Promise<void>((r) => setTimeout(r, 500));
+          onReadyToListen();
+        }
       }
     } catch (e) {
       clearTimeout(timeout);
