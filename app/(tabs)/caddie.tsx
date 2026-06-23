@@ -1330,6 +1330,20 @@ export default function CaddieTab() {
       case 'log_emotional_state': {
         const a = action as { state: string; valence: 'positive' | 'neutral' | 'negative' };
         logEmotionalState(a.state, a.valence, currentHole);
+        // 2026-06-23 (Tim — "don't see the emotion state pickup in the builds") —
+        // the log was wired into the brain but had NO visible surface, so a pickup
+        // was invisible (and Tim tests outside a round, where it's easy to miss).
+        // Append works regardless of round state; this just makes it VISIBLE with a
+        // warm, valence-aware confirmation so you can see the caddie register it.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
+          const emoji = a.valence === 'positive' ? '💚' : a.valence === 'negative' ? '🫶' : '👍';
+          const label = (a.state || '').trim();
+          toast.useToastStore.getState().show(
+            label ? `Noted — ${label} ${emoji}` : `Got it ${emoji}`,
+          );
+        } catch (e) { console.log('[caddie] emotion toast failed (non-fatal):', e); }
         break;
       }
       case 'record_swing':
