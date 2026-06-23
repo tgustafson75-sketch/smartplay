@@ -157,7 +157,7 @@ export default function RangeImportScreen() {
         </View>
         <View style={styles.pickBody}>
           <Ionicons name="alert-circle-outline" size={48} color={c.error ?? '#F87171'} style={styles.pickIcon} />
-          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>Couldn't read screenshot</Text>
+          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>Couldn&apos;t read screenshot</Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>{phase.message}</Text>
           {phase.retryable ? (
             <TouchableOpacity
@@ -187,7 +187,7 @@ export default function RangeImportScreen() {
             {phase.applied} distance{phase.applied === 1 ? '' : 's'} applied
           </Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>
-            Kevin's club recommendations are now calibrated to your real TopTracer carry numbers.
+            Kevin&apos;s club recommendations are now calibrated to your real TopTracer carry numbers.
           </Text>
           <TouchableOpacity
             style={[styles.pickBtn, { backgroundColor: c.accent }]}
@@ -271,7 +271,7 @@ export default function RangeImportScreen() {
         ) : null}
 
         <Text style={[styles.applyNote, { color: c.text_muted }]}>
-          Flat-carry numbers will calibrate Kevin's club recommendations. You can update or clear these any time in Settings → My Bag.
+          Flat-carry numbers will calibrate Kevin&apos;s club recommendations. You can update or clear these any time in Settings → My Bag.
         </Text>
 
         {/* CTA */}

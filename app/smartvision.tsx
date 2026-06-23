@@ -1297,7 +1297,7 @@ export default function SmartVisionScreen() {
     // commitCartCanvas runs per drag frame, so logging here logged dozens
     // of phantom shots per drag and inflated the score.
     lastCartFixRef.current = { lat, lng };
-  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive]);
+  }, [holeIndex, usingGpsTile, projection, imageW, imageH, calibration2Anchor, projectCanvasToLatLngVia2Anchor, currentHole, isRoundActive, holeKeyOf]);
 
   // Log a shot from the last committed cart fix — called only on a DISCRETE
   // commit (tap-end / drag-end), so a drag can't mint phantom shots. One
@@ -1391,7 +1391,7 @@ export default function SmartVisionScreen() {
       y: pinDragStartRef.current.y + dy,
     });
     setPinByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
-  }, [pinCanvas, holeIndex, clampToCanvas]);
+  }, [pinCanvas, holeIndex, clampToCanvas, holeKeyOf]);
 
   // Phase 108-followup — tee drag handler. Persists per hole into teeByHole.
   const onTeeDrag = useCallback((dx: number, dy: number) => {
@@ -1402,7 +1402,7 @@ export default function SmartVisionScreen() {
       y: teeDragStartRef.current.y + dy,
     });
     setTeeByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
-  }, [teeCanvas, holeIndex, clampToCanvas]);
+  }, [teeCanvas, holeIndex, clampToCanvas, holeKeyOf]);
 
   // Reset drag refs when hole changes
   useEffect(() => {

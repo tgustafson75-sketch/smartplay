@@ -90,7 +90,7 @@ export default function FeelingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>How'd it feel out there?</Text>
+        <Text style={styles.title}>How&apos;d it feel out there?</Text>
         <Text style={styles.subtitle}>Optional — helps your caddie personalize feedback.</Text>
 
         {/* Energy */}
