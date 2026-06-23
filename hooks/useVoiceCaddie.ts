@@ -1450,8 +1450,8 @@ export const useVoiceCaddie = ({
         // CockpitCaddieScreen advice card and the Full Mode bottom bubble.
         // 2026-06-19 (Tim — dead-zone testing) — SPEAK it via device TTS (works with no
         // signal), not just a text bubble the user can't see while driving.
-        onResponseReceived('I had trouble hearing that — try again.');
-        if (voiceEnabled) void speakDeviceNotice('I had trouble hearing that — try again.', language, voiceGender).catch(() => {});
+        onResponseReceived("Didn't catch that — say it again?");
+        if (voiceEnabled) void speakDeviceNotice("Didn't catch that — say it again?", language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
@@ -1803,12 +1803,12 @@ export const useVoiceCaddie = ({
       // the text bubble alone is invisible while driving. Honest about signal.
       if (aborted) {
         logTranscribeError(null, message, { source: 'process_audio_abort' });
-        const line = 'That took too long — weak signal. Try again in a sec.';
+        const line = "Didn't catch that — say it again?";
         onResponseReceived(line);
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       } else {
         logVoiceError('process_audio', err);
-        const line = "Can't reach the network — looks like weak signal. Try again when you've got bars.";
+        const line = "Something went wrong on my end — try again?";
         onResponseReceived(line);
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       }
