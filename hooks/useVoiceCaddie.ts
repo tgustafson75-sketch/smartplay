@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice } from '../services/voiceWarmup';
+import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import {
   configureAudioForRecording,
@@ -91,7 +92,6 @@ const TRANSCRIBE_TIMEOUT_MS = 45000;
 // mid-flight on good signal (Tim: "I have signal but it gives a failure state").
 // 30s covers the realistic path + network margin; the pathological 36s server
 // cap is rare and falls through to the graceful minimal-retry + local responder.
-const BRAIN_TIMEOUT_MS = 30000;
 
 // 2026-06-06 — handleMicPress silence-VAD config. Mirrors the
 // SILENCE_DB_THRESHOLD / SPEECH_DETECT_DB / SILENCE_TIMEOUT_MS in

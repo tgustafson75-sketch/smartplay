@@ -1,4 +1,5 @@
 import { Linking, Vibration } from 'react-native';
+import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
@@ -66,7 +67,6 @@ type SessionState = 'idle' | 'opening' | 'listening' | 'thinking' | 'responding'
 const INTENT_FETCH_TIMEOUT_MS = 8_000;
 // 2026-06-23 (smoke-test) — match useVoiceCaddie BRAIN_TIMEOUT_MS (30s) so the
 // active-listen path doesn't abort a healthy-but-slow brain the tap path would keep.
-const KEVIN_FETCH_TIMEOUT_MS = 30_000;
 
 // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — localStatusResponder
 // query types that are DETERMINISTIC + accuracy-safe to answer INSTANTLY from device

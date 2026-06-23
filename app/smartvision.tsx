@@ -81,7 +81,7 @@ import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // implementation duplicated utils/geoDistance.ts and was a maintenance
 // liability (three copies across this file, hole-view.tsx, and utils).
 // Single source of truth now lives in utils/geoDistance.ts.
-import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
+import { haversineYards as canonicalHaversineYards, bearingDegrees } from '../utils/geoDistance';
 import { planAimLines, layupFraction } from '../utils/layupPlan';
 import { LinearGradient } from 'expo-linear-gradient';
 // 2026-06-23 (Phase 3b) — honest AI recommendation bar. composeShotRead is
@@ -119,15 +119,8 @@ function haversineYards(lat1: number, lng1: number, lat2: number, lng2: number):
   return canonicalHaversineYards({ lat: lat1, lng: lng1 }, { lat: lat2, lng: lng2 });
 }
 
-function bearingDeg(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const φ1 = a.lat * Math.PI / 180;
-  const φ2 = b.lat * Math.PI / 180;
-  const y = Math.sin(dLng) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dLng);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
-
+// 2026-06-23 (audit dedup) — local bearingDeg removed; use canonical
+// bearingDegrees from utils/geoDistance (identical formula).
 function autoZoom(yardage: number, par: number): number {
   if (par === 3 || yardage < 180) return 18;
   if (yardage < 400) return 17;
@@ -751,7 +744,7 @@ export default function SmartVisionScreen() {
     if (!fit) return null;
     return fit;
   }, [teeCoord, greenCoord, imageW, imageH]);
-  void bearingDeg; void autoZoom; // legacy helpers retained for future use
+  void autoZoom; // legacy helper retained for future use
 
   // Marker positions in CANVAS-LOCAL pixel coordinates (top-left origin,
   // x increases right, y increases DOWN).
@@ -1065,7 +1058,7 @@ export default function SmartVisionScreen() {
   // fabricated success%. Drives the AI-rec bar above the F/M/B panel.
   const aiRead = useMemo(() => {
     if (yardages.middle == null) return null;
-    const bearing = (teeCoord && greenCoord) ? bearingDeg(teeCoord, greenCoord) : null;
+    const bearing = (teeCoord && greenCoord) ? bearingDegrees(teeCoord, greenCoord) : null;
     try {
       return composeShotRead({
         rawYards: yardages.middle,
