@@ -84,6 +84,12 @@ import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 import { haversineYards as canonicalHaversineYards } from '../utils/geoDistance';
 import { planAimLines, layupFraction } from '../utils/layupPlan';
 import { LinearGradient } from 'expo-linear-gradient';
+// 2026-06-23 (Phase 3b) — honest AI recommendation bar. composeShotRead is
+// pure/local/offline: club (from the player's REAL bag, ladder fallback) +
+// plays-like + a short "why" line. NO fabricated success% (per the
+// illustration-data rule — the mockup's "78%" is illustrative only).
+import { composeShotRead } from '../services/cnsShotRead';
+import { bagDistances } from '../services/shotStrategy';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -1007,6 +1013,24 @@ export default function SmartVisionScreen() {
     // user re-marks or drags the cart.
   }, [usingGpsTile, projection, targetPx, pinPx, teePx, geometry, courseHoles, holeIndex, calibration2Anchor, greenOverrideGeo, targetCanvas, projectCanvasToLatLngVia2Anchor]);
 
+  // 2026-06-23 (Phase 3b) — honest AI recommendation read. Pure/local/offline:
+  // the player's real bag (ladder fallback) picks the club for the MIDDLE
+  // distance; bearing comes from tee→green; weather is null here (SmartVision
+  // has no snapshot), so plays-like == raw — honest, just no wind line. No
+  // fabricated success%. Drives the AI-rec bar above the F/M/B panel.
+  const aiRead = useMemo(() => {
+    if (yardages.middle == null) return null;
+    const bearing = (teeCoord && greenCoord) ? bearingDeg(teeCoord, greenCoord) : null;
+    try {
+      return composeShotRead({
+        rawYards: yardages.middle,
+        weather: null,
+        shotBearingDeg: bearing,
+        bag: bagDistances(),
+      });
+    } catch { return null; }
+  }, [yardages.middle, teeCoord, greenCoord]);
+
   // 2026-06-13 (Tim #6) — Golfshot-style layup planning. The hole's playing
   // distance (tee→green) decides whether the view shows one direct line or a
   // two-segment layup plan; the waypoint rides the tee→pin axis at the layup
@@ -1800,6 +1824,22 @@ export default function SmartVisionScreen() {
       {/* Mark T/P is voice-only — "mark tee" / "mark the green". No visible buttons.
           The signal store is set by caddie.tsx's handleToolAction and consumed here. */}
 
+      {/* 2026-06-23 (Phase 3b) — AI recommendation bar. Floats just above the
+          F/M/B panel (portrait only). Honest signals only: club from the real
+          bag + plays-like + top "why" line. No fabricated success %. */}
+      {!isSplit && aiRead?.club && yardages.middle != null && (
+        <View style={[styles.aiRecBar, { bottom: BOTTOM_PANEL_H + Math.max(insets.bottom, 8) }]} pointerEvents="none">
+          <Ionicons name="sparkles" size={15} color="#88F700" />
+          <Text style={styles.aiRecClub}>{aiRead.club}</Text>
+          <View style={styles.aiRecDivider} />
+          <Text style={styles.aiRecSub} numberOfLines={1}>
+            {aiRead.deltaYards !== 0 ? `plays like ${aiRead.playsLikeYards}y` : `${aiRead.playsLikeYards}y to pin`}
+            {aiRead.why[0] ? `  ·  ${aiRead.why[0]}` : ''}
+            {aiRead.hazardNote ? `  ·  ${aiRead.hazardNote}` : ''}
+          </Text>
+        </View>
+      )}
+
       {/* Bottom panel — F/M/B yardages from yellow target. Phase 406:
           on landscape, this becomes a right-side column (flexDirection
           column, fixed width = SIDE_PANEL_W, fills available height);
@@ -1921,6 +1961,17 @@ const styles = StyleSheet.create({
   },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
+  // 2026-06-23 (Phase 3b) — AI recommendation bar (floats above F/M/B panel).
+  aiRecBar: {
+    position: 'absolute', left: 10, right: 10, zIndex: 25,
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    borderWidth: 1, borderColor: 'rgba(136,247,0,0.45)',
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 9,
+  },
+  aiRecClub: { color: '#88F700', fontSize: 19, fontWeight: '900', letterSpacing: 0.3 },
+  aiRecDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.18)', marginHorizontal: 2 },
+  aiRecSub: { color: '#e5e7eb', fontSize: 13, fontWeight: '600', flex: 1, fontVariant: ['tabular-nums'] },
   marker: {
     position: 'absolute',
     borderWidth: 2,

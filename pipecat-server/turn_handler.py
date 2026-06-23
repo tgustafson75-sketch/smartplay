@@ -17,7 +17,7 @@ Flow:
 import os
 from anthropic import AsyncAnthropic
 from kevin_prompt import build_kevin_system
-from kevin_tools import KEVIN_TOOLS, UI_TOOLS
+from kevin_tools import KEVIN_TOOLS, UI_TOOLS, PERSIST_TOOLS
 import httpx
 
 anthropic = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
@@ -161,6 +161,12 @@ async def handle_turn(
                 # Client handles these; add to tool_actions and return a stub result
                 tool_actions.append({"type": name, **args})
                 result_text = f"Opening {name.replace('_', ' ')}."
+            elif name in PERSIST_TOOLS:
+                # 2026-06-23 — route to the CLIENT (not Vercel) so handleToolAction
+                # persists to roundStore + CNS. Previously these were server-routed
+                # and silently dropped: "shot logged" spoken, scorecard got nothing.
+                tool_actions.append({"type": name, **args})
+                result_text = _persist_ack(name, args)
             else:
                 result_text = await _call_vercel_tool(name, args, session_id)
 
@@ -186,6 +192,20 @@ async def handle_turn(
         "tool_actions": tool_actions,
         "updated_history": updated_history,
     }
+
+
+def _persist_ack(name: str, args: dict) -> str:
+    """Synthetic confirmation fed back to Claude's loop after a client-persist tool.
+    The actual persistence happens client-side via handleToolAction (tool_actions)."""
+    if name == "log_score":
+        hole = args.get("hole")
+        return f"Score {args.get('score')} logged" + (f" for hole {hole}." if hole else ".")
+    if name == "log_shot":
+        bits = [f"{k}: {args[k]}" for k in ("club", "direction", "contactQuality", "outcome") if args.get(k)]
+        return "Shot logged" + (f" ({', '.join(bits)})." if bits else ".")
+    if name == "log_emotional_state":
+        return "Noted."
+    return f"{name} logged."
 
 
 def _build_live_context(context: dict) -> str:

@@ -151,6 +151,15 @@ KEVIN_TOOLS = [
 # ── UI tool names — handled locally, not bridged to Vercel ───────────────────
 UI_TOOLS = {"open_smartvision", "open_smartfinder", "open_swinglab", "record_swing"}
 
+# ── Persist tools — dispatched to the CLIENT as tool_actions so the RN
+# handleToolAction persists them to roundStore + CNS (scorecard, shot log,
+# emotional log). 2026-06-23: these were wrongly routed server-side (just
+# console.log'd in /api/pipecat-tool), so the caddie SAID "shot logged" on the
+# live-voice path while the scorecard/CNS got NOTHING. They carry their args to
+# the client exactly like UI tools; the server returns a synthetic confirmation
+# to Claude's agentic loop. lookup_course/lookup_hole stay server-routed (real fetch).
+PERSIST_TOOLS = {"log_shot", "log_score", "log_emotional_state"}
+
 # ── Tool handler registry ────────────────────────────────────────────────────
 
 async def handle_tool_call(tool_name: str, tool_input: dict, session_ctx: dict, push_ui_event) -> str:
