@@ -605,6 +605,15 @@ interface CageState {
   setDistanceCalibration: (yards: number, cageId?: string) => void;
   getClubProfile: (club: string) => CageState['clubProfiles'][string] | null;
   updateShotLabels: (sessionId: string, shotId: string, labels: ReviewLabels, transcript: string) => void;
+  /** 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
+   *  — reassign a session's golfer attribution. Immutably sets the
+   *  session's player_id (the only record that carries it — CageShot has
+   *  no player_id, so there's nothing per-shot to mirror). Pass the same
+   *  value derivePlayerId() would yield for the chosen golfer: a family
+   *  member id, the account holder's lowercased email, or 'account_holder'.
+   *  Searches activeSession AND sessionHistory like the sibling setters so
+   *  an in-flight session can be reassigned too. */
+  setSessionPlayer: (sessionId: string, playerId: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────
@@ -1394,6 +1403,23 @@ export const useCageStore = create<CageState>()(
             }
           ),
         })),
+
+      // 2026-06-23 (Tim) — reassign golfer attribution. player_id lives ONLY on
+      // CageSession (CageShot has none), so this patches the session and there's
+      // nothing per-shot to update. Dual-update activeSession + history like the
+      // other session setters above.
+      setSessionPlayer: (sessionId, playerId) =>
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
+            session.id !== sessionId ? session : { ...session, player_id: playerId };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId
+                ? apply(s.activeSession)
+                : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
     }),
     {
       name: 'cage-store-v1',

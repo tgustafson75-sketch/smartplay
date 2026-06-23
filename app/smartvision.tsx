@@ -453,6 +453,19 @@ export default function SmartVisionScreen() {
   // a viewer across the whole course without forcing the round to follow.
   const [holeIndex, setHoleIndex] = useState<number>(currentHole || 1);
 
+  // 2026-06-23 (SV-4) — per-hole marker OVERRIDE maps (targetByHole / pinByHole /
+  // teeByHole) were keyed by holeIndex ALONE. If SmartVision stayed mounted across
+  // a course switch, hole N of course A would leak its override onto hole N of
+  // course B (the in-memory map carries across, the key collides). Composite the
+  // key with the courseId so each (course, hole) pair owns its own override.
+  // courseId is defined just above; fall back to '_' when it's null (single-course
+  // behavior is unchanged — every read/write uses the SAME composite consistently).
+  const holeKeyOf = useCallback(
+    (idx: number) => `${effectiveCourseId ?? '_'}:${idx}`,
+    [effectiveCourseId],
+  );
+  const holeKey = holeKeyOf(holeIndex);
+
   // 2026-05-17 — Curated bundled image. Prefer the courseId-keyed lookup
   // (canonical) and fall back to courseName-based substring matching
   // only when courseId is missing. Hoisted ABOVE the canvas sizing (2026-06-23)
@@ -504,18 +517,18 @@ export default function SmartVisionScreen() {
   // Defaults to the midpoint of the bearing axis (50% of the way from tee
   // to green) on first view of each hole; persists in component memory
   // across hole switches so the user's adjustments aren't lost.
-  const [targetByHole, setTargetByHole] = useState<Record<number, { x: number; y: number }>>({});
+  const [targetByHole, setTargetByHole] = useState<Record<string, { x: number; y: number }>>({});
   // Per-hole pin override — same shape, but for the red Pin marker which
   // is now draggable. Defaults to green centroid; user can drag it to
   // simulate today's pin position (front/middle/back of green).
-  const [pinByHole, setPinByHole] = useState<Record<number, { x: number; y: number }>>({});
+  const [pinByHole, setPinByHole] = useState<Record<string, { x: number; y: number }>>({});
   // Phase 108-followup — per-hole tee override. Matches pinByHole shape.
   // Lets the user nudge the T marker when course geometry positions it
   // off the actual tee box (golfcourseapi quality varies by course).
   // Drag is only enabled when no round is active per Tim's request —
   // mid-round, the tee marker should reflect the actual tee box and not
   // be accidentally moved by a fat-finger gesture during play.
-  const [teeByHole, setTeeByHole] = useState<Record<number, { x: number; y: number }>>({});
+  const [teeByHole, setTeeByHole] = useState<Record<string, { x: number; y: number }>>({});
 
   // Golfbert premium-data state — populated when the active course has a
   // mapping AND the upstream proxy returns data successfully. Holds the
@@ -834,7 +847,7 @@ export default function SmartVisionScreen() {
     return calibrationToCanvas(calibration, imageW, imageH);
   }, [calibration, imageW, imageH]);
 
-  const teeOverride = teeByHole[holeIndex];
+  const teeOverride = teeByHole[holeKey];
   // 2026-06-23 (Tim — "move the measurement lines and the T box jumps off-screen,
   // can't see it") — the GPS-projection path returns UNCLAMPED pixels, so when a
   // target move triggers a reconcile the projected tee/pin can land off-canvas and
@@ -887,7 +900,7 @@ export default function SmartVisionScreen() {
   }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
 
   // Pin override (user-dragged) — stored in canvas coords.
-  const pinOverride = pinByHole[holeIndex];
+  const pinOverride = pinByHole[holeKey];
   const pinCanvas = pinOverride ?? pinDefaultCanvas;
 
   // Pixel-relative (+y up) versions for legacy yardage interpolation.
@@ -979,7 +992,7 @@ export default function SmartVisionScreen() {
 
   // Yellow target — defaults to midpoint of tee→pin if no override set.
   // Stored in CANVAS coords (top-left origin, y down) for direct render.
-  const targetOverride = targetByHole[holeIndex];
+  const targetOverride = targetByHole[holeKey];
   const targetCanvas = useMemo(() => {
     if (targetOverride) return targetOverride;
     return { x: (teeCanvas.x + pinCanvas.x) / 2, y: (teeCanvas.y + pinCanvas.y) / 2 };
@@ -1229,7 +1242,7 @@ export default function SmartVisionScreen() {
   const shotTrackingInFlightRef = useRef(false);
 
   const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
-    setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
+    setTargetByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: canvasCoord }));
     let lat: number | null = null;
     let lng: number | null = null;
     if (usingGpsTile && projection) {
@@ -1353,7 +1366,7 @@ export default function SmartVisionScreen() {
       });
     }
     if (canvasCoord) {
-      setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord! }));
+      setTargetByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: canvasCoord! }));
       pendingReconcileAtRef.current = 0;
       console.log('[smartvision] cart auto-reconciled to live GPS');
     }
@@ -1377,7 +1390,7 @@ export default function SmartVisionScreen() {
       x: pinDragStartRef.current.x + dx,
       y: pinDragStartRef.current.y + dy,
     });
-    setPinByHole(prev => ({ ...prev, [holeIndex]: next }));
+    setPinByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
   }, [pinCanvas, holeIndex, clampToCanvas]);
 
   // Phase 108-followup — tee drag handler. Persists per hole into teeByHole.
@@ -1388,7 +1401,7 @@ export default function SmartVisionScreen() {
       x: teeDragStartRef.current.x + dx,
       y: teeDragStartRef.current.y + dy,
     });
-    setTeeByHole(prev => ({ ...prev, [holeIndex]: next }));
+    setTeeByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
   }, [teeCanvas, holeIndex, clampToCanvas]);
 
   // Reset drag refs when hole changes
@@ -1429,7 +1442,7 @@ export default function SmartVisionScreen() {
   // for this hole (targetByHole[holeIndex] is undefined). Once they
   // drag or tap, their pick wins until they leave the screen.
   useEffect(() => {
-    if (targetByHole[holeIndex]) return; // user already placed cart this session
+    if (targetByHole[holeKey]) return; // user already placed cart this session
     if (!usingGpsTile || !projection) return; // Mode 2 — no projection
     const fix = getLastFix();
     if (!fix || !fix.location || typeof fix.location.lat !== 'number' || typeof fix.location.lng !== 'number') return;
@@ -1459,7 +1472,7 @@ export default function SmartVisionScreen() {
         return;
       }
       const canvasCoord = clampToCanvas(unclamped);
-      setTargetByHole(prev => ({ ...prev, [holeIndex]: canvasCoord }));
+      setTargetByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: canvasCoord }));
     } catch (e) {
       console.log('[smartvision] gps-init cart failed (non-fatal):', e);
     }
@@ -1494,7 +1507,7 @@ export default function SmartVisionScreen() {
         if (!teeGeo) { toastMod.useToastStore.getState().show('No GPS — stand at the tee and try again'); return; }
         const teeMod = require('../services/courseTeeOverrides') as typeof import('../services/courseTeeOverrides');
         void teeMod.setTeeOverride(courseId, holeIndex, teeGeo);
-        if (!usingGpsTile) setTeeByHole(prev => ({ ...prev, [holeIndex]: { x: teeCanvas.x, y: teeCanvas.y } }));
+        if (!usingGpsTile) setTeeByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: { x: teeCanvas.x, y: teeCanvas.y } }));
         toastMod.useToastStore.getState().show(`Tee marked for hole ${holeIndex}`);
       } else {
         let pinGeo: { lat: number; lng: number } | null = null;
@@ -1508,7 +1521,7 @@ export default function SmartVisionScreen() {
         if (!pinGeo) { toastMod.useToastStore.getState().show('No GPS — stand near the green and try again'); return; }
         const greenMod = require('../services/courseGreenOverrides') as typeof import('../services/courseGreenOverrides');
         void greenMod.setGreenOverride(courseId, holeIndex, pinGeo);
-        if (!usingGpsTile) setPinByHole(prev => ({ ...prev, [holeIndex]: { x: pinCanvas.x, y: pinCanvas.y } }));
+        if (!usingGpsTile) setPinByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: { x: pinCanvas.x, y: pinCanvas.y } }));
         toastMod.useToastStore.getState().show(`Green marked for hole ${holeIndex}`);
       }
     } catch (e) { console.log('[smartvision] voice mark failed:', e); }

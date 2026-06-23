@@ -1216,12 +1216,19 @@ export async function ingestVideoFromPick(args: {
     perspective: inferredPerspective,
     angleOverride: args.angleOverride ?? null,
   };
-  // Persist the clip into documents BEFORE ingest so the stored clipUri is
-  // durable (replayable + re-analyzable later). Falls back to the original uri
-  // on any copy failure — never blocks the upload.
-  const persistentUri = await persistClipToDocuments(args.uri);
+  // 2026-06-23 (RP-7) — Persisting a 120-180MB clip into documents (copyAsync)
+  // used to be AWAITED here, on the upload-landing critical path: the user
+  // stared at a stall while the OS copied the whole file AND we briefly held 2×
+  // the clip on disk before ingest/analysis could even start. Fix: ingest +
+  // analyze immediately on the ORIGINAL cache uri (analysis/replay can read the
+  // cache file — it stays valid until the OS reclaims it, long after the copy
+  // finishes), and do the durable copy in the BACKGROUND. When the copy lands,
+  // repoint the persisted record to the durable path so replay/re-analysis
+  // survives cache eviction. Copy semantics are unchanged (still copyAsync via
+  // persistClipToDocuments) — only the AWAIT moved off the hot path.
+  const ingestUri = args.uri;
   const sessionId = useCageStore.getState().ingestUploadedSwing({
-    clipUri: persistentUri,
+    clipUri: ingestUri,
     club: args.club,
     upload,
   });
@@ -1232,10 +1239,35 @@ export async function ingestVideoFromPick(args: {
     has_audio: upload.has_audio,
     duration_sec: upload.duration_sec,
   });
+  // Background durable-copy + repoint. NOT awaited — never blocks the landing.
+  // On completion, repoint EVERY shot still pointing at the original cache uri
+  // (covers the single ingested shot AND any shots the multi-swing expansion in
+  // runPhaseKOnSession carved out, which inherit the same clipUri). If the copy
+  // fails, persistClipToDocuments returns the original uri unchanged → no-op, no
+  // regression (the cache uri stays in the record, exactly as before this fix).
+  void (async () => {
+    try {
+      const durable = await persistClipToDocuments(ingestUri, sessionId);
+      if (durable && durable !== ingestUri) {
+        const store = useCageStore.getState();
+        const fresh = store.sessionHistory.find(s => s.id === sessionId);
+        for (const shot of fresh?.shots ?? []) {
+          if (shot.id && shot.clipUri === ingestUri) {
+            store.setShotClipUri(sessionId, shot.id, durable);
+          }
+        }
+        uploadLog('clip-persist-repointed', { session_id: sessionId, tail: durable.slice(-40) }, sessionId);
+      }
+    } catch (e) {
+      console.log('[videoUpload] background clip persist failed (cache uri retained):', e);
+    }
+  })();
   // 2026-06-15 (Tim — "no thumbnails for the last 5") — generate the library thumbnail
   // EAGERLY now (fresh clip), not lazily on library-open over a 120-180MB file (which
   // times out → missing thumbs). Uploads have no acoustic strike → representative frame.
-  void ensureSwingThumbnail(sessionId, persistentUri, null);
+  // Generated from the cache uri (valid now); the thumbnail is a small derived
+  // asset under documents and is unaffected by the later clip repoint.
+  void ensureSwingThumbnail(sessionId, ingestUri, null);
   // Promote the pre-session timing key to a session-keyed one so the
   // analysis-trigger / pose-detection / ui-render markers all share a
   // continuous elapsed-total clock from pickVideo through to UI render.

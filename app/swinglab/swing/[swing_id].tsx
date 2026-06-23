@@ -22,6 +22,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
+import { useFamilyStore } from '../../../store/familyStore';
 import { exportCoachReport } from '../../../services/coachReport';
 import { getCaptureKind } from '../../../services/swingLibrary';
 import { getSwingReference } from '../../../services/swingReferences';
@@ -124,6 +125,63 @@ export default function SwingDetail() {
   // Library hydration race fix — same pattern as app/swinglab/library.tsx.
   const hasHydrated = useCageStore(s => s.hasHydrated);
   const shot = session?.shots[0];
+
+  // 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
+  // — golfer attribution editor. The session.player_id resolves to a display
+  // name: a family member's firstName, or "You" for the account holder
+  // (email / 'account_holder' fallback). Subscribed reactively so adding a
+  // golfer or reassigning re-renders the chip immediately.
+  const familyMembers = useFamilyStore(s => s.members);
+  const profileEmail = usePlayerProfileStore(s => s.email);
+  const familyAddMember = useFamilyStore(s => s.addMember);
+  const [golferSheetOpen, setGolferSheetOpen] = useState(false);
+  const [addGolferOpen, setAddGolferOpen] = useState(false);
+  const [newGolferName, setNewGolferName] = useState('');
+  // The value derivePlayerId() yields for the account holder when no family
+  // member is active: lowercased profile email, else 'account_holder'. Reused
+  // verbatim (no hardcoded 'account_holder' when an email exists) so the "You"
+  // row writes the SAME id ingest would have stamped.
+  const accountHolderPlayerId = useMemo(
+    () => (profileEmail && profileEmail.trim().length > 0 ? profileEmail.trim().toLowerCase() : 'account_holder'),
+    [profileEmail],
+  );
+  const currentPlayerId = session?.player_id ?? accountHolderPlayerId;
+  // Resolve player_id → display name. A family member id matches a roster
+  // entry (firstName); 'account_holder' or any email = "You".
+  const golferDisplayName = useMemo(() => {
+    const member = familyMembers.find(m => m.id === currentPlayerId);
+    if (member) return member.firstName;
+    return 'You';
+  }, [familyMembers, currentPlayerId]);
+  const activeGolfers = useMemo(
+    () => familyMembers.filter(m => !m.archived).sort((a, b) => a.added_at - b.added_at),
+    [familyMembers],
+  );
+  const assignGolfer = useCallback((playerId: string) => {
+    if (!swing_id) return;
+    useCageStore.getState().setSessionPlayer(swing_id, playerId);
+    setGolferSheetOpen(false);
+    setAddGolferOpen(false);
+    setNewGolferName('');
+  }, [swing_id]);
+  const onAddGolferSubmit = useCallback(() => {
+    const name = newGolferName.trim();
+    if (!name) return;
+    // addMember requires the full FamilyMember shape minus id/timestamps/archived.
+    // Sensible neutral defaults — this is a quick "+ Add golfer" from the swing
+    // editor, not the full Family roster form; the user can flesh out details in
+    // Settings → Family later.
+    const newId = familyAddMember({
+      firstName: name,
+      relationship: 'other',
+      age: null,
+      skillLevel: 'developing',
+      handedness: 'unknown',
+      approximate_handicap: null,
+      avatar_emoji: '🏌️',
+    });
+    assignGolfer(newId);
+  }, [newGolferName, familyAddMember, assignGolfer]);
 
   // 2026-06-23 (Tim — "still can't play my swing library videos") — resolve the
   // stored clipUri to a path that exists under the CURRENT app container before
@@ -297,6 +355,15 @@ export default function SwingDetail() {
   }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
+  // 2026-06-23 (RP-6) — autoplay-on-open is preserved (Tim: "videos all play"),
+  // but the auto-LOOP fights "scrub then analyze this moment" on a re-opened
+  // pending upload — the clip keeps restarting under the held frame. Once the
+  // user ACTIVELY scrubs/seeks, flip this true so isLooping goes false and the
+  // frame they pointed at HOLDS. Open-time playback is untouched (only a real
+  // scrub interaction trips it, not the initial autoplay).
+  const [userScrubbed, setUserScrubbed] = useState(false);
+  // Reset on swing change so a freshly-opened swing autoplays/loops again.
+  useEffect(() => { setUserScrubbed(false); }, [swing_id]);
 
   const poseFrames = session?.biomechanics?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
@@ -566,6 +633,9 @@ export default function SwingDetail() {
     // 2026-06-15 (Tim) — seek + HOLD the frame (don't force play). Scrubbing to
     // a position on a swing is a "show me this frame" action; auto-playing from
     // there fights the static-by-default behavior. Tap the frame to play.
+    // 2026-06-23 (RP-6) — a real scrub is the signal to STOP the auto-loop, so
+    // the held frame doesn't get yanked back to the top on the next loop tick.
+    setUserScrubbed(true);
     await videoRef.current?.setPositionAsync(sec * 1000);
     await videoRef.current?.pauseAsync();
   };
@@ -973,11 +1043,27 @@ export default function SwingDetail() {
               {session.upload?.notes ?? `${session.club} swing`}
             </Text>
             {/* Phase 2 — capture-kind badge: the entry identifies its own source. */}
-            <View style={[styles.kindBadge, { borderColor: KIND_BADGE.tint }]}>
-              <Ionicons name={KIND_BADGE.icon} size={11} color={KIND_BADGE.tint} />
-              <Text style={[styles.kindBadgeText, { color: KIND_BADGE.tint }]} numberOfLines={1}>
-                {KIND_BADGE.label}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+              <View style={[styles.kindBadge, { borderColor: KIND_BADGE.tint, marginTop: 0 }]}>
+                <Ionicons name={KIND_BADGE.icon} size={11} color={KIND_BADGE.tint} />
+                <Text style={[styles.kindBadgeText, { color: KIND_BADGE.tint }]} numberOfLines={1}>
+                  {KIND_BADGE.label}
+                </Text>
+              </View>
+              {/* 2026-06-23 (Tim) — GOLFER chip: always-editable golfer attribution.
+                  Tap to reassign who hit this swing (you / a family member / add one). */}
+              <TouchableOpacity
+                onPress={() => { setAddGolferOpen(false); setGolferSheetOpen(true); }}
+                style={[styles.kindBadge, { borderColor: colors.accent, marginTop: 0 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Golfer: ${golferDisplayName}. Tap to change who hit this swing.`}
+              >
+                <Ionicons name="person-circle-outline" size={12} color={colors.accent} />
+                <Text style={[styles.kindBadgeText, { color: colors.accent }]} numberOfLines={1}>
+                  {golferDisplayName}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
           <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>
@@ -1173,7 +1259,10 @@ export default function SwingDetail() {
                 // loads (muted + looping for library so scrubbing/replay is calm);
                 // tap still pauses. watch-then-analyze keeps its own audio path.
                 shouldPlay
-                isLooping={true}
+                // 2026-06-23 (RP-6) — loop until the user actively scrubs/seeks; then
+                // stop looping so they can HOLD a frame to "analyze this moment". Open-
+                // time autoplay is unaffected (userScrubbed starts false).
+                isLooping={!userScrubbed}
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
@@ -1594,6 +1683,81 @@ export default function SwingDetail() {
                   })}
                 </ScrollView>
                 <TouchableOpacity onPress={() => setLinkPickerOpen(false)} style={styles.linkCancel}>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* 2026-06-23 (Tim) — golfer attribution picker. Always-editable: who hit
+              this swing. Rows = You (account holder) + each family member + "Add
+              golfer". The auto-detect row is a disabled future stub. Mirrors the
+              link-picker bottom-sheet styling. Hoisted out of any status block so it
+              survives a re-analyze. */}
+          <Modal visible={golferSheetOpen} transparent animationType="slide" onRequestClose={() => setGolferSheetOpen(false)}>
+            <View style={styles.linkBackdrop}>
+              <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Who hit this swing?</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Tag the golfer so this swing files under the right person.</Text>
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {/* You (account holder) */}
+                  <TouchableOpacity
+                    style={[styles.linkRow, { borderColor: colors.border }]}
+                    onPress={() => assignGolfer(accountHolderPlayerId)}
+                  >
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>You (account holder)</Text>
+                    {currentPlayerId === accountHolderPlayerId ? (
+                      <Ionicons name="checkmark" size={18} color={colors.accent} />
+                    ) : null}
+                  </TouchableOpacity>
+                  {/* One row per family member */}
+                  {activeGolfers.map((m) => (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[styles.linkRow, { borderColor: colors.border }]}
+                      onPress={() => assignGolfer(m.id)}
+                    >
+                      <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{m.firstName}</Text>
+                      {currentPlayerId === m.id ? (
+                        <Ionicons name="checkmark" size={18} color={colors.accent} />
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                  {/* + Add golfer — inline input, no leaving the sheet */}
+                  {addGolferOpen ? (
+                    <View style={[styles.linkRow, { borderColor: colors.border }]}>
+                      <TextInput
+                        value={newGolferName}
+                        onChangeText={setNewGolferName}
+                        placeholder="Golfer's name"
+                        placeholderTextColor={colors.text_muted}
+                        autoFocus
+                        returnKeyType="done"
+                        onSubmitEditing={onAddGolferSubmit}
+                        style={{ flex: 1, marginRight: 10, color: colors.text_primary, fontSize: 14, fontWeight: '600', paddingVertical: 2 }}
+                      />
+                      <TouchableOpacity onPress={onAddGolferSubmit} disabled={!newGolferName.trim()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={[styles.linkRowBadge, { color: newGolferName.trim() ? colors.accent : colors.text_muted }]}>ADD</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.linkRow, { borderColor: colors.border }]}
+                      onPress={() => setAddGolferOpen(true)}
+                    >
+                      <Text style={[styles.linkRowText, { color: colors.accent }]} numberOfLines={1}>+ Add golfer…</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* FUTURE: biometric auto-register (face/body signature from swing frames → match to family member). Stubbed per Tim 2026-06-23 — needs consent decision before building. See memory: golfer biometric stub. */}
+                  <View
+                    style={[styles.linkRow, { borderColor: colors.border, opacity: 0.4 }]}
+                    pointerEvents="none"
+                  >
+                    <Text style={[styles.linkRowText, { color: colors.text_muted }]} numberOfLines={1}>✨ Auto-detect golfer · Coming soon</Text>
+                    <Ionicons name="scan-outline" size={16} color={colors.text_muted} />
+                  </View>
+                </ScrollView>
+                <TouchableOpacity onPress={() => { setGolferSheetOpen(false); setAddGolferOpen(false); setNewGolferName(''); }} style={styles.linkCancel}>
                   <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
                 </TouchableOpacity>
               </View>

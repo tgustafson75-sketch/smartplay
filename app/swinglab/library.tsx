@@ -14,7 +14,7 @@
  *   - Empty states: cleaner copy + correct CTA per context.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
   ActivityIndicator,
@@ -147,6 +147,11 @@ export default function SwingLibrary() {
   // "unavailable" badge surfaces on rows whose video file is gone so
   // they know why tapping in won't play.
   const [fileStatus, setFileStatus] = useState<Map<string, { video: boolean; thumb: boolean }>>(new Map());
+  // 2026-06-23 (RP-8) — when the probe re-anchors a stale clip uri (resolveClipUri)
+  // to the live-container path, PERSIST the healed path once so the next render/open
+  // doesn't redo the FS re-anchor work. Guarded by a ref Set keyed by shot id so each
+  // shot heals at most once per mount (no write-during-scroll storm).
+  const healedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!hasHydrated) return;
     if (entries.length === 0) return;
@@ -173,6 +178,19 @@ export default function SwingLibrary() {
               const resolved = await resolveClipUri(clipUri);
               videoOk = resolved != null;
               if (resolved) playableUri = resolved;
+              // 2026-06-23 (RP-8) — heal-persist: if the path genuinely changed
+              // (stale UUID prefix re-anchored under the live container) AND the
+              // file exists, write it back ONCE per shot so we stop re-anchoring
+              // every render/open. resolveClipUri only returns a !== value when
+              // the basename was found under the live Documents, so existence is
+              // already implied. healedRef keyed by shot id prevents a write storm.
+              const healShotId = entry.session.shots[0]?.id ?? null;
+              if (resolved && resolved !== clipUri && healShotId && !healedRef.current.has(healShotId)) {
+                healedRef.current.add(healShotId);
+                try {
+                  useCageStore.getState().setShotClipUri(entry.session.id, healShotId, resolved);
+                } catch { /* non-fatal — re-anchor still works at read time next pass */ }
+              }
             } catch { videoOk = false; }
           } else if (clipUri && !clipUri.startsWith('file://')) {
             videoOk = true;
