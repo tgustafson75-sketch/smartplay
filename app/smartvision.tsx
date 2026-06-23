@@ -804,25 +804,35 @@ export default function SmartVisionScreen() {
   }, [calibration, imageW, imageH]);
 
   const teeOverride = teeByHole[holeIndex];
+  // 2026-06-23 (Tim — "move the measurement lines and the T box jumps off-screen,
+  // can't see it") — the GPS-projection path returns UNCLAMPED pixels, so when a
+  // target move triggers a reconcile the projected tee/pin can land off-canvas and
+  // vanish (also hard-clipped now by the canvasBox overflow:hidden). Clamp BOTH
+  // markers to stay fully visible (marker radius ≈ 20px). On curated holes the
+  // calibrated points are already in-bounds, so this is a no-op there.
+  const clampMarker = useCallback((p: { x: number; y: number }) => ({
+    x: Math.max(22, Math.min(imageW - 22, p.x)),
+    y: Math.max(22, Math.min(imageH - 22, p.y)),
+  }), [imageW, imageH]);
   const teeCanvas = useMemo(() => {
     if (teeOverride) return teeOverride;
     // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
     if (!onCuratedPhoto && teeCoord && projection) {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
-      return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
     }
-    if (calibratedPoints) return calibratedPoints.tee;
+    if (calibratedPoints) return clampMarker(calibratedPoints.tee);
     return { x: imageW / 2, y: imageH * 0.85 };
-  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto]);
+  }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
   const pinDefaultCanvas = useMemo(() => {
     // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
     if (!onCuratedPhoto && greenCoord && projection) {
       const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
-      return { x: imageW / 2 + off.x, y: imageH / 2 - off.y };
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
     }
-    if (calibratedPoints) return calibratedPoints.green;
+    if (calibratedPoints) return clampMarker(calibratedPoints.green);
     return { x: imageW / 2, y: imageH * 0.15 };
-  }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto]);
+  }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
 
   // Pin override (user-dragged) — stored in canvas coords.
   const pinOverride = pinByHole[holeIndex];
