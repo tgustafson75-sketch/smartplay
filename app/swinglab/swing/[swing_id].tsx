@@ -28,7 +28,7 @@ import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
-import { runPhaseKOnSession, resolveClipUri } from '../../../services/videoUpload';
+import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
 // 2026-05-28 — Fix FI: presence fill when analysis fails. Instead of
 // leaving the user staring at "Couldn't analyze this one" with no
 // caddie voice, the caddie speaks a short context-aware line
@@ -702,6 +702,12 @@ export default function SwingDetail() {
     const history = useCageStore.getState().sessionHistory;
     const sameStudent = swinger ? history.filter(h => (h.upload?.swinger ?? null) === swinger) : [];
     useToastStore.getState().show('Building report…');
+    // 2026-06-23 (RP-3b) — the fault frame is an IMAGE asset under smartmotion/
+    // (not a clip), so resolveClipUri (swing_clips/ only) can't heal it. Re-anchor
+    // it with resolveImageUri so a post-reinstall export embeds the real picture
+    // instead of a stale (UUID-rotated) path that resolves to nothing.
+    const rawFaultFrame = session.fault_frame_uri ?? pi?.visual_reference_path ?? null;
+    const faultFrameUri = (await resolveImageUri(rawFaultFrame)) ?? rawFaultFrame;
     const res = await exportCoachReport({
       studentName: swinger,
       instructorName: profile.name || profile.firstName || 'Your Instructor',
@@ -709,7 +715,7 @@ export default function SwingDetail() {
       sessionDateMs: session.upload?.uploaded_at ?? Date.now(),
       sessionNumber: sameStudent.length > 0 ? sameStudent.length : null,
       // image frames only (never the video clip) for the embedded picture
-      faultFrameUri: session.fault_frame_uri ?? pi?.visual_reference_path ?? null,
+      faultFrameUri,
       analysis: pi ? {
         primaryFault: pi.primary_fault ?? null,
         observation: pi.mechanical_breakdown ?? pi.layman_explanation ?? null,
@@ -840,12 +846,24 @@ export default function SwingDetail() {
           const FS = await import('expo-file-system/legacy');
           const info = await FS.getInfoAsync(clip);
           if (!info.exists) {
-            useCageStore.getState().setSessionAnalysisStatus(
-              swing_id,
-              'failed',
-              "The original video isn't on this device anymore, so I can't re-watch it. Re-upload the clip and I'll analyze it fresh.",
-            );
-            return;
+            // 2026-06-23 (RP-4) — before declaring the clip gone, re-anchor the
+            // stored absolute path under the LIVE documentDirectory. iOS rotates
+            // the app-container UUID on a native build/reinstall, so the stored
+            // path points at the OLD container even though the file survived under
+            // the new one. resolveClipUri heals the basename; if the healed path
+            // exists, repoint the store and continue with it. Only show the honest
+            // "not on device" failure when the healed path is ALSO gone.
+            const resolved = await resolveClipUri(clip);
+            if (resolved && resolved !== clip && shot?.id) {
+              useCageStore.getState().setShotClipUri(swing_id, shot.id, resolved);
+            } else if (!resolved) {
+              useCageStore.getState().setSessionAnalysisStatus(
+                swing_id,
+                'failed',
+                "The original video isn't on this device anymore, so I can't re-watch it. Re-upload the clip and I'll analyze it fresh.",
+              );
+              return;
+            }
           }
         }
       } catch { /* fall through — let analysis try */ }
@@ -990,11 +1008,18 @@ export default function SwingDetail() {
                   if (session.coach_note) {
                     ctx.push(`Player note: ${session.coach_note}`);
                   }
-                  void sendSwingToTank({
-                    videoUri: clip,
-                    swingTitle: session.upload?.notes ?? `${session.club} swing`,
-                    contextLines: ctx,
-                  }).then(result => {
+                  // 2026-06-23 (RP-3a) — re-anchor the clip before sending so a
+                  // stale post-reinstall absolute path doesn't "send" a
+                  // non-existent file (false success / dead path). iOS rotates the
+                  // app-container UUID on reinstall; resolveClipUri heals it.
+                  void (async () => {
+                    const sendUri = (await resolveClipUri(clip)) ?? clip;
+                    return sendSwingToTank({
+                      videoUri: sendUri,
+                      swingTitle: session.upload?.notes ?? `${session.club} swing`,
+                      contextLines: ctx,
+                    });
+                  })().then(result => {
                     if (result.kind === 'paywall') {
                       useToastStore.getState().show('Send to Tank — premium review (coming soon).');
                     } else if (result.kind === 'no_file') {
@@ -1148,7 +1173,7 @@ export default function SwingDetail() {
                 // loads (muted + looping for library so scrubbing/replay is calm);
                 // tap still pauses. watch-then-analyze keeps its own audio path.
                 shouldPlay
-                isLooping={!shouldAutoplayThenAnalyze}
+                isLooping={true}
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}

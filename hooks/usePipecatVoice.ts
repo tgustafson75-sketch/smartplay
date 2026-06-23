@@ -18,6 +18,7 @@ import { useTrustLevelStore } from '../store/trustLevelStore';
 import { getLastFix } from '../services/gpsManager';
 import { bagDistances } from '../services/shotStrategy';
 import { recordKevinTurn } from '../services/conversationState';
+import { endsAsQuestion } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 import { devLog } from '../services/devLog';
@@ -318,7 +319,7 @@ export function usePipecatVoice({
       // Mirrors the legacy continuousConversationMode behavior for the pipecat path.
       if (text.trim() && onReadyToListen) {
         const { continuousConversationMode } = useSettingsStore.getState();
-        const isQuestion = text.includes('?');
+        const isQuestion = endsAsQuestion(text);
         if (continuousConversationMode || isQuestion) {
           await new Promise<void>((r) => setTimeout(r, 500));
           onReadyToListen();

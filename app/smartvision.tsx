@@ -539,6 +539,23 @@ export default function SmartVisionScreen() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // 2026-06-23 (audit SV-3) — when the hole/course changes, stale imageUri +
+    // geometry from the PREVIOUS hole can flash (wrong-hole satellite tile +
+    // wrong par) before the new async tile/geometry resolves. Clear them up
+    // front, but GATE it: curated holes resolve SYNCHRONOUSLY below (the
+    // `curatedAvailable && imageryMode !== 'gps'` early-return sets imageUri
+    // null and bails), so blanking them here would just cause a flash on the
+    // path Tim tests most. Only clear when the new hole takes the ASYNC
+    // satellite/Mapbox path (curated NOT used this render). `getLocalHoleImage*`
+    // are synchronous bundled-asset lookups (no network), so this mirrors the
+    // exact condition used below at the curated early-return.
+    const willUseCuratedSync =
+      (getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex)) != null &&
+      imageryMode !== 'gps';
+    if (!willUseCuratedSync) {
+      setImageUri(null);
+      setGeometry(null);
+    }
     void (async () => {
       // Always load geometry so the F/M/B yardage panel can use it
       // even in curated mode (when geometry is available).
@@ -829,27 +846,43 @@ export default function SmartVisionScreen() {
   // satellite frame), so a clamp to imageH-22 parked it behind the floating
   // AI-rec bar. Reserve the bottom band (AI-rec bar height ≈ 56px) and the top
   // band (the "tap to place" banner ≈ 44px) so BOTH markers stay in clear view.
-  const clampMarker = useCallback((p: { x: number; y: number }) => ({
-    x: Math.max(22, Math.min(imageW - 22, p.x)),
-    y: Math.max(46, Math.min(imageH - 58, p.y)),
-  }), [imageW, imageH]);
+  // 2026-06-23 (audit SV-1) — the wide 46/58px top/bottom inset was added to
+  // keep the GPS-projected tee/pin out of the floating AI-rec bar + "tap to
+  // place" banner on the SATELLITE branch (where projection can land markers
+  // off-frame). On CURATED/calibrated holes the calibrated points are already
+  // in-bounds and the wide inset MIS-ANCHORS the tee/pin (and skews F/M/B
+  // interpolation). So branch the clamp on `isCurated`: curated gets a tight
+  // symmetric ~20px inset so markers sit where calibration says; satellite keeps
+  // the exact original 22/22/46/58 values (do not change satellite behavior).
+  const clampMarker = useCallback((p: { x: number; y: number }, isCurated: boolean) => {
+    if (isCurated) {
+      return {
+        x: Math.max(20, Math.min(imageW - 20, p.x)),
+        y: Math.max(20, Math.min(imageH - 20, p.y)),
+      };
+    }
+    return {
+      x: Math.max(22, Math.min(imageW - 22, p.x)),
+      y: Math.max(46, Math.min(imageH - 58, p.y)),
+    };
+  }, [imageW, imageH]);
   const teeCanvas = useMemo(() => {
-    if (teeOverride) return clampMarker(teeOverride);
+    if (teeOverride) return clampMarker(teeOverride, onCuratedPhoto);
     // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
     if (!onCuratedPhoto && teeCoord && projection) {
       const off = projectToPixels(teeCoord, projection.center, projection.zoom, projection.bearing);
-      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y }, false);
     }
-    if (calibratedPoints) return clampMarker(calibratedPoints.tee);
+    if (calibratedPoints) return clampMarker(calibratedPoints.tee, onCuratedPhoto);
     return { x: imageW / 2, y: imageH * 0.85 };
   }, [teeOverride, teeCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
   const pinDefaultCanvas = useMemo(() => {
     // Only use GPS projection on Mapbox/Golfbert tiles, never on curated photos.
     if (!onCuratedPhoto && greenCoord && projection) {
       const off = projectToPixels(greenCoord, projection.center, projection.zoom, projection.bearing);
-      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y });
+      return clampMarker({ x: imageW / 2 + off.x, y: imageH / 2 - off.y }, false);
     }
-    if (calibratedPoints) return clampMarker(calibratedPoints.green);
+    if (calibratedPoints) return clampMarker(calibratedPoints.green, onCuratedPhoto);
     return { x: imageW / 2, y: imageH * 0.15 };
   }, [greenCoord, projection, imageW, imageH, calibratedPoints, onCuratedPhoto, clampMarker]);
 

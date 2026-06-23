@@ -332,7 +332,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         result = await cap(
           runAgenticLoop(provider, 'quality', system, text, [], KEVIN_TOOLS, toolDispatch,
             { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
-          13_000,
+          9_000,
         );
         if (provider !== 'anthropic') console.log(`[pipecat-turn] fell back to ${provider}`);
         break;

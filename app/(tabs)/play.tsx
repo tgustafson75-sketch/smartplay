@@ -598,6 +598,11 @@ export default function PlayTab() {
     const bundledHoles = getBundledHoles(s.id);
     if (bundledHoles.length === 9) {
       setSetupNineHole(true);
+    } else if (bundledHoles.length > 0) {
+      // DP-4 — reset the chip for a known non-9-hole course so it can't
+      // stick ON after switching from a 9-hole pick. len===0 (unknown /
+      // API-only / loading) is left untouched so a manual override survives.
+      setSetupNineHole(false);
     }
     if (s.isLocal) {
       // Local courses — synthesize a minimal Course object for display.

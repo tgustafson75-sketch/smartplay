@@ -135,6 +135,42 @@ export async function resolveClipUri(stored: string | null | undefined): Promise
 }
 
 /**
+ * 2026-06-23 (RP-3) — Sibling of resolveClipUri for IMAGE assets (fault frames /
+ * thumbnails), which DON'T live under `swing_clips/`. The same iOS container-UUID
+ * reshuffle (see resolveClipUri) staled the absolute prefix of a persisted fault
+ * frame, so a post-reinstall coach-report export embedded a non-existent picture.
+ * Mirrors resolveClipUri's structure/guards exactly — only the candidate subdirs
+ * differ: fault frames are written under `smartmotion/` (poseDetection.ts),
+ * `thumbs/` is checked too for any thumbnail asset, plus the doc root. Returns the
+ * stored uri untouched for non-file:// uris, and null only when genuinely gone.
+ */
+export async function resolveImageUri(stored: string | null | undefined): Promise<string | null> {
+  if (!stored) return null;
+  // Non-file uris (remote http(s), Android content://, iOS ph://) — hand back
+  // untouched; the UUID-reshuffle problem is file:// only.
+  if (!stored.startsWith('file://')) return stored;
+  try {
+    const FS = await import('expo-file-system/legacy');
+    // 1. Stored path still valid? (common case — same install)
+    try { if ((await FS.getInfoAsync(stored)).exists) return stored; } catch { /* fall through */ }
+    const dir = FS.documentDirectory;
+    if (!dir) return null;
+    const base = stored.split('/').pop();
+    if (!base) return null;
+    // 2. Re-anchor the basename under the CURRENT container's Documents. Check
+    //    the dirs image assets actually land in: smartmotion/ (fault frames),
+    //    thumbs/ (thumbnails), then the doc root.
+    const candidates = [`${dir}smartmotion/${base}`, `${dir}thumbs/${base}`, `${dir}${base}`];
+    for (const c of candidates) {
+      try { if ((await FS.getInfoAsync(c)).exists) return c; } catch { /* try next */ }
+    }
+    return null; // genuinely gone
+  } catch {
+    return stored; // FS unavailable — don't regress, hand back the original
+  }
+}
+
+/**
  * 2026-06-10 — Persist a freshly-captured/picked clip into the app's DOCUMENT
  * directory so it survives OS cache eviction. The picker (and the camera
  * recorder) hand back a TEMPORARY uri in cache/tmp; the OS clears those, so an
@@ -338,6 +374,35 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   }
 
   let swings = session.shots.filter(s => s.clipUri);
+
+  // 2026-06-23 (RP-5) — Defense-in-depth re-anchor. iOS regenerates the app
+  // container UUID on a native build/reinstall, so a persisted absolute clipUri
+  // points at the OLD container and re-analysis re-extracts frames from a path
+  // that no longer exists (the "won't reanalyze post-reinstall" bug). Before any
+  // analysis touches a clip, resolve each shot's stored uri under the LIVE
+  // documentDirectory; if the resolved path differs and exists, repoint the
+  // persisted store (setShotClipUri) AND re-read the session so the expansion +
+  // analysis paths below all use the healed uri. The onReanalyze guard in the
+  // swing-detail screen short-circuits BEFORE this runs, so it has its own
+  // resolve; this is the belt-and-braces layer for every other caller.
+  try {
+    let repointed = false;
+    for (const shot of swings) {
+      if (!shot.clipUri || !shot.clipUri.startsWith('file:')) continue;
+      const resolved = await resolveClipUri(shot.clipUri);
+      if (resolved && resolved !== shot.clipUri && shot.id) {
+        store.setShotClipUri(sessionId, shot.id, resolved);
+        repointed = true;
+        uploadLog('phase-k-clip-reanchored', { shot_id: shot.id, tail: resolved.slice(-40) }, sessionId);
+      }
+    }
+    if (repointed) {
+      const fresh = useCageStore.getState().sessionHistory.find(s => s.id === sessionId);
+      if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
+    }
+  } catch (e) {
+    V6('STAGE 0 — clip re-anchor failed (non-fatal, using stored uris)', { error: e instanceof Error ? e.message : String(e) });
+  }
 
   // 2026-06-10 — Multi-swing UPLOAD support. A single uploaded clip can hold
   // several swings (a 60s practice video). The live range path segments swings
