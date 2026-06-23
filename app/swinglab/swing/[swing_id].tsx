@@ -132,12 +132,21 @@ export default function SwingDetail() {
   // basename under the live documentDirectory. Falls back to the raw clipUri
   // while resolving so first paint isn't blocked.
   const [playbackUri, setPlaybackUri] = useState<string | null>(shot?.clipUri ?? null);
+  // 2026-06-23 (Tim — "NONE of them play") — surface the actual reason on screen
+  // instead of a silent black frame, so a real failure (codec / missing file /
+  // expo-av error) is visible + reportable rather than a guess.
+  const [videoError, setVideoError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     const raw = shot?.clipUri ?? null;
     setPlaybackUri(raw);
+    setVideoError(null);
     if (raw && raw.startsWith('file://')) {
-      void resolveClipUri(raw).then((r) => { if (!cancelled && r) setPlaybackUri(r); });
+      void resolveClipUri(raw).then((r) => {
+        if (cancelled) return;
+        if (r) setPlaybackUri(r);
+        else setVideoError('Video file not found on this device.');
+      });
     }
     return () => { cancelled = true; };
   }, [shot?.clipUri]);
@@ -233,7 +242,7 @@ export default function SwingDetail() {
     } catch (e) {
       console.error('[swing-detail] play error:', e);
     }
-  }, [shot?.clipUri]);
+  }, [shot?.clipUri, playbackUri]);
   // 2026-06-16 (Tim) — fade the on-frame CONTROLS shortly after a pause so a
   // paused frame screenshots clean (no play badge / seek bar / speed chip burned
   // into the grab). They snap back the instant playback resumes. The skeleton /
@@ -1105,30 +1114,53 @@ export default function SwingDetail() {
                 // scrubber, so there's no native tap-handling competing with the
                 // tap-to-pause gesture. Slow-mo + frame-jump buttons unchanged.
                 useNativeControls={false}
-                // 2026-05-25 — Auto-play on ?watch=1 (Path A: watch-
-                // then-analyze for short uploads). User sees the swing
-                // play through; runPhaseKOnSession fires when the video
-                // ends via onPlaybackStatusUpdate didJustFinish. Other
-                // entry paths (library tap, re-mount) keep manual play.
-                shouldPlay={shouldAutoplayThenAnalyze && !watchFiredRef.current}
-                // Audio plays for watch-then-analyze (user wants to
-                // hear coach narration on uploaded videos). Other
-                // paths stay muted so library scrubbing doesn't blast.
+                // 2026-06-23 (Tim — "NONE play") — AUTO-PLAY on load for EVERY
+                // entry path, not just ?watch=1. The library path relied on a
+                // tap (ZoomableView onSingleTap → togglePlayPause) to start
+                // playback; if that tap never reached the handler the video just
+                // sat on a frozen frame = "won't play". Now it plays the moment it
+                // loads (muted + looping for library so scrubbing/replay is calm);
+                // tap still pauses. watch-then-analyze keeps its own audio path.
+                shouldPlay
+                isLooping={!shouldAutoplayThenAnalyze}
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
                 onLoad={async () => {
-                  // 2026-06-16 — expo-av can ignore the shouldPlay PROP on first
-                  // load (the documented quirk); kick the watch-then-analyze
-                  // autoplay explicitly so the swing actually starts.
-                  if (shouldAutoplayThenAnalyze && !watchFiredRef.current) {
-                    try { await videoRef.current?.playAsync(); } catch { /* best-effort */ }
-                  }
+                  setVideoError(null);
+                  // expo-av can ignore the shouldPlay PROP on first load (the
+                  // documented quirk); kick playback explicitly so it ALWAYS starts.
+                  try { await videoRef.current?.playAsync(); } catch { /* best-effort */ }
                 }}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-                onError={(e) => console.error('[swing-detail] video error:', e)}
+                onError={(e) => {
+                  const msg = typeof e === 'string' ? e : 'This video could not be played on this device.';
+                  console.error('[swing-detail] video error:', e);
+                  setVideoError(msg);
+                }}
               />
               </ZoomableView>
+              {/* 2026-06-23 (Tim) — visible failure state instead of a black frame. */}
+              {videoError && (
+                <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)', padding: 24 }}>
+                  <Ionicons name="alert-circle-outline" size={40} color="#F0C030" />
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', textAlign: 'center', marginTop: 10 }}>{videoError}</Text>
+                  <Text style={{ color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 8 }} numberOfLines={2}>
+                    {(playbackUri ?? shot.clipUri ?? '').slice(-52)}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      setVideoError(null);
+                      const re = await resolveClipUri(shot.clipUri);
+                      if (re) { setPlaybackUri(re); try { await videoRef.current?.loadAsync({ uri: re }, { shouldPlay: true }, false); } catch { /* */ } }
+                      else setVideoError('Video file not found on this device.');
+                    }}
+                    style={{ marginTop: 14, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, borderColor: '#88F700' }}
+                  >
+                    <Text style={{ color: '#88F700', fontSize: 13, fontWeight: '800' }}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               {/* 2026-05-25 — Fix AH: coach annotation overlay. DRAW
                   toggle is OFF by default so pinch-zoom + native
                   video controls work; coach taps DRAW to enter
