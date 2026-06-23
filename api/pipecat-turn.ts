@@ -56,7 +56,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_smartfinder',
-    description: 'Open SmartFinder — the rangefinder / distance-lock tool. Trigger on "rangefinder", "lock the distance", "give me a precise distance".',
+    description: 'Open SmartFinder — the rangefinder / distance-lock tool for measuring distance to a specific target on the current hole. Trigger ONLY on explicit rangefinder requests: "rangefinder", "lock the distance", "pin distance", "give me a precise distance". Do NOT use for course search, course selection, or "what course are we playing" — use lookup_course for those.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -109,7 +109,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'lookup_course',
-    description: 'Search for a golf course by name or location.',
+    description: 'Search for a golf course by name or location. Use for ANY question about courses: "what course is nearby?", "what course are we playing?", "find a course near me", "closest golf course", "courses in [city]".',
     parameters: {
       type: 'object',
       properties: {
