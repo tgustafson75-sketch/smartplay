@@ -79,12 +79,12 @@ const AUTO_STOP_MS = 45_000;
 // pushed to 60s for symmetry — the brain prompt cache hit varies
 // with conversation history size, and the prior 45s could clip
 // the first cold-Sonnet turn on a long context.
-// 2026-06-21 — Tightened from 40s/60s. Server tests confirm Kevin responds
-// in 3-4s including TTS; transcribe in <1s. Waiting 40-60s before declaring
-// failure meant the user sat silent for 25s+ before hearing the error message.
-// 20s: cold Lambda (2-5s) + Whisper (3-8s) = up to 13s in field.
-// 12s was cutting off live transcription on every hole. Server cap is 30s.
-const TRANSCRIBE_TIMEOUT_MS = 20000;
+// 2026-06-22 — Bumped 20s → 45s. Deepgram is 1-3s but cold Vercel Lambda
+// (formidable + Node runtime startup) can eat 10-15s before Deepgram is
+// even called. On 5G full bars Tim still saw "Aborted" at 20s because the
+// cold Lambda + Deepgram margin was too tight. 45s = generous headroom with
+// no UX cost (device-TTS fallback fires immediately when abort fires).
+const TRANSCRIBE_TIMEOUT_MS = 45000;
 // 25s: Kevin's per-round AI timeout is 15s; on spotty LTE 12s fired before
 // the server completed, causing robot voice. Client must give server headroom.
 const BRAIN_TIMEOUT_MS = 25000;
@@ -1420,14 +1420,28 @@ export const useVoiceCaddie = ({
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', language);
 
-      const transcribeController = new AbortController();
-      const transcribeTimeout = setTimeout(() => transcribeController.abort(), TRANSCRIBE_TIMEOUT_MS);
+      const doTranscribeFetch = async () => {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), TRANSCRIBE_TIMEOUT_MS);
+        return fetch(apiUrl + '/api/transcribe', {
+          method: 'POST',
+          body: formData,
+          signal: ctrl.signal,
+        }).finally(() => clearTimeout(t));
+      };
 
-      const transcribeRes = await fetch(apiUrl + '/api/transcribe', {
-        method: 'POST',
-        body: formData,
-        signal: transcribeController.signal,
-      }).finally(() => clearTimeout(transcribeTimeout));
+      let transcribeRes: Response;
+      try {
+        transcribeRes = await doTranscribeFetch();
+      } catch (firstErr) {
+        const isAbort = firstErr instanceof Error && firstErr.name === 'AbortError';
+        if (isAbort) {
+          console.log('[voice] transcribe attempt 1 aborted — retrying once');
+          transcribeRes = await doTranscribeFetch();
+        } else {
+          throw firstErr;
+        }
+      }
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };
       const transcript = transcribeData.text ?? '';

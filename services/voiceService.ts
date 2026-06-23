@@ -375,12 +375,11 @@ export const captureUtterance = async (
     formData.append('language', language);
 
     const controller = new AbortController();
-    // 2026-06-11 — bumped 12s → 20s. Telemetry (transcribe_http "Aborted",
-    // Jun 10–11) showed the client abort firing before a cold/slow Whisper
-    // Lambda responded — the request was killed client-side, not server-side.
-    // Whisper + Gemini fallback can take 8–15s on a cold function or weak
-    // cellular; 20s clears that without leaving a truly-dead request hanging.
-    const cancelTimer = setTimeout(() => controller.abort(), 20_000);
+    // 2026-06-22 — bumped 20s → 45s. Deepgram is 1-3s but cold Vercel Lambda
+    // startup (formidable + Node runtime) can add 10-15s BEFORE Deepgram is
+    // called. 45s gives full headroom; device-TTS fallback fires immediately
+    // if the abort does trigger, so the user hears something either way.
+    const cancelTimer = setTimeout(() => controller.abort(), 45_000);
     const res = await fetch(apiUrl + '/api/transcribe', {
       method: 'POST',
       body: formData,
