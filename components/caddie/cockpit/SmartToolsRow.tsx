@@ -1,18 +1,24 @@
 /**
  * Cockpit Mode — SmartToolsRow
  *
- * Four pill buttons row: Vision (green), Motion (blue), Play (pink),
- * Settings (gold). Each pill routes to the corresponding screen.
+ * Four pill buttons row: Vision (green), Motion (sky), Play (green),
+ * Settings (amber). Each pill routes to the corresponding screen.
  *
- * Non-developer note: literal pill colors are intentional brand
- * differentiation (matches the v3 design language). They don't
- * follow the theme tokens because each tool has its own brand color
- * that should look the same in light + dark mode.
+ * 2026-06-23 (Tim) — colors snapped to the disciplined 3-color brand palette
+ * (GREEN core/capture/play · SKY analysis · AMBER practice/warmth). Retired the
+ * prior blue/pink/gold so cockpit + standard tool rows read on-brand and match.
  */
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../../theme/tokens';
+
+// Tinted pill backgrounds (~8% of each accent), kept inline so the row reads at
+// a glance. Derived from the palette constants above.
+const BG_GREEN = 'rgba(0,200,150,0.08)';   // ACCENT_GREEN
+const BG_SKY   = 'rgba(56,189,248,0.08)';  // ACCENT_SKY
+const BG_AMBER = 'rgba(251,191,36,0.08)';  // ACCENT_AMBER
 
 export interface SmartToolsRowProps {
   onVision: () => void;
@@ -33,37 +39,37 @@ export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllToo
       <Pill
         icon="eye-outline"
         label="Vision"
-        color="#00C896"
-        bg="rgba(0,200,150,0.08)"
+        color={ACCENT_GREEN}
+        bg={BG_GREEN}
         onPress={onVision}
       />
       <Pill
         icon="body-outline"
         label="Motion"
-        color="#5DADE2"
-        bg="rgba(93,173,226,0.08)"
+        color={ACCENT_SKY}
+        bg={BG_SKY}
         onPress={onMotion}
       />
       <Pill
         icon="fitness-outline"
         label="Play"
-        color="#E879A6"
-        bg="rgba(232,121,166,0.08)"
+        color={ACCENT_GREEN}
+        bg={BG_GREEN}
         onPress={onPlay}
       />
       <Pill
         icon="settings-outline"
         label="Settings"
-        color="#F0C030"
-        bg="rgba(240,192,48,0.08)"
+        color={ACCENT_AMBER}
+        bg={BG_AMBER}
         onPress={onSettings}
       />
       {onAllTools ? (
         <Pill
           icon="apps-outline"
           label="Tools"
-          color="#00C896"
-          bg="rgba(0,200,150,0.08)"
+          color={ACCENT_SKY}
+          bg={BG_SKY}
           onPress={onAllTools}
         />
       ) : null}

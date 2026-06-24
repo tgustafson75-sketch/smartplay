@@ -1,3 +1,19 @@
+// ─── Disciplined 3-color brand accent palette ────────────────────────────────
+// 2026-06-23 (Tim) — retired the scattered per-card rainbow (purple/pink/orange/
+// cyan/blue) down to exactly THREE accents so the app reads on-brand. Reference
+// these named constants everywhere instead of inline hex. The theme also exposes
+// them as colors.accent / colors.accent_amber / colors.accent_sky for components
+// inside a theme context; module-level specs (card lists) use the constants.
+//   GREEN — the EXISTING brand/primary accent. CORE / capture / play / caddie.
+//   AMBER — PRACTICE / tempo / warmth / warnings / intensity.
+//   SKY   — ANALYSIS / data / prep / review / info.
+/** Brand/primary green — same value as darkTheme.colors.accent. */
+export const ACCENT_GREEN = '#00C896';
+/** Brand amber. */
+export const ACCENT_AMBER = '#FBBF24';
+/** Brand sky. */
+export const ACCENT_SKY = '#38BDF8';
+
 export interface ThemeColors {
   background: string;
   surface: string;
@@ -10,6 +26,12 @@ export interface ThemeColors {
   /** Neon lime #88F700 — used for positive deltas, hero carry numbers, and
    *  SmartMotion icon highlights. Distinct from the teal primary accent. */
   accent_lime: string;
+  /** Brand accent — AMBER #FBBF24. The disciplined 3-color palette's "warmth"
+   *  channel: PRACTICE / tempo / warnings / intensity. (See ACCENT_AMBER below.) */
+  accent_amber: string;
+  /** Brand accent — SKY #38BDF8. The palette's "data" channel:
+   *  ANALYSIS / prep / review / info. (See ACCENT_SKY below.) */
+  accent_sky: string;
   success: string;
   warning: string;
   error: string;
@@ -95,6 +117,8 @@ export const darkTheme: ThemeTokens = {
     accent:           '#00C896',
     accent_muted:     '#003d20',
     accent_lime:      '#88F700',
+    accent_amber:     '#FBBF24',
+    accent_sky:       '#38BDF8',
     success:          '#00C896',
     warning:          '#fbbf24',
     error:            '#ef4444',
@@ -122,6 +146,8 @@ export const lightTheme: ThemeTokens = {
     accent:           '#009e7a',
     accent_muted:     '#d0f0e6',
     accent_lime:      '#5a9e1a',
+    accent_amber:     '#FBBF24',
+    accent_sky:       '#38BDF8',
     success:          '#009e7a',
     warning:          '#d97706',
     error:            '#dc2626',

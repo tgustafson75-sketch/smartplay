@@ -13,8 +13,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SHOT_SHAPES, type ShotShapeDef } from '../../services/practice/shotShapes';
 import { safeBack } from '../../services/safeBack';
+import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
 
-const HEIGHT_TINT: Record<string, string> = { high: '#3FB950', medium: '#f5a623', low: '#22d3ee' };
+// 2026-06-23 (Tim) — launch-height tints on the disciplined 3-color brand
+// palette (was green/orange/cyan): high=GREEN, medium=AMBER, low=SKY.
+const HEIGHT_TINT: Record<string, string> = { high: ACCENT_GREEN, medium: ACCENT_AMBER, low: ACCENT_SKY };
 
 export default function ShotShapesPicker() {
   const router = useRouter();

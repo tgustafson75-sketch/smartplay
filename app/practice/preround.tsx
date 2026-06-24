@@ -20,6 +20,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { safeBack } from '../../services/safeBack';
+import { ACCENT_SKY } from '../../theme/tokens';
 
 const DURATIONS = [10, 20, 30] as const;
 const FOCI: { key: PreroundFocus; label: string }[] = [
@@ -184,7 +185,7 @@ export default function PreroundWarmUp() {
                 {step.kind === 'brief' && briefOpen ? (
                   <View style={styles.briefBox}>
                     {briefLoading ? (
-                      <ActivityIndicator color="#3b9eff" />
+                      <ActivityIndicator color={ACCENT_SKY} />
                     ) : (
                       <Text style={[styles.briefText, { color: colors.text_primary }]}>{briefText ?? FALLBACK_BRIEF}</Text>
                     )}

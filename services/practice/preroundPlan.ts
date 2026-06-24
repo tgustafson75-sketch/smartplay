@@ -17,6 +17,8 @@
  * completed (honest), never a fabricated score.
  */
 
+import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
+
 export type PreroundFocus = 'tempo' | 'contact' | 'power' | 'general';
 
 export type PreroundStepKind = 'stretch' | 'setup' | 'swings' | 'brief' | 'finish';
@@ -45,14 +47,19 @@ export interface PreroundPlan {
   allocated: number;
 }
 
+// 2026-06-23 (Tim) — disciplined 3-color brand palette. Retired the prior
+// rainbow (cyan/lime/pink/orange/purple/blue/green) down to GREEN / AMBER / SKY.
+//   SKY   — prep/read steps (Loosen Up, Setup Check, First-Tee Brief)
+//   AMBER — swing/tempo/warmth steps (Wedge, 7-Iron, Driver)
+//   GREEN — the anchor/confidence finish (Confidence Ball)
 const ACCENT = {
-  stretch: '#22d3ee',
-  setup: '#88F700',
-  wedge: '#fb7185',
-  iron: '#f5a623',
-  driver: '#a78bfa',
-  brief: '#3b9eff',
-  finish: '#3FB950',
+  stretch: ACCENT_SKY,
+  setup: ACCENT_SKY,
+  wedge: ACCENT_AMBER,
+  iron: ACCENT_AMBER,
+  driver: ACCENT_AMBER,
+  brief: ACCENT_SKY,
+  finish: ACCENT_GREEN,
 };
 
 /**

@@ -32,6 +32,10 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
+// 2026-06-23 (Tim) — disciplined 3-color brand palette. Per-card accents map to
+// GREEN (core/capture/play), AMBER (practice/tempo/intensity), SKY (analysis/prep/
+// review). Retired the prior rainbow (blue/purple/orange/pink/cyan/lime-green).
+import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
 
 // 2026-06-16 (Tim — mockup) — branded SmartMotion icons for the hero + feature row.
 const ICON_FEATURE_SM = require('../../assets/icons/smartmotion/feature-smartmotion.png');
@@ -84,7 +88,7 @@ const HERO_CARD: LauncherCardSpec = {
   title: 'SmartMotion',
   sub: 'AI-powered swing analysis with acoustic detection & body mechanics',
   route: '/swinglab/smartmotion',
-  accent: '#88F700',
+  accent: ACCENT_GREEN,
   tag: 'CORE',
 };
 
@@ -95,7 +99,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Drills',
     sub: 'Targeted drills for primary issues and common faults',
     route: '/drills',
-    accent: '#3b9eff',
+    accent: ACCENT_SKY,
     tag: 'PRACTICE',
   },
   {
@@ -104,7 +108,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Swing Library',
     sub: 'View, compare, and analyze your captured swings',
     route: '/swinglab/library',
-    accent: '#a78bfa',
+    accent: ACCENT_SKY,
     tag: 'REVIEW',
   },
   {
@@ -113,7 +117,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Tempo Trainer',
     sub: 'Improve rhythm and timing with guided tempo training',
     route: '/swinglab/tempo-trainer',
-    accent: '#f5a623',
+    accent: ACCENT_AMBER,
     tag: 'TEMPO',
   },
   {
@@ -122,7 +126,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Open Range',
     sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
     route: '/practice/open-range',
-    accent: '#88F700',
+    accent: ACCENT_GREEN,
     tag: 'RANGE',
   },
 ];
@@ -136,7 +140,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Coach Mode',
     sub: 'Analyze other players and build your coaching roster',
     route: '/swinglab/coach-mode',
-    accent: '#34d399',
+    accent: ACCENT_GREEN,
     tag: 'COACH',
   },
   {
@@ -145,7 +149,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Focus Session',
     sub: 'Interleaved practice that makes range work stick',
     route: '/practice/session',
-    accent: '#fb7185',
+    accent: ACCENT_AMBER,
     tag: 'FOCUS',
   },
   {
@@ -154,7 +158,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Shot Shapes',
     sub: 'Track your actual shot patterns and see trends',
     route: '/practice/shot-shapes',
-    accent: '#fb7185',
+    accent: ACCENT_AMBER,
     tag: 'SHAPES',
   },
 ];
@@ -168,7 +172,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Import Range Session',
     sub: 'Scan a TopTracer screenshot — carry distances go straight to Kevin',
     route: '/swinglab/range-import',
-    accent: '#22d3ee',
+    accent: ACCENT_SKY,
     tag: 'CALIBRATE',
   },
   {
@@ -177,7 +181,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Fit Profile',
     sub: 'Real game data builds your ideal bag setup',
     route: '/practice/fit-profile',
-    accent: '#22d3ee',
+    accent: ACCENT_SKY,
     tag: 'FITTING',
   },
   ...(SETUP_CHECK_ENABLED ? [{
@@ -186,7 +190,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Setup Check',
     sub: 'Address, alignment, and grip fundamentals before you play',
     route: '/swinglab/setup-check',
-    accent: '#88F700',
+    accent: ACCENT_GREEN,
     tag: 'PREP',
   }] : []),
   {
@@ -195,7 +199,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'SmartPlan',
     sub: 'Your personalized AI improvement plan',
     route: '/practice/smartplan',
-    accent: '#a3e635',
+    accent: ACCENT_GREEN,
     tag: 'PLAN',
   },
   {
@@ -204,7 +208,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Pre-Round Warm Up',
     sub: 'End your warm-up session on a good swing every time',
     route: '/practice/preround',
-    accent: '#88F700',
+    accent: ACCENT_GREEN,
     tag: 'WARM UP',
   },
 ];
