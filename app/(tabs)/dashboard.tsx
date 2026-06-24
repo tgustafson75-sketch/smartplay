@@ -606,12 +606,18 @@ export default function Dashboard() {
         )}
 
         {/* ─── 6. SHOT STATS — 3 tiles ────────────────────────────────
-            2026-05-25 — Fix Y: re-scoped to TEE SHOTS only. Labels
-            updated to match: FAIRWAY % is now FAIRWAY HIT %
-            (cleanTeeCount/teeShotCount), AVG YDS is now TEE AVG (avg
-            distance of tee shots). Tee-shot count surfaces too so a
-            single-shot round doesn't look like "100% fairway" with
-            no context. When teeShots=0, show dashes instead of 0/0%. */}
+            2026-05-25 — Fix Y: re-scoped to TEE SHOTS only. AVG YDS is
+            now TEE AVG (avg distance of tee shots). Tee-shot count
+            surfaces too so a single-shot round doesn't look like "100%"
+            with no context. When teeShots=0, show dashes instead of 0/0%.
+            2026-06-24 — honesty relabel: the % is cleanTeeCount/trackedTee
+            (tee shots with NO penalty logged). That is NOT a fairway-hit
+            signal — `outcome === 'clean'` only means "no penalty," so a
+            tee shot into the rough still counts as clean. We have no real
+            fairway-in-regulation data (HoleStats.fairwayHit is never
+            populated), so the tile is labelled CLEAN TEE % (dashboard
+            i18n key fairway_pct) — what the data actually supports — not
+            a fabricated FAIRWAY HIT %. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.shot_stats')}</Text>
         <View style={styles.statsRow}>
           <StatTile colors={colors} icon="golf-outline" value={String(shotStats.shotsLogged)} label={t('dashboard.shots_logged')} />
@@ -723,25 +729,41 @@ export default function Dashboard() {
         {practiceHistory.length > 0 && roundHistory.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE → PERFORMANCE</Text>
-            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{practiceImpact.headline}</Text>
-            <TrendChart
-              data={practiceImpact.practiceSeries}
-              width={chartW}
-              height={64}
-              color={colors.accent}
-              label="PRACTICE / WK"
-              higherIsBetter
-              emptyText="—"
-            />
-            <TrendChart
-              data={practiceImpact.scoreSeries}
-              width={chartW}
-              height={64}
-              color={colors.accent}
-              label="SCORE VS PAR"
-              higherIsBetter={false}
-              emptyText="—"
-            />
+            {/* 2026-06-24 — mutually-exclusive: until there's enough on BOTH
+                sides (computePracticeImpact.hasEnough = ≥3 sessions & ≥4 rounds),
+                show ONLY the "once there's enough" building copy — no chart on top
+                of a not-enough-data message. Once hasEnough, the headline is a real
+                insight and the sparklines render. */}
+            <Text
+              style={[
+                styles.impactHeadline,
+                { color: practiceImpact.hasEnough ? colors.text_primary : colors.text_muted },
+              ]}
+            >
+              {practiceImpact.headline}
+            </Text>
+            {practiceImpact.hasEnough && (
+              <>
+                <TrendChart
+                  data={practiceImpact.practiceSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label="PRACTICE / WK"
+                  higherIsBetter
+                  emptyText="—"
+                />
+                <TrendChart
+                  data={practiceImpact.scoreSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label="SCORE VS PAR"
+                  higherIsBetter={false}
+                  emptyText="—"
+                />
+              </>
+            )}
           </View>
         )}
 

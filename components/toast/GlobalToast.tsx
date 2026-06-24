@@ -20,6 +20,15 @@ import { useToastStore } from '../../store/toastStore';
 const TOAST_DURATION_MS = 2400;
 const FADE_MS = 180;
 
+// 2026-06-24 (Tim) — transient status pills ("Cockpit on", "Now in
+// Active") were rendering on top of the "SMARTPLAY CADDIE" wordmark in
+// the Caddie header, covering the brand text. Drop the toast below the
+// header band so it stays clear of the wordmark row. The Caddie
+// BrandHeader is ~72px tall (8 pad + 56 badge + 8 pad below insets.top);
+// this offset clears it on every surface while keeping the toast at the
+// top of the screen where it's expected.
+const HEADER_CLEARANCE = 76;
+
 export function GlobalToast() {
   const insets = useSafeAreaInsets();
   const message = useToastStore((s) => s.message);
@@ -55,7 +64,7 @@ export function GlobalToast() {
       style={[
         styles.wrap,
         {
-          top: insets.top + 8,
+          top: insets.top + HEADER_CLEARANCE,
           opacity,
           transform: [{ translateY }],
         },

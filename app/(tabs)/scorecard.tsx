@@ -635,7 +635,7 @@ export default function Scorecard() {
             <AppIcon name="golf-outline" size={34} color={c.text_muted} />
             <Text style={[styles.emptyRoundTitle, { color: c.text_primary }]}>No round in progress</Text>
             <Text style={[styles.emptyRoundBody, { color: c.text_muted }]}>
-              Your finished rounds are saved on the dashboard.
+              Start a round from the Caddie tab. Your finished rounds are saved on the dashboard.
             </Text>
             <View style={styles.emptyRoundCta}>
               <Text style={[styles.emptyRoundCtaText, { color: c.accent }]}>View Recent Rounds</Text>
@@ -720,12 +720,12 @@ export default function Scorecard() {
           </View>
         )}
 
-        {!hasAnythingToShow && (
-          <View style={styles.noRound}>
-            <Text style={[styles.noRoundText, { color: c.text_muted }]}>{t('scorecard.no_round')}</Text>
-            <Text style={[styles.noRoundSub, { color: c.text_muted }]}>{t('scorecard.no_round_sub')}</Text>
-          </View>
-        )}
+        {/* 2026-06-24 (Tim) — removed the redundant "No active round /
+            Start a round from the Caddie tab" block here. It stacked on
+            top of the "No round in progress" card above (both render when
+            there's no round), so the scorecard showed two empty-state
+            messages. The card above is the single empty state; its
+            "start a round from the Caddie tab" hint now lives there. */}
 
         {/* PER-HOLE ROWS — Front 9. Quick-score chips moved to a single
             sticky panel below this list (rendered after Back 9) instead
