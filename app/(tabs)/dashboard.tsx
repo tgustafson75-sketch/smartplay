@@ -777,24 +777,28 @@ export default function Dashboard() {
               <Text style={[styles.practiceLabel, { color: colors.accent }]}>~{pointsPerf.totalEstimatedPoints} EST</Text>
             </View>
             <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{pointsPerf.headline}</Text>
-            <TrendChart
-              data={pointsPerf.pointsSeries}
-              width={chartW}
-              height={64}
-              color={colors.accent}
-              label="POINTS / WK"
-              higherIsBetter
-              emptyText="—"
-            />
-            <TrendChart
-              data={pointsPerf.scoreSeries}
-              width={chartW}
-              height={64}
-              color={colors.accent}
-              label="SCORE VS PAR"
-              higherIsBetter={false}
-              emptyText="—"
-            />
+            {pointsPerf.hasEnough && (
+              <>
+                <TrendChart
+                  data={pointsPerf.pointsSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label="POINTS / WK"
+                  higherIsBetter
+                  emptyText="—"
+                />
+                <TrendChart
+                  data={pointsPerf.scoreSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label="SCORE VS PAR"
+                  higherIsBetter={false}
+                  emptyText="—"
+                />
+              </>
+            )}
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
               {pointsBaselineMs
                 ? `Running live since ${new Date(pointsBaselineMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${pointsPerf.sessionsCounted} ${pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} so far. Watch it build — we'll re-estimate your earlier history later.`

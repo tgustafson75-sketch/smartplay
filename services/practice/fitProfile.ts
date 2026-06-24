@@ -79,7 +79,7 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
         gapYards: d,
         centerYards: Math.round((longer.yards + shorter.yards) / 2),
       });
-    } else if (d <= OVERLAP_YARDS) {
+    } else if (d <= OVERLAP_YARDS && (longer.measured || longer.stated || shorter.measured || shorter.stated)) {
       overlaps.push({ shorter: shorter.club, longer: longer.club, gapYards: d });
     }
   }

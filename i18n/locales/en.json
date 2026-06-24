@@ -69,7 +69,7 @@
     "hero": "HERO",
     "putts": "PUTTS",
     "avg_putts": "AVG PUTTS",
-    "fairway_pct": "FAIRWAY %",
+    "fairway_pct": "CLEAN TEE %",
     "gir_pct": "GIR %",
     "no_round": "No active round",
     "no_round_sub": "Start a round from the Caddie tab",

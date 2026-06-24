@@ -1114,11 +1114,12 @@ export async function analyzeSwing(
       recordFailure('swing-analysis', 'timeout');
       return { kind: 'error', message: 'That took too long to analyze. Tap Re-analyze to try again.' };
     }
-    recordFailure('swing-analysis', 'network');
     if (/network|connection|fetch|unreachable|dns|offline/i.test(msg)) {
+      recordFailure('swing-analysis', 'network');
       reportNetworkFailure();
       return { kind: 'no_network' };
     }
+    recordFailure('swing-analysis', 'server');
     return { kind: 'error', message: msg };
   }
 }

@@ -174,8 +174,13 @@ export default function Scorecard() {
       if (s.shot_in_hole_index !== 1) continue;
       const holeData = viewCourseHoles.find(h => h.hole === s.hole);
       if (!holeData || holeData.par < 4) continue;
+      // 2026-06-24 — honesty: count only TRACKED tee shots (matches
+      // dashboard's trackedTeeShots/cleanTeeCount). An untracked shot
+      // (outcome == null) is NOT a clean hit and is skipped entirely so
+      // it doesn't inflate the denominator either.
+      if (s.outcome == null) continue;
       teeShotCount++;
-      if (s.outcome === 'clean' || s.outcome == null) fairwayHits++;
+      if (s.outcome === 'clean') fairwayHits++;
     }
     const fairwayPct = teeShotCount === 0 ? null : Math.round((fairwayHits / teeShotCount) * 100);
 

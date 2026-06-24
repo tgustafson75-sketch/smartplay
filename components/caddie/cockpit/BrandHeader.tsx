@@ -48,7 +48,7 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
     : colors.accent;
   const ringBg =
     voiceState === 'thinking' ? 'rgba(245,166,35,0.18)'
-    : voiceState === 'speaking' ? colors.accent_muted
+    : (voiceState === 'speaking' || voiceState === 'proactive') ? colors.accent_muted
     : colors.surface_elevated;
 
   return (
@@ -89,7 +89,7 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
           <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {voiceState === 'listening' ? 'LISTENING…'
               : voiceState === 'thinking' ? 'THINKING…'
-              : voiceState === 'speaking' ? 'SPEAKING…'
+              : (voiceState === 'speaking' || voiceState === 'proactive') ? 'SPEAKING…'
               : 'TAP TO TALK · REAL-TIME CADDIE'}
           </Text>
         </View>

@@ -414,7 +414,13 @@ export default function SmartVisionScreen() {
   // from the previewed courseId.
   const courseHoles = useMemo(() => {
     if (liveCourseHoles.length > 0) return liveCourseHoles;
-    return getBundledHoles(courseId);
+    // 2026-06-24 — Out-of-round Palms arrives as a Golfbert NUMERIC id, so the
+    // raw courseId never matches a bundled-holes key. Normalize the same way
+    // the image + calibration paths do (localSlugFromAnyCourseId) before the
+    // bundled-holes lookup, so the F/M/B reconcile keeps its source pre-round.
+    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
+    const slug = localSlugFromAnyCourseId(courseId);
+    return getBundledHoles(slug ? `local:${slug}` : courseId);
   }, [liveCourseHoles, courseId]);
   // 2026-06-04 — Bundled length wins over live for known local courses
   // (Echo Hills + Mariners Point are 9-hole; golfcourseapi can pad to 18).

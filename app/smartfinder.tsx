@@ -1147,7 +1147,7 @@ function TargetCameraOverlay({
   useEffect(() => {
     lastYardsRef.current = null;
     lastBearingRef.current = null;
-    setTargetYards(yards.reason === 'ok' ? yards.middle : null);
+    setTargetYards(yards.middle ?? null);
     setTargetBearing(shotBearingDeg);
     setReticleConfidence('medium');
     setTargetLoc(null);

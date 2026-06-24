@@ -1032,7 +1032,7 @@ export const useVoiceCaddie = ({
           // Last 5 emotional states ("I'm frustrated", "feeling locked
           // in") with valence + hole. Pairs with shot `feel` ("rushed")
           // already sent above. Server uses these to adjust tone/coaching.
-          emotionalLog: useRoundStore.getState().emotionalLog.slice(-5).map(e => ({
+          emotionalLog: (useRoundStore.getState().emotionalLog ?? []).slice(-5).map(e => ({
             state: e.state,
             valence: e.valence,
             hole: e.hole,
@@ -1673,20 +1673,26 @@ export const useVoiceCaddie = ({
       // which handles Claude brain + tool dispatch + TTS internally.
       if (processTranscriptOverride) {
         wrappedOnVoiceStateChange('thinking');
+        // Pipecat OWNS the turn from here — including its own re-entrancy (the mic
+        // capture is single-flight guarded) AND its own end state (processTurn sets
+        // 'idle' after speaking, or re-opens the mic via onReadyToListen→handleMicPress
+        // when the caddie asks a question). So:
+        //  (1) release isProcessingRef BEFORE the await — otherwise the follow-up
+        //      re-listen hits `if (isProcessingRef.current) return` in _handleMicPress
+        //      and the mic never re-opens (the caddie "asks but doesn't listen"
+        //      regression — 2026-06-24).
+        //  (2) do NOT force 'idle' after the await — that stomped the 'listening'
+        //      state processTurn just set for the follow-up. Let processTurn own it.
+        // Don't fall through to the legacy sendToBrain on error (that double-
+        // processed flaky turns; 2026-06-23 single-path fix). Local-first precheck
+        // already ran ABOVE for offline status queries.
+        isProcessingRef.current = false;
         try {
           await processTranscriptOverride(transcript);
         } catch (e) {
-          // Pipecat OWNS the turn and degrades gracefully on its own (it speaks a
-          // retry prompt on a non-ok/timeout). Do NOT fall through to the legacy
-          // sendToBrain here — that double-processed every flaky turn (pipecat
-          // attempt THEN a full second brain call), doubled latency, and let both
-          // paths display/speak (text on screen that was never spoken). The
-          // local-first precheck already ran ABOVE for offline status queries.
-          // (2026-06-23 — restores the single-path flow that worked.)
           console.log('[voice] pipecat override error:', e);
+          wrappedOnVoiceStateChange('idle');
         }
-        wrappedOnVoiceStateChange('idle');
-        isProcessingRef.current = false;
         return;
       }
 

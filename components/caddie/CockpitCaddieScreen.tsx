@@ -32,6 +32,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
+import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
@@ -208,7 +209,13 @@ export default function CockpitCaddieScreen({
   };
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
+    // Mirror the standard-layout handleLogHole: advance the mental-state
+    // coach on the FIRST score for this hole only (guarded so editing an
+    // already-scored hole doesn't double-count). Snapshot BEFORE logScore
+    // overwrites scores[currentHole].
+    const alreadyScored = (useRoundStore.getState().scores[currentHole] ?? 0) > 0;
     logScore(currentHole, next);
+    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(next, par);
   };
   const handleStepperPutts = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);

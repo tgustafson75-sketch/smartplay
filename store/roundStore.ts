@@ -804,6 +804,10 @@ export const useRoundStore = create<RoundState>()(
           roundStartTime: Date.now(),
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
+          mentalState: 'neutral',
+          riskMode: 'normal',
+          currentLocationType: 'unknown',
+          currentTeeBox: null,
         });
         // 2026-06-23 (audit FIX A) — reset the mental-coach spiral at
         // round start. resetSpiral had ZERO callers, so a round ended

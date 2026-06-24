@@ -2172,6 +2172,10 @@ export default function CaddieTab() {
   // that the round is done.
   const handleLogHole = async () => {
     if (holeScore === 0) return;
+    // Snapshot BEFORE logScore overwrites scores[currentHole] so editing an
+    // already-scored hole doesn't double-count the mental-state coach.
+    // Mirrors the once-per-hole guard at the voice score-log sites.
+    const alreadyScored = (useRoundStore.getState().scores[currentHole] ?? 0) > 0;
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
     useGhostStore.getState().updateHole(currentHole, holeScore);
@@ -2181,7 +2185,7 @@ export default function CaddieTab() {
     // executive courses (Echo Hills, Mariners Point) end at 9, not 18.
     const maxHole = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
 
-    useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
+    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
     if (currentHole >= maxHole) {
       clearShotPending();
