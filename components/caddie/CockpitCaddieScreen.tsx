@@ -33,6 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 // 2026-05-26 — Fix DV: cockpit "Tools" pill opens the global tools menu
 // so L5 users can reach Drills/Library/Mark Location/etc — prior layout
@@ -72,12 +73,27 @@ export interface CockpitCaddieScreenProps {
   caddieResponse: string;
   /** Mic tap handler — wired to handleMicPress in caddie.tsx. */
   onMicPress: () => void;
+  // 2026-06-23 — parity: SmartVision + SmartFinder entry points go
+  // through the parent's PAYWALL-GATED handlers (openSmartVision /
+  // the gated /smartfinder push), exactly like the standard layout.
+  // The cockpit previously router.push'd both directly, bypassing the
+  // canAccess/triggerPaywall gate the standard buttons enforce. With
+  // SUBSCRIPTIONS_ENABLED=false today these are no-ops, but wiring the
+  // shared handler keeps cockpit honest if subscriptions turn on.
+  // Optional so the component still renders if a caller omits them
+  // (falls back to a plain push).
+  /** Parent's gated SmartVision opener (caddie.tsx openSmartVision). */
+  onOpenSmartVision?: () => void;
+  /** Parent's gated SmartFinder opener (caddie.tsx, canAccess-checked). */
+  onOpenSmartFinder?: () => void;
 }
 
 export default function CockpitCaddieScreen({
   voiceState,
   caddieResponse,
   onMicPress,
+  onOpenSmartVision,
+  onOpenSmartFinder,
 }: CockpitCaddieScreenProps) {
   const router = useRouter();
   const { colors } = useTheme();
@@ -129,7 +145,17 @@ export default function CockpitCaddieScreen({
 
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const distance_unit = useSettingsStore((s) => s.distance_unit);
-  const caddieName = getCaddieName(caddiePersonality);
+  // 2026-06-23 — Persona parity: when the active persona is the user's
+  // custom caddie, surface their CHOSEN name (playerProfileStore
+  // .customCaddieName), exactly like the standard layout's persona
+  // cycler / advice surfaces. getCaddieName('custom') only returns the
+  // generic 'My Caddie' placeholder, so cockpit was showing the wrong
+  // name for custom-caddie users in the advice heading + tap-to-ask hint.
+  const customCaddieName = usePlayerProfileStore((s) => s.customCaddieName);
+  const caddieName =
+    caddiePersonality === 'custom'
+      ? (customCaddieName ?? 'My Caddie')
+      : getCaddieName(caddiePersonality);
 
   // 2026-05-22 — Ghost line for the current hole. Null when no ghost is
   // active, which collapses the row entirely (no chrome).
@@ -353,12 +379,24 @@ export default function CockpitCaddieScreen({
           // and offering a one-tap entry to the existing screen.
           onPressOpenRangefinder={() => {
             void Haptics.selectionAsync().catch(() => undefined);
-            router.push('/smartfinder' as never);
+            // Parity: route through the parent's paywall-gated opener
+            // (same canAccess('smartfinder') check the standard layout's
+            // floating shortcut uses). Fallback to a plain push only if
+            // the prop wasn't supplied.
+            if (onOpenSmartFinder) onOpenSmartFinder();
+            else router.push('/smartfinder' as never);
           }}
         />
 
         <SmartToolsRow
-          onVision={() => router.push('/smartvision' as never)}
+          // Parity: SmartVision goes through the parent's gated
+          // openSmartVision (canAccess('smartvision') → paywall) just
+          // like the standard layout; fall back to a plain push only
+          // if no handler was provided.
+          onVision={() => {
+            if (onOpenSmartVision) onOpenSmartVision();
+            else router.push('/smartvision' as never);
+          }}
           onMotion={() => {
             // 2026-06-07 — Smart Motion rebuild: the unified screen
             // captures in place (opens live to the camera in 'setup'),
@@ -443,7 +481,13 @@ export default function CockpitCaddieScreen({
 function greenYardsToFmb(g: GreenYardages | null): FrontMiddleBack | null {
   if (!g) return null;
   if (g.front == null && g.middle == null && g.back == null) return null;
-  return { front: g.front, middle: g.middle, back: g.back };
+  // 2026-06-23 — preserve `reason` so DistanceCard's honest-degrade
+  // handling survives the adapter. Without it, a scorecard tee→green
+  // fallback (reason === 'no_geometry') rendered as if it were a live
+  // GPS read — no "SCORECARD" pill, no "~" prefix, GPS dot lit green.
+  // smartfinder.tsx surfaces the same reason; this brings cockpit to
+  // parity instead of silently dropping the degrade flag.
+  return { front: g.front, middle: g.middle, back: g.back, reason: g.reason };
 }
 
 const styles = StyleSheet.create({

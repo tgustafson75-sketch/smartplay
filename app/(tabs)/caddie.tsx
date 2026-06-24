@@ -2338,6 +2338,17 @@ export default function CaddieTab() {
         voiceState={voiceState}
         caddieResponse={caddieResponse}
         onMicPress={handleMicPress}
+        // 2026-06-23 — pass the SAME paywall-gated openers the standard
+        // layout uses so cockpit's Vision pill + DistanceCard tap-through
+        // can't bypass the canAccess/triggerPaywall gate.
+        onOpenSmartVision={openSmartVision}
+        onOpenSmartFinder={() => {
+          if (!canAccess('smartfinder', subscription_status)) {
+            void triggerPaywall('smartfinder', () => router.push('/paywall' as never));
+            return;
+          }
+          router.push('/smartfinder' as never);
+        }}
       />
     );
   }
