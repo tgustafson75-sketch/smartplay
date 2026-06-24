@@ -12,7 +12,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
-import { composeFitProfile, recommendFlex, recommendBallCategory, type FitClubInput } from '../../services/practice/fitProfile';
+import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
+import { recommendBall } from '../../services/ballFitting';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
 
@@ -20,6 +21,10 @@ export default function FitProfileScreen() {
   const { colors } = useTheme();
   const stats = useClubStatsStore((s) => s.stats);
   const handicap = usePlayerProfileStore((s) => s.handicap);
+  // 2026-06-24 — extra readable signals for the honest Ball Fit (directional).
+  const handicapIndex = usePlayerProfileStore((s) => s.handicap_index);
+  const missType = usePlayerProfileStore((s) => s.missType);
+  const goal = usePlayerProfileStore((s) => s.goal);
 
   const manual = useClubStatsStore((s) => s.manual);
   const reps = useClubStatsStore((s) => s.reps);
@@ -58,18 +63,35 @@ export default function FitProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats, manual]);
 
-  // FLEX (honest: only off a MEASURED driver carry) + BALL category (speed tier +
-  // handicap). Both starting points, never launch-monitor specs.
+  // FLEX (honest: only off a MEASURED driver carry) + the honest, DIRECTIONAL
+  // Ball Fit (recommendBall — speed tier from carry, handicap tier, short-game/
+  // feel emphasis). Both starting points, never launch-monitor specs.
   const { flex, ball } = useMemo(() => {
     const st = useClubStatsStore.getState();
-    const driverCarry = st.avgFor('Driver');
     const driverMeasured = st.hasSamples('Driver');
+    // Prefer the player's REAL driver carry: tracked avg, else a stated (My Bag)
+    // number. Never feed the standard chart as if it were the player's own speed.
+    const driverCarry = st.hasDistance('Driver')
+      ? st.distanceFor('Driver')
+      : null;
+    // Wedge-work proxy for short-game / greenside-feel priority (tracked samples).
+    const wedgeSamples =
+      (st.stats.PW?.samples ?? 0) + (st.stats.GW?.samples ?? 0) +
+      (st.stats.SW?.samples ?? 0) + (st.stats.LW?.samples ?? 0);
+    const hcp = typeof handicapIndex === 'number' ? handicapIndex
+      : typeof handicap === 'number' ? handicap : null;
     return {
-      flex: recommendFlex(driverCarry, driverMeasured),
-      ball: recommendBallCategory(driverMeasured ? driverCarry : 0, typeof handicap === 'number' ? handicap : null),
+      flex: recommendFlex(st.avgFor('Driver'), driverMeasured),
+      ball: recommendBall({
+        handicap: hcp,
+        driverCarryYards: driverCarry,
+        goal,
+        missType,
+        wedgeSamples,
+      }),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats, handicap]);
+  }, [stats, manual, handicap, handicapIndex, missType, goal]);
 
   const gapSet = useMemo(() => {
     const m = new Map<string, number>();
@@ -136,10 +158,63 @@ export default function FitProfileScreen() {
           )}
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardLabel, { color: '#a78bfa' }]}>BALL CATEGORY</Text>
-          <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.category}</Text>
-          <Text style={[styles.gapText, { color: colors.text_muted }]}>{ball.note}</Text>
+        {/* RECOMMENDED BALL — honest, DIRECTIONAL fit from readable game data. */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent_sky }]}>
+          <Text style={[styles.cardLabel, { color: colors.accent_sky }]}>RECOMMENDED BALL</Text>
+          {ball.lowInfo ? (
+            <>
+              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.headline}</Text>
+              {ball.reasons.map((r, i) => (
+                <View key={i} style={styles.reasonRow}>
+                  <Ionicons name="ellipse" size={5} color={colors.text_muted} style={{ marginTop: 7 }} />
+                  <Text style={[styles.gapText, { color: colors.text_muted, marginTop: 0 }]}>{r}</Text>
+                </View>
+              ))}
+            </>
+          ) : (
+            <>
+              <View style={styles.ballHeadRow}>
+                <Text style={[styles.profileTag, { color: '#0a1410', backgroundColor: colors.accent_sky }]}>{ball.profileLabel}</Text>
+              </View>
+              <Text style={[styles.fitValue, { color: colors.text_primary, marginTop: 8 }]}>{ball.headline}</Text>
+
+              {ball.reasons.map((r, i) => (
+                <View key={i} style={styles.reasonRow}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.accent_sky} style={{ marginTop: 3 }} />
+                  <Text style={[styles.gapText, { color: colors.text_secondary, marginTop: 0, flex: 1 }]}>{r}</Text>
+                </View>
+              ))}
+
+              {/* Characteristics — '—' where we have no honest read (never fabricated). */}
+              <View style={styles.charRow}>
+                <View style={styles.charCell}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>SPIN</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.spin}</Text>
+                </View>
+                <View style={styles.charCell}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>FEEL</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.feel}</Text>
+                </View>
+                <View style={[styles.charCell, { flex: 1.4 }]}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>COVER</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.cover}</Text>
+                </View>
+              </View>
+
+              {/* Generic categories — NOT branded balls asserted as fact. */}
+              {ball.exampleCategories.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {ball.exampleCategories.map((c) => (
+                    <View key={c} style={[styles.catPill, { borderColor: colors.border }]}>
+                      <Text style={[styles.catPillText, { color: colors.text_secondary }]}>{c}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+          {/* Standing honesty line — always shown. */}
+          <Text style={[styles.honesty, { color: colors.text_muted }]}>{ball.honestyLine}</Text>
         </View>
 
         {/* PRACTICE VOLUME — honest rep credit per club (not a measured carry). */}
@@ -255,4 +330,15 @@ const styles = StyleSheet.create({
   repN: { fontSize: 12, fontWeight: '600' },
   legend: { fontSize: 10, lineHeight: 15, paddingHorizontal: 10, paddingVertical: 8 },
   disclaimer: { fontSize: 12, lineHeight: 18, fontStyle: 'italic', marginTop: 16 },
+  // Recommended Ball card.
+  ballHeadRow: { flexDirection: 'row', alignItems: 'center' },
+  profileTag: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
+  reasonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginTop: 6 },
+  charRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  charCell: { flex: 1 },
+  charLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  charValue: { fontSize: 14, fontWeight: '800', marginTop: 2, textTransform: 'capitalize' },
+  catPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  catPillText: { fontSize: 11, fontWeight: '700' },
+  honesty: { fontSize: 10, lineHeight: 15, marginTop: 12, fontStyle: 'italic' },
 });
