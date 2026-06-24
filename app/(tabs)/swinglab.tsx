@@ -26,7 +26,7 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -44,6 +44,13 @@ import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
 //   PLAY     → CYAN   #22D3EE → SKY   #38BDF8
 //   PREPARE  → SKY    #38BDF8 → INDIGO #6366F1
 import { ACCENT_GREEN } from '../../theme/tokens';
+import { useSettingsStore } from '../../store/settingsStore';
+import { emitSmartMotionVoiceEvent } from '../../services/smartMotionRecordBus';
+
+// 2026-06-24 (Tim) — greet once per app session on first SwingLab-hub entry.
+// Module-scoped so re-focusing the tab doesn't re-greet (avoids the unreliable
+// repeat-fire that got the old prompt pulled in June).
+let swinglabGreetedThisSession = false;
 
 // Per-section spectrum segments [startHex, endHex]. Endpoints chain so the whole page
 // flows green→indigo continuously. ANALYZE is the solo green hero (handled directly).
@@ -262,12 +269,21 @@ export default function SwingLab() {
   // unchanged.
   const { isWide } = useDeviceLayout();
 
-  // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
-  // swing commands" prompt. Active listening is Caddie-tab + round-only and was
-  // deliberately NOT wired into SmartMotion (one mic, owned by the camera during
-  // capture), so the prompt promised a capability that doesn't exist in any
-  // SwingLab mode — and its warm-up/collision timing made it fire unreliably.
-  // The QuickTutorial intro below is the only voice on this tab now.
+  // 2026-06-24 (Tim) — the caddie greets "What would you like to work on?" + LISTENS
+  // when you land on the SwingLab hub (NOT in SmartMotion — there you already chose,
+  // and the camera owns the mic). The hub has no camera, so tap-to-talk's mic is free
+  // and the listen works; the answer routes through the normal voice pipeline (e.g.
+  // "tempo" → Smart Tempo). Once per app session, gated on voiceEnabled, with a small
+  // settle delay so warm-up doesn't collide (the timing issue that pulled the old one).
+  useFocusEffect(
+    React.useCallback(() => {
+      if (swinglabGreetedThisSession) return;
+      if (!useSettingsStore.getState().voiceEnabled) return;
+      swinglabGreetedThisSession = true;
+      const t = setTimeout(() => emitSmartMotionVoiceEvent({ type: 'swinglab_entered' }), 700);
+      return () => clearTimeout(t);
+    }, []),
+  );
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>

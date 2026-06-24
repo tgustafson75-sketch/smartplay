@@ -828,8 +828,14 @@ export default function CaddieTab() {
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (!ve) return;
       if (event.type === 'entered') {
+        // 2026-06-24 (Tim) — SmartMotion entry no longer asks "what are we working
+        // on?" + listens: once you're IN Smart Motion you already chose what to work
+        // on, and the camera owns the mic here so the listen never worked anyway.
+        // That greet+listen moved to 'swinglab_entered' (the hub, no camera). Stay
+        // quiet on SmartMotion entry — the framing coach + "swing when ready" guide it.
+      } else if (event.type === 'swinglab_entered') {
         configureAudioForSpeech()
-          .then(() => speak("What are we working on today?", vg, lang, apiUrl, { userInitiated: true }))
+          .then(() => speak('What would you like to work on?', vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))
           .then(() => { handleMicPressRef.current(); })
           .catch(() => {});
