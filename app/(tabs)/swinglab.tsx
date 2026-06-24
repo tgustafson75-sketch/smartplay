@@ -32,9 +32,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
-// 2026-06-23 (Tim) — disciplined 3-color brand palette. Per-card accents map to
-// GREEN (core/capture/play), AMBER (practice/tempo/intensity), SKY (analysis/prep/
-// review). Retired the prior rainbow (blue/purple/orange/pink/cyan/lime-green).
+// 2026-06-24 (Tim) — SECTION-as-one-color, graduated button-by-button. Each section
+// reads as a single hue that steps shade by shade down its cards (the prior per-card
+// accents were an interleaved jumble). Bases: ANALYZE→GREEN (hero), PRACTICE→AMBER,
+// PLAY→SKY, PREPARE→GREEN. Greens are never adjacent (amber + sky sit between them).
+// Per-card shade is computed from the card's index within its section + the section's
+// card count, so the gradient auto-adjusts as cards are added/removed.
 import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
 
 // 2026-06-16 (Tim — mockup) — branded SmartMotion icons for the hero + feature row.
@@ -51,9 +54,8 @@ interface LauncherCardSpec {
   sub: string;
   /** Route to push on tap. */
   route: string;
-  /** 2026-06-13 (Tim) — visual dressing: per-card accent + a short role tag so the
-   *  cards read at a glance and are sequenced/colored by alignment to the north star. */
-  accent: string;
+  /** Short role tag rendered in the card. Color is no longer per-card — it is
+   *  derived per-section (one hue) + graduated by the card's index (see shade()). */
   tag: string;
 }
 
@@ -88,7 +90,6 @@ const HERO_CARD: LauncherCardSpec = {
   title: 'SmartMotion',
   sub: 'AI-powered swing analysis with acoustic detection & body mechanics',
   route: '/swinglab/smartmotion',
-  accent: ACCENT_GREEN,
   tag: 'CORE',
 };
 
@@ -99,7 +100,6 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Drills',
     sub: 'Targeted drills for primary issues and common faults',
     route: '/drills',
-    accent: ACCENT_SKY,
     tag: 'PRACTICE',
   },
   {
@@ -108,7 +108,6 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Swing Library',
     sub: 'View, compare, and analyze your captured swings',
     route: '/swinglab/library',
-    accent: ACCENT_SKY,
     tag: 'REVIEW',
   },
   {
@@ -117,7 +116,6 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Tempo Trainer',
     sub: 'Improve rhythm and timing with guided tempo training',
     route: '/swinglab/tempo-trainer',
-    accent: ACCENT_AMBER,
     tag: 'TEMPO',
   },
   {
@@ -126,7 +124,6 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Open Range',
     sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
     route: '/practice/open-range',
-    accent: ACCENT_GREEN,
     tag: 'RANGE',
   },
 ];
@@ -140,7 +137,6 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Coach Mode',
     sub: 'Analyze other players and build your coaching roster',
     route: '/swinglab/coach-mode',
-    accent: ACCENT_GREEN,
     tag: 'COACH',
   },
   {
@@ -149,7 +145,6 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Focus Session',
     sub: 'Interleaved practice that makes range work stick',
     route: '/practice/session',
-    accent: ACCENT_AMBER,
     tag: 'FOCUS',
   },
   {
@@ -158,7 +153,6 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Shot Shapes',
     sub: 'Track your actual shot patterns and see trends',
     route: '/practice/shot-shapes',
-    accent: ACCENT_AMBER,
     tag: 'SHAPES',
   },
 ];
@@ -172,7 +166,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Import Range Session',
     sub: 'Scan a TopTracer screenshot — carry distances go straight to Kevin',
     route: '/swinglab/range-import',
-    accent: ACCENT_SKY,
     tag: 'CALIBRATE',
   },
   {
@@ -181,7 +174,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Fit Profile',
     sub: 'Real game data builds your ideal bag setup',
     route: '/practice/fit-profile',
-    accent: ACCENT_SKY,
     tag: 'FITTING',
   },
   ...(SETUP_CHECK_ENABLED ? [{
@@ -190,7 +182,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Setup Check',
     sub: 'Address, alignment, and grip fundamentals before you play',
     route: '/swinglab/setup-check',
-    accent: ACCENT_GREEN,
     tag: 'PREP',
   }] : []),
   {
@@ -199,7 +190,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'SmartPlan',
     sub: 'Your personalized AI improvement plan',
     route: '/practice/smartplan',
-    accent: ACCENT_GREEN,
     tag: 'PLAN',
   },
   {
@@ -208,7 +198,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Pre-Round Warm Up',
     sub: 'End your warm-up session on a good swing every time',
     route: '/practice/preround',
-    accent: ACCENT_GREEN,
     tag: 'WARM UP',
   },
 ];
@@ -220,6 +209,48 @@ function hexFade(hex: string, alpha: number): string {
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
+ * 2026-06-24 (Tim) — graduate a base hue shade-by-shade within a section.
+ *   t < 0 → lighten (mix toward white), t > 0 → deepen (mix toward black).
+ * t lives in roughly [-0.25, +0.25]; deepening is CLAMPED (we only mix ~70%
+ * of t toward black) so the bottom card's badge text stays legible on the
+ * dark background. Deterministic, no allocation beyond the returned string.
+ */
+function shade(hex: string, t: number): string {
+  const h = hex.replace('#', '');
+  let r = parseInt(h.slice(0, 2), 16);
+  let g = parseInt(h.slice(2, 4), 16);
+  let b = parseInt(h.slice(4, 6), 16);
+  if (t < 0) {
+    // Lighten: mix toward white by |t|.
+    const k = Math.min(0.5, -t);
+    r = Math.round(r + (255 - r) * k);
+    g = Math.round(g + (255 - g) * k);
+    b = Math.round(b + (255 - b) * k);
+  } else if (t > 0) {
+    // Deepen: mix toward black, but clamp so it never goes too dark to read.
+    const k = Math.min(0.18, t * 0.7);
+    r = Math.round(r * (1 - k));
+    g = Math.round(g * (1 - k));
+    b = Math.round(b * (1 - k));
+  }
+  const hx = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${hx(r)}${hx(g)}${hx(b)}`;
+}
+
+/**
+ * Per-card accent for a section: ONE base hue graduated by the card's index.
+ * Top card = lightest/brightest, stepping deeper down the section. Driven by
+ * count so the gradient auto-adjusts when cards are added/removed. RANGE is the
+ * total light→deep span across the section (split evenly around the base).
+ */
+const SHADE_RANGE = 0.34;
+function sectionShade(base: string, index: number, count: number): string {
+  if (count <= 1) return base;
+  const t = (index / (count - 1)) * SHADE_RANGE - SHADE_RANGE / 2;
+  return shade(base, t);
 }
 
 export default function SwingLab() {
@@ -253,8 +284,10 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_analyze', { defaultValue: 'ANALYZE & IMPROVE' })}
         </Text>
+        {/* ANALYZE → GREEN (single hero card, base hue). */}
         <SmartMotionHero
           spec={HERO_CARD}
+          accent={ACCENT_GREEN}
           colors={colors}
           onPress={() => router.push(HERO_CARD.route as never)}
         />
@@ -262,22 +295,43 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_practice', { defaultValue: 'PRACTICE BETTER' })}
         </Text>
-        {PRACTICE_SECTION.map((card) => (
-          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        {/* PRACTICE → AMBER, graduated top→bottom. */}
+        {PRACTICE_SECTION.map((card, i) => (
+          <LauncherCard
+            key={card.key}
+            spec={card}
+            accent={sectionShade(ACCENT_AMBER, i, PRACTICE_SECTION.length)}
+            colors={colors}
+            onPress={() => router.push(card.route as never)}
+          />
         ))}
 
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_play', { defaultValue: 'PLAY SMARTER' })}
         </Text>
-        {PLAY_SECTION.map((card) => (
-          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        {/* PLAY → SKY, graduated top→bottom. */}
+        {PLAY_SECTION.map((card, i) => (
+          <LauncherCard
+            key={card.key}
+            spec={card}
+            accent={sectionShade(ACCENT_SKY, i, PLAY_SECTION.length)}
+            colors={colors}
+            onPress={() => router.push(card.route as never)}
+          />
         ))}
 
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_prepare', { defaultValue: 'PREPARE BETTER' })}
         </Text>
-        {PREPARE_SECTION.map((card) => (
-          <LauncherCard key={card.key} spec={card} colors={colors} onPress={() => router.push(card.route as never)} />
+        {/* PREPARE → GREEN, graduated top→bottom (amber+sky sit between it and the green hero). */}
+        {PREPARE_SECTION.map((card, i) => (
+          <LauncherCard
+            key={card.key}
+            spec={card}
+            accent={sectionShade(ACCENT_GREEN, i, PREPARE_SECTION.length)}
+            colors={colors}
+            onPress={() => router.push(card.route as never)}
+          />
         ))}
        </View>
       </ScrollView>
@@ -297,16 +351,18 @@ export default function SwingLab() {
 
 interface LauncherCardProps {
   spec: LauncherCardSpec;
+  /** Graduated section hue for this card (computed per section + index). */
+  accent: string;
   colors: ReturnType<typeof useTheme>['colors'];
   onPress: () => void;
 }
 
 // Full-width horizontal card (accent spine + colored icon box + title/tag + sub + chevron).
-function LauncherCard({ spec, colors, onPress }: LauncherCardProps) {
+// `accent` is the section's graduated hue for this card — not a per-card color.
+function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
   const { t } = useTranslation();
   const title = t('swinglab.card_' + spec.key + '_title', { defaultValue: spec.title });
   const sub = t('swinglab.card_' + spec.key + '_sub', { defaultValue: spec.sub });
-  const accent = spec.accent;
   return (
     <Pressable
       onPress={onPress}
@@ -345,8 +401,8 @@ function HeroFeature({ icon, label, colors }: { icon: ImageSourcePropType; label
 }
 
 // Smart Motion HERO — the marquee card: branded media + CORE badge + feature row.
-function SmartMotionHero({ spec, colors, onPress }: LauncherCardProps) {
-  const accent = spec.accent;
+// Single-card ANALYZE section → uses the brand green base directly (no graduation).
+function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
   return (
     <Pressable
       onPress={onPress}
