@@ -97,8 +97,11 @@ export interface SwingComparison {
   kind: CompareKind;
   /** Sources used — surfaced as chips. */
   sources_used: ('current_pose' | 'reference_pose' | 'tour_median' | 'amateur_good')[];
-  /** Aggregated 0..100 match score across all metrics. */
-  overall_match: number;
+  /** Aggregated 0..100 match score across all metrics, or `null` when
+   *  there was no usable biomechanics to compare. `null` must NOT be
+   *  coerced to 0 — a confident "0% match" is a fabricated negative.
+   *  Callers render an "insufficient data" state for null. */
+  overall_match: number | null;
   metrics: MetricDelta[];
   /** Visual diff cues. Empty when no keypoint data is available. */
   hotspots: HeatmapHotspot[];
@@ -227,9 +230,13 @@ function renderVerdict(label: string, dir: MetricDirection, distance: number, un
 
 // ─── Overall + hotspots + takeaways ──────────────────────────────────────
 
-function computeOverall(metrics: MetricDelta[]): number {
+function computeOverall(metrics: MetricDelta[]): number | null {
   const usable = metrics.filter((m) => m.current != null && m.reference != null);
-  if (usable.length === 0) return 0;
+  // No usable biomechanics → there is nothing to compare. Return null
+  // (insufficient data), NOT 0 — a 0 would render as a confident "0%
+  // match", telling the player their swing is the polar opposite of the
+  // reference, which is a fabricated negative.
+  if (usable.length === 0) return null;
   const sum = usable.reduce((a, m) => a + m.match_score, 0);
   return Math.round(sum / usable.length);
 }
@@ -283,7 +290,9 @@ function findJointInFrames(frames: PoseFrame[], jointName: string): Keypoint | n
   return null;
 }
 
-function buildTakeaways(metrics: MetricDelta[], overall: number): string[] {
+function buildTakeaways(metrics: MetricDelta[], overall: number | null): string[] {
+  // Insufficient data — no honest takeaways to draw.
+  if (overall == null) return ['Not enough pose data to compare yet.'];
   const wins = metrics.filter((m) => m.direction === 'better' && m.match_score >= 70);
   const focuses = metrics.filter((m) => m.direction === 'worse').sort((a, b) => a.match_score - b.match_score);
   const out: string[] = [];
@@ -299,8 +308,8 @@ function buildTakeaways(metrics: MetricDelta[], overall: number): string[] {
   return out;
 }
 
-function buildVoiceSummary(kind: CompareKind, overall: number, takeaways: string[]): string {
-  if (overall === 0) return 'Not enough pose data to compare cleanly yet.';
+function buildVoiceSummary(kind: CompareKind, overall: number | null, takeaways: string[]): string {
+  if (overall == null) return 'Not enough pose data to compare cleanly yet.';
   const lead =
     kind === 'self_vs_self' ? 'Comparing your swings'
     : kind === 'self_vs_pro' ? 'Vs tour median'
@@ -357,25 +366,43 @@ export function compareSwingsMulti(input: MultiReferenceInput): MultiReferenceCo
     });
     return { label: ref.label, comparison: cmp };
   });
-  results.sort((a, b) => b.comparison.overall_match - a.comparison.overall_match);
+  // Sort by overall_match desc, but treat insufficient-data (null)
+  // comparisons as ranking LAST — never let null coerce to 0 and pose
+  // as the "worst match." A real 0% (genuinely opposite) still outranks
+  // "no data to compare."
+  results.sort((a, b) => matchRank(b.comparison.overall_match) - matchRank(a.comparison.overall_match));
 
-  const top = results[0];
+  // The headline best_match must be a REAL comparison — skip any whose
+  // overall is null (insufficient data).
+  const top = results.find((r) => r.comparison.overall_match != null);
   const voice = composeMultiVoice(results);
 
   return {
     results,
     best_match: top
-      ? { label: top.label, overall: top.comparison.overall_match }
+      ? { label: top.label, overall: top.comparison.overall_match as number }
       : null,
     voice_summary: voice,
   };
+}
+
+/** Sort key for overall_match: real scores rank by value; null
+ *  (insufficient data) sinks below every real score, including a real 0. */
+function matchRank(overall: number | null): number {
+  return overall == null ? -1 : overall;
+}
+
+/** Render a match score for voice/headline text. Null reads as a
+ *  spoken "not enough data" rather than a fabricated "0%". */
+function matchPhrase(overall: number | null): string {
+  return overall == null ? 'not enough data to compare' : `${overall}% match`;
 }
 
 function composeMultiVoice(results: MultiReferenceComparison['results']): string {
   if (results.length === 0) return '';
   const lead = results[0];
   if (results.length === 1) {
-    return `${lead.comparison.overall_match}% match to ${lead.label}. ${lead.comparison.takeaways[0] ?? ''}`.trim();
+    return `${matchPhrase(lead.comparison.overall_match)} to ${lead.label}. ${lead.comparison.takeaways[0] ?? ''}`.trim();
   }
   // Two-result case: lead with the highest match + add a contrast from
   // the next-best reference if it surfaces a different focus area.
@@ -384,11 +411,11 @@ function composeMultiVoice(results: MultiReferenceComparison['results']): string
   const contrastFocus = contrast.comparison.metrics.find((m) => m.direction === 'worse')?.label.toLowerCase();
   const different = leadFocus && contrastFocus && leadFocus !== contrastFocus;
   if (different) {
-    return `${lead.comparison.overall_match}% match to ${lead.label} — focus area: ${leadFocus}. ` +
-      `Vs ${contrast.label}: ${contrast.comparison.overall_match}% — they'd want ${contrastFocus}.`;
+    return `${matchPhrase(lead.comparison.overall_match)} to ${lead.label} — focus area: ${leadFocus}. ` +
+      `Vs ${contrast.label}: ${matchPhrase(contrast.comparison.overall_match)} — they'd want ${contrastFocus}.`;
   }
-  return `${lead.comparison.overall_match}% match to ${lead.label}. ` +
-    `${contrast.comparison.overall_match}% match to ${contrast.label}. ` +
+  return `${matchPhrase(lead.comparison.overall_match)} to ${lead.label}. ` +
+    `${matchPhrase(contrast.comparison.overall_match)} to ${contrast.label}. ` +
     `${lead.comparison.takeaways[0] ?? ''}`.trim();
 }
 

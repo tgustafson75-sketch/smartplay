@@ -890,7 +890,9 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
 
   return {
     kind: 'swing_compare',
-    status: cmp.overall_match >= 30 ? 'ok' : 'partial',
+    // null overall_match = insufficient data to compare → 'partial'
+    // (never coerce null to a number here; that's the fabricated-0 bug).
+    status: cmp.overall_match != null && cmp.overall_match >= 30 ? 'ok' : 'partial',
     result: {
       ...cmp,
       primary_focus: priorities.primary,
@@ -898,7 +900,9 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
       complexity_level: complexity,
       mobility_safe_mode: mobility,
     },
-    confidence: cmp.overall_match,
+    // Envelope confidence is a numeric 0..100; insufficient data → 0
+    // confidence (the 'partial' status already flags "couldn't compare").
+    confidence: cmp.overall_match ?? 0,
     sources_used: reference ? ['player_profile', 'voice'] : ['player_profile'],
     persona,
     voice_summary: adaptedVoice,

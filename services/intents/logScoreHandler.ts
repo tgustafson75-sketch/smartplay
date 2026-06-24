@@ -157,7 +157,18 @@ export const logScoreHandler: IntentHandler = {
         follow_up_needed: true,
       };
     }
+    // Once-per-hole mental-state advance (mirrors caddie.tsx handleLogHole).
+    // round.logScore is ALSO the per-tap edit primitive, so only advance the
+    // spiral on a GENUINE hole completion — the FIRST score for this hole.
+    // Snapshot whether the hole was already scored (>0) BEFORE logScore
+    // overwrites it; skip updateMentalState on a re-log/edit.
+    const alreadyScored = (round.scores[hole] ?? 0) > 0;
     round.logScore(hole, strokes);
+    if (!alreadyScored) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useRelationshipStore } = require('../../store/relationshipStore') as typeof import('../../store/relationshipStore');
+      useRelationshipStore.getState().updateMentalState(strokes, par ?? 4);
+    }
     track('log_score_voice', { hole, strokes, par });
     const label = scoreLabel(strokes, par);
     const holePart = hole === round.currentHole ? `Got it` : `Got it, hole ${hole}`;

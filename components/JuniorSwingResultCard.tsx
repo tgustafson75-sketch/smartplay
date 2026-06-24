@@ -62,7 +62,7 @@ export default function JuniorSwingResultCard({
             </Text>
           </Text>
         </View>
-        <ScoreBadge value={analysis.overallScore} />
+        <ScoreBadge value={analysis.overallScore} estimated={analysis.scoreEstimated === true} />
       </View>
 
       {!compact && analysis.wins.length > 0 && (
@@ -137,13 +137,17 @@ export default function JuniorSwingResultCard({
 
 // ─── Subcomponents ──────────────────────────────────────────────────────
 
-function ScoreBadge({ value }: { value: number }) {
+function ScoreBadge({ value, estimated = false }: { value: number; estimated?: boolean }) {
   const tier = value >= 80 ? 'gold' : value >= 60 ? 'good' : value >= 40 ? 'fair' : 'work';
-  const color = tier === 'gold' ? '#fde047' : tier === 'good' ? '#86efac' : tier === 'fair' ? '#fbbf24' : '#f87171';
+  const tierColor = tier === 'gold' ? '#fde047' : tier === 'good' ? '#86efac' : tier === 'fair' ? '#fbbf24' : '#f87171';
+  // 2026-06-23 (honesty) — when the score is a placeholder/default (not a real
+  // graded score) present it as an ESTIMATE: muted color + tilde + "EST" label,
+  // never as a confident graded number on a child-facing surface.
+  const color = estimated ? '#94a3b8' : tierColor;
   return (
     <View style={[styles.scoreBadge, { borderColor: color }]}>
-      <Text style={[styles.scoreValue, { color }]}>{value}</Text>
-      <Text style={[styles.scoreLabel, { color }]}>SCORE</Text>
+      <Text style={[styles.scoreValue, { color }]}>{estimated ? `~${value}` : value}</Text>
+      <Text style={[styles.scoreLabel, { color }]}>{estimated ? 'EST' : 'SCORE'}</Text>
     </View>
   );
 }

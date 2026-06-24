@@ -20,7 +20,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline, Circle, Line as SvgLine } from 'react-native-svg';
-import type { JuniorSwingAnalysis } from '../services/juniorSwingAnalyzer';
+import { realGradedHistory, type JuniorSwingAnalysis } from '../services/juniorSwingAnalyzer';
 
 export interface JuniorSwingTrendChartProps {
   history: JuniorSwingAnalysis[];
@@ -47,7 +47,10 @@ export default function JuniorSwingTrendChart({
   showRange = false, color = '#86efac', background = null, label,
 }: JuniorSwingTrendChartProps) {
   const data = useMemo(() => {
-    return history
+    // 2026-06-23 (honesty) — only plot REAL graded swings. Estimated/placeholder
+    // scores are filtered out (shared realGradedHistory) so the sparkline + delta
+    // never present a fabricated trend across placeholder scores.
+    return realGradedHistory(history)
       .slice(-limit)
       .map((h) => h.overallScore)
       .filter((s) => typeof s === 'number' && Number.isFinite(s));
@@ -64,7 +67,7 @@ export default function JuniorSwingTrendChart({
     return (
       <View style={[styles.empty, { width, height, backgroundColor: background ?? 'transparent' }]}>
         {label ? <Text style={styles.emptyLabel}>{label}</Text> : null}
-        <Text style={styles.emptyText}>Not enough swings yet</Text>
+        <Text style={styles.emptyText}>Not enough graded swings yet</Text>
       </View>
     );
   }

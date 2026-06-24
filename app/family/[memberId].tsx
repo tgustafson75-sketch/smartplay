@@ -135,7 +135,7 @@ export default function FamilyMemberScreen() {
         against: 'self_previous',
         speak: true,
       });
-      const result = env.result as { overall_match?: number } | null;
+      const result = env.result as { overall_match?: number | null } | null;
       if (env.status === 'partial' || env.confidence === 0) {
         toast.useToastStore.getState().show('Open SwingLab to pick two swings to compare.');
         router.push('/swinglab/library' as never);

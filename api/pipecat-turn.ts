@@ -202,7 +202,14 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
   // context.round (client buildContext mirrors the legacy kevin body).
   const consecutiveBadHoles = Number(round.consecutiveBadHoles ?? 0);
   const isSpiralRisk = round.isSpiralRisk === true;
-  const spiralBlock = isSpiralRisk || consecutiveBadHoles >= 3
+  // Voiced-distress spiral trip: of the LAST 3 emotional self-reports, ≥2
+  // negative valence trips the calm-reset directive even when scores are
+  // fine. Mirrors api/kevin.ts exactly.
+  const voicedDistress =
+    (Array.isArray(round.emotionalLog) ? round.emotionalLog as { valence?: string }[] : [])
+      .slice(-3)
+      .filter(e => e?.valence === 'negative').length >= 2;
+  const spiralBlock = isSpiralRisk || consecutiveBadHoles >= 3 || voicedDistress
     ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.`
     : '';
 

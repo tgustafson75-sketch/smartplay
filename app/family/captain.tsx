@@ -39,6 +39,7 @@ import {
 import JuniorSwingTrendChart from '../../components/JuniorSwingTrendChart';
 import {
   getMemberSwingHistory,
+  realGradedHistory,
   type JuniorSwingAnalysis,
 } from '../../services/juniorSwingAnalyzer';
 
@@ -526,10 +527,16 @@ function TeammateTrendStrip({
     return () => { cancelled = true; };
   }, [memberId]);
 
-  if (!history || history.length < 2) return null;
+  if (!history) return null;
 
-  const latest = history[history.length - 1]?.overallScore ?? 0;
-  const prior = history[history.length - 2]?.overallScore ?? latest;
+  // 2026-06-23 (honesty) — base the latest/delta numbers on REAL graded swings
+  // only (shared realGradedHistory), matching the sparkline. Placeholder/estimated
+  // scores never feed a fabricated delta. Need ≥2 real grades to show a trend.
+  const graded = realGradedHistory(history);
+  if (graded.length < 2) return null;
+
+  const latest = graded[graded.length - 1]?.overallScore ?? 0;
+  const prior = graded[graded.length - 2]?.overallScore ?? latest;
   const delta = latest - prior;
 
   return (

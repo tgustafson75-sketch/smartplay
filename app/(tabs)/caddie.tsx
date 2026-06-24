@@ -1249,7 +1249,17 @@ export default function CaddieTab() {
         const targetHole = (action as { hole?: number }).hole ?? currentHole;
         const score = (action as { score: number }).score;
         if (typeof score === 'number' && Number.isFinite(score)) {
-          logScore(targetHole, Math.round(score));
+          const rounded = Math.round(score);
+          // Once-per-hole mental-state advance (mirrors handleLogHole).
+          // logScore is also the per-tap edit primitive, so only advance the
+          // spiral on the FIRST score for this hole (a genuine completion) —
+          // snapshot the prior score (>0) BEFORE logScore overwrites it.
+          const alreadyScored = (useRoundStore.getState().scores[targetHole] ?? 0) > 0;
+          logScore(targetHole, rounded);
+          if (!alreadyScored) {
+            const targetPar = useRoundStore.getState().courseHoles.find(c => c.hole === targetHole)?.par ?? 4;
+            useRelationshipStore.getState().updateMentalState(rounded, targetPar);
+          }
         } else {
           // Score missing — fall back to manual modal so Tim can finish entry.
           setShowShotCard(true);

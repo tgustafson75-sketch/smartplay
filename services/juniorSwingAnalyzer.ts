@@ -133,6 +133,18 @@ export async function getMemberSwingHistory(memberId: string): Promise<JuniorSwi
   return readMemberHistory(memberId);
 }
 
+/**
+ * 2026-06-23 (honesty) — return ONLY swings with a real, server-graded score.
+ * Estimated/placeholder scores (scoreEstimated === true, e.g. the default 70
+ * when the server omits a grade) are excluded so trend sparklines + point
+ * deltas never plot a fabricated number as if it were graded progress.
+ * Shared by JuniorSwingTrendChart + the captain TeammateTrendStrip so the two
+ * surfaces can never drift on what counts as a real graded swing.
+ */
+export function realGradedHistory(history: JuniorSwingAnalysis[]): JuniorSwingAnalysis[] {
+  return history.filter((h) => !h.scoreEstimated);
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────
 
 const apiUrl = (): string => getApiBaseUrl();

@@ -1016,7 +1016,9 @@ export default function SwingDetail() {
         // primary-issue auto-narration policy.
         if (voiceEnabled && trustLevel !== 1) {
           await configureAudioForSpeech();
-          const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
+          const headline = (result.overall_match == null
+            ? `Not enough data to compare to ${ref.label} yet. ${result.takeaways[0] ?? ''}`
+            : `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`).trim();
           await speakChunked(result.voice_summary || headline, voiceGender, language, apiUrl);
         }
       } catch (e) {

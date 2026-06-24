@@ -312,6 +312,11 @@ export async function searchSimilarSwings(
         ref.source === 'self_upload' ? 'self_vs_self' :
         ref.source === 'archetype' ? 'self_vs_avatar' : 'self_vs_pro',
     });
+    // overall_match === null means there was no usable biomechanics to
+    // compare. A reference we can't actually compare against has no place
+    // in a "most similar" ranking — skip it rather than coerce null to 0
+    // (which would rank it as the worst possible match, a fabricated 0%).
+    if (cmp.overall_match == null) continue;
     if (filter?.minMatch != null && cmp.overall_match < filter.minMatch) continue;
     matches.push({
       reference: ref,

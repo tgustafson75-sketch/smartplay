@@ -302,7 +302,9 @@ export default function SwingLibrary() {
           ref.source === 'archetype'   ? 'self_vs_avatar' :
                                          'self_vs_pro';
         const result = engineMod.compareSwings({ current: compareCurrentPose, reference: referencePose, kind });
-        const headline = `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`.trim();
+        const headline = (result.overall_match == null
+          ? `Not enough data to compare to ${ref.label} yet. ${result.takeaways[0] ?? ''}`
+          : `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`).trim();
         useToastStore.getState().show(headline);
         // Push to the swing detail screen so the user can dig into
         // metrics, hotspots, voice replay, etc.

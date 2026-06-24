@@ -629,6 +629,7 @@ function CameraSmartFinder({
               geometry={geometry}
               weather={weather}
               shotBearingDeg={shotBearingDeg}
+              currentHole={currentHole}
               locked={locked}
               onTargetYardsChange={setSceneTargetYards}
               onHeadingUpdate={onHeadingUpdate}
@@ -1098,6 +1099,7 @@ function TargetCameraOverlay({
   geometry,
   weather,
   shotBearingDeg,
+  currentHole,
   locked,
   onTargetYardsChange,
   onHeadingUpdate,
@@ -1107,6 +1109,7 @@ function TargetCameraOverlay({
   geometry: HoleGeometry | null;
   weather: WeatherSnapshot | null;
   shotBearingDeg: number | null;
+  currentHole: number;
   locked?: boolean;
   onTargetYardsChange?: (yards: number | null) => void;
   onHeadingUpdate?: (h: number) => void;
@@ -1116,6 +1119,40 @@ function TargetCameraOverlay({
   const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
   useEffect(() => { onTargetYardsChange?.(targetYards); }, [targetYards, onTargetYardsChange]);
   const [targetBearing, setTargetBearing] = useState<number | null>(shotBearingDeg);
+  // 2026-06-23 (Tim — "surfaces shouldn't go dark/stale on a good signal") —
+  // SPLIT-BRAIN FIX: targetYards was seeded ONCE from yards.middle and only
+  // re-derived by a manual camera-TILT read. So when the live GPS green-middle
+  // settled/changed, the F/M/B strip (which reads `yards` directly) showed the
+  // good number while the camera intel + AI club card (which read `targetYards`)
+  // stayed stale/dashed — two halves of the same screen disagreeing.
+  //
+  // Re-sync targetYards to the live GPS green-middle whenever it's a good fix
+  // (yards.reason === 'ok'), UNLESS the user has taken precedence:
+  //   - `locked`            → they've held the reticle on a target
+  //   - lastYardsRef.current → a manual TILT read has placed a target distance
+  //     (this ref is set ONLY inside onTargetPointNormalized, so a non-null
+  //      value is the exact marker that the user has aimed)
+  // In either case we keep their value. When GPS has NO fix (reason !== 'ok')
+  // we touch nothing, so the existing static fallback behavior is unchanged.
+  useEffect(() => {
+    if (locked) return;                         // manual: held target wins
+    if (lastYardsRef.current != null) return;   // manual: tilt-placed target wins
+    if (yards.reason !== 'ok' || yards.middle == null) return; // no good GPS → leave fallback as-is
+    setTargetYards(prev => (prev === yards.middle ? prev : yards.middle));
+  }, [yards.reason, yards.middle, locked]);
+  // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
+  // target from the new hole's GPS so hole N's aim doesn't bleed into hole N+1.
+  // Keyed on currentHole; the re-sync effect above then re-syncs from the new
+  // yards.middle on the next render.
+  useEffect(() => {
+    lastYardsRef.current = null;
+    lastBearingRef.current = null;
+    setTargetYards(yards.reason === 'ok' ? yards.middle : null);
+    setTargetBearing(shotBearingDeg);
+    setReticleConfidence('medium');
+    setTargetLoc(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset is keyed on hole change only
+  }, [currentHole]);
   const [reticleConfidence, setReticleConfidence] = useState<'high' | 'medium' | 'low'>('medium');
   const [playerLoc, setPlayerLoc] = useState<{ lat: number; lng: number } | null>(null);
   // 2026-06-11 — target coord (the reticle aim point) so plays-like can factor

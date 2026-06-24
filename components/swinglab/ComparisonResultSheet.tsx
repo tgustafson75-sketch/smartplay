@@ -93,8 +93,15 @@ export default function ComparisonResultSheet({
     ]).start(() => onClose());
   };
 
+  // Insufficient-data state: the engine returns overall_match === null
+  // when there was no usable biomechanics to compare. We must NOT render
+  // a confident "0% MATCH" ring in that case — that's a fabricated
+  // negative. Show a muted "—" / "Not enough data to compare" instead.
+  const hasMatch = result?.overall_match != null;
+
   const matchColor = useMemo(() => {
-    const m = result?.overall_match ?? 0;
+    const m = result?.overall_match;
+    if (m == null) return '#6b7280'; // muted — insufficient data
     if (m >= 80) return '#86efac';
     if (m >= 60) return '#a3e635';
     if (m >= 40) return '#fbbf24';
@@ -136,14 +143,20 @@ export default function ComparisonResultSheet({
             <View style={[styles.handle, { backgroundColor: colors.text_muted, opacity: 0.4 }]} />
           </View>
 
-          {/* Header: big match % + close */}
+          {/* Header: big match % + close. When the engine couldn't
+              compare (overall_match === null), show a muted "—" and a
+              "not enough data" hint instead of a confident 0% ring. */}
           <View style={styles.headerRow}>
             <View style={[styles.matchRing, { borderColor: matchColor }]}>
-              <Text style={[styles.matchValue, { color: matchColor }]}>{result.overall_match}</Text>
+              <Text style={[styles.matchValue, { color: matchColor }]}>
+                {hasMatch ? result.overall_match : '—'}
+              </Text>
               <Text style={[styles.matchLabel, { color: matchColor }]}>MATCH</Text>
             </View>
             <View style={styles.headerText}>
-              <Text style={[styles.headerHint, { color: colors.text_muted }]}>vs reference</Text>
+              <Text style={[styles.headerHint, { color: colors.text_muted }]}>
+                {hasMatch ? 'vs reference' : 'Not enough data to compare'}
+              </Text>
               <Text style={[styles.headerLabel, { color: colors.text_primary }]} numberOfLines={2}>
                 {reference.label}
               </Text>
@@ -175,7 +188,9 @@ export default function ComparisonResultSheet({
             <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>SIDE BY SIDE</Text>
             {renderableMetrics.length === 0 ? (
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-                Not enough biomechanics to compare metric-by-metric. The match score above is based on what data was available.
+                {hasMatch
+                  ? 'Not enough biomechanics to compare metric-by-metric. The match score above is based on what data was available.'
+                  : 'Not enough biomechanics captured to compare against this reference. Record a clearer swing — full body in frame — and try again.'}
               </Text>
             ) : (
               renderableMetrics.map((m) => (
