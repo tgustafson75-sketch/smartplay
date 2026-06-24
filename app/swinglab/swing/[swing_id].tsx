@@ -30,6 +30,12 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
+// 2026-06-23 — Fix: the swing-detail DrillCard showed the "appear once analysis
+// is available" placeholder even when analysis SUCCEEDED with a detected fault,
+// because it read only the separately-stored session.drill_recommendation (null
+// for sessions whose rec was never persisted). Compute the rec from the analysis'
+// primary_issue.issue_id as a fallback, mirroring videoUpload.ts exactly.
+import { recommendDrill } from '../../../services/drillRecommendation';
 // 2026-05-28 — Fix FI: presence fill when analysis fails. Instead of
 // leaving the user staring at "Couldn't analyze this one" with no
 // caddie voice, the caddie speaks a short context-aware line
@@ -851,6 +857,18 @@ export default function SwingDetail() {
   }
 
   const issueTimestamps = shot.detected_issue_timestamps_sec ?? [];
+
+  // 2026-06-23 — DrillCard recommendation. Prefer the persisted
+  // session.drill_recommendation, but FALL BACK to computing it from the
+  // analysis' primary_issue.issue_id when the stored field is null (the bug:
+  // a completed "over the top · MODERATE" read showed the empty placeholder
+  // because only the persisted field was read). Mirrors videoUpload.ts:1031
+  // exactly — same guard, same cast. recommendDrill returns null for 'none'
+  // or an unmapped issue, so a genuinely-empty/un-analyzed swing still shows
+  // the placeholder (no fabricated drill).
+  const drillRecommendation =
+    session.drill_recommendation ??
+    (session.primary_issue ? recommendDrill(session.primary_issue.issue_id as never) : null);
 
   // 2026-06-13 (Phase 2) — capture-kind identity. Every library entry now wears a
   // badge that says WHAT it is — a live Smart Motion capture, an uploaded Coach
@@ -1850,8 +1868,8 @@ export default function SwingDetail() {
                   Full-swing sessions keep the existing placeholder
                   rendering behavior (null → "Drill suggestions will
                   appear..."). */}
-              {(!session.putting_analysis || session.drill_recommendation) && (
-                <DrillCard recommendation={session.drill_recommendation ?? null} />
+              {(!session.putting_analysis || drillRecommendation) && (
+                <DrillCard recommendation={drillRecommendation} />
               )}
 
               {/* 2026-05-23 — Coach Note card. Lives alongside the AI
