@@ -1675,23 +1675,19 @@ export const useVoiceCaddie = ({
         wrappedOnVoiceStateChange('thinking');
         try {
           await processTranscriptOverride(transcript);
-          // Pipecat handled it (spoke + dispatched tools). Done.
-          wrappedOnVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
         } catch (e) {
-          // 2026-06-23 (caddie-failsafe / no-walls) — pipecat (the default since
-          // migration v15) FAILED before speaking. Do NOT go dark. Fall back to
-          // the legacy sendToBrain path below (local-first + graceful offline
-          // degrade), which would have answered. The local-first precheck already
-          // ran ABOVE, so deterministic status queries are safe — this fallback
-          // is for the conversational/coaching turns that pipecat dropped.
-          // ONE-VOICE INVARIANT: cancel any pipecat TTS still in flight before the
-          // fallback speaks, so the cloud/mp3 + device-TTS subsystems don't race.
-          console.log('[voice] pipecat override failed — falling back to brain:', e);
-          try { await stopSpeaking(); } catch { /* best-effort */ }
-          // (no return) — fall through to the sendToBrain path below.
+          // Pipecat OWNS the turn and degrades gracefully on its own (it speaks a
+          // retry prompt on a non-ok/timeout). Do NOT fall through to the legacy
+          // sendToBrain here — that double-processed every flaky turn (pipecat
+          // attempt THEN a full second brain call), doubled latency, and let both
+          // paths display/speak (text on screen that was never spoken). The
+          // local-first precheck already ran ABOVE for offline status queries.
+          // (2026-06-23 — restores the single-path flow that worked.)
+          console.log('[voice] pipecat override error:', e);
         }
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
       }
 
       // ── Voice command routing — runs after bypasses, before brain ──

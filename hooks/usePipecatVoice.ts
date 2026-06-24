@@ -108,11 +108,7 @@ export function usePipecatVoice({
         consecutiveBadHoles: relationship.consecutiveBadHoles ?? 0,
         isSpiralRisk: (() => { try { return relationship.isSpiralRisk(); } catch { return false; } })(),
         // Subjective self-reports (last 5) — same shape kevin reads (state/valence/hole).
-        emotionalLog: useRoundStore.getState().emotionalLog.slice(-5).map(e => ({
-          state: e.state,
-          valence: e.valence,
-          hole: e.hole,
-        })),
+        emotionalLog: (() => { try { return (useRoundStore.getState().emotionalLog ?? []).slice(-5).map(e => ({ state: e.state, valence: e.valence, hole: e.hole })); } catch { return []; } })(),
         goal: round.goal ?? undefined,
       },
       bag: {
@@ -293,12 +289,19 @@ export function usePipecatVoice({
       clearTimeout(timeout);
 
       if (!resp.ok) {
-        // 2026-06-23 (caddie-failsafe/no-walls parity) — DON'T speak a dead-end
-        // warm line here. Throw so the consumer (useVoiceCaddie) falls back to
-        // the legacy sendToBrain path, which has its own local-first answer +
-        // graceful offline degrade. Going idle on a non-ok violated no-walls.
+        // Pipecat OWNS the turn. The local-first precheck already ran in
+        // useVoiceCaddie BEFORE this override, so offline/status queries are
+        // covered. On a non-ok, speak a graceful retry prompt and STOP — do NOT
+        // throw to a legacy fallback. (2026-06-23 regression: throwing here made
+        // the consumer double-process every flaky turn — pipecat attempt THEN a
+        // second full legacy brain call — doubling latency and letting both paths
+        // display/speak. Single path, single voice, graceful degrade.)
         devLog('[pipecat] /turn error:', resp.status);
-        throw new Error(`pipecat_http_${resp.status}`);
+        onVoiceStateChange?.('speaking');
+        const settings = useSettingsStore.getState();
+        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+        onVoiceStateChange?.('idle');
+        return;
       }
 
       const data = await resp.json() as {
@@ -350,12 +353,13 @@ export function usePipecatVoice({
     } catch (e) {
       clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
-      // 2026-06-23 (caddie-failsafe/no-walls parity) — if we never got a real
-      // response out, propagate the failure so the consumer (useVoiceCaddie)
-      // falls back to the legacy sendToBrain path (local-first + offline degrade)
-      // instead of dead-ending. If we ALREADY spoke, swallow (a late auto-listen
-      // throw must not double-answer).
-      if (!spokeResponse) throw e;
+      // Single-path graceful degrade (NO legacy double-processing). If we already
+      // spoke a real response, a late auto-listen throw is swallowed silently.
+      if (!spokeResponse) {
+        onVoiceStateChange?.('speaking');
+        const settings = useSettingsStore.getState();
+        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+      }
       onVoiceStateChange?.('idle');
     }
   }, [buildContext, onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
