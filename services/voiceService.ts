@@ -301,6 +301,7 @@ export const captureUtterance = async (
     // silence-VAD trips early (Fix A) OR user taps to end early
     // (2026-06-06 — endCaptureEarly path).
     const start = Date.now();
+    let lastSizeProbeAt = 0;
     while (Date.now() - start < timeoutMs && !captureCancelled && !captureEarlyStop) {
       await new Promise(resolve => setTimeout(resolve, 100));
       // Silence-VAD early stop: only after user has actually spoken
@@ -308,6 +309,29 @@ export const captureUtterance = async (
       // sustained quiet for ≥ SILENCE_TIMEOUT_MS.
       if (hasSpoken && Date.now() - lastLoudAt >= SILENCE_TIMEOUT_MS) {
         break;
+      }
+      // 2026-06-23 — real-time SIZE CEILING. Some Android OEMs (Samsung Z
+      // Fold seen in the wild) ignore the 32kbps bitRate and encode far
+      // larger; in a noisy room the silence-VAD never trips, so the file
+      // blows past Vercel's 4.5MB body limit → the audio_too_large skip +
+      // slow-upload Aborts (Tim's Jun 23 telemetry). Probe ~once/sec and
+      // force-stop BEFORE we cross the safe ceiling so every capture stays
+      // uploadable regardless of how the OEM honored the bitrate.
+      const nowMs = Date.now();
+      if (nowMs - lastSizeProbeAt >= 1000) {
+        lastSizeProbeAt = nowMs;
+        try {
+          const probeUri = recording.getURI?.();
+          if (probeUri) {
+            const FS = await import('expo-file-system/legacy');
+            const probe = await FS.getInfoAsync(probeUri);
+            const liveSize = (probe as { size?: number }).size ?? 0;
+            if (liveSize > 3.0 * 1024 * 1024) {
+              console.log('[voice] capture hit size ceiling (', liveSize, 'bytes) — force-stopping to stay under Vercel limit');
+              break;
+            }
+          }
+        } catch { /* probe non-fatal — fall through to normal stop */ }
       }
     }
 
