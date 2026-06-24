@@ -28,10 +28,10 @@ export type ClubName = (typeof CLUB_ORDER)[number];
 /** Standard amateur carry chart (yds) — inference fallback before the
  *  player has logged enough real shots. Mid-handicap baseline. */
 const STANDARD_YARDS: Record<ClubName, number> = {
-  Driver: 230, '3W': 210, '5W': 195, '7W': 180,
-  '2H': 200, '3H': 190, '4H': 180,
-  '3I': 180, '4I': 170, '5I': 160, '6I': 150, '7I': 140, '8I': 130, '9I': 120,
-  PW: 110, GW: 95, SW: 80, LW: 60, Putter: 0,
+  Driver: 275, '3W': 255, '5W': 240, '7W': 228,
+  '2H': 222, '3H': 216, '4H': 211,
+  '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
+  PW: 110, GW: 98, SW: 86, LW: 74, Putter: 0,
 };
 
 export interface ClubStat {

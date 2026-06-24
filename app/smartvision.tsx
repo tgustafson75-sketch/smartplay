@@ -1049,8 +1049,29 @@ export default function SmartVisionScreen() {
     // today (no change).
     const hasPlacedTarget = !!targetOverride;
     const fullHoleDistance = courseHoles.find(x => x.hole === holeIndex)?.distance ?? null;
-    const withDefaultMiddle = (r: { front: number | null; middle: number | null; back: number | null }) =>
-      hasPlacedTarget || fullHoleDistance == null ? r : { ...r, middle: fullHoleDistance };
+    // 2026-06-23 (SV-2 follow-up) — Owner-reported inconsistency: in the
+    // unplaced state we forced MIDDLE to the full hole distance but left
+    // FRONT/BACK at their green-relative (position-derived) values, so the
+    // three numbers no longer reconciled (real example F162 / M352 / B190 —
+    // middle 160y BEYOND back, nonsense). Fix: in the SAME unplaced branch,
+    // re-anchor F/B to the full-hole middle by PRESERVING the computed
+    // front→middle and middle→back deltas (= a realistic green depth) and
+    // applying them to fullHoleDistance: newFront = full − (middle − front),
+    // newBack = full + (back − middle). This keeps front < middle < back and
+    // a sensible green depth. If either F or B isn't available to derive a
+    // delta, we DASH it (null) — better than a contradictory number. Once
+    // the user places the marker (hasPlacedTarget), F/M/B compute from the
+    // marker exactly as today (no change to that path).
+    const withDefaultMiddle = (r: { front: number | null; middle: number | null; back: number | null }) => {
+      if (hasPlacedTarget || fullHoleDistance == null) return r;
+      const frontDelta = r.middle != null && r.front != null ? r.middle - r.front : null;
+      const backDelta = r.middle != null && r.back != null ? r.back - r.middle : null;
+      return {
+        front: frontDelta != null ? Math.max(0, Math.round(fullHoleDistance - frontDelta)) : null,
+        middle: fullHoleDistance,
+        back: backDelta != null ? Math.round(fullHoleDistance + backDelta) : null,
+      };
+    };
     if (usingGpsTile && targetPx && geometry && pinPx) {
       const targetGeo = pixelsToLatLng(targetPx, projection!.center, projection!.zoom, projection!.bearing);
       const pinGeo = pixelsToLatLng(pinPx, projection!.center, projection!.zoom, projection!.bearing);

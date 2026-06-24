@@ -17,7 +17,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
-  ActivityIndicator,
+  ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -254,6 +254,10 @@ export default function SwingLibrary() {
   // swingComparisonEngine pass and route the user into the swing
   // detail surface with a toast summary.
   const [compareSessionId, setCompareSessionId] = useState<string | null>(null);
+  // 2026-06-23 (Tim declutter) — which row's "⋯" overflow menu is open.
+  // The action sheet consolidates the former inline Compare + Delete
+  // icons into a single control so the title/date have room to breathe.
+  const [rowMenuSessionId, setRowMenuSessionId] = useState<string | null>(null);
   // 2026-05-23 — YouTube reference modal state. Replaces the
   // iOS-only Alert.prompt hack with a real cross-platform modal.
   const [ytModalOpen, setYtModalOpen] = useState(false);
@@ -614,10 +618,32 @@ export default function SwingLibrary() {
                     </View>
                   );
                 })()}
+                {/* 2026-06-23 (Tim declutter) — title gets its own line
+                    with room to breathe; only the thumbnail, a single
+                    "⋯" overflow control + the chevron compete for width.
+                    Date + status live on the second line. Type badge sits
+                    inline with the title row but after the flexible title
+                    so it never squeezes the label. */}
                 <View style={styles.rowMain}>
-                  <Text style={[styles.rowTitle, { color: colors.text_primary }]} numberOfLines={1}>
-                    {entry.display_label}
-                  </Text>
+                  <View style={styles.rowTitleLine}>
+                    <Text style={[styles.rowTitle, { color: colors.text_primary }]} numberOfLines={1}>
+                      {entry.display_label}
+                    </Text>
+                    <View style={[
+                      styles.sourceBadge,
+                      {
+                        backgroundColor: isUpload ? colors.accent_muted : colors.surface_elevated,
+                        borderColor: colors.border,
+                      },
+                    ]}>
+                      <Text style={[
+                        styles.sourceText,
+                        { color: isUpload ? colors.accent : colors.text_muted },
+                      ]}>
+                        {isUpload ? 'UPLOAD' : 'CAGE'}
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>
                     {dateStr} · {entry.swing_count} swing{entry.swing_count === 1 ? '' : 's'}
                   </Text>
@@ -655,52 +681,25 @@ export default function SwingLibrary() {
                   })()}
                 </View>
                 <View style={styles.rowTrailing}>
-                  {entry.session.biomechanics ? (
-                    <TouchableOpacity
-                      onPress={(e) => {
-                        e.stopPropagation?.();
-                        setCompareSessionId(entry.session.id);
-                      }}
-                      style={styles.compareBtn}
-                      accessibilityRole="button"
-                      accessibilityLabel="Compare this swing to a reference"
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
-                    </TouchableOpacity>
-                  ) : null}
-                  {/* 2026-05-25 — Visible trash icon. Long-press still
-                      works (existing behavior), but the icon makes
-                      delete discoverable per Tim's "need to delete
-                      videos" ask. e.stopPropagation prevents the row
-                      tap (which navigates to the swing detail) from
-                      firing alongside. */}
+                  {/* 2026-06-23 (Tim declutter) — the inline trash +
+                      compare-swap icons were consolidated into ONE "⋯"
+                      overflow control. It opens a small action sheet
+                      (rowMenuSessionId) whose items call the SAME
+                      handlers the inline icons used to: Compare →
+                      setCompareSessionId, Delete → onLongPress (which
+                      keeps the delete-confirmation Alert). */}
                   <TouchableOpacity
                     onPress={(e) => {
                       e.stopPropagation?.();
-                      onLongPress(entry.session.id);
+                      setRowMenuSessionId(entry.session.id);
                     }}
                     style={styles.compareBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Delete this swing from library"
+                    accessibilityLabel="More actions for this swing"
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Ionicons name="trash-outline" size={18} color={colors.text_muted} />
+                    <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
-                  <View style={[
-                    styles.sourceBadge,
-                    {
-                      backgroundColor: isUpload ? colors.accent_muted : colors.surface_elevated,
-                      borderColor: colors.border,
-                    },
-                  ]}>
-                    <Text style={[
-                      styles.sourceText,
-                      { color: isUpload ? colors.accent : colors.text_muted },
-                    ]}>
-                      {isUpload ? 'UPLOAD' : 'CAGE'}
-                    </Text>
-                  </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
                 </View>
               </TouchableOpacity>
@@ -708,6 +707,67 @@ export default function SwingLibrary() {
           })}
         </ScrollView>
       )}
+
+      {/* 2026-06-23 (Tim declutter) — per-row overflow action sheet.
+          Replaces the two inline row icons. "Compare" only appears when
+          the session has biomechanics (same gate the inline compare icon
+          used). "Delete" calls onLongPress, preserving the delete
+          confirmation Alert. Tapping a row's "⋯" sets rowMenuSessionId. */}
+      {(() => {
+        const menuEntry = rowMenuSessionId
+          ? entries.find(e => e.session.id === rowMenuSessionId) ?? null
+          : null;
+        const canCompare = !!menuEntry?.session.biomechanics;
+        const closeMenu = () => setRowMenuSessionId(null);
+        return (
+          <Modal
+            visible={rowMenuSessionId != null}
+            transparent
+            animationType="fade"
+            onRequestClose={closeMenu}
+          >
+            <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={closeMenu}>
+              <TouchableOpacity activeOpacity={1}>
+                <View style={[styles.menuSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={styles.menuHandle} />
+                  {menuEntry && (
+                    <Text style={[styles.menuTitle, { color: colors.text_primary }]} numberOfLines={1}>
+                      {menuEntry.display_label}
+                    </Text>
+                  )}
+                  {canCompare && (
+                    <TouchableOpacity
+                      style={[styles.menuRow, { borderTopColor: colors.border }]}
+                      onPress={() => {
+                        const id = rowMenuSessionId;
+                        closeMenu();
+                        if (id) setCompareSessionId(id);
+                      }}
+                    >
+                      <Ionicons name="git-compare-outline" size={20} color={colors.text_primary} />
+                      <Text style={[styles.menuLabel, { color: colors.text_primary }]}>Compare</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.menuRow, { borderTopColor: colors.border }]}
+                    onPress={() => {
+                      const id = rowMenuSessionId;
+                      closeMenu();
+                      if (id) onLongPress(id);
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                    <Text style={[styles.menuLabel, { color: '#ef4444' }]}>Delete</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCancel} onPress={closeMenu}>
+                    <Text style={[styles.menuCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+        );
+      })()}
 
       {/* 2026-05-23 — Library Compare picker. Renders the same sheet
           used in the swing detail screen; the picker handles the
@@ -835,7 +895,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 2,
   },
-  rowTitle: { fontSize: 15, fontWeight: '800' },
+  // 2026-06-23 (Tim declutter) — title + type badge share the first
+  // line; the title flexes (shrinks) so the small badge never squeezes
+  // it the way the old icon cluster did.
+  rowTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rowTitle: { flexShrink: 1, fontSize: 15, fontWeight: '800' },
   rowMeta: { fontSize: 12, fontWeight: '600' },
   rowIssue: { fontSize: 12, fontWeight: '700', marginTop: 2 },
   rowTrailing: {
@@ -900,4 +968,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.3,
   },
+  // 2026-06-23 (Tim declutter) — per-row "⋯" overflow action sheet.
+  // Mirrors the SwingActionSheet bottom-sheet pattern (backdrop +
+  // slide-up panel + action rows) so it feels native to the app.
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    paddingBottom: 32,
+  },
+  menuHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#9ca3af',
+    alignSelf: 'center',
+    marginBottom: 12,
+    opacity: 0.5,
+  },
+  menuTitle: { fontSize: 15, fontWeight: '900', marginBottom: 6 },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  menuCancel: { paddingVertical: 14, alignItems: 'center', marginTop: 6 },
+  menuCancelText: { fontSize: 14, fontWeight: '700' },
 });

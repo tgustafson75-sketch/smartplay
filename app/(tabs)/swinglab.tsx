@@ -432,8 +432,8 @@ const styles = StyleSheet.create({
   },
   cardText: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  cardTitle: { fontSize: 17, fontWeight: '800' },
-  tag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  cardTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
+  tag: { flexShrink: 0, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
 

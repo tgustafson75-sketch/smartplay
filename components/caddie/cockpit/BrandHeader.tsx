@@ -86,7 +86,7 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
             <Text style={[styles.brand1, { color: colors.accent }]}>SMARTPLAY</Text>
             <Text style={[styles.brand2, { color: colors.text_primary }]}> CADDIE</Text>
           </View>
-          <Text style={[styles.tagline, { color: colors.text_muted }]}>
+          <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {voiceState === 'listening' ? 'LISTENING…'
               : voiceState === 'thinking' ? 'THINKING…'
               : voiceState === 'speaking' ? 'SPEAKING…'

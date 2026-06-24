@@ -197,7 +197,7 @@ export default function TempoTrainerScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${p.label} tempo, ${p.frames}`}
               >
-                <Text style={[styles.presetLabel, { color: sel ? colors.accent : colors.text_primary }]}>{p.label}</Text>
+                <Text style={[styles.presetLabel, { color: sel ? colors.accent : colors.text_primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{p.label}</Text>
                 <Text style={[styles.presetFrames, { color: colors.text_muted }]}>{p.frames}</Text>
               </Pressable>
             );
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   beatLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
   sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1, alignSelf: 'flex-start', marginTop: 34, marginBottom: 10 },
   presetRow: { flexDirection: 'row', gap: 8, width: '100%' },
-  presetChip: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  presetChip: { flex: 1, borderWidth: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 4, alignItems: 'center' },
   presetLabel: { fontSize: 13, fontWeight: '800' },
   presetFrames: { fontSize: 10, marginTop: 2 },
   playBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 28, paddingVertical: 15, borderRadius: 14, alignSelf: 'stretch' },

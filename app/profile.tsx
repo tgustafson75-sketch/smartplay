@@ -82,17 +82,17 @@ export default function ProfileScreen() {
           <View style={styles.statRow}>
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.accent }]}>{indexLabel}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]}>HANDICAP INDEX</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>HANDICAP INDEX</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.text_primary }]}>{roundsTracked}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]}>ROUNDS</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>ROUNDS</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.text_primary }]}>{diffCount}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]}>DIFFERENTIALS</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>DIFFERENTIALS</Text>
             </View>
           </View>
           <View style={styles.metaRow}>

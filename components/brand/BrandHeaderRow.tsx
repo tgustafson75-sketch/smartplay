@@ -99,7 +99,7 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
           <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
           <Text style={{ color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' }}> CADDIE</Text>
         </Text>
-        <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1}>
+        <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {tagline}
         </Text>
       </View>
