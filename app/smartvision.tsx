@@ -1558,7 +1558,17 @@ export default function SmartVisionScreen() {
           <View style={styles.holeBadge}>
             <Text style={styles.holeBadgeNum}>{holeIndex}</Text>
             <Text style={styles.holeBadgePar}>
-              {geometry ? `PAR ${geometry.par} · ${geometry.yardage}y` : '—'}
+              {(() => {
+                // Curated holes + pre-round have null geometry (e.g. Palms), so the
+                // chip would read "—". Fall back to the bundled courseHoles meta
+                // (same source the par memo + carry calc already use).
+                const hMeta = courseHoles.find(h => h.hole === holeIndex);
+                return geometry
+                  ? `PAR ${geometry.par} · ${geometry.yardage}y`
+                  : hMeta
+                    ? `PAR ${hMeta.par} · ${hMeta.distance}y`
+                    : '—';
+              })()}
             </Text>
             {/* 2026-05-23 — Glasses badge under the hole/par chip.
                 Surfaces when DAT is connected so the player sees that

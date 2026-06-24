@@ -214,6 +214,9 @@ export async function POST(request: Request) {
       // it into any club / strategy recommendation without waiting
       // for the player to re-state it.
       pendingLieAnalysis = null,
+      // Subjective emotional self-reports — see api/kevin.ts. Lets the
+      // caddie read the room from how the player says he feels.
+      emotionalLog = [],
     } = body as {
       message?: string;
       language?: string;
@@ -278,6 +281,7 @@ export async function POST(request: Request) {
       // lieAnalysisService keeps both call sites in lockstep without
       // dragging the service's runtime deps into the API route.
       pendingLieAnalysis?: LieAnalysis | null;
+      emotionalLog?: { state?: string; valence?: string; hole?: number }[];
     };
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
@@ -430,6 +434,11 @@ ${(recentShots as { hole: number; shotIndex: number; direction?: string; outcome
       (s.direction ? ` ${s.direction}` : '') +
       (s.outcome ? `, ${s.outcome}` : s.outcomeText ? `, ${s.outcomeText}` : '')
     ).join('\n')}\nIf there's a clear pattern (3+ shots in one direction, repeated contact issues), reference it once when giving tactical advice — don't repeat every shot.`
+  : ''}
+${(emotionalLog as { state?: string; valence?: string; hole?: number }[]).length > 0
+  ? `[HOW TIM SAYS HE FEELS]
+${(emotionalLog as { state?: string; valence?: string; hole?: number }[]).slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valence})` : '') + (e.hole != null ? ` · h${e.hole}` : '')).join('\n')}
+[/HOW TIM FEELS]`
   : ''}
 ${pendingLieAnalysis ? `\nCURRENT LIE (from TightLie analysis, just captured):
   Situation: ${pendingLieAnalysis.situation_description}

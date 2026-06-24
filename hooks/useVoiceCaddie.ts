@@ -51,6 +51,7 @@ import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -1648,6 +1649,9 @@ export const useVoiceCaddie = ({
           const local = responder.tryLocalReply(transcript, langSafe);
           if (local) {
             devLog('[voice] LOCAL-FIRST hit:', local.queryType);
+            // Instrument the local hit-rate (self-growing-agent: brain grows →
+            // tokens+network fall, so we measure how often the local path answers).
+            try { useVoiceHitRateStore.getState().recordLocal(`tap_local:${local.queryType}`, Date.now()); } catch {}
             onResponseReceived(local.text);
             recordKevinTurn(local.text);
             wrappedOnVoiceStateChange('speaking');
@@ -1671,12 +1675,23 @@ export const useVoiceCaddie = ({
         wrappedOnVoiceStateChange('thinking');
         try {
           await processTranscriptOverride(transcript);
+          // Pipecat handled it (spoke + dispatched tools). Done.
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
         } catch (e) {
-          console.log('[voice] pipecat override error:', e);
+          // 2026-06-23 (caddie-failsafe / no-walls) — pipecat (the default since
+          // migration v15) FAILED before speaking. Do NOT go dark. Fall back to
+          // the legacy sendToBrain path below (local-first + graceful offline
+          // degrade), which would have answered. The local-first precheck already
+          // ran ABOVE, so deterministic status queries are safe — this fallback
+          // is for the conversational/coaching turns that pipecat dropped.
+          // ONE-VOICE INVARIANT: cancel any pipecat TTS still in flight before the
+          // fallback speaks, so the cloud/mp3 + device-TTS subsystems don't race.
+          console.log('[voice] pipecat override failed — falling back to brain:', e);
+          try { await stopSpeaking(); } catch { /* best-effort */ }
+          // (no return) — fall through to the sendToBrain path below.
         }
-        wrappedOnVoiceStateChange('idle');
-        isProcessingRef.current = false;
-        return;
       }
 
       // ── Voice command routing — runs after bypasses, before brain ──

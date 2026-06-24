@@ -1507,6 +1507,12 @@ export default function SmartMotion() {
     setFeelText('');
     setFeelReply(null);
     setDraftBall(DEFAULT_BALL_BOX); // keep the default reference box after Record again
+    // Re-arm the DTL handedness rig + pose ball-auto-anchor for the next capture.
+    // Without this, the first clip "consumes" both refs and every later "Record
+    // again" / hands-free loop loses the outer-third partition + auto-anchor. The
+    // re-applying effect (~L571) is putt-guarded, so resetting here is safe.
+    dtlDefaultAppliedRef.current = false;
+    userMovedBallRef.current = false;
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
     ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset

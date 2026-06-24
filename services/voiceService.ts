@@ -1427,11 +1427,12 @@ export const speak = async (
         console.log('[voice] speak retry Sound.createAsync — myId=', myId,
           'isLoaded=', loaded2, 'durationMillis=', dur2);
         if (!loaded2 || dur2 === 0) {
-          console.log('[voice] speak retry STILL dead — giving up on this utterance (likely OS audio session denied playback)');
+          console.log('[voice] speak retry STILL dead — OS audio session denied playback; falling back to device TTS instead of going mute');
           logVoiceSilentFail('speak_dead_load_giving_up', { speechId: myId, isLoaded: loaded2, durationMillis: dur2, bytes: arrayBuffer.byteLength, textHead: text.slice(0, 60) });
           try { await sound.unloadAsync(); } catch {}
           notifyCaption(null);
           notifySpeaking(false);
+          await deviceSpeakFallback(text, language, myId, effectiveGender);
           return;
         }
       }

@@ -15,6 +15,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
+import { useRelationshipStore } from '../store/relationshipStore';
 import { getLastFix } from '../services/gpsManager';
 import { bagDistances } from '../services/shotStrategy';
 import { recordKevinTurn } from '../services/conversationState';
@@ -80,6 +81,11 @@ export function usePipecatVoice({
     const settings = useSettingsStore.getState();
     const profile = usePlayerProfileStore.getState();
     const trustLevel = useTrustLevelStore.getState().level;
+    // Parity with the legacy /api/kevin path (useVoiceCaddie ~921-923, 1034):
+    // ship the LIVE mental-state signals so the pipecat brain can act as the
+    // sports psychologist (spiral reset + "how Tim feels"), not just the static
+    // pre-round mentalState string.
+    const relationship = useRelationshipStore.getState();
 
     return {
       player: {
@@ -94,7 +100,19 @@ export function usePipecatVoice({
         currentHole: round.currentHole ?? undefined,
         courseId: round.activeCourseId ?? undefined,
         courseName: round.activeCourse ?? undefined,
-        mentalState: round.mentalState ?? undefined,
+        // Live mental-state (relationship store) — mirrors the legacy kevin body
+        // (useVoiceCaddie: mentalState: currentMentalState, consecutiveBadHoles,
+        // isSpiralRisk: isSpiralRisk()). The static round.mentalState pre-round
+        // string is superseded by the live currentMentalState here.
+        mentalState: relationship.currentMentalState ?? round.mentalState ?? undefined,
+        consecutiveBadHoles: relationship.consecutiveBadHoles ?? 0,
+        isSpiralRisk: (() => { try { return relationship.isSpiralRisk(); } catch { return false; } })(),
+        // Subjective self-reports (last 5) — same shape kevin reads (state/valence/hole).
+        emotionalLog: useRoundStore.getState().emotionalLog.slice(-5).map(e => ({
+          state: e.state,
+          valence: e.valence,
+          hole: e.hole,
+        })),
         goal: round.goal ?? undefined,
       },
       bag: {
@@ -254,6 +272,9 @@ export function usePipecatVoice({
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
+    // Once we've spoken a real response, a later throw (e.g. auto-listen) must
+    // NOT trigger the consumer's sendToBrain fallback — that would double-answer.
+    let spokeResponse = false;
 
     try {
       const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
@@ -272,12 +293,12 @@ export function usePipecatVoice({
       clearTimeout(timeout);
 
       if (!resp.ok) {
+        // 2026-06-23 (caddie-failsafe/no-walls parity) — DON'T speak a dead-end
+        // warm line here. Throw so the consumer (useVoiceCaddie) falls back to
+        // the legacy sendToBrain path, which has its own local-first answer +
+        // graceful offline degrade. Going idle on a non-ok violated no-walls.
         devLog('[pipecat] /turn error:', resp.status);
-        onVoiceStateChange?.('speaking');
-        const settings = useSettingsStore.getState();
-        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl()).catch(() => {});
-        onVoiceStateChange?.('idle');
-        return;
+        throw new Error(`pipecat_http_${resp.status}`);
       }
 
       const data = await resp.json() as {
@@ -302,12 +323,13 @@ export function usePipecatVoice({
 
       // TTS via existing speak() path
       if (text) {
+        spokeResponse = true;
         onVoiceStateChange?.('speaking');
         onKevinSpoke?.(text);
         recordKevinTurn(text);
         try {
           const settings = useSettingsStore.getState();
-          await speak(text, settings.voiceGender, settings.language, getApiBaseUrl());
+          await speak(text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true });
         } catch (e) {
           devLog('[pipecat] tts error:', e);
         }
@@ -328,9 +350,12 @@ export function usePipecatVoice({
     } catch (e) {
       clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
-      onVoiceStateChange?.('speaking');
-      const settings = useSettingsStore.getState();
-      await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl()).catch(() => {});
+      // 2026-06-23 (caddie-failsafe/no-walls parity) — if we never got a real
+      // response out, propagate the failure so the consumer (useVoiceCaddie)
+      // falls back to the legacy sendToBrain path (local-first + offline degrade)
+      // instead of dead-ending. If we ALREADY spoke, swallow (a late auto-listen
+      // throw must not double-answer).
+      if (!spokeResponse) throw e;
       onVoiceStateChange?.('idle');
     }
   }, [buildContext, onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);

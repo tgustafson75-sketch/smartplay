@@ -805,6 +805,18 @@ export const useRoundStore = create<RoundState>()(
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
         });
+        // 2026-06-23 (audit FIX A) — reset the mental-coach spiral at
+        // round start. resetSpiral had ZERO callers, so a round ended
+        // mid-spiral left consecutiveBadHoles/currentMentalState='spiraling'
+        // persisted into the NEXT round, muting hole-1 tactical coaching.
+        // Clear it here alongside the other start-of-round resets.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const relMod = require('./relationshipStore') as typeof import('./relationshipStore');
+          relMod.useRelationshipStore.getState().resetSpiral();
+        } catch (e) {
+          console.log('[roundStore] resetSpiral at round start failed (non-fatal):', e);
+        }
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
         // FIX B6 — hole 1 voice intro. startRound sets currentHole:1 via direct
@@ -944,8 +956,10 @@ export const useRoundStore = create<RoundState>()(
         // gpsManager via recalibrate). A user could tap Start Round
         // without ever navigating to the Caddie tab and miss GPS
         // entirely. Now: startRound is the single orchestrator that
-        // ensures permission + GPS + shot detection are running before
-        // the user does anything else.
+        // ensures permission + GPS are running before the user does
+        // anything else. (Shot detection is NOT started here — see FIX B
+        // below; it is owned by the gated subscriber in app/_layout.tsx
+        // which respects the user's autoShotDetection setting + cartMode.)
         //
         // hole detection + off-course detector + poor-signal subscription
         // already auto-start from app/_layout.tsx via the existing
@@ -1008,9 +1022,13 @@ export const useRoundStore = create<RoundState>()(
             }
             const { startGpsManager } = await import('../services/gpsManager');
             await startGpsManager();
-            const { shotDetectionService } = await import('../services/shotDetectionService');
-            await shotDetectionService.start();
-            console.log('[audit:round-active] GPS + shot detection orchestrated start complete');
+            // 2026-06-23 (audit FIX B) — shot detection is NOT started here.
+            // The gated subscriber in app/_layout.tsx owns it: it respects
+            // the user's autoShotDetection setting and calls configure({cartMode})
+            // first. The previous unconditional shotDetectionService.start()
+            // here bypassed that setting (phantom shot prompts Tim disabled)
+            // and skipped cartMode config. startRound orchestrates GPS only.
+            console.log('[audit:round-active] GPS orchestrated start complete (shot detection owned by _layout gated subscriber)');
           } catch (e) {
             console.log('[roundStore] round-start orchestration failed (non-fatal):', e);
           }

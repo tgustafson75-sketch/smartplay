@@ -195,6 +195,26 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
       ].filter(Boolean).join('\n')
     : '';
 
+  // ── Live mental-state coaching (PARITY with api/kevin.ts) ──────────────────
+  // Mirrors kevin.ts EXACTLY: the spiral-reset directive (kevin.ts:836) and the
+  // [HOW TIM SAYS HE FEELS] emotionalLog block (kevin.ts:1067-1071). Gated on
+  // the same consecutiveBadHoles/isSpiralRisk thresholds. Fields come from
+  // context.round (client buildContext mirrors the legacy kevin body).
+  const consecutiveBadHoles = Number(round.consecutiveBadHoles ?? 0);
+  const isSpiralRisk = round.isSpiralRisk === true;
+  const spiralBlock = isSpiralRisk || consecutiveBadHoles >= 3
+    ? `IMPORTANT: ${consecutiveBadHoles} difficult holes. ONE calm sentence to reset focus. Nothing else.`
+    : '';
+
+  const emoArr = Array.isArray(round.emotionalLog)
+    ? round.emotionalLog as { state?: string; valence?: string; hole?: number }[]
+    : [];
+  const emotionalBlock = emoArr.length > 0
+    ? `[HOW TIM SAYS HE FEELS]
+${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valence})` : '') + (e.hole != null ? ` · h${e.hole}` : '')).join('\n')}
+[/HOW TIM FEELS]`
+    : '';
+
   const historySection = history.length > 0
     ? 'RECENT CONVERSATION:\n' + history.map(m =>
         `${m.role === 'user' ? name : caddieName}: ${m.content}`
@@ -225,7 +245,11 @@ MENTAL GAME — You are also a sports psychologist and emotional coach. This is 
 - The tone of WHAT they say matters as much as the words. Read the emotional subtext.
 - Use log_emotional_state when you detect a meaningful emotional shift (frustrated, confident, anxious, resigned).
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
-- Never bring up a mistake unless the player mentions it first.`.trim();
+- Never bring up a mistake unless the player mentions it first.
+
+${spiralBlock}
+
+${emotionalBlock}`.trim();
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────────
