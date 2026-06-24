@@ -32,13 +32,26 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
-// 2026-06-24 (Tim) — SECTION-as-one-color, graduated button-by-button. Each section
-// reads as a single hue that steps shade by shade down its cards (the prior per-card
-// accents were an interleaved jumble). Bases: ANALYZE→GREEN (hero), PRACTICE→AMBER,
-// PLAY→SKY, PREPARE→GREEN. Greens are never adjacent (amber + sky sit between them).
-// Per-card shade is computed from the card's index within its section + the section's
-// card count, so the gradient auto-adjusts as cards are added/removed.
-import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
+// 2026-06-24 (Tim) — CONTINUOUS COOL SPECTRUM that cascades down the whole hub.
+// ONE green→teal→cyan→sky→indigo gradient flows top to bottom; each SECTION owns a
+// SEGMENT of that spectrum and graduates strongly across its cards, then hands its end
+// hue to the next section's start so the page reads as one flowing cool cascade. NO
+// amber/yellow anywhere. Per-card color = linear hex interpolation start→end by the
+// card's index, so the gradient auto-adjusts as cards are added/removed (e.g. the
+// flag-gated Setup Check changing PREPARE's count still graduates smoothly).
+//   ANALYZE  → GREEN  #00C896 (solo hero, no graduation)
+//   PRACTICE → TEAL   #2DD4BF → CYAN  #22D3EE
+//   PLAY     → CYAN   #22D3EE → SKY   #38BDF8
+//   PREPARE  → SKY    #38BDF8 → INDIGO #6366F1
+import { ACCENT_GREEN } from '../../theme/tokens';
+
+// Per-section spectrum segments [startHex, endHex]. Endpoints chain so the whole page
+// flows green→indigo continuously. ANALYZE is the solo green hero (handled directly).
+const SECTION_SEGMENTS = {
+  practice: ['#2DD4BF', '#22D3EE'] as const, // teal → cyan
+  play: ['#22D3EE', '#38BDF8'] as const,     // cyan → sky
+  prepare: ['#38BDF8', '#6366F1'] as const,  // sky  → indigo
+} as const;
 
 // 2026-06-16 (Tim — mockup) — branded SmartMotion icons for the hero + feature row.
 const ICON_FEATURE_SM = require('../../assets/icons/smartmotion/feature-smartmotion.png');
@@ -55,7 +68,7 @@ interface LauncherCardSpec {
   /** Route to push on tap. */
   route: string;
   /** Short role tag rendered in the card. Color is no longer per-card — it is
-   *  derived per-section (one hue) + graduated by the card's index (see shade()). */
+   *  the section's spectrum segment interpolated by the card's index (see segmentColor()). */
   tag: string;
 }
 
@@ -212,45 +225,32 @@ function hexFade(hex: string, alpha: number): string {
 }
 
 /**
- * 2026-06-24 (Tim) — graduate a base hue shade-by-shade within a section.
- *   t < 0 → lighten (mix toward white), t > 0 → deepen (mix toward black).
- * t lives in roughly [-0.25, +0.25]; deepening is CLAMPED (we only mix ~70%
- * of t toward black) so the bottom card's badge text stays legible on the
- * dark background. Deterministic, no allocation beyond the returned string.
+ * 2026-06-24 (Tim) — linearly interpolate two hex colors in RGB.
+ *   t in [0,1]: 0 → a, 1 → b. Returns a hex string. The spine of the
+ *   continuous cool-spectrum cascade. Deterministic, allocation-free
+ *   beyond the returned string.
  */
-function shade(hex: string, t: number): string {
-  const h = hex.replace('#', '');
-  let r = parseInt(h.slice(0, 2), 16);
-  let g = parseInt(h.slice(2, 4), 16);
-  let b = parseInt(h.slice(4, 6), 16);
-  if (t < 0) {
-    // Lighten: mix toward white by |t|.
-    const k = Math.min(0.5, -t);
-    r = Math.round(r + (255 - r) * k);
-    g = Math.round(g + (255 - g) * k);
-    b = Math.round(b + (255 - b) * k);
-  } else if (t > 0) {
-    // Deepen: mix toward black, but clamp so it never goes too dark to read.
-    const k = Math.min(0.18, t * 0.7);
-    r = Math.round(r * (1 - k));
-    g = Math.round(g * (1 - k));
-    b = Math.round(b * (1 - k));
-  }
+function lerpHex(a: string, b: string, t: number): string {
+  const k = Math.max(0, Math.min(1, t));
+  const pa = a.replace('#', '');
+  const pb = b.replace('#', '');
+  const ar = parseInt(pa.slice(0, 2), 16), ag = parseInt(pa.slice(2, 4), 16), ab = parseInt(pa.slice(4, 6), 16);
+  const br = parseInt(pb.slice(0, 2), 16), bg = parseInt(pb.slice(2, 4), 16), bb = parseInt(pb.slice(4, 6), 16);
+  const r = Math.round(ar + (br - ar) * k);
+  const g = Math.round(ag + (bg - ag) * k);
+  const bl = Math.round(ab + (bb - ab) * k);
   const hx = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${hx(r)}${hx(g)}${hx(b)}`;
+  return `#${hx(r)}${hx(g)}${hx(bl)}`;
 }
 
 /**
- * Per-card accent for a section: ONE base hue graduated by the card's index.
- * Top card = lightest/brightest, stepping deeper down the section. Driven by
- * count so the gradient auto-adjusts when cards are added/removed. RANGE is the
- * total light→deep span across the section (split evenly around the base).
+ * Per-card accent for a section: interpolate the section's spectrum SEGMENT
+ * (startHex → endHex) by the card's index. count<=1 pins the start. Driven by
+ * count so the gradient auto-adjusts when cards are added/removed, and the
+ * segment endpoints chain section-to-section into one continuous cascade.
  */
-const SHADE_RANGE = 0.34;
-function sectionShade(base: string, index: number, count: number): string {
-  if (count <= 1) return base;
-  const t = (index / (count - 1)) * SHADE_RANGE - SHADE_RANGE / 2;
-  return shade(base, t);
+function segmentColor(startHex: string, endHex: string, index: number, count: number): string {
+  return lerpHex(startHex, endHex, count <= 1 ? 0 : index / (count - 1));
 }
 
 export default function SwingLab() {
@@ -284,7 +284,7 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_analyze', { defaultValue: 'ANALYZE & IMPROVE' })}
         </Text>
-        {/* ANALYZE → GREEN (single hero card, base hue). */}
+        {/* ANALYZE → solid GREEN #00C896 (single hero card, spectrum start, no graduation). */}
         <SmartMotionHero
           spec={HERO_CARD}
           accent={ACCENT_GREEN}
@@ -295,12 +295,12 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_practice', { defaultValue: 'PRACTICE BETTER' })}
         </Text>
-        {/* PRACTICE → AMBER, graduated top→bottom. */}
+        {/* PRACTICE → TEAL → CYAN, graduated top→bottom. */}
         {PRACTICE_SECTION.map((card, i) => (
           <LauncherCard
             key={card.key}
             spec={card}
-            accent={sectionShade(ACCENT_AMBER, i, PRACTICE_SECTION.length)}
+            accent={segmentColor(SECTION_SEGMENTS.practice[0], SECTION_SEGMENTS.practice[1], i, PRACTICE_SECTION.length)}
             colors={colors}
             onPress={() => router.push(card.route as never)}
           />
@@ -309,12 +309,12 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_play', { defaultValue: 'PLAY SMARTER' })}
         </Text>
-        {/* PLAY → SKY, graduated top→bottom. */}
+        {/* PLAY → CYAN → SKY, graduated top→bottom (continues from PRACTICE's cyan end). */}
         {PLAY_SECTION.map((card, i) => (
           <LauncherCard
             key={card.key}
             spec={card}
-            accent={sectionShade(ACCENT_SKY, i, PLAY_SECTION.length)}
+            accent={segmentColor(SECTION_SEGMENTS.play[0], SECTION_SEGMENTS.play[1], i, PLAY_SECTION.length)}
             colors={colors}
             onPress={() => router.push(card.route as never)}
           />
@@ -323,12 +323,12 @@ export default function SwingLab() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
           {t('swinglab.sec_prepare', { defaultValue: 'PREPARE BETTER' })}
         </Text>
-        {/* PREPARE → GREEN, graduated top→bottom (amber+sky sit between it and the green hero). */}
+        {/* PREPARE → SKY → INDIGO, graduated top→bottom (continues from PLAY's sky end → indigo). */}
         {PREPARE_SECTION.map((card, i) => (
           <LauncherCard
             key={card.key}
             spec={card}
-            accent={sectionShade(ACCENT_GREEN, i, PREPARE_SECTION.length)}
+            accent={segmentColor(SECTION_SEGMENTS.prepare[0], SECTION_SEGMENTS.prepare[1], i, PREPARE_SECTION.length)}
             colors={colors}
             onPress={() => router.push(card.route as never)}
           />
