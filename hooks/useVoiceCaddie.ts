@@ -714,6 +714,12 @@ export const useVoiceCaddie = ({
   // ── SEND TO BRAIN ─────────────────────────
 
   const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
+    // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Count a
+    // voice turn whenever the caddie brain is engaged. No message content sent.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../services/usageTelemetry').track('voice_turn');
+    } catch { /* telemetry never throws */ }
     // 2026-06-13 (Cecily) — if the player asked the caddie to SING, reshape the brain
     // message into a playful "attempt to sing" prompt so the caddie gives it a go
     // (charming, brief, kid-friendly) instead of answering flat or refusing.

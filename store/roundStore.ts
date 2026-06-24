@@ -823,6 +823,11 @@ export const useRoundStore = create<RoundState>()(
         }
         console.log(`[path2:round] start course=${course} holes=${holes.length} courseId=${courseId ?? 'none'}`);
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
+        // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/usageTelemetry').track('round_started', { holes: holes.length, mode: options.mode ?? 'free_play' });
+        } catch { /* telemetry never throws */ }
         // FIX B6 — hole 1 voice intro. startRound sets currentHole:1 via direct
         // set() which bypasses setCurrentHole's TTS block (prevHole===clamped guard
         // would fire with both equal to 1). Fire the same intro inline here so the
@@ -1456,6 +1461,11 @@ export const useRoundStore = create<RoundState>()(
         const holesPlayed = Object.keys(s.scores).length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
+        // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/usageTelemetry').track('round_completed', { holesPlayed, totalScore: total });
+        } catch { /* telemetry never throws */ }
         // Phase 405 wave 3 — visible round-end confirmation.
         try {
           const toast = require('./toastStore');

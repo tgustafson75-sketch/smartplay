@@ -125,6 +125,9 @@ export default function Settings() {
   // Phase 107 — GPS quality debug overlay toggle.
   const gpsQualityDebugOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay);
   const setGpsQualityDebugOverlay = useSettingsStore(s => s.setGpsQualityDebugOverlay);
+  // 2026-06-24 — Off-device data layer Phase A: usage telemetry opt-in.
+  const analyticsOptIn = useSettingsStore(s => s.analyticsOptIn);
+  const setAnalyticsOptIn = useSettingsStore(s => s.setAnalyticsOptIn);
 
   // Persona-aware display name. Settings labels reference the active caddie
   // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
@@ -1440,6 +1443,16 @@ export default function Settings() {
               </Text>
             </View>
           </View>
+          {/* 2026-06-24 — Off-device data layer Phase A: anonymous usage
+              telemetry. OPT-IN, default OFF. Honest copy: anonymous, no
+              fingerprint, isolated from any other data, off unless you turn
+              it on. Helps Tim see which features get used. */}
+          <ToggleRow
+            label="Help improve SmartPlay"
+            sub="Share anonymous usage (which features you use — never your name, scores, or location). A random ID, not a device fingerprint. Off by default; turn off any time."
+            value={analyticsOptIn}
+            onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
+          />
         </CollapsibleSection>
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}

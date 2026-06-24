@@ -419,6 +419,14 @@ export default function SwingDetail() {
       has_drill: !!session?.drill_recommendation,
       analysis_error: session?.analysis_error ?? null,
     }, swing_id);
+    // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Count one
+    // swing_analyzed when the analysis lands successfully ('ok').
+    if (analysisStatus === 'ok') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../services/usageTelemetry').track('swing_analyzed', { hasIssue: !!session?.primary_issue });
+      } catch { /* telemetry never throws */ }
+    }
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis

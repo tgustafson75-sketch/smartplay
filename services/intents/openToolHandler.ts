@@ -277,6 +277,12 @@ export const openToolHandler: IntentHandler = {
       };
     }
 
+    // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../usageTelemetry').track('tool_opened', { tool: toolName });
+    } catch { /* telemetry never throws */ }
+
     if (action.type === 'navigate') {
       // 2026-05-21 — Fix B: voice "record me down the line" / "face on"
       // routes through tool_name='smartmotion' with angle + auto_start

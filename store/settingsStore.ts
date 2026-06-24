@@ -303,6 +303,14 @@ interface SettingsState {
   // Default 'gemini' — matches the existing fast-path for vision routes.
   aiProvider: 'openai' | 'gemini';
 
+  // 2026-06-24 — Off-device data layer Phase A. OPT-IN anonymous usage
+  // telemetry. Default FALSE — nothing is sent unless the user turns this on
+  // in Settings → Data & Privacy. When false, services/usageTelemetry.track()
+  // is a no-op. Sends coarse, anonymous events (round_started, swing_analyzed,
+  // …) tagged with a random local id (NOT a device fingerprint) to the isolated
+  // `smartplay` Supabase schema — never SmartManage's data.
+  analyticsOptIn: boolean;
+
   // ─── ACTIONS ────────────────────────────
 
   setVoiceEnabled: (v: boolean) => void;
@@ -369,6 +377,8 @@ interface SettingsState {
   setGhostAutoActivate: (v: boolean) => void;
   // 2026-06-21 — AI provider toggle.
   setAiProvider: (v: 'openai' | 'gemini') => void;
+  // 2026-06-24 — Off-device data layer Phase A: usage telemetry opt-in.
+  setAnalyticsOptIn: (v: boolean) => void;
 
   // ─── PIPECAT VOICE ORCHESTRATOR ─────────────────────────────────
   // 'legacy' = existing batch STT → intent classify → Kevin API chain
@@ -487,6 +497,8 @@ export const useSettingsStore = create<SettingsState>()(
       ghostAutoActivate: true,
       // 2026-06-21 — AI provider default 'gemini' (fastest vision path).
       aiProvider: 'gemini' as const,
+      // 2026-06-24 — Usage telemetry OPT-IN, default OFF.
+      analyticsOptIn: false,
       // Pipecat voice orchestrator — off by default until server is deployed.
       voiceOrchestrator: 'pipecat' as const,
       pipecatServerUrl: '',
@@ -701,6 +713,19 @@ export const useSettingsStore = create<SettingsState>()(
       setCaddieSuggestions: (mode) => set({ caddieSuggestions: mode }),
       setGpsQualityDebugOverlay: (v) => set({ gpsQualityDebugOverlay: v }),
       setAiProvider: (v) => set({ aiProvider: v }),
+      // 2026-06-24 — Usage telemetry opt-in setter. On flip-off, also drop any
+      // buffered events so opting out is immediate. Dynamic require avoids a
+      // module-load cycle (usageTelemetry imports this store).
+      setAnalyticsOptIn: (v) => {
+        set({ analyticsOptIn: v });
+        if (!v) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const mod = require('../services/usageTelemetry');
+            void mod.flushUsage?.();
+          } catch { /* ignore */ }
+        }
+      },
       setVoiceOrchestrator: (v) => set({ voiceOrchestrator: v }),
       setPipecatServerUrl: (v) => set({ pipecatServerUrl: v }),
     }),
@@ -712,7 +737,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 15,
+      version: 16,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -854,6 +879,11 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 15) {
           p.voiceOrchestrator = 'pipecat';
         }
+        // v16 — 2026-06-24 — usage telemetry opt-in added. Seed FALSE for
+        // existing installs so telemetry stays off until the user opts in.
+        if (version < 16) {
+          if (p.analyticsOptIn == null) p.analyticsOptIn = false;
+        }
         return p as SettingsState;
       },
       partialize: (s) => ({
@@ -917,6 +947,7 @@ export const useSettingsStore = create<SettingsState>()(
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         aiProvider: s.aiProvider,
+        analyticsOptIn: s.analyticsOptIn,
         voiceOrchestrator: s.voiceOrchestrator,
         pipecatServerUrl: s.pipecatServerUrl,
         // watchConnected / glassesConnected not persisted — rechecked on mount

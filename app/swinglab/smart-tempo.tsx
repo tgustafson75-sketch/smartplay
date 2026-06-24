@@ -223,6 +223,19 @@ export default function SmartTempoScreen() {
   }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec]);
   const outOfOrder = allMarked && result == null;
 
+  // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Fire once
+  // when a tempo result first lands (all three marks placed + in order).
+  const tempoTrackedRef = useRef(false);
+  useEffect(() => {
+    if (result && !tempoTrackedRef.current) {
+      tempoTrackedRef.current = true;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../services/usageTelemetry').track('smart_tempo_completed', { ratio: result.ratio ?? null });
+      } catch { /* telemetry never throws */ }
+    }
+  }, [result]);
+
   // ── Replay tempo (loop backswingStart→impact) ────────────────────────
   function stopReplay() {
     replayRef.current = null;

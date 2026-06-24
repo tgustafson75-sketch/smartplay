@@ -36,6 +36,7 @@
     { "src": "api/recap.ts",           "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "api/briefing.ts",        "use": "@vercel/node", "config": { "maxDuration": 45 } },
     { "src": "api/cage-review.ts",     "use": "@vercel/node", "config": { "maxDuration": 45 } },
+    { "src": "api/usage.ts",           "use": "@vercel/node", "config": { "maxDuration": 10 } },
     { "src": "api/*.ts",               "use": "@vercel/node" },
     {
       "src": "package.json",
@@ -88,6 +89,7 @@
     { "src": "/api/toptracer-parse",   "dest": "/api/toptracer-parse.ts" },
     { "src": "/api/kevin-read",        "dest": "/api/kevin-read.ts" },
     { "src": "/api/owner-triage",      "dest": "/api/owner-triage.ts" },
+    { "src": "/api/usage",             "dest": "/api/usage.ts" },
     { "src": "/api/meta-voice/?",      "dest": "/api/meta-voice.ts" },
     { "src": "/api/meta-voice/(.*)",   "dest": "/api/meta-voice.ts" },
     { "handle": "filesystem" },
