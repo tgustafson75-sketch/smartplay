@@ -23,7 +23,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore } from '../../store/cageStore';
+import { useCageStore, resolvePlayerName, playerMatchesFilter } from '../../store/cageStore';
+import { useFamilyStore } from '../../store/familyStore';
 import { useToastStore } from '../../store/toastStore';
 import { getLibrary, type LibraryFilter } from '../../services/swingLibrary';
 import CompareReferencePickerSheet from '../../components/swinglab/CompareReferencePickerSheet';
@@ -58,6 +59,11 @@ export default function SwingLibrary() {
   // storage — which Tim hit on the new build and assumed his library
   // had been wiped. Wait for hasHydrated before deciding "empty."
   const hasHydrated = useCageStore(s => s.hasHydrated);
+  // 2026-06-24 — subscribe to the family roster so the swinger filter chips +
+  // predicate re-resolve player_id→name when a golfer is added/renamed/archived
+  // (resolvePlayerName reads familyStore under the hood; the subscription is
+  // what forces the useMemo to recompute on roster change).
+  const familyMembers = useFamilyStore(s => s.members);
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [clubFilter, setClubFilter] = useState<string>('all');
@@ -86,13 +92,20 @@ export default function SwingLibrary() {
     }
   }, [availableClubs, clubFilter]);
 
-  // 2026-05-26 — Available swingers, case-insensitive dedup. Cage
-  // sessions without an explicit swinger fall under "Me" (matches the
-  // upload screen default). Sort alphabetically with "Me" pinned first.
+  // 2026-05-26 — Available swingers, case-insensitive dedup.
+  // 2026-06-24 — single-sourced on player_id (the field the golfer-edit chip
+  // WRITES via setSessionPlayer), resolved through the SAME resolvePlayerName
+  // helper the chip uses — so reassigning a swing's golfer immediately moves it
+  // under the right swinger here. (Previously read upload.swinger, an unrelated
+  // free-text field the chip never touches → reassignments were invisible.)
+  // Sessions whose player_id resolves to the account holder fall under "Me".
+  // Sort alphabetically with "Me" pinned first. familyMembers is a dep so the
+  // list re-resolves when the roster changes.
   const availableSwingers = useMemo(() => {
+    void familyMembers; // resolvePlayerName reads familyStore — recompute on roster change
     const map = new Map<string, string>(); // lowercase → display
     sourceFilteredEntries.forEach(e => {
-      const raw = (e.session.upload?.swinger ?? 'Me').trim() || 'Me';
+      const raw = resolvePlayerName(e.session.player_id); // 'Me' when account-holder/unassigned
       const key = raw.toLowerCase();
       if (!map.has(key)) map.set(key, raw);
     });
@@ -102,7 +115,7 @@ export default function SwingLibrary() {
       return a.localeCompare(b);
     });
     return ['all', ...names];
-  }, [sourceFilteredEntries]);
+  }, [sourceFilteredEntries, familyMembers]);
 
   useEffect(() => {
     if (swingerFilter !== 'all' && !availableSwingers.some(n => n.toLowerCase() === swingerFilter.toLowerCase())) {
@@ -116,16 +129,16 @@ export default function SwingLibrary() {
       dateFilter === '7d' ? now - 7 * DAY_MS :
       dateFilter === '30d' ? now - 30 * DAY_MS :
       0;
+    void familyMembers; // playerMatchesFilter resolves via familyStore — recompute on roster change
     return sourceFilteredEntries.filter(e => {
       if (e.date_ms < cutoff) return false;
       if (clubFilter !== 'all' && e.session.club !== clubFilter) return false;
-      if (swingerFilter !== 'all') {
-        const sw = (e.session.upload?.swinger ?? 'Me').trim() || 'Me';
-        if (sw.toLowerCase() !== swingerFilter.toLowerCase()) return false;
-      }
+      // 2026-06-24 — match on the resolved player_id (same source the chip
+      // writes), not the legacy upload.swinger field.
+      if (!playerMatchesFilter(e.session, swingerFilter)) return false;
       return true;
     });
-  }, [sourceFilteredEntries, dateFilter, clubFilter, swingerFilter]);
+  }, [sourceFilteredEntries, dateFilter, clubFilter, swingerFilter, familyMembers]);
 
   const advancedFiltersActive = dateFilter !== 'all' || clubFilter !== 'all' || swingerFilter !== 'all';
   const filtersActive = filter !== 'all' || advancedFiltersActive || swingerFilter !== 'all';

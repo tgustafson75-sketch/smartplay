@@ -651,6 +651,53 @@ export function derivePlayerId(): string {
   return 'account_holder';
 }
 
+/**
+ * 2026-06-24 — Shared player_id → display-name resolver. SINGLE source of
+ * truth for "who hit this swing", used by both the swing-detail golfer chip
+ * (the editor that WRITES player_id via setSessionPlayer) and the Swing
+ * Library swinger filter (which READS it). Before this, the library filtered
+ * on the unrelated `upload.swinger` free-text field, so reassigning a swing's
+ * golfer via the chip never moved it under the right swinger. Resolving both
+ * surfaces from player_id keeps them in lockstep.
+ *
+ * Resolution mirrors derivePlayerId() in reverse:
+ *   - a family-member id → that member's firstName
+ *   - an account-holder id (the profile email, lowercased, OR the
+ *     'account_holder' guest fallback) → the `selfLabel` ("Me" in the
+ *     library; the chip passes "You"). Anything that doesn't match a roster
+ *     member is treated as the account holder.
+ *
+ * Pure read of familyStore — no writes, dynamic require to dodge the import
+ * cycle, defensive (store unavailable → selfLabel). Session arg may carry a
+ * null/undefined player_id (legacy sessions predating the data-model rule) —
+ * those resolve to the account holder too.
+ */
+export function resolvePlayerName(playerId: string | null | undefined, selfLabel = 'Me'): string {
+  if (playerId) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fam = require('./familyStore') as typeof import('./familyStore');
+      const member = fam.useFamilyStore.getState().getMember(playerId);
+      if (member) return member.firstName;
+    } catch { /* familyStore unavailable — fall through to self */ }
+  }
+  return selfLabel;
+}
+
+/**
+ * 2026-06-24 — Does a session's golfer match the library swinger filter?
+ * filterId is the SAME player_id space setSessionPlayer writes ('all' =
+ * Everyone passes through). Resolving the session's player_id and comparing
+ * by resolved name keeps the filter chip list (built from resolvePlayerName)
+ * and the predicate reading one source. Case-insensitive on the resolved name
+ * so a roster rename / casing drift can't split a golfer into two chips.
+ */
+export function playerMatchesFilter(session: CageSession, filterName: string): boolean {
+  if (filterName === 'all') return true;
+  const resolved = resolvePlayerName(session.player_id);
+  return resolved.toLowerCase() === filterName.toLowerCase();
+}
+
 // 2026-06-13 (Tim) — stamp the active-round context onto a Smart Motion capture so
 // the scorecard/recap for that round can surface it as a highlight swing. Dynamic
 // require avoids a roundStore↔cageStore import cycle. All-null off-course.

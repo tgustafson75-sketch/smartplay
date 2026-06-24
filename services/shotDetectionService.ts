@@ -159,6 +159,43 @@ class ShotDetector {
   }
 
   /**
+   * 2026-06-24 — Fix T (mid-round auto-shot-detection toggle). Stop ONLY
+   * this service's own behavior — its gpsManager listener and its in-flight
+   * shot-segmentation state — while leaving the SHARED round GPS
+   * (gpsManager + smartFinder tracking) fully running for the rest of the
+   * round. This is what the autoShotDetection setting must call when the
+   * player flips it OFF mid-round: the STROKE counter stops auto-logging,
+   * but yardages / hole-view / SmartFinder keep their live fixes.
+   *
+   * Difference vs stop(): pause() does NOT call stopGpsManager() or
+   * stopSmartFinderGpsTracking(). Other features depend on the shared
+   * round GPS, so a shot-detection pause must never tear it down.
+   *
+   * start() is safe to call after pause() to resume (it re-subscribes the
+   * service's own listener; startGpsManager()/startSmartFinderGpsTracking()
+   * are idempotent and simply no-op on the already-running shared watch).
+   */
+  pause(): void {
+    if (!this.running && !this.unsubscribeGps) return;
+    // Drop only OUR subscription to the shared gpsManager — do not stop
+    // the manager itself.
+    if (this.unsubscribeGps) {
+      this.unsubscribeGps();
+      this.unsubscribeGps = null;
+    }
+    if (this.subscription) {
+      this.subscription.remove();
+      this.subscription = null;
+    }
+    this.running = false;
+    // Clear in-flight segmentation state so a later resume starts from a
+    // fresh stationary anchor rather than a stale pre-pause buffer.
+    this.samples = [];
+    this.lastShotEmitTime = 0;
+    console.log('[shotDetection] paused (own listener + segmentation only; shared GPS untouched)');
+  }
+
+  /**
    * Manually feed a GPS sample (useful for testing or non-expo-location pipelines).
    */
   ingest(sample: GPSSample): void {

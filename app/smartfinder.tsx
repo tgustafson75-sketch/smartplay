@@ -31,6 +31,12 @@ import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { composeShotRead } from '../services/cnsShotRead';
 import { bagDistances } from '../services/shotStrategy';
+// SF fix #2 — learned-bag club lookup (inferClub) + the canonical club ladder so
+// the rangefinder recommends from the player's real distances, not a generic chart.
+import { useClubStatsStore, CLUB_ORDER } from '../store/clubStatsStore';
+// SF fix #3 — the 4-tier yardage resolver, so a number the player STATED
+// ("I'm 150 out") wins over the GPS/scorecard middle on the target overlay.
+import { resolveYardage } from '../services/yardageResolver';
 import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
 import {
   peekFix,
@@ -913,8 +919,21 @@ function CameraSmartFinder({
 // Bottom strip shows TO TARGET <yds> with Front / Middle / Back of green
 // distances. Replaces the old top-down flat-canvas TargetView.
 
+// SF fix #2 (owner Tim — "generic hardcoded club ladder, not the learned bag") —
+// this used to map distance→club via a fixed amateur ladder, ignoring the
+// player's real/edited bag. Route it through clubStatsStore.inferClub(), which
+// picks the closest club from the player's TRACKED carries → STATED My-Bag
+// carries → STANDARD_YARDS chart (in that precedence). Same learned-bag lookup
+// the brain read (composeShotRead/bagDistances) uses, so the plan lines and the
+// headline can't recommend from different yardage tables. The old hardcoded
+// ladder remains only as an unreachable safety fallback if the store throws.
 function recommendClubForDistance(yards: number | null): string | null {
   if (yards == null || yards <= 0) return null;
+  try {
+    return useClubStatsStore.getState().inferClub(yards);
+  } catch {
+    // fall through to the generic chart only if the store is unavailable
+  }
   if (yards >= 240) return 'Driver';
   if (yards >= 215) return '3 Wood';
   if (yards >= 195) return 'Hybrid';
@@ -962,7 +981,12 @@ function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarr
 }
 
 function estimateDispersion(club: string | null, handicap: number): { yards: number; band: 'tight' | 'moderate' | 'wide' } {
-  const base = club === 'Driver' ? 34 : club === '3 Wood' ? 28 : club === 'Hybrid' ? 24 : club?.includes('Iron') ? 18 : 10;
+  // SF fix #2 — recognize the clubStatsStore short names ('3W','3H','7I') the
+  // learned-bag lookup now returns, alongside the legacy display names.
+  const isWood = club === 'Driver' || club === '3 Wood' || /^[3457]W$/.test(club ?? '');
+  const isHybrid = club === 'Hybrid' || /^[234]H$/.test(club ?? '');
+  const isIron = !!club?.includes('Iron') || /^[1-9]I$/.test(club ?? '');
+  const base = isWood ? (club === 'Driver' ? 34 : 28) : isHybrid ? 24 : isIron ? 18 : 10;
   const hcpAdjust =
     handicap <= DISPERSION_HCP_BREAKS.tight ? -6
     : handicap <= DISPERSION_HCP_BREAKS.good ? -3
@@ -976,7 +1000,11 @@ function estimateDispersion(club: string | null, handicap: number): { yards: num
 
 function stepDownClub(club: string | null): string | null {
   if (!club) return null;
-  const ladder = ['Driver', '3 Wood', 'Hybrid', '4 Iron', '5 Iron', '6 Iron', '7 Iron', '8 Iron', '9 Iron', 'PW', 'GW', 'SW', 'LW'];
+  // SF fix #2 — step down using the canonical clubStatsStore CLUB_ORDER (the
+  // same '7I'/'3W' names inferClub returns) so the hazard step-down stays
+  // aligned with the learned-bag recommendation. Putter is excluded so we
+  // never "step down" an approach club to the putter.
+  const ladder = CLUB_ORDER.filter(c => c !== 'Putter') as readonly string[];
   const idx = ladder.indexOf(club);
   if (idx < 0 || idx === ladder.length - 1) return club;
   return ladder[idx + 1];
@@ -1116,7 +1144,20 @@ function TargetCameraOverlay({
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const [targetYards, setTargetYards] = useState<number | null>(yards.middle);
+  // SF fix #3 (owner Tim — "user-stated yardage ignored") — the target overlay
+  // seeded/re-synced purely from yards.middle (GPS/scorecard) and never consulted
+  // resolveYardage, so when the player STATES a distance ("I'm 150 out") the
+  // screen kept showing the GPS middle. statedYardageFor() returns a number ONLY
+  // when resolveYardage's source is 'user_stated' (a fresh, same-hole stated
+  // anchor); otherwise null, so the GPS/scorecard path below is untouched. A
+  // stated value wins over GPS for the seed, the re-sync, and the hole reset.
+  const statedYardageFor = useCallback((hole: number): number | null => {
+    const r = resolveYardage(hole);
+    return r.source === 'user_stated' && r.value != null ? r.value : null;
+  }, []);
+  const [targetYards, setTargetYards] = useState<number | null>(
+    () => statedYardageFor(currentHole) ?? yards.middle,
+  );
   useEffect(() => { onTargetYardsChange?.(targetYards); }, [targetYards, onTargetYardsChange]);
   const [targetBearing, setTargetBearing] = useState<number | null>(shotBearingDeg);
   // 2026-06-23 (Tim — "surfaces shouldn't go dark/stale on a good signal") —
@@ -1135,11 +1176,20 @@ function TargetCameraOverlay({
   // In either case we keep their value. When GPS has NO fix (reason !== 'ok')
   // we touch nothing, so the existing static fallback behavior is unchanged.
   useEffect(() => {
+    // SF fix #3 — a fresh user-stated number is the highest-trust source: it
+    // overrides GPS AND the manual locked/tilt targets (the player literally
+    // told us the distance). Re-checked on every GPS tick (yards changes ~3s)
+    // so a number stated mid-screen takes over without a remount.
+    const stated = statedYardageFor(currentHole);
+    if (stated != null) {
+      setTargetYards(prev => (prev === stated ? prev : stated));
+      return;
+    }
     if (locked) return;                         // manual: held target wins
     if (lastYardsRef.current != null) return;   // manual: tilt-placed target wins
     if (yards.reason !== 'ok' || yards.middle == null) return; // no good GPS → leave fallback as-is
     setTargetYards(prev => (prev === yards.middle ? prev : yards.middle));
-  }, [yards.reason, yards.middle, locked]);
+  }, [yards.reason, yards.middle, locked, currentHole, statedYardageFor]);
   // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
   // target from the new hole's GPS so hole N's aim doesn't bleed into hole N+1.
   // Keyed on currentHole; the re-sync effect above then re-syncs from the new
@@ -1147,7 +1197,9 @@ function TargetCameraOverlay({
   useEffect(() => {
     lastYardsRef.current = null;
     lastBearingRef.current = null;
-    setTargetYards(yards.middle ?? null);
+    // SF fix #3 — re-seed the new hole from a stated number if the player has
+    // one for it, otherwise the GPS/scorecard middle (unchanged behavior).
+    setTargetYards(statedYardageFor(currentHole) ?? yards.middle ?? null);
     setTargetBearing(shotBearingDeg);
     setReticleConfidence('medium');
     setTargetLoc(null);
@@ -1433,7 +1485,14 @@ function TargetCameraOverlay({
             </View>
             <View style={styles.targetIntelMetric}>
               <Text style={styles.targetIntelLabel}>CLUB</Text>
-              <Text style={styles.targetIntelValue}>{adjustedClub ?? '—'}</Text>
+              {/* SF fix #1 (owner Tim — "two contradicting club recs on one card") —
+                  this cell used to compute its OWN club (adjustedClub, off the
+                  hardcoded recommendClubForDistance ladder), which could DISAGREE
+                  with the brain headline above (shotRead.club, the composed
+                  learned-bag read). Single-source it on shotRead.club so the
+                  card can NEVER show two different clubs. adjustedClub still
+                  drives the aggressive/conservative plan lines (hazard step-down). */}
+              <Text style={styles.targetIntelValue}>{shotRead?.club ?? adjustedClub ?? '—'}</Text>
             </View>
             <View style={styles.targetIntelMetric}>
               <Text style={styles.targetIntelLabel}>CONF</Text>

@@ -373,8 +373,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const provider of PROVIDER_ORDER) {
       try {
         toolActions.length = 0; // reset captured actions on a retry
+        // 2026-06-24 (Tim — latency pass) — 'fast' tier (Haiku-class) for the live
+        // conversational turn. The caddie cadence is short ("under 30 words"),
+        // tool-driven, and on-course — the fast tier is plenty for that and cuts
+        // generation time materially vs 'quality'. (Bump back to 'quality' if the
+        // mental-coaching nuance suffers on complex asks.)
         result = await cap(
-          runAgenticLoop(provider, 'quality', system, text, [], KEVIN_TOOLS, toolDispatch,
+          runAgenticLoop(provider, 'fast', system, text, [], KEVIN_TOOLS, toolDispatch,
             { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
           9_000,
         );

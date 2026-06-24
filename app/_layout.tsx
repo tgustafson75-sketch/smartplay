@@ -805,12 +805,29 @@ function AppNavigator() {
       active = s.isRoundActive;
       apply(active);
     });
-    // Reconfigure live when cartMode toggles during an active round so the
-    // change takes effect immediately (next sample evaluation cycle).
+    // React live to BOTH cartMode and autoShotDetection toggles during an
+    // active round.
     const unsubSettings = useSettingsStore.subscribe((s, prev) => {
-      if (s.cartMode === prev.cartMode) return;
-      if (useRoundStore.getState().isRoundActive) {
+      if (!useRoundStore.getState().isRoundActive) return;
+      // cartMode: reconfigure so the change takes effect immediately (next
+      // sample evaluation cycle).
+      if (s.cartMode !== prev.cartMode) {
         shotDetectionService.configure({ cartMode: s.cartMode });
+      }
+      // 2026-06-24 — Fix T: autoShotDetection mid-round live toggle.
+      // Previously this subscriber only reacted to isRoundActive, so
+      // flipping the setting mid-round was a no-op until the next round.
+      // ON  -> start (configured with cartMode as today).
+      // OFF -> pause() (NOT stop()): tears down only shot-detection's own
+      //        GPS listener + segmentation, leaving the SHARED round GPS
+      //        running so SmartFinder / hole-view / yardages keep working.
+      if (s.autoShotDetection !== prev.autoShotDetection) {
+        if (s.autoShotDetection) {
+          shotDetectionService.configure({ cartMode: s.cartMode });
+          shotDetectionService.start().catch(() => {});
+        } else {
+          shotDetectionService.pause();
+        }
       }
     });
     return () => {
