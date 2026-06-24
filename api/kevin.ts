@@ -41,7 +41,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open SwingLab — the swing analysis / practice / drill tool. Trigger this when Tim says ANY of: "swinglab", "practice", "let\'s work on my swing", "I want to practice", "open practice", "swing analysis", "swing drills", "let me work on something", or any phrasing meaning he wants to enter practice or analysis mode.',
+    description: 'Open SwingLab (swing analysis / practice / drills). Call ONLY when Tim is SPECIFIC — he explicitly says "open swinglab"/"swing lab", OR names a specific activity (a drill, tempo, open range, focus session, "record my swing", "swing analysis", "swing drills"). Do NOT call this for a VAGUE "I want to practice" / "let me work on something" — instead ASK what he wants to work on (a specific drill, tempo, open range) and offer to open the Swing Lab; only open once he picks something or confirms.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {

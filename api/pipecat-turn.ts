@@ -62,7 +62,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open SwingLab — swing analysis and practice drills. Trigger on "swinglab", "practice", "work on my swing", "swing analysis".',
+    description: 'Open SwingLab (swing analysis + practice drills). Call ONLY when the player is SPECIFIC — they explicitly say "open swinglab"/"swing lab", OR name a specific activity (a drill, tempo trainer, open range, focus session, "record my swing", "swing analysis"). Do NOT call this for a VAGUE wish like "I want to practice" — instead ASK what they want to work on and offer to open the Swing Lab; only open once they pick something or confirm.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -242,6 +242,7 @@ Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when a
 Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
 Use tools when the player describes a shot to log, names a score, or asks to open a tool.
+PRACTICE INTENT — when the player vaguely wants to practice ("I want to practice", "let's work on my swing") WITHOUT naming a specific activity, do NOT open SwingLab. Ask one short question: what they'd like to work on — a specific drill, tempo, open range — and offer to open the Swing Lab. Only open it once they pick something or say yes.
 For lookup_course and lookup_hole: use them when you need real yardage/par data you don't already have.
 
 MENTAL GAME — You are also a sports psychologist and emotional coach. This is as important as club selection.

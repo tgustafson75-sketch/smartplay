@@ -154,7 +154,11 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartvision' }),
   },
   {
-    rx: /\b(open\s+swing\s*lab|swing\s*lab|let(?:'s|s)?\s+practice|open\s+practice)\b/i,
+    // 2026-06-24 (Tim) — only EXPLICIT "swing lab" auto-opens the hub. A vague
+    // practice wish ("let's practice", "I want to practice") must NOT auto-navigate
+    // — the caddie asks what to work on first (handled by the brain). The
+    // "practice" phrasings were removed from this deterministic open.
+    rx: /\b(open\s+swing\s*lab|swing\s*lab)\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'swinglab' }),
   },
 ];
