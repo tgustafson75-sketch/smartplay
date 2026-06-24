@@ -16,7 +16,7 @@
  * Auth: shared secret in PIPECAT_SESSION_SECRET env var (set in Vercel dashboard).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { runAgenticLoop, type AiToolDef } from './_aiProvider';
+import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
 const MAX_HISTORY_PAIRS = 6;
@@ -266,6 +266,18 @@ interface HistoryMsg { role: 'user' | 'assistant'; content: string }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // 2026-06-24 — Pre-warm. pipecat is the DEFAULT brain (since the v15 migration),
+  // but the warmup heartbeat only hit /api/kevin, so this Lambda + the Anthropic
+  // SDK went cold between turns → the "takes longer to think" lag on the first
+  // turn. Client now pings { mode: 'warmup' } here too; warm the runtime + the
+  // provider client and return fast (no auth, no full turn). ~$0.0001/warmup.
+  if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
+    try {
+      await completeText('anthropic', 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
+    } catch { /* warmup is best-effort */ }
+    return res.status(200).json({ ok: true, warmed: true });
+  }
 
   // Auth — only enforce when BOTH sides have a secret configured.
   // EXPO_PUBLIC_PIPECAT_SECRET is not set in prod OTA builds, so client sends ''.

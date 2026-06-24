@@ -24,6 +24,10 @@ const WARMUP_PATHS = [
   '/api/transcribe',
   '/api/voice-intent',
   '/api/kevin',
+  // 2026-06-24 — pipecat-turn is the DEFAULT brain since the v15 migration; it was
+  // missing here, so the default conversational path hit a cold Lambda every first
+  // turn (the "takes longer to think" lag). Warm it too.
+  '/api/pipecat-turn',
 ] as const;
 
 /**
