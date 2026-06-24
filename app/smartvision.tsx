@@ -518,20 +518,27 @@ export default function SmartVisionScreen() {
   const layout = useDeviceLayout();
   const isSplit = layout.isLandscape;
   const SIDE_PANEL_W = isSplit ? Math.floor(W * 0.35) : 0;
-  const imageW = isSplit ? W - SIDE_PANEL_W : W;
+  const fullW = isSplit ? W - SIDE_PANEL_W : W;
   const availH = isSplit
     ? H - insets.top - insets.bottom - TOP_BAR_H
     : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H;
-  // 2026-06-23 (Tim — "image must stay in its box and not cut off") — our curated
-  // hole crops are 2:3 portrait (1024×1536). If the canvas box isn't that aspect,
-  // resizeMode:cover chops the top/bottom — exactly what cut the TEE (bottom ~83%)
-  // off-frame while calibration still mapped to the full image. Cap the portrait
-  // canvas height to the image's 2:3 aspect so cover == contain (no crop) and the
-  // markers (calibration × imageW × imageH) align with the visible image 1:1.
+  // 2026-06-24 (Tim — "the T you can't see") — our curated hole crops are 2:3
+  // portrait (1024×1536). The box must be EXACTLY that aspect or resizeMode:cover
+  // crops the top/bottom and the TEE (~83% down) falls off the visible image while
+  // calibration still maps to the full image. Capping HEIGHT alone wasn't enough:
+  // when availH < fullW*1.5 the box stayed wider than 2:3 and still cropped. So fit
+  // a TRUE 1.5-aspect box inside (fullW × availH), SHRINKING THE WIDTH when height
+  // is the limit. Now cover == contain (whole hole + tee visible) and markers
+  // (calibration × imageW × imageH) align 1:1; the narrower box centers via
+  // canvasBox alignSelf.
   const CURATED_ASPECT = 1536 / 1024; // = 1.5
-  const imageH = (!isSplit && curatedImage)
-    ? Math.min(availH, Math.round(imageW * CURATED_ASPECT))
+  const isCuratedPortrait = !isSplit && !!curatedImage;
+  const imageH = isCuratedPortrait
+    ? Math.min(availH, Math.round(fullW * CURATED_ASPECT))
     : availH;
+  const imageW = isCuratedPortrait
+    ? Math.round(imageH / CURATED_ASPECT)
+    : fullW;
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -1660,7 +1667,7 @@ export default function SmartVisionScreen() {
           inside a defined frame so nothing bleeds off the physical screen edge
           when the device aspect changes (Fold open/closed). Brand-consistent
           with the AI-rec bar. */}
-      <View style={[styles.canvasBox, { width: imageW, height: imageH }]}>
+      <View style={[styles.canvasBox, { width: imageW, height: imageH, alignSelf: 'center' }]}>
         {/* 2026-06-23 (Tim) — "Golfbert premium" pill removed: it's internal
             data-sourcing detail, not something the player needs on the map, and
             it collided with the tap-to-place banner. */}
