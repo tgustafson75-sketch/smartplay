@@ -126,9 +126,9 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
   {
     key: 'tempo',
     icon: 'musical-notes-outline',
-    title: 'Tempo Trainer',
-    sub: 'Improve rhythm and timing with guided tempo training',
-    route: '/swinglab/tempo-trainer',
+    title: 'Smart Tempo',
+    sub: 'Measure your real backswing:downswing ratio vs 3:1',
+    route: '/swinglab/smart-tempo',
     tag: 'TEMPO',
   },
   {

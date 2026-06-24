@@ -257,6 +257,13 @@ export interface CageSession {
    *  many swings in one session) and null when unset. */
   ball_area_norm?: { x: number; y: number; r: number } | null;
   target_norm?: { x: number; y: number } | null;
+  /** 2026-06-24 — Smart Tempo result. The honest backswing:downswing ratio
+   *  read computed by services/smartTempo.computeTempo from the player's three
+   *  marked swing phases (backswing-start / top / impact). Null = no tempo
+   *  read saved for this swing. Surfaced on the Smart Tempo screen + (future)
+   *  the swing-detail tempo row. Only ever written from REAL marks — never
+   *  fabricated. */
+  tempo_result?: import('../services/smartTempo').TempoResult | null;
   /** 2026-05-24 — Display-quality diagnostic fault frame persisted to
    *  FileSystem at session-creation time. Pre-requisite for the
    *  visual-annotation feature (coach markup + AI auto-annotation)
@@ -529,6 +536,9 @@ interface CageState {
   toggleSessionStarred: (sessionId: string) => void;
   /** Feels engine — store the player's stated feel on the session. */
   setSessionFeel: (sessionId: string, note: string | null) => void;
+  /** 2026-06-24 — Smart Tempo. Persist (or clear with null) the computed
+   *  backswing:downswing tempo result on a session so it shows later. */
+  setSessionTempo: (sessionId: string, tempo: import('../services/smartTempo').TempoResult | null) => void;
   /** 2026-06-12 — Persist a lazily-generated library thumbnail (representative
    *  frame) for sessions with no analysis fault-frame. Pass null to clear. */
   setSessionThumbnail: (sessionId: string, uri: string | null) => void;
@@ -1264,6 +1274,15 @@ export const useCageStore = create<CageState>()(
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, thumbnailUri: uri || null }
+          ),
+        })),
+
+      // 2026-06-24 — Smart Tempo result writer. Mirrors the other session
+      // patch setters; null clears.
+      setSessionTempo: (sessionId, tempo) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, tempo_result: tempo ?? null }
           ),
         })),
 
