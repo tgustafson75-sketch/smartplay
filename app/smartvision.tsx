@@ -39,6 +39,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   BackHandler,
+  Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { safeBack } from '../services/safeBack';
@@ -211,16 +212,26 @@ const MARKER_STYLE: Record<MarkerKind, { bg: string; ring: string; text: string;
   P: { bg: '#ef4444', ring: '#7f1d1d', text: '#ffffff', size: 36 }, // red pin
 };
 
-function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
+function Marker({ kind, x, y, draggable, onDragLive, onDragEnd }: {
   kind: MarkerKind;
   x: number;
   y: number;
   draggable: boolean;
-  /** Receives absolute translation since gesture start (translationX/Y). */
-  onDrag?: (translationX: number, translationY: number) => void;
-  onDragEnd?: () => void;
+  /** Optional per-frame callback (translationX/Y). Omit for zero re-renders
+   *  during the drag — the committed left/top + yardages update on release. */
+  onDragLive?: (translationX: number, translationY: number) => void;
+  /** Fires once on release with the FINAL translation since gesture start. */
+  onDragEnd?: (translationX: number, translationY: number) => void;
 }) {
   const s = MARKER_STYLE[kind];
+
+  // 2026-06-23 — perf: decouple the visual drag from React state. The
+  // marker tracks the finger via an Animated.ValueXY (native-driven, no
+  // re-render). The committed left/top (x/y props) stays put DURING the
+  // drag; on release we reset the translate to 0 and commit the final
+  // position to React state ONCE. This stops the full aerial Image + SVG
+  // aim/layup lines + F/M/B panel re-rendering 60×/sec (the reported lag).
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
 
   // Using react-native-gesture-handler's Pan gesture (not PanResponder).
   // GH runs on the native side so it competes correctly with siblings
@@ -231,19 +242,25 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
     return Gesture.Pan()
       .runOnJS(true)
       .onUpdate((e) => {
-        if (onDrag) onDrag(e.translationX, e.translationY);
+        // setValue updates the native view directly — NO React re-render,
+        // so the marker tracks the finger at 60fps with zero canvas redraw.
+        pan.setValue({ x: e.translationX, y: e.translationY });
+        if (onDragLive) onDragLive(e.translationX, e.translationY);
       })
-      .onEnd(() => {
-        if (onDragEnd) onDragEnd();
+      .onEnd((e) => {
+        // Reset the translate to 0 just as the committed left/top jumps to
+        // the final spot, so the marker doesn't visually snap back/forward.
+        pan.setValue({ x: 0, y: 0 });
+        if (onDragEnd) onDragEnd(e.translationX, e.translationY);
       });
-  }, [onDrag, onDragEnd]);
+  }, [pan, onDragLive, onDragEnd]);
 
   // 2026-06-06 — Phase 4.1 of on-course resilience sprint. The Y marker
   // (yardage target) is now rendered as a cart icon so the metaphor
   // matches Tim's mental model ("tap your position"). T (tee) and P
   // (pin) keep their letter labels — those are fixed reference points.
   const inner = (
-    <View
+    <Animated.View
       style={[
         styles.marker,
         {
@@ -258,6 +275,7 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
           elevation: draggable ? 12 : 8,
           alignItems: 'center',
           justifyContent: 'center',
+          transform: pan.getTranslateTransform(),
         },
       ]}
       hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
@@ -267,7 +285,7 @@ function Marker({ kind, x, y, draggable, onDrag, onDragEnd }: {
       ) : (
         <Text style={[styles.markerText, { color: s.text, fontSize: s.size * 0.42 }]}>{kind}</Text>
       )}
-    </View>
+    </Animated.View>
   );
 
   if (!draggable) return inner;
@@ -1205,12 +1223,6 @@ export default function SmartVisionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yardages.middle, carryYards]);
 
-  // ── Drag handlers for yellow target + pin (canvas coords) ───────
-  const targetDragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const pinDragStartRef = useRef<{ x: number; y: number } | null>(null);
-  // Phase 108-followup — tee drag start ref.
-  const teeDragStartRef = useRef<{ x: number; y: number } | null>(null);
-
   // ── Phase 4.4a/b: Shared cart position + GPS auto-reconcile ─────
   // When the user TAPS or DRAGS the cart marker, derive the cart's
   // lat/lng (Mode 1: pixelsToLatLng via projection; Mode 2: 2-anchor
@@ -1373,43 +1385,31 @@ export default function SmartVisionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markBumpTick]);
 
-  const onTargetDrag = useCallback((dx: number, dy: number) => {
+  // 2026-06-23 — perf: drag is now decoupled from React state (Animated
+  // translate rides the finger). These handlers fire ONCE on release. The
+  // committed canvas position hasn't moved during the drag (no per-frame
+  // state commits), so `committedCanvas + translation` IS the final spot.
+  // No per-frame startRef needed — we seed straight from the committed
+  // teeCanvas/pinCanvas/targetCanvas + the gesture's final translation.
+  const onTargetDragEnd = useCallback((dx: number, dy: number) => {
     if (!targetCanvas) return;
-    if (!targetDragStartRef.current) targetDragStartRef.current = targetCanvas;
-    const next = clampToCanvas({
-      x: targetDragStartRef.current.x + dx,
-      y: targetDragStartRef.current.y + dy,
-    });
+    const next = clampToCanvas({ x: targetCanvas.x + dx, y: targetCanvas.y + dy });
     commitCartCanvas(next);
-  }, [targetCanvas, clampToCanvas, commitCartCanvas]);
+    maybeTrackShot();
+  }, [targetCanvas, clampToCanvas, commitCartCanvas, maybeTrackShot]);
 
-  const onPinDrag = useCallback((dx: number, dy: number) => {
+  const onPinDragEnd = useCallback((dx: number, dy: number) => {
     if (!pinCanvas) return;
-    if (!pinDragStartRef.current) pinDragStartRef.current = pinCanvas;
-    const next = clampToCanvas({
-      x: pinDragStartRef.current.x + dx,
-      y: pinDragStartRef.current.y + dy,
-    });
+    const next = clampToCanvas({ x: pinCanvas.x + dx, y: pinCanvas.y + dy });
     setPinByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
   }, [pinCanvas, holeIndex, clampToCanvas, holeKeyOf]);
 
   // Phase 108-followup — tee drag handler. Persists per hole into teeByHole.
-  const onTeeDrag = useCallback((dx: number, dy: number) => {
+  const onTeeDragEnd = useCallback((dx: number, dy: number) => {
     if (!teeCanvas) return;
-    if (!teeDragStartRef.current) teeDragStartRef.current = teeCanvas;
-    const next = clampToCanvas({
-      x: teeDragStartRef.current.x + dx,
-      y: teeDragStartRef.current.y + dy,
-    });
+    const next = clampToCanvas({ x: teeCanvas.x + dx, y: teeCanvas.y + dy });
     setTeeByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: next }));
   }, [teeCanvas, holeIndex, clampToCanvas, holeKeyOf]);
-
-  // Reset drag refs when hole changes
-  useEffect(() => {
-    targetDragStartRef.current = null;
-    pinDragStartRef.current = null;
-    teeDragStartRef.current = null;
-  }, [holeIndex]);
 
   // 2026-06-06 — Phase 4.1: tap-to-place gesture. Tapping ANYWHERE on
   // the canvas (image background, not on a marker — markers have their
@@ -1850,8 +1850,7 @@ export default function SmartVisionScreen() {
                 x={teeCanvas.x}
                 y={teeCanvas.y}
                 draggable
-                onDrag={onTeeDrag}
-                onDragEnd={() => { teeDragStartRef.current = null; }}
+                onDragEnd={onTeeDragEnd}
               />
             )}
             <Marker
@@ -1859,16 +1858,14 @@ export default function SmartVisionScreen() {
               x={pinCanvas.x}
               y={pinCanvas.y}
               draggable
-              onDrag={onPinDrag}
-              onDragEnd={() => { pinDragStartRef.current = null; }}
+              onDragEnd={onPinDragEnd}
             />
             <Marker
               kind="Y"
               x={targetCanvas.x}
               y={targetCanvas.y}
               draggable
-              onDrag={onTargetDrag}
-              onDragEnd={() => { targetDragStartRef.current = null; maybeTrackShot(); }}
+              onDragEnd={onTargetDragEnd}
             />
           </>
         )}
