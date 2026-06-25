@@ -20,6 +20,8 @@ import { SHORT_GAME } from './shortGame';
 import { BALL_FLIGHT } from './ballFlight';
 import { COURSE_MGMT } from './courseMgmt';
 import { PSYCHOLOGY } from './psychology';
+import { FAULT_LIBRARY } from './faultLibrary';
+import { DRILLS } from './drills';
 
 export {
   PUTTING,
@@ -30,6 +32,8 @@ export {
   BALL_FLIGHT,
   COURSE_MGMT,
   PSYCHOLOGY,
+  FAULT_LIBRARY,
+  DRILLS,
 };
 
 /** The full golf-knowledge corpus, concatenated across every module. */
@@ -42,4 +46,6 @@ export const GOLF_KNOWLEDGE: KBEntry[] = [
   ...BALL_FLIGHT,
   ...COURSE_MGMT,
   ...PSYCHOLOGY,
+  ...FAULT_LIBRARY,
+  ...DRILLS,
 ];

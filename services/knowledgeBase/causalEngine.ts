@@ -40,6 +40,15 @@ export const FAULT_PRIORITY: Record<string, FaultPriority> = {
   aim: 5,
   'ball-position': 5,
   setup: 5,
+  // fault-library setup roots (broad-world player-language faults)
+  'fault.weak-grip': 5,
+  'fault.strong-grip': 5,
+  'fault.poor-aim': 5,
+  'fault.ball-position': 5,
+  'fault.posture': 5,
+  'fault.standing-too-close': 5,
+  'weak-grip': 5,
+  'strong-grip': 5,
 
   // ── P4: BODY STABILITY ───────────────────────────────────────────────────
   'fs.finish.balance': 4,
@@ -48,6 +57,14 @@ export const FAULT_PRIORITY: Record<string, FaultPriority> = {
   posture: 4,
   weight: 4,
   'weight-shift': 4,
+  // fault-library body-stability faults
+  'fault.hanging-back': 4,
+  'fault.reverse-pivot': 4,
+  'fault.sway': 4,
+  'fault.rushed-tempo': 4,
+  'hanging-back': 4,
+  'reverse-pivot': 4,
+  sway: 4,
 
   // ── P3: MOTION ARCHITECTURE ──────────────────────────────────────────────
   'fs.architecture.takeaway': 3,
@@ -74,6 +91,15 @@ export const FAULT_PRIORITY: Record<string, FaultPriority> = {
   casting: 2,
   'early-extension': 2,
   stall: 2,
+  // fault-library transition faults (player-language aliases of the above)
+  'fault.over-the-top': 2,
+  'fault.casting': 2,
+  'fault.early-extension': 2,
+  'fault.slide': 2,
+  'fault.steep': 2,
+  slide: 2,
+  steep: 2,
+  scooping: 2,
 
   // ── P1: SYMPTOMS (outcomes) ──────────────────────────────────────────────
   'fs.finish.chicken-wing': 1,
@@ -91,6 +117,19 @@ export const FAULT_PRIORITY: Record<string, FaultPriority> = {
   fat: 1,
   thin: 1,
   flip: 1,
+  // fault-library symptom outcomes (ball-flight + contact)
+  'fault.slice': 1,
+  'fault.hook': 1,
+  'fault.pull': 1,
+  'fault.push': 1,
+  'fault.fat': 1,
+  'fault.thin': 1,
+  'fault.shank': 1,
+  'fault.pop-up': 1,
+  'fault.chicken-wing': 1,
+  shank: 1,
+  'pop-up': 1,
+  top: 1,
 };
 
 /**
@@ -128,6 +167,81 @@ export const CAUSAL_CHAINS: string[][] = [
     'setup.alignment',
     'setup.grip.neutral',
     'bf.start-direction-face',
+  ],
+
+  // ── Broad-world (fault-library) chains, player-language faults ────────────
+  // Weak grip → open face → over-the-top compensation → slice.
+  [
+    'fault.weak-grip',
+    'fault.over-the-top',
+    'fault.casting',
+    'fault.slice',
+  ],
+  // Strong grip → closed face → hook (and its slide companion).
+  [
+    'fault.strong-grip',
+    'fault.slide',
+    'fault.hook',
+  ],
+  // Aim error → pull/push the body obeys or fights.
+  [
+    'fault.poor-aim',
+    'fault.over-the-top',
+    'fault.pull',
+  ],
+  // Posture → early extension → loss of room → shank / thin / push.
+  [
+    'fault.posture',
+    'fault.early-extension',
+    'fault.shank',
+  ],
+  [
+    'fault.posture',
+    'fault.early-extension',
+    'fault.thin',
+  ],
+  [
+    'fault.standing-too-close',
+    'fault.early-extension',
+    'fault.shank',
+  ],
+  // Reverse pivot / hanging back → back-of-ball low point → fat / thin.
+  [
+    'fault.reverse-pivot',
+    'fault.hanging-back',
+    'fault.fat',
+  ],
+  [
+    'fault.reverse-pivot',
+    'fault.hanging-back',
+    'fault.thin',
+  ],
+  // Sway (backswing) → off-center low point → fat / thin scatter.
+  [
+    'fault.sway',
+    'fault.fat',
+  ],
+  // Casting / scoop → added loft, lost low point → thin / fat / weak.
+  [
+    'fault.casting',
+    'fault.thin',
+  ],
+  // Rushed tempo seeds the over-the-top / casting sequence break.
+  [
+    'fault.rushed-tempo',
+    'fault.over-the-top',
+    'fault.casting',
+  ],
+  // Stall / early extension → arm rescue → chicken wing.
+  [
+    'fault.early-extension',
+    'fault.chicken-wing',
+  ],
+  // Ball-position / steep driver → top-edge contact → pop-up.
+  [
+    'fault.ball-position',
+    'fault.steep',
+    'fault.pop-up',
   ],
 ];
 
