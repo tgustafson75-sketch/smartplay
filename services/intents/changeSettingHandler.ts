@@ -19,9 +19,20 @@ export function detectCaddieSwitch(raw: string): Persona | null {
   const m = t.match(/\b(kevin|tank|serena|harry)\b/);
   if (!m) return null;
   const persona = m[1] as Persona;
-  const SWITCH = /\b(switch( me| over| back)?( to)?|change( the)?( caddie| caddy)?( to)?|talk to|talk with|let me (talk to|speak to|get)|i want (to talk to|to speak to)|can i (talk to|speak to|get)|bring (in |back )?|put .* (on|in)|hand (it|this|me|off|over|the bag)|swap (to|in|out)( for)?|go (to|with)|give me|i'?d like|let'?s get)\b/;
-  const TAKEOVER = new RegExp(`\\b${persona}\\b\\s+(you'?re up|you'?re on|take over|takeover|take the bag|step in|your turn|you got (it|this)|come in|jump in)`);
-  return (SWITCH.test(t) || TAKEOVER.test(t)) ? persona : null;
+  // 2026-06-25 (audit C1 — voice swallowing fix): the persona must be the DIRECT
+  // OBJECT of an explicit hand-off verb (verb → persona). The old regex matched any
+  // generic verb (give me / go with / let's get / i'd like / put…) appearing ANYWHERE
+  // alongside a caddie name, so normal in-round phrases ("Kevin, give me a read",
+  // "go with the 7-iron Tank") were intercepted and NEVER reached the brain — a dead
+  // voice path. Those generic verbs are gone; only true switch/hand-off structures match.
+  const SWITCH_TO = new RegExp(
+    `\\b(?:switch(?: me| over| back)?(?: to)?|change(?: the)?(?: caddie| caddy)?(?: to)?|talk(?: to| with)|speak to|let me (?:talk to|speak to)|i want to (?:talk to|speak to)|can i (?:talk to|speak to)|bring(?: in| back)?|swap(?: to| in)?(?: for)?|put|hand(?: it| this| the bag)?(?: off| over)? to|get me|gimme)\\s+(?:the )?(?:caddie |caddy )?(?:to )?${persona}\\b`,
+  );
+  // Persona named FIRST, then a takeover cue: "Kevin, you're up" / "Serena take over".
+  const TAKEOVER = new RegExp(`\\b${persona}\\b\\s+(?:you'?re up|you'?re on|take over|takeover|take the bag|step in|your turn|you got (?:it|this)|come in|jump in)`);
+  // "put Tank on/in" — verb → persona → on/in.
+  const PUT_ON = new RegExp(`\\bput ${persona} (?:on|in)\\b`);
+  return (SWITCH_TO.test(t) || TAKEOVER.test(t) || PUT_ON.test(t)) ? persona : null;
 }
 
 function asBool(v: unknown): boolean | null {
