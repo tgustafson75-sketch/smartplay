@@ -22,6 +22,18 @@ import { COURSE_MGMT } from './courseMgmt';
 import { PSYCHOLOGY } from './psychology';
 import { FAULT_LIBRARY } from './faultLibrary';
 import { DRILLS } from './drills';
+// Gap-fill modules (2026-06-24) — comprehensive sweep of established golf knowledge,
+// filtered through truth + mid/high-handicap + growth coaching, grounded honestly.
+import { SHORT_GAME_ADVANCED } from './shortGameAdvanced';
+import { PUTTING_ADVANCED } from './puttingAdvanced';
+import { COURSE_STRATEGY } from './courseStrategy';
+import { CONDITIONS } from './conditions';
+import { EQUIPMENT } from './equipment';
+import { PRACTICE_DESIGN } from './practiceDesign';
+import { WARMUP } from './warmup';
+import { RULES } from './rules';
+import { MENTAL_GAME } from './mentalGame';
+import { PRO_EXEMPLARS } from './proExemplars';
 
 export {
   PUTTING,
@@ -34,6 +46,16 @@ export {
   PSYCHOLOGY,
   FAULT_LIBRARY,
   DRILLS,
+  SHORT_GAME_ADVANCED,
+  PUTTING_ADVANCED,
+  COURSE_STRATEGY,
+  CONDITIONS,
+  EQUIPMENT,
+  PRACTICE_DESIGN,
+  WARMUP,
+  RULES,
+  MENTAL_GAME,
+  PRO_EXEMPLARS,
 };
 
 /** The full golf-knowledge corpus, concatenated across every module. */
@@ -48,4 +70,14 @@ export const GOLF_KNOWLEDGE: KBEntry[] = [
   ...PSYCHOLOGY,
   ...FAULT_LIBRARY,
   ...DRILLS,
+  ...SHORT_GAME_ADVANCED,
+  ...PUTTING_ADVANCED,
+  ...COURSE_STRATEGY,
+  ...CONDITIONS,
+  ...EQUIPMENT,
+  ...PRACTICE_DESIGN,
+  ...WARMUP,
+  ...RULES,
+  ...MENTAL_GAME,
+  ...PRO_EXEMPLARS,
 ];
