@@ -649,7 +649,17 @@ function CameraSmartFinder({
       {/* 2026-05-27 — Fix EQ: Lock + Capture floating controls.
           Sit OUTSIDE the GestureDetector + overlay tree so they're
           always tappable regardless of the target-overlay touch
-          capture. Position bottom-right above the F/M/B strip.
+          capture.
+          2026-06-25 (Tim — "controls land ON the intel card text") — the
+          stack used to anchor bottom-right (bottom: insets.bottom + 110),
+          which dropped it INSIDE the tall targetBottomStrip's vertical span:
+          the TOOLS pop-out covered the TO TARGET yardage, the PHOTO/VIDEO
+          pill clipped the CONF column, and the shutter sat over the Landing
+          line. Fix: anchor the whole stack to the UPPER-RIGHT camera zone
+          (top-based) which is clear live-camera area above the card's top
+          edge. The pop-out TOOLS card now expands DOWNWARD into that empty
+          zone instead of upward into the card. This frees the strip to use
+          full width (paddingRight reduced below) so CONF is fully visible.
           Lock toggle: only renders in target mode (where the reticle
           actually moves). Capture button: always available, snaps a
           single photo with the full overlay composited via screen
@@ -657,7 +667,7 @@ function CameraSmartFinder({
           frame; we don't bake overlays into the photo today — that
           needs view-shot for the SVG layer. v1 = raw photo). */}
       <View
-        style={{ position: 'absolute', right: 16, bottom: insets.bottom + 110, gap: 12, alignItems: 'center' }}
+        style={{ position: 'absolute', right: 16, top: insets.top + 64, gap: 12, alignItems: 'center' }}
         pointerEvents="box-none"
       >
         {/* 2026-06-23 (Tim) — TOOLS pop-out (SmartMotion SETUP TOOLS style): a
@@ -2014,11 +2024,13 @@ return StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.78)',
     paddingLeft: 16,
-    // 2026-06-23 (Tim — "crowded... settles hidden behind the shutter") — the
-    // right-side capture controls (shutter / eye / lock) overlap the panel's
-    // right edge. Inset the panel content past that control column so nothing
-    // hides behind them.
-    paddingRight: 92,
+    // 2026-06-25 (Tim) — the capture controls moved OUT of the bottom-right
+    // into the upper-right camera zone (see the controls View above), so the
+    // strip no longer needs to reserve a right gutter for them. Reclaim the
+    // full width with a symmetric inset so the RAW/PLAYS/CLUB/CONF row breathes
+    // and the CONF column is fully visible (was clipped to "CO…" behind the
+    // PHOTO/VIDEO pill).
+    paddingRight: 16,
     paddingTop: 12,
     alignItems: 'stretch',
   },
