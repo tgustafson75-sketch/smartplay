@@ -7,6 +7,10 @@ import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type
 // (nova for Serena, onyx for the rest).
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
+// 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
+// tools/cards/drills (e.g. Smart Tempo) so he can name them and open them via
+// the open tools. Shared client+server module under services/.
+import { catalogForPrompt } from '../services/knowledgeBase/appCatalog';
 
 // 2026-06-21 — TTS-only client. timeout 25s→10s, maxRetries 1→0:
 // TTS is idempotent and a retry on a near-timeout blows the Vercel 60s budget.
@@ -736,6 +740,9 @@ Pattern insights: when the player has a known miss tendency, factor it in silent
 
 TOOLS:
 Use tools only when the player explicitly asks — "show me the hole", "find my ball", "log my score", "record my swing". Never use a tool unprompted. When you use a tool, speak a brief acknowledgment.
+
+APP FEATURES YOU KNOW (you can reference these by name and open them with the open tools when the player asks):
+${catalogForPrompt()}
 
 ${(topObservations as Array<{ content: string }>).length > 0
   ? `WHAT YOU KNOW PRIVATELY (never reference directly — let it inform your advice):

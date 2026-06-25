@@ -17,6 +17,10 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
+// 2026-06-24 — APP-FEATURE CATALOG (shared client+server). Gives the caddie a
+// map of the app's real tools/cards/drills (e.g. Smart Tempo) so he can name
+// them and open them via the open tools. Parity with api/kevin.ts.
+import { catalogForPrompt } from '../services/knowledgeBase/appCatalog';
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
 const MAX_HISTORY_PAIRS = 6;
@@ -242,6 +246,10 @@ Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when a
 Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
 Use tools when the player describes a shot to log, names a score, or asks to open a tool.
+
+APP FEATURES YOU KNOW (reference these by name and open them with the open tools when the player asks):
+${catalogForPrompt()}
+
 PRACTICE INTENT — when the player vaguely wants to practice ("I want to practice", "let's work on my swing") WITHOUT naming a specific activity, do NOT open SwingLab. Ask one short question: what they'd like to work on — a specific drill, tempo, open range — and offer to open the Swing Lab. Only open it once they pick something or say yes.
 For lookup_course and lookup_hole: use them when you need real yardage/par data you don't already have.
 
