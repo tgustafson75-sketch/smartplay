@@ -54,7 +54,7 @@ import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
-import { useElevationDelta } from '../hooks/useElevationDelta';
+import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
 import type { WeatherSnapshot } from '../services/weatherService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
@@ -1220,7 +1220,17 @@ function TargetCameraOverlay({
   // 2026-06-11 — target coord (the reticle aim point) so plays-like can factor
   // real uphill/downhill via the cached elevation service. Defaults flat.
   const [targetLoc, setTargetLoc] = useState<{ lat: number; lng: number } | null>(null);
-  const elevationDeltaFeet = useElevationDelta(playerLoc, targetLoc);
+  // 2026-06-25 — Wire REAL elevation into plays-like. A manual camera-tilt read
+  // sets playerLoc/targetLoc above, but the COMMON case is the GPS green read
+  // (no tilt) — there both stayed null and elevation was always flat. Fall back
+  // to the live GPS fix (player) + the hole's green centroid (target) so the
+  // elevation lookup runs on every normal read, not just a manual tilt. The
+  // elevationService caches per ~11m grid, so this is one lookup per tee/green.
+  const fixForElev = getLastFix();
+  const elevPlayer = playerLoc ?? (fixForElev ? { lat: fixForElev.location.lat, lng: fixForElev.location.lng } : null);
+  const elevTarget = targetLoc ?? (geometry?.green ? { lat: geometry.green.lat, lng: geometry.green.lng } : null);
+  const elevation = useElevationDeltaStatus(elevPlayer, elevTarget);
+  const elevationDeltaFeet = elevation.deltaFeet;
   const headingRef = useRef(0);
   const pitchRef = useRef(-10);
   const lastYardsRef = useRef<number | null>(null);
@@ -1515,6 +1525,18 @@ function TargetCameraOverlay({
               breakdown (it duplicated the nearest-hazard line). Kept the numbers row, wind,
               a compact landing line, the nearest-hazard + safe-miss, and the two plans. */}
           {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
+          {/* 2026-06-25 — Honest REAL-elevation line. Shown ONLY when we have a
+              real read (hasData) that actually moves the number (≥1yd ≈ 3ft) —
+              so it's signal, not the old "Elevation: unavailable" noise Tim cut.
+              When elevation has no data the line is simply absent and the
+              plays-like number is unchanged (deltaFeet stays 0): we never imply
+              a read we don't have. */}
+          {elevation.hasData && Math.abs(elevationDeltaFeet) >= 3 && (
+            <Text style={styles.targetIntelLine}>
+              Elevation: {elevationDeltaFeet > 0 ? '↑ uphill' : '↓ downhill'} {Math.abs(Math.round(elevationDeltaFeet))} ft
+              {' · '}plays {elevationDeltaFeet > 0 ? '+' : '−'}{Math.abs(Math.round(elevationDeltaFeet / 3))}y
+            </Text>
+          )}
           {landing && (
             <Text style={styles.targetIntelLine}>
               Landing: carry {landing.carry} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})

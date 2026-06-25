@@ -49,10 +49,23 @@ export async function getPlaysLikeElevationDeltaFeet(
   player: { lat: number; lng: number },
   target: { lat: number; lng: number },
 ): Promise<number> {
+  const r = await getPlaysLikeElevation(player, target);
+  return r.deltaFeet;
+}
+
+/** Honesty-aware result: `hasData` distinguishes a REAL flat read (both points
+ *  resolved, ~level ground) from a no-data fallback (a lookup failed). Lets the
+ *  UI flag "elevation: flat (no data)" instead of implying a real read. */
+export type PlaysLikeElevation = { deltaFeet: number; hasData: boolean };
+
+export async function getPlaysLikeElevation(
+  player: { lat: number; lng: number },
+  target: { lat: number; lng: number },
+): Promise<PlaysLikeElevation> {
   const [p, t] = await Promise.all([
     getElevationFeet(player.lat, player.lng),
     getElevationFeet(target.lat, target.lng),
   ]);
-  if (p == null || t == null) return 0;
-  return Math.round((t - p) * 10) / 10;
+  if (p == null || t == null) return { deltaFeet: 0, hasData: false };
+  return { deltaFeet: Math.round((t - p) * 10) / 10, hasData: true };
 }

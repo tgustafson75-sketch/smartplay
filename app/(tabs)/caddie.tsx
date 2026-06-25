@@ -84,6 +84,7 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
+import { useElevationDeltaStatus } from '../../hooks/useElevationDelta';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../../store/trustLevelStore';
 import { useToastStore } from '../../store/toastStore';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
@@ -580,11 +581,46 @@ export default function CaddieTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRoundActive, currentHole, markTick]);
 
+  // 2026-06-25 — Wire REAL elevation into the caddie HUD's plays-like. Player =
+  // live GPS fix; target = the current hole's green (resolveGreenCoords). The
+  // elevationService caches per ~11m grid (one lookup per tee/green), and the
+  // hook returns 0 with hasData=false whenever either point is missing or the
+  // lookup fails — so a missing elevation NEVER blocks or corrupts the yardage,
+  // it just falls back to flat. markTick re-derives the coords on mark captures.
+  const elevPlayerCoord = useMemo(() => {
+    if (!isRoundActive) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLastFix } = require('../../services/smartFinderService');
+      const fix = getLastFix();
+      return fix ? { lat: fix.location.lat, lng: fix.location.lng } : null;
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive, currentHole, markTick]);
+  const elevGreenCoord = useMemo(() => {
+    if (!isRoundActive) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { resolveGreenCoords } = require('../../services/smartFinderService');
+      const g = resolveGreenCoords(currentHole);
+      const mid = g?.middle;
+      return mid ? { lat: mid.lat, lng: mid.lng } : null;
+    } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundActive, currentHole, markTick]);
+  const caddieElevation = useElevationDeltaStatus(elevPlayerCoord, elevGreenCoord);
+
   const playsLikeYardage = useMemo(() => {
     if (displayYardage == null) return displayYardage;
-    if (!caddieWeather) return displayYardage;
-    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing).plays_like_yards;
-  }, [displayYardage, caddieWeather, caddieShotBearing]);
+    const elevFt = caddieElevation.deltaFeet;
+    // With weather we get the full wind+temp+elevation model. With no weather we
+    // still honor real elevation so uphill/downhill never goes dark (same spirit
+    // as cnsShotRead). Flat read (elevFt === 0) leaves the number untouched.
+    if (!caddieWeather) {
+      return elevFt !== 0 ? Math.round(displayYardage + elevFt / 3) : displayYardage;
+    }
+    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing, elevFt).plays_like_yards;
+  }, [displayYardage, caddieWeather, caddieShotBearing, caddieElevation.deltaFeet]);
 
   // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
   const {

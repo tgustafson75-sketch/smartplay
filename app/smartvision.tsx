@@ -75,6 +75,7 @@ import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
+import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug, type LocalCourseSlug } from '../data/localCourseImages';
 import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount } from '../data/courses';
@@ -1171,6 +1172,12 @@ export default function SmartVisionScreen() {
   // distance; bearing comes from tee→green; weather is null here (SmartVision
   // has no snapshot), so plays-like == raw — honest, just no wind line. No
   // fabricated success%. Drives the AI-rec bar above the F/M/B panel.
+  // 2026-06-25 — Wire REAL elevation into the SmartVision read. This is the
+  // top-down hole view (no live player GPS), so the meaningful delta is
+  // tee→green: how much the hole climbs/drops. The elevationService caches per
+  // ~11m grid, and the hook returns 0/hasData=false whenever a lookup fails, so
+  // a missing elevation falls back to flat rather than corrupting the read.
+  const svElevation = useElevationDeltaStatus(teeCoord, greenCoord);
   const aiRead = useMemo(() => {
     if (yardages.middle == null) return null;
     const bearing = (teeCoord && greenCoord) ? bearingDegrees(teeCoord, greenCoord) : null;
@@ -1179,10 +1186,11 @@ export default function SmartVisionScreen() {
         rawYards: yardages.middle,
         weather: null,
         shotBearingDeg: bearing,
+        elevationDeltaFeet: svElevation.deltaFeet,
         bag: bagDistances(),
       });
     } catch { return null; }
-  }, [yardages.middle, teeCoord, greenCoord]);
+  }, [yardages.middle, teeCoord, greenCoord, svElevation.deltaFeet]);
 
   // 2026-06-13 (Tim #6) — Golfshot-style layup planning. The hole's playing
   // distance (tee→green) decides whether the view shows one direct line or a
