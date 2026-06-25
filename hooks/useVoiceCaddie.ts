@@ -1492,13 +1492,15 @@ export const useVoiceCaddie = ({
       try {
         transcribeRes = await doTranscribeFetch();
       } catch (firstErr) {
-        const isAbort = firstErr instanceof Error && firstErr.name === 'AbortError';
-        if (isAbort) {
-          console.log('[voice] transcribe attempt 1 aborted — retrying once');
-          transcribeRes = await doTranscribeFetch();
-        } else {
-          throw firstErr;
-        }
+        // 2026-06-25 (Tim — voice "goes straight to failure") — retry on ANY first-attempt
+        // failure, not just an abort/timeout. The old code only retried AbortError and
+        // re-threw a "Network request failed" instantly — so a transient blip (a brief
+        // server/deploy hiccup, a radio wake, a cell handoff) failed the whole turn with no
+        // second try. A single retry after a short backoff lands on the recovered connection.
+        const name = firstErr instanceof Error ? firstErr.name : 'network';
+        console.log('[voice] transcribe attempt 1 failed (', name, ') — retrying once after backoff');
+        await new Promise((r) => setTimeout(r, 600));
+        transcribeRes = await doTranscribeFetch();
       }
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };

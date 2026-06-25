@@ -266,27 +266,46 @@ export function usePipecatVoice({
 
     onVoiceStateChange?.('thinking');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
     // Once we've spoken a real response, a later throw (e.g. auto-listen) must
     // NOT trigger the consumer's sendToBrain fallback — that would double-answer.
     let spokeResponse = false;
 
-    try {
-      const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          secret,
-          text: transcript,
-          history: historyRef.current,
-          context: buildContext(),
-          sessionId: sessionIdRef.current,
-        }),
-      });
+    // 2026-06-25 (Tim — voice "goes straight to failure") — each attempt gets its OWN
+    // controller/timeout so we can retry once on a transient NETWORK throw (a brief
+    // deploy hiccup / radio wake) before degrading to "give me one sec". Matches the
+    // transcribe retry. A timeout-abort isn't retried (the server was already too slow).
+    const doTurnFetch = async (): Promise<Response> => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), TURN_TIMEOUT_MS);
+      try {
+        return await fetch(`${apiBase}/api/pipecat-turn`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            secret,
+            text: transcript,
+            history: historyRef.current,
+            context: buildContext(),
+            sessionId: sessionIdRef.current,
+          }),
+        });
+      } finally {
+        clearTimeout(t);
+      }
+    };
 
-      clearTimeout(timeout);
+    try {
+      let resp: Response;
+      try {
+        resp = await doTurnFetch();
+      } catch (firstErr) {
+        const name = firstErr instanceof Error ? firstErr.name : 'network';
+        if (name === 'AbortError') throw firstErr; // genuine timeout — don't pile on a retry
+        devLog('[pipecat] /turn attempt 1 failed (', name, ') — retrying once after backoff');
+        await new Promise((r) => setTimeout(r, 600));
+        resp = await doTurnFetch();
+      }
 
       if (!resp.ok) {
         // Pipecat OWNS the turn. The local-first precheck already ran in
@@ -363,7 +382,6 @@ export function usePipecatVoice({
         }
       }
     } catch (e) {
-      clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
       // Single-path graceful degrade (NO legacy double-processing). If we already
       // spoke a real response, a late auto-listen throw is swallowed silently.
