@@ -1279,6 +1279,27 @@ export const useVoiceCaddie = ({
           }
         }
 
+        // Pipecat override — keep the WHOLE conversation on ONE brain.
+        // When the pipecat orchestrator is active, the first turn went through
+        // processTranscriptOverride (Claude brain + tools + TTS + its own
+        // re-listen). The legacy sendToBrain path POSTs /api/kevin, which would
+        // split history/context across two brains on every follow-up. Route the
+        // follow-up through the SAME override so context stays unified. Pipecat
+        // owns the turn end-state + re-listen (it re-opens the mic when it asks a
+        // question), so we record the user turn and return — no legacy speak/recurse.
+        if (processTranscriptOverride) {
+          recordUserTurn(trimmed);
+          wrappedOnVoiceStateChange('thinking');
+          isProcessingRef.current = false; // release before await so the re-listen mic isn't blocked
+          try {
+            await processTranscriptOverride(trimmed);
+          } catch (e) {
+            console.log('[voice] follow-up pipecat override error:', e);
+            wrappedOnVoiceStateChange('idle');
+          }
+          return;
+        }
+
         // Match the manual-tap pattern: record the user turn, send to
         // brain, speak, then check if Kevin asked ANOTHER question —
         // recurse via this same loop so a multi-turn back-and-forth

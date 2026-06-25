@@ -1186,6 +1186,14 @@ export default function SmartMotion() {
             });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
+        // Camera-first Smart Tempo return — fire here where sessionId is assigned (the
+        // stopRecording-side block raced ingestedSessionIdRef before this await).
+        if (tempoReturnRef.current && segmentsRef.current.length <= 1) {
+          const dest = tempoReturnRef.current;
+          tempoReturnRef.current = null; // one-shot
+          const tempoMode = puttModeRef.current ? 'putt' : 'full_swing';
+          router.replace({ pathname: dest as never, params: { swing_id: sessionId, tempoMode } as never });
+        }
         // 2026-06-15 (Tim) — eager library thumbnail at the IMPACT frame (we have the
         // acoustic strike time), so cage sessions always carry a meaningful thumb and
         // don't rely on the unreliable lazy library-open generation over a big clip.
@@ -2280,24 +2288,9 @@ export default function SmartMotion() {
         // so subscribers (e.g. voice UI) receive the event.
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: 1, summary: '1 swing recorded.' });
       }
-      // 2026-06-24 (Tim — camera-first Smart Tempo) — if we were launched in
-      // TEMPO capture mode, hand the just-ingested swing back to Smart Tempo so
-      // the player lands on the tempo RESULT (it auto-runs detectTempoPhases on
-      // the loaded session). Only for a clean SINGLE capture — a multi-swing reel
-      // doesn't map to one tempo read, so it stays in Smart Motion's normal
-      // review. 2026-06-24 (Tim — mode-aware tempo): PUTTS route here TOO now,
-      // carrying tempoMode=putt so Smart Tempo grades the smoother ~2:1 putting
-      // stroke (pose-only impact, lower confidence) instead of the full-swing
-      // 3:1. DTL + face-on are the same full swing → no flag (default).
-      if (tempoReturnRef.current && segsForAnalysis.length <= 1) {
-        const sid = ingestedSessionIdRef.current;
-        if (sid) {
-          const dest = tempoReturnRef.current;
-          tempoReturnRef.current = null; // one-shot — don't re-route on a later swing
-          const tempoMode = puttModeRef.current ? 'putt' : 'full_swing';
-          router.replace({ pathname: dest as never, params: { swing_id: sid, tempoMode } as never });
-        }
-      }
+      // 2026-06-24 (Tim — camera-first Smart Tempo): the tempo-return now fires from
+      // INSIDE runAnalysis (right after sessionId is assigned), so this side no longer
+      // races ingestedSessionIdRef while it's transiently null. See runAnalysis.
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
