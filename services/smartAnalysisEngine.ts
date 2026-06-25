@@ -152,6 +152,10 @@ export interface SwingCompareRequest extends BaseRequest {
   /** Optional reference video URI (e.g. instructor swing). */
   reference_video_uri?: string | null;
   reference_video_duration_ms?: number | null;
+  /** 2026-06-25 — the club the current swing was hit with. Used only for the
+   *  tour-benchmark (self_vs_pro, no reference) path to pick the club-category
+   *  profile (driver fuller, wedge more compact). Unknown → 'default' band. */
+  club?: string | null;
 }
 
 export interface PoseEstimateRequestX extends BaseRequest {
@@ -881,7 +885,7 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
     req.against === 'amateur_good' ? 'self_vs_amateur' :
     reference ? 'self_vs_self' : 'self_vs_pro';
 
-  const cmp = compareMod.compareSwings({ current, reference, kind });
+  const cmp = compareMod.compareSwings({ current, reference, kind, club: req.club });
   const profile = usePlayerProfileStore.getState();
   const priorities = prioritizeSwingFocus(cmp.metrics as Array<{ label: string; direction: string; match_score: number; verdict: string }>);
   const complexity = deriveComplexityLevel(profile);

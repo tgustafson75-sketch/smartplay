@@ -28,22 +28,32 @@
 
 import type { PoseEstimate, PoseFrame, Keypoint, SwingBiomechanics } from './poseEstimator';
 import { devLog } from './devLog';
+import {
+  benchmarkIdealBiomech,
+  getBenchmarkProfile,
+  getBenchmarkMetric,
+  clubCategoryFor,
+  withinBenchmark,
+  BENCHMARK_FRAMING,
+  type BenchmarkClubCategory,
+  type BenchmarkMetricKey,
+} from './swingBenchmarks';
+import { PRO_EXEMPLARS } from './knowledgeBase/modules/proExemplars';
 
-// ─── Reference bank (PGA-tour median, single-digit amateur upper) ───────
-// Numbers anchor against publicly documented coaching standards.
-const TOUR_MEDIAN: SwingBiomechanics = {
-  hipTurnDeg: 45,
-  shoulderTurnDeg: 95,
-  shoulderTiltDeg: 30,
-  weightShiftPct: 80,
-  spineAngleDeltaDeg: 4,
-  headDriftPxNorm: 0.02,
-  hipSlideRatio: 0.6,
-  sequencingScore: 78,
-  frames: [],
-  verdicts: { hipTurn: null, shoulderTurn: null, weightShift: null, posture: null, shoulderTilt: null, sequencing: null },
-};
-
+// ─── Reference bank ──────────────────────────────────────────────────────
+// 2026-06-25 — self_vs_pro now grades against the BENCHMARK BANK
+// (services/swingBenchmarks.ts): tour-standard directional RANGES keyed by
+// club, each tied to a proExemplars feel + drill, server-hostable for future
+// real pro-pose data. The old in-file TOUR_MEDIAN constant moved INTO the
+// bank as the 'default' (all-clubs) profile's ideal values — pickReferenceBio
+// reads it through benchmarkIdealBiomech(), so there's no second copy here.
+//
+// HONESTY: the bank holds tour-standard RANGES, NOT a captured named-pro
+// pose. The result is framed "vs the tour benchmark (directional)", never
+// "you're X° off [pro]".
+//
+// AMATEUR_GOOD stays in-file — it's the self_vs_amateur / avatar baseline,
+// a "good single-digit" reference, not a tour benchmark.
 const AMATEUR_GOOD: SwingBiomechanics = {
   hipTurnDeg: 38,
   shoulderTurnDeg: 88,
@@ -62,6 +72,44 @@ const AMATEUR_GOOD: SwingBiomechanics = {
 export type CompareKind = 'self_vs_self' | 'self_vs_pro' | 'self_vs_amateur' | 'self_vs_avatar';
 
 export type MetricDirection = 'better' | 'worse' | 'same' | 'unknown';
+
+/**
+ * 2026-06-25 — the honest benchmark payload that rides on a self_vs_pro
+ * comparison graded against the BENCHMARK BANK (no captured pro supplied).
+ *
+ * HONESTY: this is the framing the UI/voice MUST lead with. It is a
+ * directional "vs the tour benchmark" — a tour-standard RANGE, never a
+ * measured "you're X° off [named pro]". Each focus carries the matching
+ * proExemplars FEEL + DRILL so the gap comes with a way to close it.
+ */
+export interface BenchmarkFocus {
+  /** Metric label, e.g. "Shoulder turn". */
+  label: string;
+  /** Are you inside the tour band for this metric? */
+  withinBand: boolean;
+  /** The hedged, honest benchmark note (never "X° off a pro"). */
+  note: string;
+  /** proExemplars entry this focus maps to (the model to copy by feel). */
+  exemplarTopic: string;
+  /** The single FEEL cue from that exemplar. */
+  feel: string;
+  /** A drill id (from the exemplar's related[]) to close the gap, if any. */
+  drillId: string | null;
+}
+
+export interface BenchmarkContext {
+  /** The honesty framing the UI/voice MUST lead with. */
+  framing: string;
+  /** Which club category the bank graded against. */
+  club: BenchmarkClubCategory;
+  /** 'in_bundle' (curated, shipped now) or 'server' (future real pro-pose
+   *  Tier-2 payload) — surfaced so the UI can be transparent. */
+  origin: 'in_bundle' | 'server';
+  /** Per-focus feel + drill for the metrics that fell OUTSIDE the band,
+   *  worst first. Empty when the read is inside the tour benchmark on
+   *  everything we could measure. */
+  focuses: BenchmarkFocus[];
+}
 
 export interface MetricDelta {
   key: keyof Omit<SwingBiomechanics, 'frames' | 'verdicts' | 'metric_confidence' | 'angle'>;
@@ -95,8 +143,9 @@ export interface SwingComparison {
   comparisonId: string;
   timestamp: string;
   kind: CompareKind;
-  /** Sources used — surfaced as chips. */
-  sources_used: ('current_pose' | 'reference_pose' | 'tour_median' | 'amateur_good')[];
+  /** Sources used — surfaced as chips. ('tour_median' retained in the union
+   *  for back-compat; the bank path now emits 'tour_benchmark'.) */
+  sources_used: ('current_pose' | 'reference_pose' | 'tour_median' | 'tour_benchmark' | 'amateur_good')[];
   /** Aggregated 0..100 match score across all metrics, or `null` when
    *  there was no usable biomechanics to compare. `null` must NOT be
    *  coerced to 0 — a confident "0% match" is a fabricated negative.
@@ -109,14 +158,26 @@ export interface SwingComparison {
   takeaways: string[];
   /** Optional persona-aware spoken summary. Caller pipes through voice. */
   voice_summary: string;
+  /** 2026-06-25 — present ONLY when self_vs_pro was graded against the
+   *  BENCHMARK BANK (no captured pro reference supplied). Carries the honest
+   *  "vs tour benchmark (directional)" framing + the proExemplars feel/drill
+   *  for each focus. Absent for self_vs_self / a real reference pose. */
+  benchmark?: BenchmarkContext;
 }
 
 export interface CompareInput {
   current: PoseEstimate;
-  /** When omitted, the engine compares against TOUR_MEDIAN or AMATEUR_GOOD
-   *  based on `kind`. */
+  /** When omitted, the engine compares against the BENCHMARK BANK (pro) or
+   *  AMATEUR_GOOD based on `kind`. */
   reference?: PoseEstimate | null;
   kind?: CompareKind;
+  /** 2026-06-25 — the club the swing was hit with (free text / chip, e.g.
+   *  "Driver", "7 iron", "PW"). Used ONLY for self_vs_pro against the
+   *  benchmark bank: it picks the club-category profile (driver fuller,
+   *  wedge more compact). Ignored when a real reference pose is supplied.
+   *  Unknown / omitted → the 'default' all-clubs band (no fabricated
+   *  precision). */
+  club?: string | null;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────
@@ -131,10 +192,17 @@ export function compareSwings(input: CompareInput): SwingComparison {
   const currentBio = input.current.biomechanics;
   const referenceBio = pickReferenceBio(input, kind);
 
+  // 2026-06-25 — when self_vs_pro runs WITHOUT a captured reference pose, the
+  // BENCHMARK BANK (services/swingBenchmarks.ts) is the reference. We grade
+  // against the club-category profile's tour-standard RANGES, never a
+  // fabricated named-pro capture.
+  const usesBenchmark = kind === 'self_vs_pro' && !input.reference?.biomechanics;
+  const benchClub: BenchmarkClubCategory = usesBenchmark ? clubCategoryFor(input.club) : 'default';
+
   const sources_used: SwingComparison['sources_used'] = [];
   if (currentBio) sources_used.push('current_pose');
   if (input.reference?.biomechanics) sources_used.push('reference_pose');
-  if (kind === 'self_vs_pro' && !input.reference) sources_used.push('tour_median');
+  if (usesBenchmark) sources_used.push('tour_benchmark');
   if (kind === 'self_vs_amateur' && !input.reference) sources_used.push('amateur_good');
 
   const metrics: MetricDelta[] = [
@@ -155,8 +223,10 @@ export function compareSwings(input: CompareInput): SwingComparison {
 
   const overall_match = computeOverall(metrics);
   const hotspots = buildHotspots(input.current.frames, metrics);
-  const takeaways = buildTakeaways(metrics, overall_match);
-  const voice_summary = buildVoiceSummary(kind, overall_match, takeaways);
+  // Benchmark context (feel + drill) only when the bank was the reference.
+  const benchmark = usesBenchmark ? buildBenchmarkContext(metrics, benchClub) : undefined;
+  const takeaways = buildTakeaways(metrics, overall_match, benchmark);
+  const voice_summary = buildVoiceSummary(kind, overall_match, takeaways, benchmark);
 
   const result: SwingComparison = {
     comparisonId: 'cmp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 5),
@@ -168,9 +238,70 @@ export function compareSwings(input: CompareInput): SwingComparison {
     hotspots,
     takeaways,
     voice_summary,
+    ...(benchmark ? { benchmark } : {}),
   };
-  devLog(`[swingCompare] kind=${kind} overall=${overall_match} hotspots=${hotspots.length}`);
+  devLog(`[swingCompare] kind=${kind} overall=${overall_match} hotspots=${hotspots.length} bench=${benchmark ? benchmark.club : 'no'}`);
   return result;
+}
+
+// ─── 2026-06-25 — Benchmark context (feel + drill bridge) ────────────────
+//
+// Maps each metric that fell OUTSIDE the tour band to its proExemplars
+// entry (the model to copy by FEEL) + a drill id to close the gap. This is
+// what turns "your shoulder turn is short" into "vs the tour benchmark
+// (directional) — chase the Rose full-coil feel, drill.feet-together".
+// HONEST: ranges, hedged language, never "you're X° off a named pro".
+
+/** A focus is "outside the band" when its current read falls beyond the
+ *  benchmark RANGE for that metric (we re-check via withinBenchmark using
+ *  the same bank the reference came from). We surface the worst first. */
+function buildBenchmarkContext(metrics: MetricDelta[], club: BenchmarkClubCategory): BenchmarkContext {
+  const prof = getBenchmarkProfile(club);
+  const focuses: BenchmarkFocus[] = [];
+  for (const m of metrics) {
+    if (m.current == null) continue;
+    const benchKey = m.key as BenchmarkMetricKey;
+    const bm = getBenchmarkMetric(benchKey, club);
+    if (!bm) continue;
+    const inBand = withinBenchmark(benchKey, m.current, club);
+    if (inBand) continue; // only the gaps become focuses
+    const ex = PRO_EXEMPLARS.find((e) => e.id === bm.exemplarId);
+    focuses.push({
+      label: m.label,
+      withinBand: false,
+      note: bm.benchmarkNote,
+      exemplarTopic: ex?.topic ?? bm.exemplarId,
+      feel: feelFromExemplar(ex) ?? bm.benchmarkNote,
+      drillId: drillFromExemplar(ex),
+    });
+  }
+  // Worst (lowest match_score) first so the UI leads with the biggest gap.
+  focuses.sort((a, b) => {
+    const sa = metrics.find((m) => m.label === a.label)?.match_score ?? 0;
+    const sb = metrics.find((m) => m.label === b.label)?.match_score ?? 0;
+    return sa - sb;
+  });
+  return {
+    framing: prof.framing || BENCHMARK_FRAMING,
+    club,
+    origin: prof.origin,
+    focuses,
+  };
+}
+
+/** The single FEEL cue from an exemplar — its coachingCues entries lead with
+ *  a "feel:" line; pick the first one, else the first cue, else null. */
+function feelFromExemplar(ex: (typeof PRO_EXEMPLARS)[number] | undefined): string | null {
+  if (!ex?.coachingCues || ex.coachingCues.length === 0) return null;
+  const feelLine = ex.coachingCues.find((c) => /^feel:/i.test(c.trim()));
+  const raw = feelLine ?? ex.coachingCues[0];
+  return raw.replace(/^feel:\s*/i, '').trim();
+}
+
+/** The drill id from an exemplar's related[] (the `drill.*` link), if any. */
+function drillFromExemplar(ex: (typeof PRO_EXEMPLARS)[number] | undefined): string | null {
+  if (!ex?.related || ex.related.length === 0) return null;
+  return ex.related.find((r) => r.startsWith('drill.')) ?? null;
 }
 
 // ─── Reference selection ─────────────────────────────────────────────────
@@ -178,7 +309,11 @@ export function compareSwings(input: CompareInput): SwingComparison {
 function pickReferenceBio(input: CompareInput, kind: CompareKind): SwingBiomechanics {
   if (input.reference?.biomechanics) return input.reference.biomechanics;
   switch (kind) {
-    case 'self_vs_pro':     return TOUR_MEDIAN;
+    // 2026-06-25 — the BENCHMARK BANK is now the pro reference (club-aware
+    // tour-standard ranges; the profile's `ideal` values are the comparison
+    // anchor). The old TOUR_MEDIAN numbers live on as the bank's 'default'
+    // profile, reached when the club is unknown.
+    case 'self_vs_pro':     return benchmarkIdealBiomech(clubCategoryFor(input.club));
     case 'self_vs_amateur': return AMATEUR_GOOD;
     case 'self_vs_avatar':  return AMATEUR_GOOD;
     case 'self_vs_self':
@@ -290,29 +425,54 @@ function findJointInFrames(frames: PoseFrame[], jointName: string): Keypoint | n
   return null;
 }
 
-function buildTakeaways(metrics: MetricDelta[], overall: number | null): string[] {
+function buildTakeaways(
+  metrics: MetricDelta[],
+  overall: number | null,
+  benchmark?: BenchmarkContext,
+): string[] {
   // Insufficient data — no honest takeaways to draw.
   if (overall == null) return ['Not enough pose data to compare yet.'];
   const wins = metrics.filter((m) => m.direction === 'better' && m.match_score >= 70);
-  const focuses = metrics.filter((m) => m.direction === 'worse').sort((a, b) => a.match_score - b.match_score);
   const out: string[] = [];
   if (wins.length > 0) {
     out.push(`Strong: ${wins.slice(0, 2).map((w) => w.label.toLowerCase()).join(' + ')}.`);
   }
-  if (focuses.length > 0) {
-    out.push(`Focus: ${focuses[0].label.toLowerCase()} — ${focuses[0].verdict.toLowerCase()}`);
+  // When the BENCHMARK BANK is the reference, lead the focus with the honest
+  // "vs tour benchmark (directional)" framing + the proExemplars FEEL and a
+  // drill to close it — never a "you're X° off [pro]" claim.
+  if (benchmark && benchmark.focuses.length > 0) {
+    const f = benchmark.focuses[0];
+    const drill = f.drillId ? ` (drill: ${f.drillId})` : '';
+    out.push(
+      `Vs the tour benchmark (directional): your ${f.label.toLowerCase()} tends outside the tour range — feel: ${f.feel}${drill}.`,
+    );
+  } else {
+    const focuses = metrics.filter((m) => m.direction === 'worse').sort((a, b) => a.match_score - b.match_score);
+    if (focuses.length > 0) {
+      out.push(`Focus: ${focuses[0].label.toLowerCase()} — ${focuses[0].verdict.toLowerCase()}`);
+    }
   }
-  if (overall >= 85) out.push('Overall — very close to the reference.');
+  if (benchmark && benchmark.focuses.length === 0) {
+    out.push('Looks tour-standard on everything we could measure — directionally inside the benchmark range.');
+  } else if (overall >= 85) out.push('Overall — very close to the reference.');
   else if (overall >= 65) out.push('Overall — solid pattern with one or two leaks to close.');
   else if (overall > 0) out.push('Overall — meaningful gaps; pick one focus and rep it.');
   return out;
 }
 
-function buildVoiceSummary(kind: CompareKind, overall: number | null, takeaways: string[]): string {
+function buildVoiceSummary(
+  kind: CompareKind,
+  overall: number | null,
+  takeaways: string[],
+  benchmark?: BenchmarkContext,
+): string {
   if (overall == null) return 'Not enough pose data to compare cleanly yet.';
+  // HONEST framing for the bank path: "vs the tour benchmark", directional —
+  // not "vs a measured pro". Hedged ("looks like", "tends toward") per the
+  // app's honesty bar.
   const lead =
     kind === 'self_vs_self' ? 'Comparing your swings'
-    : kind === 'self_vs_pro' ? 'Vs tour median'
+    : kind === 'self_vs_pro' ? (benchmark ? 'Vs the tour benchmark (directional)' : 'Vs tour median')
     : kind === 'self_vs_amateur' ? 'Vs single-digit baseline'
     : 'Vs ideal avatar';
   return `${lead}: ${overall}% match. ${takeaways.slice(0, 2).join(' ')}`.trim();
