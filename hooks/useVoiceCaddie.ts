@@ -25,6 +25,8 @@ import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { pickGreeting, isSocialGreeting } from '../services/intents/socialGreetingHandler';
+import { detectCaddieSwitch } from '../services/intents/changeSettingHandler';
+import { getCaddieName } from '../lib/persona';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
@@ -1711,6 +1713,36 @@ export const useVoiceCaddie = ({
           return;
         } catch (e) {
           devLog('[voice] greeting fast-path error (falling through):', e);
+        }
+      }
+
+      // ── Caddie hand-off fast-path (BEFORE pipecat) — 2026-06-24 (Tim, restore) ──
+      // "switch to Serena" / "let me talk to Tank" / "Kevin, you're up" used to switch
+      // caddies, then stopped working: on the pipecat default the override runs before
+      // the legacy changeSettingHandler AND pipecat has no switch-caddie tool, so the
+      // switch died. Detect it deterministically and fire setCaddiePersonality, which
+      // stops the old voice + plays the new persona's BUNDLED opener (the spoken
+      // hand-off, instant + never silent) + sets the on-screen line. Skip the brain.
+      if (!skipIntentRouter) {
+        try {
+          const switchTo = detectCaddieSwitch(transcript);
+          if (switchTo) {
+            const cur = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as typeof switchTo;
+            devLog('[voice] CADDIE SWITCH fast-path:', cur, '→', switchTo);
+            try { useVoiceHitRateStore.getState().recordLocal('tap_local:caddie_switch', Date.now()); } catch {}
+            if (switchTo === cur) {
+              wrappedOnVoiceStateChange('speaking');
+              await speakResponse(`${getCaddieName(switchTo)} here — already with you. What do you need?`);
+            } else {
+              // setCaddiePersonality owns the announcement (bundled opener + flashCaption).
+              try { useSettingsStore.getState().setCaddiePersonality(switchTo); } catch (e) { devLog('[voice] caddie switch failed:', e); }
+            }
+            wrappedOnVoiceStateChange('idle');
+            isProcessingRef.current = false;
+            return;
+          }
+        } catch (e) {
+          devLog('[voice] caddie-switch fast-path error (falling through):', e);
         }
       }
 

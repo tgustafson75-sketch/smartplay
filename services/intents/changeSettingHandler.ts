@@ -5,6 +5,25 @@ import { useGhostStore } from '../../store/ghostStore';
 import type { RoundMode } from '../../types/patterns';
 import { getCaddieName } from '../../lib/persona';
 
+/**
+ * Deterministic caddie hand-off detector (2026-06-24, Tim — restore the switch).
+ * "switch to Serena", "let me talk to Tank", "change caddie to Harry", "Kevin you're
+ * up". Returns the target persona, or null. Requires a SWITCH/handoff intent + a
+ * persona name, so a plain greeting ("hey kevin") never matches. Lets useVoiceCaddie
+ * fire setCaddiePersonality BEFORE the pipecat override (which has no switch tool, so
+ * the switch died on the default voice path).
+ */
+export function detectCaddieSwitch(raw: string): Persona | null {
+  const t = String(raw ?? '').toLowerCase().replace(/[?.!,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 70) return null;
+  const m = t.match(/\b(kevin|tank|serena|harry)\b/);
+  if (!m) return null;
+  const persona = m[1] as Persona;
+  const SWITCH = /\b(switch( me| over| back)?( to)?|change( the)?( caddie| caddy)?( to)?|talk to|talk with|let me (talk to|speak to|get)|i want (to talk to|to speak to)|can i (talk to|speak to|get)|bring (in |back )?|put .* (on|in)|hand (it|this|me|off|over|the bag)|swap (to|in|out)( for)?|go (to|with)|give me|i'?d like|let'?s get)\b/;
+  const TAKEOVER = new RegExp(`\\b${persona}\\b\\s+(you'?re up|you'?re on|take over|takeover|take the bag|step in|your turn|you got (it|this)|come in|jump in)`);
+  return (SWITCH.test(t) || TAKEOVER.test(t)) ? persona : null;
+}
+
 function asBool(v: unknown): boolean | null {
   if (typeof v === 'boolean') return v;
   if (typeof v === 'string') {
