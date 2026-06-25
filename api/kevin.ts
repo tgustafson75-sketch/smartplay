@@ -1031,10 +1031,25 @@ You are ${caddieName}. Not an app. Not an AI. A relationship built over ${rounds
 ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
 `.trim();
 
-    // 2026-06-25 (Tim) — KB RAG removed from the brain while isolating a voice
-    // regression. systemPromptWithKB is now just the base prompt (no per-turn
-    // knowledge injection, no KB import on this hot path).
-    const systemPromptWithKB = systemPrompt;
+    // 2026-06-25 (Tim — "get kb back") — KB re-added the SAFE way: a LAZY dynamic
+    // import inside try/catch so the KB modules are NOT pulled into this function's
+    // cold-start bundle init, and any KB error is swallowed (best-effort — never
+    // break a turn). Builds ONE optional addendum (app-feature catalog + per-turn
+    // coaching-knowledge RAG, max 3, offline, scored floor). Injected only when
+    // non-empty; empty → base prompt unchanged. Kept OUT of the static systemPrompt
+    // literal so that literal has no KB dependency. Var name kept (passed to runAgenticLoop).
+    let kbAddendum = '';
+    try {
+      const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
+      const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
+      const kbBlock = kbForPrompt(retrieveKB(_message, { max: 3 }));
+      kbAddendum =
+        `\n\nAPP FEATURES YOU KNOW (you can reference these by name and open them with the open tools when the player asks):\n${catalogForPrompt()}`
+        + (kbBlock
+          ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
+          : '');
+    } catch { /* KB is best-effort — never break the turn */ }
+    const systemPromptWithKB = kbAddendum ? systemPrompt + kbAddendum : systemPrompt;
 
     const baseMessage = _message;
 

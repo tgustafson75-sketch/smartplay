@@ -303,10 +303,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const toolActions: Array<Record<string, unknown>> = [];
 
   try {
-    // 2026-06-25 (Tim) — KB RAG removed from the live-voice brain while we isolate a
-    // voice regression. The per-turn knowledge injection + the KB import are gone from
-    // this hot path; the brain runs on its base prompt only.
-    const system = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+    const baseSystem = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+
+    // 2026-06-25 (Tim — "get kb back") — KB re-added the SAFE way: a LAZY dynamic
+    // import inside try/catch so the KB modules are NOT pulled into this function's
+    // cold-start bundle init, and any KB error is swallowed (best-effort — never
+    // break a turn). Builds ONE optional addendum (app-feature catalog + per-turn
+    // coaching-knowledge RAG, max 3, offline, scored floor). Injected only when
+    // non-empty; empty → base prompt unchanged. Kept OUT of the static buildSystem
+    // literal so that literal has no KB dependency.
+    let kbAddendum = '';
+    try {
+      const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
+      const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
+      const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
+      kbAddendum =
+        `\n\nAPP FEATURES YOU KNOW (reference these by name and open them with the open tools when the player asks):\n${catalogForPrompt()}`
+        + (kbBlock
+          ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
+          : '');
+    } catch { /* KB is best-effort — never break the turn */ }
+    const system = kbAddendum ? baseSystem + kbAddendum : baseSystem;
 
     // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
     // provider hiccup, so the live-voice caddie said "give me one sec" every turn
