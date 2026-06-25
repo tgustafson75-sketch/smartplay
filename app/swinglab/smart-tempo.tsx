@@ -120,8 +120,15 @@ export default function SmartTempoScreen() {
   // ping-pong with the camera.
   const [browsing, setBrowsing] = useState(false);
   const autoLaunchedRef = useRef(false);
-  const launchCamera = useCallback(() => {
-    router.push({
+  // `replace` controls whether launching the camera REPLACES this entry screen
+  // in the back stack (true) or pushes on top of it (false). The AUTO-launch on
+  // an empty entry replaces, so backing out of the camera returns to SwingLab —
+  // NOT this intermediate menu (Tim: "the old menu shouldn't be what you hit").
+  // A deliberate re-launch from the entry's own "Open camera" button pushes, so
+  // the user can still back out to the menu they're looking at.
+  const launchCamera = useCallback((replace = false) => {
+    const nav = replace ? router.replace : router.push;
+    nav({
       pathname: '/swinglab/smartmotion' as never,
       params: { captureMode: 'tempo', returnTo: '/swinglab/smart-tempo' } as never,
     });
@@ -133,7 +140,9 @@ export default function SmartTempoScreen() {
     if (inReview || browsing || autoLaunchedRef.current) return;
     if (params.swing_id || params.clipUri) return; // arrived pointed at a swing → don't hijack
     autoLaunchedRef.current = true;
-    launchCamera();
+    // REPLACE on auto-launch: the empty entry menu must not linger in the back
+    // stack, so backing out of the camera lands on SwingLab, not this menu.
+    launchCamera(true);
   }, [inReview, browsing, params.swing_id, params.clipUri, launchCamera]);
 
   // ── Resolve the playable URI (re-anchor stale container paths) ────────
@@ -449,7 +458,7 @@ export default function SmartTempoScreen() {
           </Text>
 
           <Pressable
-            onPress={launchCamera}
+            onPress={() => launchCamera(false)}
             style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
             accessibilityRole="button"
             accessibilityLabel="Open the camera and record a swing"
