@@ -69,7 +69,22 @@ const GREETINGS: Record<Persona, string[]> = {
   ],
 };
 
-function pickGreeting(persona: Persona, raw: string): string {
+/**
+ * Whole-utterance greeting / chit-chat detector. Conservative: a greeting PREFIX
+ * followed by a real ask ("hey kevin, what should I hit") must NOT match — only a
+ * PURE greeting ("hey kevin", "how are you", "what's up"), so it can short-circuit
+ * the brain (instant, no cold pipecat turn). (2026-06-24, Tim — demo speed.)
+ */
+export function isSocialGreeting(raw: string): boolean {
+  let t = String(raw ?? '').toLowerCase().trim().replace(/[?.!,]+$/g, '').replace(/\s+/g, ' ');
+  if (!t || t.length > 40) return false;
+  t = t.replace(/^(hey|hi|hello|yo|ok|okay|good morning|good afternoon|good evening)\b[\s,]*/g, '');
+  t = t.replace(/^(kevin|tank|serena|harry|caddie|caddy)\b[\s,]*/g, '');
+  t = t.trim();
+  return t === '' || /^(how are you( doing| feeling)?|how are we|how'?s it going|how you doing|how is everything|what'?s up|whats up|sup|wassup|you there|are you there|how'?s things)$/.test(t);
+}
+
+export function pickGreeting(persona: Persona, raw: string): string {
   const pool = GREETINGS[persona] ?? GREETINGS.kevin;
   // Hash the transcript so identical greetings produce identical
   // picks (single response per phrasing) but DIFFERENT greetings

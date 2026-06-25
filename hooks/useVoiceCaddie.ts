@@ -24,6 +24,7 @@ import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemo
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
+import { pickGreeting, isSocialGreeting } from '../services/intents/socialGreetingHandler';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
@@ -1671,6 +1672,41 @@ export const useVoiceCaddie = ({
           }
         } catch (e) {
           console.log('[voice] local-first precheck threw (non-fatal):', e);
+        }
+      }
+
+      // ── Greeting fast-path (BEFORE pipecat) — 2026-06-24 (Tim, demo speed) ──
+      // "hey kevin" / "how are you" / "what's up" never need the brain. On the
+      // pipecat default this used to fall into the full cold turn (transcribe +
+      // inference + live TTS ≈ 12-15s on the first, most-demoed utterance). Answer
+      // it LOCALLY: a canned per-persona line + the pre-rendered clip (instant) when
+      // bundled, else live TTS — then listen for the real ask. Conservative matcher
+      // (isSocialGreeting) only fires on a PURE greeting, never a greeting + real
+      // query, so "hey kevin what should I hit" still goes to the brain.
+      if (!skipIntentRouter && isSocialGreeting(transcript)) {
+        try {
+          const persona = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+          const reply = pickGreeting(persona, transcript);
+          devLog('[voice] GREETING fast-path:', persona, reply);
+          try { useVoiceHitRateStore.getState().recordLocal('tap_local:social_greeting', Date.now()); } catch {}
+          onResponseReceived(reply);
+          recordKevinTurn(reply);
+          wrappedOnVoiceStateChange('speaking');
+          const clip = resolveGreetingClip(reply, persona);
+          if (clip != null) {
+            try { await playLocalFile(clip); } catch { await speakResponse(reply); }
+          } else {
+            await speakResponse(reply);
+          }
+          // The reply invites a follow-up ("what's up?") — open the mic for the real ask.
+          if (voiceEnabled && !userInterruptedRef.current) {
+            await runFollowUpListenLoop();
+          }
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        } catch (e) {
+          devLog('[voice] greeting fast-path error (falling through):', e);
         }
       }
 
