@@ -90,6 +90,10 @@ export const useCustomCaddieMediaStore = create<CustomCaddieMediaState>()(
         profilePortraitB64: s.profilePortraitB64,
         _migratedFromProfile: s._migratedFromProfile,
       }),
+      // 2026-06-25 (audit) — version+migrate hook so a future shape change can't
+      // silently wipe the persisted base64 portraits on a version bump. Passthrough today.
+      version: 1,
+      migrate: (state) => state as CustomCaddieMediaState,
     },
   ),
 );

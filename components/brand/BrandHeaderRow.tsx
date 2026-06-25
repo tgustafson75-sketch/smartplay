@@ -151,12 +151,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: 'center',
   },
-  wordmarkRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  name1: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
-  name2: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
+  name1: { fontWeight: '800' },
   tagline: { fontSize: 10, fontWeight: '500', letterSpacing: 1.4, marginTop: 2 },
   toolsPill: {
     width: 36,
