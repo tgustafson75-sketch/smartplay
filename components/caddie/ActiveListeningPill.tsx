@@ -50,8 +50,12 @@ export function ActiveListeningPill() {
 
   if (!visible) return null;
 
-  const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] });
-  const dotScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.15] });
+  // 2026-06-24 (Tim — "mic needs to be brighter when it pulses, hard to tell the
+  // state") — raise the opacity floor (was 0.45, the dot nearly disappeared at
+  // the bottom of the pulse) and widen the scale travel so the live dot stays
+  // clearly readable through the whole cycle.
+  const dotOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] });
+  const dotScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.3] });
 
   const handleTap = () => {
     setAutoListenEnabled(false);

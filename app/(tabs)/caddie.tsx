@@ -1370,6 +1370,14 @@ export default function CaddieTab() {
         // user is standing in — so a brain-fired record_swing never actually rolled.
         if (isSmartMotionActive()) {
           emitSmartMotionCommand('start');
+          // 2026-06-24 (Tim — "Caddie is still giving instructions almost 11
+          // seconds into recording") — usePipecatVoice now suppresses the long
+          // brain reply when record_swing fires, so the recording isn't talked
+          // over. Speak ONE short cue here so the user still knows it's rolling.
+          try {
+            const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+            if (ve) speak('Recording — let it rip.', vg, lang, apiUrl, { userInitiated: true }).catch(() => {});
+          } catch { /* cue is advisory only */ }
         } else {
           router.push('/swinglab/smartmotion' as never);
         }

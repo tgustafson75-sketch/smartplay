@@ -85,12 +85,20 @@ export function CaddieMicBadge({
   // services/listeningSession.ts). Badge dims during opening /
   // listening / thinking; full opacity returns at 'responding'
   // (Kevin starts speaking) or 'idle'.
-  const isInFlightLocked = listeningState === 'opening' || listeningState === 'listening' || listeningState === 'thinking';
-  const badgeOpacity = isInFlightLocked ? 0.4 : 1;
+  // 2026-06-24 (Tim — "mic needs to be BRIGHTER when it pulses, hard to tell
+  // the state") — the badge used to DIM to 0.4 opacity while listening, which
+  // made the live state read DIMMER than idle (backwards). Now: keep the badge
+  // at full opacity while LISTENING (the brightest, most legible state) and only
+  // apply the soft dim during the opening/thinking handoff. Listening also gets
+  // a brighter accent + a stronger pulsing halo (see below).
+  const isInFlightLocked = listeningState === 'opening' || listeningState === 'thinking';
+  const badgeOpacity = isInFlightLocked ? 0.55 : 1;
 
-  const ringColor = isThinking ? '#F5A623' : isActive ? colors.accent : 'transparent';
+  // Brighter teal for the active LISTENING state so it clearly out-glows idle.
+  const LISTEN_BRIGHT = '#3BFFC8';
+  const ringColor = isThinking ? '#F5A623' : isListening ? LISTEN_BRIGHT : isActive ? colors.accent : 'transparent';
   const micColor = isActive ? '#060f09' : '#060f09';
-  const micBg = isThinking ? '#F5A623' : isActive ? colors.accent : 'rgba(0, 200, 150, 0.92)';
+  const micBg = isThinking ? '#F5A623' : isListening ? LISTEN_BRIGHT : isActive ? colors.accent : 'rgba(0, 200, 150, 0.92)';
 
   const handlePress =
     onPress === null ? null :
@@ -101,8 +109,8 @@ export function CaddieMicBadge({
   const micSize = Math.max(16, Math.round(size * 0.34));
 
   const content = (
-    <View style={[styles.ring, { width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderColor: ringColor }]}>
-      {isListening && <ListeningHalo accent={colors.accent} size={haloSize} />}
+    <View style={[styles.ring, { width: ringSize, height: ringSize, borderRadius: ringSize / 2, borderColor: ringColor, borderWidth: isListening ? 3 : 2 }]}>
+      {isListening && <ListeningHalo accent={LISTEN_BRIGHT} size={haloSize} />}
       <Image
         source={require('../../assets/avatars/smartplay_caddie_badge.png')}
         style={{ width: size, height: size, borderRadius: size / 2 }}
@@ -202,8 +210,10 @@ function ListeningHalo({ accent, size }: { accent: string; size: number }) {
     loop.start();
     return () => { loop.stop(); progress.setValue(0); };
   }, [progress]);
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
-  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] });
+  // 2026-06-24 (Tim) — brighter, larger-travelling pulse so "listening" is
+  // unmistakable: starts at near-full opacity (was 0.55) and expands further.
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 1.45] });
+  const opacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0] });
   return (
     <Animated.View
       pointerEvents="none"
@@ -223,7 +233,7 @@ const styles = StyleSheet.create({
   },
   halo: {
     position: 'absolute',
-    borderWidth: 3,
+    borderWidth: 4,
   },
   micChip: {
     position: 'absolute',

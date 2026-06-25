@@ -314,13 +314,25 @@ export function usePipecatVoice({
       historyRef.current = (data.updated_history ?? []).slice(-MAX_HISTORY_TURNS * 2);
 
       // Dispatch tool actions to the RN UI (same handler as Kevin's tools)
+      let startedRecording = false;
       if (data.tool_actions?.length) {
         for (const raw of data.tool_actions) {
+          // 2026-06-24 (Tim — "Caddie is still giving instructions almost 11
+          // seconds into recording") — record_swing starts the camera roll
+          // IMMEDIATELY (handleToolAction → emitSmartMotionCommand('start')).
+          // If we then speak the brain's full response_text, that multi-sentence
+          // setup instruction plays OVER the live recording. Flag it so we
+          // suppress the long reply below and let the SmartMotion screen's own
+          // brief "swing when you're set" cue carry the moment.
+          if ((raw as { type?: string })?.type === 'record_swing') startedRecording = true;
           onToolAction?.(raw as ToolAction);
         }
       }
 
-      const text = data.response_text ?? '';
+      // When a recording just started, do NOT narrate the brain's long reply over
+      // the live capture — at most a short cue. The recorder surface already gives
+      // the user a brief spoken/visual "rolling" signal.
+      const text = startedRecording ? '' : (data.response_text ?? '');
 
       if (text.trim()) { try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch {} }
 
