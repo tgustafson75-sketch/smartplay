@@ -48,29 +48,13 @@ export default function TargetingOverlay({
   const tx = useSharedValue(width / 2);
   const ty = useSharedValue(height / 2);
   const [isCenter, setIsCenter] = useState(true);
-  // 2026-06-25 (Tim — "faint duplicate 352 yds pill bleeds through on the left")
-  // — when the reticle is dragged into the LOWER portion of the frame (e.g. onto
-  // a green low in view), this reticle yardage bubble lands inside the bottom
-  // intel strip's footprint, where it ghosts behind/under the canonical "TO
-  // TARGET <yds>" readout. The strip already shows the distance, so suppress the
-  // reticle bubble once it enters that lower band — a single clean readout, and
-  // the bubble still shows live yardage everywhere it doesn't collide.
-  const [bubbleHidden, setBubbleHidden] = useState(false);
   const lastReportAtRef = useRef(0);
-
-  // The bottom intel strip (TO TARGET + intel card + F/M/B) occupies roughly the
-  // lower ~42% of the screen in target mode. Hide the reticle bubble once its
-  // anchor crosses into that band so it never duplicates the strip's readout.
-  const STRIP_TOP_FRACTION = 0.58;
 
   const reportPoint = useCallback((x: number, y: number) => {
     const xNorm = Math.max(0, Math.min(1, x / Math.max(1, width)));
     const yNorm = Math.max(0, Math.min(1, y / Math.max(1, height)));
     onTargetPointNormalized?.({ xNorm, yNorm });
     setIsCenter(Math.abs(x - width / 2) < 12 && Math.abs(y - height / 2) < 12);
-    // Bubble sits ~44px above the reticle; hide it once the reticle drops into
-    // the bottom strip band so it doesn't ghost behind the TO TARGET readout.
-    setBubbleHidden(y > height * STRIP_TOP_FRACTION);
   }, [height, onTargetPointNormalized, width]);
 
   // Throttle the parent recompute (yardage/geometry) to ~30fps during a drag so a
@@ -149,7 +133,7 @@ export default function TargetingOverlay({
         <CornerBracket pos="bl" />
         <CornerBracket pos="br" />
       </Animated.View>
-      {targetYards != null && !bubbleHidden && (
+      {targetYards != null && (
         <Animated.View
           pointerEvents="none"
           style={[styles.yardBubble, bubbleStyle]}

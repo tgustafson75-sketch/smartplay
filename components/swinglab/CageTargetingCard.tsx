@@ -25,7 +25,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions, PanResponder } from 'react-native';
-import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon, Polyline as SvgPolyline } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon } from 'react-native-svg';
 import { translateRig } from '../../services/cage/targetRig';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
@@ -487,104 +487,7 @@ export function BallTraceOverlay({
 const traceStyles = StyleSheet.create({
   pill: { position: 'absolute', transform: [{ translateX: -28 }], borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3, minWidth: 56, alignItems: 'center' },
   pillText: { color: '#06281b', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  legend: { position: 'absolute', left: 10, bottom: 10, backgroundColor: 'rgba(6,15,9,0.78)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, gap: 4 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  solidSwatch: { width: 18, height: 3.5, borderRadius: 2 },
-  dashedSwatch: { width: 18, height: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', opacity: 0.55 },
-  dash: { width: 4, height: 3.5, borderRadius: 1 },
 });
-
-/**
- * 2026-06-25 — MULTI-POINT shot trace overlay (Shot Tracing, Tim).
- *
- * Draws the tiered trace from services/swing/ballTrace.buildShotTrace over the
- * swing video. HONESTY IS THE WHOLE POINT (Tim's law):
- *   • measured — a SOLID polyline through the REAL detected ball positions only.
- *   • projected — a DASHED, FADED continuation, ONLY ever the modeled estimate,
- *     drawn in the same colour but visually unmistakable (dashes + ~45% opacity)
- *     and announced by a "PROJECTED" legend chip. Never blended with measured.
- * With no measured points the caller renders nothing here (it shows the no-track
- * note instead) — we never fabricate an arc.
- */
-export function MultiPointTraceOverlay({
-  trace, color,
-}: {
-  trace: {
-    tier: 'full' | 'launch' | 'none';
-    measured: { x: number; y: number }[];
-    projected: { x: number; y: number }[] | null;
-  } | null;
-  color: string;
-}) {
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  if (!trace || trace.tier === 'none' || trace.measured.length < 2) return null;
-  const { w, h } = size;
-  const pt = (p: { x: number; y: number }) => `${p.x * w},${p.y * h}`;
-  const measuredStr = trace.measured.map(pt).join(' ');
-  // The dashed projection starts at the last MEASURED point so the segments meet
-  // visually, but it's drawn as its own (dashed/faded) polyline — never merged.
-  const projStr = trace.projected && trace.projected.length > 0
-    ? [trace.measured[trace.measured.length - 1], ...trace.projected].map(pt).join(' ')
-    : null;
-  const origin = trace.measured[0];
-  return (
-    <View
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
-      onLayout={(e) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-    >
-      {w > 0 && (
-        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-          {/* PROJECTED — dashed + faded, drawn UNDER the measured line. */}
-          {projStr && (
-            <SvgPolyline
-              points={projStr}
-              fill="none"
-              stroke={color}
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="7,7"
-              opacity={0.45}
-            />
-          )}
-          {/* MEASURED — solid, full opacity. The real detected positions only. */}
-          <SvgPolyline
-            points={measuredStr}
-            fill="none"
-            stroke={color}
-            strokeWidth={3.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.97}
-          />
-          {/* origin dot at the ball */}
-          <SvgCircle cx={origin.x * w} cy={origin.y * h} r={5} fill={color} />
-        </Svg>
-      )}
-      {/* Legend — makes the measured/projected boundary unmistakable. */}
-      {w > 0 && (
-        <View style={traceStyles.legend} pointerEvents="none">
-          <View style={traceStyles.legendRow}>
-            <View style={[traceStyles.solidSwatch, { backgroundColor: color }]} />
-            <Text style={traceStyles.legendText}>Measured</Text>
-          </View>
-          {projStr && (
-            <View style={traceStyles.legendRow}>
-              <View style={traceStyles.dashedSwatch}>
-                <View style={[traceStyles.dash, { backgroundColor: color }]} />
-                <View style={[traceStyles.dash, { backgroundColor: color }]} />
-                <View style={[traceStyles.dash, { backgroundColor: color }]} />
-              </View>
-              <Text style={traceStyles.legendText}>Projected</Text>
-            </View>
-          )}
-        </View>
-      )}
-    </View>
-  );
-}
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 

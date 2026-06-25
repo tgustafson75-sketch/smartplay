@@ -38,13 +38,8 @@ import { createClient } from '@supabase/supabase-js';
  * The service key is a SECRET — it is only ever used here, server-side, in
  * Vercel serverless functions. It is NEVER bundled into the Expo client.
  */
-// SMARTPLAY_* names win (explicit isolation). Fall back to the standard names the
-// Vercel↔Supabase integration auto-injects (2026-06-24, Tim connected it), so the
-// data layer activates without hand-adding vars. Isolation still holds either way:
-// every query through this client is hard-scoped to the `smartplay` schema below,
-// so even on the shared SmartManage project SmartPlay data can't reach `public`.
-const SUPABASE_URL = process.env.SMARTPLAY_SUPABASE_URL ?? process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SMARTPLAY_SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SMARTPLAY_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SMARTPLAY_SUPABASE_SERVICE_KEY;
 
 /**
  * The schema-scoped SmartPlay client type. Inferred from createClient with the

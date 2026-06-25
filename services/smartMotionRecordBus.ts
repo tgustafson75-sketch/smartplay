@@ -95,10 +95,6 @@ export function subscribeDrillConfig(cb: (cfg: DrillConfig) => void): () => void
 
 export type SmartMotionVoiceEvent =
   | { type: 'entered' }
-  // 2026-06-24 (Tim) — the "what would you like to work on?" greet+listen lives on
-  // the SwingLab HUB, not SmartMotion (in SmartMotion you already know what you're
-  // working on; and the hub has no camera owning the mic, so listening works).
-  | { type: 'swinglab_entered' }
   | { type: 'session_complete'; swingCount: number; summary: string };
 
 const voiceEventListeners: Set<(e: SmartMotionVoiceEvent) => void> = new Set();

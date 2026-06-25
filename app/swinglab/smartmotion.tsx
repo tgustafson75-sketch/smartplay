@@ -47,12 +47,11 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
-import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import { defaultDtlRig } from '../../services/cage/targetRig';
 import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
-import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild } from '../../services/swing/ballTrace';
+import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
-import { detectBallPath } from '../../services/swing/ballPath';
 import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
 // The component is lazy-required ONLY when the runtime toggle is on (a vision build),
@@ -357,18 +356,8 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType, captureMode, returnTo } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string }>();
-  // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
-  // Smart Tempo opens its own camera it routes here with captureMode='tempo'
-  // (+ returnTo='/swinglab/smart-tempo'). On a single-swing completion we route
-  // BACK to that screen with the freshly-ingested swing_id, so the player lands
-  // straight on the tempo RESULT — no manual "pick from library". A normal
-  // launch leaves both undefined and behaves exactly as before. Held in a ref
-  // so the async stop/ingest closure reads it without dep churn.
-  const tempoReturnRef = useRef<string | null>(
-    captureMode === 'tempo' && typeof returnTo === 'string' && returnTo.length > 0 ? returnTo : null,
-  );
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string }>();
   // Note: drillFocus + drillShotType are carried on the route for the next
   // increment (per-focus metric surfacing); typed here so the drill contract is
   // complete even though this increment only consumes drillId/drillName/drillShots.
@@ -465,14 +454,6 @@ export default function SmartMotion() {
   // departure once off the FIRST strike and never recomputed, so swings 2-5 showed
   // swing 1's trace (or none). Mirrors the per-swing tempo cache.
   const ballDepartureCacheRef = useRef<Record<number, BallDepartureResult | null>>({});
-  // 2026-06-25 (Shot Tracing, Tim) — the MULTI-FRAME measured ball path for the
-  // selected swing. Where ballDeparture seeds the single launch-direction line,
-  // this carries the full set of detected post-impact positions that buildShotTrace
-  // renders as a solid measured polyline (+ a dashed projected continuation when the
-  // ball leaves frame). Cached per swing index like the departure read. null = not
-  // run / nothing detected (the overlay degrades to the single-line trace + a note).
-  const [ballPathPoints, setBallPathPoints] = useState<{ x: number; y: number }[] | null>(null);
-  const ballPathCacheRef = useRef<Record<number, { x: number; y: number }[] | null>>({});
   const [liveDb, setLiveDb] = useState<number | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
@@ -998,57 +979,6 @@ export default function SmartMotion() {
     return () => { cancelled = true; };
   }, [showSkeleton, clipUri, ballArea, segments, selectedSwing]);
 
-  // 2026-06-25 (Shot Tracing, Tim) — MULTI-FRAME ball-path detection. Samples a
-  // short sequence of post-impact frames and locates the ball in each it can (api/
-  // ball-path → detectBallPath). The detected positions are the SOLID measured
-  // portion of the shot trace; buildShotTrace adds the dashed PROJECTED continuation
-  // when the ball runs off the edge. Runs only DTL + non-putt (no flight to trace
-  // face-on / in a putt), on the same on-demand Motion step as the departure read
-  // (never competes with the core analysis pass). Honest: detectBallPath returns
-  // null on any failure / no-server, and an empty result → no trace + a note.
-  useEffect(() => {
-    if (!showSkeleton || !clipUri || !ballArea) return;
-    if (angle !== 'down_the_line' || isPutt) { setBallPathPoints(null); return; }
-    const seg = segments[selectedSwing];
-    const strikeMs = seg?.strikeMs ?? firstStrikeMsRef.current;
-    if (strikeMs == null) return;
-    if (selectedSwing in ballPathCacheRef.current) {
-      setBallPathPoints(ballPathCacheRef.current[selectedSwing]);
-      return;
-    }
-    setBallPathPoints(null);
-    let cancelled = false;
-    void detectBallPath({ videoUri: clipUri, impactMs: strikeMs, ballArea })
-      .then((r) => {
-        if (cancelled) return;
-        // Only a genuine multi-point path is useful here; a 0/1-point result lets
-        // the single-line departure trace own the read (no fabricated path).
-        const pts = r && r.points.length >= 2 ? r.points.map((p) => ({ x: p.x, y: p.y })) : null;
-        ballPathCacheRef.current[selectedSwing] = pts;
-        setBallPathPoints(pts);
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, ballArea, segments, selectedSwing, angle, isPutt]);
-
-  // Compose the tiered multi-point shot trace from the measured positions +
-  // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
-  // launch + a DASHED PROJECTED continuation; 'none' = no honest path (caller
-  // shows the no-track note). Gated DTL + non-putt (same as ballTrace).
-  const shotTrace = useMemo<ShotTraceBuild | null>(() => {
-    if (angle !== 'down_the_line' || isPutt) return null;
-    if (!ballPathPoints || ballPathPoints.length < 2 || !ballArea) return null;
-    return buildShotTrace(ballPathPoints, ballArea, targetPoint);
-  }, [angle, isPutt, ballPathPoints, ballArea, targetPoint]);
-  // Colour the measured/projected trace by how far off the aim line it launched
-  // (reuses traceColor — green on line → red way off), dimmed by a weak strike.
-  const shotTraceColor = useMemo(() => {
-    if (!shotTrace || shotTrace.divergenceDeg == null) return '#34d399';
-    const seg = segments[selectedSwing];
-    const refDb = segments.reduce((m, s) => (typeof s.peakDb === 'number' && s.peakDb !== 0 ? Math.max(m, s.peakDb) : m), -Infinity);
-    return traceColor(shotTrace.divergenceDeg, seg?.peakDb, refDb === -Infinity ? undefined : refDb);
-  }, [shotTrace, segments, selectedSwing]);
-
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
   // Putt mode has its own verdict (the swing `analysis` stays null for putts,
@@ -1186,14 +1116,6 @@ export default function SmartMotion() {
             });
         ingestedSessionIdRef.current = sessionId;
         setSessionId(sessionId);
-        // Camera-first Smart Tempo return — fire here where sessionId is assigned (the
-        // stopRecording-side block raced ingestedSessionIdRef before this await).
-        if (tempoReturnRef.current && segmentsRef.current.length <= 1) {
-          const dest = tempoReturnRef.current;
-          tempoReturnRef.current = null; // one-shot
-          const tempoMode = puttModeRef.current ? 'putt' : 'full_swing';
-          router.replace({ pathname: dest as never, params: { swing_id: sessionId, tempoMode } as never });
-        }
         // 2026-06-15 (Tim) — eager library thumbnail at the IMPACT frame (we have the
         // acoustic strike time), so cage sessions always carry a meaningful thumb and
         // don't rely on the unreliable lazy library-open generation over a big clip.
@@ -1594,8 +1516,6 @@ export default function SmartMotion() {
     setPlaceBallMode(false);
     firstStrikeMsRef.current = null;
     ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset
-    ballPathCacheRef.current = {};
-    setBallPathPoints(null);
     setLiveDb(null);
     setMeteringActive(false);
     // Clear caches BEFORE resetting selection so no stale per-swing
@@ -1888,8 +1808,6 @@ export default function SmartMotion() {
     setBallSpeed(null);
     setBallDeparture(null);
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
-    ballPathCacheRef.current = {};
-    setBallPathPoints(null);
     // Clear the prior swing's results so the next minute starts clean (the
     // voice loop uses startRecording, not reset).
     setAnalysis(null);
@@ -2288,9 +2206,6 @@ export default function SmartMotion() {
         // so subscribers (e.g. voice UI) receive the event.
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: 1, summary: '1 swing recorded.' });
       }
-      // 2026-06-24 (Tim — camera-first Smart Tempo): the tempo-return now fires from
-      // INSIDE runAnalysis (right after sessionId is assigned), so this side no longer
-      // races ingestedSessionIdRef while it's transiently null. See runAnalysis.
     } catch (e) {
       recordingPromiseRef.current = null;
       stoppingRef.current = false;
@@ -2887,16 +2802,9 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {/* DTL shot trace (2026-06-25, Tim). PREFER the MULTI-POINT measured path
-            when we have one: a SOLID polyline through the real detected ball
-            positions, plus a DASHED/FADED clearly-labelled PROJECTED continuation
-            when the ball leaves frame (buildShotTrace, with its own legend). Falls
-            back to the single-line departure trace when the multi-frame path didn't
-            resolve. Both honest: solid = measured only, dashed = labelled estimate.
-            Down-the-line + non-putt only. */}
-        {isReview && showResults && shotTrace && shotTrace.tier !== 'none' ? (
-          <MultiPointTraceOverlay trace={shotTrace} color={shotTraceColor} />
-        ) : isReview && showResults && ballTrace ? (
+        {/* DTL ball-trace — the real initial departure direction, green→red by how
+            far off the aim line it started. Down-the-line only (gated in ballTrace). */}
+        {isReview && showResults && ballTrace ? (
           <BallTraceOverlay trace={ballTrace} color={ballTraceColor} />
         ) : null}
 
@@ -3171,22 +3079,6 @@ export default function SmartMotion() {
               <Text style={styles.shotShapeLeg}>READ <Text style={[styles.shotShapeVal, { color: shotShapeVerdict.match === 'on' ? '#3FB950' : shotShapeVerdict.match === 'close' ? '#f5a623' : '#ef4444' }]}>{shotShapeVerdict.actualHeight}</Text></Text>
             </View>
             <Text style={styles.shotShapeFeedback}>{shotShapeVerdict.feedback}</Text>
-          </View>
-        ) : null}
-
-        {/* SHOT-TRACE caption (2026-06-25, Tim) — one honest line under the trace.
-            'full'/'launch' → the trace headline (+ the measured-vs-projected note on
-            launch tier); when DTL ball-path detection ran but found NOTHING (and the
-            single-line departure trace also didn't resolve), the honest no-track
-            one-liner instead of a fabricated arc. */}
-        {isReview && showResults && angle === 'down_the_line' && !isPutt
-          && (shotTrace || (ballPathPoints != null && !ballTrace)) ? (
-          <View style={[styles.traceCaption, { bottom: insets.bottom + 116 }]} pointerEvents="none">
-            <Text style={styles.traceCaptionText} numberOfLines={2}>
-              {shotTrace
-                ? (shotTrace.note ?? shotTrace.headline)
-                : 'Couldn’t track the ball this time — try better light or keep it in frame a beat longer.'}
-            </Text>
           </View>
         ) : null}
 
@@ -3853,8 +3745,6 @@ const styles = StyleSheet.create({
   shotShapeLeg: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   shotShapeVal: { color: '#e8f5e9', fontSize: 11, fontWeight: '900' },
   shotShapeFeedback: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 6 },
-  traceCaption: { position: 'absolute', alignSelf: 'center', maxWidth: '86%', backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 6, zIndex: 7 },
-  traceCaptionText: { color: '#e8f5e9', fontSize: 11, lineHeight: 15, textAlign: 'center', fontWeight: '600' },
   barBtnRecord: { width: 56, height: 56, borderRadius: 28 },
   barBtnStop: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(229,72,77,0.22)' },
   barGhost: { borderWidth: 1.5, backgroundColor: 'rgba(6,15,9,0.55)' },

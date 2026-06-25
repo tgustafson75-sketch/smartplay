@@ -26,7 +26,6 @@ import { loadRecap } from '../../services/planStorage';
 import { recommendBagForCourse } from '../../services/bagRecommendation';
 import { speakChunked, warmVoice, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import AppIcon from '../../components/AppIcon';
-import { GreenHeatCard } from '../../components/GreenHeatCard';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
@@ -725,13 +724,6 @@ export default function Scorecard() {
             </View>
           </View>
         )}
-
-        {/* 2026-06-25 — Green Heat (Grint-style putting heat map). Career
-            scope: aggregates the player's REAL logged putts across all rounds
-            into an honest 1-putt-conversion heat. Renders only real data; shows
-            an honest "collecting your putts" state until enough holes are
-            logged. Wired off the same putt capture the stats row above uses. */}
-        <GreenHeatCard scope="career" />
 
         {/* 2026-06-24 (Tim) — removed the redundant "No active round /
             Start a round from the Caddie tab" block here. It stacked on

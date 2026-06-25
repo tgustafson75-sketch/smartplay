@@ -24,9 +24,6 @@ import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemo
 import { checkContent } from '../services/contentGuardrail';
 import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
-import { pickGreeting, isSocialGreeting } from '../services/intents/socialGreetingHandler';
-import { detectCaddieSwitch } from '../services/intents/changeSettingHandler';
-import { getCaddieName } from '../lib/persona';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
@@ -1279,27 +1276,6 @@ export const useVoiceCaddie = ({
           }
         }
 
-        // Pipecat override — keep the WHOLE conversation on ONE brain.
-        // When the pipecat orchestrator is active, the first turn went through
-        // processTranscriptOverride (Claude brain + tools + TTS + its own
-        // re-listen). The legacy sendToBrain path POSTs /api/kevin, which would
-        // split history/context across two brains on every follow-up. Route the
-        // follow-up through the SAME override so context stays unified. Pipecat
-        // owns the turn end-state + re-listen (it re-opens the mic when it asks a
-        // question), so we record the user turn and return — no legacy speak/recurse.
-        if (processTranscriptOverride) {
-          recordUserTurn(trimmed);
-          wrappedOnVoiceStateChange('thinking');
-          isProcessingRef.current = false; // release before await so the re-listen mic isn't blocked
-          try {
-            await processTranscriptOverride(trimmed);
-          } catch (e) {
-            console.log('[voice] follow-up pipecat override error:', e);
-            wrappedOnVoiceStateChange('idle');
-          }
-          return;
-        }
-
         // Match the manual-tap pattern: record the user turn, send to
         // brain, speak, then check if Kevin asked ANOTHER question —
         // recurse via this same loop so a multi-turn back-and-forth
@@ -1492,15 +1468,13 @@ export const useVoiceCaddie = ({
       try {
         transcribeRes = await doTranscribeFetch();
       } catch (firstErr) {
-        // 2026-06-25 (Tim — voice "goes straight to failure") — retry on ANY first-attempt
-        // failure, not just an abort/timeout. The old code only retried AbortError and
-        // re-threw a "Network request failed" instantly — so a transient blip (a brief
-        // server/deploy hiccup, a radio wake, a cell handoff) failed the whole turn with no
-        // second try. A single retry after a short backoff lands on the recovered connection.
-        const name = firstErr instanceof Error ? firstErr.name : 'network';
-        console.log('[voice] transcribe attempt 1 failed (', name, ') — retrying once after backoff');
-        await new Promise((r) => setTimeout(r, 600));
-        transcribeRes = await doTranscribeFetch();
+        const isAbort = firstErr instanceof Error && firstErr.name === 'AbortError';
+        if (isAbort) {
+          console.log('[voice] transcribe attempt 1 aborted — retrying once');
+          transcribeRes = await doTranscribeFetch();
+        } else {
+          throw firstErr;
+        }
       }
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };
@@ -1697,75 +1671,6 @@ export const useVoiceCaddie = ({
           }
         } catch (e) {
           console.log('[voice] local-first precheck threw (non-fatal):', e);
-        }
-      }
-
-      // ── Greeting fast-path (BEFORE pipecat) — 2026-06-24 (Tim, demo speed) ──
-      // "hey kevin" / "how are you" / "what's up" never need the brain. On the
-      // pipecat default this used to fall into the full cold turn (transcribe +
-      // inference + live TTS ≈ 12-15s on the first, most-demoed utterance). Answer
-      // it LOCALLY: a canned per-persona line + the pre-rendered clip (instant) when
-      // bundled, else live TTS — then listen for the real ask. Conservative matcher
-      // (isSocialGreeting) only fires on a PURE greeting, never a greeting + real
-      // query, so "hey kevin what should I hit" still goes to the brain.
-      if (!skipIntentRouter && isSocialGreeting(transcript)) {
-        try {
-          // Greeting-as-warm-up (Tim) — the natural greeting exchange is the perfect
-          // cover to heat the brain so the user's REAL follow-up lands hot. Fire the
-          // full-chain warm NOW (fire-and-forget) while we speak the greeting + listen.
-          try { prewarmVoice(true); } catch { /* opportunistic */ }
-          const persona = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
-          const reply = pickGreeting(persona, transcript);
-          devLog('[voice] GREETING fast-path:', persona, reply);
-          try { useVoiceHitRateStore.getState().recordLocal('tap_local:social_greeting', Date.now()); } catch {}
-          onResponseReceived(reply);
-          recordKevinTurn(reply);
-          wrappedOnVoiceStateChange('speaking');
-          const clip = resolveGreetingClip(reply, persona);
-          if (clip != null) {
-            try { await playLocalFile(clip); } catch { await speakResponse(reply); }
-          } else {
-            await speakResponse(reply);
-          }
-          // The reply invites a follow-up ("what's up?") — open the mic for the real ask.
-          if (voiceEnabled && !userInterruptedRef.current) {
-            await runFollowUpListenLoop();
-          }
-          wrappedOnVoiceStateChange('idle');
-          isProcessingRef.current = false;
-          return;
-        } catch (e) {
-          devLog('[voice] greeting fast-path error (falling through):', e);
-        }
-      }
-
-      // ── Caddie hand-off fast-path (BEFORE pipecat) — 2026-06-24 (Tim, restore) ──
-      // "switch to Serena" / "let me talk to Tank" / "Kevin, you're up" used to switch
-      // caddies, then stopped working: on the pipecat default the override runs before
-      // the legacy changeSettingHandler AND pipecat has no switch-caddie tool, so the
-      // switch died. Detect it deterministically and fire setCaddiePersonality, which
-      // stops the old voice + plays the new persona's BUNDLED opener (the spoken
-      // hand-off, instant + never silent) + sets the on-screen line. Skip the brain.
-      if (!skipIntentRouter) {
-        try {
-          const switchTo = detectCaddieSwitch(transcript);
-          if (switchTo) {
-            const cur = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as typeof switchTo;
-            devLog('[voice] CADDIE SWITCH fast-path:', cur, '→', switchTo);
-            try { useVoiceHitRateStore.getState().recordLocal('tap_local:caddie_switch', Date.now()); } catch {}
-            if (switchTo === cur) {
-              wrappedOnVoiceStateChange('speaking');
-              await speakResponse(`${getCaddieName(switchTo)} here — already with you. What do you need?`);
-            } else {
-              // setCaddiePersonality owns the announcement (bundled opener + flashCaption).
-              try { useSettingsStore.getState().setCaddiePersonality(switchTo); } catch (e) { devLog('[voice] caddie switch failed:', e); }
-            }
-            wrappedOnVoiceStateChange('idle');
-            isProcessingRef.current = false;
-            return;
-          }
-        } catch (e) {
-          devLog('[voice] caddie-switch fast-path error (falling through):', e);
         }
       }
 

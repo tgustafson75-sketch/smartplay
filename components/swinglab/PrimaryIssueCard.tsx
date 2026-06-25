@@ -88,24 +88,6 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
   const strengths = (issue.strengths ?? []).filter((s) => typeof s === 'string' && s.trim().length > 0);
   const hasStrengths = strengths.length > 0;
 
-  // 2026-06-24 — Causal first-domino framing. When the multi-swing consensus
-  // led with the ROOT cause and there are downstream symptoms, surface the
-  // growth-coaching line so the player gets ONE thing to work on (encouraging)
-  // and understands the rest settle down once the root is fixed. The card
-  // headline (issue.name) IS already the root; this block names the symptoms.
-  // Honest framing only — "likely settle down", never a measurement claim.
-  // Absent on single-issue / null-mapped / pre-deploy sessions → block hidden.
-  const downstreamSymptoms = (issue.downstream_symptoms ?? []).filter(
-    (s) => typeof s === 'string' && s.trim().length > 0,
-  );
-  const hasCausalFraming = downstreamSymptoms.length > 0;
-  const symptomsList =
-    downstreamSymptoms.length === 1
-      ? downstreamSymptoms[0]
-      : downstreamSymptoms.length === 2
-        ? `${downstreamSymptoms[0]} and ${downstreamSymptoms[1]}`
-        : downstreamSymptoms.slice(0, -1).join(', ') + ', and ' + downstreamSymptoms[downstreamSymptoms.length - 1];
-
   return (
     <View style={[styles.card, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
       <View style={styles.headerRow}>
@@ -168,24 +150,6 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
               <Text style={styles.strengthText}>{s}</Text>
             </View>
           ))}
-        </View>
-      )}
-
-      {/* 2026-06-24 — Causal first-domino block. The headline above IS the
-          root; this names the downstream symptoms and gives the growth line:
-          fix this one thing and the rest settle down. Honest framing (the
-          consensus ranked these as the EARLIEST-causal of the detected faults
-          — coaching, not a measured link). Only rendered when the session
-          surfaced 2+ distinct mapped issues. */}
-      {hasCausalFraming && (
-        <View style={styles.firstDominoBox}>
-          <View style={styles.firstDominoHeader}>
-            <Ionicons name="git-branch-outline" size={14} color="#00C896" style={{ marginRight: 6 }} />
-            <Text style={styles.firstDominoLabel}>START HERE — FIRST DOMINO</Text>
-          </View>
-          <Text style={styles.firstDominoText}>
-            Work on <Text style={styles.firstDominoEmph}>{issue.name.toLowerCase()}</Text> first. Fix this one thing and {symptomsList.toLowerCase()} should settle down with it.
-          </Text>
         </View>
       )}
 
@@ -431,19 +395,4 @@ const styles = StyleSheet.create({
   strengthsLabel: { color: '#3FB950', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
   strengthRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 2 },
   strengthText: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, flex: 1, fontWeight: '600' },
-  // 2026-06-24 — first-domino / causal-root block. Teal accent, sits above the
-  // structured fault body so the player sees the ONE thing to start with.
-  firstDominoBox: {
-    backgroundColor: 'rgba(0,200,150,0.07)',
-    borderLeftWidth: 3,
-    borderLeftColor: '#00C896',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 4,
-    marginBottom: 12,
-  },
-  firstDominoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  firstDominoLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
-  firstDominoText: { color: '#e8f5e9', fontSize: 13, lineHeight: 20 },
-  firstDominoEmph: { color: '#fff', fontWeight: '800' },
 });

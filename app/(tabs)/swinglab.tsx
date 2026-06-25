@@ -26,7 +26,7 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
@@ -44,13 +44,6 @@ import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
 //   PLAY     → CYAN   #22D3EE → SKY   #38BDF8
 //   PREPARE  → SKY    #38BDF8 → INDIGO #6366F1
 import { ACCENT_GREEN } from '../../theme/tokens';
-import { useSettingsStore } from '../../store/settingsStore';
-import { emitSmartMotionVoiceEvent } from '../../services/smartMotionRecordBus';
-
-// 2026-06-24 (Tim) — greet once per app session on first SwingLab-hub entry.
-// Module-scoped so re-focusing the tab doesn't re-greet (avoids the unreliable
-// repeat-fire that got the old prompt pulled in June).
-let swinglabGreetedThisSession = false;
 
 // Per-section spectrum segments [startHex, endHex]. Endpoints chain so the whole page
 // flows green→indigo continuously. ANALYZE is the solo green hero (handled directly).
@@ -74,6 +67,9 @@ interface LauncherCardSpec {
   sub: string;
   /** Route to push on tap. */
   route: string;
+  /** Short role tag rendered in the card. Color is no longer per-card — it is
+   *  the section's spectrum segment interpolated by the card's index (see segmentColor()). */
+  tag: string;
 }
 
 // 2026-05-19 — Reordered per Tim: SmartMotion first (the marquee
@@ -107,6 +103,7 @@ const HERO_CARD: LauncherCardSpec = {
   title: 'SmartMotion',
   sub: 'AI-powered swing analysis with acoustic detection & body mechanics',
   route: '/swinglab/smartmotion',
+  tag: 'CORE',
 };
 
 const PRACTICE_SECTION: LauncherCardSpec[] = [
@@ -116,6 +113,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Drills',
     sub: 'Targeted drills for primary issues and common faults',
     route: '/drills',
+    tag: 'PRACTICE',
   },
   {
     key: 'library',
@@ -123,6 +121,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Swing Library',
     sub: 'View, compare, and analyze your captured swings',
     route: '/swinglab/library',
+    tag: 'REVIEW',
   },
   {
     key: 'tempo',
@@ -130,6 +129,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Smart Tempo',
     sub: 'Measure your real backswing:downswing ratio vs 3:1',
     route: '/swinglab/smart-tempo',
+    tag: 'TEMPO',
   },
   {
     key: 'open-range',
@@ -137,6 +137,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Open Range',
     sub: 'Hit freely — Smart Motion tracks every ball and tallies the read',
     route: '/practice/open-range',
+    tag: 'RANGE',
   },
 ];
 
@@ -149,6 +150,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Coach Mode',
     sub: 'Analyze other players and build your coaching roster',
     route: '/swinglab/coach-mode',
+    tag: 'COACH',
   },
   {
     key: 'focus-session',
@@ -156,6 +158,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Focus Session',
     sub: 'Interleaved practice that makes range work stick',
     route: '/practice/session',
+    tag: 'FOCUS',
   },
   {
     key: 'shot-shapes',
@@ -163,6 +166,7 @@ const PLAY_SECTION: LauncherCardSpec[] = [
     title: 'Shot Shapes',
     sub: 'Track your actual shot patterns and see trends',
     route: '/practice/shot-shapes',
+    tag: 'SHAPES',
   },
 ];
 
@@ -175,6 +179,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Import Range Session',
     sub: 'Scan a TopTracer screenshot — carry distances go straight to Kevin',
     route: '/swinglab/range-import',
+    tag: 'CALIBRATE',
   },
   {
     key: 'fit-profile',
@@ -182,6 +187,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Fit Profile',
     sub: 'Real game data builds your ideal bag setup',
     route: '/practice/fit-profile',
+    tag: 'FITTING',
   },
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
@@ -189,6 +195,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Setup Check',
     sub: 'Address, alignment, and grip fundamentals before you play',
     route: '/swinglab/setup-check',
+    tag: 'PREP',
   }] : []),
   {
     key: 'smartplan',
@@ -196,6 +203,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'SmartPlan',
     sub: 'Your personalized AI improvement plan',
     route: '/practice/smartplan',
+    tag: 'PLAN',
   },
   {
     key: 'preround',
@@ -203,6 +211,7 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     title: 'Pre-Round Warm Up',
     sub: 'End your warm-up session on a good swing every time',
     route: '/practice/preround',
+    tag: 'WARM UP',
   },
 ];
 
@@ -253,21 +262,12 @@ export default function SwingLab() {
   // unchanged.
   const { isWide } = useDeviceLayout();
 
-  // 2026-06-24 (Tim) — the caddie greets "What would you like to work on?" + LISTENS
-  // when you land on the SwingLab hub (NOT in SmartMotion — there you already chose,
-  // and the camera owns the mic). The hub has no camera, so tap-to-talk's mic is free
-  // and the listen works; the answer routes through the normal voice pipeline (e.g.
-  // "tempo" → Smart Tempo). Once per app session, gated on voiceEnabled, with a small
-  // settle delay so warm-up doesn't collide (the timing issue that pulled the old one).
-  useFocusEffect(
-    React.useCallback(() => {
-      if (swinglabGreetedThisSession) return;
-      if (!useSettingsStore.getState().voiceEnabled) return;
-      swinglabGreetedThisSession = true;
-      const t = setTimeout(() => emitSmartMotionVoiceEvent({ type: 'swinglab_entered' }), 700);
-      return () => clearTimeout(t);
-    }, []),
-  );
+  // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
+  // swing commands" prompt. Active listening is Caddie-tab + round-only and was
+  // deliberately NOT wired into SmartMotion (one mic, owned by the camera during
+  // capture), so the prompt promised a capability that doesn't exist in any
+  // SwingLab mode — and its warm-up/collision timing made it fire unreliably.
+  // The QuickTutorial intro below is the only voice on this tab now.
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -378,7 +378,12 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
         <Ionicons name={spec.icon} size={24} color={accent} />
       </View>
       <View style={styles.cardText}>
-        <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+          <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+          </View>
+        </View>
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
@@ -413,6 +418,9 @@ function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
         </View>
         <View style={styles.heroText}>
           <Text style={[styles.heroTitle, { color: colors.text_primary }]}>{spec.title}</Text>
+          <View style={[styles.tag, { alignSelf: 'flex-start', marginBottom: 4, backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+          </View>
           <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={2}>{spec.sub}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
@@ -483,7 +491,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardText: { flex: 1, minWidth: 0 },
-  cardTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cardTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
+  tag: { flexShrink: 0, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
+  tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
 
   // SMART MOTION hero.

@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
@@ -84,15 +84,6 @@ export interface BrandHeaderRowProps {
 export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false, hideLogoMicIcon = false }: BrandHeaderRowProps) {
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
-  // 2026-06-25 (Tim — wordmark clips on a narrow fold) — adjustsFontSizeToFit does
-  // NOT shrink text that has letterSpacing on iOS, so the prior fix never engaged and
-  // "CADDIE" clipped. Size the wordmark explicitly by width instead: normal iPhones
-  // (≥375pt: SE, 12-16, Pro Max) keep the full 18/2.5 look UNCHANGED; only a narrow
-  // fold cover (≤360pt) drops to a tighter size so it always fits.
-  const { width } = useWindowDimensions();
-  const compact = width <= 360;
-  const wmFont = compact ? 15 : 18;
-  const wmSpacing = compact ? 1.2 : 2.5;
 
   return (
     <View style={styles.wrap}>
@@ -104,7 +95,7 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
             Nested Text keeps the accent/white split; the outer Text drives the
             single-line fit. CADDIE stays pure white in dark / black in light for
             max contrast (the Z-Fold grey-wordmark fix). */}
-        <Text style={[styles.name1, { fontSize: wmFont, letterSpacing: wmSpacing }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        <Text style={styles.name1} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
           <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
           <Text style={{ color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' }}> CADDIE</Text>
         </Text>
@@ -151,7 +142,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: 'center',
   },
-  name1: { fontWeight: '800' },
+  wordmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  name1: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
+  name2: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
   tagline: { fontSize: 10, fontWeight: '500', letterSpacing: 1.4, marginTop: 2 },
   toolsPill: {
     width: 36,

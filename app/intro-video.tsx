@@ -67,16 +67,6 @@ export default function IntroVideoScreen() {
     return () => clearTimeout(t);
   }, [exit]);
 
-  // 2026-06-24 (Tim — "once it lets you pass the splash, Caddie should be warm").
-  // The intro video is a guaranteed 5-7s window with the user just watching — use
-  // it to heat the whole voice chain (transcribe + brain + TTS) so the FIRST real
-  // turn after the splash isn't a cold 12-15s wait. force=true bypasses the dedupe;
-  // gated on voiceEnabled. Fire-and-forget; never blocks the video/exit.
-  useEffect(() => {
-    if (!useSettingsStore.getState().voiceEnabled) return;
-    void import('../services/voiceWarmup').then(m => m.prewarmVoice(true)).catch(() => {});
-  }, []);
-
   // Reveal the Skip button after the first second so the user has an
   // out within ~1s if they don't want to watch.
   useEffect(() => {

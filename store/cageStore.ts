@@ -365,25 +365,6 @@ export interface PrimaryIssue {
    *  ABOVE the fault on PrimaryIssueCard. Absent until /api/swing-analysis
    *  `strengths` is deployed (back-compat: card hides the block when empty). */
   strengths?: string[];
-  /** 2026-06-24 — Causal first-domino framing. When a multi-swing SESSION
-   *  surfaced 2+ DISTINCT mapped issues, the consensus leads with the
-   *  earliest-causal ROOT (services/knowledgeBase/causalEngine.rankFaults).
-   *  `root_cause` is the human label of that root (= `name`); the issue_id /
-   *  name / severity / drill of the card are ALREADY the root. These three
-   *  fields exist so the card can add the growth-coaching "fix this one thing
-   *  and the [symptoms] settle down" line WITHOUT re-deriving causality at the
-   *  render site.
-   *
-   *  HONESTY: this is coaching FRAMING, not a measurement claim — the rationale
-   *  text says the symptoms are "likely downstream", never asserts a measured
-   *  link. All three are absent for single-issue / null-mapped / pre-deploy
-   *  sessions, so the card renders exactly as before when they're missing. */
-  root_cause?: string;
-  /** Human labels (ISSUE_DISPLAY_NAME) of the other detected issues, framed as
-   *  symptoms that ease up once the root is fixed. */
-  downstream_symptoms?: string[];
-  /** One-line rationale from rankFaults() explaining why the root was chosen. */
-  causal_rationale?: string;
 }
 
 export interface DrillRecommendation {

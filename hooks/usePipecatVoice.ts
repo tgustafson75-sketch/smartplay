@@ -266,46 +266,27 @@ export function usePipecatVoice({
 
     onVoiceStateChange?.('thinking');
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
     // Once we've spoken a real response, a later throw (e.g. auto-listen) must
     // NOT trigger the consumer's sendToBrain fallback — that would double-answer.
     let spokeResponse = false;
 
-    // 2026-06-25 (Tim — voice "goes straight to failure") — each attempt gets its OWN
-    // controller/timeout so we can retry once on a transient NETWORK throw (a brief
-    // deploy hiccup / radio wake) before degrading to "give me one sec". Matches the
-    // transcribe retry. A timeout-abort isn't retried (the server was already too slow).
-    const doTurnFetch = async (): Promise<Response> => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), TURN_TIMEOUT_MS);
-      try {
-        return await fetch(`${apiBase}/api/pipecat-turn`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: ctrl.signal,
-          body: JSON.stringify({
-            secret,
-            text: transcript,
-            history: historyRef.current,
-            context: buildContext(),
-            sessionId: sessionIdRef.current,
-          }),
-        });
-      } finally {
-        clearTimeout(t);
-      }
-    };
-
     try {
-      let resp: Response;
-      try {
-        resp = await doTurnFetch();
-      } catch (firstErr) {
-        const name = firstErr instanceof Error ? firstErr.name : 'network';
-        if (name === 'AbortError') throw firstErr; // genuine timeout — don't pile on a retry
-        devLog('[pipecat] /turn attempt 1 failed (', name, ') — retrying once after backoff');
-        await new Promise((r) => setTimeout(r, 600));
-        resp = await doTurnFetch();
-      }
+      const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          secret,
+          text: transcript,
+          history: historyRef.current,
+          context: buildContext(),
+          sessionId: sessionIdRef.current,
+        }),
+      });
+
+      clearTimeout(timeout);
 
       if (!resp.ok) {
         // Pipecat OWNS the turn. The local-first precheck already ran in
@@ -333,25 +314,13 @@ export function usePipecatVoice({
       historyRef.current = (data.updated_history ?? []).slice(-MAX_HISTORY_TURNS * 2);
 
       // Dispatch tool actions to the RN UI (same handler as Kevin's tools)
-      let startedRecording = false;
       if (data.tool_actions?.length) {
         for (const raw of data.tool_actions) {
-          // 2026-06-24 (Tim — "Caddie is still giving instructions almost 11
-          // seconds into recording") — record_swing starts the camera roll
-          // IMMEDIATELY (handleToolAction → emitSmartMotionCommand('start')).
-          // If we then speak the brain's full response_text, that multi-sentence
-          // setup instruction plays OVER the live recording. Flag it so we
-          // suppress the long reply below and let the SmartMotion screen's own
-          // brief "swing when you're set" cue carry the moment.
-          if ((raw as { type?: string })?.type === 'record_swing') startedRecording = true;
           onToolAction?.(raw as ToolAction);
         }
       }
 
-      // When a recording just started, do NOT narrate the brain's long reply over
-      // the live capture — at most a short cue. The recorder surface already gives
-      // the user a brief spoken/visual "rolling" signal.
-      const text = startedRecording ? '' : (data.response_text ?? '');
+      const text = data.response_text ?? '';
 
       if (text.trim()) { try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch {} }
 
@@ -382,6 +351,7 @@ export function usePipecatVoice({
         }
       }
     } catch (e) {
+      clearTimeout(timeout);
       devLog('[pipecat] /turn fetch error:', e);
       // Single-path graceful degrade (NO legacy double-processing). If we already
       // spoke a real response, a late auto-listen throw is swallowed silently.

@@ -54,7 +54,7 @@ import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
-import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
+import { useElevationDelta } from '../hooks/useElevationDelta';
 import type { WeatherSnapshot } from '../services/weatherService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
@@ -464,87 +464,7 @@ function CameraSmartFinder({
   // 2026-06-23 (Tim) — collapse the right-side controls into a SmartMotion-style
   // TOOLS pop-out (sliders chevron → labeled themed rows) so the camera view
   // stays clear and the icons are learnable.
-  // 2026-06-25 (Tim — "crowded ass dog shit") — the PHOTO/VIDEO pill + the big
-  // floating shutter also move INTO this pop-out as rows, so the ONLY persistent
-  // floating control in target mode is the single TOOLS button. Capture logic is
-  // unchanged — it's just one tap deeper (TOOLS → Photo / Video).
   const [toolsOpen, setToolsOpen] = useState(false);
-
-  // 2026-06-25 — Capture handler lifted out of the (now-removed) floating shutter's
-  // inline onPress so it can be driven from the TOOLS pop-out rows. takePictureAsync /
-  // recordAsync / ingestCapture / share logic is byte-for-byte the same; only the
-  // trigger surface changed. `kind` selects photo vs video so the two TOOLS rows
-  // each call straight into the right branch.
-  const runCapture = useCallback(async (kind: 'picture' | 'video') => {
-    if (capturing) return;
-    if (!cameraRef.current) return;
-    if (kind === 'video') {
-      if (recording) {
-        // Second tap on the recording row = stop. recordAsync resolves with the
-        // file URI; the running promise captured below handles the share.
-        try { cameraRef.current.stopRecording(); } catch (e) { console.log('[smartfinder] stopRecording threw', e); }
-        return;
-      }
-      // First tap = start recording. Need mic permission first.
-      if (!micPerm?.granted) {
-        const result = await requestMicPerm();
-        if (!result.granted) {
-          useToastStore.getState().show('Microphone access needed for video.');
-          return;
-        }
-      }
-      setRecording(true);
-      try {
-        // recordAsync resolves when stopRecording is called or maxDuration hits.
-        // 60s cap so a forgotten tap doesn't fill the device.
-        const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
-        setRecording(false);
-        if (result?.uri) {
-          // 2026-06-13 (Tim) — INGEST: a turn-while-recording clip is this hole's
-          // panorama source → builds the course's spatial data as you play.
-          // 2026-06-14 (Tim) — attach the live compass heading; it's the key
-          // field for green-facing selection + any future geometry/3D rebuild.
-          void ingestCapture({ sourceUri: result.uri, kind: 'pano', hole: currentHole, heading: headingRef.current })
-            .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
-          const Sharing = await import('expo-sharing');
-          const can = await Sharing.isAvailableAsync().catch(() => false);
-          if (can) {
-            await Sharing.shareAsync(result.uri, { mimeType: 'video/mp4', dialogTitle: 'SmartFinder video' });
-          } else {
-            useToastStore.getState().show('Saved · sharing not available');
-          }
-        }
-      } catch (e) {
-        console.log('[smartfinder] video recording failed', e);
-        useToastStore.getState().show('Recording failed — try again.');
-        setRecording(false);
-      }
-      return;
-    }
-    // Photo path — unchanged from Fix EQ.
-    setCapturing(true);
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
-      if (photo?.uri) {
-        // 2026-06-13 (Tim) — INGEST: every SmartFinder photo bootstraps this
-        // hole's real player's-eye imagery (course-data self-build).
-        void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole, heading: headingRef.current })
-          .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
-        const Sharing = await import('expo-sharing');
-        const can = await Sharing.isAvailableAsync().catch(() => false);
-        if (can) {
-          await Sharing.shareAsync(photo.uri, { mimeType: 'image/jpeg', dialogTitle: 'SmartFinder photo' });
-        } else {
-          useToastStore.getState().show('Saved to cache · sharing not available');
-        }
-      }
-    } catch (e) {
-      console.log('[smartfinder] capture failed', e);
-      useToastStore.getState().show('Capture failed — try again.');
-    } finally {
-      setCapturing(false);
-    }
-  }, [capturing, recording, micPerm, requestMicPerm, currentHole]);
   const setZoomFromPinch = useCallback((next: number) => {
     setZoom(next);
   }, []);
@@ -729,17 +649,7 @@ function CameraSmartFinder({
       {/* 2026-05-27 — Fix EQ: Lock + Capture floating controls.
           Sit OUTSIDE the GestureDetector + overlay tree so they're
           always tappable regardless of the target-overlay touch
-          capture.
-          2026-06-25 (Tim — "controls land ON the intel card text") — the
-          stack used to anchor bottom-right (bottom: insets.bottom + 110),
-          which dropped it INSIDE the tall targetBottomStrip's vertical span:
-          the TOOLS pop-out covered the TO TARGET yardage, the PHOTO/VIDEO
-          pill clipped the CONF column, and the shutter sat over the Landing
-          line. Fix: anchor the whole stack to the UPPER-RIGHT camera zone
-          (top-based) which is clear live-camera area above the card's top
-          edge. The pop-out TOOLS card now expands DOWNWARD into that empty
-          zone instead of upward into the card. This frees the strip to use
-          full width (paddingRight reduced below) so CONF is fully visible.
+          capture. Position bottom-right above the F/M/B strip.
           Lock toggle: only renders in target mode (where the reticle
           actually moves). Capture button: always available, snaps a
           single photo with the full overlay composited via screen
@@ -747,7 +657,7 @@ function CameraSmartFinder({
           frame; we don't bake overlays into the photo today — that
           needs view-shot for the SVG layer. v1 = raw photo). */}
       <View
-        style={{ position: 'absolute', right: 16, top: insets.top + 64, gap: 12, alignItems: 'center' }}
+        style={{ position: 'absolute', right: 16, bottom: insets.bottom + 110, gap: 12, alignItems: 'center' }}
         pointerEvents="box-none"
       >
         {/* 2026-06-23 (Tim) — TOOLS pop-out (SmartMotion SETUP TOOLS style): a
@@ -788,53 +698,6 @@ function CameraSmartFinder({
                     </View>
                   </TouchableOpacity>
                 )}
-                {/* 2026-06-25 (Tim — declutter) — capture moved off the floating
-                    shutter into these two rows. Photo: snap immediately. Video:
-                    first tap arms video mode + starts recording, second tap (label
-                    flips to "Stop recording") stops + shares. Same takePictureAsync /
-                    recordAsync / ingestCapture path as before, just relocated. */}
-                <View style={sfStyles.toolDivider} />
-                <TouchableOpacity
-                  style={sfStyles.toolRow}
-                  disabled={recording || capturing}
-                  onPress={() => {
-                    if (captureMode !== 'picture') setCaptureMode('picture');
-                    setToolsOpen(false);
-                    void runCapture('picture');
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Take a photo"
-                >
-                  <View style={[sfStyles.toolIcon, (recording || capturing) && { opacity: 0.4 }]}>
-                    <Ionicons name={capturing ? 'sync' : 'camera'} size={20} color="#88F700" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sfStyles.toolTitle}>Photo</Text>
-                    <Text style={sfStyles.toolDesc}>Snap + add to this hole</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={sfStyles.toolRow}
-                  disabled={capturing}
-                  onPress={() => {
-                    // Arm video mode so CameraView is in the recording pipeline,
-                    // then start/stop. The mode prop is bound to captureMode. Keep
-                    // the pop-out OPEN while recording so the row (now "Stop
-                    // recording") stays reachable for the second tap.
-                    if (captureMode !== 'video') setCaptureMode('video');
-                    void runCapture('video');
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={recording ? 'Stop video recording' : 'Record video or pano'}
-                >
-                  <View style={[sfStyles.toolIcon, recording && { backgroundColor: 'rgba(239,68,68,0.18)', borderColor: '#ef4444' }]}>
-                    <Ionicons name={recording ? 'stop' : 'videocam'} size={20} color={recording ? '#ef4444' : '#88F700'} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sfStyles.toolTitle}>{recording ? 'Stop recording' : 'Video / Pano'}</Text>
-                    <Text style={sfStyles.toolDesc}>{recording ? 'Tap to finish + share' : 'Record this hole · turn to pan'}</Text>
-                  </View>
-                </TouchableOpacity>
               </View>
             )}
             <TouchableOpacity
@@ -845,16 +708,141 @@ function CameraSmartFinder({
                 flexDirection: 'row', alignItems: 'center', gap: 2,
                 paddingHorizontal: 12, height: 44, borderRadius: 22,
                 backgroundColor: 'rgba(0,0,0,0.6)',
-                // Subtle live-recording tint so the single TOOLS button signals an
-                // active recording even when the pop-out is the thing being looked at.
-                borderWidth: 1.5, borderColor: recording ? '#ef4444' : '#88F700',
+                borderWidth: 1.5, borderColor: '#88F700',
               }}
             >
-              <Ionicons name="options-outline" size={18} color={recording ? '#ef4444' : '#88F700'} />
-              <Ionicons name={toolsOpen ? 'chevron-down' : 'chevron-up'} size={14} color={recording ? '#ef4444' : '#88F700'} />
+              <Ionicons name="options-outline" size={18} color="#88F700" />
+              <Ionicons name={toolsOpen ? 'chevron-down' : 'chevron-up'} size={14} color="#88F700" />
             </TouchableOpacity>
           </>
         )}
+        {/* Mode toggle pill — photo / video. Sits above the capture
+            button so it's easy to switch before pressing record.
+            Switching mode mid-recording is disabled (would invalidate
+            the in-flight recordAsync). */}
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            borderRadius: 14,
+            padding: 2,
+            opacity: recording ? 0.5 : 1,
+          }}
+          pointerEvents={recording ? 'none' : 'auto'}
+        >
+          {(['picture', 'video'] as const).map(m => (
+            <TouchableOpacity
+              key={m}
+              onPress={() => setCaptureMode(m)}
+              accessibilityRole="button"
+              accessibilityLabel={m === 'picture' ? 'Switch to photo' : 'Switch to video'}
+              style={{
+                paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+                backgroundColor: captureMode === m ? '#ffffff' : 'transparent',
+              }}
+            >
+              <Text style={{
+                fontSize: 10, fontWeight: '800', letterSpacing: 0.8,
+                color: captureMode === m ? '#0d1a0d' : '#ffffff',
+              }}>{m === 'picture' ? 'PHOTO' : 'VIDEO'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          onPress={async () => {
+            if (capturing) return;
+            if (!cameraRef.current) return;
+            // 2026-05-27 — Fix EV: split path on captureMode.
+            if (captureMode === 'video') {
+              if (recording) {
+                // Second tap on the recording button = stop. recordAsync
+                // resolves with the file URI; the running promise
+                // captured below handles the share.
+                try { cameraRef.current.stopRecording(); } catch (e) { console.log('[smartfinder] stopRecording threw', e); }
+                return;
+              }
+              // First tap = start recording. Need mic permission first.
+              if (!micPerm?.granted) {
+                const result = await requestMicPerm();
+                if (!result.granted) {
+                  useToastStore.getState().show('Microphone access needed for video.');
+                  return;
+                }
+              }
+              setRecording(true);
+              try {
+                // recordAsync resolves when stopRecording is called or
+                // maxDuration hits. 60s cap so a forgotten tap doesn't
+                // fill the device.
+                const result = await cameraRef.current.recordAsync({ maxDuration: 60 });
+                setRecording(false);
+                if (result?.uri) {
+                  // 2026-06-13 (Tim) — INGEST: a turn-while-recording clip is this hole's
+                  // panorama source → builds the course's spatial data as you play.
+                  // 2026-06-14 (Tim) — attach the live compass heading; it's the key
+                  // field for green-facing selection + any future geometry/3D rebuild
+                  // (was being dropped — captures landed heading:null).
+                  void ingestCapture({ sourceUri: result.uri, kind: 'pano', hole: currentHole, heading: headingRef.current })
+                    .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
+                  const Sharing = await import('expo-sharing');
+                  const can = await Sharing.isAvailableAsync().catch(() => false);
+                  if (can) {
+                    await Sharing.shareAsync(result.uri, { mimeType: 'video/mp4', dialogTitle: 'SmartFinder video' });
+                  } else {
+                    useToastStore.getState().show('Saved · sharing not available');
+                  }
+                }
+              } catch (e) {
+                console.log('[smartfinder] video recording failed', e);
+                useToastStore.getState().show('Recording failed — try again.');
+                setRecording(false);
+              }
+              return;
+            }
+            // Photo path — unchanged from Fix EQ.
+            setCapturing(true);
+            try {
+              const photo = await cameraRef.current.takePictureAsync({ quality: 0.85, skipProcessing: false });
+              if (photo?.uri) {
+                // 2026-06-13 (Tim) — INGEST: every SmartFinder photo bootstraps this
+                // hole's real player's-eye imagery (course-data self-build).
+                void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole, heading: headingRef.current })
+                  .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
+                const Sharing = await import('expo-sharing');
+                const can = await Sharing.isAvailableAsync().catch(() => false);
+                if (can) {
+                  await Sharing.shareAsync(photo.uri, { mimeType: 'image/jpeg', dialogTitle: 'SmartFinder photo' });
+                } else {
+                  useToastStore.getState().show('Saved to cache · sharing not available');
+                }
+              }
+            } catch (e) {
+              console.log('[smartfinder] capture failed', e);
+              useToastStore.getState().show('Capture failed — try again.');
+            } finally {
+              setCapturing(false);
+            }
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            captureMode === 'video'
+              ? (recording ? 'Stop video recording' : 'Start video recording')
+              : 'Take photo'
+          }
+          style={{
+            width: 60, height: 60, borderRadius: 30,
+            backgroundColor: recording ? '#ef4444' : '#ffffff',
+            borderWidth: 3, borderColor: recording ? '#ffffff' : 'rgba(0,0,0,0.4)',
+            alignItems: 'center', justifyContent: 'center',
+            opacity: capturing ? 0.5 : 1,
+          }}
+        >
+          <Ionicons
+            name={captureMode === 'video' ? (recording ? 'stop' : 'videocam') : 'camera'}
+            size={26}
+            color={recording ? '#ffffff' : '#0d1a0d'}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Top bar — back, hole+par, GPS quality */}
@@ -1218,27 +1206,11 @@ function TargetCameraOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset is keyed on hole change only
   }, [currentHole]);
   const [reticleConfidence, setReticleConfidence] = useState<'high' | 'medium' | 'low'>('medium');
-  // 2026-06-25 (Tim — "crowded ass dog shit") — the intel card defaults to a
-  // COMPACT read (club + yardage + one-line safe-side tip). The full breakdown
-  // (RAW/PLAYS/CLUB/CONF row + Landing + nearest-hazard + aggressive/conservative
-  // plans + wind/elevation) lives behind this expand chevron, so the resting
-  // rangefinder view is clean. No data is removed — just collapsed by default.
-  const [intelExpanded, setIntelExpanded] = useState(false);
   const [playerLoc, setPlayerLoc] = useState<{ lat: number; lng: number } | null>(null);
   // 2026-06-11 — target coord (the reticle aim point) so plays-like can factor
   // real uphill/downhill via the cached elevation service. Defaults flat.
   const [targetLoc, setTargetLoc] = useState<{ lat: number; lng: number } | null>(null);
-  // 2026-06-25 — Wire REAL elevation into plays-like. A manual camera-tilt read
-  // sets playerLoc/targetLoc above, but the COMMON case is the GPS green read
-  // (no tilt) — there both stayed null and elevation was always flat. Fall back
-  // to the live GPS fix (player) + the hole's green centroid (target) so the
-  // elevation lookup runs on every normal read, not just a manual tilt. The
-  // elevationService caches per ~11m grid, so this is one lookup per tee/green.
-  const fixForElev = getLastFix();
-  const elevPlayer = playerLoc ?? (fixForElev ? { lat: fixForElev.location.lat, lng: fixForElev.location.lng } : null);
-  const elevTarget = targetLoc ?? (geometry?.green ? { lat: geometry.green.lat, lng: geometry.green.lng } : null);
-  const elevation = useElevationDeltaStatus(elevPlayer, elevTarget);
-  const elevationDeltaFeet = elevation.deltaFeet;
+  const elevationDeltaFeet = useElevationDelta(playerLoc, targetLoc);
   const headingRef = useRef(0);
   const pitchRef = useRef(-10);
   const lastYardsRef = useRef<number | null>(null);
@@ -1454,13 +1426,10 @@ function TargetCameraOverlay({
         locked={locked}
       />
 
-      {/* Bottom F/M/B strip — port of V3's TO TARGET row.
-          2026-06-25 — box-none so the intel card's expand chevron is tappable
-          while the rest of the strip (labels, F/M/B) stays touch-transparent and
-          lets reticle drags through. */}
+      {/* Bottom F/M/B strip — port of V3's TO TARGET row. */}
       <View
         style={[styles.targetBottomStrip, { paddingBottom: insets.bottom + 16 }]}
-        pointerEvents="box-none"
+        pointerEvents="none"
       >
         {targetYards != null && (
           <Text style={styles.targetToLabel}>
@@ -1478,38 +1447,21 @@ function TargetCameraOverlay({
         {yards.reason !== 'ok' && targetYards != null && (
           <Text style={styles.targetStaticCaption}>scorecard distance · aim not live</Text>
         )}
-        {/* 2026-06-25 (Tim — declutter) — COMPACT-by-default intel card. At rest it
-            shows only the answer: club + yardage + one safe-side line. The full
-            read (numbers row, landing, hazard, plans, wind/elevation) is gated
-            behind the expand chevron so the resting rangefinder is clean. Tapping
-            anywhere on the card toggles expand; box-none on the strip lets this
-            TouchableOpacity receive the tap while the rest stays touch-through. */}
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => setIntelExpanded(v => !v)}
-          style={styles.targetIntelCard}
-          accessibilityRole="button"
-          accessibilityLabel={intelExpanded ? 'Hide the full shot read' : 'Show the full shot read'}
-          accessibilityState={{ expanded: intelExpanded }}
-        >
+        <View style={styles.targetIntelCard}>
           {/* 2026-06-13 — THE MOAT: the brain's answer-first read leads the card.
-              Club + plays-like big; one compact "why" line. */}
+              Club + plays-like big; one compact "why" line; tendency light;
+              past-performance only in a competitive round. The detailed breakdown
+              stays below for depth, but the answer comes first (Tim was
+              "overwhelmed" by the old data-dump). */}
           {shotRead?.club ? (
-            <View style={[styles.brainRead, !intelExpanded && styles.brainReadCompact]}>
+            <View style={styles.brainRead}>
               <View style={styles.brainReadHeadline}>
                 <Text style={styles.brainReadClub}>{shotRead.club}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                  <Text style={styles.brainReadNums}>
-                    {shotRead.deltaYards !== 0
-                      ? `${shotRead.rawYards} · plays ${shotRead.playsLikeYards}`
-                      : `${shotRead.rawYards} yds`}
-                  </Text>
-                  <Ionicons
-                    name={intelExpanded ? 'chevron-down' : 'chevron-up'}
-                    size={16}
-                    color="rgba(255,255,255,0.55)"
-                  />
-                </View>
+                <Text style={styles.brainReadNums}>
+                  {shotRead.deltaYards !== 0
+                    ? `${shotRead.rawYards} · plays ${shotRead.playsLikeYards}`
+                    : `${shotRead.rawYards} yds`}
+                </Text>
               </View>
               {shotRead.why.length > 0 && (
                 <Text style={styles.brainReadWhy} numberOfLines={2}>{shotRead.why.join('  ·  ')}</Text>
@@ -1521,75 +1473,53 @@ function TargetCameraOverlay({
                 <Text style={styles.brainReadPast} numberOfLines={1}>◆ {shotRead.pastPerfNote}</Text>
               )}
             </View>
-          ) : (
-            // No brain club yet (GPS still settling) — keep a tiny affordance row
-            // so the card is still tappable to expand.
-            <View style={styles.brainReadHeadline}>
-              <Text style={styles.brainReadNums}>{targetYards != null ? `${targetYards} yds` : 'Reading…'}</Text>
-              <Ionicons name={intelExpanded ? 'chevron-down' : 'chevron-up'} size={16} color="rgba(255,255,255,0.55)" />
+          ) : null}
+          <View style={styles.targetIntelTopRow}>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>RAW</Text>
+              <Text style={styles.targetIntelValue}>{targetYards ?? '—'}</Text>
             </View>
-          )}
-
-          {/* COMPACT: one safe-side / miss line so the resting card still gives the
-              key playing tip without the full data dump. */}
-          {!intelExpanded && (
-            <Text style={styles.brainReadWhy} numberOfLines={1}>
-              {hazardSummary?.nearest
-                ? `${hazardSummary.nearest.label} ${hazardSummary.nearest.yards}y · ${hazardSummary.safeMiss}`
-                : sideAwareMissGuidance}
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>PLAYS</Text>
+              <Text style={styles.targetIntelValueAccent}>{effectiveYards ?? '—'}</Text>
+            </View>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>CLUB</Text>
+              {/* SF fix #1 (owner Tim — "two contradicting club recs on one card") —
+                  this cell used to compute its OWN club (adjustedClub, off the
+                  hardcoded recommendClubForDistance ladder), which could DISAGREE
+                  with the brain headline above (shotRead.club, the composed
+                  learned-bag read). Single-source it on shotRead.club so the
+                  card can NEVER show two different clubs. adjustedClub still
+                  drives the aggressive/conservative plan lines (hazard step-down). */}
+              <Text style={styles.targetIntelValue}>{shotRead?.club ?? adjustedClub ?? '—'}</Text>
+            </View>
+            <View style={styles.targetIntelMetric}>
+              <Text style={styles.targetIntelLabel}>CONF</Text>
+              <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
+            </View>
+          </View>
+          {/* 2026-06-12 (Tim) — DECLUTTERED. The target panel read as a data dump (he was
+              "overwhelmed"). Cut the two worst offenders: the "Elevation: unavailable"
+              noise line, and the verbose per-hazard front/center/back/carry/runout
+              breakdown (it duplicated the nearest-hazard line). Kept the numbers row, wind,
+              a compact landing line, the nearest-hazard + safe-miss, and the two plans. */}
+          {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
+          {landing && (
+            <Text style={styles.targetIntelLine}>
+              Landing: carry {landing.carry} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
             </Text>
           )}
-
-          {/* EXPANDED: the full read. Nothing here is new — it's the same numbers
-              row + lines + plans that used to render always. */}
-          {intelExpanded && (
-            <>
-              <View style={styles.targetIntelTopRow}>
-                <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>RAW</Text>
-                  <Text style={styles.targetIntelValue}>{targetYards ?? '—'}</Text>
-                </View>
-                <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>PLAYS</Text>
-                  <Text style={styles.targetIntelValueAccent}>{effectiveYards ?? '—'}</Text>
-                </View>
-                <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>CLUB</Text>
-                  {/* SF fix #1 — single-source on shotRead.club so the card can
-                      NEVER show two different clubs. */}
-                  <Text style={styles.targetIntelValue}>{shotRead?.club ?? adjustedClub ?? '—'}</Text>
-                </View>
-                <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>CONF</Text>
-                  <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
-                </View>
-              </View>
-              {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
-              {/* 2026-06-25 — Honest REAL-elevation line. Shown ONLY when we have a
-                  real read (hasData) that actually moves the number (≥1yd ≈ 3ft). */}
-              {elevation.hasData && Math.abs(elevationDeltaFeet) >= 3 && (
-                <Text style={styles.targetIntelLine}>
-                  Elevation: {elevationDeltaFeet > 0 ? '↑ uphill' : '↓ downhill'} {Math.abs(Math.round(elevationDeltaFeet))} ft
-                  {' · '}plays {elevationDeltaFeet > 0 ? '+' : '−'}{Math.abs(Math.round(elevationDeltaFeet / 3))}y
-                </Text>
-              )}
-              {landing && (
-                <Text style={styles.targetIntelLine}>
-                  Landing: carry {landing.carry} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
-                </Text>
-              )}
-              {hazardSummary?.nearest ? (
-                <Text style={styles.targetIntelLine}>
-                  {hazardSummary.nearest.label} {hazardSummary.nearest.yards}y · {hazardSummary.safeMiss}
-                </Text>
-              ) : (
-                <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
-              )}
-              <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
-              <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
-            </>
+          {hazardSummary?.nearest ? (
+            <Text style={styles.targetIntelLine}>
+              {hazardSummary.nearest.label} {hazardSummary.nearest.yards}y · {hazardSummary.safeMiss}
+            </Text>
+          ) : (
+            <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
           )}
-        </TouchableOpacity>
+          <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
+          <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
+        </View>
         <View style={styles.targetFmbRow}>
           <View style={styles.targetFmbCol}>
             <Text style={styles.targetFmbHeader}>F</Text>
@@ -2084,13 +2014,11 @@ return StyleSheet.create({
     right: 0,
     backgroundColor: 'rgba(0,0,0,0.78)',
     paddingLeft: 16,
-    // 2026-06-25 (Tim) — the capture controls moved OUT of the bottom-right
-    // into the upper-right camera zone (see the controls View above), so the
-    // strip no longer needs to reserve a right gutter for them. Reclaim the
-    // full width with a symmetric inset so the RAW/PLAYS/CLUB/CONF row breathes
-    // and the CONF column is fully visible (was clipped to "CO…" behind the
-    // PHOTO/VIDEO pill).
-    paddingRight: 16,
+    // 2026-06-23 (Tim — "crowded... settles hidden behind the shutter") — the
+    // right-side capture controls (shutter / eye / lock) overlap the panel's
+    // right edge. Inset the panel content past that control column so nothing
+    // hides behind them.
+    paddingRight: 92,
     paddingTop: 12,
     alignItems: 'stretch',
   },
@@ -2130,13 +2058,6 @@ return StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.14)',
     paddingBottom: 7,
     marginBottom: 7,
-  },
-  // 2026-06-25 — compact (collapsed) variant: drop the divider since the only
-  // thing under it is the single safe-side line, not the full breakdown.
-  brainReadCompact: {
-    borderBottomWidth: 0,
-    paddingBottom: 2,
-    marginBottom: 2,
   },
   brainReadHeadline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   brainReadClub: { color: '#00C896', fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
@@ -2335,11 +2256,4 @@ const sfStyles = StyleSheet.create({
   },
   toolTitle: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   toolDesc: { color: '#9ca3af', fontSize: 12, fontWeight: '600', marginTop: 1 },
-  // 2026-06-25 — thin separator between the read/lock tools and the capture rows.
-  toolDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginVertical: 4,
-    marginHorizontal: 8,
-  },
 });

@@ -27,70 +27,49 @@ import { useSettingsStore } from '../../store/settingsStore';
 
 type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
 
-// 2026-06-24 (Tim) — warmer, slightly-longer greetings: they answer "how are you?"
-// naturally AND cover the brain's behind-the-scenes warm-up (kicked off in the
-// greeting fast-path) so the user's real follow-up lands on a hot chain. In-character
-// per persona. NOTE: changing this text means the pre-rendered clips no longer match
-// (resolveGreetingClip → null → warm live TTS, ~1-2s). To restore instant playback,
-// re-run scripts/render-greeting-clips.ts + update GREETING_TEXTS in quickGreetingClips.ts.
 const GREETINGS: Record<Persona, string[]> = {
   kevin: [
-    "Doing great — fresh and ready. What are we working on today?",
-    "All good here. Let's get after it — what's the plan?",
-    "I'm right here with you. What do you want to work on?",
-    "Feeling good. Talk to me — what's up?",
-    "Ready when you are. What are we hitting today?",
+    "Hey, what do you need?",
+    "Right here. What's up?",
+    "I'm with you. What are we working on?",
+    "Talk to me.",
+    "Go ahead.",
   ],
   tank: [
-    "Let's go — I'm fired up. What are we working on?",
-    "Feeling great, ready to work. What do you got?",
-    "All day. Talk to me — what's the mission?",
-    "I'm locked in. What are we hitting today?",
-    "Let's get after it. What do you need?",
+    "Yeah, what do you got?",
+    "Talk to me.",
+    "Go ahead, I'm listening.",
+    "What do you need?",
+    "Here. What's up?",
   ],
   serena: [
-    "I'm good — calm and ready. What are you thinking about today?",
-    "Doing well, thanks. What's on your mind?",
-    "Right here with you. What would you like to work on?",
-    "Feeling steady. Talk to me — where do we start?",
-    "All good. Let's ease in — what are we working on?",
+    "I'm here. What are you thinking?",
+    "Go ahead.",
+    "Talk to me.",
+    "What's on your mind?",
+    "Right here with you.",
   ],
   harry: [
-    "Good, good. What do you need?",
-    "All set here. What are we working on?",
-    "Right with you. Talk to me — what's up?",
-    "Ready. What's the plan?",
-    "Doing well. Where do we start?",
+    "Go.",
+    "Here.",
+    "What do you need?",
+    "Talk to me.",
+    "Go ahead.",
   ],
   // Custom caddie greeting pool — neutral / friendly, suitable for
   // any user-chosen identity. The user's own recorded clip overrides
   // this when present (see services/quickAckClips.ts pattern for the
   // recorded-clip resolution path).
   custom: [
-    "Doing great — ready to roll. What are we working on?",
-    "All good here. What's on your mind?",
-    "Right here with you. What do you want to work on?",
-    "Feeling good. Talk to me — what's up?",
-    "Ready when you are. Where do we start?",
+    "Hey, what's up?",
+    "I'm here. What do you need?",
+    "Right here with you.",
+    "Talk to me.",
+    "Go ahead.",
   ],
 };
 
-/**
- * Whole-utterance greeting / chit-chat detector. Conservative: a greeting PREFIX
- * followed by a real ask ("hey kevin, what should I hit") must NOT match — only a
- * PURE greeting ("hey kevin", "how are you", "what's up"), so it can short-circuit
- * the brain (instant, no cold pipecat turn). (2026-06-24, Tim — demo speed.)
- */
-export function isSocialGreeting(raw: string): boolean {
-  let t = String(raw ?? '').toLowerCase().trim().replace(/[?.!,]+$/g, '').replace(/\s+/g, ' ');
-  if (!t || t.length > 40) return false;
-  t = t.replace(/^(hey|hi|hello|yo|ok|okay|good morning|good afternoon|good evening)\b[\s,]*/g, '');
-  t = t.replace(/^(kevin|tank|serena|harry|caddie|caddy)\b[\s,]*/g, '');
-  t = t.trim();
-  return t === '' || /^(how are you( doing| feeling)?|how are we|how'?s it going|how you doing|how is everything|what'?s up|whats up|sup|wassup|you there|are you there|how'?s things)$/.test(t);
-}
-
-export function pickGreeting(persona: Persona, raw: string): string {
+function pickGreeting(persona: Persona, raw: string): string {
   const pool = GREETINGS[persona] ?? GREETINGS.kevin;
   // Hash the transcript so identical greetings produce identical
   // picks (single response per phrasing) but DIFFERENT greetings

@@ -84,7 +84,6 @@ import { fetchCourseGeometry } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
-import { useElevationDeltaStatus } from '../../hooks/useElevationDelta';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../../store/trustLevelStore';
 import { useToastStore } from '../../store/toastStore';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
@@ -581,46 +580,11 @@ export default function CaddieTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRoundActive, currentHole, markTick]);
 
-  // 2026-06-25 — Wire REAL elevation into the caddie HUD's plays-like. Player =
-  // live GPS fix; target = the current hole's green (resolveGreenCoords). The
-  // elevationService caches per ~11m grid (one lookup per tee/green), and the
-  // hook returns 0 with hasData=false whenever either point is missing or the
-  // lookup fails — so a missing elevation NEVER blocks or corrupts the yardage,
-  // it just falls back to flat. markTick re-derives the coords on mark captures.
-  const elevPlayerCoord = useMemo(() => {
-    if (!isRoundActive) return null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getLastFix } = require('../../services/smartFinderService');
-      const fix = getLastFix();
-      return fix ? { lat: fix.location.lat, lng: fix.location.lng } : null;
-    } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick]);
-  const elevGreenCoord = useMemo(() => {
-    if (!isRoundActive) return null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { resolveGreenCoords } = require('../../services/smartFinderService');
-      const g = resolveGreenCoords(currentHole);
-      const mid = g?.middle;
-      return mid ? { lat: mid.lat, lng: mid.lng } : null;
-    } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick]);
-  const caddieElevation = useElevationDeltaStatus(elevPlayerCoord, elevGreenCoord);
-
   const playsLikeYardage = useMemo(() => {
     if (displayYardage == null) return displayYardage;
-    const elevFt = caddieElevation.deltaFeet;
-    // With weather we get the full wind+temp+elevation model. With no weather we
-    // still honor real elevation so uphill/downhill never goes dark (same spirit
-    // as cnsShotRead). Flat read (elevFt === 0) leaves the number untouched.
-    if (!caddieWeather) {
-      return elevFt !== 0 ? Math.round(displayYardage + elevFt / 3) : displayYardage;
-    }
-    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing, elevFt).plays_like_yards;
-  }, [displayYardage, caddieWeather, caddieShotBearing, caddieElevation.deltaFeet]);
+    if (!caddieWeather) return displayYardage;
+    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing).plays_like_yards;
+  }, [displayYardage, caddieWeather, caddieShotBearing]);
 
   // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
   const {
@@ -864,14 +828,8 @@ export default function CaddieTab() {
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (!ve) return;
       if (event.type === 'entered') {
-        // 2026-06-24 (Tim) — SmartMotion entry no longer asks "what are we working
-        // on?" + listens: once you're IN Smart Motion you already chose what to work
-        // on, and the camera owns the mic here so the listen never worked anyway.
-        // That greet+listen moved to 'swinglab_entered' (the hub, no camera). Stay
-        // quiet on SmartMotion entry — the framing coach + "swing when ready" guide it.
-      } else if (event.type === 'swinglab_entered') {
         configureAudioForSpeech()
-          .then(() => speak('What would you like to work on?', vg, lang, apiUrl, { userInitiated: true }))
+          .then(() => speak("What are we working on today?", vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))
           .then(() => { handleMicPressRef.current(); })
           .catch(() => {});
@@ -1406,14 +1364,6 @@ export default function CaddieTab() {
         // user is standing in — so a brain-fired record_swing never actually rolled.
         if (isSmartMotionActive()) {
           emitSmartMotionCommand('start');
-          // 2026-06-24 (Tim — "Caddie is still giving instructions almost 11
-          // seconds into recording") — usePipecatVoice now suppresses the long
-          // brain reply when record_swing fires, so the recording isn't talked
-          // over. Speak ONE short cue here so the user still knows it's rolling.
-          try {
-            const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
-            if (ve) speak('Recording — let it rip.', vg, lang, apiUrl, { userInitiated: true }).catch(() => {});
-          } catch { /* cue is advisory only */ }
         } else {
           router.push('/swinglab/smartmotion' as never);
         }
