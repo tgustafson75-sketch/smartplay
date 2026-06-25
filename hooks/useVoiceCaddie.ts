@@ -1685,6 +1685,10 @@ export const useVoiceCaddie = ({
       // query, so "hey kevin what should I hit" still goes to the brain.
       if (!skipIntentRouter && isSocialGreeting(transcript)) {
         try {
+          // Greeting-as-warm-up (Tim) — the natural greeting exchange is the perfect
+          // cover to heat the brain so the user's REAL follow-up lands hot. Fire the
+          // full-chain warm NOW (fire-and-forget) while we speak the greeting + listen.
+          try { prewarmVoice(true); } catch { /* opportunistic */ }
           const persona = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
           const reply = pickGreeting(persona, transcript);
           devLog('[voice] GREETING fast-path:', persona, reply);
