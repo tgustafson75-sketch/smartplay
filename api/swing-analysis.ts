@@ -1342,7 +1342,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // tier=quick: SmartMotion speed path ships Gemini's read immediately,
     // skipping OpenAI escalation — same latency contract as old Haiku path.
     const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
-    const quickShortCircuit = tier === 'quick';
+    // 2026-06-25 (Tank — Setup Check wouldn't analyze): a SETUP read is a one-shot
+    // pre-round capture, NOT a latency-critical live SmartMotion swing. It rode tier
+    // 'quick', which short-circuits OpenAI — so if Gemini hiccuped/timed out (cold
+    // Lambda) there was NO fallback and the server 502'd, surfacing to the user as the
+    // misleading "stand back so I can see head to feet". Exempt setup from the
+    // short-circuit so Gemini failure escalates to OpenAI (reliability > a few seconds).
+    const quickShortCircuit = tier === 'quick' && !isSetup;
     if (quickShortCircuit) {
       console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI escalation', {
         winner_provider: winner.provider,
