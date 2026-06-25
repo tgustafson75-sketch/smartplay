@@ -11,6 +11,7 @@ import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHo
 // tools/cards/drills (e.g. Smart Tempo) so he can name them and open them via
 // the open tools. Shared client+server module under services/.
 import { catalogForPrompt } from '../services/knowledgeBase/appCatalog';
+import { retrieveKB, kbForPrompt } from '../services/knowledgeBase/retrieve';
 
 // 2026-06-21 — TTS-only client. timeout 25s→10s, maxRetries 1→0:
 // TTS is idempotent and a retry on a near-timeout blows the Vercel 60s budget.
@@ -1035,6 +1036,22 @@ You are ${caddieName}. Not an app. Not an AI. A relationship built over ${rounds
 ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
 `.trim();
 
+    // Increment 3 — PER-TURN golf-knowledge RAG. The app catalog above is static
+    // (same every turn, lives in the literal). The coaching-knowledge slice is
+    // DYNAMIC: retrieve the few principles relevant to THIS turn's player message
+    // and append them to the system prompt for this request only. Conservative
+    // (max 3, offline, scored floor) — most non-coaching turns ("what's my
+    // distance", "log a 5") match nothing, so kbBlock is '' and we inject nothing.
+    const _kb = retrieveKB(_message, { max: 3 });
+    const _kbBlock = kbForPrompt(_kb);
+    const systemPromptWithKB = _kbBlock
+      ? `${systemPrompt}
+
+RELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):
+${_kbBlock}
+Honesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
+      : systemPrompt;
+
     const baseMessage = _message;
 
     // Phase BH — when in-round diagnostic, prepend recent shots so Coach
@@ -1220,17 +1237,17 @@ ${onCourseContextBlock}${baseMessage}`
 
     let loopResult;
     try {
-      loopResult = await runAgenticLoop(provider, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+      loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
     } catch (err1) {
       console.warn(`[kevin] provider=${provider} failed (${err1 instanceof Error ? err1.message : String(err1)}) — trying ${fallback1}`);
       capture.action = null; capture.dataToolCalls = 0;
       try {
-        loopResult = await runAgenticLoop(fallback1, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+        loopResult = await runAgenticLoop(fallback1, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
         console.log(`[kevin] fallback1 provider=${fallback1} succeeded`);
       } catch (err2) {
         console.warn(`[kevin] provider=${fallback1} failed (${err2 instanceof Error ? err2.message : String(err2)}) — trying ${fallback2}`);
         capture.action = null; capture.dataToolCalls = 0;
-        loopResult = await runAgenticLoop(fallback2, aiTier, systemPrompt, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+        loopResult = await runAgenticLoop(fallback2, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
         console.log(`[kevin] fallback2 provider=${fallback2} succeeded`);
       }
     }

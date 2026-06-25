@@ -21,6 +21,7 @@ import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
 // map of the app's real tools/cards/drills (e.g. Smart Tempo) so he can name
 // them and open them via the open tools. Parity with api/kevin.ts.
 import { catalogForPrompt } from '../services/knowledgeBase/appCatalog';
+import { retrieveKB, kbForPrompt } from '../services/knowledgeBase/retrieve';
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
 const MAX_HISTORY_PAIRS = 6;
@@ -307,7 +308,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const toolActions: Array<Record<string, unknown>> = [];
 
   try {
-    const system = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+    const baseSystem = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+
+    // Increment 3 — PER-TURN golf-knowledge RAG. The app catalog inside buildSystem
+    // is static; the coaching-knowledge slice is DYNAMIC. Retrieve the few principles
+    // relevant to THIS turn's player text and append to the system prompt for this
+    // request only. Conservative (max 3, offline, scored floor) — most non-coaching
+    // turns ("what's my distance", "log a 5") match nothing, so kbBlock is '' and we
+    // inject nothing.
+    const kb = retrieveKB(text, { max: 3 });
+    const kbBlock = kbForPrompt(kb);
+    const system = kbBlock
+      ? `${baseSystem}
+
+RELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):
+${kbBlock}
+Honesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
+      : baseSystem;
 
     // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
     // provider hiccup, so the live-voice caddie said "give me one sec" every turn
