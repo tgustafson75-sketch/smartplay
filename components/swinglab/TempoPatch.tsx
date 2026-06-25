@@ -98,9 +98,11 @@ export default function TempoPatch({ result }: TempoPatchProps) {
   const total = result.backswingMs + result.downswingMs;
   if (!(total > 0)) return null;
 
-  // YOUR row: real measured split. IDEAL row: same total re-split 3:1 (top @75%).
+  // YOUR row: real measured split. IDEAL row: same total re-split on the
+  // result's targetRatio (3:1 full swing → top @75%; ~2:1 putt → top @~67%).
   const actualTopFrac = result.backswingMs / total;
-  const idealTopFrac = 0.75;
+  const targetRatio = result.targetRatio > 0 ? result.targetRatio : 3;
+  const idealTopFrac = targetRatio / (targetRatio + 1);
 
   const rowTopY = 0;
   const rowBottomY = ROW_H + ROW_GAP;
@@ -141,9 +143,11 @@ export default function TempoPatch({ result }: TempoPatchProps) {
         <PatchRow y={rowBottomY} topFrac={idealTopFrac} gradId="tp_ideal" dim colors={colors} />
       </Svg>
 
-      {/* IDEAL label + point legend */}
+      {/* IDEAL label + point legend — target follows the mode (3:1 / ~2:1). */}
       <View style={styles.labelRow}>
-        <Text style={[styles.rowLabelDim, { color: colors.text_muted }]}>IDEAL 3:1</Text>
+        <Text style={[styles.rowLabelDim, { color: colors.text_muted }]}>
+          IDEAL {targetRatio.toFixed(0)}:1
+        </Text>
       </View>
 
       {/* segment ms readout — real measured values */}

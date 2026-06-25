@@ -41,7 +41,7 @@ import { resolveClipUri } from '../../services/videoUpload';
 import { getLibrary } from '../../services/swingLibrary';
 import {
   computeTempo, detectTempoPhases,
-  type TempoPhases, type TempoResult, type TempoRating,
+  type TempoPhases, type TempoResult, type TempoRating, type TempoMode,
 } from '../../services/smartTempo';
 import { TempoMetronome, type MetronomeMode } from '../../services/tempoMetronome';
 import TempoPatch from '../../components/swinglab/TempoPatch';
@@ -49,10 +49,20 @@ import TempoPatch from '../../components/swinglab/TempoPatch';
 // ─── Phase model ───────────────────────────────────────────────────────
 type PhaseKey = 'backswingStartSec' | 'topSec' | 'impactSec';
 
-const PHASE_META: { key: PhaseKey; tab: string; caption: string }[] = [
+type PhaseMeta = { key: PhaseKey; tab: string; caption: string };
+
+// Full-swing labels (default). Putting reuses the same three phases but with
+// stroke-specific wording (a putt has a backstroke + a forward-stroke ball-pass,
+// not a "top of backswing" + acoustic "impact").
+const PHASE_META_FULL: PhaseMeta[] = [
   { key: 'backswingStartSec', tab: 'Backswing Start', caption: 'Mark where the club starts back' },
   { key: 'topSec',            tab: 'Top',             caption: 'Mark the top of the backswing' },
   { key: 'impactSec',         tab: 'Impact',          caption: 'Mark impact' },
+];
+const PHASE_META_PUTT: PhaseMeta[] = [
+  { key: 'backswingStartSec', tab: 'Takeaway',  caption: 'Mark where the putter starts back' },
+  { key: 'topSec',            tab: 'End of Back', caption: 'Mark the end of the backstroke (reversal)' },
+  { key: 'impactSec',         tab: 'Ball Pass', caption: 'Mark the forward stroke passing the ball' },
 ];
 
 // Rating → brand token. on_tempo=green, rushed=amber, slow/smooth=sky.
@@ -68,7 +78,7 @@ function ratingColor(rating: TempoRating, c: ReturnType<typeof useTheme>['colors
 export default function SmartTempoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string }>();
+  const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string; tempoMode?: string }>();
 
   // The swing currently under review. swing_id binds to a persisted session
   // (so Save updates it in place); clipUri can load a bare clip with no session.
@@ -84,6 +94,22 @@ export default function SmartTempoScreen() {
   // The clip to play: an explicit clipUri param, else the loaded session's shot.
   const sourceClipUri = rawClipUri ?? shot?.clipUri ?? null;
   const inReview = sourceClipUri != null;
+
+  // 2026-06-24 (Tim — mode-aware tempo) — is this a PUTT or a FULL SWING?
+  // DTL + face-on are the SAME full swing (one shared 3:1 profile); putting is
+  // the genuinely different stroke (~2:1 + pose-only impact). Infer putt from,
+  // in order: the carried route param (Smart Motion sets tempoMode=putt when it
+  // routes a putt here), the session's putting_analysis, or a putter club tag.
+  // Everything else (incl. face-on) is a full swing.
+  const tempoMode: TempoMode = useMemo(() => {
+    if (params.tempoMode === 'putt') return 'putt';
+    if (session?.putting_analysis != null) return 'putt';
+    if (session?.club === 'PT') return 'putt';
+    return 'full_swing';
+  }, [params.tempoMode, session?.putting_analysis, session?.club]);
+  const isPuttMode = tempoMode === 'putt';
+  // Phase labels follow the mode (full swing vs putting stroke).
+  const PHASE_META = isPuttMode ? PHASE_META_PUTT : PHASE_META_FULL;
 
   // 2026-06-24 (Tim — camera-first) — Smart Tempo opens straight into its OWN
   // camera (Smart Motion in 'tempo' capture mode), which records the swing and
@@ -176,7 +202,7 @@ export default function SmartTempoScreen() {
       impactMs,
       poseFrames: session?.biomechanics?.frames ?? null,
       clipStartMs: 0,
-    });
+    }, tempoMode);
     const seeded: Partial<TempoPhases> = {};
     const autos = new Set<PhaseKey>();
     (['backswingStartSec', 'topSec', 'impactSec'] as PhaseKey[]).forEach(k => {
@@ -191,7 +217,7 @@ export default function SmartTempoScreen() {
       const firstMissing = (['backswingStartSec', 'topSec', 'impactSec'] as PhaseKey[]).find(k => seeded[k] == null);
       if (firstMissing) setActivePhase(firstMissing);
     }
-  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames]);
+  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames, tempoMode]);
 
   // ── Playback status ──────────────────────────────────────────────────
   const onStatus = (status: AVPlaybackStatus) => {
@@ -252,8 +278,8 @@ export default function SmartTempoScreen() {
       backswingStartSec: marks.backswingStartSec!,
       topSec: marks.topSec!,
       impactSec: marks.impactSec!,
-    });
-  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec]);
+    }, tempoMode);
+  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec, tempoMode]);
   const outOfOrder = allMarked && result == null;
 
   // ── Metronome (actual vs ideal) ───────────────────────────────────────
@@ -463,6 +489,22 @@ export default function SmartTempoScreen() {
       ) : (
         // ─── B/C) MARK + RESULT ──────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.reviewBody}>
+          {/* Mode chip — DTL + face-on read as one FULL-SWING tempo (3:1);
+              putting is the smoother, more even ~2:1 stroke. */}
+          <View style={[styles.modeChip, { borderColor: isPuttMode ? colors.accent_sky : colors.accent }]}>
+            <Ionicons
+              name={isPuttMode ? 'golf-outline' : 'speedometer-outline'}
+              size={14}
+              color={isPuttMode ? colors.accent_sky : colors.accent}
+            />
+            <Text style={[styles.modeChipText, { color: colors.text_primary }]}>
+              {isPuttMode ? 'Putting tempo' : 'Full-swing tempo'}
+            </Text>
+            <Text style={[styles.modeChipTarget, { color: colors.text_muted }]}>
+              {isPuttMode ? 'target ~2:1 · smooth & even' : 'target 3:1'}
+            </Text>
+          </View>
+
           {/* Player */}
           <View style={styles.videoWrap}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => void togglePlayPause()}>
@@ -534,8 +576,12 @@ export default function SmartTempoScreen() {
               <Ionicons name="construct-outline" size={16} color={colors.accent_sky} />
               <Text style={[styles.refineText, { color: colors.text_secondary }]}>
                 {detectConfidence === 'none'
-                  ? "We couldn't auto-read this swing's tempo. Scrub the video and tap each phase to mark it — your real marks build the result."
-                  : 'We auto-marked what we could read. Scrub to the unmarked phase(s) and mark them — your real marks build the result.'}
+                  ? (isPuttMode
+                      ? "Putting tempo is read from motion only (a putt is quiet — no strike to anchor on), so we couldn't auto-read it. Scrub the video and tap each phase — your real marks build the result."
+                      : "We couldn't auto-read this swing's tempo. Scrub the video and tap each phase to mark it — your real marks build the result.")
+                  : (isPuttMode
+                      ? 'We motion-estimated this putt, but pose-only putt reads are less certain than a full swing — scrub and confirm each phase (especially the ball-pass) so the ratio is yours.'
+                      : 'We auto-marked what we could read. Scrub to the unmarked phase(s) and mark them — your real marks build the result.')}
               </Text>
             </View>
           )}
@@ -616,7 +662,7 @@ export default function SmartTempoScreen() {
                 <Text style={[styles.resultRating, { color: rc }]}>{result.ratingLabel}</Text>
                 <View style={styles.ratioBig}>
                   <Text style={[styles.ratioBigNum, { color: rc }]}>{result.ratioLabel}</Text>
-                  <Text style={[styles.ratioBigTarget, { color: colors.text_muted }]}>target 3:1</Text>
+                  <Text style={[styles.ratioBigTarget, { color: colors.text_muted }]}>{result.targetLabel}</Text>
                 </View>
                 <Text style={[styles.coaching, { color: colors.text_secondary }]}>{result.coaching}</Text>
 
@@ -634,7 +680,7 @@ export default function SmartTempoScreen() {
                 <View style={styles.metroRow}>
                   {([
                     { mode: 'actual' as const, label: 'Your tempo', icon: 'person-outline' as const },
-                    { mode: 'ideal' as const, label: 'Ideal 3:1', icon: 'flag-outline' as const },
+                    { mode: 'ideal' as const, label: `Ideal ${result.targetRatio}:1`, icon: 'flag-outline' as const },
                     { mode: 'both' as const, label: 'Compare', icon: 'git-compare-outline' as const },
                   ]).map(b => {
                     const on = metroMode === b.mode;
@@ -653,7 +699,7 @@ export default function SmartTempoScreen() {
                   })}
                 </View>
                 <Text style={[styles.metroHint, { color: colors.text_muted }]}>
-                  Tick-tick-tock at your measured spacing vs the tour 3:1. Built from your real marks.
+                  Tick-tick-tock at your measured spacing vs the {result.targetLabel}. Built from your real marks.
                 </Text>
 
                 <View style={styles.resultActions}>
@@ -813,6 +859,9 @@ const styles = StyleSheet.create({
 
   // Review
   reviewBody: { paddingHorizontal: 16, paddingBottom: 48 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, marginBottom: 12 },
+  modeChipText: { fontSize: 12.5, fontWeight: '900', letterSpacing: 0.3 },
+  modeChipTarget: { fontSize: 11, fontWeight: '700' },
   videoWrap: { width: '100%', aspectRatio: 9 / 12, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden' },
   videoErr: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.82)', padding: 24 },
   videoErrText: { color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center', marginTop: 10 },

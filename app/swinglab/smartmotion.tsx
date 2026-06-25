@@ -2219,16 +2219,19 @@ export default function SmartMotion() {
       // 2026-06-24 (Tim — camera-first Smart Tempo) — if we were launched in
       // TEMPO capture mode, hand the just-ingested swing back to Smart Tempo so
       // the player lands on the tempo RESULT (it auto-runs detectTempoPhases on
-      // the loaded session). Only for a clean single-swing capture: a putt or a
-      // multi-swing reel doesn't map to one tempo read, so those stay in Smart
-      // Motion's normal review. The swing is already in the library, so this is
-      // purely a navigation; nothing is lost if it's skipped.
-      if (tempoReturnRef.current && !puttModeRef.current && segsForAnalysis.length <= 1) {
+      // the loaded session). Only for a clean SINGLE capture — a multi-swing reel
+      // doesn't map to one tempo read, so it stays in Smart Motion's normal
+      // review. 2026-06-24 (Tim — mode-aware tempo): PUTTS route here TOO now,
+      // carrying tempoMode=putt so Smart Tempo grades the smoother ~2:1 putting
+      // stroke (pose-only impact, lower confidence) instead of the full-swing
+      // 3:1. DTL + face-on are the same full swing → no flag (default).
+      if (tempoReturnRef.current && segsForAnalysis.length <= 1) {
         const sid = ingestedSessionIdRef.current;
         if (sid) {
           const dest = tempoReturnRef.current;
           tempoReturnRef.current = null; // one-shot — don't re-route on a later swing
-          router.replace({ pathname: dest as never, params: { swing_id: sid } as never });
+          const tempoMode = puttModeRef.current ? 'putt' : 'full_swing';
+          router.replace({ pathname: dest as never, params: { swing_id: sid, tempoMode } as never });
         }
       }
     } catch (e) {

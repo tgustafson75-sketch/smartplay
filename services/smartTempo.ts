@@ -38,9 +38,30 @@ import type { ImpactReading } from './acousticImpactDetector';
 
 // ─── Public types ──────────────────────────────────────────────────────
 
+/**
+ * 2026-06-24 (Tim — mode-aware tempo) — the Smart Motion state a tempo read
+ * was captured in.
+ *
+ *   • 'full_swing' — DOWN-THE-LINE and FACE-ON. They are the SAME full swing:
+ *     same tour 3:1 target, same detection (pose "hands-highest = top" + the
+ *     acoustic strike work in both camera views). ONE shared profile — we do
+ *     NOT invent a different ratio for face-on.
+ *   • 'putt' — the genuinely different one. A smoother, more EVEN stroke
+ *     (~2:1 back:through, not 3:1), SHORT (sub-second), and QUIET — there is
+ *     no loud acoustic strike, so impact CANNOT come from the acoustic
+ *     detector. Its own profile: a looser ~2:1 target + impact derived from
+ *     POSE MOTION (the forward-stroke pass through the ball), defaulted to
+ *     LOWER confidence because the small/quiet motion is harder to read.
+ */
+export type TempoMode = 'full_swing' | 'putt';
+
 /** The three real timestamps a tempo read is built from, in SECONDS
  *  relative to the same clock (clip start). Must satisfy
- *  backswingStartSec < topSec < impactSec. */
+ *  backswingStartSec < topSec < impactSec.
+ *
+ *  Naming note: for a PUTT these are the analogous stroke phases —
+ *  backswingStart = stroke takeaway, top = end of backstroke (reversal),
+ *  impact = the forward-stroke pass through the ball. */
 export interface TempoPhases {
   /** Motion onset — the hands first leave address. */
   backswingStartSec: number;
@@ -64,12 +85,20 @@ export interface TempoResult {
   ratingLabel: string;
   /** One short, honest coaching cue for this rating. */
   coaching: string;
-  /** The tour-standard target this read is graded against. Always 3. */
-  targetRatio: 3;
+  /** The mode this read was graded as. Defaults to 'full_swing'. */
+  mode: TempoMode;
+  /** The target this read is graded against — 3 for a full swing, 2 for a
+   *  putt. A NUMBER (not the literal 3) so the patch / metronome can draw the
+   *  right ideal for either mode. */
+  targetRatio: number;
+  /** Short, honest target framing, e.g. "tour 3:1" or "putt ~2:1 (smooth & even)". */
+  targetLabel: string;
 }
 
-// ─── Rating thresholds ─────────────────────────────────────────────────
-// Graded against the tour-standard 3:1 (backswing is ~3x the downswing).
+// ─── Tempo profiles (per mode) ─────────────────────────────────────────
+//
+// FULL SWING — graded against the tour-standard 3:1 (backswing is ~3x the
+// downswing). Byte-identical to the v2 single-mode behavior.
 //
 //   ratio < 2.7          → 'rushed'   (downswing too quick vs the backswing
 //                                       — the common amateur fault)
@@ -81,33 +110,86 @@ export interface TempoResult {
 // slightly long but the transition is still unhurried (a forgivable,
 // often-deliberate pattern) — distinct from a genuinely 'slow' tempo
 // where the downswing lags.
-const ON_TEMPO_LOW = 2.7;
-const ON_TEMPO_HIGH = 3.3;
-const SMOOTH_HIGH = 3.4;
+//
+// PUTT — a smoother, more EVEN stroke. We grade against a ~2:1 GUIDE (the
+// backstroke a touch longer than the through-stroke), NOT a precise tour
+// standard — there isn't one. So the bands are LOOSER and the language leans
+// on SMOOTH + EVEN rhythm over hitting a number. Honest by design.
+//
+//   ratio < 1.7          → 'rushed'   (forward stroke jabbed / decelerated load)
+//   1.7 ≤ ratio ≤ 2.3    → 'on_tempo' (smooth, even — right in the guide)
+//   2.3 < ratio < 2.7    → 'smooth'   (backstroke a hair long, still fluid)
+//   ratio ≥ 2.7          → 'slow'     (long backstroke / sluggish forward pass)
+interface TempoBand {
+  onTempoLow: number;
+  onTempoHigh: number;
+  smoothHigh: number;
+}
 
-const RATING_META: Record<TempoRating, { label: string; coaching: string }> = {
-  rushed: {
-    label: 'Rushed',
-    coaching: 'Slow your load slightly — let the club finish the backswing before you fire.',
+interface TempoProfile {
+  targetRatio: number;
+  targetLabel: string;
+  band: TempoBand;
+  meta: Record<TempoRating, { label: string; coaching: string }>;
+}
+
+const TEMPO_PROFILES: Record<TempoMode, TempoProfile> = {
+  full_swing: {
+    targetRatio: 3,
+    targetLabel: 'tour 3:1',
+    band: { onTempoLow: 2.7, onTempoHigh: 3.3, smoothHigh: 3.4 },
+    meta: {
+      rushed: {
+        label: 'Rushed',
+        coaching: 'Slow your load slightly — let the club finish the backswing before you fire.',
+      },
+      on_tempo: {
+        label: 'On Tempo',
+        coaching: 'Right on tempo — repeat it.',
+      },
+      smooth: {
+        label: 'Smooth',
+        coaching: 'Smooth and unhurried — a hair long on the load, but a clean transition.',
+      },
+      slow: {
+        label: 'Slow',
+        coaching: 'Your downswing is lagging the load — match the backswing with a more decisive transition.',
+      },
+    },
   },
-  on_tempo: {
-    label: 'On Tempo',
-    coaching: 'Right on tempo — repeat it.',
-  },
-  smooth: {
-    label: 'Smooth',
-    coaching: 'Smooth and unhurried — a hair long on the load, but a clean transition.',
-  },
-  slow: {
-    label: 'Slow',
-    coaching: 'Your downswing is lagging the load — match the backswing with a more decisive transition.',
+  putt: {
+    targetRatio: 2,
+    targetLabel: 'putt ~2:1 (smooth & even)',
+    band: { onTempoLow: 1.7, onTempoHigh: 2.3, smoothHigh: 2.7 },
+    meta: {
+      rushed: {
+        label: 'Quick Through',
+        coaching: 'Your forward stroke is jumping ahead — match the backstroke with a smooth, even pass through the ball.',
+      },
+      on_tempo: {
+        label: 'Smooth & Even',
+        coaching: 'Smooth, even putting rhythm — backstroke and forward stroke in balance. Repeat it.',
+      },
+      smooth: {
+        label: 'Smooth',
+        coaching: 'Nicely unhurried — a touch long on the backstroke, but the stroke stays smooth.',
+      },
+      slow: {
+        label: 'Long Back',
+        coaching: 'Your backstroke is running long — shorten it so the through-stroke can stay even and accelerating.',
+      },
+    },
   },
 };
 
-function ratingFor(ratio: number): TempoRating {
-  if (ratio < ON_TEMPO_LOW) return 'rushed';
-  if (ratio <= ON_TEMPO_HIGH) return 'on_tempo';
-  if (ratio < SMOOTH_HIGH) return 'smooth';
+function profileFor(mode: TempoMode): TempoProfile {
+  return TEMPO_PROFILES[mode] ?? TEMPO_PROFILES.full_swing;
+}
+
+function ratingFor(ratio: number, band: TempoBand): TempoRating {
+  if (ratio < band.onTempoLow) return 'rushed';
+  if (ratio <= band.onTempoHigh) return 'on_tempo';
+  if (ratio < band.smoothHigh) return 'smooth';
   return 'slow';
 }
 
@@ -115,8 +197,11 @@ function ratingFor(ratio: number): TempoRating {
  * Pure tempo computation from three real phase timestamps. Returns null
  * when the ordering is invalid (start < top < impact must hold) or any
  * phase duration is ≤ 0 — we never fabricate a ratio from a bad read.
+ *
+ * `mode` selects the profile (target ratio + rating bands + coaching). It
+ * defaults to 'full_swing' so every existing caller is byte-identical.
  */
-export function computeTempo(phases: TempoPhases): TempoResult | null {
+export function computeTempo(phases: TempoPhases, mode: TempoMode = 'full_swing'): TempoResult | null {
   const { backswingStartSec, topSec, impactSec } = phases;
   if (
     !Number.isFinite(backswingStartSec) ||
@@ -136,8 +221,9 @@ export function computeTempo(phases: TempoPhases): TempoResult | null {
   const ratio = backswingMs / downswingMs;
   if (!Number.isFinite(ratio) || ratio <= 0) return null;
 
-  const rating = ratingFor(ratio);
-  const meta = RATING_META[rating];
+  const profile = profileFor(mode);
+  const rating = ratingFor(ratio, profile.band);
+  const meta = profile.meta[rating];
 
   return {
     backswingMs: Math.round(backswingMs),
@@ -147,7 +233,9 @@ export function computeTempo(phases: TempoPhases): TempoResult | null {
     rating,
     ratingLabel: meta.label,
     coaching: meta.coaching,
-    targetRatio: 3,
+    mode,
+    targetRatio: profile.targetRatio,
+    targetLabel: profile.targetLabel,
   };
 }
 
@@ -188,7 +276,13 @@ export interface DetectTempoOutput {
   phases: Partial<TempoPhases>;
   /** 'auto'    — all three phases derived from real signal.
    *  'partial' — at least one phase derived (commonly impact only).
-   *  'none'    — nothing derivable; phases is empty. */
+   *  'none'    — nothing derivable; phases is empty.
+   *
+   * NOTE (putt honesty): a PUTT read NEVER returns 'auto'. Pose-only putt
+   * detection — small, quiet, sub-second motion with no acoustic anchor — is
+   * genuinely less reliable than a full swing, so even when all three phases
+   * come out we cap a putt at 'partial' to push the user through the
+   * scrub/refine flow rather than over-claiming an exact stroke ratio. */
   confidence: 'auto' | 'partial' | 'none';
 }
 
@@ -225,17 +319,35 @@ function wristY(frame: PoseFrame): number | null {
  *
  * Confidence is 'auto' when all three phases came out, 'partial' when
  * some did, 'none' when nothing could be read.
+ *
+ * `mode` (default 'full_swing') changes how IMPACT is found and how
+ * confident we allow ourselves to be:
+ *   • 'full_swing' — IMPACT from the acoustic strike (most reliable),
+ *     TOP/START from pose. Unchanged from v2.
+ *   • 'putt' — there is NO loud strike, so the acoustic impact is IGNORED
+ *     (it won't fire / isn't reliable for a quiet putt). IMPACT is derived
+ *     from POSE MOTION: the forward-stroke pass back through address height
+ *     (the lead-hand direction reversal toward the ball after the top).
+ *     TOP/START come from the same wrist-y series. A putt read is capped at
+ *     'partial' confidence (see DetectTempoOutput) so the UI always invites a
+ *     scrub/refine — we never fabricate a putt impact or over-claim a ratio.
  */
-export function detectTempoPhases(input: DetectTempoInput): DetectTempoOutput {
+export function detectTempoPhases(input: DetectTempoInput, mode: TempoMode = 'full_swing'): DetectTempoOutput {
   try {
+    const isPutt = mode === 'putt';
     const phases: Partial<TempoPhases> = {};
     const clipStartMs = typeof input.clipStartMs === 'number' && Number.isFinite(input.clipStartMs)
       ? input.clipStartMs
       : 0;
 
-    // ── 1. Impact (acoustic) ────────────────────────────────────────
-    const rawImpactMs =
-      typeof input.impactMs === 'number' && Number.isFinite(input.impactMs)
+    // ── 1. Impact ───────────────────────────────────────────────────
+    // FULL SWING — the acoustic strike (most reliable). PUTT — skip it: a
+    // putt is quiet, the strike won't reliably fire, so we derive impact from
+    // pose motion in step 2 instead (never trust an acoustic "strike" for a
+    // putt — it would be noise).
+    const rawImpactMs = isPutt
+      ? null
+      : typeof input.impactMs === 'number' && Number.isFinite(input.impactMs)
         ? input.impactMs
         : typeof input.acoustic?.impact_ms === 'number' && Number.isFinite(input.acoustic.impact_ms)
           ? input.acoustic.impact_ms
@@ -249,7 +361,7 @@ export function detectTempoPhases(input: DetectTempoInput): DetectTempoOutput {
       }
     }
 
-    // ── 2. Top + backswing-start (pose) ─────────────────────────────
+    // ── 2. Top + backswing-start (+ putt impact) from pose ──────────
     const frames = (input.poseFrames ?? [])
       .filter((f): f is PoseFrame => !!f && typeof f.timestampMs === 'number')
       .slice()
@@ -293,6 +405,40 @@ export function detectTempoPhases(input: DetectTempoInput): DetectTempoOutput {
             }
           }
 
+          // ── PUTT IMPACT (pose, no acoustic) ──────────────────────
+          // A putt is quiet, so impact = the FORWARD-STROKE PASS through the
+          // ball, read from the same wrist-y series: after the top (hands
+          // highest, the backstroke reversal), the hands move back DOWN/forward
+          // toward address. We take impact as the first post-top frame whose
+          // wrist-y returns to ~address height (the forward stroke passing back
+          // through the ball line). Falls back to the series' last sample if it
+          // never fully returns (so a clipped clip still yields a stroke span).
+          if (isPutt && impactSec == null) {
+            const addressY = series[0].y;
+            const topY = series[topIdx].y;
+            const travel = addressY - topY; // positive: hands rose into the backstroke
+            let puttImpactSec: number | null = null;
+            if (travel > 0) {
+              const returnDelta = travel * 0.8; // ~80% back down toward address = forward pass
+              for (let i = topIdx + 1; i < series.length; i++) {
+                if (addressY - series[i].y <= travel - returnDelta) {
+                  puttImpactSec = series[i].t;
+                  break;
+                }
+              }
+              // Never fully returned in-window → use the last frame as the
+              // forward-stroke endpoint (honest, low-confidence; the user can
+              // scrub to the true ball-pass).
+              if (puttImpactSec == null && topIdx < series.length - 1) {
+                puttImpactSec = series[series.length - 1].t;
+              }
+            }
+            if (puttImpactSec != null && puttImpactSec > topSec) {
+              impactSec = puttImpactSec;
+              phases.impactSec = puttImpactSec;
+            }
+          }
+
           // Only commit phases that keep a strictly increasing order
           // against whatever else we have. Never emit an out-of-order
           // seed — the UI would then build an invalid ratio.
@@ -311,8 +457,10 @@ export function detectTempoPhases(input: DetectTempoInput): DetectTempoOutput {
       (phases.topSec != null ? 1 : 0) +
       (phases.impactSec != null ? 1 : 0);
 
+    // Putt detection is pose-only, small and quiet → never claim 'auto'. Cap
+    // a fully-detected putt at 'partial' so the UI keeps inviting a refine.
     const confidence: DetectTempoOutput['confidence'] =
-      detected === 3 ? 'auto' : detected > 0 ? 'partial' : 'none';
+      detected === 3 ? (isPutt ? 'partial' : 'auto') : detected > 0 ? 'partial' : 'none';
 
     return { phases, confidence };
   } catch {

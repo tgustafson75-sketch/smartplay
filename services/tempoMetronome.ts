@@ -107,12 +107,17 @@ export class TempoMetronome {
    *           lanes directly comparable (same length, top beat shifts).
    */
   static buildBeats(result: TempoResult | null, mode: MetronomeMode): { beats: Beat[]; cycleMs: number } {
+    // 2026-06-24 (Tim — mode-aware tempo) — the IDEAL beat spacing follows the
+    // result's targetRatio (3:1 for a full swing, ~2:1 for a putt) instead of a
+    // hard-coded 3. With no result we fall back to a 3:1 standard preset.
+    const targetRatio = result && result.targetRatio > 0 ? result.targetRatio : 3;
     const backMs = result && result.backswingMs > 0 ? result.backswingMs : DEFAULT_BACKSWING_MS;
     const downMs = result && result.downswingMs > 0 ? result.downswingMs : DEFAULT_BACKSWING_MS / 3;
     const totalMs = backMs + downMs;
 
-    // IDEAL re-splits the SAME total on a 3:1 ratio (back = 3/4, down = 1/4).
-    const idealBackMs = totalMs * 0.75;
+    // IDEAL re-splits the SAME total on the target ratio: back = R/(R+1) of the
+    // total, down = 1/(R+1). (3:1 → back 3/4; 2:1 → back 2/3.)
+    const idealBackMs = totalMs * (targetRatio / (targetRatio + 1));
 
     const actualBeats: Beat[] = [
       { atMs: 0, tone: 'tick', lane: 'actual', name: 'takeaway' },
