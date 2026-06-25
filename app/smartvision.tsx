@@ -1953,6 +1953,45 @@ export default function SmartVisionScreen() {
           <Text style={styles.measureHintText}>Tap to place your position · Drag P for pin</Text>
         </View>
 
+        {/* 2026-06-25 (Tim — restore segmented aim/layup yardages) — once the
+            user PLACES/MOVES the aim point (targetOverride set), surface the two
+            REAL segment distances for shot planning: YOU → point (carry, green)
+            and point → PIN (white). These are the same GPS/coord-derived numbers
+            already computed (carryYards / yardages.middle) — no fabrication.
+            The 2026-06-23 clean-up pass dropped EVERY surface that showed the
+            per-point split (the on-canvas numbers, the "LAY UP · Ny" label, and
+            the floating carry box), leaving only F/M/B + club-to-pin — which is
+            the regression Tim reported. This restores it in a LABELED, dismissable
+            chip (hidden until a point is placed) so it reads cleanly instead of
+            colliding like the old label-less numbers. For par-5/long-hole layup
+            mode we also show the planned "leave" so the two-segment plan reads. */}
+        {targetOverride && (carryYards != null || yardages.middle != null) && (
+          <View pointerEvents="none" style={styles.aimSegments}>
+            <View style={styles.aimSegRow}>
+              <Text style={styles.aimSegLabel}>YOU → POINT</Text>
+              <Text style={[styles.aimSegValue, { color: '#facc15' }]}>
+                {carryYards != null ? `${carryYards}y` : '—'}
+              </Text>
+            </View>
+            <View style={styles.aimSegDivider} />
+            <View style={styles.aimSegRow}>
+              <Text style={styles.aimSegLabel}>POINT → PIN</Text>
+              <Text style={[styles.aimSegValue, { color: '#ffffff' }]}>
+                {yardages.middle != null ? `${yardages.middle}y` : '—'}
+              </Text>
+            </View>
+            {aimPlan.mode === 'layup' && aimPlan.leaveYards != null && (
+              <>
+                <View style={styles.aimSegDivider} />
+                <View style={styles.aimSegRow}>
+                  <Text style={[styles.aimSegLabel, { color: '#f97316' }]}>LAY UP · LEAVES</Text>
+                  <Text style={[styles.aimSegValue, { color: '#f97316' }]}>{aimPlan.leaveYards}y</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
       </GestureDetector>
@@ -2197,6 +2236,30 @@ const styles = StyleSheet.create({
   },
   measureHintText: {
     color: '#facc15', fontSize: 11, fontWeight: '700', letterSpacing: 0.3,
+  },
+  // 2026-06-25 (Tim — segmented aim/layup yardages) — labeled chip in the
+  // top-right that shows YOU→point + point→pin (and the layup leave on long
+  // holes) once the user has placed/moved the aim point. Mirrors measureHint's
+  // pill styling but anchors right so it never collides with the tap hint.
+  aimSegments: {
+    position: 'absolute',
+    top: 12, right: 12,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    borderWidth: 1, borderColor: 'rgba(136,247,0,0.45)',
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
+    gap: 4, minWidth: 132,
+  },
+  aimSegRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  aimSegLabel: {
+    color: 'rgba(255,255,255,0.65)', fontSize: 9, fontWeight: '800', letterSpacing: 0.6,
+  },
+  aimSegValue: {
+    fontSize: 15, fontWeight: '900', letterSpacing: 0.3, fontVariant: ['tabular-nums'],
+  },
+  aimSegDivider: {
+    height: 1, backgroundColor: 'rgba(255,255,255,0.12)',
   },
   saveBtn: {
     position: 'absolute',
