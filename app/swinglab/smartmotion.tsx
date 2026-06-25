@@ -356,8 +356,18 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType, captureMode, returnTo } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string }>();
+  // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
+  // Smart Tempo opens its own camera it routes here with captureMode='tempo'
+  // (+ returnTo='/swinglab/smart-tempo'). On a single-swing completion we route
+  // BACK to that screen with the freshly-ingested swing_id, so the player lands
+  // straight on the tempo RESULT — no manual "pick from library". A normal
+  // launch leaves both undefined and behaves exactly as before. Held in a ref
+  // so the async stop/ingest closure reads it without dep churn.
+  const tempoReturnRef = useRef<string | null>(
+    captureMode === 'tempo' && typeof returnTo === 'string' && returnTo.length > 0 ? returnTo : null,
+  );
   // Note: drillFocus + drillShotType are carried on the route for the next
   // increment (per-focus metric surfacing); typed here so the drill contract is
   // complete even though this increment only consumes drillId/drillName/drillShots.
@@ -2205,6 +2215,21 @@ export default function SmartMotion() {
         // Single-swing session — pipeline doesn't run, so emit session_complete here
         // so subscribers (e.g. voice UI) receive the event.
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: 1, summary: '1 swing recorded.' });
+      }
+      // 2026-06-24 (Tim — camera-first Smart Tempo) — if we were launched in
+      // TEMPO capture mode, hand the just-ingested swing back to Smart Tempo so
+      // the player lands on the tempo RESULT (it auto-runs detectTempoPhases on
+      // the loaded session). Only for a clean single-swing capture: a putt or a
+      // multi-swing reel doesn't map to one tempo read, so those stay in Smart
+      // Motion's normal review. The swing is already in the library, so this is
+      // purely a navigation; nothing is lost if it's skipped.
+      if (tempoReturnRef.current && !puttModeRef.current && segsForAnalysis.length <= 1) {
+        const sid = ingestedSessionIdRef.current;
+        if (sid) {
+          const dest = tempoReturnRef.current;
+          tempoReturnRef.current = null; // one-shot — don't re-route on a later swing
+          router.replace({ pathname: dest as never, params: { swing_id: sid } as never });
+        }
       }
     } catch (e) {
       recordingPromiseRef.current = null;
