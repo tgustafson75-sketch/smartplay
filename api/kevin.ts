@@ -441,6 +441,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // string when one or more tutorials are active, null otherwise.
       // Capped at 3 active tutorials so token budget stays bounded.
       practice_context = null,
+      // 2026-06-26 (Tim) — ephemeral "current screen/drill" from the client
+      // (services/screenContext). Lets the caddie answer a question asked from
+      // inside a drill ABOUT that drill ("if I'm on Tempo, tempo is the topic").
+      screen_context = null,
       // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
@@ -504,6 +508,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const _persistentPatterns: string | null = capOrNull(persistentPatterns, 2000);
     const _practiceContext: string | null = capOrNull(practice_context, 2000);
+    const _screenContext: string | null = capOrNull(screen_context, 600);
     // Prompt-injection caps for short identity fields (200 chars) and long context blobs (2000 chars).
     const _dominantMiss: string | null = capOrNull(dominantMiss, 200);
     const _physicalLimitation: string | null = capOrNull(physicalLimitation, 200);
@@ -857,6 +862,8 @@ ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS
 ${_persistentPatterns ? `EMERGING PATTERNS (private; reference naturally if they fit, never list them):\n${_persistentPatterns}` : ''}
 
 ${_practiceContext ? `${_practiceContext}\n\nUse the practice context to shape advice on relevant clubs / situations. Reinforce the player's current learning when shots match. Do not introduce a competing swing thought during a shot that already calls for a practiced technique.` : ''}
+
+${_screenContext ? _screenContext : ''}
 
 ${_recentRoundInsights.length > 0 ? `RECENT ROUND MEMORY (private; reference if same course or matching pattern):\n${_recentRoundInsights.map(r => `- ${r.course ? r.course + ': ' : ''}${r.insight}`).join('\n')}` : ''}
 

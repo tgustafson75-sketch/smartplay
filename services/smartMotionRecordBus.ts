@@ -94,7 +94,10 @@ export function subscribeDrillConfig(cb: (cfg: DrillConfig) => void): () => void
 // ── Voice events: SmartMotion → Kevin ────────────────────────────────────────
 
 export type SmartMotionVoiceEvent =
-  | { type: 'entered' }
+  // 2026-06-26 — `entered` carries the drill (when opened in drill mode) so the
+  // greeting is drill-AWARE instead of the redundant/laggy "what are we working
+  // on?" — opening the Tempo drill already answers that question.
+  | { type: 'entered'; drillName?: string; drillFocus?: string }
   | { type: 'session_complete'; swingCount: number; summary: string };
 
 const voiceEventListeners: Set<(e: SmartMotionVoiceEvent) => void> = new Set();

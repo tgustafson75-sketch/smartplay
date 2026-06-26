@@ -45,6 +45,7 @@ import {
 } from '../../services/smartTempo';
 import { TempoMetronome, type MetronomeMode } from '../../services/tempoMetronome';
 import TempoPatch from '../../components/swinglab/TempoPatch';
+import { setScreenContext, clearScreenContext } from '../../services/screenContext';
 
 // ─── Phase model ───────────────────────────────────────────────────────
 type PhaseKey = 'backswingStartSec' | 'topSec' | 'impactSec';
@@ -79,6 +80,14 @@ export default function SmartTempoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string; tempoMode?: string }>();
+
+  // 2026-06-26 (Tim) — tell the caddie brain we're on Tempo so a question asked
+  // here is answered about TEMPO, not generically. Cleared on leave.
+  useEffect(() => {
+    const label = 'the Smart Tempo drill';
+    setScreenContext({ screen: label, focus: 'backswing-to-downswing tempo toward the 3:1 ratio' });
+    return () => clearScreenContext(label);
+  }, []);
 
   // The swing currently under review. swing_id binds to a persisted session
   // (so Save updates it in place); clipUri can load a bare clip with no session.

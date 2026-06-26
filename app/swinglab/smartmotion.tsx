@@ -114,6 +114,7 @@ import { detectBallDeparture, type BallDepartureResult } from '../../services/sw
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { ensureSwingThumbnail } from '../../services/videoUpload';
 import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { setScreenContext, clearScreenContext } from '../../services/screenContext';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
@@ -357,7 +358,7 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillShotType, captureMode, returnTo } =
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo } =
     useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string }>();
   // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
   // Smart Tempo opens its own camera it routes here with captureMode='tempo'
@@ -379,6 +380,20 @@ export default function SmartMotion() {
   // undefined and behaves exactly as before.
   const isDrill = typeof drillId === 'string' && drillId.length > 0;
   const drillShotCount = isDrill ? Math.max(1, Math.min(5, Number(drillShots) || 3)) : null;
+
+  // 2026-06-26 (Tim) — register the current screen/drill so a voice question
+  // asked here is answered drill-aware (focus from the route), cleared on leave.
+  useEffect(() => {
+    const label = isDrill && typeof drillName === 'string' && drillName.trim()
+      ? `the ${drillName.trim()} drill`
+      : 'Smart Motion (recording swings)';
+    setScreenContext({
+      screen: label,
+      focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
+      drillId: isDrill ? drillId : undefined,
+    });
+    return () => clearScreenContext(label);
+  }, [isDrill, drillName, drillFocus, drillId]);
   // 2026-06-16 (Tim — shot-rest cycles) — user-chosen swing count: null = OPEN (the
   // existing free window), or 1/3/5 → cap the session to exactly N swings (the read +
   // narration cover N). A drill's own count still wins. Ref mirror so the stop
@@ -2535,8 +2550,14 @@ export default function SmartMotion() {
       require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true });
     } catch { /* non-fatal */ }
     // Voice layer: tell Kevin we're open so he can greet + ask what to work on.
+    // When opened in DRILL mode, pass the drill so the greeting is drill-aware
+    // (no redundant "what are we working on?" — the drill IS the answer).
     if (useSettingsStore.getState().voiceEnabled) {
-      emitSmartMotionVoiceEvent({ type: 'entered' });
+      emitSmartMotionVoiceEvent(
+        isDrill
+          ? { type: 'entered', drillName: typeof drillName === 'string' ? drillName : undefined, drillFocus: typeof drillFocus === 'string' ? drillFocus : undefined }
+          : { type: 'entered' },
+      );
     }
     // Kevin → SmartMotion: apply drill config (club + shot count) from voice setup.
     const unsubDrill = subscribeDrillConfig((cfg) => {

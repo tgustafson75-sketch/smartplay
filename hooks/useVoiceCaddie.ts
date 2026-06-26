@@ -43,6 +43,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { buildFullPracticeContext } from '../services/tutorialContext';
+import { screenContextForPrompt } from '../services/screenContext';
 import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
@@ -1033,6 +1034,7 @@ export const useVoiceCaddie = ({
           // Phase BR — active practice context from tutorialStore. Null
           // when no tutorials are flagged active. Capped at 3 active.
           practice_context: buildFullPracticeContext(),
+          screen_context: screenContextForPrompt(),
           recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
           recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
           holeNotes: useRoundStore.getState().holeNotes,

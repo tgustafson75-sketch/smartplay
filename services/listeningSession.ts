@@ -18,6 +18,7 @@ import { tryLocalReply } from './localStatusResponder';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
+import { screenContextForPrompt } from './screenContext';
 import { getApiBaseUrl } from './apiBase';
 
 // ─── External URL allowlist ───────────────────────────────────────────────────
@@ -585,6 +586,7 @@ async function openSession() {
           kevinContext: profile.kevinContext ?? null,
           persistentPatterns: profile.persistentPatterns ?? null,
           practice_context: buildFullPracticeContext(),
+          screen_context: screenContextForPrompt(),
           register: 'coach',
           inRoundDiagnostic: true,
           voiceGender: settingsStore.voiceGender ?? 'male',

@@ -864,8 +864,14 @@ export default function CaddieTab() {
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (!ve) return;
       if (event.type === 'entered') {
+        // 2026-06-26 (Tim) — if they opened a SPECIFIC drill, the drill IS the
+        // answer to "what are we working on?", so greet drill-aware instead of
+        // asking the redundant (and laggy) question. Generic open still asks.
+        const greeting = event.drillName
+          ? `${event.drillName}${event.drillFocus ? ` — ${event.drillFocus}` : ''}. Hit one when you're ready and I'll watch it.`
+          : "What are we working on today?";
         configureAudioForSpeech()
-          .then(() => speak("What are we working on today?", vg, lang, apiUrl, { userInitiated: true }))
+          .then(() => speak(greeting, vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))
           .then(() => { handleMicPressRef.current(); })
           .catch(() => {});
