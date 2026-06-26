@@ -70,6 +70,135 @@ export function computeTraceDirection(
   };
 }
 
+// ─── Multi-point shot trace (2026-06-25, Shot Tracing) ──────────────────────
+//
+// buildShotTrace turns the MEASURED ball positions (services/swing/ballPath →
+// api/ball-path) into a tiered, honesty-segregated trace:
+//   • measured — the SOLID polyline through the real detected positions only.
+//   • projected — an OPTIONAL dashed/faded continuation, computed here from the
+//     measured launch direction (a straight launch-angle extrapolation). It is
+//     NEVER blended with the measured points and is always flagged "projected".
+// The renderer draws `measured` solid and `projected` dashed+faded with a legend
+// so the two can't be confused (Tim's law). With <2 measured points there's no
+// honest path to draw → tier 'none' and the caller shows a no-track note.
+
+export interface ShotTraceBuild {
+  tier: 'full' | 'launch' | 'none';
+  /** Solid line: the real detected positions, in time order, normalized 0..1.
+   *  Length 0 at tier 'none'. */
+  measured: { x: number; y: number }[];
+  /** Dashed/faded continuation — ONLY a modeled projection, never measured.
+   *  null when we don't draw one (full in-frame path, or nothing to project from). */
+  projected: { x: number; y: number }[] | null;
+  /** How far OFF the aim line the launch started (from the first→last measured
+   *  segment), when a target is known. null when not computable. */
+  divergenceDeg: number | null;
+  side: TraceSide | null;
+  /** Honest one-liner for the caption/legend. */
+  headline: string;
+  /** The flag shown when the trace is partial / projected. null at full tier. */
+  note: string | null;
+}
+
+const PROJECT_MIN_SEG = 0.02; // launch segment must span this (norm) to project off
+const PROJECT_LEN = 0.55;     // how far to extend the dashed projection (norm)
+const PROJECT_STEPS = 5;      // dashed projection sample points
+// If the LAST measured point is still well inside the frame, the ball stayed in
+// view (short game / chip) → it's a full path, no projection needed.
+const IN_FRAME_MARGIN = 0.12;
+
+/**
+ * Compose a tiered shot trace from measured ball positions + the aim reference.
+ * Pure / deterministic / never-throws. `points`, `ballCenter`, `target` are all
+ * normalized full-frame (0..1). Honesty:
+ *   - <2 points → tier 'none', no line (caller shows the no-track note).
+ *   - ball still in frame at the end → tier 'full', solid line only, no projection.
+ *   - ball ran off the edge fast → tier 'launch', solid measured launch segment +
+ *     a clearly-labelled dashed projection extrapolated along the launch direction.
+ * The projection is geometry-only (a straight launch extrapolation) — no spin,
+ * curve, carry or dispersion is ever claimed (memory smartmotion-metrics-honesty).
+ */
+export function buildShotTrace(
+  points: { x: number; y: number }[],
+  ballCenter: { x: number; y: number } | null,
+  target: { x: number; y: number } | null,
+): ShotTraceBuild {
+  const measured = points.filter(
+    (p) => typeof p?.x === 'number' && typeof p?.y === 'number' && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1,
+  );
+  if (measured.length < 2) {
+    return {
+      tier: 'none', measured: [], projected: null, divergenceDeg: null, side: null,
+      headline: 'No clean read this swing.',
+      note: 'Couldn’t track the ball this time — try better light or keep the ball in frame a beat longer.',
+    };
+  }
+
+  const first = ballCenter ?? measured[0];
+  const last = measured[measured.length - 1];
+
+  // Launch direction = first detected origin → last detected point. Divergence vs
+  // the aim line reuses the same convention as computeTraceDirection.
+  let side: TraceSide | null = null;
+  let divergenceDeg: number | null = null;
+  const dvx = last.x - first.x;
+  const dvy = last.y - first.y;
+  const dLen = Math.hypot(dvx, dvy);
+  if (dLen >= 0.012) {
+    const avx = target ? target.x - first.x : 0;
+    const avy = target ? target.y - first.y : -1;
+    const aimAng = Math.hypot(avx, avy) < 1e-4 ? 0 : Math.atan2(avx, -avy);
+    const depAng = Math.atan2(dvx, -dvy);
+    let rel = ((depAng - aimAng) * 180) / Math.PI;
+    while (rel > 180) rel -= 360;
+    while (rel < -180) rel += 360;
+    if (target) {
+      side = Math.abs(rel) <= STRAIGHT_DEG ? 'straight' : rel > 0 ? 'right' : 'left';
+      divergenceDeg = Math.round(Math.abs(rel));
+    }
+  }
+
+  // Did the ball stay in frame? If the last point is comfortably inside the frame,
+  // we saw the whole (short) flight → full path, no projection.
+  const inFrame =
+    last.x > IN_FRAME_MARGIN && last.x < 1 - IN_FRAME_MARGIN &&
+    last.y > IN_FRAME_MARGIN && last.y < 1 - IN_FRAME_MARGIN;
+
+  if (inFrame) {
+    return {
+      tier: 'full', measured, projected: null, divergenceDeg, side,
+      headline: 'Full ball flight tracked.',
+      note: null,
+    };
+  }
+
+  // Ball left the frame fast → measured LAUNCH segment + a dashed projection.
+  // Only project when the launch segment is long enough to give a real direction.
+  let projected: { x: number; y: number }[] | null = null;
+  if (dLen >= PROJECT_MIN_SEG) {
+    const ux = dvx / dLen;
+    const uy = dvy / dLen;
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 1; i <= PROJECT_STEPS; i++) {
+      const t = (PROJECT_LEN * i) / PROJECT_STEPS;
+      pts.push({ x: last.x + ux * t, y: last.y + uy * t });
+    }
+    projected = pts;
+  }
+
+  return {
+    tier: 'launch',
+    measured,
+    projected,
+    divergenceDeg,
+    side,
+    headline: projected
+      ? 'Launch tracked — flight projected (the ball left frame).'
+      : 'Launch direction tracked (the ball left frame).',
+    note: 'Solid = measured launch off the camera; dashed = projected (estimated continuation, not measured).',
+  };
+}
+
 function lerp(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * Math.max(0, Math.min(1, t)));
 }

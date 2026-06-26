@@ -311,6 +311,9 @@ export async function searchSimilarSwings(
       kind:
         ref.source === 'self_upload' ? 'self_vs_self' :
         ref.source === 'archetype' ? 'self_vs_avatar' : 'self_vs_pro',
+      // Picks the benchmark profile only if this falls back to the
+      // tour-benchmark path (reference has no biomechanics).
+      club: filter?.club ?? ref.club ?? null,
     });
     // overall_match === null means there was no usable biomechanics to
     // compare. A reference we can't actually compare against has no place

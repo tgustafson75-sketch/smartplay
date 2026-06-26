@@ -19,7 +19,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
+import { View, Text, Image, Pressable, Animated, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../../store/toolsMenuStore';
@@ -36,6 +36,11 @@ export interface BrandHeaderProps {
 export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
+  // 2026-06-25 (Tim) — width-based wordmark sizing (adjustsFontSizeToFit doesn't
+  // shrink letterSpaced text). Normal iPhones (≥375pt) keep 18/2.5 unchanged; a
+  // narrow fold cover (≤360pt) tightens so "CADDIE" never clips/overlaps the logo.
+  const { width } = useWindowDimensions();
+  const compact = width <= 360;
 
   // Visible-state hints on the badge ring so the user gets immediate
   // feedback for every voice state — not just listening. Idle = accent
@@ -82,10 +87,16 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
         </View>
 
         <View style={styles.titleBlock}>
-          <View style={styles.wordmarkRow}>
-            <Text style={[styles.brand1, { color: colors.accent }]}>SMARTPLAY</Text>
-            <Text style={[styles.brand2, { color: colors.text_primary }]}> CADDIE</Text>
-          </View>
+          {/* 2026-06-25 (Tim — wordmark overlaps logo + "CADDIE" clipped on
+              narrow screens) — match BrandHeaderRow's fix: ONE auto-shrinking
+              single line so "SMARTPLAY CADDIE" always fits the space between
+              the badge and the ••• pill instead of forcing its intrinsic
+              width (which pushed CADDIE off-screen and slid the block over the
+              badge). Nested Text keeps the accent/white split. */}
+          <Text style={[styles.wordmark, { fontSize: compact ? 15 : 18, letterSpacing: compact ? 1.2 : 2.5 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
+            <Text style={{ color: colors.text_primary }}> CADDIE</Text>
+          </Text>
           <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {voiceState === 'listening' ? 'LISTENING…'
               : voiceState === 'thinking' ? 'THINKING…'
@@ -194,16 +205,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  wordmarkRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  brand1: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 2.5,
-  },
-  brand2: {
+  wordmark: {
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 2.5,

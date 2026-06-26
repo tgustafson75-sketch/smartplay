@@ -10,16 +10,22 @@
  */
 
 import { useEffect, useState } from 'react';
-import { getPlaysLikeElevationDeltaFeet } from '../services/elevationService';
+import { getPlaysLikeElevation } from '../services/elevationService';
 
 type Coord = { lat: number; lng: number } | null | undefined;
+
+/** `hasData` is false until BOTH points resolve OR when a lookup fails — so the
+ *  UI can honestly show "flat (no data)" vs a real ~level read. `deltaFeet` is
+ *  always 0 in that case, so it is still safe to pass straight to playsLike. */
+export type ElevationDelta = { deltaFeet: number; hasData: boolean };
 
 function gridded(v: number | null | undefined): number | null {
   return v == null || !Number.isFinite(v) ? null : Math.round(v * 1e4) / 1e4;
 }
 
-export function useElevationDelta(player: Coord, target: Coord): number {
-  const [delta, setDelta] = useState(0);
+/** Honesty-aware: returns the delta AND whether it's backed by a real read. */
+export function useElevationDeltaStatus(player: Coord, target: Coord): ElevationDelta {
+  const [state, setState] = useState<ElevationDelta>({ deltaFeet: 0, hasData: false });
   const pLat = gridded(player?.lat);
   const pLng = gridded(player?.lng);
   const tLat = gridded(target?.lat);
@@ -27,15 +33,20 @@ export function useElevationDelta(player: Coord, target: Coord): number {
 
   useEffect(() => {
     if (pLat == null || pLng == null || tLat == null || tLng == null) {
-      setDelta(0);
+      setState({ deltaFeet: 0, hasData: false });
       return;
     }
     let active = true;
-    getPlaysLikeElevationDeltaFeet({ lat: pLat, lng: pLng }, { lat: tLat, lng: tLng })
-      .then((d) => { if (active) setDelta(d); })
-      .catch(() => { if (active) setDelta(0); });
+    getPlaysLikeElevation({ lat: pLat, lng: pLng }, { lat: tLat, lng: tLng })
+      .then((r) => { if (active) setState(r); })
+      .catch(() => { if (active) setState({ deltaFeet: 0, hasData: false }); });
     return () => { active = false; };
   }, [pLat, pLng, tLat, tLng]);
 
-  return delta;
+  return state;
+}
+
+/** Back-compat: just the delta (0 when missing/flat). */
+export function useElevationDelta(player: Coord, target: Coord): number {
+  return useElevationDeltaStatus(player, target).deltaFeet;
 }

@@ -184,6 +184,45 @@ export default function ComparisonResultSheet({
               </View>
             ) : null}
 
+            {/* 2026-06-25 — Tour-benchmark card. Present only when the
+                comparison was graded against the BENCHMARK BANK (no captured
+                pro). HONEST: it leads with the directional framing, then the
+                proExemplars FEEL + a drill to close each gap — never a
+                "you're X° off [named pro]" claim. */}
+            {result.benchmark ? (
+              <View style={[styles.benchmarkCard, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
+                <View style={styles.benchmarkHeader}>
+                  <Ionicons name="flag-outline" size={14} color={colors.accent} />
+                  <Text style={[styles.benchmarkTitle, { color: colors.text_primary }]}>
+                    vs the tour benchmark (directional)
+                  </Text>
+                </View>
+                <Text style={[styles.benchmarkFraming, { color: colors.text_muted }]}>
+                  {result.benchmark.framing}
+                </Text>
+                {result.benchmark.focuses.length === 0 ? (
+                  <Text style={[styles.benchmarkFocusNote, { color: colors.text_secondary }]}>
+                    Looks tour-standard on everything we could measure — inside the benchmark range.
+                  </Text>
+                ) : (
+                  result.benchmark.focuses.slice(0, 3).map((f, i) => (
+                    <View key={i} style={styles.benchmarkFocusRow}>
+                      <Text style={[styles.benchmarkFocusLabel, { color: colors.text_primary }]}>
+                        {f.label}
+                      </Text>
+                      <Text style={[styles.benchmarkFocusNote, { color: colors.text_secondary }]}>
+                        {f.note}
+                      </Text>
+                      <Text style={[styles.benchmarkFeel, { color: colors.accent }]}>
+                        Feel: {f.feel}
+                        {f.drillId ? `  ·  drill: ${f.drillId}` : ''}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            ) : null}
+
             {/* Per-metric side-by-side bars */}
             <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>SIDE BY SIDE</Text>
             {renderableMetrics.length === 0 ? (
@@ -382,6 +421,17 @@ const styles = StyleSheet.create({
     width: 8, height: 8, borderRadius: 4, marginTop: 6,
   },
   takeawayText: { flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 18 },
+
+  benchmarkCard: {
+    borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, marginTop: 2,
+  },
+  benchmarkHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  benchmarkTitle: { fontSize: 13, fontWeight: '900' },
+  benchmarkFraming: { fontSize: 11, lineHeight: 15, fontStyle: 'italic' },
+  benchmarkFocusRow: { gap: 2, marginTop: 6 },
+  benchmarkFocusLabel: { fontSize: 12, fontWeight: '800' },
+  benchmarkFocusNote: { fontSize: 11, lineHeight: 15 },
+  benchmarkFeel: { fontSize: 11, fontWeight: '700', lineHeight: 15 },
 
   sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginTop: 6 },
   emptyHint: { fontSize: 12, fontStyle: 'italic', lineHeight: 17 },

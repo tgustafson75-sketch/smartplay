@@ -318,7 +318,7 @@ export default function SwingLibrary() {
           ref.source === 'self_upload' ? 'self_vs_self' :
           ref.source === 'archetype'   ? 'self_vs_avatar' :
                                          'self_vs_pro';
-        const result = engineMod.compareSwings({ current: compareCurrentPose, reference: referencePose, kind });
+        const result = engineMod.compareSwings({ current: compareCurrentPose, reference: referencePose, kind, club: compareSession?.club ?? ref.club ?? null });
         const headline = (result.overall_match == null
           ? `Not enough data to compare to ${ref.label} yet. ${result.takeaways[0] ?? ''}`
           : `${result.overall_match}% match to ${ref.label}. ${result.takeaways[0] ?? ''}`).trim();

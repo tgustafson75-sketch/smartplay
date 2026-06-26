@@ -17,6 +17,9 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
+// 2026-06-24 — APP-FEATURE CATALOG (shared client+server). Gives the caddie a
+// map of the app's real tools/cards/drills (e.g. Smart Tempo) so he can name
+// them and open them via the open tools. Parity with api/kevin.ts.
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
 const MAX_HISTORY_PAIRS = 6;
@@ -242,6 +245,7 @@ Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when a
 Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
 Use tools when the player describes a shot to log, names a score, or asks to open a tool.
+
 PRACTICE INTENT — when the player vaguely wants to practice ("I want to practice", "let's work on my swing") WITHOUT naming a specific activity, do NOT open SwingLab. Ask one short question: what they'd like to work on — a specific drill, tempo, open range — and offer to open the Swing Lab. Only open it once they pick something or say yes.
 For lookup_course and lookup_hole: use them when you need real yardage/par data you don't already have.
 
@@ -299,7 +303,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const toolActions: Array<Record<string, unknown>> = [];
 
   try {
-    const system = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+    const baseSystem = buildSystem(context, (history as HistoryMsg[]).slice(-MAX_HISTORY_PAIRS * 2));
+
+    // 2026-06-25 (Tim — "get kb back") — KB re-added the SAFE way: a LAZY dynamic
+    // import inside try/catch so the KB modules are NOT pulled into this function's
+    // cold-start bundle init, and any KB error is swallowed (best-effort — never
+    // break a turn). Builds ONE optional addendum (app-feature catalog + per-turn
+    // coaching-knowledge RAG, max 3, offline, scored floor). Injected only when
+    // non-empty; empty → base prompt unchanged. Kept OUT of the static buildSystem
+    // literal so that literal has no KB dependency.
+    let kbAddendum = '';
+    try {
+      const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
+      const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
+      const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
+      kbAddendum =
+        `\n\nAPP FEATURES YOU KNOW (reference these by name and open them with the open tools when the player asks):\n${catalogForPrompt()}`
+        + (kbBlock
+          ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
+          : '');
+    } catch { /* KB is best-effort — never break the turn */ }
+    const system = kbAddendum ? baseSystem + kbAddendum : baseSystem;
 
     // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
     // provider hiccup, so the live-voice caddie said "give me one sec" every turn

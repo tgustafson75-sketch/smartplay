@@ -1,5 +1,69 @@
 import type { CanonicalIssue, SwingAnalysis } from './poseDetection';
 import type { PrimaryIssue } from '../store/cageStore';
+import { rankFaults } from './knowledgeBase/causalEngine';
+
+/**
+ * 2026-06-24 — Causal first-domino tie-in.
+ *
+ * Maps each CanonicalIssue (what the vision analysis classifies) to the
+ * causalEngine fault key that names its ROOT in the first-domino ladder, so
+ * that when a SESSION surfaces 2+ DISTINCT issues across swings the consensus
+ * can lead with the earliest-causal ROOT rather than the most-frequent one.
+ *
+ * HONESTY: a mapping exists ONLY where the causal lineage is sound. `null`
+ * means "no honest root key" — those issues fall straight back to the existing
+ * most-frequent tally and are never re-ranked or dropped.
+ *
+ *   swing_path_outside_in → 'over-the-top'  (outside-in path IS the over-the-top
+ *       signature — same P2 transition root)
+ *   over_the_top          → 'over-the-top'
+ *   swing_path_inside_out → 'slide'          (the in-to-out / lower-body-slide
+ *       lineage; 'slide' is the closest real P2 key — see CAUSAL_CHAINS
+ *       strong-grip→slide→hook)
+ *   attack_angle_steep    → 'steep'
+ *   attack_angle_shallow  → null             (no clean root key; 'scooping'/casting
+ *       is a guess, so leave it to the frequency tally)
+ *   early_extension       → 'early-extension'
+ *   chicken_wing          → 'chicken-wing'
+ *   reverse_pivot         → 'reverse-pivot'
+ *   club_face_open        → null             (an open face at impact is an OUTCOME
+ *       with several roots — weak grip, but also over-the-top/timing; not
+ *       reliably a grip issue from 2D phone video, so we DON'T assert 'weak-grip')
+ *   club_face_closed      → null             (same — closed face ≠ reliably a
+ *       strong grip from what we can see)
+ *   none                  → null
+ *
+ * The two face issues and shallow attack are intentionally null: ranking them
+ * to a setup root would be a measurement claim we can't make from the frames.
+ */
+export const CANONICAL_TO_FAULT: Record<CanonicalIssue, string | null> = {
+  swing_path_outside_in: 'over-the-top',
+  over_the_top: 'over-the-top',
+  swing_path_inside_out: 'slide',
+  attack_angle_steep: 'steep',
+  attack_angle_shallow: null,
+  early_extension: 'early-extension',
+  chicken_wing: 'chicken-wing',
+  reverse_pivot: 'reverse-pivot',
+  club_face_open: null,
+  club_face_closed: null,
+  none: null,
+};
+
+/** Reverse lookup: a causalEngine fault key → the CanonicalIssue it maps from.
+ *  Built from CANONICAL_TO_FAULT so the root selected by rankFaults() can be
+ *  resolved back to the issue whose consensus tally entry we should lead with. */
+const FAULT_TO_CANONICAL: Record<string, CanonicalIssue> = (() => {
+  const m: Record<string, CanonicalIssue> = {};
+  (Object.entries(CANONICAL_TO_FAULT) as [CanonicalIssue, string | null][]).forEach(
+    ([issue, key]) => {
+      // First-writer wins so the lead canonical for a shared key (e.g.
+      // 'over-the-top' ← both over_the_top and swing_path_outside_in) is stable.
+      if (key && !(key in m)) m[key] = issue;
+    },
+  );
+  return m;
+})();
 
 /**
  * Phase K — Aggregate per-swing analyses into a session-level Primary Issue.
@@ -197,8 +261,57 @@ export function classifySession(
     .map(([issue, data]) => ({ issue: issue as CanonicalIssue, ...data }))
     .sort((a, b) => b.score - a.score);
 
-  const top = ranked[0];
+  let top = ranked[0];
   console.log('[classifier] multi: consensus top=' + (top?.issue ?? 'none') + ' count=' + (top?.count ?? 0));
+
+  // 2026-06-24 — Causal first-domino re-ranking. The frequency/severity tally
+  // above is the INPUT SET; causality breaks the "which is the headline"
+  // decision when 2+ DISTINCT mapped issues are present. We pass only the
+  // honestly-mapped issue keys to rankFaults(); the primary (earliest-causal
+  // ROOT) becomes the lead, the others are framed as downstream symptoms.
+  //
+  // NON-REGRESSION: a single distinct issue, or any case where <2 issues map to
+  // a real causalEngine key (null-mapped), leaves `top` exactly as the
+  // frequency tally chose it. Confidence gating already happened above (low-conf
+  // swings never entered the tally), so this never resurrects a gated read.
+  let causal: { rootCause: string; downstreamSymptoms: string[]; causalRationale: string } | null = null;
+  if (ranked.length >= 2) {
+    // Distinct issues that have an HONEST root key, paired with their tally entry.
+    const mapped = ranked
+      .map((r) => ({ r, key: CANONICAL_TO_FAULT[r.issue] }))
+      .filter((x): x is { r: typeof ranked[number]; key: string } => x.key != null);
+    const distinctKeys = Array.from(new Set(mapped.map((m) => m.key)));
+    if (distinctKeys.length >= 2) {
+      const ranking = rankFaults(distinctKeys);
+      // Resolve the root key back to an issue that is ACTUALLY PRESENT in this
+      // session's tally — a key can map from >1 canonical (e.g. 'over-the-top'
+      // ← over_the_top AND swing_path_outside_in), so the static first-writer
+      // reverse map could point at an absent issue. Prefer the present tally
+      // entry; fall back to the static reverse map only if none is present.
+      const rootEntry =
+        mapped.find((m) => m.key === ranking.primary)?.r ??
+        (FAULT_TO_CANONICAL[ranking.primary]
+          ? ranked.find((r) => r.issue === FAULT_TO_CANONICAL[ranking.primary])
+          : undefined);
+      // Only override the headline when the causal root is a DIFFERENT, present
+      // issue than the frequency top. If the root IS already the frequency top,
+      // nothing changes (but we still surface the symptoms framing).
+      if (rootEntry) {
+        const downstreamIssues = ranked
+          .filter((r) => r.issue !== rootEntry.issue && CANONICAL_TO_FAULT[r.issue] != null)
+          .map((r) => ISSUE_DISPLAY_NAME[r.issue]);
+        causal = {
+          rootCause: ISSUE_DISPLAY_NAME[rootEntry.issue],
+          downstreamSymptoms: downstreamIssues,
+          causalRationale: ranking.rationale,
+        };
+        if (rootEntry.issue !== top.issue) {
+          console.log('[classifier] causal root override: ' + top.issue + ' → ' + rootEntry.issue + ' (downstream: ' + downstreamIssues.join(', ') + ')');
+          top = rootEntry;
+        }
+      }
+    }
+  }
 
   if (top && swingAnalyses.length >= MIN_SESSION_SWINGS_FOR_PRIMARY && top.count >= MIN_OCCURRENCES_FOR_PRIMARY) {
     const voice = ISSUE_COACH_VOICE[top.issue];
@@ -230,6 +343,12 @@ export function classifySession(
       drill: (best?.drill ?? '').trim() || undefined,
       evidence: (best?.evidence ?? '').trim() || undefined,
       strengths: cleanStrengths(best?.strengths),
+      // 2026-06-24 — causal first-domino framing (only when 2+ distinct mapped
+      // issues produced a root; undefined otherwise so single-issue / null-mapped
+      // sessions render exactly as before).
+      root_cause: causal?.rootCause,
+      downstream_symptoms: (causal?.downstreamSymptoms?.length ?? 0) > 0 ? causal!.downstreamSymptoms : undefined,
+      causal_rationale: causal?.causalRationale,
     };
   }
 

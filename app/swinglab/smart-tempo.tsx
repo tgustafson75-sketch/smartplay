@@ -41,16 +41,28 @@ import { resolveClipUri } from '../../services/videoUpload';
 import { getLibrary } from '../../services/swingLibrary';
 import {
   computeTempo, detectTempoPhases,
-  type TempoPhases, type TempoResult, type TempoRating,
+  type TempoPhases, type TempoResult, type TempoRating, type TempoMode,
 } from '../../services/smartTempo';
+import { TempoMetronome, type MetronomeMode } from '../../services/tempoMetronome';
+import TempoPatch from '../../components/swinglab/TempoPatch';
 
 // ─── Phase model ───────────────────────────────────────────────────────
 type PhaseKey = 'backswingStartSec' | 'topSec' | 'impactSec';
 
-const PHASE_META: { key: PhaseKey; tab: string; caption: string }[] = [
+type PhaseMeta = { key: PhaseKey; tab: string; caption: string };
+
+// Full-swing labels (default). Putting reuses the same three phases but with
+// stroke-specific wording (a putt has a backstroke + a forward-stroke ball-pass,
+// not a "top of backswing" + acoustic "impact").
+const PHASE_META_FULL: PhaseMeta[] = [
   { key: 'backswingStartSec', tab: 'Backswing Start', caption: 'Mark where the club starts back' },
   { key: 'topSec',            tab: 'Top',             caption: 'Mark the top of the backswing' },
   { key: 'impactSec',         tab: 'Impact',          caption: 'Mark impact' },
+];
+const PHASE_META_PUTT: PhaseMeta[] = [
+  { key: 'backswingStartSec', tab: 'Takeaway',  caption: 'Mark where the putter starts back' },
+  { key: 'topSec',            tab: 'End of Back', caption: 'Mark the end of the backstroke (reversal)' },
+  { key: 'impactSec',         tab: 'Ball Pass', caption: 'Mark the forward stroke passing the ball' },
 ];
 
 // Rating → brand token. on_tempo=green, rushed=amber, slow/smooth=sky.
@@ -66,7 +78,7 @@ function ratingColor(rating: TempoRating, c: ReturnType<typeof useTheme>['colors
 export default function SmartTempoScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string }>();
+  const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string; tempoMode?: string }>();
 
   // The swing currently under review. swing_id binds to a persisted session
   // (so Save updates it in place); clipUri can load a bare clip with no session.
@@ -82,6 +94,56 @@ export default function SmartTempoScreen() {
   // The clip to play: an explicit clipUri param, else the loaded session's shot.
   const sourceClipUri = rawClipUri ?? shot?.clipUri ?? null;
   const inReview = sourceClipUri != null;
+
+  // 2026-06-24 (Tim — mode-aware tempo) — is this a PUTT or a FULL SWING?
+  // DTL + face-on are the SAME full swing (one shared 3:1 profile); putting is
+  // the genuinely different stroke (~2:1 + pose-only impact). Infer putt from,
+  // in order: the carried route param (Smart Motion sets tempoMode=putt when it
+  // routes a putt here), the session's putting_analysis, or a putter club tag.
+  // Everything else (incl. face-on) is a full swing.
+  const tempoMode: TempoMode = useMemo(() => {
+    if (params.tempoMode === 'putt') return 'putt';
+    if (session?.putting_analysis != null) return 'putt';
+    if (session?.club === 'PT') return 'putt';
+    return 'full_swing';
+  }, [params.tempoMode, session?.putting_analysis, session?.club]);
+  const isPuttMode = tempoMode === 'putt';
+  // Phase labels follow the mode (full swing vs putting stroke).
+  const PHASE_META = isPuttMode ? PHASE_META_PUTT : PHASE_META_FULL;
+
+  // 2026-06-24 (Tim — camera-first) — Smart Tempo opens straight into its OWN
+  // camera (Smart Motion in 'tempo' capture mode), which records the swing and
+  // routes BACK here with a swing_id → the player lands on the tempo RESULT, no
+  // manual pick. `browsing` is the escape hatch: tapping "Pick from library"
+  // sets it so the entry shows the small library option instead of re-launching
+  // the camera. autoLaunchedRef makes the launch one-shot per mount so we never
+  // ping-pong with the camera.
+  const [browsing, setBrowsing] = useState(false);
+  const autoLaunchedRef = useRef(false);
+  // `replace` controls whether launching the camera REPLACES this entry screen
+  // in the back stack (true) or pushes on top of it (false). The AUTO-launch on
+  // an empty entry replaces, so backing out of the camera returns to SwingLab —
+  // NOT this intermediate menu (Tim: "the old menu shouldn't be what you hit").
+  // A deliberate re-launch from the entry's own "Open camera" button pushes, so
+  // the user can still back out to the menu they're looking at.
+  const launchCamera = useCallback((replace = false) => {
+    const nav = replace ? router.replace : router.push;
+    nav({
+      pathname: '/swinglab/smartmotion' as never,
+      params: { captureMode: 'tempo', returnTo: '/swinglab/smart-tempo' } as never,
+    });
+  }, [router]);
+  useEffect(() => {
+    // Auto-open the camera once, on first mount, only when we landed with NO
+    // swing and aren't already reviewing one. If the user came back from a
+    // library pick or a recorded swing (inReview), or chose to browse, don't.
+    if (inReview || browsing || autoLaunchedRef.current) return;
+    if (params.swing_id || params.clipUri) return; // arrived pointed at a swing → don't hijack
+    autoLaunchedRef.current = true;
+    // REPLACE on auto-launch: the empty entry menu must not linger in the back
+    // stack, so backing out of the camera lands on SwingLab, not this menu.
+    launchCamera(true);
+  }, [inReview, browsing, params.swing_id, params.clipUri, launchCamera]);
 
   // ── Resolve the playable URI (re-anchor stale container paths) ────────
   const [playbackUri, setPlaybackUri] = useState<string | null>(sourceClipUri);
@@ -115,6 +177,10 @@ export default function SmartTempoScreen() {
   // Which marks came from auto-detection (honest "auto" vs "tap to mark" hint).
   const [autoKeys, setAutoKeys] = useState<Set<PhaseKey>>(new Set());
   const [activePhase, setActivePhase] = useState<PhaseKey>('backswingStartSec');
+  // 2026-06-24 — auto-detection confidence for the honesty banner. 'auto' = all
+  // three phases came from real signal; 'partial'/'none' = the player must refine
+  // the missing marks. Mirrors detectTempoPhases' confidence.
+  const [detectConfidence, setDetectConfidence] = useState<'auto' | 'partial' | 'none'>('none');
   const detectedForRef = useRef<string | null>(null);
 
   // Reset marks + re-run auto-detect whenever the swing source changes.
@@ -126,6 +192,7 @@ export default function SmartTempoScreen() {
     setMarks({});
     setAutoKeys(new Set());
     setActivePhase('backswingStartSec');
+    setDetectConfidence('none');
 
     // Feed detectTempoPhases whatever this swing actually persists:
     //   • IMPACT — cage swings carry shot.detectionOffsetSeconds, the acoustic
@@ -144,13 +211,14 @@ export default function SmartTempoScreen() {
       impactMs,
       poseFrames: session?.biomechanics?.frames ?? null,
       clipStartMs: 0,
-    });
+    }, tempoMode);
     const seeded: Partial<TempoPhases> = {};
     const autos = new Set<PhaseKey>();
     (['backswingStartSec', 'topSec', 'impactSec'] as PhaseKey[]).forEach(k => {
       const v = out.phases[k];
       if (typeof v === 'number') { seeded[k] = v; autos.add(k); }
     });
+    setDetectConfidence(out.confidence);
     if (Object.keys(seeded).length > 0) {
       setMarks(seeded);
       setAutoKeys(autos);
@@ -158,7 +226,7 @@ export default function SmartTempoScreen() {
       const firstMissing = (['backswingStartSec', 'topSec', 'impactSec'] as PhaseKey[]).find(k => seeded[k] == null);
       if (firstMissing) setActivePhase(firstMissing);
     }
-  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames]);
+  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames, tempoMode]);
 
   // ── Playback status ──────────────────────────────────────────────────
   const onStatus = (status: AVPlaybackStatus) => {
@@ -219,9 +287,41 @@ export default function SmartTempoScreen() {
       backswingStartSec: marks.backswingStartSec!,
       topSec: marks.topSec!,
       impactSec: marks.impactSec!,
-    });
-  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec]);
+    }, tempoMode);
+  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec, tempoMode]);
   const outOfOrder = allMarked && result == null;
+
+  // ── Metronome (actual vs ideal) ───────────────────────────────────────
+  // One TempoMetronome instance per screen; lazy-loads the tick/tock tones.
+  // The compare control plays the player's REAL measured spacing ('actual'),
+  // the tour 3:1 ('ideal'), or both back-to-back ('both') so the offset is
+  // audible — the audible twin of the TempoPatch.
+  const [metroMode, setMetroMode] = useState<MetronomeMode | null>(null);
+  const metroRef = useRef<TempoMetronome | null>(null);
+  if (metroRef.current == null) {
+    metroRef.current = new TempoMetronome({ onStop: () => setMetroMode(null) });
+  }
+  useEffect(() => {
+    const m = metroRef.current;
+    return () => { void m?.dispose(); };
+  }, []);
+  // If the marks change (re-mark) while a metronome is running, stop it so it
+  // can't keep playing a stale rhythm.
+  useEffect(() => {
+    if (metroMode && metroRef.current?.isRunning) {
+      metroRef.current.stop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.backswingMs, result?.downswingMs]);
+  const toggleMetro = useCallback((mode: MetronomeMode) => {
+    const m = metroRef.current;
+    if (!m || !result) return;
+    if (metroMode === mode) { m.stop(); setMetroMode(null); return; }
+    // Visual replay + audio compete for nothing, but stop a video replay loop so
+    // the speaker tones aren't fighting muted video (video is muted anyway).
+    setMetroMode(mode);
+    void m.play(result, mode);
+  }, [metroMode, result]);
 
   // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Fire once
   // when a tempo result first lands (all three marks placed + in order).
@@ -314,6 +414,7 @@ export default function SmartTempoScreen() {
     setRawClipUri(null);
     setSwingId(id);
     setPickerOpen(false);
+    setBrowsing(false); // picked a swing → leave browse state (now in review)
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────
@@ -351,23 +452,28 @@ export default function SmartTempoScreen() {
         // ─── A) ENTRY ────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.entryBody}>
           <Text style={[styles.blurb, { color: colors.text_muted }]}>
-            Measure your real backswing:downswing tempo vs the tour 3:1 ratio. Record or pick a
-            swing, mark the takeaway, top, and impact — we’ll read your actual ratio. No
-            guessing, only your real marks.
+            Smart Tempo opens your camera, records the swing, and reads your REAL
+            backswing:downswing ratio against the tour 3:1 — then plays it back so you can
+            HEAR and SEE the difference. No guessing, only your real marks.
           </Text>
 
           <Pressable
-            onPress={() => router.push('/swinglab/smartmotion' as never)}
+            onPress={() => launchCamera(false)}
             style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
             accessibilityRole="button"
-            accessibilityLabel="Record a swing"
+            accessibilityLabel="Open the camera and record a swing"
           >
             <Ionicons name="videocam" size={20} color="#06281b" />
-            <Text style={styles.primaryBtnText}>Record a swing</Text>
+            <Text style={styles.primaryBtnText}>Open camera</Text>
           </Pressable>
+          <Text style={[styles.metHint, { color: colors.text_muted }]}>
+            Records a swing and brings you straight to your tempo read.
+          </Text>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
           <Pressable
-            onPress={() => setPickerOpen(true)}
+            onPress={() => { setBrowsing(true); setPickerOpen(true); }}
             style={[styles.secondaryBtn, { borderColor: colors.border }]}
             accessibilityRole="button"
             accessibilityLabel="Pick a swing from your library"
@@ -376,24 +482,38 @@ export default function SmartTempoScreen() {
             <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Pick from library</Text>
           </Pressable>
 
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
           <Pressable
             onPress={() => router.push('/swinglab/tempo-trainer' as never)}
             style={[styles.secondaryBtn, { borderColor: colors.border }]}
             accessibilityRole="button"
-            accessibilityLabel="Open the tempo metronome"
+            accessibilityLabel="Open the tempo metronome to swing to a 3:1 beat"
           >
             <Ionicons name="musical-notes-outline" size={18} color={colors.accent_amber} />
-            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Metronome</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Swing to a 3:1 beat</Text>
           </Pressable>
           <Text style={[styles.metHint, { color: colors.text_muted }]}>
-            Swing to a 3:1 beat — practice the rhythm, then come back and measure it.
+            Practice the rhythm to the metronome, then record to measure it.
           </Text>
         </ScrollView>
       ) : (
         // ─── B/C) MARK + RESULT ──────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.reviewBody}>
+          {/* Mode chip — DTL + face-on read as one FULL-SWING tempo (3:1);
+              putting is the smoother, more even ~2:1 stroke. */}
+          <View style={[styles.modeChip, { borderColor: isPuttMode ? colors.accent_sky : colors.accent }]}>
+            <Ionicons
+              name={isPuttMode ? 'golf-outline' : 'speedometer-outline'}
+              size={14}
+              color={isPuttMode ? colors.accent_sky : colors.accent}
+            />
+            <Text style={[styles.modeChipText, { color: colors.text_primary }]}>
+              {isPuttMode ? 'Putting tempo' : 'Full-swing tempo'}
+            </Text>
+            <Text style={[styles.modeChipTarget, { color: colors.text_muted }]}>
+              {isPuttMode ? 'target ~2:1 · smooth & even' : 'target 3:1'}
+            </Text>
+          </View>
+
           {/* Player */}
           <View style={styles.videoWrap}>
             <Pressable style={StyleSheet.absoluteFill} onPress={() => void togglePlayPause()}>
@@ -456,6 +576,24 @@ export default function SmartTempoScreen() {
               </View>
             </Pressable>
           </View>
+
+          {/* Honesty banner — auto-detection couldn't nail every phase, so the
+              player must REFINE the missing marks. Lead with auto, flag the gap.
+              Hidden once a complete in-order result lands. */}
+          {!result && detectConfidence !== 'auto' && (
+            <View style={[styles.refineBanner, { borderColor: colors.accent_sky }]}>
+              <Ionicons name="construct-outline" size={16} color={colors.accent_sky} />
+              <Text style={[styles.refineText, { color: colors.text_secondary }]}>
+                {detectConfidence === 'none'
+                  ? (isPuttMode
+                      ? "Putting tempo is read from motion only (a putt is quiet — no strike to anchor on), so we couldn't auto-read it. Scrub the video and tap each phase — your real marks build the result."
+                      : "We couldn't auto-read this swing's tempo. Scrub the video and tap each phase to mark it — your real marks build the result.")
+                  : (isPuttMode
+                      ? 'We motion-estimated this putt, but pose-only putt reads are less certain than a full swing — scrub and confirm each phase (especially the ball-pass) so the ratio is yours.'
+                      : 'We auto-marked what we could read. Scrub to the unmarked phase(s) and mark them — your real marks build the result.')}
+              </Text>
+            </View>
+          )}
 
           {/* Phase tabs */}
           <View style={styles.tabRow}>
@@ -533,7 +671,7 @@ export default function SmartTempoScreen() {
                 <Text style={[styles.resultRating, { color: rc }]}>{result.ratingLabel}</Text>
                 <View style={styles.ratioBig}>
                   <Text style={[styles.ratioBigNum, { color: rc }]}>{result.ratioLabel}</Text>
-                  <Text style={[styles.ratioBigTarget, { color: colors.text_muted }]}>target 3:1</Text>
+                  <Text style={[styles.ratioBigTarget, { color: colors.text_muted }]}>{result.targetLabel}</Text>
                 </View>
                 <Text style={[styles.coaching, { color: colors.text_secondary }]}>{result.coaching}</Text>
 
@@ -542,6 +680,36 @@ export default function SmartTempoScreen() {
                   <DataCell label="Downswing" value={`${result.downswingMs} ms`} colors={colors} />
                   <DataCell label="Ratio" value={result.ratioLabel} colors={colors} accent={rc} />
                 </View>
+
+                {/* ── Tempo Patch — your real marks vs the ideal 3:1 ── */}
+                <TempoPatch result={result} />
+
+                {/* ── Metronome compare — HEAR actual vs ideal ── */}
+                <Text style={[styles.metroEyebrow, { color: colors.text_muted }]}>HEAR YOUR TEMPO</Text>
+                <View style={styles.metroRow}>
+                  {([
+                    { mode: 'actual' as const, label: 'Your tempo', icon: 'person-outline' as const },
+                    { mode: 'ideal' as const, label: `Ideal ${result.targetRatio}:1`, icon: 'flag-outline' as const },
+                    { mode: 'both' as const, label: 'Compare', icon: 'git-compare-outline' as const },
+                  ]).map(b => {
+                    const on = metroMode === b.mode;
+                    return (
+                      <Pressable
+                        key={b.mode}
+                        onPress={() => toggleMetro(b.mode)}
+                        style={[styles.metroBtn, { borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accent_muted : 'transparent' }]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Play ${b.label} as a metronome`}
+                      >
+                        <Ionicons name={on ? 'stop' : b.icon} size={15} color={on ? colors.accent : colors.text_primary} />
+                        <Text style={[styles.metroBtnText, { color: on ? colors.accent : colors.text_primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{on ? 'Stop' : b.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.metroHint, { color: colors.text_muted }]}>
+                  Tick-tick-tock at your measured spacing vs the {result.targetLabel}. Built from your real marks.
+                </Text>
 
                 <View style={styles.resultActions}>
                   <Pressable
@@ -659,11 +827,14 @@ export default function SmartTempoScreen() {
   // (i.e. it wasn't passed in as a route param — then back means leave).
   function backToEntry() {
     stopReplay();
+    metroRef.current?.stop();
+    setMetroMode(null);
     setSwingId(null);
     setRawClipUri(null);
     detectedForRef.current = null;
     setMarks({});
     setAutoKeys(new Set());
+    setBrowsing(false);
   }
 }
 
@@ -697,6 +868,9 @@ const styles = StyleSheet.create({
 
   // Review
   reviewBody: { paddingHorizontal: 16, paddingBottom: 48 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, marginBottom: 12 },
+  modeChipText: { fontSize: 12.5, fontWeight: '900', letterSpacing: 0.3 },
+  modeChipTarget: { fontSize: 11, fontWeight: '700' },
   videoWrap: { width: '100%', aspectRatio: 9 / 12, backgroundColor: '#000', borderRadius: 16, overflow: 'hidden' },
   videoErr: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.82)', padding: 24 },
   videoErrText: { color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center', marginTop: 10 },
@@ -719,6 +893,15 @@ const styles = StyleSheet.create({
 
   nudge: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 16 },
   nudgeText: { flex: 1, fontSize: 13, lineHeight: 19 },
+
+  refineBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginTop: 14 },
+  refineText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
+
+  metroEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, alignSelf: 'flex-start', marginTop: 18 },
+  metroRow: { flexDirection: 'row', gap: 8, marginTop: 8, width: '100%' },
+  metroBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 4 },
+  metroBtnText: { fontSize: 12.5, fontWeight: '800' },
+  metroHint: { fontSize: 11, lineHeight: 16, marginTop: 8, alignSelf: 'flex-start' },
 
   resultCard: { borderWidth: 1.5, borderRadius: 18, padding: 18, marginTop: 18, alignItems: 'center' },
   resultEyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },

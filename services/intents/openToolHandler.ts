@@ -1,5 +1,10 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import type { ToolAction } from '../../app/api/kevin+api';
+// 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
+// classifier-name map below stays (existing tool routes), but any tool_name or
+// raw transcript that matches a catalog alias also routes deterministically —
+// this is what makes "open smart tempo" / "the tempo drill card" land correctly.
+import { lookupFeature } from '../knowledgeBase/appCatalog';
 
 // 2026-05-25 — Fix E/O: voice-direct in-place mark for tee/green.
 // Returns IntentResult when the mark was captured (so the caller skips
@@ -154,6 +159,43 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   bug_log: { type: 'navigate', path: '/owner-logs' },
   buglog: { type: 'navigate', path: '/owner-logs' },
   owner_logs: { type: 'navigate', path: '/owner-logs' },
+
+  // 2026-06-24 — APP-FEATURE CATALOG routes. These SwingLab/practice cards had
+  // no deterministic voice route before — the caddie "knew" them in the prompt
+  // but couldn't open them. Each path is verified against the app/ tree and
+  // mirrors services/knowledgeBase/appCatalog.ts. Smart Tempo (the new one) is
+  // the headline fix: "open smart tempo" / "the tempo drill" now navigates.
+  smart_tempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  smarttempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  tempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  tempo_drill: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  tempo_trainer: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  drills: { type: 'navigate', path: '/drills' },
+  drill: { type: 'navigate', path: '/drills' },
+  open_range: { type: 'navigate', path: '/practice/open-range' },
+  openrange: { type: 'navigate', path: '/practice/open-range' },
+  range_mode: { type: 'navigate', path: '/practice/open-range' },
+  focus_session: { type: 'navigate', path: '/practice/session' },
+  focussession: { type: 'navigate', path: '/practice/session' },
+  shot_shapes: { type: 'navigate', path: '/practice/shot-shapes' },
+  shotshapes: { type: 'navigate', path: '/practice/shot-shapes' },
+  fit_profile: { type: 'navigate', path: '/practice/fit-profile' },
+  fitprofile: { type: 'navigate', path: '/practice/fit-profile' },
+  setup_check: { type: 'navigate', path: '/swinglab/setup-check' },
+  setupcheck: { type: 'navigate', path: '/swinglab/setup-check' },
+  smartplan: { type: 'navigate', path: '/practice/smartplan' },
+  smart_plan: { type: 'navigate', path: '/practice/smartplan' },
+  preround: { type: 'navigate', path: '/practice/preround' },
+  pre_round: { type: 'navigate', path: '/practice/preround' },
+  warm_up: { type: 'navigate', path: '/practice/preround' },
+  warmup: { type: 'navigate', path: '/practice/preround' },
+  range_import: { type: 'navigate', path: '/swinglab/range-import' },
+  import_range: { type: 'navigate', path: '/swinglab/range-import' },
+  // smartfinder already mapped above (open_smartfinder); add spoken aliases only.
+  smart_finder: { type: 'open_smartfinder' },
+  rangefinder: { type: 'open_smartfinder' },
+  play: { type: 'navigate', path: '/(tabs)/play' },
+  start_round: { type: 'navigate', path: '/(tabs)/play' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -194,6 +236,37 @@ const TOOL_LABEL: Record<string, string> = {
   bug_log: 'Issue Log',
   buglog: 'Issue Log',
   owner_logs: 'Issue Log',
+  // 2026-06-24 — APP-FEATURE CATALOG labels (parity with TOOL_NAME_TO_ACTION).
+  smart_tempo: 'Smart Tempo',
+  smarttempo: 'Smart Tempo',
+  tempo: 'Smart Tempo',
+  tempo_drill: 'Smart Tempo',
+  tempo_trainer: 'Smart Tempo',
+  drills: 'Drills',
+  drill: 'Drills',
+  open_range: 'Open Range',
+  openrange: 'Open Range',
+  range_mode: 'Open Range',
+  focus_session: 'Focus Session',
+  focussession: 'Focus Session',
+  shot_shapes: 'Shot Shapes',
+  shotshapes: 'Shot Shapes',
+  fit_profile: 'Fit Profile',
+  fitprofile: 'Fit Profile',
+  setup_check: 'Setup Check',
+  setupcheck: 'Setup Check',
+  smartplan: 'SmartPlan',
+  smart_plan: 'SmartPlan',
+  preround: 'Pre-Round Warm Up',
+  pre_round: 'Pre-Round Warm Up',
+  warm_up: 'Pre-Round Warm Up',
+  warmup: 'Pre-Round Warm Up',
+  range_import: 'Import Range Session',
+  import_range: 'Import Range Session',
+  smart_finder: 'SmartFinder',
+  rangefinder: 'SmartFinder',
+  play: 'Play',
+  start_round: 'Play',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -266,7 +339,28 @@ export const openToolHandler: IntentHandler = {
       }
     }
 
-    const action = TOOL_NAME_TO_ACTION[toolName];
+    let action = TOOL_NAME_TO_ACTION[toolName];
+
+    // 2026-06-24 — APP-FEATURE CATALOG fallback. When the explicit map misses,
+    // try the catalog's conservative alias match against the classifier's
+    // tool_name AND the raw transcript. This catches phrasings the classifier
+    // didn't normalize to a known key (e.g. "open the tempo drill card" →
+    // Smart Tempo). Only a confident whole-phrase alias match resolves; an
+    // ambiguous miss still falls through to the clarifying prompt below.
+    if (!action) {
+      const feature =
+        lookupFeature(toolName) ?? lookupFeature(intent.raw_text ?? '');
+      if (feature) {
+        action = { type: 'navigate', path: feature.route };
+        return {
+          success: true,
+          voice_response: 'Opening ' + feature.name + '.',
+          side_effects: ['navigate:' + feature.route, 'catalog_match:' + feature.id],
+          follow_up_needed: false,
+          tool_action: { type: 'navigate', path: feature.route },
+        };
+      }
+    }
 
     if (!action) {
       return {

@@ -44,9 +44,23 @@ export type SetupCheckResult = {
   evidence: string | null;
 };
 
+// Framing/validity failure — the photo was reached + read, but no readable address.
 const FAILED: SetupCheckResult = {
   valid: false,
   reason: 'Couldn\'t read your setup — stand back so I can see head to feet, face the camera, and try again.',
+  readyNote: '',
+  strengths: [],
+  adjustment: null,
+  drill: null,
+  evidence: null,
+};
+
+// 2026-06-25 (Tank) — NETWORK/server failure is NOT a framing problem; saying "stand
+// back" when the analyzer was unreachable is dishonest + sends the user re-staging a
+// fine setup. Distinct, honest message + a retry affordance.
+const FAILED_NETWORK: SetupCheckResult = {
+  valid: false,
+  reason: 'Couldn\'t reach the analyzer just now — check your signal and tap Retake to try again.',
   readyNote: '',
   strengths: [],
   adjustment: null,
@@ -63,6 +77,9 @@ export async function analyzeSetup(
   photoUri: string,
   opts?: { angle?: 'down_the_line' | 'face_on'; caddieName?: string; handedness?: 'left' | 'right' | null },
 ): Promise<SetupCheckResult> {
+  // Image read can fail for capture reasons (corrupt file) — that's a FAILED (retake),
+  // not a network issue. Done once, outside the network retry loop.
+  let b64: string;
   try {
     // Resize to ~1024px long edge so the payload clears the server frame-size
     // gate (413 over ~limit) and the upload stays fast on cell.
@@ -72,51 +89,72 @@ export async function analyzeSetup(
       { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
     );
     const FS = await import('expo-file-system/legacy');
-    const b64 = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
-    if (!b64) return FAILED;
-
-    const res = await fetch(`${getApiBaseUrl()}/api/swing-analysis`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        frames: [{ b64, media_type: 'image/jpeg' }],
-        context: {
-          club: 'setup',
-          swing_number: 1,
-          swing_tag: 'setup',
-          angle: opts?.angle ?? 'face_on',
-          caddie_name: opts?.caddieName,
-          handedness: opts?.handedness ?? null,
-          tier: 'quick',
-        },
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!res.ok) return FAILED;
-    const data = await res.json();
-
-    const validSwing = data?.valid_swing !== false; // default true (legacy-safe)
-    if (!validSwing) {
-      return {
-        ...FAILED,
-        reason: (typeof data?.validity_reason === 'string' && data.validity_reason.trim())
-          || (typeof data?.follow_up_question === 'string' && data.follow_up_question.trim())
-          || FAILED.reason,
-      };
-    }
-
-    const strengths = Array.isArray(data?.strengths)
-      ? data.strengths.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
-      : [];
-    const adjustment = typeof data?.fix === 'string' && data.fix.trim() ? data.fix.trim() : null;
-    const readyNote = typeof data?.observation === 'string' && data.observation.trim()
-      ? data.observation.trim()
-      : 'You\'re set — go.';
-    const drill = typeof data?.drill === 'string' && data.drill.trim() ? data.drill.trim() : null;
-    const evidence = typeof data?.evidence === 'string' && data.evidence.trim() ? data.evidence.trim() : null;
-
-    return { valid: true, reason: null, readyNote, strengths, adjustment, drill, evidence };
+    const s = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
+    if (!s) return FAILED;
+    b64 = s;
   } catch {
     return FAILED;
   }
+
+  const body = JSON.stringify({
+    frames: [{ b64, media_type: 'image/jpeg' }],
+    context: {
+      club: 'setup',
+      swing_number: 1,
+      swing_tag: 'setup',
+      angle: opts?.angle ?? 'face_on',
+      caddie_name: opts?.caddieName,
+      handedness: opts?.handedness ?? null,
+      // 2026-06-25 — 'full' tier (was 'quick'): setup is a one-shot pre-round read, so
+      // it should get the OpenAI fallback when Gemini fails, not Gemini-only. The server
+      // also exempts setup from the quick-short-circuit as a belt-and-suspenders.
+      tier: 'full',
+    },
+  });
+
+  // 2026-06-25 (Tank — wouldn't analyze): retry ONCE on a transient/network failure.
+  // A cold Lambda can 502 the first call; the retry lands on the now-warm function.
+  // A genuine network outage after the retry returns the honest NETWORK message, never
+  // the misleading "stand back" framing message.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!res.ok) {
+        if (attempt === 0) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+        return FAILED_NETWORK;
+      }
+      const data = await res.json();
+
+      const validSwing = data?.valid_swing !== false; // default true (legacy-safe)
+      if (!validSwing) {
+        return {
+          ...FAILED,
+          reason: (typeof data?.validity_reason === 'string' && data.validity_reason.trim())
+            || (typeof data?.follow_up_question === 'string' && data.follow_up_question.trim())
+            || FAILED.reason,
+        };
+      }
+
+      const strengths = Array.isArray(data?.strengths)
+        ? data.strengths.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
+        : [];
+      const adjustment = typeof data?.fix === 'string' && data.fix.trim() ? data.fix.trim() : null;
+      const readyNote = typeof data?.observation === 'string' && data.observation.trim()
+        ? data.observation.trim()
+        : 'You\'re set — go.';
+      const drill = typeof data?.drill === 'string' && data.drill.trim() ? data.drill.trim() : null;
+      const evidence = typeof data?.evidence === 'string' && data.evidence.trim() ? data.evidence.trim() : null;
+
+      return { valid: true, reason: null, readyNote, strengths, adjustment, drill, evidence };
+    } catch {
+      if (attempt === 0) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+      return FAILED_NETWORK;
+    }
+  }
+  return FAILED_NETWORK;
 }

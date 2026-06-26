@@ -1032,6 +1032,9 @@ export default function SwingDetail() {
           current: currentPoseForCompare,
           reference: referencePose,
           kind,
+          // Club picks the benchmark profile if this falls back to the
+          // tour-benchmark path (reference has no biomechanics).
+          club: session?.club ?? ref.club ?? null,
         });
         // 2026-05-23 — Open the visual result sheet instead of a
         // toast. The sheet renders side-by-side per-metric bars +

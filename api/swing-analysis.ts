@@ -4,6 +4,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // OpenAI gpt-4o = quality escalation (full-tier only).
 import { GoogleGenAI, Type } from '@google/genai';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -11,6 +12,14 @@ const gemini = process.env.GOOGLE_API_KEY
 // 30 s: Gemini exhausts its 13 s cap, retry fires, then OpenAI picks up the
 // rest of the budget. 22 s left barely enough; 30 s gives real headroom.
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
+// Phase 5 LAST-RESORT 3rd provider: Claude (Anthropic) fires ONLY when neither
+// Gemini nor OpenAI produced a parse — a rare safety net, NOT a routine
+// escalation. Anthropic was deliberately pulled from normal escalation for
+// cost/latency (see line 2 comment); this re-adds it as a no-dropped-connection
+// floor at ~zero added cost in the normal case.
+const anthropicClient = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 })
+  : null;
 
 function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -502,8 +511,9 @@ Rules:
  */
 
 interface AttemptResult {
-  // Phase 5: Gemini 2.5 Flash = speed primary, OpenAI gpt-4o = quality escalation.
-  provider: 'gemini' | 'openai';
+  // Phase 5: Gemini 2.5 Flash = speed primary, OpenAI gpt-4o = quality escalation,
+  // Anthropic Claude = LAST-RESORT safety net (only when neither parsed).
+  provider: 'gemini' | 'openai' | 'anthropic';
   parsed: SwingAnalysisResponse | null;
   rawText: string;
   error: string | null;
@@ -1304,6 +1314,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
+    // LAST-RESORT 3rd provider: Claude (Anthropic). Mirrors tryOpenAI's shape.
+    // Only invoked when neither Gemini nor OpenAI produced a parse (see wiring
+    // below) — a rare safety net so a read never drops a connection. NOT a
+    // routine escalation: ~zero added cost in the normal case.
+    const tryAnthropic = async (): Promise<AttemptResult> => {
+      const t0 = Date.now();
+      if (!anthropicClient) {
+        return { provider: 'anthropic', parsed: null, rawText: '', error: 'ANTHROPIC_API_KEY not configured', elapsedMs: 0 };
+      }
+      try {
+        const imageContent = frames.map(f => ({
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            // jpeg/png are the real cases; cast to the SDK's media_type union.
+            media_type: (f.media_type ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: f.b64,
+          },
+        }));
+        const msg = await anthropicClient.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1000,
+          temperature: 0.2,
+          system: systemPrompt + '\n\nReturn ONLY the JSON object per the schema — no prose, no markdown fences.',
+          messages: [
+            { role: 'user', content: [...imageContent, { type: 'text' as const, text: userText }] },
+          ],
+        });
+        const rawText = msg.content
+          .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+          .map(b => b.text)
+          .join('')
+          .trim();
+        const parsed = normalizeAnalysis(rawText, frames.length, mode);
+        return {
+          provider: 'anthropic',
+          parsed,
+          rawText,
+          error: parsed ? null : (rawText ? 'non_json_response' : 'empty_response'),
+          elapsedMs: Date.now() - t0,
+        };
+      } catch (e) {
+        return { provider: 'anthropic', parsed: null, rawText: '', error: e instanceof Error ? e.message : 'unknown', elapsedMs: Date.now() - t0 };
+      }
+    };
+
     // ── ORCHESTRATION ────────────────────────────────────────────
     const orchestrationStart = Date.now();
     const ORCHESTRATION_TOTAL_MS = 48_000;
@@ -1342,7 +1398,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // tier=quick: SmartMotion speed path ships Gemini's read immediately,
     // skipping OpenAI escalation — same latency contract as old Haiku path.
     const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
-    const quickShortCircuit = tier === 'quick';
+    // 2026-06-25 (Tank — Setup Check wouldn't analyze): a SETUP read is a one-shot
+    // pre-round capture, NOT a latency-critical live SmartMotion swing. It rode tier
+    // 'quick', which short-circuits OpenAI — so if Gemini hiccuped/timed out (cold
+    // Lambda) there was NO fallback and the server 502'd, surfacing to the user as the
+    // misleading "stand back so I can see head to feet". Exempt setup from the
+    // short-circuit so Gemini failure escalates to OpenAI (reliability > a few seconds).
+    const quickShortCircuit = tier === 'quick' && !isSetup;
     if (quickShortCircuit) {
       console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI escalation', {
         winner_provider: winner.provider,
@@ -1369,6 +1431,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     } else if (!quickShortCircuit && !meetsSpeedBar(winner.parsed)) {
       escalationReason = (escalationReason ?? '') + '_openai_skipped_budget';
+    }
+
+    // Stage 3 — Claude (Anthropic) LAST RESORT. Fires across ALL tiers
+    // (including quick) ONLY when neither Gemini nor OpenAI produced a parse
+    // (winner.parsed is still null) — so a single-provider outage never drops
+    // the read. Claude runs only when it's the difference between an answer and
+    // a 502; "we have 3 AI agents, no excuse for dropped connections."
+    if (!winner.parsed && budgetRemaining() >= 10_000) {
+      console.log('[swing-analysis] LAST-RESORT Anthropic safety net; budget_ms:', budgetRemaining());
+      const anthropicAttempt = await tryAnthropic();
+      attempts.push(anthropicAttempt);
+      if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
+        winner = anthropicAttempt;
+      }
+      escalationReason = (escalationReason ?? '') + (
+        anthropicAttempt.parsed != null ? '_anthropic_rescue' : `_anthropic_${anthropicAttempt.error ?? 'unknown_failure'}`
+      );
     }
 
     // No provider produced parseable output → 502 with full diagnostics
