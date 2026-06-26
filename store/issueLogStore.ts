@@ -42,6 +42,11 @@ export type IssueLogKind =
   // issues are diagnosable in the field (e.g. "frame_extraction_empty" with the
   // clip uri scheme + per-frame errors reveals an Android codec/VFR problem).
   | 'analysis_error'
+  // 2026-06-26 (Tim — "everything that doesn't go as planned needs to go as an
+  // error to the issue log") — voice command misses (classifier_unknown /
+  // no_handler / handler_error) now mirror into the issue log, not just the
+  // separate voice-misses store.
+  | 'voice_miss'
   | 'app_error';
 
 export interface IssueLogEntry {
@@ -96,11 +101,42 @@ interface IssueLogState {
     details?: Record<string, unknown>,
     kind?: 'analysis_error' | 'app_error',
   ) => void;
+  /** Voice "log this issue" → a real, owner-only user entry. Self-builds context
+   *  and owner-gates internally so the brain tool handler can call it directly. */
+  addUserIssue: (text: string) => void;
+  /** Voice command miss (classifier_unknown / no_handler / handler_error) mirrored
+   *  into the issue log as an error. Self-builds context. */
+  addVoiceMiss: (missType: string, details?: Record<string, unknown>) => void;
   clearAll: () => void;
   remove: (id: string) => void;
 }
 
 const MAX_ENTRIES = 100;
+
+/** Best-effort context snapshot via lazy requires (mirrors addGpsEvent/addAppEvent)
+ *  so callers don't thread route/persona/round and we avoid module-eval cycles. */
+function selfContext(route: string): IssueLogEntry['context'] {
+  let appVersion = '1.0.0';
+  let persona: string | null = null;
+  let isRoundActive = false;
+  let courseId: string | null = null;
+  let currentHole: number | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const round = require('./roundStore').useRoundStore.getState();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const settings = require('./settingsStore').useSettingsStore.getState();
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      appVersion = require('expo-constants').default?.expoConfig?.version ?? '1.0.0';
+    } catch { /* keep default */ }
+    persona = settings?.caddiePersonality ?? null;
+    isRoundActive = !!round?.isRoundActive;
+    courseId = round?.activeCourseId ?? null;
+    currentHole = round?.currentHole ?? null;
+  } catch { /* best-effort */ }
+  return { route, persona, isRoundActive, courseId, currentHole, appVersion };
+}
 
 export const useIssueLogStore = create<IssueLogState>()(
   persist(
@@ -226,6 +262,34 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] app event:', summary);
+      },
+      addUserIssue: (text) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        // Owner-gate (mirrors logIssueHandler) so only the owner's spoken issues
+        // persist. The brain `log_issue` tool is ungated; the gate lives here.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { isOwnerEmail, usePlayerProfileStore } = require('./playerProfileStore');
+          if (!isOwnerEmail(usePlayerProfileStore.getState().email)) return;
+        } catch { /* profile unavailable — best-effort, fall through */ }
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(), text: trimmed, kind: 'user', context: selfContext('caddie'),
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        console.log('[issueLog] user issue (voice):', trimmed.slice(0, 80));
+      },
+      addVoiceMiss: (missType, details) => {
+        const transcript = typeof details?.transcript === 'string' ? details.transcript : '';
+        const summary = `voice_miss: ${missType}${transcript ? ` — "${transcript.slice(0, 120)}"` : ''}`;
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(), text: summary, kind: 'voice_miss', stage: missType, details,
+          context: selfContext('voice'),
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
+        console.log('[issueLog] voice miss:', summary);
       },
       clearAll: () => set({ entries: [] }),
       remove: (id) => set(s => ({ entries: s.entries.filter(e => e.id !== id) })),

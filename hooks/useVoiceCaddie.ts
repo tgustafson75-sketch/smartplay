@@ -57,26 +57,15 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 // ─── CONSTANTS ────────────────────────────
 
 // 2026-05-25 — Bumped 4000→12000. The old 4s hard-cap clipped any
-// utterance longer than a single short phrase ("what club"), making
-// open conversation with Kevin ("hey Kevin, I've been thinking about
-// my approach shots") feel like getting timed out mid-sentence.
-// 2026-06-05 — Bumped 12s → 45s. Tim's report: longer questions
-// ("on my last shot I was thinking about laying up but ended up
-// going for it, what would you have done in that situation?") were
-// being cut mid-sentence by the 12s hard cap. The silence-VAD at
-// SILENCE_TIMEOUT_MS=4s in services/voiceService.ts is the right
-// "user stopped talking" detector — this hard cap is just the
-// "user wandered away" backstop. 45s comfortably covers any
-// natural question without truncating; user can still tap to stop.
-const AUTO_STOP_MS = 45_000;
 // 2026-06-26 (Tim — "good morning" produced a 140MB recording → transcribe
 // rejected it as too-large → no answer → re-ask). A spoken question is < 8s.
 // This is the HARD cap the silence-VAD can't be trusted to enforce: on OEMs that
 // don't report mic metering (Tim's Samsung), the metering-based silence detector
-// never fires, and the only backstop (AUTO_STOP via handleMicPress) early-returns
+// never fires, and the old backstop (AUTO_STOP via handleMicPress) early-returned
 // on the in-flight guards WITHOUT stopping the mic — so it ran unbounded for
-// minutes and ballooned the file. 12s wall-clock, enforced directly on the
+// minutes and ballooned the file. 8s wall-clock, enforced directly on the
 // recording object, guarantees a small, uploadable capture on every device.
+// (Replaces the old 45s AUTO_STOP_MS backstop, which is gone.)
 const MAX_RECORD_MS = 8_000;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
@@ -1250,7 +1239,7 @@ export const useVoiceCaddie = ({
   const followUpDepthRef = useRef(0);
 
   const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
-    // 2026-06-05 — Bumped 6s → 30s. Same reason as AUTO_STOP_MS above:
+    // 2026-06-05 — Bumped 6s → 30s. Like the MAX_RECORD_MS cap above:
     // this is a HARD cap on total mic-on time, not "stop after user
     // stops talking" (the 4s silence-VAD in voiceService.captureUtterance
     // handles that). 6s was killing the mic mid-answer on any follow-up
@@ -2167,7 +2156,7 @@ export const useVoiceCaddie = ({
       // ≥ SILENCE_TIMEOUT_MS), auto-trigger handleMicPress() to stop
       // and process. Eliminates the "first question waits forever"
       // gap Tim reported — the first turn no longer needs a manual
-      // tap to end. 45s AUTO_STOP_MS remains as the wandered-away
+      // tap to end. The MAX_RECORD_MS wall-clock cap is the wandered-away
       // backstop.
       let micHasSpoken = false;
       let micLastLoudAt = Date.now();
@@ -2220,7 +2209,7 @@ export const useVoiceCaddie = ({
         else { wrappedOnVoiceStateChange('idle'); }
       };
 
-      // Poll every 200ms. The 12s wall-clock cap is metering-INDEPENDENT (so it
+      // Poll every 200ms. The 8s wall-clock cap is metering-INDEPENDENT (so it
       // fires on Samsung et al. where status.metering never arrives); the
       // silence-VAD is the faster early-stop when metering IS reported.
       silenceVadTimer.current = setInterval(() => {

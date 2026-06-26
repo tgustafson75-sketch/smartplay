@@ -144,6 +144,8 @@ export type ToolAction =
   | { type: 'record_swing' }
   | { type: 'log_shot'; direction?: string; contactQuality?: string; outcome?: string; feel?: string }
   | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
+  // 2026-06-26 — voice "log this issue" → a real issue-log entry (owner-gated client-side)
+  | { type: 'log_issue'; note: string }
   // Phase R — generic in-app navigation for voice handlers (swing detail, library)
   | { type: 'open_url'; url: string }
   // 2026-06-04 — Tool-handler navigation deferred to the client so the

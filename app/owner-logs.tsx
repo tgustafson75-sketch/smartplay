@@ -43,6 +43,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'transcribe_error':  return 'TRANSCRIBE';
     case 'gps_error':         return 'GPS';
     case 'analysis_error':    return 'ANALYSIS';
+    case 'voice_miss':        return 'MISS';
     case 'app_error':         return 'APP';
     case 'user':              return 'USER';
   }
@@ -55,6 +56,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'transcribe_error':  return '#8b5cf6'; // purple — Whisper failed
     case 'gps_error':         return '#06b6d4'; // cyan — GPS/location failure
     case 'analysis_error':    return '#10b981'; // green — swing/frame analysis failure
+    case 'voice_miss':        return '#eab308'; // yellow — command not understood/handled
     case 'app_error':         return '#f97316'; // orange — other app failure
     case 'user':              return '#6b7280';
   }

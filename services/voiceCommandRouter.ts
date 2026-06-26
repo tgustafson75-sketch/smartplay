@@ -261,6 +261,20 @@ function logVoiceMiss(args: {
       surface,
       context: { persona, isRoundActive, currentHole },
     });
+    // 2026-06-26 (Tim — "everything that doesn't go as planned needs to go as an
+    // error to the issue log") — mirror the miss into the unified issue log too,
+    // so misses live alongside voice/transcribe/gps/app errors (not only in the
+    // separate voice-misses tool).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
+      useIssueLogStore.getState().addVoiceMiss(args.missType, {
+        transcript: args.transcript,
+        intent_type: args.intent_type,
+        error_message: args.error_message,
+        surface,
+      });
+    } catch (e) { console.log('[voiceCommandRouter] issue-log mirror failed (non-fatal):', e); }
   } catch (e) {
     console.log('[voiceCommandRouter] logVoiceMiss failed (non-fatal):', e);
   }

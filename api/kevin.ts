@@ -121,6 +121,17 @@ const AI_TOOLS: AiToolDef[] = [
     },
   },
   {
+    name: 'log_issue',
+    description: 'Capture an app issue / bug / feedback into the in-app ISSUE LOG when Tim explicitly asks you to record it. Trigger on: "log this", "log an issue", "log a bug", "report a bug", "note this", "make a note", "save this for later", "I have feedback", "remember this issue", "this is broken", "this doesn\'t work" — followed by what to log. Pass `note` = the issue description with the wake phrase stripped (e.g. "log an issue: the first response lags" → note:"the first response lags"). This is NOT a conversational "noted" — it writes a real, reviewable issue-log entry. Use whenever he wants something logged for later review.',
+    parameters: {
+      type: 'object',
+      properties: {
+        note: { type: 'string', description: 'The issue / bug / feedback description, wake phrase stripped.' },
+      },
+      required: ['note'],
+    },
+  },
+  {
     name: 'record_swing',
     description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
     parameters: { type: 'object', properties: {}, required: [] },
@@ -1189,9 +1200,10 @@ ${onCourseContextBlock}${baseMessage}`
     const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
     const startedAt = Date.now();
 
-    // 3-way provider chain: Gemini → OpenAI → Anthropic (or rotated from the
-    // user's selected primary). Each error auto-advances to the next before
-    // the outer catch returns any failure text to the user.
+    // 3-way provider chain. `provider` is pinned to 'openai' above (Tim's split:
+    // OpenAI brain, Gemini vision), so the EFFECTIVE order is openai → anthropic →
+    // gemini (primaryIdx rotates the array). Each error auto-advances to the next
+    // before the outer catch returns any failure text to the user.
     const PROVIDER_ORDER: AiProvider[] = ['gemini', 'openai', 'anthropic'];
     const primaryIdx = PROVIDER_ORDER.indexOf(provider);
     const [fallback1, fallback2] = [
@@ -1278,7 +1290,12 @@ ${onCourseContextBlock}${baseMessage}`
           };
           break;
         }
+        case 'log_issue': {
+          capture.action = { type: 'log_issue', note: String(input.note ?? '') };
+          break;
+        }
       }
+      if (name === 'log_issue') return 'Logged it to the issue log.';
       return 'Action triggered.';
     };
 

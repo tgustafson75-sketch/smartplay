@@ -48,7 +48,7 @@ async function fetchCourse(path: string): Promise<unknown> {
 const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'log_score', 'log_emotional_state',
-  'mark_tee', 'mark_green',
+  'mark_tee', 'mark_green', 'log_issue',
 ]);
 
 // ── Kevin's tools (same definitions as api/kevin.ts AI_TOOLS) ─────────────
@@ -115,6 +115,15 @@ const KEVIN_TOOLS: AiToolDef[] = [
         valence: { type: 'string', enum: ['positive','neutral','negative'] },
       },
       required: ['state', 'valence'],
+    },
+  },
+  {
+    name: 'log_issue',
+    description: 'Capture an app issue / bug / feedback into the in-app ISSUE LOG when the player asks you to record it ("log this", "log an issue", "report a bug", "note this", "make a note", "this is broken", "I have feedback" + the description). Pass `note` = the issue text with the wake phrase stripped. NOT a conversational "noted" — it writes a real, reviewable issue-log entry.',
+    parameters: {
+      type: 'object',
+      properties: { note: { type: 'string', description: 'The issue / bug / feedback description, wake phrase stripped.' } },
+      required: ['note'],
     },
   },
   {

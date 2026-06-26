@@ -1399,6 +1399,22 @@ export default function CaddieTab() {
         } catch (e) { console.log('[caddie] emotion toast failed (non-fatal):', e); }
         break;
       }
+      case 'log_issue': {
+        // 2026-06-26 (Tim) — "log this issue" via voice writes a REAL issue-log
+        // entry (not a conversational "noted"). addUserIssue self-builds context
+        // and owner-gates, so this works regardless of voice orchestrator. The
+        // brain already spoke the confirmation; this just persists it.
+        const a = action as { note: string };
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const issue = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
+          issue.useIssueLogStore.getState().addUserIssue(a.note ?? '');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
+          toast.useToastStore.getState().show('📝 Logged to the issue log');
+        } catch (e) { console.log('[caddie] log_issue write failed (non-fatal):', e); }
+        break;
+      }
       case 'record_swing':
         // 2026-06-15 (Tim) — if Smart Motion is already open, ARM the recorder in
         // place (the bus) instead of navigating to the wrong screen. The old route
