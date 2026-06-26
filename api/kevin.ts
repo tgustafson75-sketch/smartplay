@@ -274,7 +274,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Mirrors api/voice.ts pre-warm shape. ~$0.0001 per warmup.
   // Distinct from the __ping__ keep-warm pattern which only warms
   // the Lambda runtime, not the provider SDKs.
-  const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+  // 2026-06-26 (Tim — "split: OpenAI brain, Gemini vision") — the conversational
+  // BRAIN is pinned to OpenAI. A slow Gemini primary was hanging voice past the
+  // client timeout before the server's gemini→openai failover could swap in, so
+  // the toggle was silently gambling the whole voice turn. Vision/swing-analysis
+  // keeps Gemini via its OWN endpoints, which still read the X-AI-Provider header
+  // independently — only the brain is pinned here. requestedProvider is retained
+  // for telemetry. Fallback order becomes openai → anthropic → gemini.
+  const requestedProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+  const provider: AiProvider = 'openai';
+  if (requestedProvider !== 'openai') console.log(`[kevin] brain pinned to openai (toggle requested ${requestedProvider})`);
 
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     await Promise.allSettled([
