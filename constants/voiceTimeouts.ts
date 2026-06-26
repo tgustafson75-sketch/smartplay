@@ -8,4 +8,8 @@
  * 30s is the OUTER bound: the server brain's realistic worst case (cold Lambda +
  * a tool round) is ~20s, so 30s gives margin without killing a working call.
  */
-export const BRAIN_FETCH_TIMEOUT_MS = 30_000;
+// 2026-06-26 — 30s → 15s. The brain answers in ~3-5s (measured: cold 4.4s, warm
+// 3.0s for "good morning", TTS included). If it isn't back in 15s the request
+// isn't getting through — fail fast so the spoken fallback fires instead of
+// leaving the user staring at "thinking" for half a minute.
+export const BRAIN_FETCH_TIMEOUT_MS = 15_000;

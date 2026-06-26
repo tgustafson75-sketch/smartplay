@@ -69,14 +69,14 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 // natural question without truncating; user can still tap to stop.
 const AUTO_STOP_MS = 45_000;
 // 2026-06-26 (Tim — "good morning" produced a 140MB recording → transcribe
-// rejected it as too-large → no answer → re-ask). A spoken question is < 12s.
+// rejected it as too-large → no answer → re-ask). A spoken question is < 8s.
 // This is the HARD cap the silence-VAD can't be trusted to enforce: on OEMs that
 // don't report mic metering (Tim's Samsung), the metering-based silence detector
 // never fires, and the only backstop (AUTO_STOP via handleMicPress) early-returns
 // on the in-flight guards WITHOUT stopping the mic — so it ran unbounded for
 // minutes and ballooned the file. 12s wall-clock, enforced directly on the
 // recording object, guarantees a small, uploadable capture on every device.
-const MAX_RECORD_MS = 12_000;
+const MAX_RECORD_MS = 8_000;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
 // launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
@@ -95,7 +95,11 @@ const MAX_RECORD_MS = 12_000;
 // even called. On 5G full bars Tim still saw "Aborted" at 20s because the
 // cold Lambda + Deepgram margin was too tight. 45s = generous headroom with
 // no UX cost (device-TTS fallback fires immediately when abort fires).
-const TRANSCRIBE_TIMEOUT_MS = 45000;
+// 2026-06-26 — 45s → 12s. Transcribe is < 1s when the network is reachable
+// (Deepgram nova-2, measured 0.27-0.85s). If it isn't back in 12s the request
+// isn't getting through, and waiting 45s (then RETRYING for another 45s = 90s of
+// dead "thinking") helps nobody. Fail fast, speak a fallback, reset to idle.
+const TRANSCRIBE_TIMEOUT_MS = 12000;
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
 // realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
 // The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
@@ -136,7 +140,12 @@ export function endsAsQuestion(raw: string | null | undefined): boolean {
   // an answer: "How are you feeling today? Take your time." / "...today? 🙂".
   return t.slice(lastQ + 1).trim().length <= 30;
 }
-const MIC_SILENCE_TIMEOUT_MS = 4000;
+// 2026-06-26 (Tim — "12s is way too long, needs to be ~3s") — drop the
+// stop-on-silence gap 4s → 1.2s so the mic closes ~1s after you finish talking
+// (when metering is reported). Natural mid-sentence pauses are < 0.8s, so 1.2s
+// won't clip a normal question. NOTE: this only helps on devices that report
+// status.metering; metering-less OEMs still fall back to the MAX_RECORD_MS cap.
+const MIC_SILENCE_TIMEOUT_MS = 1200;
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but
@@ -1477,13 +1486,19 @@ export const useVoiceCaddie = ({
       try {
         transcribeRes = await doTranscribeFetch();
       } catch (firstErr) {
-        const isAbort = firstErr instanceof Error && firstErr.name === 'AbortError';
-        if (isAbort) {
-          console.log('[voice] transcribe attempt 1 aborted — retrying once');
-          transcribeRes = await doTranscribeFetch();
-        } else {
-          throw firstErr;
-        }
+        // 2026-06-26 — FAIL FAST. A timeout/abort means the request isn't
+        // getting through; the old retry just doubled the dead wait to ~90s
+        // ("stuck thinking" for minutes). One honest spoken fallback, reset to
+        // idle, never hang.
+        const name = firstErr instanceof Error ? firstErr.name : 'transcribe_fetch_failed';
+        console.log('[voice] transcribe failed/timed out — not retrying:', name);
+        logTranscribeError(null, name, { source: 'processAudioUri_fastfail' });
+        try { Vibration.vibrate(120); } catch {}
+        onResponseReceived("I'm not reaching the network right now — try again in a sec.");
+        if (voiceEnabled) void speakDeviceNotice("I'm not reaching the network right now — try again in a sec.", language, voiceGender).catch(() => {});
+        wrappedOnVoiceStateChange('idle');
+        isProcessingRef.current = false;
+        return;
       }
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };
