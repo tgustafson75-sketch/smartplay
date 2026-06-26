@@ -68,6 +68,15 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 // "user wandered away" backstop. 45s comfortably covers any
 // natural question without truncating; user can still tap to stop.
 const AUTO_STOP_MS = 45_000;
+// 2026-06-26 (Tim — "good morning" produced a 140MB recording → transcribe
+// rejected it as too-large → no answer → re-ask). A spoken question is < 12s.
+// This is the HARD cap the silence-VAD can't be trusted to enforce: on OEMs that
+// don't report mic metering (Tim's Samsung), the metering-based silence detector
+// never fires, and the only backstop (AUTO_STOP via handleMicPress) early-returns
+// on the in-flight guards WITHOUT stopping the mic — so it ran unbounded for
+// minutes and ballooned the file. 12s wall-clock, enforced directly on the
+// recording object, guarantees a small, uploadable capture on every device.
+const MAX_RECORD_MS = 12_000;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
 // launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
@@ -2134,31 +2143,44 @@ export const useVoiceCaddie = ({
       recordingRef.current = recording;
       devLog('[voice] recording started');
 
-      // 2026-06-06 — Silence-VAD polling timer. Checks every 200ms
-      // whether the user has stopped talking. When the condition trips,
-      // fires handleMicPress() to stop+process (same as a manual tap
-      // or AUTO_STOP_MS firing). silenceVadTimerRef gets cleared in
-      // the STOP branch via clearAutoStop() — we attach to the same
-      // ref pattern so the existing teardown covers it.
+      // 2026-06-26 — DIRECT hard-stop. The auto-stop must NOT route through
+      // handleMicPress: its isSessionInFlight() / isProcessingRef guards
+      // early-return without stopping the recording, which is exactly how a
+      // "good morning" ran unbounded into a 140MB file (the guarded backstop
+      // fired, bailed, and left the mic open). This stops the recording OBJECT
+      // itself, then hands the URI straight to processAudioUri (which keeps its
+      // own size/duration guards). Idempotent: first caller nulls recordingRef,
+      // any second caller sees null and returns.
+      const recordStartedAt = Date.now();
+      const hardStopAndProcess = async () => {
+        if (silenceVadTimer.current) { clearInterval(silenceVadTimer.current); silenceVadTimer.current = null; }
+        if (autoStopTimer.current) { clearTimeout(autoStopTimer.current); autoStopTimer.current = null; }
+        const rec = recordingRef.current;
+        if (!rec) return;
+        recordingRef.current = null;
+        wrappedOnVoiceStateChange('thinking');
+        let uri: string | null = null;
+        try {
+          await rec.stopAndUnloadAsync();
+          uri = rec.getURI();
+        } catch (e) { console.log('[voice] hard-stop error:', e); }
+        if (uri) { await processAudioUri(uri); }
+        else { wrappedOnVoiceStateChange('idle'); }
+      };
+
+      // Poll every 200ms. The 12s wall-clock cap is metering-INDEPENDENT (so it
+      // fires on Samsung et al. where status.metering never arrives); the
+      // silence-VAD is the faster early-stop when metering IS reported.
       silenceVadTimer.current = setInterval(() => {
         if (!recordingRef.current) return;
+        if (Date.now() - recordStartedAt >= MAX_RECORD_MS) {
+          void hardStopAndProcess().catch(() => undefined);
+          return;
+        }
         if (micHasSpoken && Date.now() - micLastLoudAt >= MIC_SILENCE_TIMEOUT_MS) {
-          // 2026-06-14 (audit) — clear the interval BEFORE firing so the stop runs
-          // exactly once. Previously it kept firing handleMicPress() every 200ms
-          // while the condition stayed true (e.g. handleMicPress early-returned on
-          // the in-flight guard), and the promise floated uncaught.
-          if (silenceVadTimer.current) { clearInterval(silenceVadTimer.current); silenceVadTimer.current = null; }
-          void handleMicPress().catch(() => undefined);
+          void hardStopAndProcess().catch(() => undefined);
         }
       }, 200);
-
-      // Auto-stop after AUTO_STOP_MS (hard cap / wandered-away backstop)
-      autoStopTimer.current = setTimeout(() => {
-        autoStopTimer.current = null;
-        if (recordingRef.current) {
-          void handleMicPress().catch(() => undefined);
-        }
-      }, AUTO_STOP_MS);
 
     } catch (err) {
       console.log('[voice] record error:', err);
