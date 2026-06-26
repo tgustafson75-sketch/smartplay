@@ -65,8 +65,19 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open SwingLab (swing analysis + practice drills). Call ONLY when the player is SPECIFIC — they explicitly say "open swinglab"/"swing lab", OR name a specific activity (a drill, tempo trainer, open range, focus session, "record my swing", "swing analysis"). Do NOT call this for a VAGUE wish like "I want to practice" — instead ASK what they want to work on and offer to open the Swing Lab; only open once they pick something or confirm.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself with NO specific destination. If they name a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so they land ON that feature, not the hub. For a VAGUE "I want to practice", ASK what they want, then navigate once they pick.',
     parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'navigate',
+    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", a fault drill ("the over-the-top drill", "chicken wing drill"). Pass `feature` as the feature NAME (or a listed alias) from the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when they name a destination.',
+    parameters: {
+      type: 'object',
+      properties: {
+        feature: { type: 'string', description: 'The destination feature NAME (or alias) from the APP FEATURES list, e.g. "Smart Tempo", "Drills", "Over the Top Drill".' },
+      },
+      required: ['feature'],
+    },
   },
   {
     name: 'log_score',
@@ -291,11 +302,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const { text, history = [], context = {} } = req.body as {
+  const { text, history = [], context = {}, screen_context = null } = req.body as {
     text: string;
     history: HistoryMsg[];
     context: Record<string, unknown>;
+    screen_context?: string | null;
   };
+  // Parity with api/kevin.ts — ephemeral "current screen/drill" so a question
+  // asked from inside a drill is answered about THAT drill. Capped for safety.
+  const _screenContext: string | null =
+    typeof screen_context === 'string' && screen_context.trim()
+      ? screen_context.slice(0, 600)
+      : null;
 
   if (!text?.trim()) return res.status(400).json({ error: 'text is required' });
 
@@ -318,12 +336,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
       kbAddendum =
-        `\n\nAPP FEATURES YOU KNOW (reference these by name and open them with the open tools when the player asks):\n${catalogForPrompt()}`
+        `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
         + (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
     } catch { /* KB is best-effort — never break the turn */ }
-    const system = kbAddendum ? baseSystem + kbAddendum : baseSystem;
+    const systemBase = kbAddendum ? baseSystem + kbAddendum : baseSystem;
+    const system = _screenContext ? `${systemBase}\n\n${_screenContext}` : systemBase;
 
     // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
     // provider hiccup, so the live-voice caddie said "give me one sec" every turn
@@ -369,6 +388,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           } catch (e) { return `Hole lookup failed: ${e instanceof Error ? e.message : String(e)}`; }
         }
 
+        if (toolName === 'navigate') {
+          // Parity with api/kevin.ts — resolve a named feature/drill to its real
+          // route via the shared catalog and return a navigate action the client
+          // already dispatches. Covers every screen + fault drill by name.
+          try {
+            const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
+            const feat = lookupFeature(String(toolInput.feature ?? ''));
+            if (feat) {
+              toolActions.push({ type: 'navigate', path: feat.route });
+              return `Opening ${feat.name}.`;
+            }
+            return 'I could not find that screen.';
+          } catch { return 'Navigation failed.'; }
+        }
+
         if (toolName === 'configure_drill') {
           toolActions.push({ type: 'configure_drill', club: toolInput.club, shot_count: toolInput.shot_count ?? 3 });
           return `Drill configured: ${toolInput.club ?? 'current club'}, ${toolInput.shot_count ?? 3} swings.`;
@@ -388,7 +422,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return 'Done.';
     };
 
-    const PROVIDER_ORDER = ['anthropic', 'openai', 'gemini'] as const;
+    // 2026-06-26 (Tim — "split: OpenAI brain, Gemini vision"; parity with kevin's
+    // OpenAI pin) — lead with OpenAI for the conversational brain (reliable + fast
+    // first token), then Anthropic, then Gemini. Vision stays Gemini on its own
+    // endpoints. A slow primary fails over fast via the per-provider cap below.
+    const PROVIDER_ORDER = ['openai', 'anthropic', 'gemini'] as const;
     const cap = <T,>(p: Promise<T>, ms: number): Promise<T> =>
       Promise.race([p, new Promise<never>((_, r) => setTimeout(() => r(new Error('provider timeout')), ms))]);
 
@@ -407,7 +445,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
           9_000,
         );
-        if (provider !== 'anthropic') console.log(`[pipecat-turn] fell back to ${provider}`);
+        if (provider !== 'openai') console.log(`[pipecat-turn] fell back to ${provider}`);
         break;
       } catch (e) {
         lastErr = e;

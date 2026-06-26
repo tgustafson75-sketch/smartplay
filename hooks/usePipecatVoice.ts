@@ -22,6 +22,7 @@ import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
+import { screenContextForPrompt } from '../services/screenContext';
 import { devLog } from '../services/devLog';
 import type { ToolAction } from '../app/api/kevin+api';
 
@@ -282,6 +283,9 @@ export function usePipecatVoice({
           text: transcript,
           history: historyRef.current,
           context: buildContext(),
+          // 2026-06-26 — parity with the kevin path: send the ephemeral current
+          // screen/drill so the live brain answers drill-aware too.
+          screen_context: screenContextForPrompt(),
           sessionId: sessionIdRef.current,
         }),
       });
