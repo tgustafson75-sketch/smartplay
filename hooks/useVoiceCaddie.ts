@@ -173,13 +173,28 @@ const CLOSE_INTENT_PATTERNS: RegExp[] = [
   /^that('?s|\s+is)?\s+all\.?$/i,
   /^(that('?s|\s+is)?\s+)?all\s*good\.?$/i,
   /^(no[,\s]*)?(that'?s|that\s+is)\s+all\.?$/i,
+  /^nothing\s*(else)?\.?$/i,
+  /^(i\s*)?appreciate\s*(it|you|that)?\.?$/i,
   /^bye\.?$/i,
   /^later\.?$/i,
   /^talk\s*to\s*you\s*later\.?$/i,
 ];
 function isCloseIntent(transcript: string): boolean {
-  const cleaned = transcript.trim().toLowerCase();
+  let cleaned = transcript.trim().toLowerCase();
   if (!cleaned) return false;
+  // 2026-06-26 (Tim — trapped in continuous mode: "I'm good, thank you" kept the
+  // loop alive). The patterns above require the close phrase to be the WHOLE
+  // utterance, so any trailing politeness ("..., thank you") or filler ("... man",
+  // "... for now") broke the match. Strip those benign words first, THEN test —
+  // so natural sign-offs actually end the conversation. These words carry no
+  // content, so removing them can't turn a real question into a false close.
+  cleaned = cleaned
+    .replace(/[.!?]+$/g, '')
+    .replace(/\b(thanks?|thank\s*you|please|man|buddy|dude|bro|cheers|okay|ok|alright|cool|for\s*now|right\s*now)\b/g, ' ')
+    .replace(/[,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return true; // utterance was ONLY politeness ("thank you") → close
   return CLOSE_INTENT_PATTERNS.some(p => p.test(cleaned));
 }
 
