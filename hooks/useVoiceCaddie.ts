@@ -1483,6 +1483,7 @@ export const useVoiceCaddie = ({
       };
 
       let transcribeRes: Response;
+      const txStart = Date.now();
       try {
         transcribeRes = await doTranscribeFetch();
       } catch (firstErr) {
@@ -1491,8 +1492,27 @@ export const useVoiceCaddie = ({
         // ("stuck thinking" for minutes). One honest spoken fallback, reset to
         // idle, never hang.
         const name = firstErr instanceof Error ? firstErr.name : 'transcribe_fetch_failed';
-        console.log('[voice] transcribe failed/timed out — not retrying:', name);
-        logTranscribeError(null, name, { source: 'processAudioUri_fastfail' });
+        const elapsedMs = Date.now() - txStart;
+        // 2026-06-26 DIAGNOSTIC — split "multipart upload to vercel fails" from
+        // "host unreachable from this phone". Fire a tiny JSON ping to the SAME
+        // host: if the ping lands but the multipart transcribe didn't, it's the
+        // file-upload path (client fix). If the ping ALSO fails, the phone can't
+        // reach the server at all (network/domain). elapsedMs ~12000 = connected
+        // then stalled; < ~1000 = couldn't connect.
+        let pingOk = false; let pingMs = -1;
+        try {
+          const pc = new AbortController();
+          const pt = setTimeout(() => pc.abort(), 5000);
+          const pStart = Date.now();
+          const pr = await fetch(apiUrl + '/api/kevin', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: '__ping__' }), signal: pc.signal,
+          }).finally(() => clearTimeout(pt));
+          pingMs = Date.now() - pStart;
+          pingOk = pr.ok;
+        } catch { pingOk = false; }
+        console.log('[voice] transcribe failed — not retrying:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
+        logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
         try { Vibration.vibrate(120); } catch {}
         onResponseReceived("I'm not reaching the network right now — try again in a sec.");
         if (voiceEnabled) void speakDeviceNotice("I'm not reaching the network right now — try again in a sec.", language, voiceGender).catch(() => {});
