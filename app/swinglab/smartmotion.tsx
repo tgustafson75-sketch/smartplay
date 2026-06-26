@@ -2985,19 +2985,9 @@ export default function SmartMotion() {
           </View>
         </View>
 
-        {/* 2026-06-13 (#5) — DRILL banner. When Smart Motion was opened from a
-            drill card, name the drill + its shot count over the live view so the
-            session reads as "practicing THIS drill," not a generic capture. */}
-        {isDrill && (phase === 'setup' || phase === 'recording') ? (
-          <View style={[styles.drillBannerWrap, { top: insets.top + 46 }]} pointerEvents="none">
-            <View style={styles.drillBanner}>
-              <Ionicons name="barbell-outline" size={13} color="#06140b" />
-              <Text style={styles.drillBannerText} numberOfLines={1}>
-                {`DRILL · ${drillName ?? 'Practice'} · ${drillShotCount} shots`}
-              </Text>
-            </View>
-          </View>
-        ) : null}
+        {/* 2026-06-26 (Tim) — DRILL banner relocated from the top to the bottom
+            (where the swing-count pill sits for non-drills) + made prominent. See
+            the styled banner below the swing-count selector. */}
 
         {/* SHOT-REST swing-count selector — 2026-06-16 (Tim). Non-drill setup only.
             OPEN = the free window; 1/3/5 caps the session to exactly that many swings
@@ -3027,6 +3017,20 @@ export default function SmartMotion() {
               })}
             </View>
           </Animated.View>
+        ) : null}
+
+        {/* DRILL BANNER — 2026-06-26 (Tim): SmartMotion looks the same for every
+            drill by design, so a distinct, high-contrast label makes it instantly
+            clear WHICH drill you're recording. Sits exactly where the swing-count
+            pill sits for non-drills (free in drill mode), above the tab bar. Shows
+            through setup + recording so a capture reads as "this is the X drill". */}
+        {isDrill && (phase === 'setup' || phase === 'recording') ? (
+          <View style={[styles.drillBanner, { bottom: insets.bottom + 64 }]} pointerEvents="none">
+            <Text style={styles.drillBannerKicker}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
+            <Text style={styles.drillBannerName} numberOfLines={1}>
+              {(typeof drillName === 'string' && drillName.trim() ? drillName.trim() : 'Practice').toUpperCase()}
+            </Text>
+          </View>
         ) : null}
 
         {/* SETUP TOOLS — 2026-06-13 (Tim): collapsed to a single chevron by default
@@ -3745,17 +3749,17 @@ const styles = StyleSheet.create({
   },
   dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
-  drillBannerWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6 },
   swingCountOuter: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6, pointerEvents: 'box-none' },
   swingCountPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   swingCountLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 2 },
   swingCountChip: { minWidth: 30, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
   swingCountText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  drillBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#7CE04F', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 13,
-  },
-  drillBannerText: { color: '#06140b', fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
+  // 2026-06-26 (Tim) — DRILL identity banner. Canonical SmartMotion icon green
+  // (#88F700) + heavy uppercase + wide tracking = a deliberately DIFFERENT look
+  // from the rest of the HUD so the drill reads at a glance while recording.
+  drillBanner: { position: 'absolute', alignSelf: 'center', alignItems: 'center', zIndex: 6, paddingHorizontal: 20, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(6,20,11,0.74)', borderWidth: 1.5, borderColor: '#88F700' },
+  drillBannerKicker: { color: '#88F700', fontSize: 10, fontWeight: '700', letterSpacing: 4, marginBottom: 2 },
+  drillBannerName: { color: '#FFFFFF', fontSize: 21, fontWeight: '900', letterSpacing: 1.5 },
 
   rightRail: { position: 'absolute', right: 8, width: 124, gap: 8, zIndex: 4 },
   leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },

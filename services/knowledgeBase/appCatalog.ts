@@ -198,6 +198,59 @@ export const APP_FEATURES: AppFeature[] = [
   },
 ];
 
+// ── FAULT DRILLS (voice-addressable) ─────────────────────────────────────────
+// Each opens SmartMotion in DRILL mode via the SAME deep-link the Drills detail
+// screen pushes (app/drills/[issue].tsx). Mirrors data/drillCatalog.ts practice
+// configs — duplicated here (NOT imported) because drillCatalog pulls in
+// react-native + PNG require()s and can't load server-side, where this catalog
+// is also read for the brain prompt. "Tempo" is intentionally omitted: the
+// richer Smart Tempo screen (above) owns tempo. Keep in sync with drillCatalog.
+const DRILLS: ReadonlyArray<{
+  id: string; title: string; shots: number; shotType: string;
+  focus: string; angle: string; aliases: string[];
+}> = [
+  { id: 'over_the_top',          title: 'Over the Top',       shots: 5, shotType: 'full', focus: 'path',       angle: 'down_the_line', aliases: ['over the top', 'coming over the top', 'casting', 'over the top fix'] },
+  { id: 'swing_path_outside_in', title: 'Outside-In Path',    shots: 5, shotType: 'full', focus: 'path',       angle: 'down_the_line', aliases: ['outside in', 'outside-in', 'outside in path', 'slice path'] },
+  { id: 'swing_path_inside_out', title: 'Inside-Out Path',    shots: 5, shotType: 'full', focus: 'path',       angle: 'down_the_line', aliases: ['inside out', 'inside-out', 'inside out path', 'hook path'] },
+  { id: 'club_face_open',        title: 'Open Clubface',      shots: 3, shotType: 'full', focus: 'grip',       angle: 'face_on',       aliases: ['open clubface', 'open face', 'face open'] },
+  { id: 'club_face_closed',      title: 'Closed Clubface',    shots: 3, shotType: 'full', focus: 'grip',       angle: 'face_on',       aliases: ['closed clubface', 'closed face', 'face closed'] },
+  { id: 'early_extension',       title: 'Early Extension',    shots: 5, shotType: 'full', focus: 'posture',    angle: 'down_the_line', aliases: ['early extension', 'standing up', 'losing posture'] },
+  { id: 'attack_angle_steep',    title: 'Steep Attack',       shots: 5, shotType: 'full', focus: 'posture',    angle: 'down_the_line', aliases: ['steep attack', 'too steep', 'steep angle of attack'] },
+  { id: 'attack_angle_shallow',  title: 'Shallow Attack',     shots: 5, shotType: 'full', focus: 'posture',    angle: 'down_the_line', aliases: ['shallow attack', 'too shallow', 'shallow angle of attack'] },
+  { id: 'chicken_wing',          title: 'Chicken Wing',       shots: 5, shotType: 'full', focus: 'connection', angle: 'face_on',       aliases: ['chicken wing', 'lead arm', 'bent lead arm'] },
+  { id: 'reverse_pivot',         title: 'Reverse Pivot',      shots: 5, shotType: 'full', focus: 'posture',    angle: 'face_on',       aliases: ['reverse pivot', 'weight shift', 'hanging back'] },
+  { id: 'chipping_inconsistent', title: 'Inconsistent Chipping', shots: 5, shotType: 'chip', focus: 'contact', angle: 'face_on',     aliases: ['chipping', 'chip', 'inconsistent chipping', 'short game contact'] },
+];
+
+function drillRoute(d: { id: string; title: string; shots: number; shotType: string; focus: string; angle: string }): string {
+  const q = [
+    `drillId=${d.id}`,
+    `drillName=${encodeURIComponent(d.title)}`,
+    `drillShots=${d.shots}`,
+    `drillFocus=${d.focus}`,
+    `drillShotType=${d.shotType}`,
+    `angle=${d.angle}`,
+  ].join('&');
+  return `/swinglab/smartmotion?${q}`;
+}
+
+/** Fault drills as catalog features — searched by lookupFeature so both the local
+ *  router AND the brain's navigate tool can open any drill by name. */
+export const DRILL_FEATURES: AppFeature[] = DRILLS.map(d => ({
+  id: `drill-${d.id}`,
+  name: `${d.title} Drill`,
+  aliases: Array.from(new Set([
+    ...d.aliases,
+    ...d.aliases.map(a => `${a} drill`),
+    d.title.toLowerCase(),
+    `${d.title.toLowerCase()} drill`,
+  ])),
+  route: drillRoute(d),
+  category: 'practice',
+  blurb: `Drill-mode capture for the ${d.title.toLowerCase()} fault — ${d.shots} swings, honest ${d.focus} read`,
+  whenToUse: `they want to work the ${d.title.toLowerCase()} drill`,
+}));
+
 /** Normalize a transcript for matching: lowercase, collapse separators/space. */
 function norm(s: string): string {
   return s.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -215,15 +268,19 @@ export function lookupFeature(transcript: string): AppFeature | null {
   const t = norm(transcript);
   if (!t) return null;
 
+  // Search the named features AND the fault drills (so "open the over-the-top
+  // drill" resolves to its SmartMotion deep-link, same as Smart Tempo does).
+  const ALL = [...APP_FEATURES, ...DRILL_FEATURES];
+
   // Pass 1: exact equality on name or any alias.
-  for (const f of APP_FEATURES) {
+  for (const f of ALL) {
     if (norm(f.name) === t) return f;
     if (f.aliases.some(a => norm(a) === t)) return f;
   }
 
   // Pass 2: longest alias contained as a whole phrase in the transcript.
   let best: { f: AppFeature; len: number } | null = null;
-  for (const f of APP_FEATURES) {
+  for (const f of ALL) {
     for (const a of [f.name, ...f.aliases]) {
       const na = norm(a);
       // Require >=2 chars and word-boundary containment to stay conservative.
@@ -242,8 +299,12 @@ export function lookupFeature(transcript: string): AppFeature | null {
  * ~1.0–1.4k chars total across the catalog.
  */
 export function catalogForPrompt(): string {
-  return APP_FEATURES.map(f => {
+  const features = APP_FEATURES.map(f => {
     const says = f.aliases.slice(0, 3).join(', ');
     return `- ${f.name} — ${f.blurb} (say: ${says})`;
   }).join('\n');
+  // Drills as ONE compact line (not one verbose line each) so the brain knows it
+  // can navigate to any by name without paying 11 lines of prompt every turn.
+  const drills = DRILLS.map(d => d.title).join(', ');
+  return `${features}\n- FAULT DRILLS (open any by name via navigate, e.g. "open the over-the-top drill"): ${drills}`;
 }
