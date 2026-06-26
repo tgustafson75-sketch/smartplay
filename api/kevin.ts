@@ -44,8 +44,19 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open SwingLab (swing analysis / practice / drills). Call ONLY when Tim is SPECIFIC — he explicitly says "open swinglab"/"swing lab", OR names a specific activity (a drill, tempo, open range, focus session, "record my swing", "swing analysis", "swing drills"). Do NOT call this for a VAGUE "I want to practice" / "let me work on something" — instead ASK what he wants to work on (a specific drill, tempo, open range) and offer to open the Swing Lab; only open once he picks something or confirms.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when Tim wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If he names a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so he lands ON that feature, not the hub. For a VAGUE "I want to practice", ASK what he wants, then navigate once he picks.',
     parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'navigate',
+    description: 'Take Tim DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER he asks to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when Tim names a destination — open_swinglab only drops him on the generic hub and makes him hunt. If you are unsure which feature he means, ask a one-line clarifying question first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        feature: { type: 'string', description: 'The destination feature NAME (or a listed alias) from the APP FEATURES list, e.g. "Smart Tempo", "Drills", "Open Range", "Setup Check", "Swing Library".' },
+      },
+      required: ['feature'],
+    },
   },
   {
     name: 'log_score',
@@ -1053,7 +1064,7 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       const kbBlock = kbForPrompt(retrieveKB(_message, { max: 3 }));
       kbAddendum =
-        `\n\nAPP FEATURES YOU KNOW (you can reference these by name and open them with the open tools when the player asks):\n${catalogForPrompt()}`
+        `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"} for "take me to the tempo drill"). Only use open_swinglab for the bare hub with no named destination:\n${catalogForPrompt()}`
         + (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
@@ -1207,6 +1218,27 @@ ${onCourseContextBlock}${baseMessage}`
         capture.dataToolCalls++;
         console.log(`[kevin] calling lookup_hole course_id="${input.course_id}" hole=${input.hole_number}`);
         return await executeLookupHole(input, courseHoles as Array<{ hole: number; par: number; distance: number }> | undefined);
+      }
+      // 2026-06-26 (Tim — "take me to the tempo drill" landed on the SwingLab
+      // hub) — resolve a named destination to its real route via the SAME
+      // app-feature catalog the prompt is built from, and emit a navigate action
+      // the client already handles. Covers every drill/screen in the catalog, so
+      // any feature Tim can name is reachable by voice — not just the generic hub.
+      if (name === 'navigate') {
+        try {
+          const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
+          const feat = lookupFeature(String((input as { feature?: unknown }).feature ?? ''));
+          if (feat) {
+            capture.action = { type: 'navigate', path: feat.route };
+            console.log(`[kevin] navigate → ${feat.name} (${feat.route})`);
+            return `Opening ${feat.name}.`;
+          }
+          console.log(`[kevin] navigate: no catalog match for "${String((input as { feature?: unknown }).feature ?? '')}"`);
+          return 'I could not find that screen.';
+        } catch (e) {
+          console.warn('[kevin] navigate lookup failed:', e);
+          return 'Navigation failed.';
+        }
       }
       // Action tools — capture and return dummy so loop can continue
       switch (name) {
