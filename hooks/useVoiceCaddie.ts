@@ -1474,16 +1474,17 @@ export const useVoiceCaddie = ({
       // on perfect Wi-Fi, and because it stopped trying it could never clear.
       // The transcribe fetch has its own timeout; a genuine failure below
       // gives a brief haptic, not a sticky wall.)
-      const formData = new FormData();
-      formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
-      formData.append('language', language);
-
-      const doTranscribeFetch = async () => {
+      const doTranscribeFetch = async (timeoutMs: number) => {
+        // Rebuild the multipart body per attempt — a consumed FormData stream
+        // can't be safely re-sent on a retry.
+        const fd = new FormData();
+        fd.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+        fd.append('language', language);
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), TRANSCRIBE_TIMEOUT_MS);
+        const t = setTimeout(() => ctrl.abort(), timeoutMs);
         return fetch(apiUrl + '/api/transcribe', {
           method: 'POST',
-          body: formData,
+          body: fd,
           signal: ctrl.signal,
         }).finally(() => clearTimeout(t));
       };
@@ -1491,7 +1492,20 @@ export const useVoiceCaddie = ({
       let transcribeRes: Response;
       const txStart = Date.now();
       try {
-        transcribeRes = await doTranscribeFetch();
+        // 2026-06-27 — retry ONCE through a cold-start / network blip. The 12s
+        // first attempt aborts a cold-booting Vercel Lambda (formidable + Node
+        // + Deepgram = 10-15s); the retry, after a brief pause, lands on the
+        // now-warm function. Bounded at ~27s worst case — NOT the old ~90s
+        // double-wait that read as "stuck thinking". The host is provably
+        // reachable in the field (empty_transcript 200s), so this catches
+        // exactly the transient first-call failures the single-shot fast-fail
+        // was turning into "I'm not reaching the network right now".
+        try {
+          transcribeRes = await doTranscribeFetch(TRANSCRIBE_TIMEOUT_MS);
+        } catch {
+          await new Promise(r => setTimeout(r, 600));
+          transcribeRes = await doTranscribeFetch(15000);
+        }
       } catch (firstErr) {
         // 2026-06-26 — FAIL FAST. A timeout/abort means the request isn't
         // getting through; the old retry just doubled the dead wait to ~90s

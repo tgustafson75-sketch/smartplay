@@ -394,21 +394,35 @@ export const captureUtterance = async (
       console.log('[voice] file size probe failed (continuing):', e);
     }
 
-    const formData = new FormData();
-    formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
-    formData.append('language', language);
-
-    const controller = new AbortController();
-    // 2026-06-22 — bumped 20s → 45s. Deepgram is 1-3s but cold Vercel Lambda
-    // startup (formidable + Node runtime) can add 10-15s BEFORE Deepgram is
-    // called. 45s gives full headroom; device-TTS fallback fires immediately
-    // if the abort does trigger, so the user hears something either way.
-    const cancelTimer = setTimeout(() => controller.abort(), 45_000);
-    const res = await fetch(apiUrl + '/api/transcribe', {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
-    }).finally(() => clearTimeout(cancelTimer));
+    const mkForm = () => {
+      // Rebuild per attempt — a consumed multipart body can't be re-sent.
+      const fd = new FormData();
+      fd.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+      fd.append('language', language);
+      return fd;
+    };
+    // 2026-06-27 — retry the transcribe POST once through a cold-start / blip.
+    // The single-shot fetch died on the first network hiccup (RN surfaces these
+    // as TypeError "Network request failed") even when the next attempt would
+    // reach a now-warm backend. Pure resilience: a call that would have
+    // succeeded is unaffected; only a failed first attempt gets a second try.
+    // 25s first try (cold Lambda) + 15s retry = ~40s bounded worst case.
+    const doFetch = (timeoutMs: number) => {
+      const controller = new AbortController();
+      const cancelTimer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(apiUrl + '/api/transcribe', {
+        method: 'POST',
+        body: mkForm(),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(cancelTimer));
+    };
+    let res: Response;
+    try {
+      res = await doFetch(25_000);
+    } catch {
+      await new Promise(r => setTimeout(r, 600));
+      res = await doFetch(15_000);
+    }
 
     if (!res.ok) {
       // Surface the upstream failure through the same /owner-logs Voice
