@@ -21,8 +21,12 @@
  * routes through this — there is no other place the base URL is decided.
  */
 
-/** Production backend. The pinned alias re-pointed after each API deploy. */
-export const PROD_API_BASE_URL = 'https://smartplay-beta.vercel.app';
+/** Production backend — CUSTOM DOMAIN, NOT *.vercel.app. Tim's network DNS-filters
+ *  *.vercel.app to a Cisco Umbrella block page (146.112.61.104) → every backend call
+ *  fails → robot/device-TTS fallback. api.smartplaycaddie.com (Vercel A 76.76.21.21,
+ *  same deployment) isn't on those blocklists. This is the ONLY change kept from the
+ *  reverted work — the one legit fix; the opener / self-heal complexity stayed reverted. */
+export const PROD_API_BASE_URL = 'https://api.smartplaycaddie.com';
 
 function resolveApiBaseUrl(): string {
   const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
