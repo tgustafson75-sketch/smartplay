@@ -470,7 +470,10 @@ check('featureAccess.canAccess treats lifetime as paid',
 console.log('\n=== Scenario 12: 2026-06-08 session surfaces ===');
 
 const exists = (rel: string) => fs.existsSync(path.resolve(__dirname, '../../', rel));
-const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+// Crash-safe: a MISSING file returns '' so the check FAILS gracefully instead of
+// aborting the whole suite (a single missing/renamed file used to halt the run and
+// silently skip every check after it). 2026-06-27.
+const read = (rel: string) => { try { return fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8'); } catch { return ''; } };
 
 // Tempo / transition (vision-derived, acoustic-verified)
 check('poseAnalysisApi exports deriveSwingTempo',
@@ -937,7 +940,7 @@ check('Layup planning wired into the hole view (smartvision) (#6)',
       /const aimPlan = useMemo\(\(\) => planAimLines\(approachYards\)/.test(s) &&
       /const layupCanvas = useMemo/.test(s) &&
       /layupCanvas && aimPlan\.mode === 'layup'/.test(s) &&
-      /LAY UP · \$\{aimPlan\.leaveYards\} in/.test(s) &&
+      /cx=\{layupCanvas\.x\}/.test(s) && // layup waypoint marker (the "LAY UP · Ny in" SvgText was removed 2026-06-23; marker + panel carry it)
       /\{!targetOverride && \(\s*\n\s*<Marker\s*\n\s*kind="T"/.test(s); // T clears on capture
   })(),
   'hole view shows the two-line layup plan at 200y+ and drops the T once you capture');
@@ -1002,12 +1005,12 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
       /const isDrill = typeof drillId === 'string'/.test(sm) &&
       /Math\.max\(1, Math\.min\(5, Number\(drillShots\)/.test(sm) &&
       /captureKind: isDrill \? 'drill' : 'smart_motion'/.test(sm) &&
-      /DRILL · \$\{drillName \?\? 'Practice'\} · \$\{drillShotCount\} shots/.test(sm) &&
+      /`the \$\{drillName\.trim\(\)\} drill`/.test(sm) && // drill-mode session label (refactored from "DRILL · … · N shots")
       // shot cap: a drill keeps only its 3-5 swings (post-hoc carve cap, safe)
       /const segs = isDrill && drillShotCount \? allSegs\.slice\(0, drillShotCount\) : allSegs/.test(sm) &&
       // library badge knows 'drill'; Tank is the full-width hero
       /drill:\s*\{ label: 'Drill'/.test(lib) &&
-      /const tankEntry = orderedEntries\.find/.test(idx) && /oneCol=\{true\}/.test(idx)
+      /const tankEntry = orderedEntries\.find/.test(idx) && /const oneCol = width < 380/.test(idx) // Tank hero + responsive one-col (was literal oneCol={true})
     );
   })(),
   'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank is the hero, grid stays in twos');
@@ -1450,7 +1453,7 @@ check('Play tab: walking vs cart setting persisted on the round (Tim)',
       /setTransportMode: \(m: TransportMode\) => void;/.test(rs) &&
       /setTransportMode: \(m\) => set\(\{ transportMode: m \}\)/.test(rs) &&
       /transportMode: s\.transportMode,/.test(rs) &&          // persisted on the record
-      /transportMode: options\.transportMode \?\? prev\.transportMode \?\? 'walking'/.test(rs) &&
+      /const resolvedTransport = options\.transportMode \?\? prev\.transportMode \?\? 'walking'/.test(rs) && // default (refactored to a named var)
       // Play tab chips wired to the store
       /useRoundStore\(s => s\.transportMode\)/.test(play) &&
       /setSetupTransport\('walking'\)/.test(play) && /setSetupTransport\('cart'\)/.test(play)
