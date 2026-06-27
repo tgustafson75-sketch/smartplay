@@ -357,7 +357,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn('[putting] parse failed. provider:', providerUsed);
       return res.status(502).json({ error: 'Model returned non-JSON', provider: providerUsed });
     }
-    return res.status(200).json({ ...parsed, _debug: { provider: providerUsed, gemini_error: geminiError, openai_error: openaiError } });
+    // 2026-06-27 — clamp out-of-range / non-finite numbers in place (keep-and-flag).
+    const clamped = clampPuttingNumbers(parsed);
+    if (clamped.length) console.warn('[putting] clamped out-of-range numbers:', clamped.join(', '));
+    return res.status(200).json({
+      ...parsed,
+      _debug: {
+        provider: providerUsed,
+        gemini_error: geminiError,
+        openai_error: openaiError,
+        ...(clamped.length ? { clamped } : {}),
+      },
+    });
   } catch (err) {
     console.log('[putting] error:', err);
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -447,6 +458,46 @@ function safeParse(raw: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+// 2026-06-27 — Numeric sanity clamp (additive / non-destructive). Structured
+// output guarantees these fields are NUMBERS, but NOT that they're finite or in
+// range — a model can still emit distanceFeet: 9999, breakInches: -3, or NaN.
+// We CLAMP to sane bounds (degrade + flag) rather than discard a useful read,
+// per the keep-and-flag principle. In-range values are left untouched (no
+// mutation, no flag) so valid output is byte-identical to before. Clamped field
+// paths surface in _debug.clamped so over-range models are diagnosable.
+function clampOne(v: unknown, min: number, max: number): { value: number; changed: boolean } {
+  // Non-number / NaN / ±Infinity → coerce to the floor and flag.
+  if (typeof v !== 'number' || !Number.isFinite(v)) return { value: min, changed: true };
+  if (v < min) return { value: min, changed: true };
+  if (v > max) return { value: max, changed: true };
+  return { value: v, changed: false };
+}
+
+export function clampPuttingNumbers(parsed: Record<string, unknown>): string[] {
+  const clamped: string[] = [];
+  const apply = (
+    obj: Record<string, unknown> | undefined,
+    key: string,
+    min: number,
+    max: number,
+    path: string,
+  ): void => {
+    if (!obj || typeof obj !== 'object' || !(key in obj)) return;
+    const r = clampOne(obj[key], min, max);
+    obj[key] = r.value;
+    if (r.changed) clamped.push(path);
+  };
+  apply(parsed, 'distanceFeet', 0, 100, 'distanceFeet');
+  apply(parsed, 'overallScore', 0, 100, 'overallScore');
+  const slope = parsed.greenSlope as Record<string, unknown> | undefined;
+  apply(slope, 'breakInches', 0, 120, 'greenSlope.breakInches');
+  apply(slope, 'confidence', 0, 100, 'greenSlope.confidence');
+  apply(parsed.setup as Record<string, unknown> | undefined, 'quality', 0, 100, 'setup.quality');
+  apply(parsed.stroke as Record<string, unknown> | undefined, 'quality', 0, 100, 'stroke.quality');
+  apply(parsed.readAccuracy as Record<string, unknown> | undefined, 'confidence', 0, 100, 'readAccuracy.confidence');
+  return clamped;
 }
 
 function unknownShell(caddieName: string, body: RequestBody | null): Record<string, unknown> {
