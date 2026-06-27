@@ -3744,15 +3744,14 @@ check('Caddie brain is warmed whenever the tab is open (not only in a round)',
 
 // 2026-06-10 — Provider architecture: Anthropic spine, Gemini fast fallback,
 // OpenAI out of analysis (ears/mouth only). (swingApiSrc declared above.)
-check('Analysis providers: Anthropic primary + Gemini fallback, OpenAI removed',
-  /const USE_GEMINI = true/.test(swingApiSrc) &&
-    !/tryOpenAI/.test(swingApiSrc) &&
-    !/openai\.chat\.completions/.test(swingApiSrc) &&
-    !/new OpenAI\(/.test(swingApiSrc) &&
-    /Gemini FAST FALLBACK/.test(swingApiSrc) &&
-    /if \(USE_GEMINI && !winner\.parsed/.test(swingApiSrc) &&
-    /escalating to Anthropic Sonnet/.test(swingApiSrc),
-  'swing analysis runs Anthropic Haiku→Sonnet (spine) and only falls back to Gemini when Anthropic returns nothing parseable; OpenAI is no longer CALLED in the analysis chain');
+check('Analysis providers: Gemini primary + OpenAI gpt-4o escalation (Anthropic pulled from normal escalation)',
+  // 2026-06-27 — refreshed: the analysis chain migrated OFF Anthropic to
+  // Gemini-primary → OpenAI-escalation. (Was: Anthropic spine + Gemini fallback.)
+  /Gemini 2\.5 Flash = speed primary/.test(swingApiSrc) &&
+    /OpenAI gpt-4o = quality escalation/.test(swingApiSrc) &&
+    /new OpenAI\(/.test(swingApiSrc) &&
+    /escalating to OpenAI gpt-4o/.test(swingApiSrc),
+  'swing analysis runs Gemini 2.5 Flash as the speed primary and escalates to OpenAI gpt-4o for quality; Anthropic is no longer in the normal escalation chain');
 
 check('SmartMotion warms the analyzer on open (warm first analysis)',
   /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smSrc) &&
@@ -3779,9 +3778,9 @@ const uploadSrc = read('services/videoUpload.ts');
 check('Captured clips persisted to documents (survive OS cache eviction)',
   /export async function persistClipToDocuments\(/.test(uploadSrc) &&
     /swing_clips\//.test(uploadSrc) &&
-    /const persistentUri = await persistClipToDocuments\(args\.uri\)/.test(uploadSrc) &&
+    /await persistClipToDocuments\(ingestUri/.test(uploadSrc) && // refreshed: var ingestUri/sessionId (was args.uri)
     /persistClipToDocuments\(rawUri\)/.test(smSrc) &&
-    /isn't on this device anymore/.test(read('app/swinglab/swing/[swing_id].tsx')),
+    /not found on this device/.test(read('app/swinglab/swing/[swing_id].tsx')),
   'uploads + SmartMotion recordings are copied to documentDirectory so they stay replayable/re-analyzable; a missing source clip gives an honest "re-upload" message instead of a stuck spinner');
 
 // 2026-06-10 — Re-analyze hardening: persist content:// picks, rescue legacy
@@ -4666,11 +4665,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'Tempo Trainer is reachable from a SwingLab card, with translated title/sub in en/es/zh');
 
   const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
-  check('Swing analysis opt #2: analysis output token caps trimmed 800→650',
-    /maxOutputTokens: 650/.test(swingApiSrc2) &&
-      (swingApiSrc2.match(/max_tokens: 650/g) || []).length >= 2 &&
-      !/max_tokens: 800/.test(swingApiSrc2) && !/maxOutputTokens: 800/.test(swingApiSrc2),
-    'the three analysis calls (Gemini/Sonnet/Haiku) cap output at 650 — JSON-only one-sentence schema (~250-450 real tokens) — trimming output-token cost with a safe margin; locate caps (120/400) untouched');
+  check('Swing analysis: output token caps bounded (Gemini 800 / OpenAI 1000)',
+    // 2026-06-27 — refreshed to current caps (post provider-migration the main
+    // analysis runs Gemini maxOutputTokens 800 + OpenAI max_tokens 1000; the old
+    // "650" trim is no longer in the code). Still asserts output is bounded.
+    /maxOutputTokens: 800/.test(swingApiSrc2) && /max_tokens: 1000/.test(swingApiSrc2),
+    'the swing-analysis model calls cap output (Gemini 800, OpenAI 1000) — bounded cost; the JSON-only one-sentence schema keeps real usage well under the cap');
 
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('Voice: listeningSession dispatches navigate tool_actions',
@@ -4822,8 +4822,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Elevation: client service caches successes + fails safe to flat (0)',
     /const cache = new Map/.test(elevSrc) &&
       /getPlaysLikeElevationDeltaFeet/.test(elevSrc) &&
-      /if \(p == null \|\| t == null\) return 0;/.test(elevSrc) &&
-      /return Math\.round\(\(t - p\)/.test(elevSrc),
+      /if \(p == null \|\| t == null\) return \{ deltaFeet: 0, hasData: false \};/.test(elevSrc) && // refreshed: honesty-aware result (was bare return 0)
+      /return \{ deltaFeet: Math\.round\(\(t - p\)/.test(elevSrc),
     'elevation cached per ~11m cell; a missing lookup returns 0 (flat) so it can never block/corrupt a yardage — target−player matches playsLike uphill-positive');
 
   const elevApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/elevation.ts'), 'utf-8');
@@ -4839,14 +4839,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   const hookSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useElevationDelta.ts'), 'utf-8');
   check('Elevation: useElevationDelta is safe — 0/flat until both points resolve, gridded deps',
-    /getPlaysLikeElevationDeltaFeet/.test(hookSrc) &&
-      /setDelta\(0\);\s*\n\s*return;/.test(hookSrc) &&
+    /useElevationDeltaStatus/.test(hookSrc) && /getPlaysLikeElevation\b/.test(hookSrc) && // refreshed: status hook + getPlaysLikeElevation
+      /setState\(\{ deltaFeet: 0, hasData: false \}\);\s*\n\s*return;/.test(hookSrc) &&
       /Math\.round\(v \* 1e4\)/.test(hookSrc),
     'safe to pass straight to playsLikeDistance — never blocks a yardage; deps gridded to the ~11m cache cell so GPS jitter does not thrash the effect');
 
   const sfSrc = fs.readFileSync(path.resolve(__dirname, '../../app/smartfinder.tsx'), 'utf-8');
   check('Elevation: SmartFinder reticle plays-like now factors real elevation',
-    /useElevationDelta\(playerLoc, targetLoc\)/.test(sfSrc) &&
+    /useElevationDeltaStatus\(elevPlayer, elevTarget\)/.test(sfSrc) && // refreshed: status hook variant
       /playsLikeDistance\(targetYards, weather, targetBearing \?\? shotBearingDeg, elevationDeltaFeet\)/.test(sfSrc),
     'the interactive aim-point plays-like passes the cached elevation delta — uphill/downhill is live (was always flat); other surfaces remain flat-safe follow-ups');
 
