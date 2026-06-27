@@ -114,7 +114,15 @@
       "./plugins/withBluetoothMediaButton.js",
       "./plugins/withPrebuildSafetyCheck.js",
       "expo-asset",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "SmartPlay Caddie uses the microphone so your caddie can hear you on the course.",
+          "speechRecognitionPermission": "SmartPlay Caddie uses on-device speech recognition so your caddie still understands you when there's no signal.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

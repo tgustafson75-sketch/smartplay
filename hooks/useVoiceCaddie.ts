@@ -1520,17 +1520,64 @@ export const useVoiceCaddie = ({
         } catch { return { ok: false, ms: -1 }; }
       };
 
-      // Honest offline dead-end — log the diagnostic, give a spoken fallback,
-      // and (A2) invite a typed question routed to the on-device offline caddie.
-      const failTranscribeOffline = (name: string, pingOk: boolean, pingMs: number) => {
+      // Honest offline dead-end — log the diagnostic, then degrade as far as the
+      // device allows: (Phase B) on-device STT → on-device caddie answer, else
+      // (A2) a typed question routed to the same offline caddie, else a nudge.
+      const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number) => {
         const elapsedMs = Date.now() - txStart;
         console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
         try { Vibration.vibrate(120); } catch {}
-        // pingOk distinguishes "host unreachable" (offer to type — the offline
-        // caddie can still answer yardages/club/KB) from "upload stalled but host
-        // up" (a plain retry-in-a-sec nudge — typing wouldn't reach the brain anyway).
-        if (!pingOk && onOfflineFallback) {
+
+        const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
+          ? (language as 'en' | 'es' | 'zh') : 'en';
+
+        // Host UP but the upload failed twice — a transient blip. Just nudge; the
+        // brain is reachable, so offline STT/typing would be pointless.
+        if (pingOk) {
+          const line = "I'm not reaching the network right now — try again in a sec.";
+          onResponseReceived(line);
+          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+
+        // Host UNREACHABLE. Phase B — if THIS binary has on-device STT, listen on
+        // the phone (zero network) and answer from the on-device caddie. We
+        // re-prompt because the recorded m4a can't be transcribed offline (the
+        // on-device recognizer only takes live mic / 16k WAV-MP3). [[offline-caddie-plan]]
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
+          if (stt.isOnDeviceSTTReady()) {
+            const prompt = "I lost the network — say that again and I'll listen right here on your phone.";
+            onResponseReceived(prompt);
+            if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
+            wrappedOnVoiceStateChange('listening');
+            const heard = await stt.recognizeOnceOnDevice(langSafe, { timeoutMs: 9000 });
+            wrappedOnVoiceStateChange('thinking');
+            if (heard) {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
+              const ans = offline.answerOffline(heard, langSafe);
+              const reply = ans?.text ?? "I heard you, but I can't answer that one without a connection. I've got yardages, club calls and the basics offline.";
+              logVoiceSilentFail('ondevice_stt_hit', { source: ans?.source ?? 'none', detail: ans?.detail ?? null, transcriptHead: heard.slice(0, 60) });
+              onResponseReceived(reply);
+              if (voiceEnabled) void speakDeviceNotice(reply, language, voiceGender).catch(() => {});
+              wrappedOnVoiceStateChange('idle');
+              isProcessingRef.current = false;
+              return;
+            }
+            logVoiceSilentFail('ondevice_stt_empty', {});
+            // heard nothing → fall through to the typed fallback
+          }
+        } catch (e) {
+          console.log('[voice] on-device STT path threw (non-fatal):', e);
+        }
+
+        // No on-device STT (or it heard nothing) → typed offline fallback (A2).
+        if (onOfflineFallback) {
           const line = "I can't reach the network to hear you. Tap to type and I'll answer from what I know.";
           onResponseReceived(line);
           if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
@@ -1555,7 +1602,7 @@ export const useVoiceCaddie = ({
         // hang from ~27s to ~15s and routes to the on-device caddie.
         const ping = await reachabilityPing(3000);
         if (!ping.ok) {
-          failTranscribeOffline('AbortError', ping.ok, ping.ms);
+          await failTranscribeOffline('AbortError', ping.ok, ping.ms);
           return;
         }
         // Host is up — the upload hit a cold-start/blip. Retry once.
@@ -1566,7 +1613,7 @@ export const useVoiceCaddie = ({
           const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
           // Host answered the ping but the upload still failed twice — treat as
           // reachable (don't offer offline typing; the brain is up, retry works).
-          failTranscribeOffline(name, true, ping.ms);
+          await failTranscribeOffline(name, true, ping.ms);
           return;
         }
       }
