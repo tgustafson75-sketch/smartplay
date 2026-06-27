@@ -71,6 +71,7 @@ import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLoc
 // time via getCaddieClip; falls back to TTS if the asset fails.
 import { getCaddieClip } from '../../services/getCaddieClip';
 import { Asset } from 'expo-asset';
+import { getOpenerAssetForPersona } from '../../services/kevinGreetingManifest';
 import { awaitGreetingComplete } from '../greeting';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
@@ -113,7 +114,6 @@ import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
 import { getApiBaseUrl } from '../../services/apiBase';
-import { getOpenerAssetForPersona } from '../../services/kevinGreetingManifest';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -1204,7 +1204,7 @@ export default function CaddieTab() {
   //      use a static setTimeout that could race splash audio.
   //   4) Bundled mp3 only — no /api/voice fetch in the opener path.
   useEffect(() => {
-    setOpeningPrompt('Welcome back — tap the mic or call my name anytime.');
+    setOpeningPrompt('Tap to talk.');
 
     void (async () => {
       if (openerPlayedThisProcess) return;
@@ -1232,13 +1232,6 @@ export default function CaddieTab() {
         return;
       }
       try {
-        // 2026-06-27 (Tim) — REVERTED the voice-first speak+listen+route opener. It
-        // was supposed to be a minor copy change but it (a) robot-voiced when the
-        // backend was unreachable, (b) could fail silently, and (c) its 7s listen
-        // window ATE non-play/practice commands like "open smart motion". Back to the
-        // reliable bundled greeting CLIP: offline, proper voice, no launch mic, no
-        // cloud-TTS dependency, and it never intercepts the user's commands. The
-        // "longer, cleaner" copy lives in the openingPrompt text above.
         const openerMod = getOpenerAssetForPersona(liveSettings.caddiePersonality);
         const asset = Asset.fromModule(openerMod);
         await asset.downloadAsync();
@@ -1246,9 +1239,12 @@ export default function CaddieTab() {
           console.log('[caddie] opener skipped: asset has no localUri', { persona: liveSettings.caddiePersonality });
           return;
         }
+        console.log('[caddie] opener playing:', { persona: liveSettings.caddiePersonality });
+        // userInitiated:true — cold launch IS user-initiated; lets
+        // L1 Quiet through (voiceEnabled is the hard kill switch above).
         await playLocalFile(asset.localUri, undefined, { userInitiated: true });
-        // Flag set only AFTER play resolves; a silent failure leaves it false so the
-        // next launch retries.
+        // Set the flag ONLY after play resolves. Silent failures leave
+        // it false so the next launch (or hot-reload remount) retries.
         openerPlayedThisProcess = true;
       } catch (e) {
         console.log('[caddie] opener failed (non-fatal):', e);

@@ -483,14 +483,7 @@ function AppNavigator() {
     // here overlaps the splash + navigation so the chain is hot before the
     // user ever reaches the Caddie screen. caddie.tsx focus-warmup still runs
     // (30s dedupe = no-op if within 30s) as a belt-and-suspenders.
-    // 2026-06-27 (Tim — self-healing) — BEFORE warming, probe the backend host:
-    // if the active host (custom domain) is unreachable but the *.vercel.app
-    // fallback responds (or vice versa — e.g. a DNS content-filter on one), fail
-    // over for the session so warmup + every subsequent call hit the healthy host.
-    void import('../services/apiBase')
-      .then(m => m.ensureBackendReachable())
-      .catch(() => undefined)
-      .then(() => import('../services/voiceWarmup').then(m => m.prewarmVoice()));
+    void import('../services/voiceWarmup').then(m => m.prewarmVoice());
     // 2026-05-24 — Native BT media-button bridge. Funnels through
     // notifyEarbudTap() so it shares the existing earbudControl
     // pattern (no orchestrator change). Native BluetoothMediaButton

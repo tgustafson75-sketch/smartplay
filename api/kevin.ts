@@ -44,12 +44,12 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open the GENERIC SwingLab hub. Call this ONLY when Tim wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If he names a specific feature, screen, or drill — SmartMotion / "smart motion" / "open smart motion", Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc. — DO NOT use this; use the `navigate` tool so he lands ON that screen, not the hub. "open smart motion" is NEVER open_swinglab — it is navigate{feature:"SmartMotion"}. For a VAGUE "I want to practice", ASK what he wants, then navigate once he picks.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when Tim wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If he names a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so he lands ON that feature, not the hub. For a VAGUE "I want to practice", ASK what he wants, then navigate once he picks.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'navigate',
-    description: 'Take Tim DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER he asks to open, go to, pull up, or "take me to" a named destination — e.g. "open smart motion"/"SmartMotion", "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context (e.g. feature:"SmartMotion" for "open smart motion"). ALWAYS prefer this over open_swinglab when Tim names a destination — open_swinglab only drops him on the generic hub and makes him hunt. If you are unsure which feature he means, ask a one-line clarifying question first.',
+    description: 'Take Tim DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER he asks to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when Tim names a destination — open_swinglab only drops him on the generic hub and makes him hunt. If you are unsure which feature he means, ask a one-line clarifying question first.',
     parameters: {
       type: 'object',
       properties: {
@@ -1263,19 +1263,7 @@ ${onCourseContextBlock}${baseMessage}`
       switch (name) {
         case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
         case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
-        case 'open_swinglab': {
-          // 2026-06-27 — GUARD: the model sometimes picks open_swinglab even when the
-          // user named a specific feature ("open smart motion"). Deterministically
-          // redirect to that feature's screen if the message resolves to one (there
-          // is no generic swinglab-hub feature, so a vague ask stays on the hub).
-          try {
-            const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
-            const feat = lookupFeature(_message);
-            if (feat) { capture.action = { type: 'navigate', path: feat.route }; break; }
-          } catch { /* fall through to the hub */ }
-          capture.action = { type: 'open_swinglab' };
-          break;
-        }
+        case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
         case 'record_swing':     capture.action = { type: 'record_swing' };     break;
         case 'mark_tee':         capture.action = { type: 'mark_tee' };         break;
         case 'mark_green':       capture.action = { type: 'mark_green' };       break;

@@ -138,13 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       messages: [{ role: 'user', content }],
     });
     const toolUse = completion.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-    if (!toolUse) {
-      // 2026-06-27 — graceful, HONEST degrade: couldn't determine → 200 with an
-      // "unknown / not departed" result (client shows nothing) instead of a 502.
-      console.warn('[ball-departure] no tool_use block in vision response — returning unknown');
-      const unknown: BallDepartureResult = { departed: false, ball_present_before: false, ball_present_after: false, direction: 'unknown', confidence: 'low', ball_after_norm: null };
-      return res.status(200).json(unknown);
-    }
+    if (!toolUse) return res.status(502).json({ error: 'no tool_use block in vision response' });
     const p = toolUse.input as {
       ball_present_before: boolean;
       ball_present_after: boolean;
@@ -176,10 +170,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     return res.status(200).json(result);
   } catch (e) {
-    // 2026-06-27 — graceful unknown on a vision failure (200) so a blip can't trip
-    // the client; log for diagnosis. Never fabricate a departure.
-    console.warn('[ball-departure] vision call failed — returning unknown:', e instanceof Error ? e.message : e);
-    const unknown: BallDepartureResult = { departed: false, ball_present_before: false, ball_present_after: false, direction: 'unknown', confidence: 'low', ball_after_norm: null };
-    return res.status(200).json(unknown);
+    return res.status(502).json({ error: e instanceof Error ? e.message : 'vision call failed' });
   }
 }

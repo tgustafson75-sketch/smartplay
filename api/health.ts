@@ -54,9 +54,7 @@ async function probeAnthropic(): Promise<ProbeResult> {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: PROBE_TIMEOUT_MS, maxRetries: 0 });
     await withTimeout(
       client.messages.create({
-        // 2026-06-27 — was 'claude-haiku-4-5' (no date suffix → invalid id, probe
-        // always failed). Match the real brain (api/_aiProvider anthropic.fast).
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-haiku-4-5',
         max_tokens: 1,
         messages: [{ role: 'user', content: 'ping' }],
       }),

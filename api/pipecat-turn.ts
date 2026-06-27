@@ -65,12 +65,12 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself with NO specific destination. If they name a specific feature, screen, or drill — SmartMotion / "smart motion" / "open smart motion", Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc. — DO NOT use this; use the `navigate` tool. "open smart motion" is NEVER open_swinglab — it is navigate{feature:"SmartMotion"}. For a VAGUE "I want to practice", ASK what they want, then navigate once they pick.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself with NO specific destination. If they name a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so they land ON that feature, not the hub. For a VAGUE "I want to practice", ASK what they want, then navigate once they pick.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'navigate',
-    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "open smart motion"/"SmartMotion", "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", a fault drill ("the over-the-top drill", "chicken wing drill"). Pass `feature` as the feature NAME (or a listed alias) from the APP FEATURES list (e.g. feature:"SmartMotion" for "open smart motion"). ALWAYS prefer this over open_swinglab when they name a destination.',
+    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", a fault drill ("the over-the-top drill", "chicken wing drill"). Pass `feature` as the feature NAME (or a listed alias) from the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when they name a destination.',
     parameters: {
       type: 'object',
       properties: {
@@ -420,19 +420,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (toolName === 'close_swinglab') {
           toolActions.push({ type: 'close_swinglab' });
           return 'SwingLab closed.';
-        }
-
-        // 2026-06-27 — GUARD (parity with api/kevin.ts): if the model picked
-        // open_swinglab but the player named a specific feature ("open smart motion"),
-        // deterministically redirect to that screen via navigate.
-        if (toolName === 'open_swinglab') {
-          try {
-            const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
-            const feat = lookupFeature(text);
-            if (feat) { toolActions.push({ type: 'navigate', path: feat.route }); return `Opening ${feat.name}.`; }
-          } catch { /* fall through to the hub */ }
-          toolActions.push({ type: 'open_swinglab' });
-          return 'open_swinglab dispatched to device.';
         }
 
         // All other tools: collect for client dispatch, return an acknowledgment

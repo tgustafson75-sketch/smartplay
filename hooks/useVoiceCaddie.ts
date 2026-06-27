@@ -51,7 +51,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable } from '../services/apiBase';
+import { getApiBaseUrl } from '../services/apiBase';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
@@ -1519,10 +1519,6 @@ export const useVoiceCaddie = ({
         } catch { pingOk = false; }
         console.log('[voice] transcribe failed — not retrying:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
-        // 2026-06-27 (Tim — self-heal) — a transcribe network failure may mean the
-        // active backend host got filtered/blocked. Re-probe + fail over to the
-        // other host (best-effort, deduped) so the NEXT attempt hits a healthy host.
-        void ensureBackendReachable({ force: true }).catch(() => undefined);
         try { Vibration.vibrate(120); } catch {}
         onResponseReceived("I'm not reaching the network right now — try again in a sec.");
         if (voiceEnabled) void speakDeviceNotice("I'm not reaching the network right now — try again in a sec.", language, voiceGender).catch(() => {});
@@ -1943,11 +1939,6 @@ export const useVoiceCaddie = ({
       const aborted = err instanceof Error && err.name === 'AbortError'
         || message.toLowerCase().includes('aborted');
       console.log('[voice] process error:', err);
-      // 2026-06-27 (Tim — self-heal) — this catch also swallows BRAIN network
-      // failures (sendToBrain threw), not just transcribe. Re-probe + fail over the
-      // backend host so the next turn uses a reachable one (covers a filter/outage
-      // on the active host that hits the brain leg). Best-effort, deduped.
-      void ensureBackendReachable({ force: true }).catch(() => undefined);
       // 2026-06-07 audit r6 — Most failures here are transcribe-related
       // (the fetch threw or aborted). Record for the circuit breaker
       // so repeated cellular weak-signal stretches degrade /api/transcribe
