@@ -54,10 +54,28 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
   const real = Object.entries(bag).filter(([, d]) => typeof d === 'number' && (d as number) > 0) as [string, number][];
   if (real.length > 0) {
     let best: [string, number] | null = null;
+    let longest = real[0];
+    let shortest = real[0];
     for (const entry of real) {
       if (!best || Math.abs(entry[1] - playsLikeYards) < Math.abs(best[1] - playsLikeYards)) best = entry;
+      if (entry[1] > longest[1]) longest = entry;
+      if (entry[1] < shortest[1]) shortest = entry;
     }
     if (best) {
+      // 2026-06-27 — honest read at the BAG EXTREMES. The closest club to a
+      // too-big / too-small number is already `longest` / `shortest`, so the club
+      // returned is unchanged; only the "why" is more honest. Lead with it
+      // (unshift) so it survives the voice responder's first-two-lines trim.
+      const BEYOND_MARGIN = 8;   // matches localStatusResponder.clubBeyond
+      const PARTIAL_MARGIN = 12; // under the shortest = a partial, not a full carry
+      if (playsLikeYards > longest[1] + BEYOND_MARGIN) {
+        why.unshift(`past your ${longest[0].toLowerCase()} (${Math.round(longest[1])}) — lay up and leave a wedge`);
+        return longest[0];
+      }
+      if (playsLikeYards < shortest[1] - PARTIAL_MARGIN) {
+        why.unshift(`less than a full ${shortest[0].toLowerCase()} — partial swing`);
+        return shortest[0];
+      }
       why.push(`your ${best[0].toLowerCase()} carries ~${Math.round(best[1])}`);
       return best[0];
     }
