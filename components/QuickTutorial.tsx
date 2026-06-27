@@ -76,10 +76,11 @@ export function QuickTutorial({
 
   // Self-managed visibility — open on first mount when the slug hasn't
   // been marked seen. Parent override (visible prop) wins when defined.
-  // 2026-06-13 (Tim) — TESTING: keep quick instructions defaulted ON + skippable so we
-  // feel the flow and don't miss them. While true they show on EVERY entry (ignore the
-  // seen flag) but stay one-tap skippable. Flip to false to restore once-only behavior.
-  const FORCE_SHOW_DURING_TESTING = true;
+  // 2026-06-27 (Tim) — was left TRUE from a 2026-06-13 testing pass, which force-showed
+  // EVERY QuickTutorial on EVERY launch (ignoring the seen flag) — that's the duplicate
+  // "second message" on the Caddie home, stacked on the welcome opener. Off: tutorials
+  // show once per slug via tutorialsSeen, as designed.
+  const FORCE_SHOW_DURING_TESTING = false;
   const [selfOpen, setSelfOpen] = useState<boolean>(() => FORCE_SHOW_DURING_TESTING || !tutorialsSeen?.[slug]);
   const open = typeof visible === 'boolean' ? visible : selfOpen;
 
