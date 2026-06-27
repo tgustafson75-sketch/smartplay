@@ -1724,33 +1724,11 @@ export const useVoiceCaddie = ({
         }
       }
 
-      // ── Pipecat override — bypasses intent router + Kevin API ─────────────
-      // When voiceOrchestrator === 'pipecat', the caller passes processTranscriptOverride
-      // which handles Claude brain + tool dispatch + TTS internally.
-      if (processTranscriptOverride) {
-        wrappedOnVoiceStateChange('thinking');
-        // Pipecat OWNS the turn from here — including its own re-entrancy (the mic
-        // capture is single-flight guarded) AND its own end state (processTurn sets
-        // 'idle' after speaking, or re-opens the mic via onReadyToListen→handleMicPress
-        // when the caddie asks a question). So:
-        //  (1) release isProcessingRef BEFORE the await — otherwise the follow-up
-        //      re-listen hits `if (isProcessingRef.current) return` in _handleMicPress
-        //      and the mic never re-opens (the caddie "asks but doesn't listen"
-        //      regression — 2026-06-24).
-        //  (2) do NOT force 'idle' after the await — that stomped the 'listening'
-        //      state processTurn just set for the follow-up. Let processTurn own it.
-        // Don't fall through to the legacy sendToBrain on error (that double-
-        // processed flaky turns; 2026-06-23 single-path fix). Local-first precheck
-        // already ran ABOVE for offline status queries.
-        isProcessingRef.current = false;
-        try {
-          await processTranscriptOverride(transcript);
-        } catch (e) {
-          console.log('[voice] pipecat override error:', e);
-          wrappedOnVoiceStateChange('idle');
-        }
-        return;
-      }
+      // 2026-06-26 (Tim — systemic fix) — the pipecat override USED to early-return
+      // HERE, before the intent router, which orphaned every router-only command
+      // (log_issue, set_hole_note, club changes, etc.) on the default pipecat path.
+      // The router now runs for BOTH orchestrators below; pipecat handles only the
+      // CONVERSATIONAL fallthrough (moved to just before the kevin sendToBrain).
 
       // ── Voice command routing — runs after bypasses, before brain ──
       // Builds a snapshot of app state and parses the transcript into a structured
@@ -1855,6 +1833,27 @@ export const useVoiceCaddie = ({
       } catch (err) {
         console.log('[voice] command routing error:', err);
         // Fall through to brain on routing errors — never get stuck.
+      }
+
+      // ── Conversational fallback to the BRAIN ──────────────────────────────
+      // Only a CONVERSATIONAL / unknown turn reaches here (the router above already
+      // handled + returned for any deterministic command, on BOTH orchestrators).
+      // In pipecat mode the live brain owns the turn; otherwise the kevin path.
+      if (processTranscriptOverride) {
+        wrappedOnVoiceStateChange('thinking');
+        // Pipecat owns the turn (its own re-entrancy + end state). Release
+        // isProcessingRef BEFORE the await so a follow-up re-listen isn't blocked
+        // (the "asks but doesn't listen" regression), and do NOT force 'idle' after
+        // — processTurn sets the final state. Don't fall through to kevin on error
+        // (single-path; avoids double-processing a flaky turn).
+        isProcessingRef.current = false;
+        try {
+          await processTranscriptOverride(transcript);
+        } catch (e) {
+          console.log('[voice] pipecat override error:', e);
+          wrappedOnVoiceStateChange('idle');
+        }
+        return;
       }
 
       // 2026-06-10 — Pre-response conversational filler REMOVED. It fired at
