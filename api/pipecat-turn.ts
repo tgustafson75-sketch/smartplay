@@ -65,12 +65,12 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'open_swinglab',
-    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself with NO specific destination. If they name a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so they land ON that feature, not the hub. For a VAGUE "I want to practice", ASK what they want, then navigate once they pick.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself with NO specific destination. If they name a specific feature, screen, or drill — SmartMotion / "smart motion" / "open smart motion", Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc. — DO NOT use this; use the `navigate` tool. "open smart motion" is NEVER open_swinglab — it is navigate{feature:"SmartMotion"}. For a VAGUE "I want to practice", ASK what they want, then navigate once they pick.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'navigate',
-    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", a fault drill ("the over-the-top drill", "chicken wing drill"). Pass `feature` as the feature NAME (or a listed alias) from the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when they name a destination.',
+    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "open smart motion"/"SmartMotion", "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", a fault drill ("the over-the-top drill", "chicken wing drill"). Pass `feature` as the feature NAME (or a listed alias) from the APP FEATURES list (e.g. feature:"SmartMotion" for "open smart motion"). ALWAYS prefer this over open_swinglab when they name a destination.',
     parameters: {
       type: 'object',
       properties: {

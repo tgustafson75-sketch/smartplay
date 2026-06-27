@@ -1943,6 +1943,11 @@ export const useVoiceCaddie = ({
       const aborted = err instanceof Error && err.name === 'AbortError'
         || message.toLowerCase().includes('aborted');
       console.log('[voice] process error:', err);
+      // 2026-06-27 (Tim — self-heal) — this catch also swallows BRAIN network
+      // failures (sendToBrain threw), not just transcribe. Re-probe + fail over the
+      // backend host so the next turn uses a reachable one (covers a filter/outage
+      // on the active host that hits the brain leg). Best-effort, deduped.
+      void ensureBackendReachable({ force: true }).catch(() => undefined);
       // 2026-06-07 audit r6 — Most failures here are transcribe-related
       // (the fetch threw or aborted). Record for the circuit breaker
       // so repeated cellular weak-signal stretches degrade /api/transcribe

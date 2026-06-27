@@ -138,6 +138,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[transcribe] error:', msg);
-    return res.status(502).json({ error: 'Transcription failed', detail: msg, text: '' });
+    // 2026-06-27 — return 200 (not 502) with an error field + empty text. The client
+    // already treats an `error` field as a failure (speaks "didn't catch that"), so
+    // UX is unchanged — but a 502 reads as a hard backend failure and can trip the
+    // client's voice circuit breaker. Graceful, same as the brain endpoints.
+    return res.status(200).json({ error: 'Transcription failed', detail: msg, text: '' });
   }
 }

@@ -142,7 +142,7 @@ export type ToolAction =
   | { type: 'open_swinglab' }
   | { type: 'log_score'; hole?: number; score: number }
   | { type: 'record_swing' }
-  | { type: 'log_shot'; direction?: string; contactQuality?: string; outcome?: string; feel?: string }
+  | { type: 'log_shot'; club?: string; direction?: string; contactQuality?: string; outcome?: string; feel?: string }
   | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
   // 2026-06-26 — voice "log this issue" → a real issue-log entry (owner-gated client-side)
   | { type: 'log_issue'; note: string }

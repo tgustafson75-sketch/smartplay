@@ -106,7 +106,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       messages: [{ role: 'user', content }],
     });
     const toolUse = completion.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-    if (!toolUse) return res.status(502).json({ error: 'no tool_use block in vision response' });
+    if (!toolUse) {
+      // 2026-06-27 — graceful, HONEST degrade: no tool_use = no trace. 200 with
+      // empty positions (client shows NO trace) beats a 502 that reads as a hard
+      // failure. We never fabricate a path.
+      console.warn('[ball-path] no tool_use block in vision response — returning no-trace');
+      return res.status(200).json({ positions: [] });
+    }
     const raw = (toolUse.input as { positions?: unknown }).positions;
     const list = Array.isArray(raw) ? raw : [];
     // Validate + align to the frame count. Anything not a clean in-range {x,y}
@@ -122,6 +128,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     return res.status(200).json({ positions });
   } catch (e) {
-    return res.status(502).json({ error: e instanceof Error ? e.message : 'vision call failed' });
+    // 2026-06-27 — graceful no-trace on a vision failure (200, empty positions) so a
+    // blip can't trip the client; log for diagnosis. Never fabricate a path.
+    console.warn('[ball-path] vision call failed — returning no-trace:', e instanceof Error ? e.message : e);
+    return res.status(200).json({ positions: [] });
   }
 }

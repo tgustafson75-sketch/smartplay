@@ -112,7 +112,8 @@ import { resolvePenalty } from '../../services/rulesEngine';
 import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
-import { getApiBaseUrl, ensureBackendReachable } from '../../services/apiBase';
+import { getApiBaseUrl } from '../../services/apiBase';
+import { getOpenerAssetForPersona } from '../../services/kevinGreetingManifest';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -1203,7 +1204,7 @@ export default function CaddieTab() {
   //      use a static setTimeout that could race splash audio.
   //   4) Bundled mp3 only — no /api/voice fetch in the opener path.
   useEffect(() => {
-    setOpeningPrompt('Tap to talk.');
+    setOpeningPrompt('Welcome back — tap the mic or call my name anytime.');
 
     void (async () => {
       if (openerPlayedThisProcess) return;
@@ -1231,38 +1232,26 @@ export default function CaddieTab() {
         return;
       }
       try {
-        // 2026-06-26 (Tim) — voice-first welcome: replace the bundled opener clip
-        // with a spoken play-or-practice question that OPENS LISTENING, then routes
-        // the answer. It also doubles as the warmup nudge — the speak + the listen
-        // window give the transcribe/brain lambdas time to warm before the real
-        // first turn (the "first-try slow" mitigation). No name (avoids any double-
-        // greet / hydration race — Tim). userInitiated:true — cold launch is
-        // user-initiated; voiceEnabled above is the hard kill switch.
-        const welcome = 'Welcome back. Are we here to play or practice today?';
-        setOpeningPrompt(welcome);
-        // 2026-06-27 (Tim — self-heal) — make sure we're on a reachable backend host
-        // before the opener's first network call (deduped with the launch probe; a
-        // no-op if already healthy). Keeps the welcome + listen on a live host.
-        await ensureBackendReachable().catch(() => undefined);
-        await configureAudioForSpeech();
-        await speak(welcome, liveSettings.voiceGender, liveSettings.language, apiUrl, { userInitiated: true });
-        openerPlayedThisProcess = true;
-        // Open listening for the one-word answer and route it EXPLICITLY — a bare
-        // "play"/"practice" isn't in the shortcut matcher, so we parse it here
-        // rather than relying on the generic pipeline. play → Play tab (Tim: still
-        // pick course/tee there), practice → SwingLab. Then it's manual: the user
-        // taps the caddie mic on that tab to ask for a drill / what to practice.
-        const answer = ((await captureUtterance(7000, apiUrl, liveSettings.language)) ?? '').toLowerCase().trim();
-        if (/\b(practice|swing\s*lab|swinglab|drill|drills|range|work on|chip|chipping|putt|putting)\b/.test(answer)) {
-          router.push('/(tabs)/swinglab' as never);
-        } else if (/\b(play|round|game|tee|course|start|let'?s go|gonna play)\b/.test(answer)) {
-          router.push('/(tabs)/play' as never);
-        } else {
-          // Unclear / no answer — stay on the Caddie home, manual from here.
-          setOpeningPrompt('Tap the mic or call my name anytime.');
+        // 2026-06-27 (Tim) — REVERTED the voice-first speak+listen+route opener. It
+        // was supposed to be a minor copy change but it (a) robot-voiced when the
+        // backend was unreachable, (b) could fail silently, and (c) its 7s listen
+        // window ATE non-play/practice commands like "open smart motion". Back to the
+        // reliable bundled greeting CLIP: offline, proper voice, no launch mic, no
+        // cloud-TTS dependency, and it never intercepts the user's commands. The
+        // "longer, cleaner" copy lives in the openingPrompt text above.
+        const openerMod = getOpenerAssetForPersona(liveSettings.caddiePersonality);
+        const asset = Asset.fromModule(openerMod);
+        await asset.downloadAsync();
+        if (!asset.localUri) {
+          console.log('[caddie] opener skipped: asset has no localUri', { persona: liveSettings.caddiePersonality });
+          return;
         }
+        await playLocalFile(asset.localUri, undefined, { userInitiated: true });
+        // Flag set only AFTER play resolves; a silent failure leaves it false so the
+        // next launch retries.
+        openerPlayedThisProcess = true;
       } catch (e) {
-        console.log('[caddie] welcome opener failed (non-fatal):', e);
+        console.log('[caddie] opener failed (non-fatal):', e);
       }
       // 2026-06-16 (Tim — "fix that first-turn slowness") — greeting + opener are done,
       // the caddie is idle: warm the mic/audio-capture pipeline now (once, off-path) so
