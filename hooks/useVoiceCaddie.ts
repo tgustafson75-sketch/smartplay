@@ -293,6 +293,11 @@ interface UseVoiceCaddieOptions {
   onVisionTrigger?: () => void;
   onHeroReelView?: () => void;
   onToolAction?: (action: ToolAction) => void;
+  // 2026-06-27 (A2 offline degrade) — fired when transcription can't reach the
+  // backend (host unreachable). The UI offers a typed question routed to the
+  // on-device offline caddie (services/offlineCaddie), so a dead network degrades
+  // to "type it" instead of a silent dead-end. [[offline-caddie-plan]]
+  onOfflineFallback?: () => void;
   // When set, bypasses the intent router + Kevin API entirely.
   // Called with the raw transcript; caller owns TTS and tool dispatch.
   // Used when voiceOrchestrator === 'pipecat'.
@@ -406,6 +411,7 @@ export const useVoiceCaddie = ({
   onVisionTrigger,
   onHeroReelView,
   onToolAction,
+  onOfflineFallback,
   processTranscriptOverride,
 }: UseVoiceCaddieOptions) => {
 
@@ -1162,22 +1168,26 @@ export const useVoiceCaddie = ({
       // 2026-06-06 — Phase 3 of on-course resilience sprint. Tim's
       // Echo Hills round hit this catch ~28 times (cellular died at
       // the course); user got "Hit a snag" canned every time. Now
-      // first try services/localStatusResponder.tryLocalReply — if
-      // the transcript matches a status pattern (yardage, hole, par,
-      // score, holes left, tee, course, club, handicap), produce a
-      // templated reply from local round state + GPS. Phase 1 device
-      // TTS then speaks it via system voice. Coaching / strategy
-      // questions fall through to the existing "Hit a snag" return.
+      // answer LOCALLY via services/offlineCaddie.answerOffline:
+      //   1) round-state patterns (yardage, club call, score, hole info,
+      //      wind, plays-like, last shot) from local round state + GPS,
+      //   2) and — new 2026-06-27 — the on-device golf-knowledge KB for
+      //      coaching / strategy questions that previously fell through
+      //      to the canned "Give me one sec" dead-end. retrieveKB used to
+      //      run server-side only, so the bundled KB did nothing offline;
+      //      this brings it to the device. [[caddie-brain-kb-spec]]
+      // Phase 1 device TTS then speaks the reply via system voice.
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
+        const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
           ? (language as 'en' | 'es' | 'zh')
           : 'en';
-        const local = responder.tryLocalReply(message, langSafe);
+        const local = offline.answerOffline(message, langSafe);
         if (local) {
           logVoiceSilentFail('local_responder_hit', {
-            queryType: local.queryType,
+            source: local.source,
+            detail: local.detail ?? null,
             language: langSafe,
             transcriptHead: message.slice(0, 60),
           });
@@ -1188,7 +1198,7 @@ export const useVoiceCaddie = ({
           language: langSafe,
         });
       } catch (e) {
-        console.log('[voice] localStatusResponder threw (non-fatal):', e);
+        console.log('[voice] offlineCaddie threw (non-fatal):', e);
       }
       // Reached only if the healthy endpoint, the minimal retry, AND the local
       // responder all came up empty — genuinely rare. Keep it warm, not alarmy.
@@ -1491,54 +1501,74 @@ export const useVoiceCaddie = ({
 
       let transcribeRes: Response;
       const txStart = Date.now();
-      try {
-        // 2026-06-27 — retry ONCE through a cold-start / network blip. The 12s
-        // first attempt aborts a cold-booting Vercel Lambda (formidable + Node
-        // + Deepgram = 10-15s); the retry, after a brief pause, lands on the
-        // now-warm function. Bounded at ~27s worst case — NOT the old ~90s
-        // double-wait that read as "stuck thinking". The host is provably
-        // reachable in the field (empty_transcript 200s), so this catches
-        // exactly the transient first-call failures the single-shot fast-fail
-        // was turning into "I'm not reaching the network right now".
-        try {
-          transcribeRes = await doTranscribeFetch(TRANSCRIBE_TIMEOUT_MS);
-        } catch {
-          await new Promise(r => setTimeout(r, 600));
-          transcribeRes = await doTranscribeFetch(15000);
-        }
-      } catch (firstErr) {
-        // 2026-06-26 — FAIL FAST. A timeout/abort means the request isn't
-        // getting through; the old retry just doubled the dead wait to ~90s
-        // ("stuck thinking" for minutes). One honest spoken fallback, reset to
-        // idle, never hang.
-        const name = firstErr instanceof Error ? firstErr.name : 'transcribe_fetch_failed';
-        const elapsedMs = Date.now() - txStart;
-        // 2026-06-26 DIAGNOSTIC — split "multipart upload to vercel fails" from
-        // "host unreachable from this phone". Fire a tiny JSON ping to the SAME
-        // host: if the ping lands but the multipart transcribe didn't, it's the
-        // file-upload path (client fix). If the ping ALSO fails, the phone can't
-        // reach the server at all (network/domain). elapsedMs ~12000 = connected
-        // then stalled; < ~1000 = couldn't connect.
-        let pingOk = false; let pingMs = -1;
+
+      // 2026-06-27 (A2) — a tiny JSON ping to the SAME host. Used to DECIDE,
+      // not just diagnose: if the host answers, a failed transcribe was an
+      // upload cold-start/blip worth ONE retry; if it doesn't, the network is
+      // down and a retry is a dead 15s wait — fail straight to offline. Returns
+      // { ok, ms } (ms = -1 when it threw before any response).
+      const reachabilityPing = async (timeoutMs: number): Promise<{ ok: boolean; ms: number }> => {
         try {
           const pc = new AbortController();
-          const pt = setTimeout(() => pc.abort(), 5000);
+          const pt = setTimeout(() => pc.abort(), timeoutMs);
           const pStart = Date.now();
           const pr = await fetch(apiUrl + '/api/kevin', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: '__ping__' }), signal: pc.signal,
           }).finally(() => clearTimeout(pt));
-          pingMs = Date.now() - pStart;
-          pingOk = pr.ok;
-        } catch { pingOk = false; }
-        console.log('[voice] transcribe failed — not retrying:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
+          return { ok: pr.ok, ms: Date.now() - pStart };
+        } catch { return { ok: false, ms: -1 }; }
+      };
+
+      // Honest offline dead-end — log the diagnostic, give a spoken fallback,
+      // and (A2) invite a typed question routed to the on-device offline caddie.
+      const failTranscribeOffline = (name: string, pingOk: boolean, pingMs: number) => {
+        const elapsedMs = Date.now() - txStart;
+        console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
         try { Vibration.vibrate(120); } catch {}
-        onResponseReceived("I'm not reaching the network right now — try again in a sec.");
-        if (voiceEnabled) void speakDeviceNotice("I'm not reaching the network right now — try again in a sec.", language, voiceGender).catch(() => {});
+        // pingOk distinguishes "host unreachable" (offer to type — the offline
+        // caddie can still answer yardages/club/KB) from "upload stalled but host
+        // up" (a plain retry-in-a-sec nudge — typing wouldn't reach the brain anyway).
+        if (!pingOk && onOfflineFallback) {
+          const line = "I can't reach the network to hear you. Tap to type and I'll answer from what I know.";
+          onResponseReceived(line);
+          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
+          onOfflineFallback();
+        } else {
+          const line = "I'm not reaching the network right now — try again in a sec.";
+          onResponseReceived(line);
+          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
+        }
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
-        return;
+      };
+
+      try {
+        transcribeRes = await doTranscribeFetch(TRANSCRIBE_TIMEOUT_MS);
+      } catch {
+        // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
+        // 27643) showed the old blind retry was a dead 15s wait on top of the
+        // first 12s. Probe reachability (3s) FIRST: only retry when the host is
+        // actually answering (the cold-start/blip the retry was meant for);
+        // otherwise fail straight to the offline path. Cuts the unreachable
+        // hang from ~27s to ~15s and routes to the on-device caddie.
+        const ping = await reachabilityPing(3000);
+        if (!ping.ok) {
+          failTranscribeOffline('AbortError', ping.ok, ping.ms);
+          return;
+        }
+        // Host is up — the upload hit a cold-start/blip. Retry once.
+        try {
+          await new Promise(r => setTimeout(r, 300));
+          transcribeRes = await doTranscribeFetch(15000);
+        } catch (retryErr) {
+          const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
+          // Host answered the ping but the upload still failed twice — treat as
+          // reachable (don't offer offline typing; the brain is up, retry works).
+          failTranscribeOffline(name, true, ping.ms);
+          return;
+        }
       }
 
       const transcribeData = await transcribeRes.json().catch(() => ({})) as { text?: string; error?: string };

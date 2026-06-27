@@ -64,7 +64,8 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline } from '../../services/voiceService';
+import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
+import { answerOffline } from '../../services/offlineCaddie';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
 // instead of TTS-ing the text summary. Asset is resolved at fire
@@ -764,6 +765,10 @@ export default function CaddieTab() {
   const [kevinEmotion, setKevinEmotion] = useState<string | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
   const [caddieResponse, setCaddieResponse] = useState('');
+  // 2026-06-27 (A2 offline degrade) — when voice can't reach the backend, offer
+  // a typed question routed to the on-device offline caddie (services/offlineCaddie).
+  const [offlineFallbackOpen, setOfflineFallbackOpen] = useState(false);
+  const [offlineFallbackText, setOfflineFallbackText] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
   const [showRoundSetup, setShowRoundSetup] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -1621,11 +1626,31 @@ export default function CaddieTab() {
       router.push('/(tabs)/dashboard' as never);
     },
     onToolAction: handleToolAction,
+    // 2026-06-27 (A2) — voice couldn't reach the backend; open the typed
+    // offline-caddie fallback so a dead network degrades to "type it".
+    onOfflineFallback: () => setOfflineFallbackOpen(true),
     // Pipecat override — when active, Claude handles brain + TTS + tools
     processTranscriptOverride: voiceOrchestrator === 'pipecat'
       ? pipecatVoice.processTurn
       : undefined,
   });
+
+  // 2026-06-27 (A2 offline degrade) — answer a typed question with ZERO network
+  // via the on-device offline caddie (round state + golf KB), spoken through the
+  // device voice (expo-speech, offline-capable). Honest when neither layer can help.
+  const handleOfflineAsk = () => {
+    const q = offlineFallbackText.trim();
+    if (!q) return;
+    const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
+      ? (language as 'en' | 'es' | 'zh')
+      : 'en';
+    const ans = answerOffline(q, langSafe);
+    const reply = ans?.text ?? "I can't answer that one offline — it needs a connection. I've got yardages, club calls and the basics covered without signal.";
+    setCaddieResponse(reply);
+    if (voiceEnabled) void speakDeviceNotice(reply, language, voiceGender).catch(() => {});
+    setOfflineFallbackText('');
+    setOfflineFallbackOpen(false);
+  };
 
   const handleMicPress = () => {
     // Phase BH — stronger haptic so the tap is unmistakable when Kevin's
@@ -3657,6 +3682,55 @@ export default function CaddieTab() {
           </View>
           </KeyboardAvoidingView>
         </TouchableOpacity>
+      </Modal>
+
+      {/* ── OFFLINE FALLBACK SHEET (A2) ──────────────────
+          Voice couldn't reach the backend. Let the player TYPE the question and
+          answer it with ZERO network via the on-device offline caddie (round
+          state + golf KB), spoken through the device voice. [[offline-caddie-plan]] */}
+      <Modal
+        visible={offlineFallbackOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOfflineFallbackOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', padding: 24 }}
+        >
+          <View style={{ backgroundColor: '#111827', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#1f2937' }}>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
+              No signal — ask me anyway
+            </Text>
+            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 14 }}>
+              I can't hear you without a connection, but I can still answer yardages, club calls and the basics from what's on your phone.
+            </Text>
+            <TextInput
+              style={{ backgroundColor: '#0b0f17', color: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#1f2937', padding: 12, fontSize: 15, minHeight: 44 }}
+              value={offlineFallbackText}
+              onChangeText={setOfflineFallbackText}
+              placeholder="e.g. how far to the middle? what club here?"
+              placeholderTextColor="#4b5563"
+              autoFocus
+              returnKeyType="send"
+              onSubmitEditing={handleOfflineAsk}
+            />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#374151' }}
+                onPress={() => { setOfflineFallbackText(''); setOfflineFallbackOpen(false); }}
+              >
+                <Text style={{ color: '#9ca3af', fontWeight: '600' }}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#00C896' }}
+                onPress={handleOfflineAsk}
+              >
+                <Text style={{ color: '#04241c', fontWeight: '700' }}>Ask</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── SHOT CARD SHEET ─────────────────── */}
