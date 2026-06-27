@@ -274,6 +274,12 @@ export interface RoundRecord {
     vibe?: string;
     weather?: string;
   };
+  // 2026-06-27 (smoke-test fix) — true once this round's score differential has
+  // been posted to the WHS index. endRound auto-posts at round end; this flag
+  // stops the recap card's "Post to my Index" button from posting the SAME
+  // round a SECOND time (which took two of the best-8-of-20 slots and pulled
+  // the index too low). Optional: rounds that predate this read as not-posted.
+  handicapPosted?: boolean;
 }
 
 // ─── STATE ────────────────────────────────
@@ -497,6 +503,9 @@ interface RoundState {
   /** Remove a completed round from history and rebuild handicap differentials
    *  from the remaining rounds so the index stays correct. */
   deleteRound: (id: string) => void;
+  /** 2026-06-27 — mark a round's differential as posted to the WHS index, so it
+   *  can't be double-counted (endRound auto-post + recap-card "Post" button). */
+  markHandicapPosted: (id: string) => void;
   // Phase AQ — append a synthesized round insight (rolling 10).
   addRoundInsight: (round_id: string, course: string, insight: string) => void;
   /** 2026-05-24 — Append a single external-source utterance (e.g. one
@@ -1263,6 +1272,14 @@ export const useRoundStore = create<RoundState>()(
         }
       },
 
+      markHandicapPosted: (id) => {
+        set(state => ({
+          roundHistory: state.roundHistory.map(r =>
+            r.id === id ? { ...r, handicapPosted: true } : r,
+          ),
+        }));
+      },
+
       setActiveCourseId: (id) => set({ activeCourseId: id }),
       setCurrentRoundMode: (mode) => set({ mode }),
 
@@ -1457,8 +1474,13 @@ export const useRoundStore = create<RoundState>()(
           currentTeeBox: null,
           active_ghost: null,
         }));
-        const total = Object.values(s.scores).reduce((a, b) => a + b, 0);
-        const holesPlayed = Object.keys(s.scores).length;
+        // 2026-06-27 (smoke-test fix) — gate on score>0 to match the saved
+        // RoundRecord (scoredEntries) and the getScoreVsPar/getHolesPlayed
+        // getters. The ungated count let a never-finalized 0-score hole slip
+        // into the handicap-eligibility (===9||18), points (>=9), and Tank
+        // soft-intro (>=9) gates below while the record itself excluded it.
+        const total = scoredEntries.reduce((a, [, score]) => a + score, 0);
+        const holesPlayed = scoredEntries.length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
@@ -1529,8 +1551,10 @@ export const useRoundStore = create<RoundState>()(
             const profile = profileMod.usePlayerProfileStore.getState();
             const calcMod = require('../services/handicapCalculator');
 
-            // Build HandicapHoleEntry[] from the just-ended round.
-            const holes = Object.entries(s.scores).map(([k, score]) => {
+            // Build HandicapHoleEntry[] from the just-ended round. Use the
+            // score>0 gated entries so an unfinalized 0-score hole can't drag
+            // the differential (the record + holesPlayed gate use the same set).
+            const holes = scoredEntries.map(([k, score]) => {
               const holeNum = Number(k);
               const par = s.courseHoles.find(h => h.hole === holeNum)?.par ?? 4;
               return { hole_number: holeNum, par, score };
@@ -1576,6 +1600,10 @@ export const useRoundStore = create<RoundState>()(
               profile.pushDifferential(diff);
               console.log(`[handicap] differential=${diff.toFixed(1)} (no index yet)`);
             }
+            // 2026-06-27 (smoke-test fix) — record that this round's differential
+            // is already posted, so the recap card's "Post to my Index" button
+            // can't post the SAME round again (the double-count bug).
+            if (holes.length > 0) get().markHandicapPosted(record.id);
           } catch (e) {
             console.log('[handicap] round-end update failed (non-fatal):', e);
           }

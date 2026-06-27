@@ -49,8 +49,17 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
 
   const round = useRoundStore(s => s.roundHistory.find(r => r.id === roundId) ?? null);
   const courseHoles = useRoundStore(s => s.courseHoles);
+  const markHandicapPosted = useRoundStore(s => s.markHandicapPosted);
 
-  const [posted, setPosted] = useState(false);
+  // 2026-06-27 (smoke-test fix) — endRound auto-posts every completed 9/18-hole
+  // round's differential. This card's "Post to my Index" button used to push the
+  // SAME round AGAIN (no dedup → one round filled two of the best-8-of-20 slots
+  // and pulled the index too low). Treat a round flagged handicapPosted as
+  // already posted, and mark older (pre-flag) rounds when posted here so a
+  // re-opened recap can't double-post either.
+  const alreadyPosted = round?.handicapPosted ?? false;
+  const [justPosted, setJustPosted] = useState(false);
+  const posted = alreadyPosted || justPosted;
   const [dismissed, setDismissed] = useState(false);
 
   // 2026-06-06 — Phase 6.1 followup: when the viewed round is 9-hole,
@@ -174,7 +183,9 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
 
       {/* Phase V — confidence band tied to differential count */}
       {(() => {
-        const n = recentDifferentials.length + (posted ? 1 : 0);
+        // recent_differentials already includes this round's diff once it's
+        // posted (by endRound or the button below), so don't add a phantom +1.
+        const n = recentDifferentials.length;
         const conf = confidenceForN(n);
         return (
           <View style={[styles.confidenceRow, { borderColor: CONFIDENCE_COLORS[conf] }]}>
@@ -201,7 +212,10 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
               if (est.newIndex != null) {
                 setHandicapIndex(est.newIndex);
               }
-              setPosted(true);
+              // Flag the round so a re-opened recap can't post it again
+              // (covers imported / pre-flag rounds endRound didn't auto-post).
+              if (roundId) markHandicapPosted(roundId);
+              setJustPosted(true);
             }}
           >
             <Text style={styles.ctaPrimaryText}>Post to my Index</Text>

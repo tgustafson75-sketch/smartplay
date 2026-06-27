@@ -167,7 +167,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (isLieFollowup) {
       const lieRaw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0, schema: LIE_FOLLOWUP_SCHEMA });
-      const lieParsed = JSON.parse(lieRaw) as { lie_quality: string | null; confidence: string; raw_utterance: string };
+      // Defensive (smoke-test hardening) — completeJSON returns schema'd JSON
+      // (worst case '{}'), but guard so any non-JSON degrades to low-confidence
+      // instead of throwing a 500 on a live in-round voice call.
+      let lieParsed: { lie_quality?: string | null; confidence?: string };
+      try {
+        lieParsed = JSON.parse(lieRaw) as { lie_quality?: string | null; confidence?: string };
+      } catch {
+        lieParsed = { lie_quality: null, confidence: 'low' };
+      }
       return res.status(200).json({
         lie_quality: lieParsed.lie_quality ?? null,
         confidence: lieParsed.confidence ?? 'low',
@@ -187,7 +195,15 @@ ${recentPhrases.length > 0 ? `\nThis user's recent phrasings:\n${recentPhrases.m
 Parse the shot. Return JSON only.`;
 
     const raw = await completeJSON(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0, schema: SHOT_PARSE_SCHEMA });
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Defensive (smoke-test hardening) — schema'd output is valid JSON (worst
+    // case '{}'); guard so a malformed response yields an all-null parse
+    // (handled by the typeof checks below) rather than a 500.
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      parsed = {};
+    }
 
     const club = typeof parsed.club === 'string' ? parsed.club : null;
     const distance = typeof parsed.distance === 'number' ? parsed.distance : null;
