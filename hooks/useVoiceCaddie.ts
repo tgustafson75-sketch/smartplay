@@ -51,7 +51,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
-import { getApiBaseUrl } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable } from '../services/apiBase';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
@@ -1519,6 +1519,10 @@ export const useVoiceCaddie = ({
         } catch { pingOk = false; }
         console.log('[voice] transcribe failed — not retrying:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
+        // 2026-06-27 (Tim — self-heal) — a transcribe network failure may mean the
+        // active backend host got filtered/blocked. Re-probe + fail over to the
+        // other host (best-effort, deduped) so the NEXT attempt hits a healthy host.
+        void ensureBackendReachable({ force: true }).catch(() => undefined);
         try { Vibration.vibrate(120); } catch {}
         onResponseReceived("I'm not reaching the network right now — try again in a sec.");
         if (voiceEnabled) void speakDeviceNotice("I'm not reaching the network right now — try again in a sec.", language, voiceGender).catch(() => {});

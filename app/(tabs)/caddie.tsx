@@ -112,7 +112,7 @@ import { resolvePenalty } from '../../services/rulesEngine';
 import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
-import { getApiBaseUrl } from '../../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable } from '../../services/apiBase';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -1240,6 +1240,10 @@ export default function CaddieTab() {
         // user-initiated; voiceEnabled above is the hard kill switch.
         const welcome = 'Welcome back. Are we here to play or practice today?';
         setOpeningPrompt(welcome);
+        // 2026-06-27 (Tim — self-heal) — make sure we're on a reachable backend host
+        // before the opener's first network call (deduped with the launch probe; a
+        // no-op if already healthy). Keeps the welcome + listen on a live host.
+        await ensureBackendReachable().catch(() => undefined);
         await configureAudioForSpeech();
         await speak(welcome, liveSettings.voiceGender, liveSettings.language, apiUrl, { userInitiated: true });
         openerPlayedThisProcess = true;
