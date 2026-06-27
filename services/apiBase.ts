@@ -21,8 +21,14 @@
  * routes through this — there is no other place the base URL is decided.
  */
 
-/** Production backend. The pinned alias re-pointed after each API deploy. */
-export const PROD_API_BASE_URL = 'https://smartplay-beta.vercel.app';
+/** Production backend — MUST be the custom domain, NOT *.vercel.app.
+ *  PROVEN 2026-06-27 by an on-device browser test: Tim's network intercepts
+ *  smartplay-beta.vercel.app with an invalid cert (ERR_CERT_AUTHORITY_INVALID
+ *  + HSTS) → the app's TLS handshake fails → every voice call dies → robot
+ *  voice. api.smartplaycaddie.com (same Vercel deployment, A 76.76.21.21)
+ *  returned {"status":"ok"} from the SAME phone. Never ship the backend on a
+ *  *.vercel.app host — it gets filtered/MITM'd on content-filtered networks. */
+export const PROD_API_BASE_URL = 'https://api.smartplaycaddie.com';
 
 function resolveApiBaseUrl(): string {
   const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
