@@ -21,8 +21,18 @@
  * routes through this — there is no other place the base URL is decided.
  */
 
-/** Production backend. The pinned alias re-pointed after each API deploy. */
-export const PROD_API_BASE_URL = 'https://smartplay-beta.vercel.app';
+/** Production backend — CUSTOM DOMAIN, NOT *.vercel.app.
+ *  2026-06-27 (root-cause of the recurring "voice breaks again"): *.vercel.app is
+ *  DNS-blocked by content filters (OpenDNS/Cisco Umbrella return block-page IP
+ *  146.112.61.104 → every backend fetch "Network request failed" → voice/brain/
+ *  transcribe dead, intermittently, depending on the network's resolver). The
+ *  Vercel SERVER was always healthy; only the *.vercel.app NAME was filtered. A
+ *  branded custom domain carries no "free-hosting" reputation, so it resolves
+ *  through those filters (verified: api.smartplaycaddie.com resolves + serves 200
+ *  through OpenDNS itself). api.smartplaycaddie.com → Vercel (A 76.76.21.21) on the
+ *  smartplay project. The smartplay-beta.vercel.app alias still works as a manual
+ *  fallback if ever needed. */
+export const PROD_API_BASE_URL = 'https://api.smartplaycaddie.com';
 
 function resolveApiBaseUrl(): string {
   const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
@@ -34,7 +44,7 @@ function resolveApiBaseUrl(): string {
 
 /**
  * Absolute backend base URL with no trailing slash, e.g.
- * "https://smartplay-beta.vercel.app". Resolved once at module load (the
+ * "https://api.smartplaycaddie.com". Resolved once at module load (the
  * EXPO_PUBLIC_* value is a build-time constant, so it can't change at runtime).
  */
 export const API_BASE_URL: string = resolveApiBaseUrl();
