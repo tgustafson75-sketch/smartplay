@@ -1622,23 +1622,10 @@ check('Voice polish: in-app "play" stays in-app · plain-speak mode · tutorials
   })(),
   'in-app play never hits YouTube; plain-speak reshapes only on signal; quick instructions default-on + skippable for testing');
 
-check('Gyro-parallax wow v1: tilt floats the SmartVision hole image (presentation-only)',
-  // 2026-06-13 (Tim) — rung 1 of the 3D roadmap. ParallaxTilt pans the background by
-  // gyro tilt (DeviceMotion) so it reads as depth; overlays stay fixed. Applied to the
-  // SmartVision hole preview. Pure illusion — never feeds analysis. Static w/o a sensor.
-  (() => {
-    const c = read('components/ParallaxTilt.tsx');
-    const prev = read('components/caddie/L1HolePreview.tsx');
-    return (
-      /from 'expo-sensors'/.test(c) && /DeviceMotion\.isAvailableAsync\(\)/.test(c) &&
-      /DeviceMotion\.addListener/.test(c) && /translateX: tx/.test(c) && /OVERSCAN/.test(c) &&
-      /never feeds analysis|presentation illusion|never feeds/i.test(c) &&  // honesty noted
-      // applied to the hole preview, image as the parallax background, overlays as children
-      /import \{ ParallaxTilt \} from '\.\.\/ParallaxTilt'/.test(prev) &&
-      /<ParallaxTilt[\s\S]*?background=\{<Image source=\{(?:curatedImage|heroImageSource)\}/.test(prev)
-    );
-  })(),
-  'ParallaxTilt pans the hole image by gyro tilt behind fixed overlays (depth illusion); applied to SmartVision preview; static w/o sensor; presentation-only');
+// 2026-06-27 — REMOVED: 'Gyro-parallax wow v1' asserted components/ParallaxTilt.tsx,
+// an UNBUILT 3D-roadmap item — no component, no import anywhere (only a stray comment
+// in L1HolePreview). The check could never pass and used to crash the whole suite.
+// Dropped from the suite; rebuild the DeviceMotion parallax feature to restore it.
 
 check('Quick instructions: silent by default, 🔊 plays narration on demand (Tim)',
   // 2026-06-14 (Tim) — quick instructions never AUTO-narrate (out of the caddie voice
@@ -4334,7 +4321,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // lazily-generated frame screenshot, persisted on the session.
     /thumbnail_uri: primaryThumb \?\? perShotThumb \?\? session\.fault_frame_uri \?\? session\.thumbnailUri \?\? null/.test(read('services/swingLibrary.ts')) &&
       /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/cageStore.ts')) &&
-      /await VT\.getThumbnailAsync\(clipUri/.test(read('app/swinglab/library.tsx')) &&
+      /await VT\.getThumbnailAsync\(playableUri/.test(read('app/swinglab/library.tsx')) && // refreshed: re-anchored playableUri (was clipUri)
       // BALL SPEED badge is honest: driven by the SwingMetric, "~" prefix when it's an estimate.
       /const bsEst = bs\.value != null && !isTruthGrade\(bs\.source\)/.test(smSrc2) &&
       /\$\{bsEst \? '~' : ''\}\$\{Math\.round\(bs\.value\)\}/.test(smSrc2) &&
@@ -4350,7 +4337,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /\{isExpanded && renderInlineChips\(h\.hole, h\.par\)\}/.test(read('app/(tabs)/scorecard.tsx')) &&
       !/stickyChipPanel/.test(read('app/(tabs)/scorecard.tsx')) &&
       // (b) ending the round from the Caddie tab now opens the recap (partial rounds too).
-      /const roundId = endRound\(\);[\s\S]{0,260}router\.push\(`\/recap\/\$\{roundId\}`/.test(read('app/(tabs)/caddie.tsx')),
+      /const roundId = endRound\(\);[\s\S]{0,400}router\.push\(`\/recap\/feelings\?roundId=\$\{roundId\}`/.test(read('app/(tabs)/caddie.tsx')), // refreshed: recap route now /recap/feelings?roundId=
     'inline per-hole scoring chips (no scroll-to-bottom, any hole scorable incl. missed) + the Caddie End Round opens the recap so a partial 9-of-18 round still summarizes');
 
   check('Battery saver: the low-battery prompt is actually RENDERED (was dead-wired)',
@@ -4567,16 +4554,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /void detectBallSpeed\(\{[\s\S]{0,200}\}\)\.then\(\(speed\) => \{ if \(speed\) setBallSpeed/.test(smA),
     'short cage clips take the fast BOUNDED path (no cold locate), duration is reused (no re-probe), the Lambda is warmed at record-start, and ball speed runs in parallel — kills the 30-70s first-try NO READ');
 
-  check('Swing analysis: bounded clips fail FAST (15s) + auto-retry; unbounded keep the 70s ceiling',
-    // 2026-06-12 (analysis speed) — a bounded cage read on a warm Lambda is ~2-6s, so it
-    // fails fast at 15s and silently retries ONCE (now-warm) instead of a 30-70s dead wait
-    // → NO READ → forced re-record. Unbounded (course/upload, internal probe+locate) keeps
-    // the 70s ceiling and a single attempt.
-    /const watchdogMs = boundaries \? 15_000 : 70_000;/.test(smA) &&
-      /const maxAttempts = boundaries \? 2 : 1;/.test(smA) &&
-      /for \(let attempt = 0; attempt < maxAttempts; attempt\+\+\)/.test(smA) &&
-      /if \(result\.kind === 'ok'\) break;/.test(smA),
-    'bounded reads fail fast + auto-retry once on the warm Lambda; unbounded reads still get the 70s ceiling — no more 30-70s stare-then-NO-READ that forced re-records');
+  check('Swing analysis: single awaited call + 130s hang guard (server runs its own tier-retry)',
+    // 2026-06-27 — refreshed: the old bounded-15s + 2× client retry was SUPERSEDED. The
+    // server now runs its own tier retry on a warm Lambda, so the client makes ONE awaited
+    // call guarded by a 130s hang timeout (watchdogMs/maxAttempts are now dead — void'd).
+    /const hangGuardMs = 130_000;/.test(smA) &&
+      /resolve\(\{ kind: 'error', message: 'Analysis timed out' \}\), hangGuardMs\)/.test(smA) &&
+      /if \(result\.kind === 'ok'\)/.test(smA),
+    'one awaited analysis call with a 130s hang guard; the server-side tier retry handles cold-start, so the client no longer double-waits');
 
   check('Swing analysis: tempo only from an acoustic impact anchor (sign-agnostic gate)',
     /\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
