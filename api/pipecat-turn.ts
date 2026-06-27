@@ -422,6 +422,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return 'SwingLab closed.';
         }
 
+        // 2026-06-27 — GUARD (parity with api/kevin.ts): if the model picked
+        // open_swinglab but the player named a specific feature ("open smart motion"),
+        // deterministically redirect to that screen via navigate.
+        if (toolName === 'open_swinglab') {
+          try {
+            const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
+            const feat = lookupFeature(text);
+            if (feat) { toolActions.push({ type: 'navigate', path: feat.route }); return `Opening ${feat.name}.`; }
+          } catch { /* fall through to the hub */ }
+          toolActions.push({ type: 'open_swinglab' });
+          return 'open_swinglab dispatched to device.';
+        }
+
         // All other tools: collect for client dispatch, return an acknowledgment
         if (UI_TOOLS.has(toolName)) {
           toolActions.push({ type: toolName, ...toolInput });

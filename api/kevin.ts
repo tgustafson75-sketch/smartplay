@@ -1263,7 +1263,19 @@ ${onCourseContextBlock}${baseMessage}`
       switch (name) {
         case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
         case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
-        case 'open_swinglab':    capture.action = { type: 'open_swinglab' };    break;
+        case 'open_swinglab': {
+          // 2026-06-27 — GUARD: the model sometimes picks open_swinglab even when the
+          // user named a specific feature ("open smart motion"). Deterministically
+          // redirect to that feature's screen if the message resolves to one (there
+          // is no generic swinglab-hub feature, so a vague ask stays on the hub).
+          try {
+            const { lookupFeature } = await import('../services/knowledgeBase/appCatalog');
+            const feat = lookupFeature(_message);
+            if (feat) { capture.action = { type: 'navigate', path: feat.route }; break; }
+          } catch { /* fall through to the hub */ }
+          capture.action = { type: 'open_swinglab' };
+          break;
+        }
         case 'record_swing':     capture.action = { type: 'record_swing' };     break;
         case 'mark_tee':         capture.action = { type: 'mark_tee' };         break;
         case 'mark_green':       capture.action = { type: 'mark_green' };       break;
