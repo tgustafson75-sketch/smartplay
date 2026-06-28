@@ -487,17 +487,16 @@ function AppNavigator() {
     // here overlaps the splash + navigation so the chain is hot before the
     // user ever reaches the Caddie screen. caddie.tsx focus-warmup still runs
     // (30s dedupe = no-op if within 30s) as a belt-and-suspenders.
-    // 2026-06-28 — SELF-HEAL the backend host BEFORE warmup (restored dual-host
-    // failover, 7d44a9f). If the device can't reach api.smartplaycaddie.com (custom-
-    // domain cert/DNS on this device) it fails over to smartplay-beta.vercel.app —
-    // same backend — so warmup + every voice call hits a host the device can reach.
-    void import('../services/apiBase')
-      .then(m => m.ensureBackendReachable())
-      .catch(() => undefined)
-      .then(() => {
-        bootMark('voice_warmup_fired');
-        return import('../services/voiceWarmup').then(m => { bootMark('voice_warmup_imported'); m.prewarmVoice(); });
-      });
+    // 2026-06-28 — Warm the Lambda/brain IMMEDIATELY at app load. Do NOT gate it
+    // behind the heal probe (that chained ~4s of ping-timeout in front of warmup on
+    // a blocked network — voice_warmup_fired jumped 900ms→4155ms). The app should
+    // start as ready-to-go as possible.
+    bootMark('voice_warmup_fired');
+    void import('../services/voiceWarmup').then(m => { bootMark('voice_warmup_imported'); m.prewarmVoice(); });
+    // SELF-HEAL the backend host in PARALLEL (restored dual-host failover, 7d44a9f).
+    // Switches activeBase for the user's actual calls; warmup re-runs on caddie focus
+    // (30s dedupe) so it isn't wasted if the heal fails over after this first warm.
+    void import('../services/apiBase').then(m => m.ensureBackendReachable()).catch(() => undefined);
     // 2026-05-24 — Native BT media-button bridge. Funnels through
     // notifyEarbudTap() so it shares the existing earbudControl
     // pattern (no orchestrator change). Native BluetoothMediaButton
