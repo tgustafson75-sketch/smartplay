@@ -34,6 +34,10 @@ import { WARMUP } from './warmup';
 import { RULES } from './rules';
 import { MENTAL_GAME } from './mentalGame';
 import { PRO_EXEMPLARS } from './proExemplars';
+// 2026-06-28 — distilled coaching from the curated drill-card videos
+// (data/instructorVideos.ts), attributed + source-linked. Curated seed of the
+// future Train-the-Trainer ingestion engine.
+import { INSTRUCTOR_VIDEO_KNOWLEDGE } from './instructorVideoKnowledge';
 
 export {
   PUTTING,
@@ -56,6 +60,7 @@ export {
   RULES,
   MENTAL_GAME,
   PRO_EXEMPLARS,
+  INSTRUCTOR_VIDEO_KNOWLEDGE,
 };
 
 /** The full golf-knowledge corpus, concatenated across every module. */
@@ -80,4 +85,5 @@ export const GOLF_KNOWLEDGE: KBEntry[] = [
   ...RULES,
   ...MENTAL_GAME,
   ...PRO_EXEMPLARS,
+  ...INSTRUCTOR_VIDEO_KNOWLEDGE,
 ];
