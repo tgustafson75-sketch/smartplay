@@ -3702,14 +3702,20 @@ export default function CaddieTab() {
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
               No signal — ask me anyway
             </Text>
-            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 14 }}>
+            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>
               I can't hear you without a connection, but I can still answer yardages, club calls and the basics from what's on your phone.
+            </Text>
+            {/* 2026-06-28 (Tim) — the keyboard's own dictation mic (Gboard / iOS) is a
+                reliable, often-offline talk-to-text that works in this box for free —
+                more dependable than our network/on-device STT. Make it discoverable. */}
+            <Text style={{ color: '#00C896', fontSize: 12, fontWeight: '600', marginBottom: 14 }}>
+              🎤 Prefer to talk? Tap the mic on your keyboard, then Send.
             </Text>
             <TextInput
               style={{ backgroundColor: '#0b0f17', color: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#1f2937', padding: 12, fontSize: 15, minHeight: 44 }}
               value={offlineFallbackText}
               onChangeText={setOfflineFallbackText}
-              placeholder="e.g. how far to the middle? what club here?"
+              placeholder="Type, or tap 🎤 on the keyboard to talk…"
               placeholderTextColor="#4b5563"
               autoFocus
               returnKeyType="send"
