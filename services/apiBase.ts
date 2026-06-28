@@ -21,31 +21,102 @@
  * routes through this — there is no other place the base URL is decided.
  */
 
-/** Production backend — MUST be the custom domain, NOT *.vercel.app.
- *  PROVEN 2026-06-27 by an on-device browser test: Tim's network intercepts
- *  smartplay-beta.vercel.app with an invalid cert (ERR_CERT_AUTHORITY_INVALID
- *  + HSTS) → the app's TLS handshake fails → every voice call dies → robot
- *  voice. api.smartplaycaddie.com (same Vercel deployment, A 76.76.21.21)
- *  returned {"status":"ok"} from the SAME phone. Never ship the backend on a
- *  *.vercel.app host — it gets filtered/MITM'd on content-filtered networks. */
-export const PROD_API_BASE_URL = 'https://api.smartplaycaddie.com';
+/** Backend hosts. PRIMARY is the branded custom domain (NOT *.vercel.app).
+ *  2026-06-27 (root-cause of the recurring "voice breaks again"): *.vercel.app is
+ *  DNS-blocked by content filters (OpenDNS/Cisco Umbrella → block-page IP
+ *  146.112.61.104 → every backend fetch "Network request failed" → voice/brain/
+ *  transcribe dead, intermittently by the network's resolver). The Vercel SERVER
+ *  was always healthy; only the *.vercel.app NAME was filtered. A branded custom
+ *  domain isn't on those blocklists (verified: api.smartplaycaddie.com resolves +
+ *  serves 200 through OpenDNS itself). FALLBACK is the old *.vercel.app alias (same
+ *  backend) — kept so ensureBackendReachable() can fail OVER to it if the custom
+ *  domain is ever unreachable, and vice versa. */
+const PRIMARY_HOST = 'https://api.smartplaycaddie.com';
+const FALLBACK_HOST = 'https://smartplay-beta.vercel.app';
 
-function resolveApiBaseUrl(): string {
+/** @deprecated kept for back-compat; the LIVE value is getApiBaseUrl(). */
+export const PROD_API_BASE_URL = PRIMARY_HOST;
+
+function resolveInitialBase(): string {
   const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
-  // Only an absolute http(s) URL is trustworthy. '', 'undefined', or a bare
-  // path all fall back to production so we can NEVER fetch a relative/dead URL.
+  // Only an absolute http(s) URL is trustworthy (local dev / preview override);
+  // '', 'undefined', or a bare path fall back to PRIMARY so we NEVER fetch a
+  // relative/dead URL. An explicit override also disables failover (see below).
   if (/^https?:\/\/.+/i.test(raw)) return raw.replace(/\/+$/, '');
-  return PROD_API_BASE_URL;
+  return PRIMARY_HOST;
 }
 
-/**
- * Absolute backend base URL with no trailing slash, e.g.
- * "https://smartplay-beta.vercel.app". Resolved once at module load (the
- * EXPO_PUBLIC_* value is a build-time constant, so it can't change at runtime).
- */
-export const API_BASE_URL: string = resolveApiBaseUrl();
+// The LIVE base. Starts at the resolved initial host; the self-healing probe may
+// switch it to the fallback for the session. ALWAYS read via getApiBaseUrl() at
+// fetch time so a mid-session switch reaches every call site (don't cache it).
+let activeBase = resolveInitialBase();
 
-/** Function form for call sites that prefer it. Always returns {@link API_BASE_URL}. */
+/** Absolute backend base URL, no trailing slash, e.g. "https://api.smartplaycaddie.com".
+ *  Reads the LIVE host (may have failed over). Call at fetch time; don't cache. */
 export function getApiBaseUrl(): string {
-  return API_BASE_URL;
+  return activeBase;
+}
+
+/** @deprecated initial snapshot only — use getApiBaseUrl() for the live value. */
+export const API_BASE_URL: string = activeBase;
+
+function isExplicitOverride(): boolean {
+  return /^https?:\/\/.+/i.test((process.env.EXPO_PUBLIC_API_URL ?? '').trim());
+}
+
+async function pingHost(base: string, timeoutMs = 4000): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(`${base}/api/kevin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '__ping__' }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+let healInFlight: Promise<string> | null = null;
+let healedThisSession = false;
+
+/**
+ * SELF-HEALING HOST FAILOVER (Tim 2026-06-27 — "the app should triage + self-repair").
+ * If the active backend host is unreachable but the OTHER host responds, switch to
+ * it for the rest of the session. Handles a content-filter block or outage on
+ * EITHER host (the recurring *.vercel.app DNS block, or a future block on the
+ * custom domain). Best-effort, deduped, never throws, never blocks the UI. Logs the
+ * failover to the issue log so there's a triage / self-repair trail.
+ * Call once at launch (before warmup) and again with {force:true} on a voice
+ * network failure so the NEXT attempt uses the healthy host.
+ */
+export async function ensureBackendReachable(opts?: { force?: boolean }): Promise<string> {
+  if (isExplicitOverride()) return activeBase;             // dev/preview pin — never failover
+  if (healedThisSession && !opts?.force) return activeBase;
+  if (healInFlight) return healInFlight;                   // dedupe concurrent callers
+  healInFlight = (async () => {
+    try {
+      if (await pingHost(activeBase)) { healedThisSession = true; return activeBase; }
+      const other = activeBase === FALLBACK_HOST ? PRIMARY_HOST : FALLBACK_HOST;
+      if (await pingHost(other)) {
+        const from = activeBase;
+        activeBase = other;
+        healedThisSession = true;
+        console.log(`[apiBase] host failover: ${from} unreachable → ${other}`);
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
+          useIssueLogStore.getState().addAppEvent('host_failover', { from, to: other }, 'app_error');
+        } catch { /* issue-log best-effort */ }
+      }
+      // both unreachable → leave activeBase; calls fail + surface the network notice.
+      return activeBase;
+    } finally {
+      healInFlight = null;
+    }
+  })();
+  return healInFlight;
 }

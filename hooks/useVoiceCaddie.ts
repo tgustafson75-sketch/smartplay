@@ -51,7 +51,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
-import { getApiBaseUrl } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable } from '../services/apiBase';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
@@ -1621,6 +1621,10 @@ export const useVoiceCaddie = ({
         // No added latency — both share the 3s window.
         const [ping, get] = await Promise.all([reachabilityPing(3000), healthGet(3000)]);
         if (!ping.ok) {
+          // 2026-06-28 — reactive self-heal: the active host is unreachable from this
+          // device; probe + fail over to the other host so the NEXT attempt (and the
+          // offline answer's brain calls) hit a host the device can actually reach.
+          void ensureBackendReachable({ force: true });
           await failTranscribeOffline('AbortError', ping.ok, ping.ms, get.ok, get.ms);
           return;
         }

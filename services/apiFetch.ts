@@ -17,7 +17,7 @@
  * Phases 2–5 as each API route is migrated off Anthropic.
  */
 
-import { API_BASE_URL } from './apiBase';
+import { getApiBaseUrl } from './apiBase';
 import { useSettingsStore } from '../store/settingsStore';
 
 /**
@@ -35,5 +35,6 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
   headers.set('X-AI-Provider', aiProvider);
 
-  return fetch(API_BASE_URL + path, { ...init, headers });
+  // Read the LIVE host at fetch time so a mid-session dual-host failover reaches here.
+  return fetch(getApiBaseUrl() + path, { ...init, headers });
 }
