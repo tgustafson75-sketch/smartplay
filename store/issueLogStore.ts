@@ -47,7 +47,11 @@ export type IssueLogKind =
   // no_handler / handler_error) now mirror into the issue log, not just the
   // separate voice-misses store.
   | 'voice_miss'
-  | 'app_error';
+  | 'app_error'
+  // 2026-06-28 (Tim) — TEMPORARY boot-timing breadcrumbs (services/bootTrace.ts):
+  // bundle-load → mount → hydrate → warmup → triggers, timestamped, so the first
+  // transcribe failure can be placed on the startup timeline. Owner-only.
+  | 'boot';
 
 export interface IssueLogEntry {
   /** Stable id: `${timestamp}_${random}`. */
@@ -93,6 +97,8 @@ interface IssueLogState {
    *  low-level services (gpsManager) can call it without threading route/
    *  persona. Best-effort: never throws. */
   addGpsEvent: (stage: string, details?: Record<string, unknown>) => void;
+  /** TEMPORARY boot-timing breadcrumb (services/bootTrace.ts). Owner-gated upstream. */
+  addBootEvent: (stage: string, details?: Record<string, unknown>) => void;
   /** Analysis / frame-extraction / any-other-failure auto-log. Self-context
    *  like addGpsEvent so low-level services can call it freely. `kind` defaults
    *  to 'analysis_error'; pass 'app_error' for non-analysis failures. */
@@ -219,6 +225,29 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] gps event:', summary);
+      },
+      addBootEvent: (stage, details) => {
+        // TEMPORARY boot-timing breadcrumb. Mirrors addGpsEvent's defensive
+        // self-context; owner-gating happens upstream in bootTrace.bootMark.
+        let context: IssueLogEntry['context'] = {
+          route: 'boot', persona: null, isRoundActive: false,
+          courseId: null, currentHole: null, appVersion: '1.0.0',
+        };
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const settings = require('./settingsStore').useSettingsStore.getState();
+          context = { ...context, persona: settings?.caddiePersonality ?? null };
+        } catch { /* best-effort context */ }
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          text: `boot: ${stage}`,
+          kind: 'boot',
+          stage,
+          details,
+          context,
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
       },
       addAppEvent: (stage, details, kind = 'analysis_error') => {
         // Self-context snapshot via lazy requires (mirrors addGpsEvent) so

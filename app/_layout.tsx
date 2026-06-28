@@ -24,6 +24,7 @@ import { startSwingCommentarySubscription } from '../services/swingCommentarySer
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/voiceTriggers';
+import { bootMark } from '../services/bootTrace'; // TEMPORARY boot-timing breadcrumbs (Tim)
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
@@ -425,6 +426,7 @@ function AppNavigator() {
   const settingsHydrated = useSettingsStore(s => s.hasHydrated);
   useEffect(() => {
     if (!settingsHydrated) return;
+    bootMark('settings_hydrated'); // TEMPORARY boot breadcrumb
     if (!useSettingsStore.getState().glassesMode) return;
     (async () => {
       try {
@@ -464,6 +466,7 @@ function AppNavigator() {
 
   // Phase O — boot earbud listening session bus, honoring user setting
   useEffect(() => {
+    bootMark('app_init_effect'); // root layout init effect running
     initListeningSession();
     // 2026-05-22 — Hands-Free orchestrator runs alongside the legacy
     // listeningSession.toggle() subscription. It adds pattern-aware
@@ -483,7 +486,8 @@ function AppNavigator() {
     // here overlaps the splash + navigation so the chain is hot before the
     // user ever reaches the Caddie screen. caddie.tsx focus-warmup still runs
     // (30s dedupe = no-op if within 30s) as a belt-and-suspenders.
-    void import('../services/voiceWarmup').then(m => m.prewarmVoice());
+    bootMark('voice_warmup_fired');
+    void import('../services/voiceWarmup').then(m => { bootMark('voice_warmup_imported'); m.prewarmVoice(); });
     // 2026-05-24 — Native BT media-button bridge. Funnels through
     // notifyEarbudTap() so it shares the existing earbudControl
     // pattern (no orchestrator change). Native BluetoothMediaButton
@@ -491,6 +495,7 @@ function AppNavigator() {
     // that case.
     // 2026-06-03 — voice-assistant launch heuristic removed (was
     // killing splash mp3 on every cold launch).
+    bootMark('voice_triggers_init');
     const teardownVoiceTriggers = initVoiceTriggers();
     const unsub = useSettingsStore.subscribe((s) => {
       setEarbudEnabled(s.earbudTapToTalk);

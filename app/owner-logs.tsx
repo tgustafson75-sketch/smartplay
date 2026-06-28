@@ -45,6 +45,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'analysis_error':    return 'ANALYSIS';
     case 'voice_miss':        return 'MISS';
     case 'app_error':         return 'APP';
+    case 'boot':              return 'BOOT';
     case 'user':              return 'USER';
   }
 }
@@ -58,6 +59,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'analysis_error':    return '#10b981'; // green — swing/frame analysis failure
     case 'voice_miss':        return '#eab308'; // yellow — command not understood/handled
     case 'app_error':         return '#f97316'; // orange — other app failure
+    case 'boot':              return '#64748b'; // slate — boot-timing breadcrumb (temporary)
     case 'user':              return '#6b7280';
   }
 }
