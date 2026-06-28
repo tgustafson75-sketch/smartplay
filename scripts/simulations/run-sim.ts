@@ -2001,21 +2001,24 @@ check('GolfFix: in-flight session analysis lands on the LIVE activeSession (C3 f
   })(),
   'no_dominant_fault fix/drill populate on the live (active-only) GolfFix session, not just saved history');
 
-check('Swing review: controls fade on pause (clean screenshots) + autoplay onLoad kick',
-  // 2026-06-16 (Tim) — paused frame must screenshot clean: the on-frame controls
-  // (play badge / seek bar / speed chip) fade ~1.1s after pause and become
-  // non-interactive so a tap on the bare frame plays. Skeleton/trace + watermark
-  // stay. Plus an onLoad playAsync kick for the expo-av shouldPlay-ignored quirk.
+check('Swing review: controls stay persistently visible (functional > clean-grab) + playAsync kick',
+  // 2026-06-27 — refreshed to the INTENTIONAL current design. The clean-screenshot
+  // controls-fade-on-pause was deliberately dropped 2026-06-23 ("with auto-play on,
+  // the old fade hid every control … functional controls win"). This is NOT a
+  // regression — so we assert the current design (controls persistent: controlsHidden
+  // defaults false; the pointerEvents gate stays for the rare hidden case) + the
+  // end-of-clip playAsync kick that keeps tap-to-play / autoplay working. If clean
+  // screenshots are wanted again, re-add a fade gated to MANUAL pause only (never autoplay).
   (() => {
     const f = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /const controlsOpacity = useRef\(new Animated\.Value\(1\)\)\.current/.test(f) &&
-      /setControlsHidden\(true\)[\s\S]*?Animated\.timing\(controlsOpacity, \{ toValue: 0/.test(f) &&
+      /Clean-grab fade dropped — functional controls win/.test(f) &&
+      /const \[controlsHidden, setControlsHidden\] = useState\(false\)/.test(f) &&
       /pointerEvents=\{controlsHidden \? 'none' : 'box-none'\}/.test(f) &&
-      /if \(shouldAutoplayThenAnalyze && !watchFiredRef\.current\) \{[\s\S]*?playAsync\(\)/.test(f)
+      /await v\.playAsync\(\)/.test(f)
     );
   })(),
-  'paused controls fade to a clean frame (tap still plays); watch-autoplay gets an onLoad kick');
+  'controls stay visible by design (clean-grab fade intentionally dropped 2026-06-23); the end-of-clip playAsync kick keeps tap-to-play / autoplay working');
 
 check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
   // 2026-06-16 (Tim — "first try always longer" + "listens too long" + "why go cold
@@ -2180,7 +2183,7 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
       /export async function speakDeviceNotice/.test(vs) &&
       /await deviceSpeakFallback\(text, language, currentSpeechId, gender\)/.test(vs) &&
       /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
-      /Can't reach the network/.test(vc)
+      /(can't reach|not reaching|lost) the network/i.test(vc) // refreshed: message reworded (Phase A offline-degrade); feature intact
     );
   })(),
   'transcribe/network failures speak an honest signal notice via device TTS (offline), not a silent bubble');
@@ -3151,7 +3154,9 @@ check('Analysis honesty: kids\' progress delta only when both scores are real',
   'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
-  /version: 12/.test(read('store/settingsStore.ts')) &&
+  // refreshed: store is at version 16 now; the one-time version<12 localMode clear
+  // is still present (migrations are cumulative), which is what this guards.
+  /version: 16/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
@@ -3683,8 +3688,13 @@ check('Lifecycle: VAD start is single-flight + silence poller fires once',
       /if \(startingRef\.current \|\| recordingRef\.current\) return;/.test(v) &&   // no double-start
       /stopTokenRef\.current \+= 1;/.test(v) &&                                       // stop cancels in-flight start
       /if \(stopTokenRef\.current !== myToken \|\| !enabledRef\.current\)/.test(v) &&  // bail if cancelled mid-create
-      // useVoiceCaddie silence poller clears itself then voids the promise (fires once)
-      /clearInterval\(silenceVadTimer\.current\); silenceVadTimer\.current = null; \}\s*\n\s*void handleMicPress\(\)\.catch/.test(vc)
+      // useVoiceCaddie silence poller fires the stop ONCE via the single-flight
+      // hardStopAndProcess fn (refreshed: was an inline handleMicPress call). It
+      // clears the poller + nulls recordingRef (idempotent guard) so it can't double-fire.
+      /const hardStopAndProcess = async \(\) => \{/.test(vc) &&
+      /clearInterval\(silenceVadTimer\.current\); silenceVadTimer\.current = null;/.test(vc) &&
+      /recordingRef\.current = null;/.test(vc) &&
+      /void hardStopAndProcess\(\)\.catch/.test(vc)
     );
   })(),
   'the auto-listen loop never runs two competing recorders, a stop/disable mid-acquire cancels cleanly, and the silence detector fires the stop exactly once instead of every 200ms');
