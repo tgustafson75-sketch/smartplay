@@ -1520,13 +1520,29 @@ export const useVoiceCaddie = ({
         } catch { return { ok: false, ms: -1 }; }
       };
 
+      // 2026-06-28 (Tim) — DIAGNOSTIC GET probe alongside the POST ping. Backend is
+      // healthy globally + POSTs work from elsewhere, yet the field shows POSTs
+      // stalling on Tim's device across networks. Firing a GET (/api/health) next to
+      // the POST ping lets the log say definitively: getOk+!pingOk = "GET works, POST
+      // stalls" (device/proxy POST path); !getOk+!pingOk = host blocked from here.
+      const healthGet = async (timeoutMs: number): Promise<{ ok: boolean; ms: number }> => {
+        try {
+          const gc = new AbortController();
+          const gt = setTimeout(() => gc.abort(), timeoutMs);
+          const gStart = Date.now();
+          const gr = await fetch(apiUrl + '/api/health', { method: 'GET', signal: gc.signal })
+            .finally(() => clearTimeout(gt));
+          return { ok: gr.ok, ms: Date.now() - gStart };
+        } catch { return { ok: false, ms: -1 }; }
+      };
+
       // Honest offline dead-end — log the diagnostic, then degrade as far as the
       // device allows: (Phase B) on-device STT → on-device caddie answer, else
       // (A2) a typed question routed to the same offline caddie, else a nudge.
-      const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number) => {
+      const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number, getOk = false, getMs = -1) => {
         const elapsedMs = Date.now() - txStart;
-        console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs);
-        logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs });
+        console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs, 'getOk', getOk, 'getMs', getMs);
+        logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs, getOk, getMs });
         try { Vibration.vibrate(120); } catch {}
 
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
@@ -1600,9 +1616,12 @@ export const useVoiceCaddie = ({
         // actually answering (the cold-start/blip the retry was meant for);
         // otherwise fail straight to the offline path. Cuts the unreachable
         // hang from ~27s to ~15s and routes to the on-device caddie.
-        const ping = await reachabilityPing(3000);
+        // Probe POST (ping) + GET (health) in PARALLEL so the log can tell
+        // "GET works, POST stalls" (device/proxy POST path) from "host blocked".
+        // No added latency — both share the 3s window.
+        const [ping, get] = await Promise.all([reachabilityPing(3000), healthGet(3000)]);
         if (!ping.ok) {
-          await failTranscribeOffline('AbortError', ping.ok, ping.ms);
+          await failTranscribeOffline('AbortError', ping.ok, ping.ms, get.ok, get.ms);
           return;
         }
         // Host is up — the upload hit a cold-start/blip. Retry once.
@@ -1613,7 +1632,7 @@ export const useVoiceCaddie = ({
           const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
           // Host answered the ping but the upload still failed twice — treat as
           // reachable (don't offer offline typing; the brain is up, retry works).
-          await failTranscribeOffline(name, true, ping.ms);
+          await failTranscribeOffline(name, true, ping.ms, get.ok, get.ms);
           return;
         }
       }
