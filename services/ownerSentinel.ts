@@ -59,6 +59,16 @@ export function ownerSentinel(scope: string, err: unknown, extra?: Record<string
       ? errText.slice(0, TOAST_MESSAGE_CAP) + '…'
       : errText;
     toastMod.useToastStore.getState().show(`⚠ ${scope}: ${truncated}`);
+    // 2026-06-28 (Tim — "stop guessing") — also PERSIST the breadcrumb to the issue
+    // log so every sentinel catch (GPS invalid-coord/subscriber, holeDetection,
+    // shotDetection, smartFinder, mediaCapture, …) shows up in /owner-logs + exports
+    // with its scope + error + extra, not just a 30s toast. We're already past the
+    // owner gate + 30s-per-scope dedupe, so this can never flood the log.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState()
+        .addAppEvent(scope, { error: truncated, ...(extra ?? {}) }, 'app_error');
+    } catch { /* best-effort — issue log unavailable in some test envs */ }
     lastFireAt.set(scope, now);
   } catch (sentinelErr) {
     // Best-effort. If toast / profile store isn't available, log + move on.

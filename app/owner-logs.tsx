@@ -178,9 +178,12 @@ export default function OwnerLogsScreen() {
     if (!entry) return;
     const ctx = entry.context;
     const ctxLine = `[${formatTimestamp(entry.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
+    const detailsLine = entry.details && Object.keys(entry.details).length > 0
+      ? `\n${Object.entries(entry.details).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')}`
+      : '';
     const reporter = ownerEmail || 'beta tester';
     const subject = `SmartPlay Caddie issue — ${reporter}`;
-    const body = `Reporter: ${reporter}\nDevice: ${Platform.OS}\n\n${entry.text}\n${ctxLine}\n\n— Sent from SmartPlay Caddie Issue Log`;
+    const body = `Reporter: ${reporter}\nDevice: ${Platform.OS}\n\n${entry.text}\n${ctxLine}${detailsLine}\n\n— Sent from SmartPlay Caddie Issue Log`;
     const mailto = `mailto:support@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     try {
       const can = await Linking.canOpenURL(mailto).catch(() => false);
@@ -197,7 +200,13 @@ export default function OwnerLogsScreen() {
       .map(e => {
         const ctx = e.context;
         const ctxLine = `  [${formatTimestamp(e.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
-        return `• ${e.text}\n${ctxLine}`;
+        // 2026-06-28 — include the details object (pingOk/pingMs/elapsedMs/source/…)
+        // so exported logs carry the diagnostic fields, not just the title. Mirrors
+        // the on-screen details render so "stop guessing" actually has the data.
+        const detailsLine = e.details && Object.keys(e.details).length > 0
+          ? `\n  ${Object.entries(e.details).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')}`
+          : '';
+        return `• ${e.text}\n${ctxLine}${detailsLine}`;
       })
       .join('\n\n');
 

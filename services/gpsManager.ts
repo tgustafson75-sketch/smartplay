@@ -143,6 +143,16 @@ function armStaleHardTimer(): void {
   staleHardTimer = setTimeout(() => {
     if (lastFix) {
       console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_HARD_LIMIT_MS, 'ms');
+      // 2026-06-28 (Tim — "stop guessing") — log the GPS-went-dark event with the
+      // last-known accuracy/source so dead-zone drops are diagnosable in /owner-logs.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
+          sinceMs: STALE_HARD_LIMIT_MS,
+          lastAccuracy_m: lastFix.accuracy_m ?? null,
+          lastSource: lastFix.source,
+        });
+      } catch { /* best-effort — never break the GPS loop */ }
       lastFix = null;
     }
     staleHardTimer = null;
