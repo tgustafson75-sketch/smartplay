@@ -80,6 +80,7 @@ import { GlobalToolsMenu } from '../components/tools/GlobalToolsMenu';
 import { GlobalToast } from '../components/toast/GlobalToast';
 import { BatterySaverPrompt } from '../components/battery/BatterySaverPrompt';
 import { RestModeOverlay } from '../components/round/RestModeOverlay';
+import { OwnerIssueLogPrompt } from '../components/OwnerIssueLogPrompt';
 import { useRestModeStore } from '../store/restModeStore';
 // 2026-05-24 (Flow C) — Tap-to-undo banner for silent tee Marks
 // fired by the declare-hole cross-check. Reads from undoMarkStore;
@@ -1193,6 +1194,9 @@ function AppNavigator() {
           idle in a round. GPS/voice keep running; tap to wake. Mounted last so
           it covers every screen + the data strip. */}
       <RestModeOverlay />
+      {/* 2026-06-28 (Tim) — owner-only "N issues logged → Send now" nudge so Tank
+          can one-tap email the log without digging through Owner Tools. */}
+      <OwnerIssueLogPrompt />
     </>
   );
 }

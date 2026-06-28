@@ -84,6 +84,11 @@ export interface IssueLogEntry {
 
 interface IssueLogState {
   entries: IssueLogEntry[];
+  /** When the log was last exported/emailed. Drives the owner auto-prompt: failures
+   *  newer than this are "unsent". 0 = never exported. */
+  lastExportedAt: number;
+  /** Mark the log exported (resets the owner auto-prompt's unsent count). */
+  markExported: () => void;
   addEntry: (text: string, context: IssueLogEntry['context']) => void;
   /** Structured voice-pipeline event entry. Skips the wake-phrase /
    *  trimmed-text path; builds a one-line summary from stage + details. */
@@ -148,6 +153,8 @@ export const useIssueLogStore = create<IssueLogState>()(
   persist(
     (set) => ({
       entries: [],
+      lastExportedAt: 0,
+      markExported: () => set({ lastExportedAt: Date.now() }),
       addEntry: (text, context) => {
         const trimmed = text.trim();
         if (!trimmed) return;

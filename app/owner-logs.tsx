@@ -20,6 +20,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useIssueLogStore, type IssueLogKind } from '../store/issueLogStore';
+import { exportAllIssues } from '../services/issueLogExport';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
@@ -198,48 +199,14 @@ export default function OwnerLogsScreen() {
 
   const onExport = async () => {
     if (entries.length === 0) return;
-    const text = entries
-      .map(e => {
-        const ctx = e.context;
-        const ctxLine = `  [${formatTimestamp(e.timestamp)} · ${ctx.persona ?? '—'} · ${ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round'}]`;
-        // 2026-06-28 — include the details object (pingOk/pingMs/elapsedMs/source/…)
-        // so exported logs carry the diagnostic fields, not just the title. Mirrors
-        // the on-screen details render so "stop guessing" actually has the data.
-        const detailsLine = e.details && Object.keys(e.details).length > 0
-          ? `\n  ${Object.entries(e.details).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')}`
-          : '';
-        return `• ${e.text}\n${ctxLine}${detailsLine}`;
-      })
-      .join('\n\n');
-
-    // 2026-05-25 — Fix AE: pre-fill email to support@smartplaycaddie.com
-    // via mailto: link. Opens the user's default mail client with the
-    // full log body and a sensible subject. Falls back to the native
-    // Share sheet if mailto isn't supported (rare on phones, common on
-    // tablets without a mail app configured).
-    const reporter = ownerEmail || 'beta tester';
-    const subject = `SmartPlay Caddie issue log — ${reporter}`;
-    const body =
-      `Reporter: ${reporter}\nEntries: ${entries.length}\nDevice: ${Platform.OS}\n\n${text}\n\n— Sent from SmartPlay Caddie Issue Log`;
-    const mailto = `mailto:support@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    try {
-      const can = await Linking.canOpenURL(mailto).catch(() => false);
-      if (can) {
-        await Linking.openURL(mailto);
-        return;
-      }
-      // Fallback — native share sheet (user can pick mail / messages /
-      // copy / etc.). Tester can paste the body into an email to
-      // support@smartplaycaddie.com manually.
-      await Share.share({
-        message: `support@smartplaycaddie.com\n\n${body}`,
-        title: subject,
-      });
-    } catch (e) {
-      console.log('[owner-logs] export failed', e);
+    // 2026-06-28 — body-building + mailto/share + markExported() centralized in
+    // services/issueLogExport so the manual Export here and the owner auto-prompt
+    // (OwnerIssueLogPrompt) format identically and both reset the unsent count.
+    const ok = await exportAllIssues();
+    if (!ok) {
       Alert.alert(
         'Export failed',
-        `Email support@smartplaycaddie.com directly with the log below:\n\n${text}`,
+        'Email support@smartplaycaddie.com directly with the log from this screen.',
       );
     }
   };
