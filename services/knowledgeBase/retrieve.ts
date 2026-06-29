@@ -93,6 +93,14 @@ export interface RetrieveOpts {
   max?: number;
   /** Restrict to these knowledge layers. */
   layers?: KBLayer[];
+  /**
+   * Minimum relevance score to include (default 2 = FLOOR). Standalone OFFLINE
+   * answering passes a higher bar (a real alias/topic match, e.g. 8) so loose
+   * keyword overlap isn't served as a confident answer with no LLM to filter it.
+   * The brain's RAG grounding keeps the low default — it filters relevance itself.
+   * 2026-06-29 (Tim) — this is the "no vortex" gate.
+   */
+  minScore?: number;
 }
 
 /**
@@ -119,7 +127,8 @@ export function retrieveKB(query: string, opts: RetrieveOpts = {}): KBEntry[] {
   }
 
   // Require a minimal floor so a single weak keyword doesn't surface noise.
-  const FLOOR = 2;
+  // Callers answering standalone (offline, no LLM filter) pass a higher minScore.
+  const FLOOR = opts.minScore ?? 2;
   scored.sort((a, b) => b.score - a.score);
 
   return scored

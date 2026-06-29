@@ -535,6 +535,32 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
   return { text: L[lang].yardageMiddle(yards), queryType };
 }
 
+// 2026-06-29 (Tim) — deadEndLine: the graceful, in-character fallback for when we
+// have NEITHER the cloud brain NOR a confident local knowledge answer. Instead of
+// an error ("I can't reach the network"), the caddie speaks to what it ALWAYS has
+// locally: the shot in front of you (composed distance + club), or — off the
+// course — the practice tools. True by construction; never a guess, never a banner.
+// See [[self-growing-agent-architecture]].
+const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
+  en: "We're off the course right now — good time to sharpen your tempo or short game whenever you're ready.",
+  es: 'Ahora mismo estamos fuera del campo: buen momento para pulir tu tempo o tu juego corto cuando quieras.',
+  zh: '我们现在不在球场上——准备好的时候，正适合练习你的节奏或短杆。',
+};
+
+export function deadEndLine(language: LocalReplyLanguage = 'en'): string {
+  const lang = (['en', 'es', 'zh'] as const).includes(language) ? language : 'en';
+  const round = useRoundStore.getState();
+  if (round.isRoundActive) {
+    // The shot in front of you — the one thing we always have locally.
+    const read = composedReadReply(lang);
+    if (read?.text) return read.text;
+    const club = clubCallReply(lang);
+    if (club?.text) return club.text;
+    if (round.currentHole != null) return L[lang].holeIs(round.currentHole);
+  }
+  return DEAD_END_PRACTICE[lang];
+}
+
 // Offline caddie Tier 1 — CALL A CLUB. Distance from the same GPS/green path the
 // yardage reply uses; the club from the player's REAL logged bag (bagDistances()).
 // Every number is measured/logged — never a generated yardage. Honest when the bag

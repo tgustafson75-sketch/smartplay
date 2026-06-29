@@ -80,7 +80,12 @@ export function answerOffline(
   // 2) Golf-knowledge KB — English-authored, so only for EN callers for now.
   if (language === 'en') {
     try {
-      const kb = composeKbReply(retrieveKB(query, { max: 2 }));
+      // 2026-06-29 (Tim) — "no vortex": offline answers ALONE with no LLM to judge
+      // relevance, so require a real alias/topic match (minScore 8), not loose
+      // keyword overlap (the old floor of 2 served off-topic answers like a
+      // club-choice question getting an alignment answer). A near-miss returns
+      // null → the caller grounds in the shot instead of serving a wrong answer.
+      const kb = composeKbReply(retrieveKB(query, { max: 2, minScore: 8 }));
       if (kb) return { text: kb, source: 'knowledge_base' };
     } catch {
       // No KB answer — fall through to null.

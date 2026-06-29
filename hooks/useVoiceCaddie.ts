@@ -411,7 +411,6 @@ export const useVoiceCaddie = ({
   onVisionTrigger,
   onHeroReelView,
   onToolAction,
-  onOfflineFallback,
   processTranscriptOverride,
 }: UseVoiceCaddieOptions) => {
 
@@ -1568,10 +1567,25 @@ export const useVoiceCaddie = ({
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
           ? (language as 'en' | 'es' | 'zh') : 'en';
 
-        // Host UP but the upload failed twice — a transient blip. Just nudge; the
-        // brain is reachable, so offline STT/typing would be pointless.
+        // 2026-06-29 (Tim) — SEAMLESS DEGRADE: no error banners, no "tap to type".
+        // When we can't reach the brain, the caddie speaks to what it ALWAYS has
+        // locally — the shot in front of you (yardage + club), or off-course the
+        // practice tools — never "I can't reach the network". True by construction;
+        // natural, not an error state. (Pace/timing/listen-loop untouched.)
+        const deadEnd = (): string => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
+            return responder.deadEndLine(langSafe);
+          } catch {
+            return "Let's stay on this one — what are you working with?";
+          }
+        };
+
+        // Host UP but the upload failed twice — a transient blip. Stay natural and
+        // ground in the shot rather than flag the network.
         if (pingOk) {
-          const line = "I'm not reaching the network right now — try again in a sec.";
+          const line = deadEnd();
           onResponseReceived(line);
           if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
           wrappedOnVoiceStateChange('idle');
@@ -1587,7 +1601,7 @@ export const useVoiceCaddie = ({
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
           if (stt.isOnDeviceSTTReady()) {
-            const prompt = "I lost the network — say that again and I'll listen right here on your phone.";
+            const prompt = "Say that again for me?";
             onResponseReceived(prompt);
             if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
             wrappedOnVoiceStateChange('listening');
@@ -1597,7 +1611,7 @@ export const useVoiceCaddie = ({
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
               const ans = offline.answerOffline(heard, langSafe);
-              const reply = ans?.text ?? "I heard you, but I can't answer that one without a connection. I've got yardages, club calls and the basics offline.";
+              const reply = ans?.text ?? deadEnd();
               logVoiceSilentFail('ondevice_stt_hit', { source: ans?.source ?? 'none', detail: ans?.detail ?? null, transcriptHead: heard.slice(0, 60) });
               onResponseReceived(reply);
               if (voiceEnabled) void speakDeviceNotice(reply, language, voiceGender).catch(() => {});
@@ -1612,17 +1626,11 @@ export const useVoiceCaddie = ({
           console.log('[voice] on-device STT path threw (non-fatal):', e);
         }
 
-        // No on-device STT (or it heard nothing) → typed offline fallback (A2).
-        if (onOfflineFallback) {
-          const line = "I can't reach the network to hear you. Tap to type and I'll answer from what I know.";
-          onResponseReceived(line);
-          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
-          onOfflineFallback();
-        } else {
-          const line = "I'm not reaching the network right now — try again in a sec.";
-          onResponseReceived(line);
-          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
-        }
+        // No on-device STT, or it heard nothing → ground in the shot in front of
+        // you (or, off-course, the practice tools). No "tap to type" banner.
+        const line = deadEnd();
+        onResponseReceived(line);
+        if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
       };
