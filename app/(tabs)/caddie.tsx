@@ -51,7 +51,7 @@ import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
-import { isSmartMotionActive, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent } from '../../services/smartMotionRecordBus';
+import { isSmartMotionActive, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -1644,6 +1644,20 @@ export default function CaddieTab() {
       ? pipecatVoice.processTurn
       : undefined,
   });
+
+  // 2026-06-29 (Tim — "single brain everywhere") — the SmartMotion screen's mic
+  // forwards its transcribed words here so the SAME pipecat brain handles them: it
+  // speaks the reply (dialogue-first prompt intact) AND dispatches tools through the
+  // normal handleToolAction path (record_swing → SmartMotion bus, configure_drill,
+  // navigate, switch_caddie). One brain, one TTS pipeline — no second voice instance.
+  const smProcessTurnRef = useRef(pipecatVoice.processTurn);
+  useEffect(() => { smProcessTurnRef.current = pipecatVoice.processTurn; }, [pipecatVoice.processTurn]);
+  useEffect(() => {
+    return subscribeSmartMotionUtterance((text) => {
+      const t = (text ?? '').trim();
+      if (t) void smProcessTurnRef.current(t);
+    });
+  }, []);
 
   // 2026-06-27 (A2 offline degrade) — answer a typed question with ZERO network
   // via the on-device offline caddie (round state + golf KB), spoken through the

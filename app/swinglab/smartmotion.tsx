@@ -115,7 +115,7 @@ import { useToastStore } from '../../store/toastStore';
 import { detectBallDeparture, type BallDepartureResult } from '../../services/swing/ballDeparture';
 import { getShotShape, readActualLaunch, compareShotShape } from '../../services/practice/shotShapes';
 import { ensureSwingThumbnail } from '../../services/videoUpload';
-import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
+import { subscribeSmartMotionCommand, setSmartMotionActive, setSmartMotionRecording, subscribeDrillConfig, emitSmartMotionVoiceEvent, emitSmartMotionUtterance, isSmartMotionRecording, type SmartMotionCommand } from '../../services/smartMotionRecordBus';
 import { setScreenContext, clearScreenContext } from '../../services/screenContext';
 import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconcile';
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
@@ -721,6 +721,24 @@ export default function SmartMotion() {
     } catch { /* transcription failed — leave the field as-is, no fake text */ }
     finally { setDictating(null); }
   }, [dictating]);
+
+  // 2026-06-29 (Tim — "single brain everywhere") — TALK TO THE CADDIE from the
+  // SmartMotion screen. Captures one utterance and hands it to the ONE caddie brain
+  // (emit → caddie.tsx → pipecat): it replies AND dispatches tools, so "record my
+  // swing" starts THIS screen's capture, "driver, 3 swings" configures the drill, and
+  // a conversational "what should I work on" stays dialogue-first. Setup phase only /
+  // never while recording (the camera has the mic then).
+  const [caddieListening, setCaddieListening] = useState(false);
+  const askCaddie = useCallback(async () => {
+    if (caddieListening) { endCaptureEarly(); return; }
+    if (isSmartMotionRecording()) return;
+    setCaddieListening(true);
+    try {
+      const text = await captureUtterance(8000, getApiBaseUrl(), 'en');
+      if (text && text.trim()) emitSmartMotionUtterance(text.trim());
+    } catch { /* mic/transcribe failed — no-op, no fake text */ }
+    finally { setCaddieListening(false); }
+  }, [caddieListening]);
   const [playbackMs, setPlaybackMs] = useState(0);
   // 2026-06-09 — "Motion overlay" is now a SEPARATE on-demand step (off by
   // default). Default review = watch the swing + Kevin's feedback only, with a
@@ -3025,6 +3043,21 @@ export default function SmartMotion() {
             accessibilityLabel={targetingVisible ? 'Hide targeting overlay' : 'Show targeting overlay'}
           >
             <Ionicons name={targetingVisible ? 'eye-outline' : 'eye-off-outline'} size={18} color={colors.accent} />
+          </TactilePressable>
+        ) : null}
+
+        {/* 2026-06-29 (Tim) — TALK-TO-CADDIE mic. SmartMotion is the SAME caddie brain
+            as every tab: tap and say "record my swing", "driver, 3 swings", or
+            "what should I work on" and the one brain replies + acts. Setup phase
+            (top-left, where the targeting eye sits in review). */}
+        {phase === 'setup' ? (
+          <TactilePressable
+            onPress={askCaddie}
+            style={[styles.targetingToggle, { top: insets.top + 76, backgroundColor: caddieListening ? colors.accent : 'rgba(6,15,9,0.72)' }]}
+            accessibilityRole="button"
+            accessibilityLabel={caddieListening ? 'Listening — tap to stop' : 'Talk to your caddie'}
+          >
+            <Ionicons name={caddieListening ? 'mic' : 'mic-outline'} size={18} color={caddieListening ? '#06140b' : colors.accent} />
           </TactilePressable>
         ) : null}
 

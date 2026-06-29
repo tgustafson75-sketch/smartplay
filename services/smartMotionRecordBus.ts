@@ -116,3 +116,24 @@ export function subscribeSmartMotionVoiceEvent(
   voiceEventListeners.add(cb);
   return () => { voiceEventListeners.delete(cb); };
 }
+
+// ── Voice utterance: SmartMotion mic → the ONE caddie brain ───────────────────
+// 2026-06-29 (Tim — "single brain everywhere") — SmartMotion captures the words
+// with its own mic and hands the TEXT to caddie.tsx, which runs it through the SAME
+// pipecat brain (one brain, one TTS pipeline, the dialogue-first prompt intact). The
+// brain's tool dispatch routes record_swing / configure_drill / navigate / etc. back
+// through THIS bus, so the SmartMotion mic behaves exactly like the Caddie-tab mic.
+const utteranceListeners: Set<(text: string) => void> = new Set();
+
+/** SmartMotion fires this with the transcribed words; caddie.tsx feeds the brain. */
+export function emitSmartMotionUtterance(text: string): void {
+  for (const cb of utteranceListeners) {
+    try { cb(text); } catch (e) { console.log('[smartMotionRecordBus] utterance error:', e); }
+  }
+}
+
+/** caddie.tsx subscribes so the one brain handles SmartMotion-screen speech. */
+export function subscribeSmartMotionUtterance(cb: (text: string) => void): () => void {
+  utteranceListeners.add(cb);
+  return () => { utteranceListeners.delete(cb); };
+}
