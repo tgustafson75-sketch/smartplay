@@ -93,13 +93,13 @@ export default function CageTargetingCard({
           disabled={!frameUri}
           style={({ pressed }) => [
             styles.btn,
-            { borderColor: hasTarget ? '#F0C030' : colors.border, opacity: !frameUri ? 0.4 : pressed ? 0.7 : 1 },
+            { borderColor: hasTarget ? '#88F700' : colors.border, opacity: !frameUri ? 0.4 : pressed ? 0.7 : 1 },
           ]}
           accessibilityRole="button"
           accessibilityLabel={hasTarget ? 'Edit target' : 'Set target'}
         >
-          <Ionicons name={hasTarget ? 'locate' : 'locate-outline'} size={16} color={hasTarget ? '#F0C030' : colors.text_muted} />
-          <Text style={[styles.btnText, { color: hasTarget ? '#F0C030' : colors.text_primary }]}>
+          <Ionicons name={hasTarget ? 'locate' : 'locate-outline'} size={16} color={hasTarget ? '#88F700' : colors.text_muted} />
+          <Text style={[styles.btnText, { color: hasTarget ? '#88F700' : colors.text_primary }]}>
             {hasTarget ? 'Target set' : 'Set target'}
           </Text>
         </Pressable>
@@ -213,7 +213,7 @@ function PlacementModal({
   };
 
   const title = mode === 'ball' ? 'Tap where the ball is' : 'Tap your target';
-  const tint = mode === 'ball' ? '#00C896' : '#F0C030';
+  const tint = mode === 'ball' ? '#00C896' : '#88F700';
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
@@ -255,9 +255,9 @@ function PlacementModal({
             )}
             {mode === 'ball' && existingTarget && (
               <>
-                <SvgCircle cx={existingTarget.x * frameW} cy={existingTarget.y * frameH} r={10} stroke="#F0C030" strokeWidth={2} strokeOpacity={0.45} fill="none" />
-                <SvgLine x1={existingTarget.x * frameW - 8} y1={existingTarget.y * frameH} x2={existingTarget.x * frameW + 8} y2={existingTarget.y * frameH} stroke="#F0C030" strokeWidth={1.5} strokeOpacity={0.45} />
-                <SvgLine x1={existingTarget.x * frameW} y1={existingTarget.y * frameH - 8} x2={existingTarget.x * frameW} y2={existingTarget.y * frameH + 8} stroke="#F0C030" strokeWidth={1.5} strokeOpacity={0.45} />
+                <SvgCircle cx={existingTarget.x * frameW} cy={existingTarget.y * frameH} r={10} stroke="#88F700" strokeWidth={2} strokeOpacity={0.45} fill="none" />
+                <SvgLine x1={existingTarget.x * frameW - 8} y1={existingTarget.y * frameH} x2={existingTarget.x * frameW + 8} y2={existingTarget.y * frameH} stroke="#88F700" strokeWidth={1.5} strokeOpacity={0.45} />
+                <SvgLine x1={existingTarget.x * frameW} y1={existingTarget.y * frameH - 8} x2={existingTarget.x * frameW} y2={existingTarget.y * frameH + 8} stroke="#88F700" strokeWidth={1.5} strokeOpacity={0.45} />
               </>
             )}
 
@@ -315,7 +315,9 @@ export function CageTargetingOverlay({
   if (!ballArea && !target) return null;
   const { w, h } = size;
   const LIME = '#88F700';      // ball-area box (grass green, per design)
-  const WHITE = '#FFFFFF';     // target line + ring
+  // 2026-06-29 (Tim) — target line + aim ring + putt line are now NEON-GREEN brand
+  // (was #FFFFFF). "The line should be neon green; the target's a little off brand."
+  const AIM = '#88F700';
 
   // Target geometry (pixels). 2026-06-11 — the aim line now ORIGINATES at the
   // ball-area CENTER and runs to the target, so it reads as a true ball→target
@@ -384,13 +386,24 @@ export function CageTargetingOverlay({
               <SvgLine
                 x1={targetLine.x1} y1={targetLine.y1}
                 x2={targetLine.x2} y2={targetLine.y2}
-                stroke={WHITE} strokeWidth={2} strokeDasharray="7,6" opacity={0.95}
+                stroke={AIM} strokeWidth={2} strokeDasharray="7,6" opacity={0.95}
               />
-              {/* aim-point ring at the target end of the ball→target line */}
+              {/* aim target at the end of the ball→target line — concentric
+                  neon-green reticle (brand SMART TARGET look). 2026-06-29 (Tim) —
+                  replaces the single off-brand ring. */}
               <SvgEllipse
                 cx={targetLine.ringX} cy={targetLine.ringY}
-                rx={Math.max(10, 0.06 * w)} ry={Math.max(4, 0.02 * w)}
-                stroke={WHITE} strokeWidth={1.6} fill="none" opacity={0.9}
+                rx={Math.max(13, 0.072 * w)} ry={Math.max(5, 0.024 * w)}
+                stroke={AIM} strokeWidth={1.6} fill="none" opacity={0.95}
+              />
+              <SvgEllipse
+                cx={targetLine.ringX} cy={targetLine.ringY}
+                rx={Math.max(6, 0.034 * w)} ry={Math.max(2.5, 0.011 * w)}
+                stroke={AIM} strokeWidth={1.4} fill="none" opacity={0.9}
+              />
+              <SvgCircle
+                cx={targetLine.ringX} cy={targetLine.ringY}
+                r={2.4} fill={AIM} opacity={0.95}
               />
             </>
           )}
@@ -413,9 +426,9 @@ export function CageTargetingOverlay({
               <SvgLine
                 x1={puttGeom.x} y1={puttGeom.y1}
                 x2={puttGeom.x} y2={puttGeom.pinY}
-                stroke={WHITE} strokeWidth={2} strokeDasharray="7,6" opacity={0.95} strokeLinecap="round"
+                stroke={AIM} strokeWidth={2} strokeDasharray="7,6" opacity={0.95} strokeLinecap="round"
               />
-              <SvgEllipse cx={puttGeom.x} cy={puttGeom.pinY} rx={5} ry={3} stroke={WHITE} strokeWidth={1.6} fill="none" opacity={0.9} />
+              <SvgEllipse cx={puttGeom.x} cy={puttGeom.pinY} rx={5} ry={3} stroke={AIM} strokeWidth={1.6} fill="none" opacity={0.9} />
             </>
           )}
         </Svg>

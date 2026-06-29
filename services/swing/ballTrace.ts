@@ -204,8 +204,8 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Green → amber → red by how far off the aim line the ball started. Straight = green
- * (#34d399), a big hook/slice = red (#ef4444). When `peakDb` is supplied and the
+ * Green → amber → red by how far off the aim line the ball started. Straight = the
+ * neon-green brand (#88F700), a big hook/slice = red (#ef4444). When `peakDb` is supplied and the
  * strike was weak relative to `peakDbRef` (the session's solid-strike energy), the
  * colour is dimmed toward grey — an honest "soft contact" cue. Returns a hex string.
  */
@@ -215,7 +215,10 @@ export function traceColor(divergenceDeg: number, peakDb?: number, peakDbRef?: n
   let r: number, g: number, b: number;
   if (t < 0.5) {
     const u = t / 0.5;
-    r = lerp(52, 245, u); g = lerp(211, 158, u); b = lerp(153, 11, u);
+    // 2026-06-29 (Tim — "brand everything"): a straight shot traces in the NEON-GREEN
+    // brand #88F700 (136,247,0), not emerald — then fades amber → red as it diverges
+    // so the miss signal stays meaningful.
+    r = lerp(136, 245, u); g = lerp(247, 158, u); b = lerp(0, 11, u);
   } else {
     const u = (t - 0.5) / 0.5;
     r = lerp(245, 239, u); g = lerp(158, 68, u); b = lerp(11, 68, u);
