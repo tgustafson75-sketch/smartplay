@@ -137,23 +137,48 @@ let lastFix: GpsFix | null = null;
 // this is the structural reset that prevents wrong-by-100yd silent
 // failures when GPS drops mid-round.
 const STALE_HARD_LIMIT_MS = 60_000;
+// 2026-06-29 (Tim — over-strict-gate lens) — a brief 60s signal pause shouldn't
+// BLANK a good last-known fix (it zeroed the yardages even at 5-15m accuracy).
+// Two-stage now: at 60s DEGRADE the fix to low confidence (keep the position so
+// SmartFinder still answers, flagged "signal weak"); only FULL-clear to static
+// yardages after a far longer silence, when the position is genuinely ancient.
+const STALE_FULL_CLEAR_MS = 5 * 60_000;
 let staleHardTimer: ReturnType<typeof setTimeout> | null = null;
 function armStaleHardTimer(): void {
   if (staleHardTimer) clearTimeout(staleHardTimer);
   staleHardTimer = setTimeout(() => {
     if (lastFix) {
-      console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_HARD_LIMIT_MS, 'ms');
-      // 2026-06-28 (Tim — "stop guessing") — log the GPS-went-dark event with the
-      // last-known accuracy/source so dead-zone drops are diagnosable in /owner-logs.
+      // Stage 1 — DEGRADE, don't blank. Drop confidence to 'low' so downstream
+      // gates flag it ("signal weak / last known") while keeping the yardage live.
+      console.log('[gps] lastFix stale — degraded to low confidence (no fresh fix in', STALE_HARD_LIMIT_MS, 'ms)');
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
+        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_degrade', {
           sinceMs: STALE_HARD_LIMIT_MS,
           lastAccuracy_m: lastFix.accuracy_m ?? null,
           lastSource: lastFix.source,
         });
       } catch { /* best-effort — never break the GPS loop */ }
-      lastFix = null;
+      lastFix = { ...lastFix, confidence: 'low' };
+      // Stage 2 — arm the eventual FULL clear; by now the position is genuinely
+      // ancient, so fall through to staticYardages() rather than show a number
+      // that could be wrong-by-100yd after walking.
+      staleHardTimer = setTimeout(() => {
+        if (lastFix) {
+          console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_FULL_CLEAR_MS, 'ms');
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
+              sinceMs: STALE_FULL_CLEAR_MS,
+              lastAccuracy_m: lastFix.accuracy_m ?? null,
+              lastSource: lastFix.source,
+            });
+          } catch { /* best-effort */ }
+          lastFix = null;
+        }
+        staleHardTimer = null;
+      }, STALE_FULL_CLEAR_MS - STALE_HARD_LIMIT_MS);
+      return;
     }
     staleHardTimer = null;
   }, STALE_HARD_LIMIT_MS);
