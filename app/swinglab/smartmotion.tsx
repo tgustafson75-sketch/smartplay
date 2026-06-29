@@ -3773,7 +3773,7 @@ export default function SmartMotion() {
           {clipUri ? (
             <Video source={{ uri: clipUri }} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.CONTAIN} shouldPlay={false} useNativeControls={false} />
           ) : null}
-          <VideoAnnotationOverlay />
+          <VideoAnnotationOverlay topOffset={insets.top + 60} />
           <Pressable onPress={() => setAnnotateOpen(false)} style={[styles.markupClose, { top: insets.top + 8 }]} accessibilityRole="button" accessibilityLabel="Close markup">
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>

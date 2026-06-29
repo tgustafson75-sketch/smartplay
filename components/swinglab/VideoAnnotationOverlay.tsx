@@ -78,7 +78,7 @@ interface PendingTwoPoint {
 
 const COLORS: ShapeColor[] = ['#ffffff', '#00C896', '#ef4444', '#f59e0b'];
 
-export default function VideoAnnotationOverlay() {
+export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?: number }) {
   const [enabled, setEnabled] = useState(false);
   const [visible, setVisible] = useState(true);
   const [tool, setTool] = useState<Tool>('freehand');
@@ -331,7 +331,7 @@ export default function VideoAnnotationOverlay() {
   return (
     <>
       {/* Top toolbar — toggle DRAW mode + per-tool selection */}
-      <View style={styles.toolbar} pointerEvents="box-none">
+      <View style={[styles.toolbar, { top: topOffset }]} pointerEvents="box-none">
         <View style={styles.toolbarPills} pointerEvents="auto">
           {/* 2026-05-26 — Tim wanted the annotation toolkit rebranded
               as 'SmartCapture' so it reads as an intentional, named
@@ -373,7 +373,7 @@ export default function VideoAnnotationOverlay() {
                 onPress={() => setColor(c)}
                 style={[
                   styles.colorChip,
-                  { backgroundColor: c, borderColor: color === c ? '#00C896' : 'transparent' },
+                  { backgroundColor: c, borderColor: color === c ? '#88F700' : 'transparent' },
                 ]}
                 accessibilityLabel={`Color ${c}`}
               />
@@ -558,26 +558,28 @@ function ToolPill({
       style={[
         styles.pill,
         wide && { paddingHorizontal: 12 },
-        { borderColor: active ? '#00C896' : '#1e3a28', backgroundColor: active ? 'rgba(0, 200, 150, 0.22)' : 'rgba(13, 36, 24, 0.92)' },
+        { borderColor: active ? '#88F700' : '#1e3a28', backgroundColor: active ? 'rgba(136, 247, 0, 0.22)' : 'rgba(13, 36, 24, 0.92)' },
       ]}
       hitSlop={4}
     >
-      <Ionicons name={icon} size={16} color={active ? '#00C896' : '#f8fafc'} />
-      {label ? <Text style={[styles.pillLabel, { color: active ? '#00C896' : '#f8fafc' }]}>{label}</Text> : null}
+      <Ionicons name={icon} size={16} color={active ? '#88F700' : '#f8fafc'} />
+      {label ? <Text style={[styles.pillLabel, { color: active ? '#88F700' : '#f8fafc' }]}>{label}</Text> : null}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
+  // 2026-06-29 (Tim) — reskinned to a VERTICAL right-edge neon rail (the ad feel).
+  // top is set inline (passed in to clear the modal's close button); same tools/logic.
   toolbar: {
-    position: 'absolute', top: 4, left: 4, right: 4,
-    flexDirection: 'column', gap: 6,
+    position: 'absolute', right: 6,
+    flexDirection: 'column', alignItems: 'flex-end', gap: 6,
     zIndex: 50,
   },
   toolbarPills: {
-    flexDirection: 'row',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
     gap: 6,
-    flexWrap: 'wrap',
   },
   pill: {
     flexDirection: 'row',
@@ -604,7 +606,7 @@ const styles = StyleSheet.create({
     borderRadius: 14, padding: 16, gap: 12,
     borderWidth: 1, borderColor: '#1e3a28',
   },
-  modalTitle: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  modalTitle: { color: '#88F700', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   modalInput: {
     backgroundColor: '#060f09',
     borderRadius: 10,
@@ -613,6 +615,6 @@ const styles = StyleSheet.create({
   },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, alignItems: 'center' },
   modalCancel: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
-  modalSave: { backgroundColor: '#00C896', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  modalSave: { backgroundColor: '#88F700', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   modalSaveText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
 });
