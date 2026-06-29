@@ -48,6 +48,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
 import { defaultDtlRig } from '../../services/cage/targetRig';
 import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
 import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild } from '../../services/swing/ballTrace';
@@ -3216,6 +3217,11 @@ export default function SmartMotion() {
             <Text style={styles.analyzeText}>Analyzing swing…</Text>
           </View>
         ) : null}
+
+        {/* 2026-06-29 (Tim) — CADDIE PRESENCE PiP. The selected caddie, in a draggable
+            corner tile, during review (the "coach reviewing your tape" feel). Honest:
+            a static avatar, no live video / no voice. Rides with the clean-view toggle. */}
+        {isReview && showResults ? <CaddiePresencePip /> : null}
 
         {/* BOTTOM PANEL — floating data + controls. While placing the ball box
             it's hidden so the full floor is visible + tappable; otherwise it's
