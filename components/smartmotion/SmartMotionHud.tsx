@@ -477,18 +477,18 @@ export function FooterChips({
   const { colors } = useTheme();
   const Chip = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
     <View style={styles.chip}>
-      <Text style={[styles.chipLabel, { color: colors.text_muted }]}>
+      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]}>
         {label}{sub ? <Text style={{ fontWeight: '600' }}> · {sub}</Text> : null}
       </Text>
-      <Text style={[styles.chipValue, { color: colors.accent }]}>{value}</Text>
+      <Text style={[styles.chipValue, { color: '#88F700' }]}>{value}</Text>
     </View>
   );
   return (
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {onClubPress ? (
         <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel="Set club">
-          <Text style={[styles.chipLabel, { color: colors.text_muted }]}>CLUB</Text>
-          <Text style={[styles.chipValue, { color: club ? colors.accent : colors.text_muted }]}>{club ?? 'Tag ▾'}</Text>
+          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]}>CLUB</Text>
+          <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]}>{club ?? 'Tag ▾'}</Text>
         </Pressable>
       ) : (
         <Chip label="CLUB" value={club ?? '—'} />
