@@ -401,7 +401,7 @@ export default function Dashboard() {
             </Text>
             {dayStreak > 0 && (
               <View style={styles.streakPill}>
-                <Ionicons name="flame" size={13} color="#f5a623" />
+                <Ionicons name="flame" size={13} color={colors.accent_amber} />
                 <Text style={styles.streakPillText}>{dayStreak} day{dayStreak === 1 ? '' : 's'}</Text>
               </View>
             )}
@@ -647,7 +647,7 @@ export default function Dashboard() {
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.practiceHeader}>
               <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>PRACTICE POINTS</Text>
-              <Text style={[styles.practiceTotal, { color: colors.accent }]}>{practiceTotal}</Text>
+              <Text style={[styles.practiceTotal, { color: colors.accent_lime }]}>{practiceTotal}</Text>
             </View>
             {topDrills.map(([id, rec]) => (
               <View key={id} style={styles.practiceRow}>
@@ -683,7 +683,7 @@ export default function Dashboard() {
                 <View key={rowIdx} style={{ flexDirection: 'row', marginBottom: 4 }}>
                   {bagClubs.slice(rowIdx * 3, rowIdx * 3 + 3).map((c) => (
                     <View key={c.club} style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline' }}>
-                      <Text style={[styles.bagPillClub, { color: c.measured ? '#3FB950' : colors.text_primary }]}>{c.club}</Text>
+                      <Text style={[styles.bagPillClub, { color: c.measured ? colors.accent_lime : colors.text_primary }]}>{c.club}</Text>
                       <Text style={[styles.bagPillYds, { color: colors.text_muted }]}> {c.yards}y</Text>
                     </View>
                   ))}

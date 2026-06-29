@@ -188,10 +188,12 @@ export default function SwingBodyOverlay({
     strokeBase = Math.max(bbox.w, bbox.h);
   }
   // Stroke widths derived from the draw space so the overlay stays readable.
-  const sw = strokeBase * 0.012;
+  // 2026-06-29 (Tim) — thinner, cleaner skeleton to match the brand/marketing look
+  // (fine neon-green lines, not heavy strokes).
+  const sw = strokeBase * 0.008;
   // 2026-06-15 (Tim) — joint dots were too big and overlapped; smaller so the
   // skeleton reads cleanly (joints sit on the lines, not blobs over them).
-  const dotR = strokeBase * 0.011;
+  const dotR = strokeBase * 0.008;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -216,7 +218,7 @@ export default function SwingBodyOverlay({
                 <Line
                   key={`${a}-${b}`}
                   x1={ka.x * sx} y1={ka.y * sy} x2={kb.x * sx} y2={kb.y * sy}
-                  stroke="#22d3ee"
+                  stroke="#88F700"
                   strokeWidth={sw}
                   strokeOpacity={0.9}
                   strokeLinecap="round"
@@ -232,7 +234,7 @@ export default function SwingBodyOverlay({
                   cy={k.y * sy}
                   r={dotR}
                   fill="#ffffff"
-                  stroke="#22d3ee"
+                  stroke="#88F700"
                   strokeWidth={sw * 0.6}
                 />
               );
