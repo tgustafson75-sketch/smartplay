@@ -1441,6 +1441,15 @@ export default function CaddieTab() {
       case 'close_swinglab':
         emitSmartMotionCommand('close');
         break;
+      case 'switch_caddie': {
+        // 2026-06-29 (Tim) — change the active caddie persona by voice. The setter
+        // fires the spoken per-persona handoff intro, so nothing else to speak here.
+        const p = (action as { personality?: string }).personality;
+        if (p && ['kevin', 'serena', 'harry', 'tank'].includes(p)) {
+          useSettingsStore.getState().setCaddiePersonality(p as 'kevin' | 'serena' | 'harry' | 'tank');
+        }
+        break;
+      }
       case 'mark_tee':
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('tee');

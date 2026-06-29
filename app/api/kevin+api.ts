@@ -162,7 +162,9 @@ export type ToolAction =
   | { type: 'close_swinglab' }
   // SmartVision voice calibration — user stands at tee/green and says "mark tee/green"
   | { type: 'mark_tee' }
-  | { type: 'mark_green' };
+  | { type: 'mark_green' }
+  // 2026-06-29 (Tim) — switch the active caddie persona by voice ("switch to Harry").
+  | { type: 'switch_caddie'; personality: 'kevin' | 'serena' | 'harry' | 'tank' };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 

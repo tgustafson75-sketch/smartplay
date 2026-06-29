@@ -169,6 +169,15 @@ const KEVIN_TOOLS: AiToolDef[] = [
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
+    name: 'switch_caddie',
+    description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
+    parameters: {
+      type: 'object',
+      properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry', 'tank'], description: 'The caddie to switch to.' } },
+      required: ['personality'],
+    },
+  },
+  {
     name: 'lookup_hole',
     description: 'Get hole details (par, yardage) for a known course.',
     parameters: {
@@ -421,6 +430,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (toolName === 'close_swinglab') {
           toolActions.push({ type: 'close_swinglab' });
           return 'SwingLab closed.';
+        }
+
+        if (toolName === 'switch_caddie') {
+          const p = String(toolInput.personality ?? '').toLowerCase();
+          toolActions.push({ type: 'switch_caddie', personality: p });
+          const label = ({ kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' } as Record<string, string>)[p] ?? 'your caddie';
+          return `Switching you to ${label}.`;
         }
 
         // All other tools: collect for client dispatch, return an acknowledgment

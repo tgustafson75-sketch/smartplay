@@ -1314,10 +1314,11 @@ export default function SwingDetail() {
                 // loads (muted + looping for library so scrubbing/replay is calm);
                 // tap still pauses. watch-then-analyze keeps its own audio path.
                 shouldPlay
-                // 2026-06-23 (RP-6) — loop until the user actively scrubs/seeks; then
-                // stop looping so they can HOLD a frame to "analyze this moment". Open-
-                // time autoplay is unaffected (userScrubbed starts false).
-                isLooping={!userScrubbed}
+                // 2026-06-29 (Tim) — PLAY ONCE: the clip auto-plays through a single
+                // time on open (while analysis runs in parallel); when it stops the
+                // analysis is ready and the user takes over — tap to replay from the
+                // top, scrub, slow-mo. No auto-loop (it was looping indefinitely).
+                isLooping={false}
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
