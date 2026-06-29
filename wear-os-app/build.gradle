@@ -1,0 +1,9 @@
+// Top-level build file for the standalone SmartPlay Wear OS app.
+// This project is intentionally SEPARATE from the Expo/EAS phone build —
+// it is never included in the phone's settings.gradle, so it can never
+// affect or regress the phone APK build. Build + install it on its own
+// (see wear-os-app/README.md).
+plugins {
+    id 'com.android.application' version '8.6.0' apply false
+    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+}

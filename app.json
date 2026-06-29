@@ -112,6 +112,7 @@
       "./plugins/withMetaWearablesDAT.js",
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
+      "./plugins/withWearSwingBridge.js",
       "./plugins/withPrebuildSafetyCheck.js",
       "expo-asset",
       "expo-localization",

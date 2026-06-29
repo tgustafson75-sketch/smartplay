@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.smartplaycaddie.wear'
+    compileSdk 34
+
+    defaultConfig {
+        // MUST match the phone app's applicationId for the Wearable Data
+        // Layer to auto-associate the two apps. Do not change.
+        applicationId 'com.smartplaycaddie.app'
+        // Wear OS 3 = API 30. minSdk 30 covers the Galaxy Watch 4+.
+        minSdk 30
+        targetSdk 33
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    // Wearable Data Layer (MessageClient / NodeClient). Google Maven —
+    // no GitHub token / private repo needed.
+    implementation 'com.google.android.gms:play-services-wearable:18.2.0'
+}
