@@ -358,6 +358,10 @@ export default function SmartMotion() {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  // 2026-06-29 (Tim) — narrow cover screens (e.g. closed Z Fold ~360pt) crowd the
+  // bottom: the floating swing-count pill collides with the controls row. Bump its
+  // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
+  const isNarrow = windowWidth < 400;
   const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo } =
     useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string }>();
   // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
@@ -3039,7 +3043,7 @@ export default function SmartMotion() {
             OPEN = the free window; 1/3/5 caps the session to exactly that many swings
             (the read + narration cover N). Sits where the drill banner would. */}
         {!isDrill && phase === 'setup' ? (
-          <Animated.View style={[styles.swingCountOuter, { bottom: insets.bottom + 64, opacity: swingCountOpacity }]}>
+          <Animated.View style={[styles.swingCountOuter, { bottom: insets.bottom + (isNarrow ? 138 : 64), opacity: swingCountOpacity }]}>
             <View style={styles.swingCountPill}>
               <Text style={styles.swingCountLabel}>SWINGS</Text>
               {([null, 1, 3, 5] as const).map((n) => {
@@ -3071,7 +3075,7 @@ export default function SmartMotion() {
             pill sits for non-drills (free in drill mode), above the tab bar. Shows
             through setup + recording so a capture reads as "this is the X drill". */}
         {isDrill && (phase === 'setup' || phase === 'recording') ? (
-          <View style={[styles.drillBanner, { bottom: insets.bottom + 64 }]} pointerEvents="none">
+          <View style={[styles.drillBanner, { bottom: insets.bottom + (isNarrow ? 138 : 64) }]} pointerEvents="none">
             <Text style={styles.drillBannerKicker}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
             <Text style={styles.drillBannerName} numberOfLines={1}>
               {(typeof drillName === 'string' && drillName.trim() ? drillName.trim() : 'Practice').toUpperCase()}
