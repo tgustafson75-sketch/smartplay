@@ -969,6 +969,30 @@ export default function SwingDetail() {
     })();
   };
 
+  // 2026-06-29 (Tim) — AUTO-ANALYZE uploads at a smart default. Tim expected an
+  // uploaded clip to play → analyze, not sit on a manual CTA. So the FIRST time an
+  // uploaded swing opens unanalyzed, window + analyze the MIDDLE of the clip (the
+  // swing is most often mid-clip, not in the walk-up) — windowed pose, not the old
+  // smeared full-clip pass. The "Point at your swing" card stays as a one-tap
+  // REFINE: scrub to the real swing + re-analyze. Fires once per mount, only when
+  // never analyzed and the duration is known.
+  const autoAnalyzeFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoAnalyzeFiredRef.current) return;
+    if (analysisStatus !== 'pending') return;
+    if (session?.source !== 'uploaded_video') return;
+    if (!swing_id || !shot || !duration || duration <= 0) return;
+    if (analyzeInFlightRef.current) return;
+    autoAnalyzeFiredRef.current = true;
+    const center = duration / 2;
+    const startSec = Math.max(0, center - 2.5);
+    const endSec = Math.min(duration, center + 3);
+    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+    useToastStore.getState().show('Analyzing your swing… scrub + re-analyze to fine-tune.');
+    onReanalyze();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatus, session?.source, duration, swing_id, shot]);
+
   // 2026-05-22 — Phase 2 "Compare to..." action. Opens the bottom-sheet
   // picker (CompareReferencePickerSheet); the sheet calls onCompareToSelect
   // when the user locks in a reference, at which point we run the full
@@ -1566,6 +1590,32 @@ export default function SwingDetail() {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* 2026-06-29 (Tim) — SWING-POINT ANALYZER (option B). The auto-analyze
+              above runs the WHOLE swing automatically on open; this is the explicit
+              second option below it: play, pause, scrub to a specific portion, and
+              analyze just that moment. Uploads only, once the auto pass is done
+              (hidden while pending/analyzing/failed — those states show their own CTA). */}
+          {session.source === 'uploaded_video' && analysisStatus !== 'pending' && analysisStatus !== 'failed' && !reanalyzing ? (
+            <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10, marginTop: 12 }]}>
+              <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Swing-Point Analyzer</Text>
+              <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                Want a specific part? Play, pause, and scrub to the exact moment — then analyze just that portion.
+              </Text>
+              <TouchableOpacity
+                onPress={onAnalyzeAtPosition}
+                disabled={analyzeInFlightRef.current}
+                style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
+              >
+                <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>
+                  Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
           {/* Phase BW + 403b — per-swing list. Originally gated on
               session.shots.length > 1 so single-upload sessions saw only
