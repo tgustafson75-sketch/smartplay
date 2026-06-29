@@ -821,6 +821,31 @@ export default function SmartMotion() {
   // user-placed (no inferred ball flight). Foundation for target-aware
   // club/strategy logic.
   const engaged = ballArea != null && targetPoint != null;
+
+  // 2026-06-29 (Tim) — targeting-overlay visibility: ONE persistent toggle + an
+  // auto-fade once the ball box AND target are both set, so the screen goes clean
+  // for the visual and for playback. The user taps the toggle to bring it back to
+  // re-adjust. Applies to setup/recording and review (NOT buried in the tools card).
+  const [targetingVisible, setTargetingVisible] = useState(true);
+  const targetingOpacity = useRef(new Animated.Value(1)).current;
+  const didAutoHideTargetingRef = useRef(false);
+  useEffect(() => {
+    const bothSet = phase === 'setup'
+      ? (!!draftBall && !!draftTarget && !placeBallMode)
+      : phase === 'review'
+        ? (!!ballArea && !!targetPoint)
+        : false;
+    // Reset the once-per-engagement guard whenever we're not fully set (new placement).
+    if (!bothSet) { didAutoHideTargetingRef.current = false; return; }
+    // Auto-fade once; after that, visibility is purely the user's toggle.
+    if (targetingVisible && !didAutoHideTargetingRef.current) {
+      const t = setTimeout(() => { didAutoHideTargetingRef.current = true; setTargetingVisible(false); }, 2200);
+      return () => clearTimeout(t);
+    }
+  }, [phase, draftBall, draftTarget, placeBallMode, ballArea, targetPoint, targetingVisible]);
+  useEffect(() => {
+    Animated.timing(targetingOpacity, { toValue: targetingVisible ? 1 : 0, duration: 450, useNativeDriver: true }).start();
+  }, [targetingVisible, targetingOpacity]);
   // 2026-06-12 — LIVE ball/target: the SETUP draft in setup, the session marks in
   // review. So the aim direction + effort readout update as the DTL target is dragged
   // (interactive geometry ↔ tempo — Tim "the target's not moveable + no readout").
@@ -2899,13 +2924,15 @@ export default function SmartMotion() {
           // setup can land a bit off on playback. Review IS the actual recorded
           // frame, so dragging here is guaranteed-faithful fine-tuning that sticks
           // to the session. (No face-on launch line — you can't see flight head-on.)
-          <EditableCageTargets
-            ballArea={ballArea}
-            target={targetPoint}
-            targetKind={isPutt ? 'cup' : 'aim'}
-            onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
-            onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
-          />
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents={targetingVisible ? 'box-none' : 'none'}>
+            <EditableCageTargets
+              ballArea={ballArea}
+              target={targetPoint}
+              targetKind={isPutt ? 'cup' : 'aim'}
+              onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
+              onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
+            />
+          </Animated.View>
         ) : null}
 
         {/* DTL shot trace (2026-06-25, Tim). PREFER the MULTI-POINT measured path
@@ -2929,21 +2956,25 @@ export default function SmartMotion() {
           // target aim line + the live effort/direction readout update as you drag the
           // floating target end (Tim: "the target's not moveable + no readout"). No
           // target face-on / in a putt (no flight to aim). Both carry into the session.
-          <EditableCageTargets
-            ballArea={draftBall}
-            // Putt sets angle to down_the_line too, so this enables BOTH the DTL aim
-            // target and the putt CUP flag; face-on has no on-floor target. The effort
-            // clamp is DTL-only (putt has no "effort" — the flag goes wherever the cup is).
-            target={angle === 'down_the_line' ? draftTarget : null}
-            targetKind={isPutt ? 'cup' : 'aim'}
-            onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
-            onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
-          />
+          // 2026-06-29 (Tim) — fades out via targetingOpacity once ball+target are set
+          // (clean screen); the persistent toggle brings it back to re-adjust.
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents={targetingVisible ? 'box-none' : 'none'}>
+            <EditableCageTargets
+              ballArea={draftBall}
+              // Putt sets angle to down_the_line too, so this enables BOTH the DTL aim
+              // target and the putt CUP flag; face-on has no on-floor target. The effort
+              // clamp is DTL-only (putt has no "effort" — the flag goes wherever the cup is).
+              target={angle === 'down_the_line' ? draftTarget : null}
+              targetKind={isPutt ? 'cup' : 'aim'}
+              onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
+              onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
+            />
+          </Animated.View>
         ) : phase === 'recording' && draftBall ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents="none">
             <CageTargetingOverlay ballArea={draftBall} target={angle === 'down_the_line' ? draftTarget : null} launchDir={null} targetKind={isPutt ? 'cup' : 'aim'} />
-          </View>
+          </Animated.View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
           <Pressable
@@ -2984,6 +3015,21 @@ export default function SmartMotion() {
             ))}
           </View>
         </View>
+
+        {/* 2026-06-29 (Tim) — PERSISTENT targeting toggle (NOT buried in the tools
+            card): show/hide the ball box + aim line + target. The overlay auto-fades
+            once both are set for a clean screen; tap this to bring it back to adjust.
+            Lives top-left, mirrors the setup-tools chevron on the right. */}
+        {(((phase === 'setup' || phase === 'recording') && draftBall) || (phase === 'review' && (ballArea || targetPoint))) ? (
+          <TactilePressable
+            onPress={() => setTargetingVisible((v) => !v)}
+            style={[styles.targetingToggle, { top: insets.top + 76 }]}
+            accessibilityRole="button"
+            accessibilityLabel={targetingVisible ? 'Hide targeting overlay' : 'Show targeting overlay'}
+          >
+            <Ionicons name={targetingVisible ? 'eye-outline' : 'eye-off-outline'} size={18} color={colors.accent} />
+          </TactilePressable>
+        ) : null}
 
         {/* 2026-06-26 (Tim) — DRILL banner relocated from the top to the bottom
             (where the swing-count pill sits for non-drills) + made prominent. See
@@ -3805,6 +3851,12 @@ const styles = StyleSheet.create({
   railChevron: {
     flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 11, paddingRight: 9, paddingVertical: 9,
     borderRadius: 999, backgroundColor: 'rgba(6,15,9,0.72)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.55)',
+  },
+  // 2026-06-29 (Tim) — persistent show/hide for the targeting overlay (top-left).
+  targetingToggle: {
+    position: 'absolute', left: 12, zIndex: 7, width: 40, height: 40, borderRadius: 999,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(6,15,9,0.72)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.55)',
   },
   toolCard: {
     marginTop: 10, width: 232, backgroundColor: 'rgba(8,13,10,0.95)', borderRadius: 16, borderWidth: 1,
