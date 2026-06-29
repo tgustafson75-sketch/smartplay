@@ -826,29 +826,13 @@ export default function SmartMotion() {
   // club/strategy logic.
   const engaged = ballArea != null && targetPoint != null;
 
-  // 2026-06-29 (Tim) — targeting-overlay visibility: ONE persistent toggle + an
-  // auto-fade once the ball box AND target are both set, so the screen goes clean
-  // for the visual and for playback. The user taps the toggle to bring it back to
-  // re-adjust. Applies to setup/recording and review (NOT buried in the tools card).
+  // 2026-06-29 (Tim) — targeting overlay: DEFAULT ON, manual toggle only. NO
+  // auto-fade (it vanished before you could even see it). The eye toggle (top-left,
+  // out of the tools card) hides/shows it INSTANTLY; otherwise it stays put.
   const [targetingVisible, setTargetingVisible] = useState(true);
   const targetingOpacity = useRef(new Animated.Value(1)).current;
-  const didAutoHideTargetingRef = useRef(false);
   useEffect(() => {
-    const bothSet = phase === 'setup'
-      ? (!!draftBall && !!draftTarget && !placeBallMode)
-      : phase === 'review'
-        ? (!!ballArea && !!targetPoint)
-        : false;
-    // Reset the once-per-engagement guard whenever we're not fully set (new placement).
-    if (!bothSet) { didAutoHideTargetingRef.current = false; return; }
-    // Auto-fade once; after that, visibility is purely the user's toggle.
-    if (targetingVisible && !didAutoHideTargetingRef.current) {
-      const t = setTimeout(() => { didAutoHideTargetingRef.current = true; setTargetingVisible(false); }, 2200);
-      return () => clearTimeout(t);
-    }
-  }, [phase, draftBall, draftTarget, placeBallMode, ballArea, targetPoint, targetingVisible]);
-  useEffect(() => {
-    Animated.timing(targetingOpacity, { toValue: targetingVisible ? 1 : 0, duration: 450, useNativeDriver: true }).start();
+    targetingOpacity.setValue(targetingVisible ? 1 : 0);
   }, [targetingVisible, targetingOpacity]);
   // 2026-06-12 — LIVE ball/target: the SETUP draft in setup, the session marks in
   // review. So the aim direction + effort readout update as the DTL target is dragged
@@ -3893,7 +3877,9 @@ const styles = StyleSheet.create({
   },
   placeHintText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
   // Translucent "glass" card bg so the camera shows through the bottom panel.
-  glassCard: { backgroundColor: 'rgba(12,22,16,0.55)' },
+  // 2026-06-29 (Tim) — the bottom CLUB·SHOT·DIST bar now matches the brand pill deck
+  // above it (dark base + subtle neon-green border), so the bottom reads cohesive.
+  glassCard: { backgroundColor: 'rgba(6,15,9,0.82)', borderColor: 'rgba(136,247,0,0.28)', borderRadius: 14 },
   tempoDetail: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: -2 },
   engagePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   engageText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },

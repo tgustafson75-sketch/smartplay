@@ -869,17 +869,18 @@ export default function CaddieTab() {
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (!ve) return;
       if (event.type === 'entered') {
-        // 2026-06-26 (Tim) — if they opened a SPECIFIC drill, the drill IS the
-        // answer to "what are we working on?", so greet drill-aware instead of
-        // asking the redundant (and laggy) question. Generic open still asks.
-        const greeting = event.drillName
-          ? `${event.drillName}${event.drillFocus ? ` — ${event.drillFocus}` : ''}. Hit one when you're ready and I'll watch it.`
-          : "What are we working on today?";
-        configureAudioForSpeech()
-          .then(() => speak(greeting, vg, lang, apiUrl, { userInitiated: true }))
-          .then(() => new Promise<void>((r) => setTimeout(r, 500)))
-          .then(() => { handleMicPressRef.current(); })
-          .catch(() => {});
+        // 2026-06-29 (Tim) — DON'T auto-ask "what are we working on?" and then leave a
+        // cold mic: the camera owns the mic in SmartMotion, so the greeting's
+        // auto-listen never actually engaged — a dead question. Generic open now says
+        // NOTHING; the caddie mic badge is right there to TAP if the user wants to
+        // talk. A drill open still gets a drill-aware heads-up — but as a STATEMENT,
+        // not a question, and with NO auto-listen.
+        if (event.drillName) {
+          const greeting = `${event.drillName}${event.drillFocus ? ` — ${event.drillFocus}` : ''}. Hit one when you're ready and I'll watch it.`;
+          configureAudioForSpeech()
+            .then(() => speak(greeting, vg, lang, apiUrl, { userInitiated: true }))
+            .catch(() => {});
+        }
       } else if (event.type === 'session_complete') {
         const line = `${event.summary} Want to try another drill, or are we done?`;
         configureAudioForSpeech()
