@@ -743,6 +743,13 @@ export const useVoiceCaddie = ({
   // ── SEND TO BRAIN ─────────────────────────
 
   const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
+    // 2026-06-29 (fix A) — read the LIVE host at call-time. The hook-level
+    // apiUrl (~line 671) is captured per render, so a mid-session dual-host
+    // failover (ensureBackendReachable → activeBase switch) never reached these
+    // fetches — they kept hitting the dead custom domain even after the app had
+    // already failed over. getApiBaseUrl() here uses the host the device can
+    // actually reach. Shadows the render-captured const on purpose.
+    const apiUrl = getApiBaseUrl();
     // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Count a
     // voice turn whenever the caddie brain is engaged. No message content sent.
     try {
@@ -1210,6 +1217,9 @@ export const useVoiceCaddie = ({
 
   const speakResponse = async (text: string): Promise<void> => {
     if (!voiceEnabled || !text) return;
+    // 2026-06-29 (fix A) — live host at call-time so cloud TTS follows the
+    // failover too (see sendToBrain). Shadows the render-captured const.
+    const apiUrl = getApiBaseUrl();
     // Phase V.7+ — userInitiated: this speakResponse path always answers a
     // user-tapped query, so it speaks at L1 too (the L1 badge would be
     // useless otherwise).
@@ -1249,6 +1259,9 @@ export const useVoiceCaddie = ({
   const followUpDepthRef = useRef(0);
 
   const runFollowUpListenLoop = useCallback(async (): Promise<void> => {
+    // 2026-06-29 (fix A) — live host at call-time (see sendToBrain). Shadows
+    // the render-captured const so follow-up routing follows the failover.
+    const apiUrl = getApiBaseUrl();
     // 2026-06-05 — Bumped 6s → 30s. Like the MAX_RECORD_MS cap above:
     // this is a HARD cap on total mic-on time, not "stop after user
     // stops talking" (the 4s silence-VAD in voiceService.captureUtterance
@@ -1428,6 +1441,13 @@ export const useVoiceCaddie = ({
   const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad' }): Promise<void> => {
     if (isProcessingRef.current) return;
     const source = opts?.source ?? 'manual';
+    // 2026-06-29 (fix A) — THE round-one fix. Read the live host at call-time so
+    // transcribe / reachability-ping / health / brain all use the host the app
+    // already failed over to (the boot host_failover proved it knows the custom
+    // domain is dead on this device). The render-captured apiUrl (~line 671)
+    // ignored that failover and marched into the dead host for 15s every first
+    // tap. Shadows the render-captured const on purpose.
+    const apiUrl = getApiBaseUrl();
     try {
       isProcessingRef.current = true;
       // Reset follow-up depth for each fresh top-level mic tap so a
