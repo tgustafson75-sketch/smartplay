@@ -49,6 +49,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
+import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
 import { defaultDtlRig } from '../../services/cage/targetRig';
 import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
 import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild } from '../../services/swing/ballTrace';
@@ -2674,6 +2675,15 @@ export default function SmartMotion() {
   // computes pose/body/tempo, so it can't depend on poseFrames existing yet).
   // Position scrub chips only appear once frames are computed.
   const poseReady = !!poseFrames && poseFrames.length > 0;
+  // Detected swing phases as scrubber ticks (so you can scrub BY time point).
+  const scrubMoments: ScrubMoment[] = poseReady
+    ? P_SCRUB
+        .map((p) => {
+          const f = poseFrames?.find((x) => x.position === p.key);
+          return f ? { ms: f.timestampMs, label: p.label } : null;
+        })
+        .filter((m): m is ScrubMoment => m != null)
+    : [];
   const skeletonRow =
     isReview ? (
       <View style={styles.skelRow}>
@@ -2761,7 +2771,9 @@ export default function SmartMotion() {
               if (!videoPaused) v.playAsync().catch(() => undefined);
             }}
             onPlaybackStatusUpdate={(s) => {
-              if (showSkeleton && 'positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis);
+              // Track position ALWAYS (not just when the motion overlay is on) so the
+              // review scrubber can show + seek by time even on a clean video.
+              if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis);
               // 2026-06-14 (Tim) — WINDOW the loop to the selected swing so it stops
               // replaying the whole clip (the setup the user reported). isLooping loops
               // the entire file; when this swing is a real sub-window (endMs < clip end)
@@ -3293,6 +3305,18 @@ export default function SmartMotion() {
           ) : null}
 
           {reel}
+
+          {/* 2026-06-29 (Tim) — REVIEW SCRUBBER: scrub the swing by time, with the
+              detected phases (Address/Top/Impact/Finish) shown as ticks. */}
+          {isReview && videoDurationMs ? (
+            <ReviewScrubber
+              positionMs={playbackMs}
+              durationMs={videoDurationMs}
+              moments={scrubMoments}
+              onSeek={(ms) => { void videoRef.current?.setPositionAsync(ms); setPlaybackMs(ms); }}
+              onScrubStart={() => { setVideoPaused(true); void videoRef.current?.pauseAsync(); }}
+            />
+          ) : null}
 
           {/* 2026-06-29 (Tim) — PLAN TRIO in the deck: EFFORT · CARRY · AIM. The honest
               pre-shot plan, same sources as the old floating readout (effortRaw /
