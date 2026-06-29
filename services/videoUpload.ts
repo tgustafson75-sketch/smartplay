@@ -1010,6 +1010,34 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         }
       }
     }
+    // 2026-06-29 (Tim — "degrade by confidence, always give SOMETHING") — belt-and-
+    // braces so analysis NEVER commits a null read as status 'ok' (the silent grey
+    // "coming soon" card with no logged error). The classifier + the none/inconclusive
+    // branches above can still leave primary_issue null on a MIX of 'none' and
+    // 'inconclusive' swings. When we DID get usable per-swing reads, synthesize a
+    // low-confidence read from the richest observation we have. Repeat swings then
+    // climb the confidence ladder via classifySession's consensus (more reps = higher).
+    if (!primary_issue && results.length > 0) {
+      const firstSwingWithClip = swings.find(s => s.clipUri);
+      const obs = results
+        .map(r => (r.analysis.observation ?? '').trim())
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length)[0];
+      uploadLog('analysis-degraded-lowconf', { swings: results.length, had_observation: !!obs }, sessionId);
+      primary_issue = {
+        issue_id: 'tentative_read',
+        name: 'Low-confidence read',
+        category: 'other',
+        severity: 'minor',
+        occurrence_count: results.length,
+        visual_reference_path: null,
+        mechanical_breakdown: obs
+          || 'I could see the swing but couldn’t lock onto a single tendency this time — angle, lighting, or how much of the swing was in frame can do that.',
+        feel_cue: 'Hit a few more and I’ll build a higher-confidence read as the pattern shows up.',
+        detected_in_shots: firstSwingWithClip ? [firstSwingWithClip.id] : [],
+        confidence: 'low',
+      };
+    }
     V6('STAGE 5 — classifySession returned', {
       primary_issue_id: primary_issue?.issue_id ?? null,
       primary_issue_name: primary_issue?.name ?? null,
