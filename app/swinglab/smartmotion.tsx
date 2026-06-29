@@ -405,7 +405,6 @@ export default function SmartMotion() {
   const [targetSwings, setTargetSwings] = useState<number | null>(null);
   const targetSwingsRef = useRef<number | null>(null);
   useEffect(() => { targetSwingsRef.current = targetSwings; }, [targetSwings]);
-  const swingCountOpacity = useRef(new Animated.Value(1)).current;
 
   const profile = usePlayerProfileStore();
   // Swinger's handedness — the active family member when recording someone
@@ -462,11 +461,6 @@ export default function SmartMotion() {
   // recording, so the first swing's analysis lands HOT (no cold-start wait). Throttled.
   useEffect(() => {
     if (phase === 'setup' || phase === 'recording') prewarmSwingAnalysis();
-  }, [phase]);
-  // Reset swing count selector opacity when returning to setup
-  useEffect(() => {
-    if (phase === 'setup') swingCountOpacity.setValue(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
   const [recordedSeconds, setRecordedSeconds] = useState(0);
@@ -3008,7 +3002,9 @@ export default function SmartMotion() {
             card): show/hide the ball box + aim line + target. The overlay auto-fades
             once both are set for a clean screen; tap this to bring it back to adjust.
             Lives top-left, mirrors the setup-tools chevron on the right. */}
-        {(((phase === 'setup' || phase === 'recording') && draftBall) || (phase === 'review' && (ballArea || targetPoint))) ? (
+        {/* 2026-06-29 (Tim) — REVIEW keeps the floating eye toggle; in setup/recording
+            the deck's flag button now owns show/hide targeting (deck = control center). */}
+        {phase === 'review' && (ballArea || targetPoint) ? (
           <TactilePressable
             onPress={() => setTargetingVisible((v) => !v)}
             style={[styles.targetingToggle, { top: insets.top + 76 }]}
@@ -3026,32 +3022,8 @@ export default function SmartMotion() {
         {/* SHOT-REST swing-count selector — 2026-06-16 (Tim). Non-drill setup only.
             OPEN = the free window; 1/3/5 caps the session to exactly that many swings
             (the read + narration cover N). Sits where the drill banner would. */}
-        {!isDrill && phase === 'setup' ? (
-          <Animated.View style={[styles.swingCountOuter, { bottom: insets.bottom + (isNarrow ? 138 : 64), opacity: swingCountOpacity }]}>
-            <View style={styles.swingCountPill}>
-              <Text style={styles.swingCountLabel}>SWINGS</Text>
-              {([null, 1, 3, 5] as const).map((n) => {
-                const active = targetSwings === n;
-                return (
-                  <TactilePressable
-                    key={String(n)}
-                    onPress={() => {
-                      setTargetSwings(n);
-                      Animated.timing(swingCountOpacity, {
-                        toValue: 0, duration: 350, delay: 600, useNativeDriver: true,
-                      }).start();
-                    }}
-                    style={[styles.swingCountChip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
-                    accessibilityRole="button"
-                    accessibilityLabel={n == null ? 'Open swing count' : `${n} swings`}
-                  >
-                    <Text style={[styles.swingCountText, active && { color: '#06140b' }]}>{n == null ? 'OPEN' : String(n)}</Text>
-                  </TactilePressable>
-                );
-              })}
-            </View>
-          </Animated.View>
-        ) : null}
+        {/* 2026-06-29 (Tim) — SWINGS OPEN·1·3·5 selector moved OFF the floating pill
+            and INTO the bottom deck as a persistent row (no fade). See the deck below. */}
 
         {/* DRILL BANNER — 2026-06-26 (Tim): SmartMotion looks the same for every
             drill by design, so a distinct, high-contrast label makes it instantly
@@ -3163,42 +3135,9 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* DTL AIM READOUT (setup) — live as you drag the target: declared effort %
-            + start direction. CENTERED, just UNDER the ball-area box (Tim) — the target
-            travels UP from the ball, so a readout below it can never collide on any
-            screen size. Clamped to stay above the bottom controls. DTL only. */}
-        {phase === 'setup' && angle === 'down_the_line' && !isPutt && liveBall && rootSize.h > 0 && (effortRaw != null || aimRead) ? (
-          <View
-            style={{
-              position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6,
-              top: Math.min(rootSize.h - 132, liveBall.y * rootSize.h + liveBall.r * rootSize.w * 1.5 + 14),
-            }}
-            pointerEvents="none"
-          >
-            <View style={styles.aimReadout}>
-              {effortRaw != null ? (
-                <View style={styles.aimReadoutCol}>
-                  <Text style={styles.aimReadoutValue}>{effortRaw}%</Text>
-                  <Text style={styles.aimReadoutLabel}>EFFORT</Text>
-                </View>
-              ) : null}
-              {effortRaw != null && estCarry != null ? <View style={styles.aimReadoutDivider} /> : null}
-              {estCarry != null ? (
-                <View style={styles.aimReadoutCol}>
-                  <Text style={styles.aimReadoutValue}>~{estCarry}y</Text>
-                  <Text style={styles.aimReadoutLabel}>CARRY</Text>
-                </View>
-              ) : null}
-              {(effortRaw != null || estCarry != null) && aimRead ? <View style={styles.aimReadoutDivider} /> : null}
-              {aimRead ? (
-                <View style={styles.aimReadoutCol}>
-                  <Text style={[styles.aimReadoutValue, { color: aimRead === 'STRAIGHT' ? '#34d399' : '#f5c451' }]}>{aimRead}</Text>
-                  <Text style={styles.aimReadoutLabel}>AIM</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
+        {/* 2026-06-29 (Tim) — the DTL EFFORT/CARRY/AIM readout moved OFF the floating
+            over-camera pill and INTO the bottom deck as a clean 3-card plan trio.
+            Same honest sources (effortRaw / estCarry / aimRead). See the deck below. */}
 
         {/* RIGHT RAIL — floating metric cards (review) */}
         {isReview && showResults && !isPutt ? (
@@ -3288,7 +3227,7 @@ export default function SmartMotion() {
             <Text style={[styles.placeHintText, { color: colors.accent }]}>Tap the floor where your ball is</Text>
           </View>
         ) : (
-        <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 8 }]}>
+        <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 6 }]}>
           <LinearGradient
             colors={['rgba(6,15,9,0)', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.85)']}
             style={StyleSheet.absoluteFill}
@@ -3349,6 +3288,61 @@ export default function SmartMotion() {
 
           {reel}
 
+          {/* 2026-06-29 (Tim) — PLAN TRIO in the deck: EFFORT · CARRY · AIM. The honest
+              pre-shot plan, same sources as the old floating readout (effortRaw /
+              estCarry / aimRead). DTL setup only, and only while targeting is shown. */}
+          {phase === 'setup' && angle === 'down_the_line' && !isPutt && targetingVisible && (effortRaw != null || aimRead) ? (
+            <View style={styles.planRow}>
+              <View style={styles.planCard}>
+                <Text style={styles.planLabel}>EFFORT</Text>
+                <Text style={styles.planValue} numberOfLines={1}>{effortRaw != null ? `${effortRaw}%` : '—'}</Text>
+                <View style={styles.planSeg}>
+                  {Array.from({ length: 6 }).map((_, i) => {
+                    const filled = effortRaw != null && i < Math.round((effortRaw / 100) * 6);
+                    return <View key={i} style={[styles.planSegCell, { backgroundColor: filled ? colors.accent : 'rgba(255,255,255,0.18)' }]} />;
+                  })}
+                </View>
+              </View>
+              <View style={styles.planCard}>
+                <Text style={styles.planLabel}>CARRY</Text>
+                <Text style={styles.planValue} numberOfLines={1}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
+                <Text style={styles.planUnit}>{estCarry != null ? 'yds' : ''}</Text>
+              </View>
+              <View style={styles.planCard}>
+                <Text style={styles.planLabel}>AIM</Text>
+                <Text
+                  style={[styles.planValue, styles.planValueText, { color: aimRead ? (aimRead === 'STRAIGHT' ? colors.accent : '#f5c451') : '#88F700' }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {aimRead ?? '—'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* 2026-06-29 (Tim) — persistent SWINGS OPEN·1·3·5 selector (no fade), now a
+              deck row. Non-drill setup only (drills set their own swing count). */}
+          {!isDrill && phase === 'setup' ? (
+            <View style={styles.swingRow}>
+              <Text style={styles.swingRowLabel}>SWINGS</Text>
+              {([null, 1, 3, 5] as const).map((n) => {
+                const active = targetSwings === n;
+                return (
+                  <TactilePressable
+                    key={String(n)}
+                    onPress={() => setTargetSwings(n)}
+                    style={[styles.swingRowChip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={n == null ? 'Open swing count' : `${n} swings`}
+                  >
+                    <Text style={[styles.swingRowChipText, active && { color: '#06140b' }]}>{n == null ? 'OPEN' : String(n)}</Text>
+                  </TactilePressable>
+                );
+              })}
+            </View>
+          ) : null}
+
           {/* Acoustic card shows during RECORDING (live meter) + REVIEW (swing
               count). In SETUP it's hidden — calibration lives on the right-side
               icon rail so the bottom stays clear of the ball box. */}
@@ -3400,11 +3394,12 @@ export default function SmartMotion() {
             <Text style={[styles.setupHintLine, { color: colors.accent }]}>Tap where your ball sits</Text>
           ) : null}
 
-          <View style={styles.controlsRow}>
-            {!isReview ? (
-              // 2026-06-12 — ONE golfer badge, tap to cycle DTL → Face-On → Putting,
-              // with a quick fade-away label (Tim's idea — clears the bottom bar vs
-              // the old 3-chip toggle). The current stance icon shows which mode you're in.
+          {!isReview ? (
+            // 2026-06-29 (Tim) — THREE-circle control row matching the mockup:
+            // golfer (cycle DTL → Face-On → Putting, with a fade-away mode label) ·
+            // record (center, larger) · flag (show/hide the aim target — owns what the
+            // floating eye toggle did in setup, so the deck is the control center).
+            <View style={styles.controlsRowTriple}>
               <View style={{ justifyContent: 'center' }}>
                 <Animated.Text style={[styles.modeFadeLabelLeft, { opacity: modeFadeOpacity, color: colors.accent }]} pointerEvents="none" numberOfLines={1}>
                   {modeFadeText}
@@ -3419,10 +3414,23 @@ export default function SmartMotion() {
                   <Image source={ICON_ANGLE[isPutt ? 'putt' : angle]} style={styles.modeCycleImg} resizeMode="contain" />
                 </TactilePressable>
               </View>
-            ) : null}
-            <View style={{ flex: 1 }} />
-            {actionBtn}
-          </View>
+              {actionBtn}
+              <TactilePressable
+                haptic="medium"
+                onPress={() => setTargetingVisible((v) => !v)}
+                style={[styles.flagBtn, { borderColor: targetingVisible ? colors.accent : 'rgba(136,247,0,0.35)' }]}
+                accessibilityRole="button"
+                accessibilityLabel={targetingVisible ? 'Hide aim target' : 'Show aim target'}
+              >
+                <Ionicons name="flag" size={24} color={targetingVisible ? colors.accent : 'rgba(255,255,255,0.6)'} />
+              </TactilePressable>
+            </View>
+          ) : (
+            <View style={styles.controlsRow}>
+              <View style={{ flex: 1 }} />
+              {actionBtn}
+            </View>
+          )}
 
           <FooterChips
             club={club ? clubIdLabel(club) : null}
@@ -3853,8 +3861,8 @@ const styles = StyleSheet.create({
   },
   toolCardHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 4, marginLeft: 4 },
   toolCardIcon: { width: 34, height: 34 },
-  modeCycleBtn: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
-  modeCycleImg: { width: 44, height: 44 },
+  modeCycleBtn: { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
+  modeCycleImg: { width: 42, height: 42 },
   modeFadeLabelLeft: { position: 'absolute', right: 62, width: 150, height: 54, textAlign: 'right', textAlignVertical: 'center', fontSize: 13, fontWeight: '900', letterSpacing: 1 },
   setupHintLine: { fontSize: 12, fontWeight: '800', textAlign: 'center', paddingVertical: 2 },
   recDot: { width: 10, height: 10, borderRadius: 5 },
@@ -3867,7 +3875,7 @@ const styles = StyleSheet.create({
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
     backgroundColor: 'transparent', // translucent gradient fade renders behind
     overflow: 'hidden',
-    paddingHorizontal: 10, paddingTop: 14, gap: 8,
+    paddingHorizontal: 10, paddingTop: 10, gap: 6,
     borderTopLeftRadius: 18, borderTopRightRadius: 18,
   },
   placeHint: {
@@ -3880,6 +3888,22 @@ const styles = StyleSheet.create({
   // 2026-06-29 (Tim) — the bottom CLUB·SHOT·DIST bar now matches the brand pill deck
   // above it (dark base + subtle neon-green border), so the bottom reads cohesive.
   glassCard: { backgroundColor: 'rgba(6,15,9,0.82)', borderColor: 'rgba(136,247,0,0.28)', borderRadius: 14 },
+  // 2026-06-29 (Tim) — in-deck PLAN TRIO (EFFORT/CARRY/AIM) + persistent SWINGS row +
+  // three-circle control row (golfer · record · flag), matching the mockup.
+  planRow: { flexDirection: 'row', gap: 6 },
+  planCard: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 1, backgroundColor: 'rgba(6,15,9,0.82)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.28)', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 8 },
+  planLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  planValue: { color: '#88F700', fontSize: 20, fontWeight: '900', letterSpacing: 0.3 },
+  planValueText: { fontSize: 15 },
+  planUnit: { color: 'rgba(255,255,255,0.5)', fontSize: 9, fontWeight: '700' },
+  planSeg: { flexDirection: 'row', gap: 2, marginTop: 3 },
+  planSegCell: { width: 8, height: 4, borderRadius: 1 },
+  swingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(136,247,0,0.22)', paddingHorizontal: 12, paddingVertical: 5 },
+  swingRowLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 2 },
+  swingRowChip: { minWidth: 38, paddingHorizontal: 11, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
+  swingRowChipText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  controlsRowTriple: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  flagBtn: { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   tempoDetail: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3, marginTop: -2 },
   engagePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
   engageText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
