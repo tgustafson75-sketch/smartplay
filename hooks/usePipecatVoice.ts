@@ -18,6 +18,7 @@ import { useTrustLevelStore } from '../store/trustLevelStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { getLastFix } from '../services/gpsManager';
 import { bagDistances } from '../services/shotStrategy';
+import { getCaddieContext } from '../services/caddieMemoryRetrieval';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
@@ -125,6 +126,18 @@ export function usePipecatVoice({
         lat: getLastFix()?.lat ?? undefined,
         lng: getLastFix()?.lng ?? undefined,
       },
+      // 2026-06-29 (Tim — audit) — the LEARNED CNS memory (bag carries, course/hole
+      // history, tendencies, last-round reflection) was wired into /api/kevin but NOT
+      // the default pipecat brain, so "the caddie knows everything" was dead on the
+      // path that actually runs. Ship the same promptBlock the legacy path uses.
+      memory: (() => {
+        try {
+          return getCaddieContext({
+            courseId: round.activeCourseId ?? undefined,
+            hole: round.currentHole ?? undefined,
+          }).promptBlock;
+        } catch { return ''; }
+      })(),
     };
   }, []);
 

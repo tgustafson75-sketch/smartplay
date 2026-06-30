@@ -407,7 +407,11 @@ export default function SmartMotion() {
       focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
       drillId: isDrill ? drillId : undefined,
     });
-    return () => clearScreenContext(label);
+    // 2026-06-29 (Tim — audit) — clear UNCONDITIONALLY on leave. session_complete
+    // overwrites the screen label to "just finished a session" (with an act-now
+    // directive); a label-matched clear would no-op and LEAK that directive to the
+    // next screen (saying "nine iron" on the dashboard could fire configure_drill).
+    return () => clearScreenContext();
   }, [isDrill, drillName, drillFocus, drillId]);
   // 2026-06-16 (Tim — shot-rest cycles) — user-chosen swing count: null = OPEN (the
   // existing free window), or 1/3/5 → cap the session to exactly N swings (the read +

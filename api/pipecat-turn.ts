@@ -366,20 +366,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // coaching-knowledge RAG, max 3, offline, scored floor). Injected only when
     // non-empty; empty → base prompt unchanged. Kept OUT of the static buildSystem
     // literal so that literal has no KB dependency.
-    let kbAddendum = '';
+    // 2026-06-29 (Tim — audit) — the CONFIRM-BEFORE-OPENING rule is a PURE literal,
+    // hoisted OUT of the KB try/catch so a dynamic-import hiccup can NEVER silently
+    // drop the dialogue-first behavior (the cause of the intermittent "jumps straight
+    // in instead of asking"). It is now ALWAYS in the prompt; the catalog + RAG are
+    // the only best-effort parts.
+    const confirmRule =
+      `\n\nCONFIRM BEFORE OPENING — DON'T JUMP (Tim 2026-06-29): If the player EXPLICITLY asks to open / go to / start / record something ("open Smart Motion", "take me to the tempo drill", "record my swing", "let's go to drills"), call the tool directly as usual. BUT if they only CONVERSATIONALLY mention practicing, a drill, or working on a club ("let's work on irons", "I should do a drill", "my grip feels off", "I want to work on tempo") WITHOUT asking to open anything, do NOT call navigate / open_swinglab / record_swing / configure_drill yet. Instead reply with ONE short spoken OFFER phrased as a STATEMENT — NEVER a question (so the app does not auto-listen) — e.g. "Tap the mic and tell me to go, and I'll open Smart Motion to work on that." Fire the open tool only AFTER the player confirms. Offer once; if they don't take it, keep talking — don't nag or re-offer every turn.`;
+    let kbAddendum = confirmRule;
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
-        + `\n\nCONFIRM BEFORE OPENING — DON'T JUMP (Tim 2026-06-29): If the player EXPLICITLY asks to open / go to / start / record something ("open Smart Motion", "take me to the tempo drill", "record my swing", "let's go to drills"), call the tool directly as usual. BUT if they only CONVERSATIONALLY mention practicing, a drill, or working on a club ("let's work on irons", "I should do a drill", "my grip feels off", "I want to work on tempo") WITHOUT asking to open anything, do NOT call navigate / open_swinglab / record_swing / configure_drill yet. Instead reply with ONE short spoken OFFER phrased as a STATEMENT — NEVER a question (so the app does not auto-listen) — e.g. "Tap the mic and tell me to go, and I'll open Smart Motion to work on that." Fire the open tool only AFTER the player confirms. Offer once; if they don't take it, keep talking — don't nag or re-offer every turn.`
+        + confirmRule
         + (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
     } catch { /* KB is best-effort — never break the turn */ }
     const systemBase = kbAddendum ? baseSystem + kbAddendum : baseSystem;
-    const system = _screenContext ? `${systemBase}\n\n${_screenContext}` : systemBase;
+    // 2026-06-29 (Tim — audit) — inject the LEARNED CNS memory (bag/course/tendencies)
+    // so the default pipecat brain actually "knows everything" about this player, the
+    // same block the legacy /api/kevin path consumes. Capped for safety.
+    const memoryRaw = context.memory;
+    const memoryBlock = typeof memoryRaw === 'string' && memoryRaw.trim()
+      ? `\n\nWHAT YOU'VE LEARNED ABOUT THIS PLAYER (their bag, course/hole history, tendencies, last round — use it naturally in conversation; NEVER read it aloud as raw data):\n${memoryRaw.slice(0, 2000)}`
+      : '';
+    const system = (_screenContext ? `${systemBase}\n\n${_screenContext}` : systemBase) + memoryBlock;
 
     // 2026-06-23 (audit) — the Pipecat brain was anthropic-only and 502'd on any
     // provider hiccup, so the live-voice caddie said "give me one sec" every turn
