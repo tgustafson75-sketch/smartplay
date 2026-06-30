@@ -117,11 +117,6 @@ export function segmentsFromStrikes(
   });
 }
 
-/** Count of confirmed swings — what the UI shows as "N swings detected". */
-export function confirmedCount(segments: SwingSegment[]): number {
-  return segments.filter((s) => s.confirmed).length;
-}
-
 /**
  * 2026-06-10 — Range mode (acoustics off): map VIDEO-located swing times into
  * the same SwingSegment[] the acoustic path produces, so the reel + per-swing
