@@ -65,7 +65,7 @@ function kindColor(kind: IssueLogKind): string {
   }
 }
 
-type FilterTab = 'all' | 'user' | 'voice';
+type FilterTab = 'all' | 'errors' | 'user' | 'voice';
 
 export default function OwnerLogsScreen() {
   const router = useRouter();
@@ -89,8 +89,17 @@ export default function OwnerLogsScreen() {
     () => allEntries.filter(e => !e.kind || e.kind === 'user').length,
     [allEntries],
   );
+  // 2026-06-30 (Tim — "make sure it's clean", but KEEP the tracking) — real FAILURES only:
+  // excludes 'user' feedback AND 'boot' breadcrumbs (the benign launch-timeline tracking he
+  // wants to keep for timestamp analysis). Lets him spot a real problem at a glance without
+  // losing the full 'All' timeline.
+  const errorEntryCount = useMemo(
+    () => allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot').length,
+    [allEntries],
+  );
   const entries = useMemo(() => {
     if (tab === 'user') return allEntries.filter(e => !e.kind || e.kind === 'user');
+    if (tab === 'errors') return allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot');
     if (tab === 'voice') return allEntries.filter(e => e.kind && e.kind !== 'user');
     return allEntries;
   }, [allEntries, tab]);
@@ -267,9 +276,10 @@ export default function OwnerLogsScreen() {
           glance which side is generating noise. */}
       <View style={styles.tabsRow}>
         {([
-          { id: 'all' as const,   label: 'All',    count: allEntries.length },
-          { id: 'user' as const,  label: 'Issues', count: userEntryCount },
-          { id: 'voice' as const, label: 'Voice',  count: voiceEntryCount },
+          { id: 'all' as const,    label: 'All',    count: allEntries.length },
+          { id: 'errors' as const, label: 'Errors', count: errorEntryCount },
+          { id: 'user' as const,   label: 'Issues', count: userEntryCount },
+          { id: 'voice' as const,  label: 'Voice',  count: voiceEntryCount },
         ]).map(t => {
           const active = tab === t.id;
           return (

@@ -31,6 +31,9 @@ export function bootMark(label: string, extra?: Record<string, unknown>): void {
   fired.add(label);
   const sinceBootMs = Date.now() - t0;
   console.log(`[boot] +${sinceBootMs}ms ${label}`, extra ?? '');
+  // 2026-06-30 (Tim — KEEP this; he uses the full timestamped timeline while playing +
+  // testing). The boot breadcrumbs stay in the owner log on purpose; the owner-logs view
+  // gains an "Errors" filter so real failures are separable from this benign tracking.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
