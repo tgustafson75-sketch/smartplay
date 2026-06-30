@@ -2106,6 +2106,13 @@ export default function SwingDetail() {
               {session.smart_motion_shot_map?.tempo?.ratio != null ? (
                 <View style={{ marginTop: 12 }}>
                   <TempoBar ratio={session.smart_motion_shot_map.tempo.ratio} />
+                  {/* 2026-06-30 (Tim — audit) — the tempo MS detail was persisted but never shown. */}
+                  {(session.smart_motion_shot_map.tempo.backswingMs != null && session.smart_motion_shot_map.tempo.downswingMs != null) ? (
+                    <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 4 }]}>
+                      Back {(session.smart_motion_shot_map.tempo.backswingMs / 1000).toFixed(1)}s · Down {(session.smart_motion_shot_map.tempo.downswingMs / 1000).toFixed(1)}s
+                      {session.smart_motion_shot_map.tempo.sequencingScore != null ? ` · Transition ${Math.round(session.smart_motion_shot_map.tempo.sequencingScore)}` : ''}
+                    </Text>
+                  ) : null}
                 </View>
               ) : null}
               {session.smart_motion_shot_map && (session.smart_motion_shot_map.effortPct != null || session.smart_motion_shot_map.estCarry != null || session.smart_motion_shot_map.trace) ? (
@@ -2135,6 +2142,20 @@ export default function SwingDetail() {
                       </View>
                     ) : null}
                   </View>
+                  {(session.smart_motion_shot_map.canvasFeet != null || session.smart_motion_shot_map.cameraBehindFeet != null) ? (
+                    <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 8 }]}>
+                      {session.smart_motion_shot_map.canvasFeet != null ? `Canvas ${session.smart_motion_shot_map.canvasFeet} ft` : ''}
+                      {session.smart_motion_shot_map.cameraBehindFeet != null ? `${session.smart_motion_shot_map.canvasFeet != null ? '  ·  ' : ''}Camera ${session.smart_motion_shot_map.cameraBehindFeet} ft back` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+              {/* 2026-06-30 (Tim — audit) — the player's stated FEEL was captured
+                  (setSessionFeel) but never shown anywhere. Surface it with the read. */}
+              {session.feel_note && session.feel_note.trim() ? (
+                <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>HOW IT FELT</Text>
+                  <Text style={[styles.biomechRow, { color: colors.text_primary, marginTop: 6 }]}>{session.feel_note}</Text>
                 </View>
               ) : null}
               <TouchableOpacity
