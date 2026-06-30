@@ -2564,34 +2564,30 @@ export default function SmartMotion() {
     // session (a captureKind:'drill' save). Surfaces on the dashboard; the data is
     // the practice side of the future practice→on-course-improvement ledger.
     let savedMsg = 'Saved to your Swing Library';
-    if (sid && isDrill && drillId) {
+    if (sid) {
       try {
         const swings = Math.max(1, segmentsRef.current.length || drillShotCount || 1);
-        // 2026-06-14 (Tim — wire the points) — use the unified award so the drill
-        // ALSO feeds the visible tier (not just the practice ledger), with a label
-        // for the dashboard. Same conservative points as before.
-        const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
-        const pts = usePracticePointsStore.getState().awardPracticePoints({
-          key: drillId,
-          label: drillLabel,
-          swings,
-          now: Date.now(),
-        });
-        // 2026-06-14 (Tim) — also record the drill in the unified practice history so
-        // it appears alongside Open Range / Focus sessions (separate from the award).
-        usePracticeSessionStore.getState().recordCompletedSession({
-          kind: 'focus',
-          focus: drillId,
-          drillId,
-          label: drillLabel,
-          swingCount: swings,
-        });
-        savedMsg = `Saved · +${pts} practice points`;
+        if (isDrill && drillId) {
+          // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
+          const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
+          const pts = usePracticePointsStore.getState().awardPracticePoints({ key: drillId, label: drillLabel, swings, now: Date.now() });
+          usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings });
+          savedMsg = `Saved · +${pts} practice points`;
+        } else {
+          // 2026-06-29 (Tim — "my points/sessions disappeared") — PLAIN SmartMotion
+          // practice (the normal dock-it-say-go flow) now ALSO counts toward the
+          // dashboard, not only drill-launched sessions. Keyed by club so per-club
+          // practice accrues; honest generic label.
+          const clubKey = club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice');
+          const pts = usePracticePointsStore.getState().awardPracticePoints({ key: `smartmotion:${clubKey}`, label: clubKey, swings, now: Date.now() });
+          usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings });
+          savedMsg = `Saved · +${pts} practice points`;
+        }
       } catch { /* non-fatal */ }
     }
     useToastStore.getState().show(savedMsg);
     router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, bodyItems]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
