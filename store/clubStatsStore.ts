@@ -25,6 +25,21 @@ export const CLUB_ORDER = [
 ] as const;
 export type ClubName = (typeof CLUB_ORDER)[number];
 
+// 2026-06-30 (audit C1/C10 — Tim: "wire learned carry to on-course distances") —
+// map the recognizer's ClubId ('DR','7I',…) to this store's ClubName so SmartMotion can
+// look up the player's REAL tracked/stated per-club carry (distanceFor / hasDistance).
+// Putter + unknown → null (no full-shot carry). Type-only ClubId import = no cycle.
+const CLUB_ID_TO_NAME: Record<string, ClubName> = {
+  DR: 'Driver', '3W': '3W', '5W': '5W', '7W': '7W',
+  '2H': '2H', '3H': '3H', '4H': '4H', '5H': '4H',
+  '3I': '3I', '4I': '4I', '5I': '5I', '6I': '6I', '7I': '7I', '8I': '8I', '9I': '9I',
+  PW: 'PW', GW: 'GW', AW: 'GW', SW: 'SW', LW: 'LW',
+};
+export function clubIdToClubName(id: string | null | undefined): ClubName | null {
+  if (!id) return null;
+  return CLUB_ID_TO_NAME[id] ?? null;
+}
+
 /** Standard amateur carry chart (yds) — inference fallback before the
  *  player has logged enough real shots. Mid-handicap baseline. */
 const STANDARD_YARDS: Record<ClubName, number> = {

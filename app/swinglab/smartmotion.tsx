@@ -108,7 +108,7 @@ import {
 } from '../../components/smartmotion/SmartMotionHud';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
-import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
+import { useClubStatsStore, clubIdToClubName, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
 import { speak, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
@@ -3840,13 +3840,25 @@ export default function SmartMotion() {
 
   // 2026-06-12 (Tim) — PAGE 3: the SHOT MAP (full swing → vertical course; cage →
   // bullseye). Gated by showShotMap (declared above for the dot count).
+  // 2026-06-30 (audit C1/C10 — Tim: "wire learned carry to on-course distances") — feed
+  // the shot map the player's REAL per-club carry: tracked on-course average (wins) → stated
+  // My Bag → null. Null lets fullCarryYards fall back to the handicap table, so this only
+  // overrides with HONEST data. getState() (not a hook) — safe this late in the component.
+  const shotMapClubName = clubIdToClubName(club);
+  let learnedCarryYds: number | null = null;
+  if (shotMapClubName) {
+    const cs = useClubStatsStore.getState();
+    learnedCarryYds = (cs.stats[shotMapClubName]?.samples ?? 0) > 0
+      ? cs.stats[shotMapClubName]!.avgYards
+      : (cs.manual[shotMapClubName] ?? null);
+  }
   const shotMapPage = showShotMap ? (
     <ShotMapPage
       key="shotmap"
       mode={effectiveMode}
       club={club}
       handicap={profile.handicap ?? null}
-      learnedCarry={null}
+      learnedCarry={learnedCarryYds}
       estCarry={estCarry}
       effortPct={effortPct}
       trace={ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null}
