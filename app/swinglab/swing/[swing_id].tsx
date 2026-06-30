@@ -1430,6 +1430,23 @@ export default function SwingDetail() {
                   setVideoError(msg);
                 }}
               />
+              {/* 2026-06-29 (Tim — "zoom to see the ball") — the skeleton + ball trace +
+                  target overlays now live INSIDE the zoom so they TRACK the video when you
+                  pinch in (before, only the video scaled and the overlays drifted off the
+                  ball). Markup rail + watermark stay outside — they shouldn't scale. */}
+              {hasPose && (showSkeleton || showTrace) && (
+                <SwingBodyOverlay
+                  frames={poseFrames}
+                  currentTimeMs={position * 1000}
+                  showSkeleton={showSkeleton}
+                  showTrace={showTrace}
+                  resizeMode="contain"
+                />
+              )}
+              <CageTargetingOverlay
+                ballArea={session?.ball_area_norm ?? null}
+                target={session?.target_norm ?? null}
+              />
               </ZoomableView>
               {/* 2026-06-23 (Tim) — visible failure state instead of a black frame. */}
               {videoError && (
@@ -1458,24 +1475,6 @@ export default function SwingDetail() {
                   freehand/circle/line/text mode. Per-shot session;
                   strokes don't persist across mount in v1. */}
               <VideoAnnotationOverlay />
-              {hasPose && (showSkeleton || showTrace) && (
-                <SwingBodyOverlay
-                  frames={poseFrames}
-                  currentTimeMs={position * 1000}
-                  showSkeleton={showSkeleton}
-                  showTrace={showTrace}
-                  resizeMode="contain"
-                />
-              )}
-              {/* 2026-05-27 — Fix EO: cage targeting overlay. Renders
-                  the ball-area circle (green) + target marker (gold)
-                  on top of the playing video. pointerEvents="none"
-                  so the underlying video controls + annotation tools
-                  stay tappable. Null/null = no render. */}
-              <CageTargetingOverlay
-                ballArea={session?.ball_area_norm ?? null}
-                target={session?.target_norm ?? null}
-              />
               <VideoWatermark position="bottomRight" size={36} />
               {/* 2026-06-16 (Tim) — fade-on-pause wrapper for the on-frame controls
                   (slow-mo badge, center play badge, seek bar) so a paused frame
