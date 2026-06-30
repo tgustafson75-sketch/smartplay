@@ -278,6 +278,10 @@ export interface BodyItem {
   /** 2026-06-12 — custom biomech badge (the dashed-line set) for this metric. Stays
    *  lime (on-theme); the verdict text below carries the result tone. */
   image?: ImageSourcePropType;
+  /** 2026-06-30 (audit C5/C7) — the MEASURED number for this metric (e.g. "12°", "~38%").
+   *  A leading "~" marks a low-confidence read (metric_confidence < 0.5). Omitted when
+   *  there's no measured value (honest — no fabricated number). */
+  value?: string;
 }
 
 const TONE_VERDICT: Record<SmTone, string> = {
@@ -300,6 +304,7 @@ export function BodyAnalysisRow({ items, style }: { items: BodyItem[]; style?: S
               : <Ionicons name={it.icon ?? 'body-outline'} size={18} color={toneColor(it.tone, colors)} />}
             <Text style={[styles.bodyLabel, { color: colors.text_secondary }]} numberOfLines={1}>{it.label}</Text>
             <Text style={[styles.bodyVerdict, { color: toneColor(it.tone, colors) }]}>{TONE_VERDICT[it.tone]}</Text>
+            {it.value ? <Text style={[styles.bodyValue, { color: colors.text_muted }]} numberOfLines={1}>{it.value}</Text> : null}
           </View>
         ))}
       </View>
@@ -553,6 +558,7 @@ const styles = StyleSheet.create({
   bodyBadge: { width: 44, height: 44 },
   bodyLabel: { fontSize: 10, fontWeight: '600' },
   bodyVerdict: { fontSize: 11, fontWeight: '800' },
+  bodyValue: { fontSize: 10, fontWeight: '700', marginTop: 1, opacity: 0.85 },
 
   acousticCard: { borderWidth: 1, borderRadius: 12, padding: 10 },
   acousticHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },

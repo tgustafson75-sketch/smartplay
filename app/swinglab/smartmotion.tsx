@@ -253,11 +253,18 @@ function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null)
     : fault === 'reverse_pivot' ? 'bad'
     : bio?.weightShiftPct == null ? 'neutral'
     : bio.weightShiftPct < 30 ? 'warn' : 'good';
+  // 2026-06-30 (audit C5/C7) — surface the MEASURED number on each tile (was tone-only).
+  // "~" marks a low-confidence read (metric_confidence < 0.5). Sway has no intuitive scalar
+  // (head-drift is normalized pixels), so it stays qualitative — honest, no fabricated number.
+  const conf = bio?.metric_confidence as Record<string, number | undefined> | undefined;
+  const hedge = (k: string): string => (conf && typeof conf[k] === 'number' && conf[k]! < 0.5 ? '~' : '');
+  const degVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}°`);
+  const pctVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}%`);
   return [
     { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline', image: ICON_BIOMECH.sway },
-    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt },
-    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline', image: ICON_BIOMECH.posture },
-    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline', image: ICON_BIOMECH.weight },
+    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt, value: degVal(bio?.shoulderTiltDeg, 'shoulderTilt') },
+    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline', image: ICON_BIOMECH.posture, value: degVal(bio?.spineAngleDeltaDeg, 'spineAngleDelta') },
+    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline', image: ICON_BIOMECH.weight, value: pctVal(bio?.weightShiftPct, 'weightShift') },
   ];
 }
 
