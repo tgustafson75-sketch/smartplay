@@ -21,6 +21,7 @@ import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
+import { runLibraryDataMigration } from '../services/libraryDataMigration';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/voiceTriggers';
@@ -409,6 +410,10 @@ function AppNavigator() {
   // hit"). Default-on for beta; subscribe-once, fire-and-forget.
   useEffect(() => {
     startSwingCommentarySubscription();
+    // 2026-06-29 (Tim) — one-time library repair: move the bogus "it" golfer's swings
+    // back to the owner, and backfill practice credit for tonight's plain SmartMotion
+    // sessions that predate the all-practice-counts fix. Guarded → runs once.
+    void runLibraryDataMigration();
   }, []);
 
   // 2026-05-24 v1.2.1 — Glasses Mode boot-time audio config. When

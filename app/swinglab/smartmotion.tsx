@@ -2584,6 +2584,8 @@ export default function SmartMotion() {
           usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings });
           savedMsg = `Saved · +${pts} practice points`;
         }
+        // Mark credited so the one-time backfill never double-counts this session.
+        useCageStore.getState().setSessionCreditedPractice(sid, true);
       } catch { /* non-fatal */ }
     }
     useToastStore.getState().show(savedMsg);

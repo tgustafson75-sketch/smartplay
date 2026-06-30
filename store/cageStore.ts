@@ -326,6 +326,9 @@ export interface CageSession {
    *  Optional for back-compat with sessions ingested before the
    *  rule landed; new ingests always populate it. */
   player_id?: string;
+  /** 2026-06-29 (Tim) — true once this session's practice points were awarded, so a
+   *  backfill (or a re-save) can never double-count it. */
+  creditedPractice?: boolean;
 }
 
 export type AnalysisStatus =
@@ -671,6 +674,8 @@ interface CageState {
    *  Searches activeSession AND sessionHistory like the sibling setters so
    *  an in-flight session can be reassigned too. */
   setSessionPlayer: (sessionId: string, playerId: string) => void;
+  /** Mark a session's practice credit as awarded (backfill double-count guard). */
+  setSessionCreditedPractice: (sessionId: string, credited: boolean) => void;
 }
 
 // ─── Helpers ──────────────────────────────
@@ -1537,6 +1542,16 @@ export const useCageStore = create<CageState>()(
               s.activeSession && s.activeSession.id === sessionId
                 ? apply(s.activeSession)
                 : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
+      setSessionCreditedPractice: (sessionId, credited) =>
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
+            session.id !== sessionId ? session : { ...session, creditedPractice: credited };
+          return {
+            activeSession:
+              s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
             sessionHistory: s.sessionHistory.map(apply),
           };
         }),

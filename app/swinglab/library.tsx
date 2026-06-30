@@ -862,7 +862,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     minHeight: 36,
   },
-  chipText: { fontSize: 13, fontWeight: '600', lineHeight: 18, includeFontPadding: false },
+  chipText: { fontSize: 14, fontWeight: '600', lineHeight: 19, letterSpacing: 0.2, includeFontPadding: false },
   chipDivider: { width: 1, height: 20, marginHorizontal: 4 },
   chipSmall: {
     paddingVertical: 5,
