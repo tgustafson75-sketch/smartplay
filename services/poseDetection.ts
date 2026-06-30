@@ -802,6 +802,12 @@ export async function analyzeSwing(
     // analyst prompt as expert context (not ground truth) so library/coach
     // analysis incorporates the coach's read.
     coach_note?: string | null;
+    // 2026-06-29 (Tim — drill-aware analysis) — when the swing was captured INSIDE a
+    // drill, the drill's focus/premise so the analyst grades the swing against the
+    // drill's intent (e.g. "the pump drill trains an in-to-out path — did they?")
+    // rather than giving a generic full-swing fault read.
+    drill_focus?: string | null;
+    drill_name?: string | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

@@ -1132,6 +1132,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `and note honestly if your visual evidence disagrees. Not ground truth over your own read.`
       );
     }
+    // 2026-06-29 (Tim — drill-aware analysis) — when the swing was captured INSIDE a
+    // drill, GRADE it against the drill's intent, not as a generic full-swing fault.
+    const drillFocusRaw = typeof ctx.drill_focus === 'string' ? ctx.drill_focus.trim() : '';
+    const drillNameRaw = typeof ctx.drill_name === 'string' ? ctx.drill_name.trim() : '';
+    if (drillFocusRaw.length > 0 || drillNameRaw.length > 0) {
+      ctxLines.push(
+        `DRILL CONTEXT: this swing was recorded during ${drillNameRaw ? `the "${drillNameRaw}" drill` : 'a drill'}${drillFocusRaw ? `, which trains: ${drillFocusRaw}` : ''}. ` +
+        `GRADE THE SWING AGAINST THE DRILL'S INTENT — did they execute what the drill trains? Lead with whether the drill move was achieved (got it / closer / not yet) and the ONE adjustment to nail it, BEFORE any unrelated full-swing fault. Stay honest to what you can actually see.`
+      );
+    }
     // 2026-05-21 — Fix B: camera angle is chosen BEFORE recording and
     // routed in so biomechanical reads use the correct orientation.
     // Down-the-line view = camera behind the player looking down the

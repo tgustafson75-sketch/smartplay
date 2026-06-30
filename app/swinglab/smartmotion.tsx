@@ -1379,6 +1379,12 @@ export default function SmartMotion() {
           // area into the SWING read (was only wired to the putt read before).
           ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
           target_norm: targetPointRef.current ?? null,
+          // 2026-06-29 (Tim — drill-aware analysis) — when launched from a drill card,
+          // carry the drill's premise so the read GRADES the swing against the drill's
+          // intent ("did they execute the pump move?"), not a generic full-swing fault.
+          // Was carried on the route but dropped before the analysis request.
+          drill_focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
+          drill_name: isDrill && typeof drillName === 'string' && drillName.trim() ? drillName.trim() : undefined,
         };
         // 2026-06-23 (Tim — "failure states wrapped in analysis delay it; you get
         // the analysis eventually but there's a bug in the parse/review") — the old
