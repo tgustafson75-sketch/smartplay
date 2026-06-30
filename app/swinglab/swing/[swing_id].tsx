@@ -1191,12 +1191,39 @@ export default function SwingDetail() {
                     return;
                   }
                   const dateStr = new Date(session.date).toLocaleDateString();
+                  // 2026-06-29 (Tim — "export only sent the video, not the analysis")
+                  // — send the FULL report in the message body so the coach gets the
+                  // read WITH the swing: AI focus + fix + drill, body mechanics, tempo,
+                  // and the shot-map metrics. (Sharing attaches one file — the video —
+                  // so the analysis rides in the body text.)
                   const ctx: string[] = [
                     `Club: ${session.club ?? 'unknown'}`,
                     `Date: ${dateStr}`,
                   ];
-                  if (session.primary_issue?.name) {
-                    ctx.push(`AI fault read: ${session.primary_issue.name}`);
+                  const pi = session.primary_issue;
+                  if (pi?.name) {
+                    ctx.push('— ANALYSIS —');
+                    ctx.push(`Top focus: ${pi.name}${pi.confidence ? ` (confidence: ${pi.confidence})` : ''}`);
+                    if (pi.mechanical_breakdown) ctx.push(pi.mechanical_breakdown);
+                    if (pi.cause) ctx.push(`Why: ${pi.cause}`);
+                    if (pi.fix) ctx.push(`Fix: ${pi.fix}`);
+                    if (pi.drill) ctx.push(`Drill: ${pi.drill}`);
+                  }
+                  const bv = session.biomechanics?.verdicts;
+                  if (bv && (bv.hipTurn || bv.shoulderTurn || bv.weightShift || bv.posture)) {
+                    ctx.push('— BODY —');
+                    [bv.hipTurn, bv.shoulderTurn, bv.weightShift, bv.posture]
+                      .filter((v): v is string => !!v)
+                      .forEach((v) => ctx.push(`• ${v}`));
+                  }
+                  const sm = session.smart_motion_shot_map;
+                  if (sm) {
+                    const bits: string[] = [];
+                    if (sm.tempo?.ratio != null) bits.push(`Tempo ${sm.tempo.ratio.toFixed(1)}:1`);
+                    if (sm.effortPct != null) bits.push(`Effort ${sm.effortPct}%`);
+                    if (sm.estCarry != null) bits.push(`~${sm.estCarry}y carry`);
+                    if (sm.trace) bits.push(`Launch ${sm.trace.side === 'left' ? `${sm.trace.divergenceDeg}° L` : sm.trace.side === 'right' ? `${sm.trace.divergenceDeg}° R` : 'straight'}`);
+                    if (bits.length) ctx.push(`— METRICS — ${bits.join(' · ')}`);
                   }
                   if (session.coach_note) {
                     ctx.push(`Player note: ${session.coach_note}`);
