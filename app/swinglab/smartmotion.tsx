@@ -1222,7 +1222,10 @@ export default function SmartMotion() {
         const sessionId = segs.length > 1
           ? useCageStore.getState().ingestLiveCageSession({
               masterVideoPath: uri,
-              club: 'unknown',
+              // 2026-06-30 (audit C8) — was hardcoded 'unknown', so multi-swing library
+              // sessions lost the selected club → per-club practice points + bag learning
+              // couldn't credit them. Use the live selection like the analysis path does.
+              club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
               upload: uploadMeta,
               shots: segs.map((s, i) => ({
                 correlationId: `sm_${i}_${s.strikeMs}`,
@@ -1236,7 +1239,7 @@ export default function SmartMotion() {
             })
           : useCageStore.getState().ingestUploadedSwing({
               clipUri: uri,
-              club: 'unknown',
+              club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
               upload: uploadMeta,
               source: 'live_cage',
               captureKind: isDrill ? 'drill' : 'smart_motion',
@@ -2578,23 +2581,33 @@ export default function SmartMotion() {
     if (sid) {
       try {
         const swings = Math.max(1, segmentsRef.current.length || drillShotCount || 1);
-        if (isDrill && drillId) {
-          // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
-          const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
-          const pts = usePracticePointsStore.getState().awardPracticePoints({ key: drillId, label: drillLabel, swings, now: Date.now() });
-          usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings });
-          savedMsg = `Saved · +${pts} practice points`;
-        } else {
-          // 2026-06-29 (Tim — "my points/sessions disappeared") — PLAIN SmartMotion
-          // practice (the normal dock-it-say-go flow) now ALSO counts toward the
-          // dashboard, not only drill-launched sessions. Keyed by club so per-club
-          // practice accrues; honest generic label.
-          const clubKey = club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice');
-          const pts = usePracticePointsStore.getState().awardPracticePoints({ key: `smartmotion:${clubKey}`, label: clubKey, swings, now: Date.now() });
-          usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings });
-          savedMsg = `Saved · +${pts} practice points`;
+        // 2026-06-30 (audit M1 — double-count fix) — when an Open Range / Focus / SmartPlan
+        // SESSION is active, this swing was already stamped into it (recordPracticeSwingIfActive)
+        // and endSession() awards + records the session total. Awarding here too DOUBLE-counted
+        // points and wrote a duplicate Practice History row. So only award per-save when NO
+        // session is active — which still covers plain dock-it-say-go SmartMotion (the
+        // 2026-06-29 "points disappeared" fix) and the drill flow (no session lifecycle).
+        const sessionActive = usePracticeSessionStore.getState().active != null;
+        if (!sessionActive) {
+          if (isDrill && drillId) {
+            // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
+            const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
+            const pts = usePracticePointsStore.getState().awardPracticePoints({ key: drillId, label: drillLabel, swings, now: Date.now() });
+            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings });
+            savedMsg = `Saved · +${pts} practice points`;
+          } else {
+            // 2026-06-29 (Tim — "my points/sessions disappeared") — PLAIN SmartMotion
+            // practice (the normal dock-it-say-go flow) now ALSO counts toward the
+            // dashboard, not only drill-launched sessions. Keyed by club so per-club
+            // practice accrues; honest generic label.
+            const clubKey = club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice');
+            const pts = usePracticePointsStore.getState().awardPracticePoints({ key: `smartmotion:${clubKey}`, label: clubKey, swings, now: Date.now() });
+            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings });
+            savedMsg = `Saved · +${pts} practice points`;
+          }
         }
-        // Mark credited so the one-time backfill never double-counts this session.
+        // Mark credited so the one-time backfill never double-counts this session — whether
+        // the points came from here (no session) or from endSession (session active).
         useCageStore.getState().setSessionCreditedPractice(sid, true);
       } catch { /* non-fatal */ }
     }
