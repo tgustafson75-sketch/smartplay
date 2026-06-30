@@ -110,8 +110,11 @@ export default function SwingLibrary() {
       if (!map.has(key)) map.set(key, raw);
     });
     const names = Array.from(map.values()).sort((a, b) => {
-      if (a.toLowerCase() === 'me') return -1;
-      if (b.toLowerCase() === 'me') return 1;
+      const al = a.toLowerCase(), bl = b.toLowerCase();
+      if (al === 'me') return -1;       // Me pinned first
+      if (bl === 'me') return 1;
+      if (al === 'other') return 1;      // Other pinned last (2026-06-30)
+      if (bl === 'other') return -1;
       return a.localeCompare(b);
     });
     return ['all', ...names];

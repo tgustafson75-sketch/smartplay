@@ -21,7 +21,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
+import { useCageStore, OTHER_PLAYER_ID, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
 import { useFamilyStore } from '../../../store/familyStore';
@@ -1899,6 +1899,18 @@ export default function SwingDetail() {
                       ) : null}
                     </TouchableOpacity>
                   ))}
+                  {/* 2026-06-30 (Tim) — "Other" bucket: someone else hit this swing
+                      (a guest / unknown golfer). Files under the Other chip in the
+                      library; re-tag to a real golfer anytime. */}
+                  <TouchableOpacity
+                    style={[styles.linkRow, { borderColor: colors.border }]}
+                    onPress={() => assignGolfer(OTHER_PLAYER_ID)}
+                  >
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>Other (someone else)</Text>
+                    {currentPlayerId === OTHER_PLAYER_ID ? (
+                      <Ionicons name="checkmark" size={18} color={colors.accent} />
+                    ) : null}
+                  </TouchableOpacity>
                   {/* + Add golfer — inline input, no leaving the sheet */}
                   {addGolferOpen ? (
                     <View style={[styles.linkRow, { borderColor: colors.border }]}>

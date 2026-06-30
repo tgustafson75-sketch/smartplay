@@ -734,7 +734,15 @@ export function derivePlayerId(): string {
  * null/undefined player_id (legacy sessions predating the data-model rule) —
  * those resolve to the account holder too.
  */
+// 2026-06-30 (Tim — "make the IT chip empty, but it's in Other; edit it later") —
+// explicit sentinel for a swing whose golfer is someone OTHER than the account holder
+// or a named family member (an unknown/guest swinger you can re-tag later). It is NOT
+// the null default — null/unknown still resolve to 'Me' so no existing swing moves —
+// so the "Other" bucket starts EMPTY and only fills when explicitly assigned.
+export const OTHER_PLAYER_ID = '__other__';
+
 export function resolvePlayerName(playerId: string | null | undefined, selfLabel = 'Me'): string {
+  if (playerId === OTHER_PLAYER_ID) return 'Other';
   if (playerId) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
