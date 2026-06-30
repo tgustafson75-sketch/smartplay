@@ -39,11 +39,16 @@ interface TranscribeOpts {
   /** User's selected language for caddie speech; threaded into the
    *  Whisper language hint + priming prompt. Defaults 'en'. */
   language?: 'en' | 'es' | 'zh';
-  /** Hard upload cap. Default 20MB (under /api/transcribe's 25MB). */
+  /** Hard upload cap. Default matches /api/transcribe's REAL limit (3.5MB). */
   maxBytes?: number;
 }
 
-const DEFAULT_MAX_BYTES = 20 * 1024 * 1024;
+// 2026-06-30 (audit C9) — was 20MB with a stale "under 25MB" comment, but /api/transcribe
+// rejects anything over 3.5MB with a 413. So 3.5–20MB clips uploaded and SILENTLY failed
+// (commentary_transcript never landed). Match the real server limit so oversized clips skip
+// CLEANLY here (logged null) instead of a wasted upload + silent 413. The real unlock —
+// audio-only extraction so normal-size clips fit — is the next step (see memory).
+const DEFAULT_MAX_BYTES = 3.5 * 1024 * 1024;
 
 export interface TranscribedUtterance { text: string; start: number; end: number }
 
