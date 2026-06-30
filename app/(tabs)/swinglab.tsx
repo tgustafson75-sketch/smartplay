@@ -391,11 +391,12 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
   );
 }
 
-function HeroFeature({ icon, label, colors }: { icon: ImageSourcePropType; label: string; colors: ReturnType<typeof useTheme>['colors'] }) {
+function HeroFeature({ icon, label }: { icon: ImageSourcePropType; label: string }) {
   return (
     <View style={styles.heroFeat}>
       <Image source={icon} style={styles.heroFeatIcon} resizeMode="contain" />
-      <Text style={[styles.heroFeatLabel, { color: colors.text_secondary }]} numberOfLines={1}>{label}</Text>
+      {/* Fixed light on the always-dark hero card (was theme color → washed out in light mode). */}
+      <Text style={[styles.heroFeatLabel, { color: 'rgba(233,245,233,0.78)' }]} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
@@ -417,18 +418,21 @@ function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
           <Image source={ICON_FEATURE_SM} style={styles.heroMediaIcon} resizeMode="contain" />
         </View>
         <View style={styles.heroText}>
-          <Text style={[styles.heroTitle, { color: colors.text_primary }]}>{spec.title}</Text>
+          {/* 2026-06-30 (Tim) — the hero card has a FIXED dark gradient, so its text must
+              stay LIGHT in both themes. Theme colors washed it out (dark-on-dark) in light
+              mode. Hardcoded light values here on purpose. */}
+          <Text style={[styles.heroTitle, { color: '#ffffff' }]}>{spec.title}</Text>
           <View style={[styles.tag, { alignSelf: 'flex-start', marginBottom: 4, backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
             <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
           </View>
-          <Text style={[styles.heroSub, { color: colors.text_secondary }]} numberOfLines={2}>{spec.sub}</Text>
+          <Text style={[styles.heroSub, { color: 'rgba(233,245,233,0.82)' }]} numberOfLines={2}>{spec.sub}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.55)" />
       </View>
       <View style={styles.heroFeatures}>
-        <HeroFeature icon={ICON_FEAT_ANALYSIS} label="Swing Analysis" colors={colors} />
-        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label="Acoustic Detection" colors={colors} />
-        <HeroFeature icon={ICON_FEAT_BODY} label="Body Mechanics" colors={colors} />
+        <HeroFeature icon={ICON_FEAT_ANALYSIS} label="Swing Analysis" />
+        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label="Acoustic Detection" />
+        <HeroFeature icon={ICON_FEAT_BODY} label="Body Mechanics" />
       </View>
     </Pressable>
   );
