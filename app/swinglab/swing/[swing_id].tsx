@@ -17,6 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
@@ -776,6 +778,55 @@ export default function SwingDetail() {
     }
   };
 
+  // 2026-06-29 (Tim) — SAVE THE CLIP TO PHONE PHOTOS (with permission) so the player
+  // can pull it up later and re-analyze. Saves the RAW recording (the overlays render
+  // separately, so the saved video is clean — no skeleton/markup baked in).
+  const handleSaveToPhotos = async () => {
+    if (!shot?.clipUri) {
+      Alert.alert('Nothing to save', 'This session has no video file.');
+      return;
+    }
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Photos access needed', 'Allow Photos access to save your swing video to your phone.');
+        return;
+      }
+      const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
+      await MediaLibrary.saveToLibraryAsync(uri);
+      useToastStore.getState().show('Saved to your Photos');
+    } catch (e) {
+      console.log('[swing-detail] save to photos failed', e);
+      Alert.alert('Save failed', 'Could not save the video — the file may no longer be on this device.');
+    }
+  };
+
+  // 2026-06-29 (Tim) — GRAB THE CURRENT FRAME. At the slowest slow-mo you can see the
+  // ball; this captures exactly the frame on screen (live positionMillis from the
+  // player) as a still and saves it to Photos. The clean frame, no overlay baked in.
+  const handleGrabFrame = async () => {
+    if (!shot?.clipUri) {
+      Alert.alert('Nothing to capture', 'This session has no video file.');
+      return;
+    }
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Photos access needed', 'Allow Photos access to save the frame to your phone.');
+        return;
+      }
+      const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
+      const st = await videoRef.current?.getStatusAsync();
+      const timeMs = (st && st.isLoaded ? st.positionMillis : 0) ?? 0;
+      const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(thumbUri);
+      useToastStore.getState().show('Frame saved to your Photos');
+    } catch (e) {
+      console.log('[swing-detail] grab frame failed', e);
+      Alert.alert('Capture failed', 'Could not grab this frame — try pausing on it first.');
+    }
+  };
+
   // 2026-06-08 — Coach report export. One clean PDF (instructor header +
   // logo, dated, fault frame, the AI read + drill + the coach's note) to
   // send a student — replaces the piecemeal clip-plus-text workflow.
@@ -1202,6 +1253,22 @@ export default function SwingDetail() {
                 <Ionicons name="document-text-outline" size={22} color={colors.accent} />
               </TouchableOpacity>
             ) : null}
+            <TouchableOpacity
+              onPress={handleGrabFrame}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Save the current frame to your phone Photos"
+            >
+              <Ionicons name="image-outline" size={22} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSaveToPhotos}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="button"
+              accessibilityLabel="Save this swing video to your phone Photos"
+            >
+              <Ionicons name="download-outline" size={22} color={colors.accent} />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSessionShare}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
