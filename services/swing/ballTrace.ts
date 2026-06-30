@@ -83,7 +83,8 @@ export function computeTraceDirection(
 // honest path to draw → tier 'none' and the caller shows a no-track note.
 
 export interface ShotTraceBuild {
-  tier: 'full' | 'launch' | 'none';
+  /** 'single' = exactly one ball point seen → a flagged low-confidence launch marker. */
+  tier: 'full' | 'launch' | 'single' | 'none';
   /** Solid line: the real detected positions, in time order, normalized 0..1.
    *  Length 0 at tier 'none'. */
   measured: { x: number; y: number }[];
@@ -126,11 +127,41 @@ export function buildShotTrace(
   const measured = points.filter(
     (p) => typeof p?.x === 'number' && typeof p?.y === 'number' && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1,
   );
-  if (measured.length < 2) {
+  if (measured.length === 0) {
     return {
       tier: 'none', measured: [], projected: null, divergenceDeg: null, side: null,
       headline: 'No clean read this swing.',
       note: 'Couldn’t track the ball this time — try better light or keep the ball in frame a beat longer.',
+    };
+  }
+  if (measured.length === 1) {
+    // 2026-06-29 (Tim — "show the trace even at low confidence") — a SINGLE detected
+    // ball point is a real, seen position; draw origin → that point as a flagged
+    // low-confidence launch marker instead of suppressing it entirely.
+    const p0 = measured[0];
+    const origin = ballCenter ?? p0;
+    let side1: TraceSide | null = null;
+    let div1: number | null = null;
+    const dx1 = p0.x - origin.x;
+    const dy1 = p0.y - origin.y;
+    if (Math.hypot(dx1, dy1) >= 0.012 && target) {
+      const avx = target.x - origin.x;
+      const avy = target.y - origin.y;
+      const aimAng = Math.hypot(avx, avy) < 1e-4 ? 0 : Math.atan2(avx, -avy);
+      const depAng = Math.atan2(dx1, -dy1);
+      let rel = ((depAng - aimAng) * 180) / Math.PI;
+      while (rel > 180) rel -= 360;
+      while (rel < -180) rel += 360;
+      side1 = Math.abs(rel) <= STRAIGHT_DEG ? 'straight' : rel > 0 ? 'right' : 'left';
+      div1 = Math.round(Math.abs(rel));
+    }
+    return {
+      tier: 'single',
+      measured: ballCenter ? [ballCenter, p0] : [p0],
+      projected: null,
+      divergenceDeg: div1, side: side1,
+      headline: 'One ball point — low confidence.',
+      note: 'Saw the ball once; keep it in frame a beat longer for a fuller trace.',
     };
   }
 

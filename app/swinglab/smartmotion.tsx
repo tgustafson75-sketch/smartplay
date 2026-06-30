@@ -1073,9 +1073,10 @@ export default function SmartMotion() {
     void detectBallPath({ videoUri: clipUri, impactMs: strikeMs, ballArea })
       .then((r) => {
         if (cancelled) return;
-        // Only a genuine multi-point path is useful here; a 0/1-point result lets
-        // the single-line departure trace own the read (no fabricated path).
-        const pts = r && r.points.length >= 2 ? r.points.map((p) => ({ x: p.x, y: p.y })) : null;
+        // 2026-06-29 (Tim — graded trace) — keep even a SINGLE detected point; buildShotTrace
+        // renders it as a flagged low-confidence launch marker (tier 'single') instead of
+        // dropping a real, seen ball position.
+        const pts = r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y })) : null;
         ballPathCacheRef.current[selectedSwing] = pts;
         setBallPathPoints(pts);
       })
@@ -1089,7 +1090,7 @@ export default function SmartMotion() {
   // shows the no-track note). Gated DTL + non-putt (same as ballTrace).
   const shotTrace = useMemo<ShotTraceBuild | null>(() => {
     if (angle !== 'down_the_line' || isPutt) return null;
-    if (!ballPathPoints || ballPathPoints.length < 2 || !ballArea) return null;
+    if (!ballPathPoints || ballPathPoints.length < 1 || !ballArea) return null;
     return buildShotTrace(ballPathPoints, ballArea, targetPoint);
   }, [angle, isPutt, ballPathPoints, ballArea, targetPoint]);
   // Colour the measured/projected trace by how far off the aim line it launched

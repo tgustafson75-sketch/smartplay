@@ -524,7 +524,7 @@ export function MultiPointTraceOverlay({
   trace, color,
 }: {
   trace: {
-    tier: 'full' | 'launch' | 'none';
+    tier: 'full' | 'launch' | 'single' | 'none';
     measured: { x: number; y: number }[];
     projected: { x: number; y: number }[] | null;
   } | null;
