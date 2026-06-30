@@ -1513,6 +1513,18 @@ export default function Settings() {
               Roster + Swing Library →
             </Text>
           </TouchableOpacity>
+          {/* 2026-06-30 (Tim) — minimal in-app messaging (Tim ↔ Tank to start). */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => router.push('/messages' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Messages"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Messages</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Message a golfer →
+            </Text>
+          </TouchableOpacity>
           {/* 2026-05-22 — Captain extension. Surfaces Team Captain mode
               for high-school golfers (e.g. Heritage HS Romoland CA)
               managing teammates + coach contacts. Same store, distinct
