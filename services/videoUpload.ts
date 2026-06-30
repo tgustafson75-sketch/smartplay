@@ -703,6 +703,8 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         // 2026-06-08 — fold the coach's typed note into the analysis so a
         // re-analyzed library/coach swing incorporates the instructor's read.
         ...((liveSession?.coach_note ?? '').trim().length > 0 ? { coach_note: (liveSession!.coach_note ?? '').trim() } : {}),
+        // 2026-06-30 (audit C11) — fold the player's own felt sense into the read.
+        ...((liveSession?.feel_note ?? '').trim().length > 0 ? { feel_note: (liveSession!.feel_note ?? '').trim() } : {}),
       }, boundaries, {
         faultFrameBaseName: `${sessionId}_${swing.id}_fault`,
       });

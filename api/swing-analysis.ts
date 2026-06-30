@@ -1132,6 +1132,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `and note honestly if your visual evidence disagrees. Not ground truth over your own read.`
       );
     }
+    // 2026-06-30 (audit C11) — the PLAYER'S OWN felt sense of the swing (self-reported).
+    // Weigh it against what you see and call out honest mismatches ("you said X, I see Y").
+    const feelNoteRaw = typeof ctx.feel_note === 'string' ? ctx.feel_note.trim() : '';
+    if (feelNoteRaw.length > 0) {
+      const trimmedFeel = feelNoteRaw.length > 800 ? feelNoteRaw.slice(0, 800) + '…[truncated]' : feelNoteRaw;
+      ctxLines.push(
+        `HOW THE PLAYER SAID IT FELT (their own words):\n"${trimmedFeel}"\n` +
+        `Self-reported feel — useful signal, not ground truth. Connect it to what you see and, ` +
+        `where feel and footage disagree, say so plainly (feel isn't always real).`
+      );
+    }
     // 2026-06-29 (Tim — drill-aware analysis) — when the swing was captured INSIDE a
     // drill, GRADE it against the drill's intent, not as a generic full-swing fault.
     const drillFocusRaw = typeof ctx.drill_focus === 'string' ? ctx.drill_focus.trim() : '';

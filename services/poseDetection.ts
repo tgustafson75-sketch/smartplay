@@ -808,6 +808,11 @@ export async function analyzeSwing(
     // rather than giving a generic full-swing fault read.
     drill_focus?: string | null;
     drill_name?: string | null;
+    // 2026-06-30 (audit C11) — the player's OWN felt sense of the swing (setSessionFeel:
+    // "felt thin", "pured it", "came over the top"). Self-reported context the analyst can
+    // weigh against what it sees ("you said X, I see Y") — like coach_audio, but from the
+    // golfer. Was persisted + displayed but never reached any brain/analysis prompt.
+    feel_note?: string | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

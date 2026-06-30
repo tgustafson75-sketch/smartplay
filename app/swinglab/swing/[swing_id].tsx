@@ -2105,6 +2105,14 @@ export default function SwingDetail() {
                   {session.biomechanics.verdicts.posture && (
                     <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.posture}</Text>
                   )}
+                  {/* 2026-06-30 (audit C6) — shoulderTilt + sequencing verdicts were
+                      computed (poseAnalysisApi) and persisted but never rendered here. */}
+                  {session.biomechanics.verdicts.shoulderTilt && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.shoulderTilt}</Text>
+                  )}
+                  {session.biomechanics.verdicts.sequencing && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.sequencing}</Text>
+                  )}
                 </View>
               )}
               {/* 2026-06-29 (Tim — "save the WHOLE session report") — the SmartMotion
