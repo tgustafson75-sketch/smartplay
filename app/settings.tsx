@@ -125,6 +125,15 @@ export default function Settings() {
   // Phase 107 — GPS quality debug overlay toggle.
   const gpsQualityDebugOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay);
   const setGpsQualityDebugOverlay = useSettingsStore(s => s.setGpsQualityDebugOverlay);
+  // 2026-06-30 (audit) — these round behaviors are consumed (_layout.tsx, holeDetection,
+  // roundStore) and their setters existed, but no toggle was ever built — even though the
+  // _layout.tsx comment literally promises "Settings → Auto Shot Detection". Expose both;
+  // store defaults are unchanged (auto-shot OFF, auto-advance ON), so behavior is identical
+  // until the user opts in.
+  const autoShotDetection = useSettingsStore(s => s.autoShotDetection);
+  const setAutoShotDetection = useSettingsStore(s => s.setAutoShotDetection);
+  const autoHoleAdvance = useSettingsStore(s => s.autoHoleAdvance);
+  const setAutoHoleAdvance = useSettingsStore(s => s.setAutoHoleAdvance);
   // 2026-06-24 — Off-device data layer Phase A: usage telemetry opt-in.
   const analyticsOptIn = useSettingsStore(s => s.analyticsOptIn);
   const setAnalyticsOptIn = useSettingsStore(s => s.setAnalyticsOptIn);
@@ -1037,6 +1046,18 @@ export default function Settings() {
             sub="Tunes shot detection for cart play — shorter at-ball pause, suppresses only while the cart is moving (not for ~12s after it stops). Walking default is more conservative."
             value={cartMode}
             onValueChange={confirmToggle('Cart Mode', setCartMode)}
+          />
+          <ToggleRow
+            label="Auto Hole Advance"
+            sub="Advances to the next hole automatically as GPS moves you to the next tee. On by default — turn off to step through holes yourself."
+            value={autoHoleAdvance}
+            onValueChange={confirmToggle('Auto Hole Advance', setAutoHoleAdvance)}
+          />
+          <ToggleRow
+            label="Auto Shot Detection"
+            sub="GPS auto-logs each shot's location during the round. Off by default — manual entry (stepper or voice) is the safe default; auto-detect can over-count strokes on cart rounds. Advanced."
+            value={autoShotDetection}
+            onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
           />
         </CollapsibleSection>
 
