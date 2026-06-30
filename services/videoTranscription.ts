@@ -45,15 +45,17 @@ interface TranscribeOpts {
 
 const DEFAULT_MAX_BYTES = 20 * 1024 * 1024;
 
+export interface TranscribedUtterance { text: string; start: number; end: number }
+
 /**
- * Transcribe the audio track from a local video file. Returns the
- * trimmed transcript string, or null if no audio / file missing /
- * too large / network or API failure. Never throws.
+ * Transcribe a local video's audio, returning the full transcript AND the
+ * per-utterance segments with start/end SECONDS (for per-swing bucketing of
+ * spoken commentary). null if no audio / missing / too large / failure. Never throws.
  */
-export async function transcribeVideoAudio(
+export async function transcribeVideoAudioDetailed(
   videoUri: string,
   opts: TranscribeOpts = {},
-): Promise<string | null> {
+): Promise<{ text: string; utterances: TranscribedUtterance[] } | null> {
   if (!videoUri) return null;
   if (opts.hasAudio === false) {
     console.log('[transcribe-video] skipping (has_audio=false)');
@@ -118,23 +120,34 @@ export async function transcribeVideoAudio(
       console.log('[transcribe-video] non-ok response', { status: res.status, elapsed_ms: elapsedMs, body_head: body.slice(0, 200) });
       return null;
     }
-    const data = (await res.json()) as { text?: string };
+    const data = (await res.json()) as { text?: string; utterances?: TranscribedUtterance[] };
     const text = (data.text ?? '').trim();
     if (text.length === 0) {
       console.log('[transcribe-video] empty transcript', { elapsed_ms: elapsedMs, size_bytes: fileSize });
       return null;
     }
+    const utterances = Array.isArray(data.utterances)
+      ? data.utterances
+          .filter((u) => u && typeof u.text === 'string' && u.text.trim().length > 0)
+          .map((u) => ({ text: u.text.trim(), start: Number(u.start) || 0, end: Number(u.end) || 0 }))
+      : [];
     console.log('[transcribe-video] success', {
-      elapsed_ms: elapsedMs,
-      size_bytes: fileSize,
-      chars: text.length,
-      head: text.slice(0, 80),
+      elapsed_ms: elapsedMs, size_bytes: fileSize, chars: text.length, utterances: utterances.length, head: text.slice(0, 80),
     });
-    return text;
+    return { text, utterances };
   } catch (e) {
     const elapsedMs = Date.now() - t0;
     const msg = e instanceof Error ? e.message : String(e);
     console.log('[transcribe-video] fetch failed', { elapsed_ms: elapsedMs, error: msg.slice(0, 200) });
     return null;
   }
+}
+
+/** Back-compat: the transcript string only (existing callers). */
+export async function transcribeVideoAudio(
+  videoUri: string,
+  opts: TranscribeOpts = {},
+): Promise<string | null> {
+  const r = await transcribeVideoAudioDetailed(videoUri, opts);
+  return r?.text ?? null;
 }

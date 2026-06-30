@@ -33,7 +33,7 @@
 import { useCageStore, type CageShot } from '../store/cageStore';
 import { track } from './analytics';
 import { detectCue } from './metaGlassesCueRouter';
-import { transcribeVideoAudio } from './videoTranscription';
+import { transcribeVideoAudio, transcribeVideoAudioDetailed } from './videoTranscription';
 import { useSettingsStore } from '../store/settingsStore';
 
 const inflight = new Set<string>();
@@ -141,25 +141,77 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
   }
 }
 
+// 2026-06-29 (Tim — per-swing voice commentary) — a multi-swing session carves N
+// shots out of ONE master clip, so transcribe it ONCE and BUCKET each spoken
+// utterance onto the swing it belongs to (the swing whose window-start most recently
+// precedes the utterance — "that was good" lands on the swing just hit). Single-swing
+// sessions keep the existing per-shot path (which also does the Meta-glasses cue route).
+async function transcribeMultiSwingCommentary(sessionId: string, clipUri: string, shots: CageShot[]): Promise<void> {
+  if (inflight.has(clipUri) || done.has(clipUri)) return;
+  inflight.add(clipUri);
+  try {
+    const language = useSettingsStore.getState().language;
+    const detailed = await transcribeVideoAudioDetailed(clipUri, { language });
+    if (!detailed) { shots.forEach((s) => done.add(s.id)); done.add(clipUri); track('swing_commentary_multi_skip_or_empty'); return; }
+    const store = useCageStore.getState();
+    if (detailed.utterances.length === 0) {
+      // No timestamps — honest fallback: put the whole transcript on the first swing.
+      if (detailed.text) store.setShotCommentaryTranscript(sessionId, shots[0].id, detailed.text);
+      shots.forEach((s) => done.add(s.id)); done.add(clipUri);
+      track('swing_commentary_multi_no_utterances');
+      return;
+    }
+    const ordered = [...shots].sort(
+      (a, b) => (a.clipStartSeconds ?? a.detectionOffsetSeconds ?? 0) - (b.clipStartSeconds ?? b.detectionOffsetSeconds ?? 0),
+    );
+    const buckets = new Map<string, string[]>();
+    for (const u of detailed.utterances) {
+      let chosen = ordered[0];
+      for (const sh of ordered) {
+        const start = sh.clipStartSeconds ?? sh.detectionOffsetSeconds ?? 0;
+        if (start <= u.start + 0.25) chosen = sh; else break;
+      }
+      const arr = buckets.get(chosen.id) ?? [];
+      arr.push(u.text);
+      buckets.set(chosen.id, arr);
+    }
+    for (const sh of ordered) {
+      const txt = (buckets.get(sh.id) ?? []).join(' ').trim();
+      if (txt) store.setShotCommentaryTranscript(sessionId, sh.id, txt);
+      done.add(sh.id);
+    }
+    done.add(clipUri);
+    track('swing_commentary_multi_ok', { swings: ordered.length, utterances: detailed.utterances.length });
+    console.log(`[swingCommentary] multi-swing ok session=${sessionId} swings=${ordered.length} utterances=${detailed.utterances.length}`);
+  } catch (e) {
+    console.log('[swingCommentary] multi exception:', e);
+    track('swing_commentary_multi_exception');
+  } finally {
+    inflight.delete(clipUri);
+  }
+}
+
 function processPendingShots(): void {
   const cage = useCageStore.getState();
-  const candidates: { sessionId: string; shot: CageShot }[] = [];
-  if (cage.activeSession) {
-    for (const shot of cage.activeSession.shots) {
-      if (shot.clipUri && !shot.commentary_transcript) {
-        candidates.push({ sessionId: cage.activeSession.id, shot });
-      }
+  const sessions: { id: string; shots: CageShot[] }[] = [];
+  if (cage.activeSession) sessions.push({ id: cage.activeSession.id, shots: cage.activeSession.shots });
+  for (const s of cage.sessionHistory) sessions.push({ id: s.id, shots: s.shots });
+
+  for (const session of sessions) {
+    const pending = session.shots.filter((sh) => sh.clipUri && !(sh.commentary_transcript ?? '').trim());
+    if (pending.length === 0) continue;
+    // Group pending shots by the clip they share.
+    const byClip = new Map<string, CageShot[]>();
+    for (const sh of pending) {
+      const k = sh.clipUri as string;
+      const arr = byClip.get(k) ?? [];
+      arr.push(sh);
+      byClip.set(k, arr);
     }
-  }
-  for (const session of cage.sessionHistory) {
-    for (const shot of session.shots) {
-      if (shot.clipUri && !shot.commentary_transcript) {
-        candidates.push({ sessionId: session.id, shot });
-      }
+    for (const [clipUri, shots] of byClip) {
+      if (shots.length > 1) void transcribeMultiSwingCommentary(session.id, clipUri, shots);
+      else void transcribeShotCommentary(session.id, shots[0]);
     }
-  }
-  for (const { sessionId, shot } of candidates) {
-    void transcribeShotCommentary(sessionId, shot);
   }
 }
 

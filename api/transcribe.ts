@@ -41,6 +41,9 @@ interface DgResponse {
     channels?: Array<{
       alternatives?: Array<{ transcript?: string }>;
     }>;
+    // 2026-06-29 (Tim — per-swing voice commentary) — utterances carry start/end
+    // seconds so the client can bucket spoken notes onto the swing they belong to.
+    utterances?: Array<{ transcript?: string; start?: number; end?: number }>;
   };
 }
 
@@ -99,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { fs.unlinkSync(filePath); } catch { /* ignore */ }
 
     const dgLang = DG_LANG[language] ?? 'en';
-    const url = `${DG_BASE}?model=nova-2&language=${dgLang}&smart_format=true&${DG_KEYWORDS}`;
+    const url = `${DG_BASE}?model=nova-2&language=${dgLang}&smart_format=true&utterances=true&${DG_KEYWORDS}`;
 
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), DG_TIMEOUT_MS);
@@ -130,10 +133,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let cleanedText = rawText;
     for (const [re, sub] of SUBSTITUTIONS) cleanedText = cleanedText.replace(re, sub);
 
-    console.log('[transcribe] result:', cleanedText.slice(0, 80),
-      cleanedText !== rawText ? '(substituted)' : '');
+    // Per-utterance with timestamps (substitutions applied), for per-swing bucketing.
+    const utterances = (dgData.results?.utterances ?? [])
+      .map((u) => {
+        let t = (u.transcript ?? '').trim();
+        for (const [re, sub] of SUBSTITUTIONS) t = t.replace(re, sub);
+        return { text: t, start: typeof u.start === 'number' ? u.start : 0, end: typeof u.end === 'number' ? u.end : 0 };
+      })
+      .filter((u) => u.text.length > 0);
 
-    return res.status(200).json({ text: cleanedText, _debug: { provider: 'deepgram-nova2' } });
+    console.log('[transcribe] result:', cleanedText.slice(0, 80),
+      `(${utterances.length} utterances)`, cleanedText !== rawText ? '(substituted)' : '');
+
+    return res.status(200).json({ text: cleanedText, utterances, _debug: { provider: 'deepgram-nova2' } });
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
