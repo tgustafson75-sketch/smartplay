@@ -19,6 +19,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { getLastFix } from '../services/gpsManager';
 import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext } from '../services/caddieMemoryRetrieval';
+import { answerOffline } from '../services/offlineCaddie';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
@@ -313,10 +314,26 @@ export function usePipecatVoice({
         // the consumer double-process every flaky turn — pipecat attempt THEN a
         // second full legacy brain call — doubling latency and letting both paths
         // display/speak. Single path, single voice, graceful degrade.)
+        // 2026-06-29 (Tim — audit) — before the canned dead-end, try the OFFLINE caddie
+        // (round state + golf KB, device-TTS-capable). It was wired into the legacy path
+        // but NOT this default pipecat failure branch, so a dead-network turn got a
+        // useless "ask me again" even though a real offline answer existed.
         devLog('[pipecat] /turn error:', resp.status);
-        onVoiceStateChange?.('speaking');
         const settings = useSettingsStore.getState();
-        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+        const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+        onVoiceStateChange?.('speaking');
+        let spokeOffline = false;
+        try {
+          const off = answerOffline(transcript, lang);
+          if (off?.text) {
+            onKevinSpoke?.(off.text);
+            await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+            spokeOffline = true;
+          }
+        } catch { /* offline best-effort */ }
+        if (!spokeOffline) {
+          await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+        }
         onVoiceStateChange?.('idle');
         return;
       }
@@ -375,7 +392,19 @@ export function usePipecatVoice({
       if (!spokeResponse) {
         onVoiceStateChange?.('speaking');
         const settings = useSettingsStore.getState();
-        await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+        const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+        let spokeOffline = false;
+        try {
+          const off = answerOffline(transcript, lang);
+          if (off?.text) {
+            onKevinSpoke?.(off.text);
+            await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+            spokeOffline = true;
+          }
+        } catch { /* offline best-effort */ }
+        if (!spokeOffline) {
+          await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+        }
       }
       onVoiceStateChange?.('idle');
     }
