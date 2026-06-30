@@ -373,8 +373,8 @@ export default function SmartMotion() {
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
   const isNarrow = windowWidth < 400;
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo, autoRecord } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string; autoRecord?: string }>();
   // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
   // Smart Tempo opens its own camera it routes here with captureMode='tempo'
   // (+ returnTo='/swinglab/smart-tempo'). On a single-swing completion we route
@@ -2498,6 +2498,17 @@ export default function SmartMotion() {
       void startRecording();
     }
   }, [phase, reset, startRecording, isDrill, drillName, drillFocus, drillId]);
+
+  // 2026-06-30 (Tim — "watch this swing" on the course should open STRAIGHT INTO recording).
+  // When navigated here with ?autoRecord=1 (a voice "watch/record my swing" from the Caddie
+  // tab or any screen), arm the recorder so the CameraView's onCameraReady auto-starts the
+  // capture — no manual tap. Course mode is already forced by effectiveMode when a round is
+  // active (isRoundActive ? 'course' : …), so on the course this opens the COURSE recording
+  // interface, camera ready, rolling. One-shot on mount; absent param = normal manual open.
+  useEffect(() => {
+    if (autoRecord === '1') pendingStartRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 2026-06-13 (Tim) — RE-ANALYZE the clip you already hit, instead of forcing a
   // re-record on a failed read. The clip is saved + persistent and analysis

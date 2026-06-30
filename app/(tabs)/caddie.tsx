@@ -1425,7 +1425,11 @@ export default function CaddieTab() {
         if (isSmartMotionActive()) {
           emitSmartMotionCommand('start');
         } else {
-          router.push('/swinglab/smartmotion' as never);
+          // 2026-06-30 (Tim — "watch this swing" on the course) — open Smart Motion STRAIGHT
+          // into recording (autoRecord arms the camera's onCameraReady). Course mode is
+          // auto-forced there when a round is active, so this lands in the COURSE capture
+          // interface, camera ready, rolling — not the setup screen.
+          router.push('/swinglab/smartmotion?autoRecord=1' as never);
         }
         break;
       case 'configure_drill':

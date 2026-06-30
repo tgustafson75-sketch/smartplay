@@ -165,7 +165,10 @@ export const mediaCaptureHandler: IntentHandler = {
     // voice opens the camera, no navigation into a separate mode first.
     if (kind === 'swing' && !isCaptureWired('swing')) {
       try {
-        router.push('/swinglab/smartmotion' as never);
+        // 2026-06-30 (Tim) — autoRecord arms the camera so "watch/record my swing" opens
+        // STRAIGHT into recording (not the setup screen); course mode is auto-forced there
+        // during a round. Matches this handler's own intent ("voice opens the camera").
+        router.push('/swinglab/smartmotion?autoRecord=1' as never);
         track('media_capture_handler_quick_record_route');
         return {
           success: true,

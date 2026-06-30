@@ -128,7 +128,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'record_swing',
-    description: 'Open SwingLab in record mode to film the next swing.',
+    description: 'Open SwingLab / Smart Motion in RECORD mode to film the next swing, camera ready and rolling. Trigger for "record my swing", "watch my swing", "watch this swing", "watch this one", "film this swing", "watch me hit this", "watch me swing" — any time the player wants you to watch/record the FULL swing they are about to hit. (A putt/chip/bunker shot is different — that is putt watch, not this.) On the course this opens the course recording interface directly.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -372,7 +372,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // in instead of asking"). It is now ALWAYS in the prompt; the catalog + RAG are
     // the only best-effort parts.
     const confirmRule =
-      `\n\nCONFIRM BEFORE OPENING — DON'T JUMP (Tim 2026-06-30): If the player EXPLICITLY asks to open / go to / start / record something ("open Smart Motion", "take me to the tempo drill", "record my swing", "let's go to drills"), call the tool directly as usual. BUT if they only CONVERSATIONALLY mention practicing, a drill, or working on a club ("let's work on irons", "I should do a drill", "my grip feels off", "I want to work on tempo") WITHOUT asking to open anything, do NOT call navigate / open_swinglab / record_swing / configure_drill yet. Instead have a NATURAL conversation: ASK them what specifically they want to work on — a real question, and END IT WITH A QUESTION MARK so the mic stays open for their answer ("Nice — what do you want to dial in, your irons or your tempo?"). Once they NAME something, give ONE short OFFER to open it phrased as a STATEMENT, not a question ("Say go and I'll open Smart Motion for that"), and fire the open tool only AFTER they confirm. Don't jump straight in; offer once; don't nag.
+      `\n\nCONFIRM BEFORE OPENING — DON'T JUMP (Tim 2026-06-30): If the player EXPLICITLY asks to open / go to / start / record / WATCH something ("open Smart Motion", "take me to the tempo drill", "record my swing", "watch this swing", "watch my swing", "let's go to drills"), call the tool directly as usual. BUT if they only CONVERSATIONALLY mention practicing, a drill, or working on a club ("let's work on irons", "I should do a drill", "my grip feels off", "I want to work on tempo") WITHOUT asking to open anything, do NOT call navigate / open_swinglab / record_swing / configure_drill yet. Instead have a NATURAL conversation: ASK them what specifically they want to work on — a real question, and END IT WITH A QUESTION MARK so the mic stays open for their answer ("Nice — what do you want to dial in, your irons or your tempo?"). Once they NAME something, give ONE short OFFER to open it phrased as a STATEMENT, not a question ("Say go and I'll open Smart Motion for that"), and fire the open tool only AFTER they confirm. Don't jump straight in; offer once; don't nag.
 
 KEEP THE CONVERSATION OPEN: whenever you ask the player a genuine question you want answered, END YOUR REPLY WITH "?" so the mic re-opens for their reply. The ONLY statement-not-question case is the open-OFFER above. You are a natural AI caddie having a conversation — not a command prompt.`;
     let kbAddendum = confirmRule;
