@@ -169,6 +169,15 @@ const KEVIN_TOOLS: AiToolDef[] = [
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
+    name: 'set_angle',
+    description: 'Set the SmartMotion camera angle when the player says how they want to film their swing: "down the line" / "DTL", "face on" / "face-on", or "putting" / "putt". Use ONLY when SmartMotion is open (the player is at the capture screen).',
+    parameters: {
+      type: 'object',
+      properties: { angle: { type: 'string', enum: ['down_the_line', 'face_on', 'putt'], description: 'The camera angle to set.' } },
+      required: ['angle'],
+    },
+  },
+  {
     name: 'switch_caddie',
     description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
     parameters: {
@@ -430,6 +439,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (toolName === 'close_swinglab') {
           toolActions.push({ type: 'close_swinglab' });
           return 'SwingLab closed.';
+        }
+
+        if (toolName === 'set_angle') {
+          const a = String(toolInput.angle ?? 'down_the_line');
+          toolActions.push({ type: 'set_angle', angle: a });
+          return a === 'face_on' ? 'Face-on it is.' : a === 'putt' ? 'Putting mode.' : 'Down the line.';
         }
 
         if (toolName === 'switch_caddie') {

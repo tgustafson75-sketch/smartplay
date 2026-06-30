@@ -1441,6 +1441,14 @@ export default function CaddieTab() {
       case 'close_swinglab':
         emitSmartMotionCommand('close');
         break;
+      case 'set_angle': {
+        // 2026-06-29 (Tim) — voice camera-angle on the SmartMotion screen.
+        const a = (action as { angle?: string }).angle;
+        if (a === 'face_on') emitSmartMotionCommand('angleFaceOn');
+        else if (a === 'putt') emitSmartMotionCommand('puttOn');
+        else emitSmartMotionCommand('angleDtl');
+        break;
+      }
       case 'switch_caddie': {
         // 2026-06-29 (Tim) — change the active caddie persona by voice. The setter
         // fires the spoken per-persona handoff intro, so nothing else to speak here.

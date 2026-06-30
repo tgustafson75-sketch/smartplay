@@ -27,7 +27,7 @@
 // screen, matching what picking the putter in the picker or a club scan does —
 // so a voice putter change is analyzed AS A PUTT, and any non-putter club
 // change clears putt mode back to a full-swing read.
-export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff' | 'close';
+export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff' | 'angleDtl' | 'angleFaceOn' | 'close';
 
 type Listener = (cmd: SmartMotionCommand) => void;
 

@@ -164,7 +164,9 @@ export type ToolAction =
   | { type: 'mark_tee' }
   | { type: 'mark_green' }
   // 2026-06-29 (Tim) — switch the active caddie persona by voice ("switch to Harry").
-  | { type: 'switch_caddie'; personality: 'kevin' | 'serena' | 'harry' | 'tank' };
+  | { type: 'switch_caddie'; personality: 'kevin' | 'serena' | 'harry' | 'tank' }
+  // 2026-06-29 (Tim) — voice sets the SmartMotion camera angle ("down the line"/"face on"/"putting").
+  | { type: 'set_angle'; angle: 'down_the_line' | 'face_on' | 'putt' };
 
 // ── POST handler ──────────────────────────────────────────────────────────────
 

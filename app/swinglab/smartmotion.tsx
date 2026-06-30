@@ -2590,6 +2590,9 @@ export default function SmartMotion() {
     // Voice club change set putt mode (parity with the picker / club scan).
     if (cmd === 'puttOn') { setPuttMode(true); setAngle('down_the_line'); return; }
     if (cmd === 'puttOff') { setPuttMode(false); return; }
+    // 2026-06-29 (Tim) — voice camera-angle set ("down the line" / "face on").
+    if (cmd === 'angleDtl') { setAngle('down_the_line'); setPuttMode(false); showModeFade('DOWN THE LINE'); return; }
+    if (cmd === 'angleFaceOn') { setAngle('face_on'); setPuttMode(false); showModeFade('FACE-ON'); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
