@@ -32,7 +32,7 @@
  * is fire-and-forget and silent on failure).
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
@@ -71,17 +71,29 @@ export function QuickTutorial({
 }: QuickTutorialProps) {
   const tutorialsSeen = useSettingsStore(s => s.tutorialsSeen);
   const markTutorialSeen = useSettingsStore(s => s.markTutorialSeen);
+  const introOpens = useSettingsStore(s => s.introOpens);
+  const incrementIntroOpen = useSettingsStore(s => s.incrementIntroOpen);
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const language = useSettingsStore(s => s.language);
 
   // Self-managed visibility — open on first mount when the slug hasn't
   // been marked seen. Parent override (visible prop) wins when defined.
-  // 2026-06-13 (Tim) — TESTING: keep quick instructions defaulted ON + skippable so we
-  // feel the flow and don't miss them. While true they show on EVERY entry (ignore the
-  // seen flag) but stay one-tap skippable. Flip to false to restore once-only behavior.
-  const FORCE_SHOW_DURING_TESTING = true;
-  const [selfOpen, setSelfOpen] = useState<boolean>(() => FORCE_SHOW_DURING_TESTING || !tutorialsSeen?.[slug]);
+  // 2026-06-30 (Tim — "only the first ~2 times per tool, then they stop; still
+  // resettable in settings") — restore the throttle using the per-slug `introOpens`
+  // counter that was built but never wired. Show while NOT explicitly dismissed AND
+  // shown fewer than SHOW_LIMIT times. Settings → Reset Tutorials clears both.
+  const SHOW_LIMIT = 2;
+  const [selfOpen, setSelfOpen] = useState<boolean>(
+    () => !tutorialsSeen?.[slug] && (introOpens?.[slug] ?? 0) < SHOW_LIMIT,
+  );
   const open = typeof visible === 'boolean' ? visible : selfOpen;
+  // Count this self-managed view once (a parent-controlled `visible` doesn't count).
+  useEffect(() => {
+    if (selfOpen && typeof visible !== 'boolean') {
+      try { incrementIntroOpen(slug); } catch { /* non-fatal */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDismiss = () => {
     if (onDismiss) onDismiss();
