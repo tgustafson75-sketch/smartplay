@@ -1585,6 +1585,14 @@ function TargetCameraOverlay({
               ) : (
                 <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
               )}
+              {/* 2026-06-30 (audit) — the 2nd-nearest hazard is fully computed
+                  (hazardSummary.secondary) but was dropped. Surface it as a quiet
+                  follow-on line so the player sees the next thing in play. */}
+              {!!hazardSummary?.secondary && (
+                <Text style={styles.targetIntelLine}>
+                  Also: {hazardSummary.secondary.label} {hazardSummary.secondary.yards}y
+                </Text>
+              )}
               <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
               <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
             </>
