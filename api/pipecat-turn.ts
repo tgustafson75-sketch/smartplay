@@ -178,6 +178,15 @@ const KEVIN_TOOLS: AiToolDef[] = [
     },
   },
   {
+    name: 'set_golfer',
+    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when the player says they are filming someone else, or themselves again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
+    parameters: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or "me" for the user themselves.' } },
+      required: ['name'],
+    },
+  },
+  {
     name: 'switch_caddie',
     description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
     parameters: {
@@ -445,6 +454,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const a = String(toolInput.angle ?? 'down_the_line');
           toolActions.push({ type: 'set_angle', angle: a });
           return a === 'face_on' ? 'Face-on it is.' : a === 'putt' ? 'Putting mode.' : 'Down the line.';
+        }
+
+        if (toolName === 'set_golfer') {
+          const name = String(toolInput.name ?? '').trim();
+          toolActions.push({ type: 'set_golfer', name });
+          return name && !/^(me|myself|i)$/i.test(name) ? `Got it — recording ${name} now.` : `Back to you.`;
         }
 
         if (toolName === 'switch_caddie') {

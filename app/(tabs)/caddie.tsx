@@ -1449,6 +1449,20 @@ export default function CaddieTab() {
         else emitSmartMotionCommand('angleDtl');
         break;
       }
+      case 'set_golfer': {
+        // 2026-06-29 (Tim) — voice golfer attribution: "this is Luis" / "back to me".
+        const name = (action as { name?: string }).name?.trim();
+        const fam = useFamilyStore.getState();
+        if (!name || /^(me|myself|i)$/i.test(name)) {
+          fam.setActiveMember(null);
+        } else {
+          const lower = name.toLowerCase();
+          const m = fam.members.find(mm => mm.firstName.toLowerCase() === lower)
+            ?? fam.members.find(mm => mm.firstName.toLowerCase().startsWith(lower));
+          if (m) fam.setActiveMember(m.id);
+        }
+        break;
+      }
       case 'switch_caddie': {
         // 2026-06-29 (Tim) — change the active caddie persona by voice. The setter
         // fires the spoken per-persona handoff intro, so nothing else to speak here.
