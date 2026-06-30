@@ -211,6 +211,24 @@ function AppNavigator() {
     return () => { unsubA?.(); unsubB?.(); };
   }, []);
 
+  // 2026-06-30 (Tim) — start the Galaxy Watch swing-IMU bridge on boot when the user has
+  // it enabled, so a persisted toggle survives app restarts. No-ops without the native
+  // module (older binaries) — safe everywhere. Stop it on teardown.
+  useEffect(() => {
+    if (!useSettingsStore.getState().watchSwingEnabled) return;
+    let active = true;
+    void (async () => {
+      try {
+        const m = await import('../services/watchSwingBridge');
+        if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+      } catch { /* non-fatal — bridge absent on this build */ }
+    })();
+    return () => {
+      active = false;
+      void import('../services/watchSwingBridge').then(m => m.stopWatchSwingBridge()).catch(() => {});
+    };
+  }, []);
+
   // 2026-06-12 (CNS fix) — onboarding was removed, so synthesizeOnboardingProfile (which
   // builds the brain's "ABOUT THIS GOLFER" kevinContext block) lost its trigger and the
   // block never populated — the caddie's day-one "knows me" grounding silently went dark.

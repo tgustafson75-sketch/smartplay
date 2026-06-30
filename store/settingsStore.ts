@@ -208,6 +208,8 @@ interface SettingsState {
    *  RoundRecord and to inform walking-vs-cart detection. Default true
    *  on Android; iOS users see it disabled with explanatory copy. */
   healthDataEnabled: boolean;
+  // 2026-06-30 (Tim) — enable the Galaxy Watch swing-IMU bridge (tempo/club-speed → Smart Motion).
+  watchSwingEnabled: boolean;
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
@@ -347,6 +349,7 @@ interface SettingsState {
   setAutoShotDetection: (v: boolean) => void;
   setHasAskedHealthPermission: (v: boolean) => void;
   setHealthDataEnabled: (v: boolean) => void;
+  setWatchSwingEnabled: (v: boolean) => void;
   setSkipBriefings: (v: boolean) => void;
   setProactiveKevinEnabled: (v: boolean) => void;
   setDistanceUnit: (u: 'yards' | 'meters') => void;
@@ -464,6 +467,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoShotDetection: false,
       hasAskedHealthPermission: false,
       healthDataEnabled: true,
+      watchSwingEnabled: false,
       skip_briefings: false,
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
@@ -656,6 +660,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoShotDetection: (v) => set({ autoShotDetection: v }),
       setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
       setHealthDataEnabled: (v) => set({ healthDataEnabled: v }),
+      setWatchSwingEnabled: (v) => set({ watchSwingEnabled: v }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
       setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
       setDistanceUnit: (u) => set({ distance_unit: u }),
@@ -919,6 +924,7 @@ export const useSettingsStore = create<SettingsState>()(
         // now so the JIT ask happens once per device install.
         hasAskedHealthPermission: s.hasAskedHealthPermission,
         healthDataEnabled: s.healthDataEnabled,
+        watchSwingEnabled: s.watchSwingEnabled,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,

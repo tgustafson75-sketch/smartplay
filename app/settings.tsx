@@ -20,6 +20,7 @@ import { useSettingsStore } from '../store/settingsStore';
 // reads from the dedicated watchStore so all three call sites
 // (cage-mode, cage/summary, settings) share one source of truth.
 import { useWatchStore } from '../store/watchStore';
+import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable } from '../services/watchSwingBridge';
 // 2026-05-27 — Fix EA: screenshot mode toggle (hides system chrome
 // for clean promo / store screenshots). Sourced from its own store
 // so app-wide consumers (the root StatusBar binding) read the same flag.
@@ -105,6 +106,12 @@ export default function Settings() {
   // display row. Reads from the dedicated watchStore — stays false
   // until the native SDK lands and flips it.
   const watchConnected = useWatchStore((s) => s.isConnected);
+  // 2026-06-30 (Tim — "turning on the watch is blocked") — the Galaxy Watch swing-IMU bridge
+  // shipped in the native build, so this is a REAL toggle now. Available only when the native
+  // module is linked (latest build); on an older binary it stays disabled with a clear note.
+  const watchSwingEnabled = useSettingsStore((s) => s.watchSwingEnabled);
+  const setWatchSwingEnabled = useSettingsStore((s) => s.setWatchSwingEnabled);
+  const watchBridgeAvailable = isWatchSwingBridgeAvailable();
   const watchHealthSnapshot = useWatchStore((s) => s.lastHealthSnapshot);
   const watchHealthSyncAt = useWatchStore((s) => s.lastHealthSyncAt);
 
@@ -1286,17 +1293,25 @@ export default function Settings() {
         <CollapsibleSection title="Devices & Health" icon="watch-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Samsung Galaxy Watch · Not wired</Text>
+              <Text style={labelStyle}>
+                Galaxy Watch swing capture{watchBridgeAvailable ? '' : ' · needs latest build'}
+              </Text>
               <Text style={subStyle}>
-                Samsung Health SDK integration is a native module that ships in a future APK build. The toggle is parked in simulation mode for dev testing only — it does not pull real tempo / club-speed data from your watch today.
+                {watchBridgeAvailable
+                  ? `Streams swing tempo + club speed from the watch's motion sensor into Smart Motion as a truth-grade reading.${watchConnected ? ' Watch connected.' : ' Open the SmartPlay watch app on your Galaxy Watch to start sending.'}`
+                  : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
             <Switch
-              value={watchConnected}
-              onValueChange={() => {}}
+              value={watchSwingEnabled}
+              onValueChange={(v) => {
+                setWatchSwingEnabled(v);
+                if (v) void initWatchSwingBridge().catch(() => {});
+                else void stopWatchSwingBridge().catch(() => {});
+              }}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.text_primary}
-              disabled
+              disabled={!watchBridgeAvailable}
             />
           </View>
           <View style={rowDivStyle}>
