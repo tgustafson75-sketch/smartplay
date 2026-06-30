@@ -229,6 +229,15 @@ function clubPathSpec(a: SwingAnalysis | null): MetricSpec {
   return { key: 'club_path', label: 'CLUB PATH', value, statusTone, estimate: true, icon: 'git-compare-outline' };
 }
 
+// 2026-06-29 (Tim — "work on something else? doesn't engage") — after a session the
+// caddie asks if the player wants to go again, but that line is spoken OUTSIDE the
+// brain's history, so when they answer "driver, full swing" the dialogue-first guard
+// makes the brain OFFER instead of ACT. This screen-context focus (set on
+// session_complete, cleared when they actually go again) tells the brain to ACT on
+// the next club/angle/drill answer.
+const SESSION_DONE_FOCUS =
+  'choosing whether to go again. If the player names a club, angle, or drill ("driver full swing", "face on", "nine iron easy"), ACT immediately — call configure_drill and/or set_angle to set it up, then tell them to hit when ready. Do NOT merely offer.';
+
 function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null): BodyItem[] {
   const fault = a?.primary_fault;
   const issue = a?.detected_issue;
@@ -1864,6 +1873,7 @@ export default function SmartMotion() {
         const summary = issues.length === 0
           ? `${segs.length} swings — all clean.`
           : `${segs.length} swings — ${clean} clean, ${issues.length} with ${issues[0]}${issues.length > 1 ? ' and others' : ''}.`;
+        setScreenContext({ screen: 'Smart Motion — just finished a session', focus: SESSION_DONE_FOCUS });
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: segs.length, summary });
       }
     },
@@ -2334,6 +2344,7 @@ export default function SmartMotion() {
       } else if (segsForAnalysis.length === 1 && !puttModeRef.current) {
         // Single-swing session — pipeline doesn't run, so emit session_complete here
         // so subscribers (e.g. voice UI) receive the event.
+        setScreenContext({ screen: 'Smart Motion — just finished a session', focus: SESSION_DONE_FOCUS });
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: 1, summary: '1 swing recorded.' });
       }
       // 2026-06-24 (Tim — camera-first Smart Tempo): the tempo-return now fires from
@@ -2458,13 +2469,20 @@ export default function SmartMotion() {
   // the hands-free "do a minute, review, go again" loop working by voice.
   const pendingStartRef = useRef(false);
   const beginNextRecording = useCallback(() => {
+    // 2026-06-29 (Tim) — the player chose to go again, so clear the post-session
+    // "act on their answer" directive and restore the normal capture context.
+    setScreenContext({
+      screen: isDrill && typeof drillName === 'string' && drillName.trim() ? `the ${drillName.trim()} drill` : 'Smart Motion (recording swings)',
+      focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
+      drillId: isDrill ? drillId : undefined,
+    });
     if (phase === 'review') {
       pendingStartRef.current = true;
       reset(); // → setup; CameraView mounts; onCameraReady fires startRecording
     } else if (phase !== 'analyzing' && phase !== 'recording') {
       void startRecording();
     }
-  }, [phase, reset, startRecording]);
+  }, [phase, reset, startRecording, isDrill, drillName, drillFocus, drillId]);
 
   // 2026-06-13 (Tim) — RE-ANALYZE the clip you already hit, instead of forcing a
   // re-record on a failed read. The clip is saved + persistent and analysis
