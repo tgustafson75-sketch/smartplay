@@ -19,7 +19,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, type ImageSourcePropType,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
@@ -41,7 +41,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { useTournamentStore } from '../../store/tournamentStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
-import { searchCourses, getCourse } from '../../services/golfCourseApi';
+import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { getBundledHoles } from '../../data/courses';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
@@ -324,6 +324,11 @@ export default function PlayTab() {
   const [searchError, setSearchError] = useState<string | null>(null);
   // Distinguish "haven't searched yet" from "searched and got zero results".
   const [hasSearched, setHasSearched] = useState(false);
+  // 2026-06-30 — AI course-search fallback (Tim's Gemini search). When the course DB
+  // has no match, we ask the AI to identify the course so the user isn't dead-ended
+  // with "not in the database." Honest: an AI result has NO hole geometry, so it's
+  // shown as info + booking, not a playable round.
+  const [aiResult, setAiResult] = useState<AiCourseResult | null>(null);
   const lastQueryRef = useRef<string>('');
   // Audit — monotonic request ID. setResults / setSearchError only fire
   // when the response's seq matches the current latest seq, so a stale
@@ -546,6 +551,7 @@ export default function PlayTab() {
     setSearching(true);
     setSearchError(null);
     setResults([]);
+    setAiResult(null);
     setHasSearched(true);
     try {
       const found = await searchCourses(trimmed);
@@ -563,6 +569,13 @@ export default function PlayTab() {
       setResults(mapped);
       const err = found.find(r => r._error);
       if (err && mapped.length === 0) setSearchError(err._error ?? 'Search unavailable.');
+      // 2026-06-30 — the DB responded but had NO match (not a network error): fall back
+      // to the AI identifier so a real course off the DB still resolves. Keeps the main
+      // spinner up while it runs (~2-4s) so there's no empty-state flicker.
+      else if (mapped.length === 0) {
+        const ai = await aiSearchCourse(trimmed);
+        if (mySeq === searchSeqRef.current) setAiResult(ai);
+      }
     } catch (e) {
       if (mySeq !== searchSeqRef.current) return;
       console.warn('[play] search failed:', e);
@@ -589,6 +602,7 @@ export default function PlayTab() {
       // 'type to search' hint instead of 'no courses found for ...'.
       if (hasSearched) {
         setResults([]);
+        setAiResult(null);
         setHasSearched(false);
         setSearchError(null);
         lastQueryRef.current = '';
@@ -986,9 +1000,40 @@ export default function PlayTab() {
         {/* Post-search empty results — distinct from the pre-search hint
             so the user knows the request actually ran. */}
         {!searching && !searchError && hasSearched && results.length === 0 && query.trim().length >= 3 && (
-          <Text style={styles.statusText}>
-            No courses found for &quot;{query.trim()}&quot;. Try a different name.
-          </Text>
+          aiResult ? (
+            /* 2026-06-30 — AI fallback hit: a real course the DB didn't have. Shown as
+               an info card, NOT a tappable playable row (no hole geometry / GPS overlay
+               yet). Offers a tee-time search + the caddie already knows about it. */
+            <View style={styles.aiCourseCard}>
+              <View style={styles.aiCourseHeader}>
+                <AppIcon name="sparkles-outline" size={16} color="#00C896" />
+                <Text style={styles.aiCourseBadge}>AI-identified · no GPS overlay yet</Text>
+              </View>
+              <Text style={styles.aiCourseName} numberOfLines={2}>{aiResult.club_name || aiResult.name}</Text>
+              {!!aiResult.location && <Text style={styles.aiCourseMeta}>{aiResult.location}</Text>}
+              {!!aiResult.description && <Text style={styles.aiCourseDesc}>{aiResult.description}</Text>}
+              <View style={styles.aiCourseBtnRow}>
+                <TouchableOpacity
+                  style={styles.aiCourseBtn}
+                  onPress={() => {
+                    const url = aiResult.website
+                      ?? `https://www.google.com/search?q=${encodeURIComponent(`${aiResult.name} ${aiResult.location} tee times`)}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
+                >
+                  <AppIcon name="calendar-outline" size={16} color="#0d1a0d" />
+                  <Text style={styles.aiCourseBtnText}>{aiResult.website ? 'Visit / book' : 'Search tee times'}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.aiCourseNote}>
+                Not in our course database, so live GPS yardages aren&apos;t available for it yet — but your caddie knows the course and can talk strategy.
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.statusText}>
+              No courses found for &quot;{query.trim()}&quot;. Try a different name.
+            </Text>
+          )
         )}
 
         {results.map(r => (
@@ -1507,6 +1552,23 @@ return StyleSheet.create({
 
   statusText: { color: c.text_muted, fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
   statusErr: { color: '#fbbf24', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
+  // 2026-06-30 — AI course-search fallback card.
+  aiCourseCard: {
+    marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 14,
+    backgroundColor: 'rgba(0,200,150,0.08)', borderWidth: 1, borderColor: 'rgba(0,200,150,0.35)',
+  },
+  aiCourseHeader: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 },
+  aiCourseBadge: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 0.2 },
+  aiCourseName: { color: c.text_primary, fontSize: 17, fontWeight: '900' },
+  aiCourseMeta: { color: c.text_muted, fontSize: 13, marginTop: 2 },
+  aiCourseDesc: { color: c.text_primary, fontSize: 13, lineHeight: 19, marginTop: 8, opacity: 0.9 },
+  aiCourseBtnRow: { flexDirection: 'row', marginTop: 12 },
+  aiCourseBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#00C896',
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10,
+  },
+  aiCourseBtnText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900' },
+  aiCourseNote: { color: c.text_muted, fontSize: 11, lineHeight: 16, marginTop: 10 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10 },
 
   selectedCard: {

@@ -282,6 +282,54 @@ export async function searchCourses(
   }
 }
 
+/**
+ * 2026-06-30 — AI fallback (Tim's "Gemini facilitates the search"). Call this ONLY
+ * when searchCourses() returns no real hits. Resolves the query to a course IDENTITY
+ * via api/course-ai-search (Gemini by default). HONEST: an AI result has NO hole
+ * geometry, so it can't drive the GPS overlay — the caller must treat it as info +
+ * booking, never as a playable round. Returns null when the AI doesn't recognize it.
+ */
+export interface AiCourseResult {
+  name: string;
+  club_name: string;
+  location: string;
+  description: string;
+  website: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  source: 'ai';
+}
+
+export async function aiSearchCourse(query: string, region?: string): Promise<AiCourseResult | null> {
+  const q = query.trim();
+  if (!q) return null;
+  console.log('[golfcourseapi] aiSearchCourse fallback:', q);
+  try {
+    const base = (getApiBaseUrl()) + '/api/course-ai-search';
+    const qs = `q=${encodeURIComponent(q)}${region ? `&region=${encodeURIComponent(region)}` : ''}`;
+    const res = await fetch(`${base}?${qs}`, { signal: AbortSignal.timeout(18_000) });
+    if (!res.ok) {
+      console.error('[golfcourseapi] aiSearchCourse error:', res.status);
+      return null;
+    }
+    const data = await res.json() as Record<string, unknown>;
+    if (data.found !== true) return null;
+    return {
+      name: String(data.name ?? ''),
+      club_name: String(data.club_name ?? data.name ?? ''),
+      location: String(data.location ?? ''),
+      description: String(data.description ?? ''),
+      website: data.website ? String(data.website) : null,
+      confidence: (['high', 'medium', 'low'] as const).includes(data.confidence as 'high' | 'medium' | 'low')
+        ? data.confidence as 'high' | 'medium' | 'low'
+        : 'low',
+      source: 'ai',
+    };
+  } catch (e) {
+    console.error('[golfcourseapi] aiSearchCourse exception:', e);
+    return null;
+  }
+}
+
 export async function getCourse(course_id: string): Promise<Course | null> {
   // Check cache first
   const cached = await readCachedCourse(course_id);
