@@ -30,6 +30,7 @@ import { COURSE_STRATEGY } from './courseStrategy';
 import { CONDITIONS } from './conditions';
 import { EQUIPMENT } from './equipment';
 import { PRACTICE_DESIGN } from './practiceDesign';
+import { PRACTICE_FOCUSES_KB } from './practiceFocuses';
 import { WARMUP } from './warmup';
 import { RULES } from './rules';
 import { MENTAL_GAME } from './mentalGame';
@@ -81,6 +82,7 @@ export const GOLF_KNOWLEDGE: KBEntry[] = [
   ...CONDITIONS,
   ...EQUIPMENT,
   ...PRACTICE_DESIGN,
+  ...PRACTICE_FOCUSES_KB,
   ...WARMUP,
   ...RULES,
   ...MENTAL_GAME,
