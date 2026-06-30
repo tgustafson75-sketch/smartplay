@@ -866,6 +866,24 @@ async function openSession() {
         } else {
           console.warn('[listeningSession] tool_action.navigate missing/invalid path:', path);
         }
+      } else if (ta && (ta as { type?: string }).type === 'navigate_replace') {
+        // 2026-06-30 (audit, careful pass) — endRoundHandler ends the round
+        // INTERNALLY (round.endRound()) then returns {type:'navigate_replace',
+        // path:'/recap/<id>'} for the caller to drive. This dispatch handled
+        // navigate + open_url but NOT navigate_replace, so hands-free "end the
+        // round" ended it and spoke the summary but never opened the recap.
+        // Self-nav is NOT done inside the handler, so this can't double-fire.
+        const path = (ta as { type: 'navigate_replace'; path?: string }).path;
+        if (typeof path === 'string' && path.startsWith('/')) {
+          try {
+            const router = require('expo-router').router;
+            router.replace(path);
+          } catch (e) {
+            console.log('[listeningSession] navigate_replace failed', e);
+          }
+        } else {
+          console.warn('[listeningSession] tool_action.navigate_replace missing/invalid path:', path);
+        }
       }
     }
   } catch (e) {
