@@ -40,6 +40,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
+import { usePointsStore } from '../../store/pointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
 import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
@@ -123,6 +124,11 @@ export default function Dashboard() {
     if (recent.length === 0) return null;
     return recent.reduce((a, r) => a + (r.scoreVsPar ?? 0), 0) / recent.length;
   }, [roundHistory]);
+  // 2026-06-30 (Tim — audit) — visible TIER/LEVEL + points. Every caddie chat, swing
+  // and practice awards points and climbs a tier, but it was rendered NOWHERE after the
+  // Progress card was removed. Surface a compact header chip so it's finally visible.
+  const totalPoints = usePointsStore(s => s.totalPoints);
+  const playerTier = usePointsStore(s => s.tier);
   // 2026-06-16 (Tim — "streaks as a metric in the app") — the player's OWN day streak:
   // consecutive calendar days with ANY activity (a round OR a practice session),
   // anchored at today/yesterday else 0. Honest, from real dates. (See [[streak-metric]].)
@@ -403,6 +409,12 @@ export default function Dashboard() {
               <View style={styles.streakPill}>
                 <Ionicons name="flame" size={13} color={colors.accent_amber} />
                 <Text style={styles.streakPillText}>{dayStreak} day{dayStreak === 1 ? '' : 's'}</Text>
+              </View>
+            )}
+            {totalPoints > 0 && (
+              <View style={styles.tierPill}>
+                <Ionicons name="trophy" size={12} color={colors.accent} />
+                <Text style={styles.tierPillText}>{playerTier.replace(/ Golfer$/, '')} · {totalPoints}</Text>
               </View>
             )}
           </View>
@@ -1077,6 +1089,8 @@ const styles = StyleSheet.create({
   welcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   streakPill: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: 'rgba(245,166,35,0.14)', borderWidth: 1, borderColor: 'rgba(245,166,35,0.4)' },
   streakPillText: { color: '#f5a623', fontSize: 12, fontWeight: '800' },
+  tierPill: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: 'rgba(0,200,150,0.14)', borderWidth: 1, borderColor: 'rgba(0,200,150,0.4)' },
+  tierPillText: { color: '#00C896', fontSize: 12, fontWeight: '800' },
   // Profile card
   profileCard: {
     marginHorizontal: 12,
