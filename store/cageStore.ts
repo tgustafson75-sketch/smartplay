@@ -415,9 +415,13 @@ export interface PrimaryIssue {
 }
 
 export interface DrillRecommendation {
-  drill_id: string;       // links to existing SwingLab drill library by id
+  drill_id: string;       // legacy id (gate/pump/...) — kept for persisted analytics
   drill_name: string;
   reason: string;         // Kevin's Coach voice explaining the recommendation
+  // 2026-06-30 (audit M12) — the canonical issue, which IS the /drills/<id> catalog
+  // route id (over_the_top, early_extension, …). Lets DrillCard's "Open Drill" deep-link
+  // to the real drill detail instead of dumping the user on the SwingLab tab top.
+  catalog_id?: string;
 }
 
 export interface CameraAlignment {

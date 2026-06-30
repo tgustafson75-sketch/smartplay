@@ -74,5 +74,9 @@ export function recommendDrill(issue: CanonicalIssue): DrillRecommendation | nul
     drill_id: mapped.drill_id,
     drill_name: mapped.drill_name,
     reason: mapped.reason,
+    // The CanonicalIssue value is the /drills/<id> catalog route id (over_the_top,
+    // early_extension, chicken_wing, reverse_pivot, …) — every mapped issue has a
+    // matching DRILL_CATALOG entry, so DrillCard can deep-link straight to it.
+    catalog_id: issue,
   };
 }

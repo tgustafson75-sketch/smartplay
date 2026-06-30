@@ -40,10 +40,14 @@ export default function DrillCard({ recommendation }: Props) {
       <Text style={styles.reason}>{recommendation.reason}</Text>
       <TouchableOpacity
         onPress={() =>
-          // Phase J.5 — pass the drill_id so SwingLab can auto-expand the
-          // matching drill. Falls back gracefully when the SwingLab home
-          // doesn't read the param (today scrolls to top).
-          router.push({ pathname: '/(tabs)/swinglab', params: { drill_id: recommendation.drill_id } } as never)
+          // 2026-06-30 (audit M12) — deep-link to the actual drill detail
+          // (/drills/<catalog_id>, which IS wired through to "Practice in Smart
+          // Motion"). Previously pushed /(tabs)/swinglab with a drill_id param the
+          // tab never read, so the button just dumped the user on the SwingLab top.
+          // Fall back to the SwingLab tab only if the recommendation predates catalog_id.
+          recommendation.catalog_id
+            ? router.push(`/drills/${recommendation.catalog_id}` as never)
+            : router.push('/(tabs)/swinglab' as never)
         }
         style={styles.cta}
         activeOpacity={0.85}
