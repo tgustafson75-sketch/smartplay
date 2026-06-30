@@ -1036,11 +1036,12 @@ export default function SmartMotion() {
     void detectBallDeparture({ videoUri: clipUri, impactMs: strikeMs, ballArea })
       .then((r) => {
         if (cancelled) return;
-        // Video-located: trust only a high-confidence, clearly-departed read (ball
-        // present before, gone after); else stay silent rather than risk a mis-timed
-        // direction. Acoustic anchors keep the existing (frame-accurate) behavior.
+        // 2026-06-29 (Tim — "the confidence gate is too high") — video-located reads
+        // were thrown away unless confidence was HIGH (plus departed + ball-present).
+        // The ball IS visible at the range; accept MEDIUM+ so a real, seen departure
+        // draws its launch instead of nothing. Still drop genuinely-low reads.
         const accepted = videoLocated
-          ? (r && r.departed && r.confidence === 'high' && r.ball_present_before ? r : null)
+          ? (r && r.departed && r.confidence !== 'low' && r.ball_present_before ? r : null)
           : (r ?? null);
         ballDepartureCacheRef.current[selectedSwing] = accepted;
         setBallDeparture(accepted);
@@ -2980,7 +2981,7 @@ export default function SmartMotion() {
         {/* Attached skeletal overlay — real keypoints tracked to playback. */}
         {isReview && showResults && showSkeleton && poseFrames && poseFrames.length > 0 ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={false} resizeMode="cover" />
+            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={showSkeleton} resizeMode="cover" />
           </View>
         ) : null}
 
