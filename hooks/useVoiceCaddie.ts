@@ -358,13 +358,18 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
   const toolText = stripLeadIn(cleaned.replace(/^(?:open|show|pull up|go to|launch|bring up|take me to)\s+(?:me\s+)?/i, ''));
   const toolMatchers: Array<{ tool_name: string; aliases: string[] }> = [
     { tool_name: 'smartvision', aliases: ['smart vision', 'smartvision', 'vision', 'analyze the hole', 'read the hole'] },
-    { tool_name: 'smartfinder', aliases: ['smart finder', 'smartfinder', 'finder', 'rangefinder', 'course map', 'hole map', 'show me the course', 'show the course', 'the course', 'course'] },
-    { tool_name: 'swinglab', aliases: ['swing lab', 'swinglab', 'practice', 'drills', 'library', 'swing library'] },
+    { tool_name: 'smartfinder', aliases: ['smart finder', 'smartfinder', 'finder', 'rangefinder', 'course map', 'hole map', 'show me the course', 'show the course'] },
+    // 2026-06-29 (Tim — "natural caddie, not a prompting system") — REMOVED the vague
+    // 'practice'/'drills' (and below 'cage'/'start practice', and 'course'/'the course'
+    // above): a conversational "I want to practice" must reach the BRAIN for the
+    // dialogue-first confirm ("what do you want to work on?"), not deterministically
+    // open Smart Motion. Explicit "open swing lab" still matches.
+    { tool_name: 'swinglab', aliases: ['swing lab', 'swinglab', 'swing library'] },
     { tool_name: 'scorecard', aliases: ['scorecard', 'score card', 'scores', 'show the scorecard'] },
     { tool_name: 'dashboard', aliases: ['dashboard', 'stats', 'overview', 'home stats'] },
     { tool_name: 'settings', aliases: ['settings', 'preferences', 'voice settings', 'audio settings'] },
     { tool_name: 'coach_mode', aliases: ['coach mode', 'coachmode', 'coach', 'watch my student', 'record their swing'] },
-    { tool_name: 'cage_mode', aliases: ['cage mode', 'cagemode', 'cage', 'start cage session', 'start practice'] },
+    { tool_name: 'cage_mode', aliases: ['cage mode', 'cagemode', 'start cage session'] },
     { tool_name: 'library', aliases: ['player library', 'swing library', 'library', 'show my swings', 'my swings', 'show best shots', 'show my best shots', 'best shots'] },
     { tool_name: 'smartmotion', aliases: ['smart motion', 'smartmotion', 'record my swing', 'capture my swing', 'down the line', 'face on'] },
     { tool_name: 'issue_log', aliases: ['issue log', 'bug log', 'log an issue', 'send issue log', 'email issue log'] },
