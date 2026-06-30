@@ -994,6 +994,11 @@ export default function SmartMotion() {
   // async departure upgrade isn't retro-applied — conservative (never over-claims
   // flight). Divergence is signed (L negative) so the session's spread is directional.
   const stampedClipsRef = useRef<Set<string>>(new Set());
+  // 2026-06-30 (audit M4) — also COLLECT each per-swing sample for this Smart Motion open,
+  // so the session-less save path (plain SmartMotion + drills → recordCompletedSession) can
+  // stamp them and the practice-detail screen shows real striation + tempo, not just a count.
+  // Accumulates across the go-again loop within one mount; resets naturally on next open.
+  const practiceSwingSamplesRef = useRef<Parameters<typeof recordPracticeSwingIfActive>[0][]>([]);
   useEffect(() => {
     if (phase !== 'review' || !clipUri || analysis == null) return;
     if (stampedClipsRef.current.has(clipUri)) return;
@@ -1001,12 +1006,14 @@ export default function SmartMotion() {
     const signedDiv = ballTrace
       ? (ballTrace.side === 'left' ? -1 : 1) * ballTrace.divergenceDeg
       : null;
-    recordPracticeSwingIfActive({
+    const sample = {
       club,
       tier: smartTrace.tier,
       tempoRatio: tempo?.ratio ?? null,
       divergenceDeg: signedDiv,
-    });
+    };
+    recordPracticeSwingIfActive(sample);
+    practiceSwingSamplesRef.current.push(sample);
   }, [phase, clipUri, analysis, smartTrace, ballTrace, club, tempo]);
 
   // Camera strike-verification — did the ball actually leave its spot at
@@ -2611,7 +2618,7 @@ export default function SmartMotion() {
             // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
             const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;
             const pts = usePracticePointsStore.getState().awardPracticePoints({ key: drillId, label: drillLabel, swings, now: Date.now() });
-            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings });
+            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: drillId, drillId, label: drillLabel, swingCount: swings, swingSamples: practiceSwingSamplesRef.current });
             savedMsg = `Saved · +${pts} practice points`;
           } else {
             // 2026-06-29 (Tim — "my points/sessions disappeared") — PLAIN SmartMotion
@@ -2620,7 +2627,7 @@ export default function SmartMotion() {
             // practice accrues; honest generic label.
             const clubKey = club ? clubIdLabel(club) : (isPutt ? 'Putting' : 'Practice');
             const pts = usePracticePointsStore.getState().awardPracticePoints({ key: `smartmotion:${clubKey}`, label: clubKey, swings, now: Date.now() });
-            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings });
+            usePracticeSessionStore.getState().recordCompletedSession({ kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings, swingSamples: practiceSwingSamplesRef.current });
             savedMsg = `Saved · +${pts} practice points`;
           }
         }

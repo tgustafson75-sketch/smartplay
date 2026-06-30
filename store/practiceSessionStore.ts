@@ -80,6 +80,9 @@ interface PracticeSessionState {
     label?: string | null;
     swingCount?: number | null;
     environment?: string | null;
+    // 2026-06-30 (audit M4) — per-swing samples (club/tempo/tier/divergence) so the
+    // practice-detail screen shows real striation + tempo trend, not just "Session logged".
+    swingSamples?: RangeSwingSample[];
   }) => void;
   /** Live read of the active session, or null. */
   activeSummary: () => OpenRangeSummary | null;
@@ -141,8 +144,11 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
           } catch { /* award best-effort, never blocks ending a session */ }
         }
       },
-      recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment }) => {
+      recordCompletedSession: ({ kind, focus, drillId, label, swingCount, environment, swingSamples }) => {
         const now = Date.now();
+        // 2026-06-30 (audit M4) — stamp the collected per-swing samples so the detail
+        // screen renders real per-club striation + tempo trend (was always empty here).
+        const swings: PracticeSwing[] = (swingSamples ?? []).map((sample) => ({ ...sample, id: newId('sw'), at: now }));
         const session: PracticeSession = {
           id: newId('ps'),
           kind,
@@ -151,10 +157,10 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
           targetReps: null,
           startedAt: now,
           endedAt: now,
-          swings: [],
+          swings,
           drillId: drillId ?? null,
           label: label ?? null,
-          swingCount: swingCount ?? null,
+          swingCount: swingCount ?? (swings.length || null),
         };
         set((s) => ({ history: [session, ...s.history].slice(0, 50) }));
       },
