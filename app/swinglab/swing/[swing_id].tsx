@@ -55,6 +55,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
+import { BodyAnalysisRow, TempoBar, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
 import ComparisonResultSheet from '../../../components/swinglab/ComparisonResultSheet';
@@ -2001,6 +2002,48 @@ export default function SwingDetail() {
                   )}
                 </View>
               )}
+              {/* 2026-06-29 (Tim — "save the WHOLE session report") — the SmartMotion
+                  review report, now persisted with the session and rendered here so the
+                  library swing mirrors what you saw: the BODY ANALYSIS icon card, the
+                  tempo bar, and the shot map (effort / carry / launch). Saved data, no
+                  recompute. */}
+              {session.smart_motion_shot_map?.bodyItems && session.smart_motion_shot_map.bodyItems.length > 0 ? (
+                <BodyAnalysisRow items={session.smart_motion_shot_map.bodyItems as BodyItem[]} style={{ marginTop: 12 }} />
+              ) : null}
+              {session.smart_motion_shot_map?.tempo?.ratio != null ? (
+                <View style={{ marginTop: 12 }}>
+                  <TempoBar ratio={session.smart_motion_shot_map.tempo.ratio} />
+                </View>
+              ) : null}
+              {session.smart_motion_shot_map && (session.smart_motion_shot_map.effortPct != null || session.smart_motion_shot_map.estCarry != null || session.smart_motion_shot_map.trace) ? (
+                <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>SHOT MAP</Text>
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                    {session.smart_motion_shot_map.effortPct != null ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>EFFORT</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{session.smart_motion_shot_map.effortPct}%</Text>
+                      </View>
+                    ) : null}
+                    {session.smart_motion_shot_map.estCarry != null ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>CARRY</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>~{session.smart_motion_shot_map.estCarry} yds</Text>
+                      </View>
+                    ) : null}
+                    {session.smart_motion_shot_map.trace ? (
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>LAUNCH</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>
+                          {session.smart_motion_shot_map.trace.side === 'left' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° L`
+                            : session.smart_motion_shot_map.trace.side === 'right' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° R`
+                            : 'Straight'}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              ) : null}
               <TouchableOpacity
                 style={[styles.reanalyzeBtn, { borderColor: colors.border }]}
                 onPress={onReanalyze}

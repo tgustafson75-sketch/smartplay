@@ -1439,8 +1439,14 @@ export default function SmartMotion() {
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).
   // Keeping this off by default means the default review runs ONLY Kevin's
   // analysis (no simultaneous pose extraction competing for resources).
+  // 2026-06-29 (Tim — "the report doesn't pick up / doesn't save") — COMPUTE biomech
+  // + pose frames in review REGARDLESS of the Motion toggle. The toggle only controls
+  // the on-video skeleton OVERLAY (the laggy part); the DATA (rotation/weight/balance
+  // body card + the saved library report) must always be there. Runs async in the
+  // background so it never blocks the replay, and commits to the session so Save
+  // carries the full report into the library.
   useEffect(() => {
-    if (!clipUri || videoDurationMs == null || !showSkeleton) return;
+    if (!clipUri || videoDurationMs == null || phase !== 'review') return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1461,7 +1467,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs, showSkeleton, angle]);
+  }, [clipUri, videoDurationMs, phase, angle]);
 
   // Acoustic-anchored tempo + transition for the selected swing. Impact
   // comes from the acoustic strike detector (segment.strikeMs);
@@ -2507,6 +2513,34 @@ export default function SmartMotion() {
     if (sid && feelText.trim()) {
       try { useCageStore.getState().setSessionFeel(sid, feelText.trim()); } catch { /* non-fatal */ }
     }
+    // 2026-06-29 (Tim — "Save loses the report") — FLUSH the full in-memory review
+    // report onto the session so the saved library swing mirrors SmartMotion: tempo,
+    // biomechanics, and the shot-map snapshot. (Biomech also commits live from the
+    // review effect; this is belt-and-braces in case the user saves the instant it lands.)
+    if (sid) {
+      try {
+        const store = useCageStore.getState();
+        if (biomech) store.setSessionBiomechanics(sid, biomech);
+        if (estCarry != null || effortPct != null || ballTrace || cageCanvasFeet != null || tempo || biomech) {
+          store.setSessionShotMap(sid, {
+            estCarry: estCarry ?? null,
+            effortPct: effortPct ?? null,
+            trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
+            canvasFeet: cageCanvasFeet ?? null,
+            cameraBehindFeet: cameraBehindFeet ?? null,
+            angle,
+            club: club ?? null,
+            tempo: tempo ? {
+              ratio: tempo.ratio ?? null,
+              backswingMs: tempo.backswingMs ?? null,
+              downswingMs: tempo.downswingMs ?? null,
+              sequencingScore: tempo.sequencingScore ?? null,
+            } : null,
+            bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
+          });
+        }
+      } catch { /* non-fatal */ }
+    }
     // 2026-06-13 (Tim) — award CONSERVATIVE practice points for a completed drill
     // session (a captureKind:'drill' save). Surfaces on the dashboard; the data is
     // the practice side of the future practice→on-course-improvement ledger.
@@ -2538,7 +2572,7 @@ export default function SmartMotion() {
     }
     useToastStore.getState().show(savedMsg);
     router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, bodyItems]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));

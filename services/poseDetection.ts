@@ -534,7 +534,10 @@ export async function extractKeyFrames(
 // AI both finds AND reads the swing, with no manual marking and no acoustics.
 const LOCATE_FRAME_WIDTH = 320;
 const LOCATE_FRAME_COMPRESS = 0.5;
-const LOCATE_MIN_CLIP_MS = 12_000;
+// 2026-06-29 (Tim) — lowered 12s→6s so SmartMotion/range clips around 8-10s (a real
+// swing buried in a short clip) still get the swing LOCALIZED before pose extraction,
+// instead of being skipped and smearing frames across the whole clip = empty biomech.
+const LOCATE_MIN_CLIP_MS = 6_000;
 // 2026-06-11 — bumped 15s → 25s. Telemetry (swing_locate_fallback "Aborted",
 // Jun 10–11) showed the coarse-frame locate pass aborting client-side before a
 // cold /api/swing-analysis Lambda returned. The locate pass is cheap (small

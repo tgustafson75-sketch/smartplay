@@ -163,6 +163,26 @@ export interface UploadMetadata {
   angleOverride?: 'down_the_line' | 'face_on' | null;
 }
 
+/** 2026-06-29 (Tim) — SmartMotion shot-map snapshot persisted with a saved session
+ *  so the library swing renders the same carry / shot-map view the review showed.
+ *  Honest: only REAL signals (effort %, bag-predicted carry, sensed ball-trace,
+ *  cage canvas distances) — any field may be null when we didn't have it. */
+export interface SmartMotionShotMap {
+  estCarry?: number | null;
+  effortPct?: number | null;
+  trace?: { side: string; divergenceDeg: number } | null;
+  canvasFeet?: number | null;
+  cameraBehindFeet?: number | null;
+  angle?: 'down_the_line' | 'face_on' | null;
+  club?: string | null;
+  /** Backswing:downswing tempo snapshot (the review's TempoBar), real marks only. */
+  tempo?: { ratio: number | null; backswingMs: number | null; downswingMs: number | null; sequencingScore: number | null } | null;
+  /** The review's BODY ANALYSIS icon card (sway/tilt/posture/weight tones) so the
+   *  library renders the same multi-card. Image asset refs are dropped (rebuilt from
+   *  the icon fallback) to stay rebuild-safe. */
+  bodyItems?: { key: string; label: string; tone: 'good' | 'warn' | 'bad' | 'neutral'; icon?: string }[] | null;
+}
+
 export interface CageSession {
   id: string;
   date: number;
@@ -264,6 +284,11 @@ export interface CageSession {
    *  the swing-detail tempo row. Only ever written from REAL marks — never
    *  fabricated. */
   tempo_result?: import('../services/smartTempo').TempoResult | null;
+  /** 2026-06-29 (Tim) — the SmartMotion shot-map snapshot (effort %, est carry,
+   *  ball-trace direction, cage canvas distances) so the saved library swing can
+   *  render the same shot map / carry view the SmartMotion review showed. Pure
+   *  display snapshot of REAL signals; null = nothing to show. */
+  smart_motion_shot_map?: SmartMotionShotMap | null;
   /** 2026-05-24 — Display-quality diagnostic fault frame persisted to
    *  FileSystem at session-creation time. Pre-requisite for the
    *  visual-annotation feature (coach markup + AI auto-annotation)
@@ -558,6 +583,9 @@ interface CageState {
   /** 2026-06-24 — Smart Tempo. Persist (or clear with null) the computed
    *  backswing:downswing tempo result on a session so it shows later. */
   setSessionTempo: (sessionId: string, tempo: import('../services/smartTempo').TempoResult | null) => void;
+  /** 2026-06-29 (Tim) — persist the SmartMotion shot-map snapshot so the saved
+   *  library swing shows the same carry / shot map. Pass null to clear. */
+  setSessionShotMap: (sessionId: string, shotMap: SmartMotionShotMap | null) => void;
   /** 2026-06-12 — Persist a lazily-generated library thumbnail (representative
    *  frame) for sessions with no analysis fault-frame. Pass null to clear. */
   setSessionThumbnail: (sessionId: string, uri: string | null) => void;
@@ -1302,6 +1330,13 @@ export const useCageStore = create<CageState>()(
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, tempo_result: tempo ?? null }
+          ),
+        })),
+      // 2026-06-29 (Tim) — SmartMotion shot-map writer; mirrors the tempo writer.
+      setSessionShotMap: (sessionId, shotMap) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, smart_motion_shot_map: shotMap ?? null }
           ),
         })),
 
