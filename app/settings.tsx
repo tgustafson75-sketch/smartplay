@@ -58,7 +58,6 @@ export default function Settings() {
     setContinuousConversationMode,
     language,
     responseMode,
-    castMode,
     highContrast,
     autoListenEnabled,
     earbudTapToTalk,
@@ -81,7 +80,6 @@ export default function Settings() {
     setLocalMode,
     setLanguage,
     setResponseMode,
-    setCastMode,
     setHighContrast,
     // PGA HOPE follow-up + re-sim — accessibility / persona-fit fields.
     largeText,
@@ -1172,12 +1170,6 @@ export default function Settings() {
             onSelect={(v) => setThemePreference(v as 'system' | 'light' | 'dark')}
           />
 
-          <ToggleRow
-            label="Cast Mode"
-            sub="Mirror to TV or display"
-            value={castMode}
-            onValueChange={setCastMode}
-          />
           <ToggleRow
             label="High Contrast"
             sub="Pure black/white backgrounds + stronger borders for sunlight readability"

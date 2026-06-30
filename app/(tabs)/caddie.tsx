@@ -627,20 +627,16 @@ export default function CaddieTab() {
   const {
     voiceGender,
     voiceEnabled,
-    castMode,
     language,
     autoListenEnabled,
     setVoiceEnabled,
-    setCastMode,
     voiceOrchestrator,
   } = useSettingsStore(useShallow((s) => ({
     voiceGender: s.voiceGender,
     voiceEnabled: s.voiceEnabled,
-    castMode: s.castMode,
     language: s.language,
     autoListenEnabled: s.autoListenEnabled,
     setVoiceEnabled: s.setVoiceEnabled,
-    setCastMode: s.setCastMode,
     voiceOrchestrator: s.voiceOrchestrator,
   })));
 
@@ -4103,7 +4099,6 @@ export default function CaddieTab() {
                   if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
                 },
               }] : []),
-              { icon: 'tv-outline',          label: castMode ? 'Cast Mode On' : 'Cast Mode',     sub: 'Mirror to TV',                  action: () => { setShowMoreMenu(false); setCastMode(!castMode); } },
               { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => { setShowMoreMenu(false); setVoiceEnabled(!voiceEnabled); } },
               { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
               { icon: 'book-outline',        label: 'Rules & Handicap', sub: 'Quick reference + WHS calculator', action: () => { setShowMoreMenu(false); router.push('/reference' as never); } },

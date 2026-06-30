@@ -67,8 +67,6 @@ export function GlobalToolsMenu() {
   const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
   const voiceGender = useSettingsStore((s) => s.voiceGender);
   const language = useSettingsStore((s) => s.language);
-  const castMode = useSettingsStore((s) => s.castMode);
-  const setCastMode = useSettingsStore((s) => s.setCastMode);
   const yardageMode = useSettingsStore((s) => s.yardageMode);
   const setYardageMode = useSettingsStore((s) => s.setYardageMode);
   // 2026-05-16 — surface Active Listening one tap away from the Tools
@@ -149,12 +147,6 @@ export function GlobalToolsMenu() {
   const toggleVoice = () => {
     setVoiceEnabled(!voiceEnabled);
     useToastStore.getState().show(voiceEnabled ? 'Voice off' : 'Voice on');
-    fire(() => undefined);
-  };
-
-  const toggleCast = () => {
-    setCastMode(!castMode);
-    useToastStore.getState().show(castMode ? 'Cast Mode off' : 'Cast Mode on');
     fire(() => undefined);
   };
 
@@ -346,13 +338,6 @@ export function GlobalToolsMenu() {
               label={autoListenEnabled ? 'Active Listening: ON' : 'Active Listening: OFF'}
               sub={autoListenEnabled ? 'Hot mic during rounds' : 'Tap to enable hot mic'}
               onPress={toggleActiveListening}
-              colors={colors}
-            />
-            <Row
-              icon={castMode ? 'tv' : 'tv-outline'}
-              label={castMode ? 'Cast Mode: ON' : 'Cast Mode: OFF'}
-              sub={castMode ? 'Large-text TV layout' : 'Tap for large-text TV layout'}
-              onPress={toggleCast}
               colors={colors}
             />
 

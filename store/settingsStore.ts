@@ -137,7 +137,6 @@ interface SettingsState {
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
   brightMode: boolean;
-  castMode: boolean;
   // PGA HOPE follow-up (A1) — when true, BrightMode also bumps text scale
   // and forces icon-button labels to render so low-vision users don't
   // operate the app from muscle memory alone.
@@ -333,7 +332,6 @@ interface SettingsState {
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
   setBrightMode: (v: boolean) => void;
-  setCastMode: (v: boolean) => void;
   setLargeText: (v: boolean) => void;
   setTtsCaptions: (v: boolean) => void;
   setTtsCaptionsBluetoothPrompt: (v: 'unasked' | 'asked' | 'never') => void;
@@ -428,7 +426,6 @@ export const useSettingsStore = create<SettingsState>()(
       theme_preference: 'system' as const,
       highContrast: false,
       brightMode: false,
-      castMode: false,
       largeText: false,
       ttsCaptions: true,
       ttsCaptionsBluetoothPrompt: 'unasked' as const,
@@ -631,7 +628,6 @@ export const useSettingsStore = create<SettingsState>()(
       setThemePreference: (p) => set({ theme_preference: p }),
       setHighContrast: (v) => set({ highContrast: v }),
       setBrightMode: (v) => set({ brightMode: v }),
-      setCastMode: (v) => set({ castMode: v }),
       setLargeText: (v) => set({ largeText: v }),
       setTtsCaptions: (v) => set({ ttsCaptions: v }),
       setTtsCaptionsBluetoothPrompt: (v) => set({ ttsCaptionsBluetoothPrompt: v }),
@@ -906,7 +902,6 @@ export const useSettingsStore = create<SettingsState>()(
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
         brightMode: s.brightMode,
-        castMode: s.castMode,
         largeText: s.largeText,
         ttsCaptions: s.ttsCaptions,
         ttsCaptionsBluetoothPrompt: s.ttsCaptionsBluetoothPrompt,
