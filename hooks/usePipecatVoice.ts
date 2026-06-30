@@ -21,7 +21,7 @@ import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext } from '../services/caddieMemoryRetrieval';
 import { answerOffline } from '../services/offlineCaddie';
 import { recordKevinTurn } from '../services/conversationState';
-import { endsAsQuestion } from './useVoiceCaddie';
+import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 import { screenContextForPrompt } from '../services/screenContext';
@@ -379,7 +379,14 @@ export function usePipecatVoice({
       if (text.trim() && onReadyToListen) {
         const { continuousConversationMode } = useSettingsStore.getState();
         const isQuestion = endsAsQuestion(text);
-        if (continuousConversationMode || isQuestion) {
+        // 2026-06-30 (Tim) — a sign-off ("I'm good, thanks" / "that's all" / "I'm done")
+        // must END the conversation, not re-open the mic. The legacy loop already had
+        // isCloseIntent for exactly this ("trapped in continuous mode"), but the DEFAULT
+        // pipecat path never checked it — so continuous mode kept re-arming after a
+        // farewell. Honor the same proven matcher here. The brain still spoke its sign-off
+        // (e.g. "I'm here if you need me"); we simply don't listen again.
+        const userSignedOff = isCloseIntent(transcript);
+        if (!userSignedOff && (continuousConversationMode || isQuestion)) {
           await new Promise<void>((r) => setTimeout(r, 500));
           onReadyToListen();
         }

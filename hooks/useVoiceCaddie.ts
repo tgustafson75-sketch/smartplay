@@ -160,27 +160,33 @@ const CLOSE_INTENT_PATTERNS: RegExp[] = [
   /^shut\s*up\.?$/i,
   /^i\s*hit\s*it\s*(on|by)\s*accident\.?$/i,
   /^accidental(\s*tap)?\.?$/i,
-  /^that('?s|\s+is)?\s+all\.?$/i,
+  /^that('?s|\s+is)?\s+(all|it)\.?$/i,
   /^(that('?s|\s+is)?\s+)?all\s*good\.?$/i,
-  /^(no[,\s]*)?(that'?s|that\s+is)\s+all\.?$/i,
+  /^(no[,\s]*)?(that'?s|that\s+is)\s+(all|it)\.?$/i,
   /^nothing\s*(else)?\.?$/i,
   /^(i\s*)?appreciate\s*(it|you|that)?\.?$/i,
   /^bye\.?$/i,
   /^later\.?$/i,
   /^talk\s*to\s*you\s*later\.?$/i,
 ];
-function isCloseIntent(transcript: string): boolean {
-  let cleaned = transcript.trim().toLowerCase();
-  if (!cleaned) return false;
-  // 2026-06-26 (Tim — trapped in continuous mode: "I'm good, thank you" kept the
-  // loop alive). The patterns above require the close phrase to be the WHOLE
-  // utterance, so any trailing politeness ("..., thank you") or filler ("... man",
-  // "... for now") broke the match. Strip those benign words first, THEN test —
-  // so natural sign-offs actually end the conversation. These words carry no
-  // content, so removing them can't turn a real question into a false close.
-  cleaned = cleaned
-    .replace(/[.!?]+$/g, '')
-    .replace(/\b(thanks?|thank\s*you|please|man|buddy|dude|bro|cheers|okay|ok|alright|cool|for\s*now|right\s*now)\b/g, ' ')
+export function isCloseIntent(transcript: string): boolean {
+  const raw = (transcript ?? '').trim().toLowerCase().replace(/[.!?]+$/g, '').trim();
+  if (!raw) return false;
+  // 2026-06-30 (Tim — still "trapped in continuous mode": "I'm good, thank you" didn't
+  // close). TWO passes, because no single one covers both shapes:
+  //  1) Test the RAW utterance first — so patterns that NEED the politeness word fire
+  //     ("no thanks", "thank you", "that's it").
+  //  2) Then strip trailing politeness/filler and re-test — so a close phrase WRAPPED in
+  //     politeness fires too ("I'm good, thank you" → "i'm good"). "thank you" is ordered
+  //     BEFORE "thanks?" in the strip so the whole phrase is consumed (the old order let
+  //     `thanks?` eat just "thank", orphaning "you" and breaking the match — the bug).
+  // Stripped words carry no content, so they can't turn a real question into a false close.
+  if (CLOSE_INTENT_PATTERNS.some(p => p.test(raw))) return true;
+  // Also flatten INTERNAL sentence punctuation to spaces so multi-sentence sign-offs
+  // collapse correctly: "Okay. I'm good. Thank you." → strip filler → "i'm good".
+  const cleaned = raw
+    .replace(/[.!?;]+/g, ' ')
+    .replace(/\b(thank\s*you|thanks?|please|man|buddy|dude|bro|cheers|okay|ok|alright|cool|for\s*now|right\s*now)\b/g, ' ')
     .replace(/[,]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
