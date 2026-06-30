@@ -33,3 +33,13 @@ comment on table smartplay.messages is
 create index if not exists messages_to_idx   on smartplay.messages (to_email, created_at);
 create index if not exists messages_from_idx on smartplay.messages (from_email, created_at);
 create index if not exists messages_pair_idx on smartplay.messages (from_email, to_email, created_at);
+
+-- Grants — a NEW table in the smartplay schema is NOT auto-granted to the API roles,
+-- so PostgREST (the JS client) gets permission-denied until these run. The server uses
+-- the service_role key (bypasses RLS); anon/authenticated included for completeness.
+grant usage on schema smartplay to anon, authenticated, service_role;
+grant all on smartplay.messages to service_role;
+grant select, insert, update on smartplay.messages to anon, authenticated;
+-- Future smartplay tables: auto-grant so this never bites again.
+alter default privileges in schema smartplay grant all on tables to service_role;
+alter default privileges in schema smartplay grant select, insert, update on tables to anon, authenticated;
