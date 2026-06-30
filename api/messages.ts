@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert({ from_email: f, to_email: t, body: text })
         .select()
         .single();
-      if (error) { console.error('[messages] insert:', error.message); return res.status(500).json({ ok: false, reason: 'insert_failed', detail: error.message, code: (error as { code?: string }).code ?? null }); }
+      if (error) { console.error('[messages] insert:', error.message); return res.status(500).json({ ok: false, reason: 'insert_failed' }); }
       return res.status(200).json({ ok: true, message: data });
     }
 
@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(500);
       if (since) q = q.gt('created_at', since);
       const { data, error } = await q;
-      if (error) { console.error('[messages] select:', error.message); return res.status(500).json({ ok: false, reason: 'select_failed', detail: error.message, code: (error as { code?: string }).code ?? null }); }
+      if (error) { console.error('[messages] select:', error.message); return res.status(500).json({ ok: false, reason: 'select_failed' }); }
       let messages = data ?? [];
       // Optional: narrow to the 2-person thread with a specific other user.
       if (withUser && EMAIL_RE.test(withUser)) {
