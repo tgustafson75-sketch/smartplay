@@ -125,9 +125,14 @@ export const logShotHandler: IntentHandler = {
       };
     }
 
+    // 2026-06-30 (Tim — "failing to capture it and ending up with the whole course as my
+    // long drive") — a single shot is never > 500y. Reject an absurd parsed distance (e.g.
+    // the ~7000y course total leaking in) → log the shot with NO distance rather than a fake
+    // one that then corrupts long-drive / bag learning.
     const distance =
       typeof params.distance_yards === 'number' && Number.isFinite(params.distance_yards)
-        ? Math.max(0, Math.round(params.distance_yards))
+        && params.distance_yards >= 1 && params.distance_yards <= 500
+        ? Math.round(params.distance_yards)
         : undefined;
     const { outcome, direction } = parseOutcome(params.outcome_phrase);
     const location = snapshotLocation();
