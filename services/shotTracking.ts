@@ -149,7 +149,9 @@ export function confirmTrackedShot(shotId: string): void {
     confirmedShotIds.delete(confirmedShotIds.values().next().value as string);
   }
   const yards = shot.distance_yards ?? null;
-  if (yards != null && yards > 0) {
+  // 2026-07-01 (whole-app audit) — same >500y guard the longestDrive path got (a corrupt GPS jump
+  // must not train the club-bag average with an impossible shot). No single shot exceeds ~500y.
+  if (yards != null && yards > 0 && yards <= 500) {
     useClubStatsStore.getState().record(shot.club as ClubName, yards);
   }
 }
