@@ -195,9 +195,17 @@ export default function Dashboard() {
   // (overall_kevin_summary) is stored per-round in planStorage; load it for the
   // visible Recent Rounds rows so each shows the caddie's read, not just the score.
   const [recapSummaries, setRecapSummaries] = useState<Record<string, string>>({});
+  // 2026-06-30 (Tim — dashboard "Maximum update depth" crash after ending a round) — depend
+  // on a STABLE id-key, not the roundHistory ARRAY REF. If roundHistory's reference churns
+  // (same rounds, new array) this effect used to re-fire every render → setState → re-render
+  // → loop. A joined id-string is value-compared, so a ref-only change no longer re-fires it.
+  const recentRoundIdsKey = useMemo(
+    () => [...roundHistory].reverse().slice(0, 6).map((r) => r.id).join(','),
+    [roundHistory],
+  );
   useEffect(() => {
     let cancelled = false;
-    const ids = [...roundHistory].reverse().slice(0, 6).map((r) => r.id);
+    const ids = recentRoundIdsKey ? recentRoundIdsKey.split(',') : [];
     void Promise.all(ids.map(async (id) => {
       try { const rec = await loadRecap(id); return [id, rec?.overall_kevin_summary ?? ''] as const; }
       catch { return [id, ''] as const; }
@@ -208,7 +216,7 @@ export default function Dashboard() {
       setRecapSummaries(map);
     });
     return () => { cancelled = true; };
-  }, [roundHistory]);
+  }, [recentRoundIdsKey]);
 
   // Phase U — pattern shift surfacing.
   const patternShift = useMemo(
