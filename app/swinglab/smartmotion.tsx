@@ -86,6 +86,7 @@ import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeD
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { useClubBagStore } from '../../store/clubBagStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -380,8 +381,8 @@ export default function SmartMotion() {
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
   const isNarrow = windowWidth < 400;
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo, autoRecord } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string; autoRecord?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo, autoRecord, autoScan } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string }>();
   // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
   // Smart Tempo opens its own camera it routes here with captureMode='tempo'
   // (+ returnTo='/swinglab/smart-tempo'). On a single-swing completion we route
@@ -2467,10 +2468,17 @@ export default function SmartMotion() {
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
         setPuttMode(res.club_id === 'PT');
+        // 2026-07-01 (Tim) — a scanned club also REGISTERS to the bag, so "look at my club /
+        // add this club" builds the player's real roster the caddie recommends from.
+        const alreadyInBag = !!useClubBagStore.getState().clubs[res.club_id];
+        try { useClubBagStore.getState().registerClub(res.club_id, { source: 'camera' }); } catch { /* non-fatal */ }
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
-          await speak(`Got it — ${clubLabel(res.club_id)}.`, s.voiceGender, s.language, apiUrl, { userInitiated: true });
+          const ack = alreadyInBag
+            ? `Got it — ${clubLabel(res.club_id)}.`
+            : `Got it — ${clubLabel(res.club_id)}. Added it to your bag.`;
+          await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
       } else {
         setClubMenuOpen(true); // couldn't confirm — let the user pick/correct
@@ -2484,6 +2492,19 @@ export default function SmartMotion() {
       setClubScanCount(0);
     }
   }, [scanningClub, clubScanActive, setClub]);
+
+  // 2026-07-01 (Tim — "look at my club / register my club / add this club" from anywhere) — when
+  // navigated here with ?autoScan=1 (a voice club-register command routed through openToolHandler),
+  // fire the GUIDED scan (3-2-1 hold → recognize → registerClub → "added to your bag") once the
+  // camera is up in setup. One-shot; yields to an in-flight record/scan so it never races the
+  // camera. Mirrors the autoRecord one-shot above.
+  const pendingScanRef = useRef(autoScan === '1');
+  useEffect(() => {
+    if (phase !== 'setup' || !pendingScanRef.current || scanningClub || clubScanActive || pendingStartRef.current) return;
+    pendingScanRef.current = false;
+    const t = setTimeout(() => { void startClubScan(); }, 700);
+    return () => clearTimeout(t);
+  }, [phase, scanningClub, clubScanActive, startClubScan]);
 
   // ── hands-free voice control (the money shot) ──────────────────────────
   // Active-listening "caddie, record / start / stop" drives capture without

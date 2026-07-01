@@ -94,6 +94,11 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // normalizes spaces/underscores.
   smartmotion: { type: 'navigate', path: '/swinglab/smartmotion' },
   smart_motion: { type: 'navigate', path: '/swinglab/smartmotion' },
+  // 2026-07-01 (Tim — "the most natural is a voice path where you say 'look at my club / register
+  // my club / add this club', show the sole, and it gets registered") — opens Smart Motion with
+  // ?autoScan=1 so the camera comes up and runs the GUIDED club scan on arrival, which recognizes
+  // the club and registers it to the bag (clubBagStore). Works from anywhere via voice.
+  register_club: { type: 'navigate', path: '/swinglab/smartmotion?autoScan=1' },
   // 2026-06-08 — Acoustic Test Bench removed (acoustic now lives in
   // SmartMotion calibration); its voice routes deleted with the screen.
   // 2026-05-19 — Owner GPS Test Bench voice intent. Same gating as

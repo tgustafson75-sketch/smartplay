@@ -59,7 +59,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -75,6 +75,7 @@ Available intents:
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
    - "open SmartMotion" / "start SmartMotion" / "smart motion" / "quick swing" -> { tool_name: "smartmotion" }
+   - "look at my club" / "register my club" / "add this club" / "add this club to my bag" / "scan my club" / "what club is this" / "read my club" / "register this club" -> { tool_name: "register_club" } (opens the camera guided club scan — the user shows the sole with the number/loft — and REGISTERS the recognized club to their bag. Distinct from club_change #13, which is naming a club you're about to hit, not registering one via the camera.)
    - "record me down the line" / "record down the line" / "down the line swing" / "DTL" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
    - "record me face on" / "record face on" / "face-on swing" / "front view swing" -> { tool_name: "smartmotion", angle: "face_on", auto_start: true }
    - "record my swing down the line" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
