@@ -1100,9 +1100,25 @@ export default function SmartVisionScreen() {
         return { front: null as number | null, middle: null as number | null, back: null as number | null };
       }
       const cell = (v: number) => Number.isFinite(v) ? Math.round(v) : null;
-      const front = geometry.green_front ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_front.lat, geometry.green_front.lng)) : null;
       const middle = cell(haversineYards(targetGeo.lat, targetGeo.lng, pinGeo.lat, pinGeo.lng));
-      const back = geometry.green_back ? cell(haversineYards(targetGeo.lat, targetGeo.lng, geometry.green_back.lat, geometry.green_back.lng)) : null;
+      // 2026-06-30 (Tim — Greenhill 8289: F/M/B read 50/74/50, back < middle is impossible).
+      // Prior code measured target→green_front and target→green_back as INDEPENDENT haversines,
+      // while MIDDLE is target→(possibly-dragged)pin. When the pin is dragged off the green
+      // center, or green_front/green_back are degenerate (near-identical points — Green Hill #4),
+      // the three numbers stop bracketing each other. Match the curated-mode branch instead:
+      // derive the green DEPTH from the two edge points, then front = middle − depth/2 and
+      // back = middle + depth/2. This GUARANTEES front ≤ middle ≤ back, keeps MIDDLE (the number
+      // Tim actually plays off) exactly as-is, and honestly nulls F/B when there's no real depth.
+      const greenDepthYds = (geometry.green_front && geometry.green_back)
+        ? haversineYards(geometry.green_front.lat, geometry.green_front.lng, geometry.green_back.lat, geometry.green_back.lng)
+        : NaN;
+      let front: number | null = null;
+      let back: number | null = null;
+      if (middle != null && Number.isFinite(greenDepthYds) && greenDepthYds >= 4) {
+        const half = greenDepthYds / 2;
+        front = Math.max(0, Math.round(middle - half));
+        back = Math.round(middle + half);
+      }
       return withDefaultMiddle({ front, middle, back });
     }
     // Phase 4.3 — Mode 2 calibrated branch. When the user has marked
