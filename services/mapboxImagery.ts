@@ -121,7 +121,13 @@ export function computeFitView(input: {
   marginPct?: number;
 }): FitView | null {
   const { tee, green, width, height } = input;
-  const marginPct = input.marginPct ?? 0.15;
+  // 2026-06-30 (Tim — Greenhill 8292: "the images are a little zoomed so the green gets
+  // overlapped by graphics") — nudged 0.15 → 0.20 so the green + tee sit further inside the
+  // frame, clear of the top vignette + the P marker. Modest on purpose: a big increase would
+  // re-trigger the 2026-06-23 "it zooms the hell out, we don't isolate the holes" complaint.
+  // Default drives BOTH the projection (smartvision) and the fetched tile (getHoleImageryUrl),
+  // so they stay aligned. Callers can still override via input.marginPct.
+  const marginPct = input.marginPct ?? 0.20;
   if (!tee) {
     // No tee — center on green, default zoom.
     return { center: green, zoom: 17, bearing: 0 };
