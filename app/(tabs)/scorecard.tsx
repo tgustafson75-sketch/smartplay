@@ -75,12 +75,15 @@ export default function Scorecard() {
   const clearQuickScorePlaceholders = useRoundStore(s => s.clearQuickScorePlaceholders);
   const heroMoments = useRelationshipStore(s => s.heroMoments);
 
-  // 2026-06-13 (Tim) — the scorecard no longer LINGERS on the last completed round.
-  // On End Round the round is saved to history (dashboard Recent Rounds → recap) and
-  // the scorecard CLEARS to an empty state. It shows ONLY the active round now;
-  // past rounds live in history. (Kept as a typed null so the view derivations +
-  // saved-chip below compile unchanged.)
-  const lastCompletedRound = useMemo<(typeof roundHistory)[number] | null>(() => null, []);
+  // 2026-06-30 (Tim — Greenhill: "when you end the round you can't see your scorecard, it
+  // auto-goes to dashboard") — REVERSED the 2026-06-13 no-linger behavior. When there's no
+  // ACTIVE round, the scorecard tab now shows the MOST RECENT completed round so the player
+  // can review the card he just finished (the whole view was already wired to read from
+  // lastCompletedRound — it was just stubbed to null). Active round still takes precedence.
+  const lastCompletedRound = useMemo<(typeof roundHistory)[number] | null>(
+    () => (isRoundActive ? null : (roundHistory.length ? roundHistory[roundHistory.length - 1] : null)),
+    [isRoundActive, roundHistory],
+  );
 
   const viewingRoundId = isRoundActive ? currentRoundId : lastCompletedRound?.id ?? null;
   const viewScores = useMemo(
