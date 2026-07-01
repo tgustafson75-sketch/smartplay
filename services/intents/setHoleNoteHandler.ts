@@ -36,7 +36,13 @@ export const setHoleNoteHandler: IntentHandler = {
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const params = (intent.parameters ?? {}) as Record<string, unknown>;
-    const hole = parseHole(params.hole ?? params.hole_number, intent.raw_text);
+    const round = useRoundStore.getState();
+    const parsedHole = parseHole(params.hole ?? params.hole_number, intent.raw_text);
+    // 2026-07-01 (Tim — narrative lie notes: "I'm off to the right, downhill lie" with NO hole
+    // number) — default to the CURRENT hole instead of asking "which hole", so a bare lie /
+    // condition / position note just gets remembered on the hole the player is on. Only ask when
+    // we truly can't infer (no active round).
+    const hole = parsedHole ?? (round.isRoundActive ? round.currentHole : null);
     if (hole == null) {
       return {
         success: false,
@@ -56,7 +62,6 @@ export const setHoleNoteHandler: IntentHandler = {
       };
     }
 
-    const round = useRoundStore.getState();
     round.setHoleNote(hole, note);
     if (round.isRoundActive && round.currentHole !== hole) {
       round.setCurrentHole(hole);

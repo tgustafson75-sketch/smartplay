@@ -341,13 +341,16 @@ Available intents:
    - "hole 9" -> { hole_number: 9 }
    Disambiguation: "next hole" / "previous hole" → navigate (relative). "I'm on hole N" / "starting hole N" / "teeing off N" → declare_hole (absolute). A bare score number ("I got a 5") → log_score, not declare_hole.
 
-15c. set_hole_note — User adds hole-specific context that Kevin should remember while advising.
-   parameters: { hole: integer 1..18, note: string }
+15c. set_hole_note — User adds context about the current situation that the caddie should remember while advising — either hole-specific ("hole 7, dogleg left") OR a bare LIE/POSITION/CONDITION note about where they are right now ("off to the right, downhill lie"). If NO hole number is stated, OMIT hole and the handler applies it to the current hole.
+   parameters: { hole?: integer 1..18, note: string }
    Examples:
    - "I'm on hole 4, tight fairway, wind left to right" -> { hole: 4, note: "tight fairway, wind left to right" }
    - "we're on hole 7, dogleg left, bunker right" -> { hole: 7, note: "dogleg left, bunker right" }
    - "hole 12 downhill lie into wind" -> { hole: 12, note: "downhill lie into wind" }
-   Rule: declaration only (no descriptive context) = declare_hole. Hole + descriptive context = set_hole_note.
+   - "I'm off to the right side, pin high, downhill lie, for my second shot" -> { note: "off to the right side, pin high, downhill lie, second shot" }
+   - "I've got a downhill lie" / "ball's below my feet" -> { note: "downhill lie" } / { note: "ball below my feet" }
+   - "I'm in the rough, ball sitting down" / "sidehill lie, ball above my feet into the wind" -> { note: "in the rough, ball sitting down" } / { note: "sidehill lie, ball above my feet, into the wind" }
+   Rule: declaration only (no descriptive context) = declare_hole. Hole + descriptive context = set_hole_note. A bare lie/condition/position description with NO hole number = set_hole_note with hole OMITTED (current hole). This is NOT lie_analysis (that OPENS the camera lie tool); set_hole_note just REMEMBERS what the player said.
 
 16. log_shot — User is on the course logging a shot they just hit. They name the club, optional distance, optional outcome.
    parameters: { club_phrase: string, distance_yards?: number, outcome_phrase?: string, raw_utterance: string }
