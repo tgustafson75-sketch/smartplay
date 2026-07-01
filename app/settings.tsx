@@ -325,6 +325,32 @@ export default function Settings() {
   const [editLongestDrive, setEditLongestDrive] = useState(longestDrive != null ? String(longestDrive) : '');
   const [editLongestPutt, setEditLongestPutt] = useState(longestPutt != null ? String(longestPutt) : '');
 
+  // 2026-07-01 (Tim — OTA-lag trust fix) — show the LIVE bundle stamp so you can confirm in 2s that
+  // you're on the current update before judging a fix. `embedded` = running the build's baked-in JS
+  // (no OTA pulled yet); otherwise shows the OTA update id + when it was published.
+  const [buildStamp, setBuildStamp] = useState<string>('Loading…');
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const Updates = await import('expo-updates');
+        const embedded = Updates.isEmbeddedLaunch === true;
+        const id = typeof Updates.updateId === 'string' ? Updates.updateId.slice(0, 8) : null;
+        const at = Updates.createdAt instanceof Date
+          ? Updates.createdAt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : null;
+        const ch = typeof Updates.channel === 'string' ? Updates.channel : null;
+        const stamp = embedded
+          ? `Embedded (no OTA yet)${ch ? ` · ${ch}` : ''}`
+          : `${id ?? 'unknown'}${at ? ` · ${at}` : ''}${ch ? ` · ${ch}` : ''}`;
+        if (alive) setBuildStamp(stamp);
+      } catch {
+        if (alive) setBuildStamp('Unavailable');
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   // 2026-05-28 — Fix FB: ScrollView ref so we can scroll back to top on
   // profile save. The collapsed slim card sits at the top of the
   // ScrollView; without the scroll-back, the user is still down at the
@@ -1636,6 +1662,12 @@ export default function Settings() {
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Version</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>2.0.0</Text>
+          </View>
+          {/* 2026-07-01 (Tim) — live OTA bundle stamp so you can confirm you're on the current
+              update before judging a fix (OTA lands on cold start; this proves which one you have). */}
+          <View style={styles.aboutRow}>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Update</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]} selectable>{buildStamp}</Text>
           </View>
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Caddie</Text>
