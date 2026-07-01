@@ -239,13 +239,28 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
     ? `Registered bag (the clubs he actually carries — ONLY recommend from these): ${registered.join(', ')}.`
     : '';
 
+  // 2026-07-01 (whole-app audit — pipecat parity with kevin) — live shot context so the default
+  // brain answers "how far / what's my score / what did I note here / what have I hit" with real data.
+  const rYards = round.yardage as { front: number | null; middle: number | null; back: number | null } | undefined;
+  const rScore = round.score as { total: number; holesPlayed: number; vsPar?: number } | undefined;
+  const rShots = Array.isArray(round.recentShots)
+    ? (round.recentShots as { club: string | null; hole: number | null; distance: number | null; outcome: string | null }[])
+    : [];
   const roundSection = round.active
     ? [
         `ACTIVE ROUND`,
         round.courseName ? `Course: ${round.courseName}` : '',
         round.currentHole ? `Hole: ${round.currentHole}` : '',
         round.holePar ? `Par: ${round.holePar}` : '',
-        round.holeYardage ? `Yardage: ${round.holeYardage}y` : '',
+        round.holeYardage ? `Hole plays ${round.holeYardage}y from the tee` : '',
+        rYards && rYards.middle != null
+          ? `Live distance to the green — front ${rYards.front ?? '?'}, MIDDLE ${rYards.middle}, back ${rYards.back ?? '?'}. Use the MIDDLE number for "how far" unless he asks front/back.`
+          : '',
+        rScore ? `Score so far: ${rScore.total} through ${rScore.holesPlayed}${rScore.vsPar != null ? ` (${rScore.vsPar >= 0 ? '+' : ''}${rScore.vsPar} vs par)` : ''}` : '',
+        (typeof round.mode === 'string' && round.mode !== 'free_play') ? `Round mode/goal: ${round.mode} — shape every call to it (e.g. break-100 = keep the big number off the card).` : '',
+        round.isCompetition ? `COMPETITION round — bias conservative, protect against the blow-up.` : '',
+        round.holeNote ? `His note on THIS hole: "${round.holeNote}" — factor it in.` : '',
+        rShots.length ? `Recent shots: ${rShots.map((s) => `${s.club ?? '?'}${s.distance ? ' ' + s.distance + 'y' : ''}${s.outcome ? ' ' + s.outcome : ''}`).join('; ')}` : '',
         round.mentalState ? `Mental state: ${round.mentalState}` : '',
         round.goal ? `Round goal: ${round.goal}` : '',
         gps.lat && gps.lng ? `GPS: ${gps.lat}, ${gps.lng}` : '',

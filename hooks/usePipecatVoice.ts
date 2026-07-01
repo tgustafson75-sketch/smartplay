@@ -19,6 +19,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { getLastFix } from '../services/gpsManager';
 import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext } from '../services/caddieMemoryRetrieval';
+import { getGreenYardagesSync } from '../services/smartFinderService';
 import { answerOffline } from '../services/offlineCaddie';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
@@ -113,6 +114,34 @@ export function usePipecatVoice({
         // Subjective self-reports (last 5) — same shape kevin reads (state/valence/hole).
         emotionalLog: (() => { try { return (useRoundStore.getState().emotionalLog ?? []).slice(-5).map(e => ({ state: e.state, valence: e.valence, hole: e.hole })); } catch { return []; } })(),
         goal: round.goal ?? undefined,
+        // 2026-07-01 (whole-app audit — pipecat was context-starved vs the legacy kevin brain) —
+        // ship the LIVE shot context so the DEFAULT brain can answer "how far / what's my score /
+        // what did I say about this hole / what have I been hitting" instead of flying half-blind.
+        holePar: round.courseHoles.find((h) => h.hole === round.currentHole)?.par ?? undefined,
+        holeYardage: round.courseHoles.find((h) => h.hole === round.currentHole)?.distance ?? undefined,
+        yardage: (() => {
+          try {
+            const y = getGreenYardagesSync(round.currentHole);
+            return y.middle != null ? { front: y.front, middle: y.middle, back: y.back } : undefined;
+          } catch { return undefined; }
+        })(),
+        score: (() => {
+          const scores = round.scores ?? {};
+          const holesPlayed = Object.values(scores).filter((v) => typeof v === 'number' && v > 0).length;
+          if (holesPlayed === 0) return undefined;
+          const total = Object.values(scores).reduce((s: number, v) => s + (typeof v === 'number' ? v : 0), 0);
+          const parPlayed = Object.keys(scores).reduce((s, k) => {
+            const h = round.courseHoles.find((x) => x.hole === Number(k));
+            return s + (h?.par ?? 0);
+          }, 0);
+          return { total, holesPlayed, vsPar: parPlayed ? total - parPlayed : undefined };
+        })(),
+        mode: round.mode ?? undefined,
+        isCompetition: round.isCompetition ?? undefined,
+        holeNote: (round.holeNotes ?? {})[round.currentHole] ?? undefined,
+        recentShots: (round.shots ?? []).slice(-5).map((s) => ({
+          club: s.club ?? null, hole: s.hole ?? null, distance: s.distance_yards ?? null, outcome: s.outcome_text ?? null,
+        })),
       },
       bag: {
         club_distances: bagDistances() as Record<string, number>,
@@ -145,6 +174,7 @@ export function usePipecatVoice({
           return getCaddieContext({
             courseId: round.activeCourseId ?? undefined,
             hole: round.currentHole ?? undefined,
+            club: round.club ?? undefined, // parity with kevin — surfaces the learned per-club carry line
           }).promptBlock;
         } catch { return ''; }
       })(),
