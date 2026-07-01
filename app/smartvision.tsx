@@ -1601,15 +1601,19 @@ export default function SmartVisionScreen() {
             <Text style={styles.holeBadgeNum}>{holeIndex}</Text>
             <Text style={styles.holeBadgePar}>
               {(() => {
-                // Curated holes + pre-round have null geometry (e.g. Palms), so the
-                // chip would read "—". Fall back to the bundled courseHoles meta
-                // (same source the par memo + carry calc already use).
+                // 2026-06-30 (Tim — Greenhill 8288: hole 4 header read "PAR 4 · 193y" while the
+                // F/M/B below read 329/342/355 and the scorecard says ~342). The header trusted
+                // the golfcourseapi geometry.yardage FIELD, which was wrong for some holes, while
+                // the F/M/B body uses the round-store courseHoles.distance. PREFER the round-store
+                // distance (scorecard-sourced, same value the body's full-hole default uses) so
+                // the header can NEVER contradict the numbers right below it. Fall back to geometry
+                // only when the round-store value is missing. Par agrees across both; guard 0/null.
                 const hMeta = courseHoles.find(h => h.hole === holeIndex);
-                return geometry
-                  ? `PAR ${geometry.par} · ${geometry.yardage}y`
-                  : hMeta
-                    ? `PAR ${hMeta.par} · ${hMeta.distance}y`
-                    : '—';
+                const hMetaDist = hMeta && typeof hMeta.distance === 'number' && hMeta.distance > 0 ? hMeta.distance : null;
+                const hMetaPar = hMeta && typeof hMeta.par === 'number' && hMeta.par > 0 ? hMeta.par : null;
+                const par = hMetaPar ?? geometry?.par ?? null;
+                const yardage = hMetaDist ?? geometry?.yardage ?? null;
+                return par != null && yardage != null ? `PAR ${par} · ${yardage}y` : '—';
               })()}
             </Text>
             {/* 2026-05-23 — Glasses badge under the hole/par chip.
