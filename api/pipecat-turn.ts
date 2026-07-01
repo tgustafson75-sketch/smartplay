@@ -231,6 +231,13 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
   const bagLine = distances && Object.keys(distances).length > 0
     ? 'Bag distances: ' + Object.entries(distances).slice(0, 10).map(([c, d]) => `${c}: ${d}y`).join(', ') + '.'
     : '';
+  // 2026-07-01 (Tim — voice club registration) — the clubs the player has actually registered
+  // (scanned the sole via "look at my club" / "add this club"). When present, recommend ONLY
+  // clubs in this bag — never suggest a club he doesn't carry.
+  const registered = Array.isArray(bag.registered_clubs) ? (bag.registered_clubs as string[]) : [];
+  const registeredBagLine = registered.length > 0
+    ? `Registered bag (the clubs he actually carries — ONLY recommend from these): ${registered.join(', ')}.`
+    : '';
 
   const roundSection = round.active
     ? [
@@ -282,6 +289,7 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
 You are talking to ${name} through their earbuds. Be direct and concise — on-course caddie cadence, not a manual.
 ${hcp} ${miss}
 ${bagLine}
+${registeredBagLine}
 
 ${roundSection}
 

@@ -116,6 +116,15 @@ export function usePipecatVoice({
       },
       bag: {
         club_distances: bagDistances() as Record<string, number>,
+        // 2026-07-01 (Tim — voice club registration) — the clubs the player has actually
+        // SCANNED/registered (clubBagStore), so the caddie recommends ONLY clubs in the bag
+        // instead of guessing from observed swings. Empty until the player registers clubs.
+        registered_clubs: (() => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            return (require('../store/clubBagStore').useClubBagStore.getState().bagList() as { club_id: string }[]).map((c) => c.club_id);
+          } catch { return []; }
+        })(),
       },
       settings: {
         trustLevel,
