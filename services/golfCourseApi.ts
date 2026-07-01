@@ -403,10 +403,14 @@ export function courseSummaryForContext(course: Course): string {
       return `H${h.hole_number} par${h.par} ${h.yardage}y${hazardStr}`;
     })
     .join(' · ');
+  // 2026-06-30 (Tim — Greenhill: the caddie briefed the WHOLE-COURSE total (~7000y) as if it
+  // were the hole/shot yardage). Clearly label total_yards as course context, and state the
+  // rule: the LIVE shot distance is the GPS yardage (currentYardage), NEVER this total.
   return (
     `Course: ${course.club_name} — ${course.location.city}, ${course.location.state}\n` +
-    `Tee: ${tee.tee_name} ${tee.total_yards}yds par${tee.par_total}` +
-    (tee.course_rating ? ` rating ${tee.course_rating}/${tee.slope_rating}` : '') +
-    `\nHoles: ${holeList}`
+    `Whole-course length (CONTEXT ONLY — never quote this as a shot/hole distance): ${tee.tee_name} tee ${tee.total_yards} yds, par ${tee.par_total}` +
+    (tee.course_rating ? ` (rating ${tee.course_rating}/${tee.slope_rating})` : '') +
+    `\nFor the CURRENT shot always use the live GPS yardage, not this total.` +
+    `\nPer-hole reference yardages: ${holeList}`
   );
 }
