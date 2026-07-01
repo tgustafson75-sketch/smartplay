@@ -294,7 +294,10 @@ Available intents:
    wants_card: true ONLY if user said "show me", "card", "card me", "visually", "on screen", or similar visual-display request. Default false (voice response).
    DO NOT match a tactical single-club QUESTION with no miss named. "What club here?" / "What's the wind?" / "How far?" are NOT in_round_diagnostic — they have no pattern AND no reasoning/remediation verb.
 
-13. club_change — User is in a cage practice session and is announcing a club switch.
+13. club_change — User is announcing which club they're going to hit. TWO contexts, SAME intent (the handler sets the working club either way):
+   (a) in a cage practice session ("switching to 6-iron"), OR
+   (b) ON THE COURSE, selecting the club for the shot they're ABOUT to hit — a pre-shot club
+       declaration ("I'm gonna go with a five wood", "we're gonna hit 5 hybrid from here").
    parameters: { club_phrase: string }
    Examples:
    - "switching to 6-iron" -> { club_phrase: "6-iron" }
@@ -304,9 +307,17 @@ Available intents:
    - "switch to my 5 wood" -> { club_phrase: "5 wood" }
    - "going driver" -> { club_phrase: "driver" }
    - "I'm hitting the gap wedge now" -> { club_phrase: "gap wedge" }
+   - "I'm gonna go with a five wood on this tee shot" -> { club_phrase: "five wood" }
+   - "alright, we're gonna hit five hybrid from here" -> { club_phrase: "five hybrid" }
+   - "I'm using my 52 wedge" -> { club_phrase: "52 wedge" }
+   - "let's go with the 7 iron" -> { club_phrase: "7 iron" }
+   - "gonna hit driver here" -> { club_phrase: "driver" }
+   - "I think I'll play the hybrid" -> { club_phrase: "hybrid" }
+   - "it's not the five wood, we got a putter" -> { club_phrase: "putter" }
    club_phrase: pass the verbatim club name the user said. The handler parses it.
-   ONLY match when the user names a specific club AND signals a switch ("switching to", "going to", "now I'm on", "I'll grab", "I'm hitting", or just "going [club]").
-   Bare "wedge" / "switching clubs" without specifying which is fine — the handler asks "which one".
+   Match when the user names a specific club AND signals a switch OR a pre-shot selection ("switching to", "going to", "going [club]", "now I'm on", "I'll grab", "I'm hitting", "I'm gonna go with", "we're gonna hit", "I'm using", "let's go with", "gonna hit", "I'll play").
+   Bare "wedge" / "switching clubs" / "changing clubs" without specifying which is fine — the handler asks "which one".
+   TENSE is the key vs log_shot (#16): FUTURE/intent ("I'm gonna hit my 5-wood", "going with the 7") = club_change (about to hit). PAST ("I hit my 5-wood", "went left with my 5-wood", "drove it 260") = log_shot (already hit).
 
 14. club_query — User is in a cage session asking which club they're currently on.
    parameters: {}
@@ -355,7 +366,7 @@ Available intents:
    - "mark my shot, 7-iron" -> { club_phrase: "7-iron", raw_utterance: "mark my shot, 7-iron" }
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
    KEY: "mark my shot/tee shot/drive" = log_shot trigger even without distance. "I went left with my [club]" embedded in any sentence = log_shot for that club+outcome. Extract the club and outcome even from longer narrative sentences.
-   ONLY match when the user is reporting a shot they just hit (past tense or present-narrative). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match cage-mode club switches ("switching to 6-iron") — those are club_change.
+   ONLY match when the user is reporting a shot they ALREADY hit (past tense or present-narrative: "I hit", "went left with my", "drove it"). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match club selections for a shot ABOUT to be hit — future/intent phrasing ("I'm gonna go with a 5-wood", "we're gonna hit 7 here", "switching to 6-iron") is club_change (#13), NOT log_shot.
 
 21. log_score — User is REPORTING their final score for a hole they just finished. Past-tense report with a number ("I got a 4", "took a 5") OR a score name ("made par", "bogey", "birdie"). This is DISTINCT from:
    - log_shot (#16), which captures a single SWING mid-hole ("I hit driver 240 left").
