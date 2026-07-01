@@ -26,6 +26,100 @@ import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
 import { synthesizeRecapFromRecord } from '../../services/recapSynth';
+import { getBundledHoles } from '../../data/courses';
+
+// 2026-07-01 (Tim — recap showed "Unknown Course / 0 holes" for a real 18-hole round) — the
+// archived recap can be degraded (generated at round-end before the course/scores resolved), while
+// the stored RoundRecord has the truth. Build the recap from whichever source has the real
+// structure (a named course + the most hole rows) and overlay the archive's LLM narrative.
+function mergeRecap(synth: RoundRecap | null, archive: RoundRecap | null): RoundRecap | null {
+  if (synth && !archive) return synth;
+  if (archive && !synth) return archive;
+  if (!synth || !archive) return null;
+  const realName = (n: string | undefined | null) => !!n && n !== 'Your round' && n !== 'Unknown Course';
+  // Structure: prefer the source with the most hole rows (the record usually wins over a bad archive).
+  const structureFrom = synth.hole_comparisons.length >= archive.hole_comparisons.length ? synth : archive;
+  const narrativeFrom = archive; // the LLM prose lives on the archive
+  return {
+    ...structureFrom,
+    course_name: realName(synth.course_name) ? synth.course_name : (realName(archive.course_name) ? archive.course_name : structureFrom.course_name),
+    course_id: synth.course_id || archive.course_id,
+    overall_kevin_summary: narrativeFrom.overall_kevin_summary ?? structureFrom.overall_kevin_summary,
+    hole_comparisons: structureFrom.hole_comparisons.map((h) => {
+      const a = narrativeFrom.hole_comparisons.find((x) => x.hole_number === h.hole_number);
+      return a?.kevin_summary ? { ...h, kevin_summary: a.kevin_summary, matched_shots: a.matched_shots?.length ? a.matched_shots : h.matched_shots } : h;
+    }),
+    ghost_match: structureFrom.ghost_match ?? archive.ghost_match,
+  };
+}
+
+// 2026-07-01 (Tim — "it needs to look like a normal scorecard, not this") — a real scorecard grid:
+// hole / par / your score, front-nine + back-nine, colored vs par, with OUT/IN/TOTAL.
+function scoreVsParColor(score: number | null | undefined, par: number | undefined): string {
+  if (score == null || !par) return '#cbd5e1';
+  const d = score - par;
+  if (d <= -1) return '#22c55e';   // birdie or better
+  if (d === 0) return '#e5e7eb';   // par
+  if (d === 1) return '#f59e0b';   // bogey
+  return '#ef4444';                // double+
+}
+function RecapScorecardGrid({ holes, parByHole }: { holes: HoleComparison[]; parByHole: Record<number, number> }) {
+  const scoreByHole: Record<number, number | null> = {};
+  for (const h of holes) scoreByHole[h.hole_number] = h.actual_score;
+  const nums = holes.map((h) => h.hole_number).sort((a, b) => a - b);
+  const front = nums.filter((n) => n <= 9);
+  const back = nums.filter((n) => n >= 10);
+  const hasPar = nums.some((n) => parByHole[n] != null);
+  const sumPar = (ns: number[]) => ns.reduce((s, n) => s + (parByHole[n] || 0), 0);
+  const sumScore = (ns: number[]) => ns.reduce((s, n) => s + (scoreByHole[n] || 0), 0);
+  const Nine = ({ ns, label }: { ns: number[]; label: string }) => (
+    <View style={sg.block}>
+      <View style={sg.row}>
+        <Text style={[sg.cell, sg.lab]}>HOLE</Text>
+        {ns.map((n) => <Text key={n} style={[sg.cell, sg.head]}>{n}</Text>)}
+        <Text style={[sg.cell, sg.head]}>{label}</Text>
+      </View>
+      {hasPar && (
+        <View style={sg.row}>
+          <Text style={[sg.cell, sg.lab]}>PAR</Text>
+          {ns.map((n) => <Text key={n} style={[sg.cell, sg.par]}>{parByHole[n] ?? '·'}</Text>)}
+          <Text style={[sg.cell, sg.par]}>{sumPar(ns) || '·'}</Text>
+        </View>
+      )}
+      <View style={sg.row}>
+        <Text style={[sg.cell, sg.lab]}>YOU</Text>
+        {ns.map((n) => <Text key={n} style={[sg.cell, sg.score, { color: scoreVsParColor(scoreByHole[n], parByHole[n]) }]}>{scoreByHole[n] ?? '·'}</Text>)}
+        <Text style={[sg.cell, sg.score]}>{sumScore(ns) || '·'}</Text>
+      </View>
+    </View>
+  );
+  const totScore = sumScore(nums);
+  const totPar = sumPar(nums);
+  const vsPar = hasPar && totPar ? totScore - totPar : null;
+  return (
+    <View style={sg.wrap}>
+      {front.length > 0 && <Nine ns={front} label="OUT" />}
+      {back.length > 0 && <Nine ns={back} label="IN" />}
+      <View style={sg.totalRow}>
+        <Text style={sg.totalLab}>TOTAL</Text>
+        <Text style={sg.totalVal}>{totScore || '·'}{vsPar != null ? `   ${vsPar >= 0 ? '+' : ''}${vsPar}` : ''}</Text>
+      </View>
+    </View>
+  );
+}
+const sg = StyleSheet.create({
+  wrap: { marginHorizontal: 16, marginBottom: 12 },
+  block: { marginBottom: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
+  cell: { flex: 1, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
+  lab: { flex: 1.5, textAlign: 'left', color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  head: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
+  par: { color: '#9ca3af', fontWeight: '600' },
+  score: { color: '#e5e7eb', fontSize: 15, fontWeight: '800' },
+  totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#1f2937', paddingTop: 10, marginTop: 2 },
+  totalLab: { color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  totalVal: { color: '#ffffff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+});
 import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
 import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -210,10 +304,18 @@ export default function RecapScreen() {
   // that only recomputes when courseHoles actually changes.
   const courseHoles = useRoundStore(s => s.courseHoles);
   const parByHole = useMemo(() => {
+    // Live round → live courseHoles. Past round (courseHoles reset on endRound) → resolve par from
+    // the record's course id (getBundledHoles handles local: + custom: courses), so the hole-by-hole
+    // scorecard shows score-vs-par colors instead of falling back to neutral gray. (2026-07-01 Tim.)
+    let holes = courseHoles;
+    if (holes.length === 0 && round_id) {
+      const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
+      if (rec?.courseId) holes = getBundledHoles(rec.courseId);
+    }
     const map: Record<number, number> = {};
-    for (const h of courseHoles) map[h.hole] = h.par;
+    for (const h of holes) map[h.hole] = h.par;
     return map;
-  }, [courseHoles]);
+  }, [courseHoles, round_id]);
   // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).
@@ -266,18 +368,21 @@ export default function RecapScreen() {
     const shown = { current: false };
 
     void (async () => {
+      // Build the record synth (structural truth: course, holes, scores) FIRST, then merge the
+      // archive's narrative over it. The old code used the archive wholesale, so a degraded archive
+      // ("Unknown Course / 0 holes", generated at round-end before the course resolved) hid the real
+      // round the record clearly has.
+      const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
+      const synth = rec ? synthesizeRecapFromRecord(rec) : null;
       const archived = await loadRecap(round_id).catch(() => null);
       if (cancelled) return;
-      if (archived) { setRecap(archived); setLoading(false); shown.current = true; return; }
-      // No archive — show the stored round instantly.
-      const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
-      if (rec) { setRecap(synthesizeRecapFromRecord(rec)); setLoading(false); shown.current = true; }
+      const merged = mergeRecap(synth, archived);
+      if (merged) { setRecap(merged); setLoading(false); shown.current = true; }
 
       // Background upgrade: only when it's worth waiting — the round JUST ended (Sonnet
       // recap lands a few seconds later) OR we have nothing to show yet. Old history
       // rounds with a synth already on screen don't poll (no wasted reads, no spinner).
-      const rec2 = rec ?? null;
-      const justEnded = rec2 ? (Date.now() - rec2.endedAt) < 90_000 : true;
+      const justEnded = rec ? (Date.now() - rec.endedAt) < 90_000 : true;
       if (!justEnded) {
         if (!shown.current) { setTimedOut(true); setLoading(false); }
         return;
@@ -289,7 +394,7 @@ export default function RecapScreen() {
         attempts += 1;
         const r = await loadRecap(round_id).catch(() => null);
         if (cancelled) return;
-        if (r) { setRecap(r); setLoading(false); shown.current = true; return; }
+        if (r) { setRecap(mergeRecap(synth, r)); setLoading(false); shown.current = true; return; }
         if (attempts >= MAX_ATTEMPTS) {
           if (!shown.current) { setTimedOut(true); setLoading(false); }
           return;
@@ -707,6 +812,13 @@ export default function RecapScreen() {
                   );
                 })}
               </View>
+            )}
+
+            {recap.hole_comparisons.length > 0 && (
+              <>
+                <Text style={styles.holesHeader}>SCORECARD</Text>
+                <RecapScorecardGrid holes={recap.hole_comparisons} parByHole={parByHole} />
+              </>
             )}
 
             <Text style={styles.holesHeader}>
