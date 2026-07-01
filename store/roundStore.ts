@@ -2000,6 +2000,7 @@ export const useRoundStore = create<RoundState>()(
       setRiskMode: (mode) => set({ riskMode: mode }),
 
       logScore: (hole, score) => {
+        const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
         set(s => ({ scores: { ...s.scores, [hole]: score } }));
         // 2026-05-22 — Ghost Rounds. Push the just-logged score into the
         // active ghost match so the per-hole delta + running overall
@@ -2012,6 +2013,23 @@ export const useRoundStore = create<RoundState>()(
           if (ghostMod.useGhostStore.getState().ghostRecord) {
             ghostMod.useGhostStore.getState().updateHole(hole, score);
             console.log(`[ghost] hole ${hole} score ${score} → updateHole`);
+          }
+        } catch { /* non-fatal */ }
+        // 2026-06-30 (Tim — "when I enter a score for a hole, auto-advance to the next hole")
+        // — on the FIRST score for the CURRENT hole, if Auto Hole Advance is on, move to the
+        // next hole. Central seam so it works for voice + manual entry. First-score-only so
+        // EDITING a past hole never jumps the round. GPS reconciliation won't ping-pong back
+        // (it skips holes behind current or already-scored — holeReconciliation.ts:106).
+        try {
+          if (prevScore === 0) {
+            const st = get();
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const autoAdvance = require('./settingsStore').useSettingsStore.getState().autoHoleAdvance;
+            const holesN = st.courseHoles.length ? Math.max(...st.courseHoles.map(h => h.hole)) : 18;
+            if (autoAdvance && st.isRoundActive && hole === st.currentHole && hole < holesN) {
+              set({ currentHole: hole + 1 });
+              console.log(`[roundStore] auto-advanced ${hole} → ${hole + 1} on first score (autoHoleAdvance)`);
+            }
           }
         } catch { /* non-fatal */ }
       },
