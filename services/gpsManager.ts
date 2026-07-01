@@ -151,14 +151,24 @@ function armStaleHardTimer(): void {
       // Stage 1 — DEGRADE, don't blank. Drop confidence to 'low' so downstream
       // gates flag it ("signal weak / last known") while keeping the yardage live.
       console.log('[gps] lastFix stale — degraded to low confidence (no fresh fix in', STALE_HARD_LIMIT_MS, 'ms)');
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_degrade', {
-          sinceMs: STALE_HARD_LIMIT_MS,
-          lastAccuracy_m: lastFix.accuracy_m ?? null,
-          lastSource: lastFix.source,
-        });
-      } catch { /* best-effort — never break the GPS loop */ }
+      // 2026-06-30 (Tim — Greenhill: stale_degrade "fired repeatedly at GOOD accuracy, yardage
+      // was fine, these are noise") — when the last fix was ACCURATE (≤10m), a 60s gap almost
+      // always just means the golfer is STATIONARY (the OS throttles GPS when position isn't
+      // changing), not a real signal problem. The degrade still happens (harmless — flags low
+      // confidence), but we DON'T spam the owner log with it. Only log when the fix was already
+      // weak/unknown accuracy, where the degrade is actionable. Keeps the log readable for review.
+      const lastAcc = lastFix.accuracy_m ?? null;
+      const isBenignStationaryStale = lastAcc != null && lastAcc <= 10;
+      if (!isBenignStationaryStale) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_degrade', {
+            sinceMs: STALE_HARD_LIMIT_MS,
+            lastAccuracy_m: lastAcc,
+            lastSource: lastFix.source,
+          });
+        } catch { /* best-effort — never break the GPS loop */ }
+      }
       lastFix = { ...lastFix, confidence: 'low' };
       // Stage 2 — arm the eventual FULL clear; by now the position is genuinely
       // ancient, so fall through to staticYardages() rather than show a number
