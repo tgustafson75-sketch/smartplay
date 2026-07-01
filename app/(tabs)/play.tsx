@@ -43,6 +43,7 @@ import { useTournamentStore } from '../../store/tournamentStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { getBundledHoles } from '../../data/courses';
+import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
@@ -439,10 +440,27 @@ export default function PlayTab() {
   // themselves). When userPosition is null (no permission / no fix
   // yet), the previous catalog-then-recent insertion order is kept
   // exactly, so the behavior is no-regression at first paint.
+  // 2026-07-01 (Tim) — courses the player added from a scorecard photo (customCourseStore) show
+  // in the picker alongside local + API courses. isLocal so selection/start take the local branch,
+  // where getBundledHoles resolves their holes.
+  const customCoursesMap = useCustomCourseStore(s => s.courses);
+  const customSummaries: CourseSummary[] = useMemo(
+    () => Object.values(customCoursesMap).map(c => ({
+      id: c.id,
+      club_name: c.name,
+      location: c.location ?? 'Added from scorecard',
+      rating: null,
+      slope: null,
+      isLocal: true,
+    })),
+    [customCoursesMap],
+  );
+
   const closestLocal: CourseSummary[] = useMemo(() => {
     const combined: CourseSummary[] = [
+      ...customSummaries,
       ...LOCAL_COURSES,
-      ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id)),
+      ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id) && !customSummaries.some(cs => cs.id === r.id)),
     ];
     if (!userPosition) return combined;
     const YARDS_PER_MILE = 1760;
@@ -460,7 +478,7 @@ export default function PlayTab() {
       return a.miles - b.miles;
     });
     return annotated.map(a => a.course);
-  }, [recentCourses, userPosition]);
+  }, [recentCourses, userPosition, customSummaries]);
 
   // Phase 407 — per-course distance label keyed by id. Computed once
   // alongside the sort so the row renderer just looks up.
@@ -980,6 +998,16 @@ export default function PlayTab() {
             <Text style={styles.searchBtnText}>{searching ? '…' : 'Search'}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 2026-07-01 (Tim) — add a course that isn't in the database from a scorecard photo. */}
+        <TouchableOpacity
+          style={styles.addFromPhotoBtn}
+          onPress={() => router.push('/add-course' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Add a course from a scorecard photo"
+        >
+          <Text style={styles.addFromPhotoText}>＋  Course not listed? Add from a scorecard photo</Text>
+        </TouchableOpacity>
 
         {searching && (
           <View style={styles.statusRow}>
@@ -1538,6 +1566,8 @@ return StyleSheet.create({
   kindTextActive: { color: c.accent },
 
   searchRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, alignItems: 'center' },
+  addFromPhotoBtn: { paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 },
+  addFromPhotoText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
   searchInput: {
     flex: 1, backgroundColor: c.surface, borderColor: c.border,
     borderWidth: 1, borderRadius: 10,

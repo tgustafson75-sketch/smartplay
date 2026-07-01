@@ -46,7 +46,8 @@ import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona'
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
-import { getCourseList, getCourse, getCourseHoleCount } from '../../data/courses';
+import { getCourseList, getCourse, getCourseHoleCount, getBundledHoles } from '../../data/courses';
+import { useCustomCourseStore } from '../../store/customCourseStore';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
@@ -281,6 +282,11 @@ export default function CaddieTab() {
           fullName: local?.name ?? slug,
           isLocal: true,
         };
+      } else if (id.startsWith('custom:')) {
+        // 2026-07-01 (Tim) — a course added from a scorecard photo (customCourseStore). isLocal
+        // so runStartRound takes the local branch, where getBundledHoles resolves the custom holes.
+        const cc = useCustomCourseStore.getState().getCustomCourse(id);
+        picked = { id, name: cc?.name ?? 'My Course', fullName: cc?.name ?? 'My Course', isLocal: true };
       } else {
         try {
           const apiCourse = await getApiCourse(id);
@@ -2063,7 +2069,9 @@ export default function CaddieTab() {
       const localId = picked.id.replace('local:', '');
       const local = getCourse(localId);
       courseName = local?.name ?? picked.name;
-      holes = local?.holes ?? [];
+      // 2026-07-01 (Tim) — fall back to getBundledHoles, which also resolves `custom:` scorecard
+      // courses (customCourseStore). No-op for local courses that getCourse already populated.
+      holes = local?.holes ?? getBundledHoles(picked.id);
 
       // 2026-06-21 — API fallback for local-image courses without a data/courses.ts entry.
       // Greenhill (and future local: courses) have bundled images + centroid but no hardcoded

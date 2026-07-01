@@ -32,7 +32,29 @@ export const getCourse = (
  * effects on the round store.
  */
 export function getBundledHoles(courseId: string | null | undefined): CourseHole[] {
-  if (!courseId || !courseId.startsWith('local:')) return [];
+  if (!courseId) return [];
+  // 2026-07-01 (Tim) — custom courses built from a scorecard photo (customCourseStore). Yardage-
+  // only (no GPS/green coords yet), so on-course yardage falls back to the scorecard distance until
+  // the player marks tees/greens — the same honest-degrade as other coord-less bundled holes. Single
+  // resolution point: every caller (Play chip, runStartRound, hole count) gets these for free.
+  if (courseId.startsWith('custom:')) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cc = require('../store/customCourseStore').useCustomCourseStore.getState().getCustomCourse(courseId) as
+        | { holes: { hole: number; par: number; distance: number | null; handicap?: number | null }[] }
+        | null;
+      if (!cc) return [];
+      return cc.holes.map((h) => ({
+        hole: h.hole,
+        par: h.par,
+        distance: h.distance ?? 0,
+        front: 0, back: 0,
+        teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
+        note: '', estimated: true,
+      }));
+    } catch { return []; }
+  }
+  if (!courseId.startsWith('local:')) return [];
   const slug = courseId.slice('local:'.length);
   const course = COURSES.find(c => c.id === slug);
   return course?.holes ?? [];
