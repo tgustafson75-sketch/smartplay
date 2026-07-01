@@ -23,7 +23,7 @@
  * Kevin still hears, responds, and works exactly the same way.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -172,14 +172,27 @@ export default function CockpitCaddieScreen({
     const initial = getGreenYardagesSync(currentHole);
     return greenYardsToFmb(initial);
   });
+  // 2026-07-01 (Tim — "cockpit mode was NOT updating with yardage; it should have all the same
+  // functionality as every other caddie tab") — cockpit read yardage ONLY off subscribeFixChange,
+  // which is the shot-detection-scoped gpsManager→smartFinderService fan-out. When that fan-out
+  // has a gap (round teardown/reconnect, or cockpit open while it isn't running), the callback
+  // never fires and the card freezes even though gpsManager's live fix is fresh. Fix: funnel both
+  // the subscription AND a 3s BACKSTOP poll through one refresh that re-reads the LIVE fix and only
+  // setFmb when the numbers actually change (a key compare) — so it always tracks like SmartFinder,
+  // with no stationary GPS-noise flicker and no wasted renders.
+  const lastFmbKeyRef = useRef<string>('');
   useEffect(() => {
-    // Seed immediately for the current hole (covers hole change).
-    setFmb(greenYardsToFmb(getGreenYardagesSync(currentHole)));
-    // Subscribe to live fix updates — auto-cleanup on unmount / hole change.
-    const unsub = subscribeFixChange(() => {
-      setFmb(greenYardsToFmb(getGreenYardagesSync(currentHole)));
-    });
-    return () => { unsub(); };
+    const refresh = () => {
+      const next = greenYardsToFmb(getGreenYardagesSync(currentHole));
+      const key = next ? `${next.front}|${next.middle}|${next.back}|${next.reason ?? ''}` : 'null';
+      if (key === lastFmbKeyRef.current) return; // unchanged — skip (no flicker, no re-render)
+      lastFmbKeyRef.current = key;
+      setFmb(next);
+    };
+    refresh(); // seed immediately (covers hole change)
+    const unsub = subscribeFixChange(refresh);
+    const poll = setInterval(refresh, 3000);
+    return () => { unsub(); clearInterval(poll); };
   }, [currentHole]);
 
   // Hole metadata from the active course's hole list.
