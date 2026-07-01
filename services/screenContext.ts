@@ -23,8 +23,20 @@ export type ScreenContext = {
 
 let current: ScreenContext = null;
 
+// 2026-07-01 (Tim — "the universal caddie mic needs context of where the user is within the app;
+// everything ties to everything") — a ROUTE-DERIVED baseline so EVERY screen gives the caddie at
+// least a "where am I" label, not just the few that call setScreenContext. The global caddie mic
+// sets this from the current route on every navigation. Explicit setScreenContext (rich drill
+// focus) always WINS over this baseline — they're separate slots, so there's no race.
+let routeLabel: string | null = null;
+
 export function setScreenContext(ctx: ScreenContext): void {
   current = ctx;
+}
+
+/** Set the coarse route-derived screen label (the universal baseline). */
+export function setRouteLabel(label: string | null): void {
+  routeLabel = label;
 }
 
 /**
@@ -41,11 +53,20 @@ export function getScreenContext(): ScreenContext {
 
 /** Compact line for the brain system prompt. Null when nothing is active. */
 export function screenContextForPrompt(): string | null {
-  if (!current) return null;
-  const focus = current.focus ? ` (working on ${current.focus})` : '';
-  return (
-    `CURRENT SCREEN: The player is on ${current.screen}${focus}. ` +
-    `If they ask a question or speak while here, assume it's about THIS unless they clearly change the subject. ` +
-    `Shape any coaching to this focus and don't introduce an unrelated swing thought.`
-  );
+  if (current) {
+    const focus = current.focus ? ` (working on ${current.focus})` : '';
+    return (
+      `CURRENT SCREEN: The player is on ${current.screen}${focus}. ` +
+      `If they ask a question or speak while here, assume it's about THIS unless they clearly change the subject. ` +
+      `Shape any coaching to this focus and don't introduce an unrelated swing thought.`
+    );
+  }
+  // Baseline: no screen set rich context, but the global mic knows the route.
+  if (routeLabel) {
+    return (
+      `CURRENT SCREEN: The player is on ${routeLabel}. ` +
+      `If they speak while here, assume it's about THIS screen unless they clearly change the subject.`
+    );
+  }
+  return null;
 }

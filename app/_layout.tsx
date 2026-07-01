@@ -87,6 +87,7 @@ import { useRestModeStore } from '../store/restModeStore';
 // fired by the declare-hole cross-check. Reads from undoMarkStore;
 // hides itself after the visibility window. Sibling to GlobalToast.
 import { UndoMarkBanner } from '../components/UndoMarkBanner';
+import GlobalCaddieMic from '../components/GlobalCaddieMic';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';
@@ -1228,6 +1229,11 @@ function AppNavigator() {
       {/* 2026-06-28 (Tim) — owner-only "N issues logged → Send now" nudge so Tank
           can one-tap email the log without digging through Owner Tools. */}
       <OwnerIssueLogPrompt />
+      {/* 2026-07-01 (Tim) — the UNIVERSAL caddie mic: a tap-to-talk badge always in the upper
+          left of every screen (the one way to talk to the unified caddie anywhere), that also
+          keeps the brain's "where am I" context in sync with the route. Mounted last so it rides
+          on top; self-suppresses on the tabs / Smart Motion where a mic already exists. */}
+      <GlobalCaddieMic />
     </>
   );
 }
