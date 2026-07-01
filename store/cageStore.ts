@@ -1580,7 +1580,17 @@ export const useCageStore = create<CageState>()(
       migrate: (persisted) => persisted as CageState,
       partialize: (s) => ({
         // activeSession NOT persisted — in-flight session lost on crash is acceptable
-        sessionHistory: s.sessionHistory,
+        // 2026-06-30 (Tim — Greenhill: SQLITE_FULL crash, dashboard "exceeds maximum limit")
+        // — strip the heavy raw pose FRAMES from each persisted session. They're 33 keypoints
+        // × many frames per swing and are only the INPUT to biomech; the computed verdicts +
+        // measured numbers are kept and are what's displayed. The raw frames were the bulk
+        // that pushed cage-store-v1 past Android's ~2MB per-row limit → unreadable → the
+        // dashboard crashed reading it. Sessions themselves are preserved (still 50).
+        sessionHistory: s.sessionHistory.map((sess) =>
+          sess.biomechanics && Array.isArray(sess.biomechanics.frames) && sess.biomechanics.frames.length > 0
+            ? { ...sess, biomechanics: { ...sess.biomechanics, frames: [] } }
+            : sess,
+        ),
         clubProfiles: s.clubProfiles,
         cameraAlignment: s.cameraAlignment,
         recentInsights: s.recentInsights,

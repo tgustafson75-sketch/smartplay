@@ -2091,7 +2091,9 @@ export default function SwingDetail() {
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS</Text>
                   <Text style={[styles.biomechSub, { color: colors.text_muted }]}>
-                    Measured from {session.biomechanics.frames.length} swing keyframes
+                    {session.biomechanics.frames.length > 0
+                      ? `Measured from ${session.biomechanics.frames.length} swing keyframes`
+                      : 'Measured from on-device pose'}
                   </Text>
                   {session.biomechanics.verdicts.hipTurn && (
                     <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.hipTurn}</Text>
