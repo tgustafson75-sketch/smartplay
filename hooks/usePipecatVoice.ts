@@ -356,6 +356,16 @@ export function usePipecatVoice({
 
       const text = data.response_text ?? '';
 
+      // 2026-06-30 (Tim — "a log for the WHOLE voice") — record this turn (his words → the
+      // caddie's reply, or null) + which tool(s) fired, in the owner issue log. Lets him SEE
+      // when the brain jumped to a tool vs answered conversationally — the exact "too
+      // predictive" signal. Owner-gated + best-effort inside addVoiceTurn.
+      try {
+        const ta = (data as { tool_actions?: Array<{ type?: string }> }).tool_actions;
+        const tool = Array.isArray(ta) && ta.length ? ta.map(a => a?.type).filter(Boolean).join(',') : null;
+        require('../store/issueLogStore').useIssueLogStore.getState().addVoiceTurn(transcript, text || null, { path: 'brain', tool });
+      } catch { /* best-effort */ }
+
       if (text.trim()) { try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch {} }
 
       // TTS via existing speak() path

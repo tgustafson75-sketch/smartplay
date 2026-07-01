@@ -46,6 +46,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'analysis_error':    return 'ANALYSIS';
     case 'voice_miss':        return 'MISS';
     case 'app_error':         return 'APP';
+    case 'voice_turn':        return 'VOICE';
     case 'boot':              return 'BOOT';
     case 'user':              return 'USER';
   }
@@ -60,6 +61,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'analysis_error':    return '#10b981'; // green — swing/frame analysis failure
     case 'voice_miss':        return '#eab308'; // yellow — command not understood/handled
     case 'app_error':         return '#f97316'; // orange — other app failure
+    case 'voice_turn':        return '#22c55e'; // green — a full voice turn (his words → reply)
     case 'boot':              return '#64748b'; // slate — boot-timing breadcrumb (temporary)
     case 'user':              return '#6b7280';
   }
@@ -94,12 +96,12 @@ export default function OwnerLogsScreen() {
   // wants to keep for timestamp analysis). Lets him spot a real problem at a glance without
   // losing the full 'All' timeline.
   const errorEntryCount = useMemo(
-    () => allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot').length,
+    () => allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot' && e.kind !== 'voice_turn').length,
     [allEntries],
   );
   const entries = useMemo(() => {
     if (tab === 'user') return allEntries.filter(e => !e.kind || e.kind === 'user');
-    if (tab === 'errors') return allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot');
+    if (tab === 'errors') return allEntries.filter(e => e.kind && e.kind !== 'user' && e.kind !== 'boot' && e.kind !== 'voice_turn');
     if (tab === 'voice') return allEntries.filter(e => e.kind && e.kind !== 'user');
     return allEntries;
   }, [allEntries, tab]);

@@ -48,6 +48,10 @@ export type IssueLogKind =
   // separate voice-misses store.
   | 'voice_miss'
   | 'app_error'
+  // 2026-06-30 (Tim — "a log for the WHOLE voice") — every voice turn: what he said +
+  // what the caddie replied (or null). Successes AND misses, so the full conversation is
+  // reviewable in owner logs to tune the narrative brain.
+  | 'voice_turn'
   // 2026-06-28 (Tim) — TEMPORARY boot-timing breadcrumbs (services/bootTrace.ts):
   // bundle-load → mount → hydrate → warmup → triggers, timestamped, so the first
   // transcribe failure can be placed on the startup timeline. Owner-only.
@@ -118,6 +122,9 @@ interface IssueLogState {
   /** Voice command miss (classifier_unknown / no_handler / handler_error) mirrored
    *  into the issue log as an error. Self-builds context. */
   addVoiceMiss: (missType: string, details?: Record<string, unknown>) => void;
+  /** 2026-06-30 — log ONE full voice turn: the transcript + the caddie's reply (null if
+   *  none) + optional meta (tool fired, path, provider). Owner-only, best-effort. */
+  addVoiceTurn: (transcript: string, response: string | null, meta?: Record<string, unknown>) => void;
   clearAll: () => void;
   remove: (id: string) => void;
 }
@@ -298,6 +305,28 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] app event:', summary);
+      },
+      addVoiceTurn: (transcript, response, meta) => {
+        const t = (transcript ?? '').trim();
+        if (!t) return; // nothing said → nothing to log
+        // Owner-only (mirrors bootMark / addUserIssue) — don't fill a beta tester's log
+        // with their whole conversation. Fail-safe: if we can't tell, don't log.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const prof = require('./playerProfileStore') as typeof import('./playerProfileStore');
+          if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return;
+        } catch { return; }
+        const reply = (response ?? '').trim();
+        const summary = `voice: "${t.slice(0, 160)}" → ${reply ? `"${reply.slice(0, 160)}"` : '(no reply)'}`;
+        const entry: IssueLogEntry = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          text: summary,
+          kind: 'voice_turn',
+          details: { transcript: t, response: reply || null, ...(meta ?? {}) },
+          context: selfContext('caddie'),
+        };
+        set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
       },
       addUserIssue: (text) => {
         const trimmed = text.trim();
