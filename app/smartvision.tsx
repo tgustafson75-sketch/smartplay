@@ -550,6 +550,11 @@ export default function SmartVisionScreen() {
   // to green) on first view of each hole; persists in component memory
   // across hole switches so the user's adjustments aren't lost.
   const [targetByHole, setTargetByHole] = useState<Record<string, { x: number; y: number }>>({});
+  // 2026-06-30 (Tim — Greenhill: "the cart should auto-move with GPS like the caddie thumbnail,
+  // not require a tap"). Per-hole flag: TRUE once the user has manually tapped/dragged the cart
+  // on that hole, which STOPS GPS auto-follow for that hole (respects a what-if target). Until
+  // then, the cart on the CURRENT hole auto-follows the live GPS fix (effect below).
+  const [userPlacedByHole, setUserPlacedByHole] = useState<Record<string, boolean>>({});
   // Per-hole pin override — same shape, but for the red Pin marker which
   // is now draggable. Defaults to green centroid; user can drag it to
   // simulate today's pin position (front/middle/back of green).
@@ -1313,6 +1318,9 @@ export default function SmartVisionScreen() {
 
   const commitCartCanvas = useCallback((canvasCoord: { x: number; y: number }) => {
     setTargetByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: canvasCoord }));
+    // 2026-06-30 (Tim) — a manual tap/drag is the FALLBACK override: mark this hole user-placed
+    // so GPS auto-follow stops fighting the what-if target the user just set.
+    setUserPlacedByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: true }));
     let lat: number | null = null;
     let lng: number | null = null;
     if (usingGpsTile && projection) {
@@ -1442,6 +1450,50 @@ export default function SmartVisionScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markBumpTick]);
+
+  // 2026-06-30 (Tim — "the cart should auto-move with GPS like the caddie thumbnail; the tap is
+  // just a fallback in case auto didn't work"). CONTINUOUS GPS auto-follow: on every live fix,
+  // while the user hasn't manually placed the cart on the CURRENT hole (and we're actually
+  // playing it), project the fix to canvas and move the yellow cart there — so it tracks you as
+  // you walk and F/M/B read live→green. A manual tap sets userPlacedByHole (fallback override)
+  // and this bails. Gated on a trustworthy, recent fix (≤15m accuracy, <30s old) so a weak or
+  // stale fix never jerks the marker. Reuses the same projection as the tap auto-reconcile above.
+  useEffect(() => {
+    if (!isRoundActive || holeIndex !== currentHole) return;
+    if (userPlacedByHole[holeKeyOf(holeIndex)]) return; // fallback override wins
+    const fix = getLastFix();
+    if (!fix || !fix.location) return;
+    const acc = fix.accuracy_m ?? null;
+    if (acc == null || acc > 15) return; // trust gate — don't follow a weak fix
+    if (fix.timestamp && Date.now() - fix.timestamp > 30_000) return; // stale — don't follow an old position
+    let canvasCoord: { x: number; y: number } | null = null;
+    if (usingGpsTile && projection) {
+      try {
+        const px = projectToPixels(
+          { lat: fix.location.lat, lng: fix.location.lng },
+          projection.center, projection.zoom, projection.bearing,
+        );
+        canvasCoord = clampToCanvas({ x: px.x + imageW / 2, y: imageH / 2 - px.y });
+      } catch { /* skip this tick */ }
+    } else if (calibration2Anchor) {
+      const tG = calibration2Anchor.teeGeo;
+      const gG = calibration2Anchor.greenGeo;
+      const dLat = gG.lat - tG.lat;
+      const dLng = gG.lng - tG.lng;
+      const useLat = Math.abs(dLat) > Math.abs(dLng);
+      const t = useLat
+        ? (fix.location.lat - tG.lat) / (dLat || 1)
+        : (fix.location.lng - tG.lng) / (dLng || 1);
+      canvasCoord = clampToCanvas({
+        x: calibration2Anchor.teePx.x + t * calibration2Anchor.axisDx,
+        y: calibration2Anchor.teePx.y + t * calibration2Anchor.axisDy,
+      });
+    }
+    if (canvasCoord) {
+      setTargetByHole(prev => ({ ...prev, [holeKeyOf(holeIndex)]: canvasCoord! }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markBumpTick, isRoundActive, holeIndex, currentHole, userPlacedByHole]);
 
   // 2026-06-23 — perf: drag is now decoupled from React state (Animated
   // translate rides the finger). These handlers fire ONCE on release. The
@@ -1969,8 +2021,16 @@ export default function SmartVisionScreen() {
         {/* First-time hint. Phase 4.1 — updated copy: tap-to-place is
             the new primary interaction; drag still works. */}
         <View pointerEvents="none" style={styles.measureHint}>
-          <Ionicons name="hand-left-outline" size={12} color="#facc15" />
-          <Text style={styles.measureHintText}>Tap to place your position · Drag P for pin</Text>
+          <Ionicons
+            name={(isRoundActive && holeIndex === currentHole && !userPlacedByHole[holeKeyOf(holeIndex)]) ? 'navigate' : 'hand-left-outline'}
+            size={12}
+            color="#facc15"
+          />
+          <Text style={styles.measureHintText}>
+            {(isRoundActive && holeIndex === currentHole && !userPlacedByHole[holeKeyOf(holeIndex)])
+              ? 'Following your GPS · tap to override · Drag P for pin'
+              : 'Tap to place your position · Drag P for pin'}
+          </Text>
         </View>
 
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
