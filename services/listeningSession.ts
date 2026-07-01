@@ -1,6 +1,7 @@
 import { Linking, Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
+import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { getTrustLevel } from './trustLevelService';
@@ -674,7 +675,27 @@ async function openSession() {
           //   (2) chatRes.ok === true but reply text is empty / wrong shape
           //   (3) fetch itself throws (network error, AbortController)
           let chatSpoken = false;
-          try {
+          // 2026-07-01 (whole-app audit — MIC CONVERGENCE) — route the badge / earbud / hands-free
+          // conversational turn to the SAME unified pipecat brain the caddie-tab mic uses.
+          // conversationalBrainTurn falls back to legacy kevin internally on any pipecat failure, and
+          // on a total miss (null text) we still fall through to the untouched kevin block below — so
+          // this can never break the earbud path worse than before. Gated on voiceOrchestrator.
+          if ((settings.voiceOrchestrator ?? 'pipecat') === 'pipecat') {
+            try {
+              speculativeController?.abort();
+              speculativeBrainP = null;
+              const r = await conversationalBrainTurn(utterance, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+              if (r.text && getSessionState() === 'responding') {
+                await stopSpeaking().catch(() => {});
+                if (getSessionState() === 'responding') {
+                  if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch((e) => console.log('[listeningSession] pipecat speakFromBase64 failed', e));
+                  else await speak(r.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] pipecat speak failed', e));
+                  chatSpoken = true;
+                }
+              }
+            } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
+          }
+          if (!chatSpoken) try {
             // 2026-06-16 — prefer the SPECULATIVE brain call fired in parallel with
             // the classifier above; it's already in flight, so the classify time was
             // overlapped instead of stacked. Falls back to a fresh call if it wasn't
