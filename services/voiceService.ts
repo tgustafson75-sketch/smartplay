@@ -1438,6 +1438,23 @@ export const speak = async (
       console.log('[voice] speak Sound.createAsync — myId=', myId,
         'isLoaded=', loaded, 'durationMillis=', dur, 'volume=', snapshotVolume, 'bytes=', arrayBuffer.byteLength);
       const looksDead = !loaded || dur === 0;
+      // 2026-07-01 (Tim — "SmartFinder AI advice voice was very choppy" on spotty signal) — a
+      // weak-signal fetch can deliver a TRUNCATED mp3 (> the 1000-byte guard, but cut mid-stream),
+      // which loads fine yet plays as a short/cut-off/choppy clip. Detect it by DURATION: for
+      // non-trivial text, a clip far shorter than the text could possibly be spoken is truncated.
+      // Drop it and speak on-device (expo-speech is local — smooth, never truncates). Conservative
+      // floor (~28ms/char vs real ~55-70) + a 30-char gate so short phrases are never false-flagged.
+      const chars = text.trim().length;
+      const expectedFloorMs = chars * 28;
+      const looksTruncated = loaded && dur > 0 && chars > 30 && dur < expectedFloorMs;
+      if (looksTruncated) {
+        console.log('[voice] speak clip looks TRUNCATED (weak signal) — dur', dur, 'ms <', expectedFloorMs, 'floor for', chars, 'chars; device-TTS fallback');
+        logVoiceSilentFail('speak_truncated_clip', { speechId: myId, durMs: dur, expectedFloorMs, chars, bytes: arrayBuffer.byteLength, textHead: text.slice(0, 40) });
+        try { await sound.unloadAsync(); } catch {}
+        if (myId !== currentSpeechId) { notifyCaption(null); notifySpeaking(false); return; }
+        await deviceSpeakFallback(text, language, myId, effectiveGender);
+        return;
+      }
       if (looksDead) {
         console.log('[voice] speak first load looked dead — unloading and retrying with forced audio reset', { isLoaded: loaded, dur });
         try { await sound.unloadAsync(); } catch {}
