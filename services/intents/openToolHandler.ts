@@ -141,6 +141,14 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // ("analyze my lie", "check my lie", etc.) still land on lie_analysis.
   smartplay: { type: 'navigate', path: '/smartfinder?autoread=1' },
   smart_play: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  // 2026-06-30 (Tim — "the logical voice path should be: open up SmartVision and tell me what
+  // you see") — a spoken "tell me what you see / what do you see out there / read the scene"
+  // opens the camera scene read (SmartFinder autoread) and SPEAKS what it perceives. Same
+  // autoread path as smart_play; distinct from lie_analysis (a specific lie read). This is the
+  // natural voice front-end for vision ingestion — point the phone, hear what's out there.
+  scene_read: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  look: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  what_you_see: { type: 'navigate', path: '/smartfinder?autoread=1' },
   // 2026-06-21 — PuttingLab voice route. "Open PuttingLab", "putting lab",
   // "putting analysis" all land on the upload screen (swinglab/upload) where
   // the user picks their putt video and the Putt tag is self-selected.

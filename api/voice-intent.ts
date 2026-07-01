@@ -59,7 +59,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -70,7 +70,8 @@ Available intents:
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "${caddieName} what should I do here" / "analyze my lie" / "look at this lie" / "take a look at this" / "what do you see" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
+   - "${caddieName} what should I do here" / "analyze my lie" / "look at this lie" / "take a look at this lie" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
+   - "tell me what you see" / "what do you see" / "what do you see out there" / "open SmartVision and tell me what you see" / "what's out there" / "read the scene" / "read the hole for me" / "look around and tell me what's there" -> { tool_name: "scene_read" } (opens the camera scene read and SPEAKS what it perceives — the general "what's in front of me" read. Distinct from lie_analysis, which is a SPECIFIC ball-lie read: "analyze my lie", "check my lie".)
    - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
    - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
    - "open SmartMotion" / "start SmartMotion" / "smart motion" / "quick swing" -> { tool_name: "smartmotion" }
