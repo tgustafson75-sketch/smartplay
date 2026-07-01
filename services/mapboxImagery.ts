@@ -127,7 +127,7 @@ export function computeFitView(input: {
   // re-trigger the 2026-06-23 "it zooms the hell out, we don't isolate the holes" complaint.
   // Default drives BOTH the projection (smartvision) and the fetched tile (getHoleImageryUrl),
   // so they stay aligned. Callers can still override via input.marginPct.
-  const marginPct = input.marginPct ?? 0.20;
+  const marginPct = input.marginPct ?? 0.24;
   if (!tee) {
     // No tee — center on green, default zoom.
     return { center: green, zoom: 17, bearing: 0 };

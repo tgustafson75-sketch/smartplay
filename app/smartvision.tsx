@@ -2296,12 +2296,14 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'], marginTop: 1,
   },
   measureHint: {
+    // 2026-07-01 (Tim) — moved from top to the BOTTOM of the image so the instruction pill no
+    // longer overshadows the green + pin at the top. Self-centered so it doesn't crowd the tee.
     position: 'absolute',
-    top: 12, left: 12,
+    bottom: 8, left: 12,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.62)',
     borderWidth: 1, borderColor: 'rgba(250,204,21,0.5)',
-    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5,
   },
   measureHintText: {
     color: '#facc15', fontSize: 11, fontWeight: '700', letterSpacing: 0.3,
@@ -2325,8 +2327,8 @@ const styles = StyleSheet.create({
   },
   ydCell: { flex: 1, alignItems: 'center' },
   ydLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
-  ydValue: { color: '#e8f5e9', fontSize: 26, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  ydValueEmph: { color: '#ffffff', fontSize: 32 },
+  ydValue: { color: '#e8f5e9', fontSize: 21, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  ydValueEmph: { color: '#ffffff', fontSize: 26 },
   divider: { width: 1, height: 36, backgroundColor: '#1f2937' },
   // Phase 406 — landscape split-screen side panel for SmartVision.
   // Replaces the horizontal bottomPanel when the device is landscape;
