@@ -2420,6 +2420,11 @@ export default function SmartMotion() {
       const res = await recognizeClubFromBase64(b64, apiUrl);
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
+        // 2026-07-01 (Tim — on-course "record this club": show the sole while recording so it
+        // registers what you're about to use) — a confident camera recognition also REGISTERS
+        // the club to the bag. Covers BOTH the guided scan and this voice/auto path.
+        const newlyRegistered = !useClubBagStore.getState().clubs[res.club_id];
+        try { useClubBagStore.getState().registerClub(res.club_id, { source: 'camera' }); } catch { /* non-fatal */ }
         // Manual/voice scan owns putt mode both ways; the SILENT auto scan only sets
         // it ADDITIVELY (a confident putter → putt mode) and never CLEARS a putt mode
         // the user set deliberately (audit 2026-06-11 — explicit per-recording intent).
@@ -2428,7 +2433,8 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
-          await speak(`Got it — ${clubLabel(res.club_id)}.`, s.voiceGender, s.language, apiUrl, { userInitiated: true });
+          const ack = newlyRegistered ? `Got it — ${clubLabel(res.club_id)}. Added it to your bag.` : `Got it — ${clubLabel(res.club_id)}.`;
+          await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
       } else if (!auto) {
         // Manual scan couldn't confirm — let the user confirm/correct in the picker.
