@@ -781,6 +781,14 @@ export default function PlayTab() {
     pushCourseGuarded(router, selected.id);
   };
 
+  // 2026-07-01 (Tim) — the whole course at a glance (par/yardage per hole, out/in/total). Works
+  // for local, API, and custom scorecard courses via the course-layout screen's own resolution.
+  const handleCourseLayout = () => {
+    if (!selected) return;
+    useRoundStore.getState().setPreviewCourse(selected.id);
+    router.push(`/course-layout?courseId=${encodeURIComponent(selected.id)}&name=${encodeURIComponent(selected.club_name ?? selected.course_name ?? 'Course')}` as never);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
@@ -1127,6 +1135,10 @@ export default function PlayTab() {
                 <TouchableOpacity style={styles.actionBtn} onPress={handleRangeBook}>
                   <AppIcon name="book-outline" size={14} color="#00C896" />
                   <Text style={styles.actionBtnText}>{t('play.log')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel="Course layout">
+                  <AppIcon name="list-outline" size={14} color="#00C896" />
+                  <Text style={styles.actionBtnText}>Layout</Text>
                 </TouchableOpacity>
               </View>
             </View>
