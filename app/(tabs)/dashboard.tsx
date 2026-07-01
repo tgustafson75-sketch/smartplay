@@ -353,12 +353,17 @@ export default function Dashboard() {
 
   // 2026-06-04 — Highlights Card derived stats.
   const derivedLongestDrive = useMemo(() => {
+    // 2026-06-30 (Tim — long drive showed ~7000y = the whole-course total, from a failed
+    // capture leaking the course yardage into a shot). No human drive exceeds ~500y, so
+    // anything above that is a corrupt capture — drop it. This also self-resets a bad value.
+    const MAX_REAL_DRIVE = 500;
     const fromHistory = roundHistory
       .flatMap(r => r.shots)
       .filter(s => s.club === 'Driver')
       .map(s => s.carry_distance ?? s.distance_yards ?? 0)
+      .filter(y => y > 0 && y <= MAX_REAL_DRIVE)
       .reduce((max, y) => (y > max ? y : max), 0);
-    const fromProfile = longestDrive ?? 0;
+    const fromProfile = (longestDrive != null && longestDrive <= MAX_REAL_DRIVE) ? longestDrive : 0;
     const best = Math.max(fromHistory, fromProfile);
     return best > 0 ? best : null;
   }, [roundHistory, longestDrive]);

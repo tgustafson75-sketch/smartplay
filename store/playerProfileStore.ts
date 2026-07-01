@@ -387,7 +387,11 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // clears the value.
       setLongestDrive: (yards) => {
         if (yards == null || !Number.isFinite(yards) || yards <= 0) return set({ longestDrive: null });
-        set({ longestDrive: Math.min(1000, Math.round(yards)) });
+        // 2026-06-30 (Tim) — a drive never exceeds ~500y. A larger value is a corrupt capture
+        // (e.g. the whole-course total leaked in), so REJECT it — keep the current best rather
+        // than record a fake number. (Was clamped to 1000, still absurd for a drive.)
+        if (yards > 500) return;
+        set({ longestDrive: Math.round(yards) });
       },
       setLongestPutt: (yards) => {
         if (yards == null || !Number.isFinite(yards) || yards <= 0) return set({ longestPutt: null });
