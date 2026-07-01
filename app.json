@@ -113,6 +113,7 @@
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
       "./plugins/withWearSwingBridge.js",
+      ["./plugins/withAsyncStorageSize.js", { "sizeMB": 50 }],
       "./plugins/withPrebuildSafetyCheck.js",
       "expo-asset",
       "expo-localization",
