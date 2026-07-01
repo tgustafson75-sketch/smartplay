@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -203,11 +203,17 @@ export default function RecapScreen() {
   // active store state — valid for just-ended rounds and any round
   // whose course hasn't been overwritten by a new one. Falls back to
   // an empty map (neutral gray) for older history rounds.
-  const parByHole = useRoundStore(s => {
+  // 2026-07-01 (Tim — "Maximum update depth exceeded" opening a past round's card/scorecard from
+  // the dashboard) — this selector BUILT A NEW OBJECT every render, so zustand's Object.is check
+  // saw a changed result on every pass → re-render → new object → infinite loop → crash. Fix:
+  // select the STABLE courseHoles slice (same ref unless it changes) and build the map in a useMemo
+  // that only recomputes when courseHoles actually changes.
+  const courseHoles = useRoundStore(s => s.courseHoles);
+  const parByHole = useMemo(() => {
     const map: Record<number, number> = {};
-    for (const h of s.courseHoles) map[h.hole] = h.par;
+    for (const h of courseHoles) map[h.hole] = h.par;
     return map;
-  });
+  }, [courseHoles]);
   // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).
