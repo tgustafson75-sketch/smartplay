@@ -459,6 +459,27 @@ export default function Dashboard() {
           </TouchableOpacity>
         </View>
 
+        {/* 2026-06-30 (Tim) — Messages card = the future home of the social layer (foursome
+            feed, share, message). Opens the minimal Tank↔Tim thread today. Simple nav card,
+            no store subscription. */}
+        <TouchableOpacity
+          style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
+          onPress={() => router.push('/messages' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Open Messages"
+        >
+          <View style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent_muted }}>
+            <AppIcon name="chatbubbles-outline" size={22} color={colors.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sharedTitle, { color: colors.text_primary }]}>Messages</Text>
+            <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
+              Message your golfers — foursome, coach, friends
+            </Text>
+          </View>
+          <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
+        </TouchableOpacity>
+
         {coachModeEnabled && activeFamilyRoster.length > 0 && (
           <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
             <View style={styles.sharedHeader}>

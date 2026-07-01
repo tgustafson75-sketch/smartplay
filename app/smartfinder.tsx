@@ -1199,7 +1199,14 @@ function TargetCameraOverlay({
     }
     if (locked) return;                         // manual: held target wins
     if (lastYardsRef.current != null) return;   // manual: tilt-placed target wins
-    if (yards.reason !== 'ok' || yards.middle == null) return; // no good GPS → leave fallback as-is
+    // 2026-06-30 (Tim — Greenhill: "SmartFinder didn't always adjust for the actual yardage
+    // like the other parts did"). Was gated on reason === 'ok', so during a GPS stale-DEGRADE
+    // (frequent in the log, even at good 3-9m accuracy) the club card / intel kept a STALE
+    // number while the F/M/B strip (which reads yards.middle directly) updated — the two
+    // halves disagreeing again. Sync to whatever the F/M/B strip shows (any non-null middle,
+    // incl. a recent degraded fix) so they always match. Only when there's NO number at all
+    // do we leave the static fallback.
+    if (yards.middle == null) return;
     setTargetYards(prev => (prev === yards.middle ? prev : yards.middle));
   }, [yards.reason, yards.middle, locked, currentHole, statedYardageFor]);
   // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
