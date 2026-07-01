@@ -55,6 +55,9 @@ import Svg, { Line as SvgLine, Polygon as SvgPolygon, Text as SvgText, G as SvgG
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { speak, configureAudioForSpeech } from '../services/voiceService';
+import { getApiBaseUrl } from '../services/apiBase';
+import { registerSmartVisionRead } from '../services/visionReadBus';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVisionSignalStore } from '../store/smartVisionSignalStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -1212,6 +1215,31 @@ export default function SmartVisionScreen() {
       });
     } catch { return null; }
   }, [yardages.middle, teeCoord, greenCoord, svElevation.deltaFeet]);
+
+  // 2026-07-01 (Tim — "tell me what you see" reads the WHOLE VIEW aerial too, not just the camera)
+  // — register an in-place hole read so a voice scene_read while on SmartVision speaks THIS hole
+  // (yardage + plays-like + club + hazard) from the real GPS/hazard data, instead of jumping to
+  // the camera. The bus claim (openToolHandler) routes here when SmartVision is mounted.
+  const svReadRef = useRef<{ ar: typeof aiRead; mid: number | null; holeNo: number }>({ ar: aiRead, mid: yardages.middle, holeNo: holeIndex });
+  svReadRef.current = { ar: aiRead, mid: yardages.middle, holeNo: holeIndex };
+  useEffect(() => {
+    registerSmartVisionRead(() => {
+      const { ar, mid, holeNo } = svReadRef.current;
+      const parts: string[] = [];
+      if (mid != null) parts.push(`Hole ${holeNo}. Middle of the green, ${mid} yards.`);
+      if (ar?.playsLikeYards != null && ar.deltaYards !== 0) parts.push(`Plays like ${ar.playsLikeYards}.`);
+      if (ar?.club) parts.push(`I'd go ${ar.club}.`);
+      if (ar?.hazardNote) parts.push(ar.hazardNote);
+      else if (ar?.why?.[0]) parts.push(ar.why[0]);
+      const text = parts.join(' ') || 'Give me a second to get a GPS fix on this hole.';
+      const s = useSettingsStore.getState();
+      void configureAudioForSpeech()
+        .then(() => speak(text, s.voiceGender, s.language ?? 'en', getApiBaseUrl(), { userInitiated: true }))
+        .catch(() => undefined);
+    });
+    return () => registerSmartVisionRead(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 2026-06-13 (Tim #6) — Golfshot-style layup planning. The hole's playing
   // distance (tee→green) decides whether the view shows one direct line or a

@@ -352,6 +352,20 @@ export const openToolHandler: IntentHandler = {
       }
     }
 
+    // 2026-07-01 (Tim — "tell me what you see" reads the WHOLE VIEW (aerial) as well as the camera)
+    // — if the player is already on SmartVision looking at the hole, read THAT aerial in place
+    // (yardage + hazards + club) instead of jumping to the camera. Only when a mounted SmartVision
+    // claims it; otherwise fall through to the camera scene_read navigate below.
+    if (toolName === 'scene_read') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { requestSmartVisionRead } = require('../visionReadBus') as typeof import('../visionReadBus');
+        if (requestSmartVisionRead()) {
+          return { success: true, voice_response: '', side_effects: ['scene_read:smartvision_aerial'], follow_up_needed: false };
+        }
+      } catch { /* fall through to the camera scene read */ }
+    }
+
     let action = TOOL_NAME_TO_ACTION[toolName];
 
     // 2026-06-24 — APP-FEATURE CATALOG fallback. When the explicit map misses,
