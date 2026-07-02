@@ -27,6 +27,9 @@ import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 import { screenContextForPrompt } from '../services/screenContext';
 import { devLog } from '../services/devLog';
+// 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
+// mic and the earbud/badge path keep the same conversation + reset together.
+import { getPipecatHistory, setPipecatHistory, clearPipecatHistory } from '../services/voice/pipecatHistory';
 import type { ToolAction } from '../app/api/kevin+api';
 
 // Simplified history entry — persisted in a ref, sent to /turn each call
@@ -49,7 +52,7 @@ export type PipecatSessionState = 'idle' | 'connecting' | 'connected' | 'error' 
 // 2026-06-23 (audit) — was 20s but the server turn budget is 30s, so a
 // healthy-but-slow turn got aborted client-side on good signal. Match 30s.
 const TURN_TIMEOUT_MS = 30_000;
-const MAX_HISTORY_TURNS = 6; // keep last 6 exchanges (~12 messages) for context
+// History cap now lives in services/voice/pipecatHistory.ts (the shared history).
 
 interface UsePipecatVoiceOpts {
   onUIEvent?: (event: PipecatUIEvent, data: Record<string, unknown>) => void;
@@ -72,7 +75,6 @@ export function usePipecatVoice({
   const sessionIdRef = useRef<string | null>(null);
   const stateRef = useRef<PipecatSessionState>('idle');
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const historyRef = useRef<ConversationMessage[]>([]);
 
   const setSessionState = useCallback((s: PipecatSessionState) => {
     stateRef.current = s;
@@ -306,7 +308,7 @@ export function usePipecatVoice({
 
   /** Clear conversation history (call on round end or new session). */
   const clearHistory = useCallback(() => {
-    historyRef.current = [];
+    clearPipecatHistory();
   }, []);
 
   /**
@@ -334,7 +336,7 @@ export function usePipecatVoice({
         body: JSON.stringify({
           secret,
           text: transcript,
-          history: historyRef.current,
+          history: getPipecatHistory(),
           context: buildContext(),
           // 2026-06-26 — parity with the kevin path: send the ephemeral current
           // screen/drill so the live brain answers drill-aware too.
@@ -383,8 +385,8 @@ export function usePipecatVoice({
         updated_history: ConversationMessage[];
       };
 
-      // Update history, capped to avoid unbounded growth
-      historyRef.current = (data.updated_history ?? []).slice(-MAX_HISTORY_TURNS * 2);
+      // Update the shared history, capped to avoid unbounded growth
+      setPipecatHistory(data.updated_history ?? []);
 
       // Dispatch tool actions to the RN UI (same handler as Kevin's tools)
       if (data.tool_actions?.length) {

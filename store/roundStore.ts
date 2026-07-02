@@ -765,6 +765,13 @@ export const useRoundStore = create<RoundState>()(
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
         const courseLocation = options.courseLocation ?? null;
+        // 2026-07-01 (audit — MIC CONVERGENCE) — a new round is a fresh conversation:
+        // wipe the shared pipecat history so last round's chat can't leak context into
+        // this one. Best-effort; never blocks the round from starting.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/voice/pipecatHistory').clearPipecatHistory();
+        } catch { /* voice history is additive */ }
         // FIX B5 — explicitly bind selectedTee and transportMode from opts so
         // they are never sourced from ambient store state. prev.selectedTee /
         // prev.transportMode are only used as secondary fallbacks here and are

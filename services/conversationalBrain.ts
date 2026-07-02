@@ -24,9 +24,11 @@ export interface BrainReply {
   source: 'pipecat' | 'kevin' | 'none';
 }
 
-// Rolling conversation history for the pipecat path so multi-turn earbud chats keep context.
-let pipecatHistory: { role: string; content: string }[] = [];
-export function clearConversationalHistory(): void { pipecatHistory = []; }
+// 2026-07-01 (audit — MIC CONVERGENCE) — was a private `pipecatHistory` disjoint
+// from usePipecatVoice's, and never cleared. Now shares the ONE history module so
+// the caddie keeps context across mics + resets on round boundaries.
+import { getPipecatHistory, setPipecatHistory, appendPipecatTurn, clearPipecatHistory } from './voice/pipecatHistory';
+export function clearConversationalHistory(): void { clearPipecatHistory(); }
 
 async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainReply | null> {
   try {
@@ -41,7 +43,7 @@ async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainRe
       body: JSON.stringify({
         secret,
         text: utterance,
-        history: pipecatHistory,
+        history: getPipecatHistory(),
         context: buildPipecatContext(),
         screen_context: screenContextForPrompt(),
       }),
@@ -50,8 +52,8 @@ async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainRe
     const j = (await resp.json()) as { response_text?: string; tool_actions?: unknown[]; updated_history?: { role: string; content: string }[] };
     const text = typeof j.response_text === 'string' && j.response_text.trim() ? j.response_text : null;
     if (!text) return null;
-    if (Array.isArray(j.updated_history)) pipecatHistory = j.updated_history.slice(-12);
-    else pipecatHistory = [...pipecatHistory, { role: 'user', content: utterance }, { role: 'assistant', content: text }].slice(-12);
+    if (Array.isArray(j.updated_history)) setPipecatHistory(j.updated_history);
+    else appendPipecatTurn(utterance, text);
     return { text, audioBase64: null, toolActions: Array.isArray(j.tool_actions) ? j.tool_actions : [], source: 'pipecat' };
   } catch {
     return null;
