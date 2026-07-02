@@ -512,7 +512,10 @@ export const openToolHandler: IntentHandler = {
       } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
         const params: string[] = [];
         if (angle) params.push(`angle=${angle}`);
-        if (autoStart) params.push('autoStart=1');
+        // 2026-07-01 (audit RANK 2) — smartmotion.tsx keys on `autoRecord=1`, NOT
+        // `autoStart`, so the old param was dead: voice "record my swing" opened
+        // SmartMotion but never started recording. Emit the param the screen reads.
+        if (autoStart) params.push('autoRecord=1');
         // 2026-05-25 — Fix AJ Phase 1: shotType ("chip"/"putt"/"swing")
         // and subject (whose swing) get forwarded as URL params so
         // quick-record can pre-fill the tag + family-member context

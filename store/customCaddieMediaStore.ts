@@ -84,6 +84,12 @@ export const useCustomCaddieMediaStore = create<CustomCaddieMediaState>()(
     {
       name: 'custom-caddie-media-v1',
       storage: createJSONStorage(() => getPersistStorage()),
+      // 2026-07-01 (audit) — pin a persist version + passthrough migrate so a future
+      // shape change bumps the version deliberately instead of zustand silently
+      // discarding a mismatched blob (which would WIPE the user's caddie portrait +
+      // selfie with no recovery — these are base64 images, not re-derivable).
+      version: 1,
+      migrate: (persisted) => persisted as CustomCaddieMediaState,
       partialize: (s) => ({
         selfieB64: s.selfieB64,
         customCaddiePortraitB64: s.customCaddiePortraitB64,
