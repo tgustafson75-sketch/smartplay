@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { computeRoundHandicap, estimateNewIndex } from '../../services/handicapCalculator';
+import { computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
 import { getBundledHoles } from '../../data/courses';
 
 /**
@@ -98,19 +98,18 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     const rating = tee?.course_rating ?? par;
     const slope = tee?.slope_rating ?? 113;
 
-    const holes = Object.entries(round.scores).map(([h, score]) => ({
-      hole_number: Number(h),
-      par: parForHole(Number(h)),
-      score,
-      hole_stroke_index: Number(h),
-    }));
+    // 2026-07-01 (re-audit — M3) — gate to scored holes (score>0). A stray
+    // unfinalized 0-score in round.scores otherwise adds a phantom hole to the
+    // AGS/par accounting, diverging from endRound (which uses the score>0 set).
+    const holes = Object.entries(round.scores)
+      .filter(([, score]) => typeof score === 'number' && score > 0)
+      .map(([h, score]) => ({
+        hole_number: Number(h),
+        par: parForHole(Number(h)),
+        score,
+        hole_stroke_index: Number(h),
+      }));
 
-    // 9-hole scaling: use 18-hole-equivalent par for course-handicap
-    // math; the computeRoundHandicap helper internally computes AGS
-    // from the 9 holes and a differential from that AGS, so we need
-    // to post-scale the differential AND adjusted-gross-score by ×2
-    // (and the raw_score for the display only — actual user score
-    // stays as-is in the round record).
     const equivalentPar = is9Hole ? par * 2 : par;
     const out = computeRoundHandicap({
       handicapIndex,
@@ -120,14 +119,21 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       holes,
       recentDifferentials,
     });
-    if (is9Hole) {
-      return {
-        ...out,
-        adjusted_gross_score: out.adjusted_gross_score * 2,
-        score_differential: Math.round(((113 / slope) * ((out.adjusted_gross_score * 2) - rating)) * 10) / 10,
-      };
-    }
-    return out;
+    // 2026-07-01 (re-audit — 9-hole differential drift) — DISPLAY the same
+    // differential the round actually posts. endRound + the recalc path both post
+    // via rebuildDifferentialsFromHistory (gross totalScore, WHS expected-nine for
+    // 9-hole). The old card math (score×2 vs the AGS) produced a DIFFERENT number
+    // than what landed in the Index. Compute the per-round differential with the
+    // rebuild's exact formula so the card matches.
+    const totalScore = holes.reduce((a, h) => a + h.score, 0);
+    const perRoundDiff = is9Hole
+      ? Math.round((computeScoreDifferential(totalScore, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
+      : Math.round(computeScoreDifferential(totalScore, 72, 113) * 10) / 10;
+    return {
+      ...out,
+      adjusted_gross_score: is9Hole ? out.adjusted_gross_score * 2 : out.adjusted_gross_score,
+      score_differential: perRoundDiff,
+    };
   }, [handicapIndex, round, courseHoles, recentDifferentials, is9Hole, isPostable]);
 
   // Sim-report gap #4 — when the player hasn't set their Handicap Index

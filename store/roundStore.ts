@@ -1581,46 +1581,26 @@ export const useRoundStore = create<RoundState>()(
               return { hole_number: holeNum, par, score };
             });
 
-            // Course rating + slope. Pull from courseHoles or fall back
-            // to USGA neutral (72.0 / 113). Most local courses don't
-            // ship rating data; that's OK — the differential just
-            // anchors to the neutral baseline.
-            const courseRating = 72.0;
-            const slopeRating = 113;
-            // For 9-hole rounds, parTotal carries 9 holes (~36). To
-            // keep the differential math comparable to 18-hole rounds
-            // we double the AGS and treat it as the 18-hole-equivalent
-            // (see services/handicapCalculator.ts:212-238 for the same
-            // approach in the rebuild path).
-            const is9 = holesPlayed === 9;
-            const parTotal = holes.reduce((a, h) => a + h.par, 0);
-            const equivalentPar = is9 ? parTotal * 2 : parTotal;
-
-            if (profile.handicap_index != null && holes.length > 0) {
-              const courseHandicap = calcMod.computeCourseHandicap(
-                profile.handicap_index, courseRating, slopeRating, equivalentPar,
-              );
-              const ags = calcMod.computeAdjustedGrossScore(holes, courseHandicap);
-              const equivalentAgs = is9 ? ags * 2 : ags;
-              const scoreDifferential = calcMod.computeScoreDifferential(equivalentAgs, courseRating, slopeRating);
-              profile.pushDifferential(scoreDifferential);
-              const after = calcMod.estimateNewIndex(
-                [...profile.recent_differentials, scoreDifferential],
-              );
-              if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
-                profile.setHandicapIndex(after.newIndex);
-              }
-              console.log(`[handicap] holesPlayed=${holesPlayed} differential=${scoreDifferential.toFixed(1)} newIndex=${after?.newIndex ?? '?'}`);
-            } else if (holes.length > 0) {
-              // No index yet — still push the differential so when the
-              // user enters their starting Index, recent_differentials
-              // is already populated.
-              const ags = calcMod.computeAdjustedGrossScore(holes, 18);
-              const equivalentAgs = is9 ? ags * 2 : ags;
-              const diff = calcMod.computeScoreDifferential(equivalentAgs, courseRating, slopeRating);
-              profile.pushDifferential(diff);
-              console.log(`[handicap] differential=${diff.toFixed(1)} (no index yet)`);
+            // 2026-07-01 (re-audit — 9-hole differential drift) — post the Index via
+            // the SAME rebuildDifferentialsFromHistory the deleteRound / recalc path
+            // uses, instead of a separate inline score×2 formula. The old inline path
+            // (double the AGS vs 72) diverged from the rebuild's WHS expected-nine
+            // method, so a 9-hole round's differential + Index SHIFTED the next time
+            // differentials were recomputed (delete a round / recalc). Rebuilding from
+            // the full history (which now includes this round, appended above) makes
+            // the posted Index IDENTICAL to any later recalc — one source of truth.
+            // `holes` is still built above for the score>0 gate + record consistency.
+            void holes;
+            const hist = get().roundHistory;
+            const diffs = calcMod.rebuildDifferentialsFromHistory(
+              hist.map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+            );
+            profile.resetDifferentials(diffs);
+            const after = calcMod.estimateNewIndex(diffs);
+            if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
+              profile.setHandicapIndex(after.newIndex);
             }
+            console.log(`[handicap] holesPlayed=${holesPlayed} rebuilt ${diffs.length} diffs newIndex=${after?.newIndex ?? '?'}`);
             // 2026-06-27 (smoke-test fix) — record that this round's differential
             // is already posted, so the recap card's "Post to my Index" button
             // can't post the SAME round again (the double-count bug).
