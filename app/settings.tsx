@@ -33,6 +33,7 @@ import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
 import {
@@ -1480,6 +1481,10 @@ export default function Settings() {
         {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of what
             leaves the device and where. Relocated below Devices & Health in the
             2026-06-10 settings cleanup. */}
+        {/* 2026-07-01 — Cloud Backup & Sync (email OTP). Self-contained card so a
+            phone swap never wipes the player's data. Sits just above Data & Privacy. */}
+        {sectionMatchesQuery('Cloud Backup & Sync', 'backup restore sync cloud account email') ? <CloudBackupCard /> : null}
+
         <CollapsibleSection title="Data & Privacy" icon="shield-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>

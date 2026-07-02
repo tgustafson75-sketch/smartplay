@@ -1793,6 +1793,13 @@ export const useRoundStore = create<RoundState>()(
           console.log('[roundStore] tee-goal evaluation failed (non-fatal):', e);
         }
 
+        // 2026-07-01 — a finished round is a natural high-value moment to back up
+        // to the cloud. Debounced + no-op-gated + inert unless signed in.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/cloudSync/autoBackup').scheduleBackup();
+        } catch { /* best-effort — backup is additive */ }
+
         return record.id;
       },
 

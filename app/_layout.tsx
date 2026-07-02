@@ -506,6 +506,18 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
+    // 2026-07-01 — Cloud backup boot: re-hydrate the Supabase session (so a
+    // still-signed-in user keeps auto-backing-up) and install the AppState
+    // auto-backup listener. Both are inert until the cloud is configured +
+    // the user is signed in. Fire-and-forget; never blocks boot.
+    void (async () => {
+      try {
+        const cb = await import('../services/cloudSync/cloudBackup');
+        await cb.refreshCloudSession();
+        const ab = await import('../services/cloudSync/autoBackup');
+        ab.initAutoBackup();
+      } catch { /* best-effort — backup is additive */ }
+    })();
     // 2026-06-17 — Full 4-endpoint voice warmup fires at app start (was
     // caddie-tab-focus only). Cold Lambdas take 3-8s to init SDKs; firing
     // here overlaps the splash + navigation so the chain is hot before the
