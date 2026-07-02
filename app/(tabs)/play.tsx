@@ -318,7 +318,6 @@ export default function PlayTab() {
   const setupTransport = useRoundStore(s => s.transportMode);
   const setSetupTransport = useRoundStore(s => s.setTransportMode);
 
-  const [searchKind, setSearchKind] = useState<SearchKind>('courses');
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<CourseSummary[]>([]);
@@ -977,20 +976,10 @@ export default function PlayTab() {
         </View>
 
         {/* Course search — golfcourseapi-backed lookup for non-local courses. */}
+        {/* 2026-07-01 (re-audit) — removed the "Courses / Range + Practice" toggle:
+            searchKind was never read by runSearch (always searchCourses), so the
+            pill was a visibly-dead control. Re-add wired if range search ships. */}
         <Text style={[styles.sectionLabel, { marginTop: 22 }]}>{t('play.search_courses')}</Text>
-        <View style={styles.kindRow}>
-          {(['courses', 'range_practice'] as SearchKind[]).map(k => (
-            <TouchableOpacity
-              key={k}
-              style={[styles.kindBtn, searchKind === k && styles.kindBtnActive]}
-              onPress={() => setSearchKind(k)}
-            >
-              <Text style={[styles.kindText, searchKind === k && styles.kindTextActive]}>
-                {k === 'courses' ? 'Courses' : 'Range + Practice'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
         <View style={styles.searchRow}>
           <TextInput

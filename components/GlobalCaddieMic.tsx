@@ -47,7 +47,9 @@ const ROUTE_LABELS: { prefix: string; label: string }[] = [
 // Screens that ALREADY render a prominent caddie mic (tab header badge, or own top-left mic +
 // own the camera/mic) — suppress the global badge there to avoid a double mic. Detected by
 // route segment / pathname prefix.
-const SUPPRESS_PATH_PREFIXES = ['/swinglab/smartmotion', '/swinglab/cage-mode'];
+// 2026-07-01 (re-audit) — dropped '/swinglab/cage-mode' (Cage Mode was merged into
+// SmartMotion; no such route exists) — it was dead config suppressing nothing.
+const SUPPRESS_PATH_PREFIXES = ['/swinglab/smartmotion'];
 // Boot / full-screen flows where a floating mic would be wrong.
 const HIDE_PATH_PREFIXES = ['/intro-video', '/permissions', '/greeting', '/welcome'];
 

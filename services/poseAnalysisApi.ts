@@ -673,23 +673,21 @@ export async function extractPoseFramesFromVideo(
   return frames;
 }
 
-/** Joints the SwingBodyOverlay actually draws (skeleton edges + lead-wrist arc).
- *  Anything else can be dropped when persisting. */
-const OVERLAY_KEYPOINTS = new Set<string>([
-  'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
-  'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
-  'left_knee', 'right_knee', 'left_ankle', 'right_ankle',
-]);
-
 /** 2026-07-01 (audit H1) — the cage store used to STRIP biomechanics.frames to []
  *  on persist (the Greenhill SQLITE_FULL fix). That silently killed the swing
  *  overlay (skeleton + tempo arc) on every reload — it showed right after analysis,
  *  then vanished forever. Instead of dropping the frames, DOWNSAMPLE them: keep at
  *  most `maxFrames` (always including the position-tagged P1..P10 keyframes the
- *  biomech read needs), keep only the joints the overlay renders, and round coords.
- *  Result is ~5% of the raw size — small enough to persist safely while keeping the
- *  overlay alive across reloads. Verdicts/numbers are persisted separately, so
- *  this only affects the visual overlay, never the analysis. */
+ *  biomech read needs) and round coords.
+ *
+ *  2026-07-01 (re-audit) — keep ALL keypoints (not just the overlay joints): the
+ *  persisted frames are ALSO re-fed to the swing-comparison engine, which reads
+ *  head/foot joints the overlay doesn't draw (e.g. head-drift). Dropping non-overlay
+ *  joints made a reloaded-then-compared swing lose those metrics. Only sub-threshold
+ *  (<0.2) keypoints are dropped — the biomech/compare code discards those anyway. At
+ *  today's real input (5 keyframes) this is still tiny; the frame cap bounds the
+ *  worst case. Verdicts/numbers persist separately, so this only affects visuals +
+ *  the compare frames, never the stored analysis. */
 export function compactPoseFramesForPersist(frames: PoseFrame[], maxFrames = 28): PoseFrame[] {
   if (!Array.isArray(frames) || frames.length === 0) return [];
   const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
@@ -710,7 +708,7 @@ export function compactPoseFramesForPersist(frames: PoseFrame[], maxFrames = 28)
     const compact: PoseFrame = {
       timestampMs: f.timestampMs,
       keypoints: f.keypoints
-        .filter(k => k.name != null && OVERLAY_KEYPOINTS.has(k.name) && k.score >= MIN_PERSIST_SCORE)
+        .filter(k => k.name != null && k.score >= MIN_PERSIST_SCORE)
         .map(k => ({ name: k.name, x: round(k.x), y: round(k.y), score: round(k.score) })),
     };
     if (f.position) compact.position = f.position;
