@@ -24,6 +24,7 @@ import {
   signOutCloud,
 } from '../../services/cloudSync/cloudBackup';
 import { shouldOfferRestore } from '../../services/cloudSync/autoBackup';
+import { exportBackupToFile, importBackupFromFile } from '../../services/cloudSync/localBackup';
 
 function timeAgo(ms: number | null): string {
   if (!ms) return 'never';
@@ -95,19 +96,61 @@ export default function CloudBackupCard() {
     else Alert.alert('Backup failed', r.reason);
   };
 
+  const [fileBusy, setFileBusy] = useState(false);
+  const onExportFile = async () => {
+    setFileBusy(true);
+    const r = await exportBackupToFile();
+    setFileBusy(false);
+    if (!r.ok && r.reason !== 'canceled') Alert.alert('Couldn’t save backup', r.reason ?? 'Export failed.');
+  };
+  const onImportFile = async () => {
+    setFileBusy(true);
+    const r = await importBackupFromFile();
+    setFileBusy(false);
+    if (r.ok) {
+      Alert.alert(
+        'Restored',
+        `Brought back ${r.restored} data set${r.restored === 1 ? '' : 's'} from the file. The app will reload to apply it.`,
+        [{ text: 'Reload', onPress: () => { void Updates.reloadAsync().catch(() => {}); } }],
+      );
+    } else if (r.reason !== 'canceled') {
+      Alert.alert('Couldn’t restore', r.reason === 'not_a_backup' ? 'That file isn’t a SmartPlay backup.' : r.reason ?? 'Import failed.');
+    }
+  };
+
   const s = makeStyles(colors);
 
   return (
     <View style={s.card}>
       <View style={s.headerRow}>
-        <Ionicons name="cloud-outline" size={20} color={colors.accent} style={{ marginRight: 8 }} />
-        <Text style={s.title}>Cloud Backup & Sync</Text>
+        <Ionicons name="save-outline" size={20} color={colors.accent} style={{ marginRight: 8 }} />
+        <Text style={s.title}>Backup & Restore</Text>
+      </View>
+
+      {/* ── Local file backup — ALWAYS available, no account/config needed ── */}
+      <Text style={s.muted}>
+        Save a backup file of your rounds, bag, caddie memory, courses + settings. Keep it in Files / Drive /
+        email — restore it any time, even on a new phone. No account needed.
+      </Text>
+      <View style={s.btnRow}>
+        <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onExportFile} disabled={fileBusy}>
+          {fileBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Save backup file</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.accent }]} onPress={onImportFile} disabled={fileBusy}>
+          <Text style={[s.btnText, { color: colors.accent }]}>Restore from file</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={s.divider} />
+      <View style={s.headerRow}>
+        <Ionicons name="cloud-outline" size={18} color={colors.text_secondary} style={{ marginRight: 8 }} />
+        <Text style={[s.title, { fontSize: 14 }]}>Auto-sync to your account (optional)</Text>
       </View>
 
       {!configured ? (
         <Text style={s.muted}>
-          Cloud backup isn’t set up yet on this build. Once it’s configured, sign in with your email here to
-          protect your rounds, bag, and caddie memory against a lost or swapped phone.
+          Optional: hands-free background sync + one-tap restore on a new phone. Not set up on this build yet —
+          the file backup above already protects your data with no account.
         </Text>
       ) : userId ? (
         // ── Signed in ────────────────────────────────────────────
@@ -194,6 +237,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     btn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
     btnOutline: { backgroundColor: 'transparent', borderWidth: 1.5 },
     btnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: 16 },
     toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
     toggle: { width: 46, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center' },
     knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff' },

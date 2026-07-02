@@ -1481,9 +1481,10 @@ export default function Settings() {
         {/* 2026-06-08 (audit #2, privacy) — plain-language disclosure of what
             leaves the device and where. Relocated below Devices & Health in the
             2026-06-10 settings cleanup. */}
-        {/* 2026-07-01 — Cloud Backup & Sync (email OTP). Self-contained card so a
-            phone swap never wipes the player's data. Sits just above Data & Privacy. */}
-        {sectionMatchesQuery('Cloud Backup & Sync', 'backup restore sync cloud account email') ? <CloudBackupCard /> : null}
+        {/* 2026-07-01 — Backup & Restore. Local file export/import (zero config,
+            always works) + optional cloud auto-sync. So a phone swap never wipes
+            the player's data. Sits just above Data & Privacy. */}
+        {sectionMatchesQuery('Backup & Restore', 'backup restore sync cloud account email file export import') ? <CloudBackupCard /> : null}
 
         <CollapsibleSection title="Data & Privacy" icon="shield-outline">
           <View style={rowDivStyle}>
