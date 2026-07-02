@@ -13,14 +13,8 @@
 import { useRef, useCallback } from 'react';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
-import { useTrustLevelStore } from '../store/trustLevelStore';
-import { useRelationshipStore } from '../store/relationshipStore';
-import { getLastFix } from '../services/gpsManager';
-import { bagDistances } from '../services/shotStrategy';
-import { getCaddieContext } from '../services/caddieMemoryRetrieval';
-import { getGreenYardagesSync } from '../services/smartFinderService';
 import { answerOffline } from '../services/offlineCaddie';
+import { buildPipecatContext } from '../services/pipecatContext';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
@@ -82,106 +76,12 @@ export function usePipecatVoice({
   }, [onStateChange]);
 
   /** Build the full context snapshot to push on connect. */
-  const buildContext = useCallback(() => {
-    const round = useRoundStore.getState();
-    const settings = useSettingsStore.getState();
-    const profile = usePlayerProfileStore.getState();
-    const trustLevel = useTrustLevelStore.getState().level;
-    // Parity with the legacy /api/kevin path (useVoiceCaddie ~921-923, 1034):
-    // ship the LIVE mental-state signals so the pipecat brain can act as the
-    // sports psychologist (spiral reset + "how Tim feels"), not just the static
-    // pre-round mentalState string.
-    const relationship = useRelationshipStore.getState();
-
-    return {
-      player: {
-        name: profile.name ?? 'golfer',
-        handicap: profile.handicap ?? undefined,
-        dominantMiss: profile.dominantMiss ?? undefined,
-        caddiePersonality: settings.caddiePersonality,
-        trustLevel,
-      },
-      round: {
-        active: round.isRoundActive,
-        currentHole: round.currentHole ?? undefined,
-        courseId: round.activeCourseId ?? undefined,
-        courseName: round.activeCourse ?? undefined,
-        // Live mental-state (relationship store) — mirrors the legacy kevin body
-        // (useVoiceCaddie: mentalState: currentMentalState, consecutiveBadHoles,
-        // isSpiralRisk: isSpiralRisk()). The static round.mentalState pre-round
-        // string is superseded by the live currentMentalState here.
-        mentalState: relationship.currentMentalState ?? round.mentalState ?? undefined,
-        consecutiveBadHoles: relationship.consecutiveBadHoles ?? 0,
-        isSpiralRisk: (() => { try { return relationship.isSpiralRisk(); } catch { return false; } })(),
-        // Subjective self-reports (last 5) — same shape kevin reads (state/valence/hole).
-        emotionalLog: (() => { try { return (useRoundStore.getState().emotionalLog ?? []).slice(-5).map(e => ({ state: e.state, valence: e.valence, hole: e.hole })); } catch { return []; } })(),
-        goal: round.goal ?? undefined,
-        // 2026-07-01 (whole-app audit — pipecat was context-starved vs the legacy kevin brain) —
-        // ship the LIVE shot context so the DEFAULT brain can answer "how far / what's my score /
-        // what did I say about this hole / what have I been hitting" instead of flying half-blind.
-        holePar: round.courseHoles.find((h) => h.hole === round.currentHole)?.par ?? undefined,
-        holeYardage: round.courseHoles.find((h) => h.hole === round.currentHole)?.distance ?? undefined,
-        yardage: (() => {
-          try {
-            const y = getGreenYardagesSync(round.currentHole);
-            return y.middle != null ? { front: y.front, middle: y.middle, back: y.back } : undefined;
-          } catch { return undefined; }
-        })(),
-        score: (() => {
-          const scores = round.scores ?? {};
-          const holesPlayed = Object.values(scores).filter((v) => typeof v === 'number' && v > 0).length;
-          if (holesPlayed === 0) return undefined;
-          const total = Object.values(scores).reduce((s: number, v) => s + (typeof v === 'number' ? v : 0), 0);
-          const parPlayed = Object.keys(scores).reduce((s, k) => {
-            const h = round.courseHoles.find((x) => x.hole === Number(k));
-            return s + (h?.par ?? 0);
-          }, 0);
-          return { total, holesPlayed, vsPar: parPlayed ? total - parPlayed : undefined };
-        })(),
-        mode: round.mode ?? undefined,
-        isCompetition: round.isCompetition ?? undefined,
-        holeNote: (round.holeNotes ?? {})[round.currentHole] ?? undefined,
-        recentShots: (round.shots ?? []).slice(-5).map((s) => ({
-          club: s.club ?? null, hole: s.hole ?? null, distance: s.distance_yards ?? null, outcome: s.outcome_text ?? null,
-        })),
-      },
-      bag: {
-        club_distances: bagDistances() as Record<string, number>,
-        // 2026-07-01 (Tim — voice club registration) — the clubs the player has actually
-        // SCANNED/registered (clubBagStore), so the caddie recommends ONLY clubs in the bag
-        // instead of guessing from observed swings. Empty until the player registers clubs.
-        registered_clubs: (() => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            return (require('../store/clubBagStore').useClubBagStore.getState().bagList() as { club_id: string }[]).map((c) => c.club_id);
-          } catch { return []; }
-        })(),
-      },
-      settings: {
-        trustLevel,
-        language: settings.language ?? 'en',
-        aiProvider: 'anthropic',
-        continuousConversationMode: settings.continuousConversationMode ?? false,
-      },
-      gps: {
-        lat: getLastFix()?.lat ?? undefined,
-        lng: getLastFix()?.lng ?? undefined,
-      },
-      // 2026-06-29 (Tim — audit) — the LEARNED CNS memory (bag carries, course/hole
-      // history, tendencies, last-round reflection) was wired into /api/kevin but NOT
-      // the default pipecat brain, so "the caddie knows everything" was dead on the
-      // path that actually runs. Ship the same promptBlock the legacy path uses.
-      memory: (() => {
-        try {
-          return getCaddieContext({
-            courseId: round.activeCourseId ?? undefined,
-            hole: round.currentHole ?? undefined,
-            club: round.club ?? undefined, // parity with kevin — surfaces the learned per-club carry line
-          }).promptBlock;
-        } catch { return ''; }
-      })(),
-    };
-  }, []);
+  // 2026-07-01 (audit — MIC CONVERGENCE) — was a full duplicate of
+  // services/pipecatContext.buildPipecatContext(). Both were getState()-based and
+  // identical, so they silently drifted risk. Now this delegates to the ONE shared
+  // builder, so the caddie-tab mic and the earbud/badge/watch path send IDENTICAL
+  // context and any future field is added in exactly one place.
+  const buildContext = useCallback(() => buildPipecatContext(), []);
 
   /** Push a delta message to an open session. */
   const pushMessage = useCallback((msg: Record<string, unknown>) => {

@@ -65,6 +65,20 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
     const apiBase = getApiBaseUrl().replace(/\/+$/, '');
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
+    // 2026-07-01 (audit — MIC CONVERGENCE) — the kevin FALLBACK used to ship a
+    // starved payload, so when pipecat was down the earbud/watch reply came from a
+    // stranger (no name, handicap, or miss tendency). Fold in the same core
+    // personalization the main kevin path sends so the fallback still sounds like
+    // the player's caddie. Best-effort read; /api/kevin tolerates missing fields.
+    const profile = (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
+          name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
+          missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
+        };
+      } catch { return {} as Record<string, never>; }
+    })();
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), timeoutMs);
     const resp = await fetch(`${apiBase}/api/kevin`, {
@@ -81,6 +95,15 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         isRoundActive: round.isRoundActive,
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
+        // Personalization parity with the main kevin path.
+        playerName: profile.name ?? '',
+        firstName: profile.firstName ?? '',
+        handicap: profile.handicap ?? 18,
+        dominantMiss: profile.dominantMiss ?? null,
+        missType: profile.missType ?? null,
+        kevinContext: profile.kevinContext ?? null,
+        persistentPatterns: profile.persistentPatterns ?? null,
+        recentShots: (round.shots ?? []).slice(-5),
       }),
     }).finally(() => clearTimeout(t));
     if (!resp.ok) return null;
