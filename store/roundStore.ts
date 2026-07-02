@@ -274,6 +274,13 @@ export interface RoundRecord {
     vibe?: string;
     weather?: string;
   };
+  // 2026-07-01 (audit) — per-hole par snapshot taken at round end. Completed-round
+  // surfaces (scorecard tab, HandicapImpactCard, recap) otherwise fabricated par-4
+  // for every hole, because courseHoles is cleared when the round ends and API
+  // courseIds don't resolve back to a bundled hole list post-round. Snapshotting the
+  // real pars here is the single source of truth. Optional: pre-this + imports omit
+  // it (consumers fall back to getBundledHoles(courseId) then par-4).
+  holePars?: Record<number, number>;
   // 2026-06-27 (smoke-test fix) — true once this round's score differential has
   // been posted to the WHS index. endRound auto-posts at round end; this flag
   // stops the recap card's "Post to my Index" button from posting the SAME
@@ -1354,6 +1361,13 @@ export const useRoundStore = create<RoundState>()(
           // FIX M14 — persist the player's stated goal ("break 90") so recap
           // surfaces it and evaluateTeeGoal / post-round analysis can read it.
           goal: s.goal ?? undefined,
+          // 2026-07-01 (audit) — snapshot real per-hole par so completed-round
+          // surfaces don't fabricate par-4. courseHoles is cleared post-round.
+          holePars: (() => {
+            const m: Record<number, number> = {};
+            for (const h of s.courseHoles) if (h.par > 0) m[h.hole] = h.par;
+            return Object.keys(m).length > 0 ? m : undefined;
+          })(),
         };
         // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
         // per-hole memory (rounds played, scoring avg, tee club, par). Additive
@@ -2025,9 +2039,14 @@ export const useRoundStore = create<RoundState>()(
             const st = get();
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const autoAdvance = require('./settingsStore').useSettingsStore.getState().autoHoleAdvance;
-            const holesN = st.courseHoles.length ? Math.max(...st.courseHoles.map(h => h.hole)) : 18;
+            // 2026-07-01 (audit) — respect nineHoleMode for the upper bound, and go
+            // through setCurrentHole (NOT a raw set). The old raw set({currentHole})
+            // bypassed closeHoleEndLocation (dropping the just-finished hole's GPS
+            // drive distance), the nineHole clamp, and the yardage/stated-number
+            // reset. setCurrentHole is the canonical advance seam.
+            const holesN = st.nineHoleMode ? 9 : (st.courseHoles.length ? Math.max(...st.courseHoles.map(h => h.hole)) : 18);
             if (autoAdvance && st.isRoundActive && hole === st.currentHole && hole < holesN) {
-              set({ currentHole: hole + 1 });
+              get().setCurrentHole(hole + 1);
               console.log(`[roundStore] auto-advanced ${hole} → ${hole + 1} on first score (autoHoleAdvance)`);
             }
           }
@@ -2149,9 +2168,15 @@ export const useRoundStore = create<RoundState>()(
           // every future club call. GPS stays a DISPLAY value (it answers "what did my
           // driver do"); it just doesn't teach the brain. distance_yards is treated as
           // GPS-sourced (excluded) exactly when it equals gps_distance_yards.
+          // 2026-07-01 (audit) — plausibility guard. carry_distance / distance_yards
+          // are NOT bounded like the GPS path (which is clamped 5..500 at :2144), so a
+          // corrupt sensor/measure could feed a >500y value into BOTH the learned bag
+          // (recordShot) and longestDrive, poisoning every future club call. Reject
+          // anything outside a real single-shot range (no club carries >500y).
+          const plausibleCarry = (y: number): boolean => y > 0 && y <= 500;
           const measuredCarry = (sh: ShotResult): number | null => {
-            if (typeof sh.carry_distance === 'number' && sh.carry_distance > 0) return sh.carry_distance;
-            if (typeof sh.distance_yards === 'number' && sh.distance_yards > 0 && sh.distance_yards !== sh.gps_distance_yards) return sh.distance_yards;
+            if (typeof sh.carry_distance === 'number' && plausibleCarry(sh.carry_distance)) return sh.carry_distance;
+            if (typeof sh.distance_yards === 'number' && plausibleCarry(sh.distance_yards) && sh.distance_yards !== sh.gps_distance_yards) return sh.distance_yards;
             return null;
           };
 

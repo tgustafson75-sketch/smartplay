@@ -100,30 +100,42 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
     quality.level !== 'weak' &&
     quality.level !== 'none';
 
+  // 2026-07-01 (audit) — accept BOTH 'ok' AND 'estimated'. 'estimated' is the
+  // tee-relative GPS estimate (green data not available yet — the Wachusett case).
+  // The old code gated on reason==='ok' only, so it DISCARDED the estimate and fell
+  // through to the frozen static card — the brain + club-rec never saw the live
+  // number counting down as the player walked. We take the estimate (honest lower
+  // confidence + flagged as fallback) instead of freezing.
   if (isUserMarkedFix) {
     const y = getGreenYardagesSync(hole);
-    if (y && y.middle != null && y.reason === 'ok') {
+    if (y && y.middle != null && (y.reason === 'ok' || y.reason === 'estimated')) {
+      const estimated = y.reason === 'estimated';
       return {
         value: y.middle,
         source: 'gps_live',
-        confidence: 'med',
-        reason: 'Using your marked position.',
+        confidence: estimated ? 'low' : 'med',
+        reason: estimated
+          ? 'GPS estimate from the tee — mark the green for exact yardage.'
+          : 'Using your marked position.',
         asOf: fix.timestamp,
-        is_fallback: false,
+        is_fallback: estimated,
       };
     }
   }
 
   if (gpsHealthy) {
     const y = getGreenYardagesSync(hole);
-    if (y && y.middle != null && y.reason === 'ok') {
+    if (y && y.middle != null && (y.reason === 'ok' || y.reason === 'estimated')) {
+      const estimated = y.reason === 'estimated';
       return {
         value: y.middle,
         source: 'gps_live',
-        confidence: quality.level === 'strong' ? 'high' : 'med',
-        reason: quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.',
+        confidence: estimated ? 'med' : (quality.level === 'strong' ? 'high' : 'med'),
+        reason: estimated
+          ? 'GPS estimate from the tee — no green data yet.'
+          : (quality.level === 'strong' ? 'GPS clean.' : 'GPS okay.'),
         asOf: fix.timestamp,
-        is_fallback: false,
+        is_fallback: estimated,
       };
     }
   }

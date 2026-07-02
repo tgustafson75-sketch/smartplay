@@ -801,7 +801,18 @@ export default function SmartVisionScreen() {
     return null;
   }, [geometry, courseHoles, holeIndex]);
 
-  const greenCoord = useMemo(() => geometry?.green ?? null, [geometry]);
+  // 2026-07-01 (audit) — prefer the canonical green resolver (truth → Mark-Green
+  // override → golfbert → courseHoles) so the overlay green MATCHES the SmartFinder
+  // strip after the user marks the green. Raw geometry?.green bypassed the override,
+  // so the tile + aim line diverged from the spoken/strip yardage. Falls back to raw
+  // geometry when the resolver has nothing (source 'none').
+  const greenCoord = useMemo(() => {
+    try {
+      const r = resolveGreenCoords(holeIndex);
+      if (r.middle) return r.middle;
+    } catch { /* fall through to raw geometry */ }
+    return geometry?.green ?? null;
+  }, [geometry, holeIndex]);
 
   const projection = useMemo(() => {
     if (!teeCoord || !greenCoord) return null;

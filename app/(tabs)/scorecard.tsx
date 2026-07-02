@@ -33,6 +33,7 @@ import { SCREEN_HELP } from '../../services/screenHelp';
 import type { ShotResult } from '../../store/roundStore';
 import type { RoundRecap } from '../../types/plan';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { getBundledHoles } from '../../data/courses';
 
 const SCORE_FILL = (diff: number): string => {
   if (diff <= -2) return '#3b82f6'; // eagle blue
@@ -125,8 +126,16 @@ export default function Scorecard() {
     : (() => {
         if (!lastCompletedRound) return [];
         const total = effectiveNineHoleMode ? 9 : 18;
+        // 2026-07-01 (audit) — was a hardcoded par-4 for EVERY hole of a completed
+        // round, so vs-par colors + totals were wrong. Resolve real par: the round's
+        // own holePars snapshot first, then the bundled hole list for its courseId,
+        // then par-4 only as a last resort.
+        const snap = lastCompletedRound.holePars;
+        const bundled = lastCompletedRound.courseId ? getBundledHoles(lastCompletedRound.courseId) : [];
+        const parFor = (hole: number): number =>
+          snap?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? 4;
         return Array.from({ length: total }, (_, i) => ({
-          hole: i + 1, par: 4, distance: 0,
+          hole: i + 1, par: parFor(i + 1), distance: 0,
           front: 0, back: 0,
           teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
           frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,

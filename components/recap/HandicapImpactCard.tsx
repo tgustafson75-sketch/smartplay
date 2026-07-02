@@ -18,6 +18,7 @@ import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { computeRoundHandicap, estimateNewIndex } from '../../services/handicapCalculator';
+import { getBundledHoles } from '../../data/courses';
 
 /**
  * Phase V — confidence band for the Index estimate. WHS itself doesn't
@@ -81,14 +82,25 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // Best-available rating + slope. Phase Q.5b's getHoleGeometry would be
     // the upgraded path; for v1.0 we read whatever's on the courseHoles
     // record (may be missing — fall back to neutral 113 / par-as-rating).
-    const tee = courseHoles[0] as ({ course_rating?: number; slope_rating?: number } | undefined);
-    const par = courseHoles.reduce((a, h) => a + h.par, 0) || 72;
+    // 2026-07-01 (audit) — for a PAST round, live courseHoles is EMPTY (the round
+    // ended), so par fell back to a fabricated par-4/72 and the differential shown
+    // was wrong. Resolve real par: the round's holePars snapshot, then the bundled
+    // hole list for its courseId, then live courseHoles (active round only).
+    const bundled = round.courseId ? getBundledHoles(round.courseId) : [];
+    const parForHole = (hole: number): number =>
+      round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? courseHoles.find(c => c.hole === hole)?.par ?? 4;
+    const tee = (courseHoles[0] ?? bundled[0]) as ({ course_rating?: number; slope_rating?: number } | undefined);
+    const par =
+      (round.holePars ? Object.values(round.holePars).reduce((a, b) => a + b, 0) : 0) ||
+      (bundled.length ? bundled.reduce((a, h) => a + h.par, 0) : 0) ||
+      courseHoles.reduce((a, h) => a + h.par, 0) ||
+      72;
     const rating = tee?.course_rating ?? par;
     const slope = tee?.slope_rating ?? 113;
 
     const holes = Object.entries(round.scores).map(([h, score]) => ({
       hole_number: Number(h),
-      par: courseHoles.find(c => c.hole === Number(h))?.par ?? 4,
+      par: parForHole(Number(h)),
       score,
       hole_stroke_index: Number(h),
     }));

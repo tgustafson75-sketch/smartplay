@@ -5,7 +5,7 @@ import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
-import { peekFix, getLastFix } from '../../services/smartFinderService';
+import { peekFix, getLastFix, resolveGreenCoords } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
 // Curated screenshot fallback for local courses Tim has playtested. The
@@ -193,8 +193,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     // Prefer the seeded geometry's tee/green if available; fall back to
     // courseHoles record (Palms has these). Either path produces an
     // axis we can project the player onto.
-    const teeLatLng = (geometry?.tee && geometry?.green)
-      ? { tee: geometry.tee, green: geometry.green }
+    // 2026-07-01 (audit) — prefer the canonical green (truth → Mark-Green override →
+    // golfbert → courseHoles) for the player→green distance so this preview matches
+    // the SmartFinder strip after the user marks the green; fall back to raw geometry.
+    const resolvedGreen = (() => { try { return resolveGreenCoords(currentHole).middle; } catch { return null; } })();
+    const previewGreen = resolvedGreen ?? geometry?.green ?? null;
+    const teeLatLng = (geometry?.tee && previewGreen)
+      ? { tee: geometry.tee, green: previewGreen }
       : holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (holeRecord.middleLat || holeRecord.middleLng)
         ? { tee: { lat: holeRecord.teeLat, lng: holeRecord.teeLng }, green: { lat: holeRecord.middleLat, lng: holeRecord.middleLng } }
         : null;

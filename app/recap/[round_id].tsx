@@ -310,6 +310,10 @@ export default function RecapScreen() {
     let holes = courseHoles;
     if (holes.length === 0 && round_id) {
       const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
+      // 2026-07-01 (audit) — prefer the round's own holePars snapshot: it covers
+      // API/custom courses whose courseId no longer resolves to a bundled hole list
+      // post-round. Fall back to the bundled list for older rounds without it.
+      if (rec?.holePars && Object.keys(rec.holePars).length > 0) return { ...rec.holePars };
       if (rec?.courseId) holes = getBundledHoles(rec.courseId);
     }
     const map: Record<number, number> = {};
