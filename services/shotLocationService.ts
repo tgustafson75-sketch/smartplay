@@ -70,6 +70,19 @@ export async function getCurrentLocation(): Promise<ShotLocation | null> {
  * distance_to_green voice query.
  */
 export function getGreenCentroid(holeNumber: number): ShotLocation | null {
+  // 2026-07-01 (re-audit) — consult the canonical green resolver FIRST
+  // (truth → Mark-Green override → golfbert → courseHoles → geometryCache). This is
+  // the same cascade the SmartFinder strip uses, so the consumers of getGreenCentroid
+  // (club recommendation via queryStatusHandler, lie-analysis brain context, shot-
+  // distance logging) stop diverging from the strip after the user marks a green.
+  // Lazy require avoids any import cycle with smartFinderService.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resolveGreenCoords } = require('./smartFinderService') as typeof import('./smartFinderService');
+    const resolved = resolveGreenCoords(holeNumber);
+    if (resolved.middle) return resolved.middle;
+  } catch { /* fall through to the geometry path below */ }
+
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId;
 

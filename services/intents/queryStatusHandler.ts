@@ -641,6 +641,20 @@ export const queryStatusHandler: IntentHandler = {
         const lang: 'en' | 'es' | 'zh' = context.language ?? 'en';
         const t = TTS_STRINGS[lang] ?? TTS_STRINGS.en;
         if (!green) {
+          // 2026-07-01 (re-audit) — green coords missing (the Wachusett green-less
+          // case): the SmartFinder strip now shows a tee-relative GPS ESTIMATE. Speak
+          // that (hedged) instead of a flat "no green" that contradicts the strip.
+          try {
+            const est = await getGreenYardages(greenHole);
+            if (est && (est as { reason?: string }).reason === 'estimated' && typeof est.middle === 'number') {
+              return {
+                success: true,
+                voice_response: `About ${est.middle} to the middle — that's a GPS estimate from the tee. Mark the green for an exact number.`,
+                side_effects: ['query:distance_to_green:estimated', `lang:${lang}`],
+                follow_up_needed: false,
+              };
+            }
+          } catch { /* fall through to the honest no-green line */ }
           return {
             success: true,
             voice_response: t.noGreen,

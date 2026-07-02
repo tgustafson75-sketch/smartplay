@@ -307,15 +307,18 @@ export default function RecapScreen() {
     // Live round → live courseHoles. Past round (courseHoles reset on endRound) → resolve par from
     // the record's course id (getBundledHoles handles local: + custom: courses), so the hole-by-hole
     // scorecard shows score-vs-par colors instead of falling back to neutral gray. (2026-07-01 Tim.)
+    // 2026-07-01 (re-audit — M1) — a recap is ALWAYS for a completed round, so the
+    // round's OWN holePars snapshot is the truth. Previously this only consulted
+    // holePars when live courseHoles was empty; if the user started a NEW round and
+    // then opened an OLD round's recap, courseHoles held the ACTIVE course's pars and
+    // the old round showed the wrong par-by-hole colors. Prefer the record's holePars
+    // first, regardless of active-round state.
+    const rec = round_id ? useRoundStore.getState().roundHistory.find((r) => r.id === round_id) : null;
+    if (rec?.holePars && Object.keys(rec.holePars).length > 0) return { ...rec.holePars };
+    // No snapshot (old round): live courseHoles if this is the active round, else the
+    // bundled hole list for the record's course (custom:/local: resolve; API IDs → par 4).
     let holes = courseHoles;
-    if (holes.length === 0 && round_id) {
-      const rec = useRoundStore.getState().roundHistory.find((r) => r.id === round_id);
-      // 2026-07-01 (audit) — prefer the round's own holePars snapshot: it covers
-      // API/custom courses whose courseId no longer resolves to a bundled hole list
-      // post-round. Fall back to the bundled list for older rounds without it.
-      if (rec?.holePars && Object.keys(rec.holePars).length > 0) return { ...rec.holePars };
-      if (rec?.courseId) holes = getBundledHoles(rec.courseId);
-    }
+    if (holes.length === 0 && rec?.courseId) holes = getBundledHoles(rec.courseId);
     const map: Record<number, number> = {};
     for (const h of holes) map[h.hole] = h.par;
     return map;

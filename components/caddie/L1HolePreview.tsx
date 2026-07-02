@@ -200,8 +200,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     const previewGreen = resolvedGreen ?? geometry?.green ?? null;
     const teeLatLng = (geometry?.tee && previewGreen)
       ? { tee: geometry.tee, green: previewGreen }
-      : holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (holeRecord.middleLat || holeRecord.middleLng)
-        ? { tee: { lat: holeRecord.teeLat, lng: holeRecord.teeLng }, green: { lat: holeRecord.middleLat, lng: holeRecord.middleLng } }
+      : holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (previewGreen || holeRecord.middleLat || holeRecord.middleLng)
+        // 2026-07-01 (re-audit) — prefer the resolved (override-aware) green here too,
+        // so this branch doesn't silently fall back to the raw courseHoles pin after
+        // a Mark-Green. Only use the record's middle when the resolver had nothing.
+        ? { tee: { lat: holeRecord.teeLat, lng: holeRecord.teeLng }, green: previewGreen ?? { lat: holeRecord.middleLat, lng: holeRecord.middleLng } }
         : null;
     let pctAlong: number | null = null;
     let yardsToGreen: number | null = null;
