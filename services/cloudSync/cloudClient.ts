@@ -19,8 +19,19 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// 2026-07-01 — OTA gotcha (see memory api-base-url-spine): EXPO_PUBLIC_* vars are
+// EMPTY in `eas update` JS bundles, so an env-only config would never activate over
+// OTA. The codebase solves this by hardcoding PUBLIC keys as OTA-safe fallbacks
+// (mapboxImagery.ts pk., coursePlaces.ts AIza). The Supabase anon key is likewise a
+// PUBLIC key — data is protected by RLS (auth.uid()), not by hiding the anon key — so
+// it belongs here as a fallback too. FILL THESE with the project URL + anon public key
+// (Supabase → Project Settings → API) to activate cloud backup over OTA. Until then
+// they're empty → isCloudConfigured() false → the UI shows the honest not-set-up state.
+const SUPABASE_URL_FALLBACK = '';
+const SUPABASE_ANON_KEY_FALLBACK = '';
+
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || SUPABASE_URL_FALLBACK;
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY_FALLBACK;
 
 /** True once both the project URL and the anon key are configured. */
 export function isCloudConfigured(): boolean {
