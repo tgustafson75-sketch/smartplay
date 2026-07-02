@@ -993,7 +993,27 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const intent = await parseRes.json();
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (!handler) {
-      console.log(`[handsFree-route] no handler for ${intent.intent_type}`);
+      // 2026-07-01 (audit — MIC CONVERGENCE) — the watch / hands-free path used to
+      // DROP any non-tool intent (greetings, questions, chit-chat) into SILENCE, so
+      // "watch" mode felt deaf to anything conversational. Route it to the SAME
+      // unified brain the caddie-tab + earbud paths use. conversationalBrainTurn is
+      // pipecat-first with an always-there kevin fallback (and honors the kevin
+      // orchestrator), so this answers in BOTH modes and can't regress below silence.
+      console.log(`[handsFree-route] no tool handler for ${intent.intent_type} → conversational`);
+      try {
+        const r = await conversationalBrainTurn(text, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+        if (r.text) {
+          const { speak, speakFromBase64 } = await import('./voiceService');
+          if (r.audioBase64) {
+            await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+          } else {
+            await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
+              ?.catch?.(() => undefined);
+          }
+        }
+      } catch (e) {
+        console.log('[handsFree-route] conversational fallback failed:', e);
+      }
       return;
     }
     const ctx: AppContext = {
