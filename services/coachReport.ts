@@ -25,6 +25,8 @@ export interface CoachReportInput {
   sessionNumber: number | null;
   /** Local image URI of the fault/keyframe to feature. */
   faultFrameUri: string | null;
+  /** Real, measured metrics to show (tempo, etc.). Only pass values that exist — never fabricate. */
+  metrics?: { label: string; value: string }[];
   analysis: {
     primaryFault?: string | null;
     observation?: string | null;
@@ -108,7 +110,16 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
             .instructor { font-size: 18pt; font-weight: 800; margin-top: 1pt; }
             .creds { font-size: 10.5pt; color: #6b7280; margin-top: 1pt; }
             .meta { font-size: 10pt; color: #6b7280; margin: 10pt 0 4pt; }
-            .frame { width: 100%; max-width: 7.5in; border-radius: 12pt; margin: 8pt 0 4pt; }
+            /* 2026-07-02 (Tim — "report is pretty bad") — the frame was full-width with NO height
+               cap, so a portrait/odd keyframe rendered ~10in tall = a whole wasted page. Cap the
+               height + contain so the featured frame is a tidy inline image, never a page-filler. */
+            .frame { display: block; width: 100%; max-width: 7.5in; height: 3.2in; object-fit: contain;
+                     background: #0d1a0d; border-radius: 12pt; margin: 8pt 0 4pt; }
+            .metrics { display: flex; flex-wrap: wrap; gap: 6pt 18pt; margin: 8pt 0 2pt; }
+            .metric { min-width: 1.2in; }
+            .metric .mv { font-size: 15pt; font-weight: 800; color: #0d1a0d; }
+            .metric .ml { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.6pt; color: #6b7280; text-transform: uppercase; }
+            .card { page-break-inside: avoid; }
             .card { background: #f3faf6; border: 1pt solid #d7ece1; border-radius: 10pt; padding: 9pt 12pt; margin-top: 8pt; }
             .card.accent { background: #e9f9f2; border-color: #00C896; }
             .label { font-size: 9pt; font-weight: 800; letter-spacing: 0.8pt; color: #00936e; text-transform: uppercase; }
@@ -127,6 +138,9 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
             </div>
           </div>
           <div class="meta">${metaBits}</div>
+          ${(input.metrics && input.metrics.length > 0)
+            ? `<div class="metrics">${input.metrics.map(m => `<div class="metric"><div class="mv">${esc(m.value)}</div><div class="ml">${esc(m.label)}</div></div>`).join('')}</div>`
+            : ''}
           ${frameUrl ? `<img class="frame" src="${frameUrl}" />` : ''}
           ${fault ? `<div class="card accent"><div class="label">Top Focus</div><div class="fault">${esc(fault)}</div>${a.confidence ? `<div class="creds">Confidence: ${esc(a.confidence)}</div>` : ''}</div>` : ''}
           ${section('What I see', a.observation)}

@@ -852,6 +852,19 @@ export default function SwingDetail() {
       sessionNumber: sameStudent.length > 0 ? sameStudent.length : null,
       // image frames only (never the video clip) for the embedded picture
       faultFrameUri,
+      // 2026-07-02 (Tim — the report had no metrics) — pass REAL measured values only (honest;
+      // omitted when absent). Tempo + club are what we reliably have per swing today.
+      metrics: (() => {
+        const out: { label: string; value: string }[] = [];
+        const s = session as unknown as Record<string, unknown>;
+        const sm = s.smart_motion_shot_map as { tempo?: number } | undefined;
+        const tr = s.tempo_result as { ratio?: number } | undefined;
+        const tempo = typeof sm?.tempo === 'number' ? sm.tempo : (typeof tr?.ratio === 'number' ? tr.ratio : null);
+        if (tempo != null && Number.isFinite(tempo)) out.push({ label: 'Tempo', value: `${tempo.toFixed(1)} : 1` });
+        const club = typeof s.club === 'string' ? s.club : (s.upload as { club?: string } | undefined)?.club;
+        if (club) out.push({ label: 'Club', value: club });
+        return out.length ? out : undefined;
+      })(),
       analysis: pi ? {
         primaryFault: pi.primary_fault ?? null,
         observation: pi.mechanical_breakdown ?? pi.layman_explanation ?? null,
