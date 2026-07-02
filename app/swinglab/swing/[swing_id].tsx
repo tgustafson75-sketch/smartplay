@@ -857,9 +857,16 @@ export default function SwingDetail() {
       metrics: (() => {
         const out: { label: string; value: string }[] = [];
         const s = session as unknown as Record<string, unknown>;
-        const sm = s.smart_motion_shot_map as { tempo?: number } | undefined;
-        const tr = s.tempo_result as { ratio?: number } | undefined;
-        const tempo = typeof sm?.tempo === 'number' ? sm.tempo : (typeof tr?.ratio === 'number' ? tr.ratio : null);
+        // 2026-07-01 (audit H2/H3) — smart_motion_shot_map.tempo is an OBJECT
+        // ({ ratio, backswingMs, ... }), NOT a number, and tempo_result is a
+        // TempoResult ({ ratio }). The old `typeof sm.tempo === 'number'` check
+        // was always false, so the PDF tempo row was dead. Read the ratio off
+        // whichever shape is present.
+        const sm = s.smart_motion_shot_map as { tempo?: { ratio?: number | null } | null } | undefined;
+        const tr = s.tempo_result as { ratio?: number | null } | undefined;
+        const smRatio = typeof sm?.tempo?.ratio === 'number' ? sm.tempo!.ratio! : null;
+        const trRatio = typeof tr?.ratio === 'number' ? tr!.ratio! : null;
+        const tempo = smRatio ?? trRatio;
         if (tempo != null && Number.isFinite(tempo)) out.push({ label: 'Tempo', value: `${tempo.toFixed(1)} : 1` });
         const club = typeof s.club === 'string' ? s.club : (s.upload as { club?: string } | undefined)?.club;
         if (club) out.push({ label: 'Club', value: club });
@@ -1049,12 +1056,40 @@ export default function SwingDetail() {
     if (!swing_id || !shot || !duration || duration <= 0) return;
     if (analyzeInFlightRef.current) return;
     autoAnalyzeFiredRef.current = true;
-    const center = duration / 2;
-    const startSec = Math.max(0, center - 2.5);
-    const endSec = Math.min(duration, center + 3);
-    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
-    useToastStore.getState().show('Analyzing your swing… scrub + re-analyze to fine-tune.');
-    onReanalyze();
+    void (async () => {
+      // 2026-07-01 (audit M2 + C1 root) — the old path blindly windowed the geometric
+      // MIDDLE of the clip. For a practice-heavy upload the real swing usually isn't
+      // mid-clip, so we analyzed walk-up/setup and then FEATURED a pavement/setup frame
+      // (the "pretty bad report" garbage frame). Instead, LOCATE the real swing first
+      // and window that; only fall back to the middle when the locator can't find it
+      // (short clips where the whole clip is the swing, or a locate miss/timeout).
+      let startSec: number;
+      let endSec: number;
+      let located = false;
+      try {
+        const { locateSwingWindow } = await import('../../../services/poseDetection');
+        const win = await locateSwingWindow(shot.clipUri!, duration * 1000);
+        if (win && win.endSec > win.startSec) {
+          // Pad the located window a touch so P1/P10 aren't clipped.
+          startSec = Math.max(0, win.startSec - 0.5);
+          endSec = Math.min(duration, win.endSec + 0.5);
+          located = true;
+        } else {
+          const center = duration / 2;
+          startSec = Math.max(0, center - 2.5);
+          endSec = Math.min(duration, center + 3);
+        }
+      } catch {
+        const center = duration / 2;
+        startSec = Math.max(0, center - 2.5);
+        endSec = Math.min(duration, center + 3);
+      }
+      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+      useToastStore.getState().show(
+        located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
+      );
+      onReanalyze();
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, session?.source, duration, swing_id, shot]);
 

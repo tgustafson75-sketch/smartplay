@@ -1586,11 +1586,15 @@ export const useCageStore = create<CageState>()(
         // measured numbers are kept and are what's displayed. The raw frames were the bulk
         // that pushed cage-store-v1 past Android's ~2MB per-row limit → unreadable → the
         // dashboard crashed reading it. Sessions themselves are preserved (still 50).
-        sessionHistory: s.sessionHistory.map((sess) =>
-          sess.biomechanics && Array.isArray(sess.biomechanics.frames) && sess.biomechanics.frames.length > 0
-            ? { ...sess, biomechanics: { ...sess.biomechanics, frames: [] } }
-            : sess,
-        ),
+        // 2026-07-01 (audit H1) — was `frames: []`, which killed the swing overlay
+        // (skeleton + tempo arc) on every reload. Downsample instead: keep a compact,
+        // overlay-only subset that survives persist without re-triggering SQLITE_FULL.
+        sessionHistory: s.sessionHistory.map((sess) => {
+          if (!(sess.biomechanics && Array.isArray(sess.biomechanics.frames) && sess.biomechanics.frames.length > 0)) return sess;
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { compactPoseFramesForPersist } = require('../services/poseAnalysisApi') as typeof import('../services/poseAnalysisApi');
+          return { ...sess, biomechanics: { ...sess.biomechanics, frames: compactPoseFramesForPersist(sess.biomechanics.frames) } };
+        }),
         clubProfiles: s.clubProfiles,
         cameraAlignment: s.cameraAlignment,
         recentInsights: s.recentInsights,

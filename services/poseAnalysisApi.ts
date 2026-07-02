@@ -673,6 +673,54 @@ export async function extractPoseFramesFromVideo(
   return frames;
 }
 
+/** Joints the SwingBodyOverlay actually draws (skeleton edges + lead-wrist arc).
+ *  Anything else can be dropped when persisting. */
+const OVERLAY_KEYPOINTS = new Set<string>([
+  'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
+  'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
+  'left_knee', 'right_knee', 'left_ankle', 'right_ankle',
+]);
+
+/** 2026-07-01 (audit H1) — the cage store used to STRIP biomechanics.frames to []
+ *  on persist (the Greenhill SQLITE_FULL fix). That silently killed the swing
+ *  overlay (skeleton + tempo arc) on every reload — it showed right after analysis,
+ *  then vanished forever. Instead of dropping the frames, DOWNSAMPLE them: keep at
+ *  most `maxFrames` (always including the position-tagged P1..P10 keyframes the
+ *  biomech read needs), keep only the joints the overlay renders, and round coords.
+ *  Result is ~5% of the raw size — small enough to persist safely while keeping the
+ *  overlay alive across reloads. Verdicts/numbers are persisted separately, so
+ *  this only affects the visual overlay, never the analysis. */
+export function compactPoseFramesForPersist(frames: PoseFrame[], maxFrames = 28): PoseFrame[] {
+  if (!Array.isArray(frames) || frames.length === 0) return [];
+  const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
+  const keep = new Set<number>();
+  sorted.forEach((f, i) => { if (f.position) keep.add(i); });
+  if (sorted.length <= maxFrames) {
+    sorted.forEach((_, i) => keep.add(i));
+  } else {
+    const need = maxFrames - keep.size;
+    if (need > 0) {
+      const step = (sorted.length - 1) / need;
+      for (let j = 0; j <= need; j++) keep.add(Math.round(j * step));
+    }
+  }
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  return [...keep].sort((a, b) => a - b).slice(0, maxFrames).map((i) => {
+    const f = sorted[i];
+    const compact: PoseFrame = {
+      timestampMs: f.timestampMs,
+      keypoints: f.keypoints
+        .filter(k => k.name != null && OVERLAY_KEYPOINTS.has(k.name) && k.score >= MIN_PERSIST_SCORE)
+        .map(k => ({ name: k.name, x: round(k.x), y: round(k.y), score: round(k.score) })),
+    };
+    if (f.position) compact.position = f.position;
+    if (f.frameW) compact.frameW = f.frameW;
+    if (f.frameH) compact.frameH = f.frameH;
+    return compact;
+  });
+}
+const MIN_PERSIST_SCORE = 0.2;
+
 // ─── Acoustic-anchored tempo ─────────────────────────────────────────
 
 /** Backswing:downswing tempo + transition read for a single swing.

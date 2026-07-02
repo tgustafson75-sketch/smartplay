@@ -413,7 +413,14 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   // gets its own analysis + per-swing card. Short clips / single-swing results
   // fall straight through to the existing single-swing path (no extra cost,
   // no regression). Best-effort — any failure leaves the single shot intact.
-  const MULTI_SWING_UPLOAD_MIN_MS = 25_000;
+  // 2026-07-01 (audit C2) — was 25_000, which meant a 12-20s clip of a few quick
+  // reps got analyzed as ONE swing. The locator's own floor is 6s and the
+  // `found.length > 1` guard below already prevents over-expansion on a genuine
+  // single-swing clip (locateSwings returns 1 → we fall straight through), so a
+  // 15s floor safely catches short multi-swing clips at the cost of one extra
+  // locator call on 15-25s single-swing uploads. Practice/rehearsal swings are
+  // now filtered at the locator prompt, so expansion tracks real ball-strikes.
+  const MULTI_SWING_UPLOAD_MIN_MS = 15_000;
   if (
     swings.length === 1 &&
     swings[0].clipStartSeconds == null &&
@@ -490,6 +497,11 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
 
     const results: { swing_id: string; analysis: import('./poseDetection').SwingAnalysis }[] = [];
     const perSwingOutcomes: Array<{ swing_id: string; kind: string; detail?: string }> = [];
+    // 2026-07-01 (audit M3) — session-level fault frame was promoted inside runOne,
+    // so in parallel mode whichever swing FINISHED LAST won — the featured frame was
+    // chosen by completion order, not swing order. Collect candidates here and pick
+    // deterministically (first swing with a real display frame) after all swings run.
+    const faultCandidates: Array<{ index: number; uri: string | null; frameIndex: number | null; fraction: number | null }> = [];
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
     uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);
@@ -750,15 +762,15 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           fault_frame_index: r.analysis.fault_frame_index ?? -1,
           visual_reference_path: r.fault_frame_uri ?? null,
         });
-        // 2026-05-24 — Promote the display-quality fault frame to the
-        // session level. In parallel mode the "last successful with
-        // display URI wins" semantics still hold — the LAST batch to
-        // complete writes its display URI (effectively the latest
-        // diagnostic frame in completion order, vs swing order).
+        // 2026-07-01 (audit M3) — collect the fault-frame candidate instead of
+        // writing it here. Promotion happens once, after all swings finish, from
+        // the FIRST swing (swing order) that produced a real display frame — so the
+        // featured frame is deterministic, not "whichever batch completed last."
         if (r.fault_frame_display_uri || r.analysis.fault_frame_index != null) {
-          useCageStore.getState().setSessionFaultFrame(sessionId, {
+          faultCandidates.push({
+            index: i,
             uri: r.fault_frame_display_uri ?? null,
-            index: r.analysis.fault_frame_index ?? null,
+            frameIndex: r.analysis.fault_frame_index ?? null,
             fraction: r.fault_frame_fraction ?? null,
           });
         }
@@ -784,6 +796,20 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       for (const item of work) {
         await runOne(item);
       }
+    }
+
+    // 2026-07-01 (audit M3) — promote the session fault frame deterministically:
+    // prefer the lowest-index swing that produced a real display frame; fall back
+    // to the lowest-index swing with any fault index. Stable regardless of the
+    // parallel completion order.
+    if (faultCandidates.length > 0) {
+      const byIndex = [...faultCandidates].sort((a, b) => a.index - b.index);
+      const chosen = byIndex.find(c => c.uri) ?? byIndex[0];
+      useCageStore.getState().setSessionFaultFrame(sessionId, {
+        uri: chosen.uri,
+        index: chosen.frameIndex,
+        fraction: chosen.fraction,
+      });
     }
 
     V6('STAGE 4 SUMMARY — per-swing outcomes', {

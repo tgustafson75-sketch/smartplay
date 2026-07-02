@@ -75,8 +75,12 @@ export function GlobalCaddieMic() {
   if (suppressed || hidden) return null;
 
   return (
-    <View style={[styles.wrap, { top: insets.top + 6 }]} pointerEvents="box-none">
-      <CaddieMicBadge size={44} />
+    // 2026-07-01 (whole-app audit) — sits BELOW the header row, not at the very top-left corner,
+    // so the 44px badge never overlaps / intercepts a screen's back/close button (which owns the
+    // top-left on settings, smartvision, smartfinder, recap, mark-*, messages, etc.). Still the
+    // upper-left region Tim asked for, just clear of the back chevron.
+    <View style={[styles.wrap, { top: insets.top + 52 }]} pointerEvents="box-none">
+      <CaddieMicBadge size={40} />
     </View>
   );
 }
