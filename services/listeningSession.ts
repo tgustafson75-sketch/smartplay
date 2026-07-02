@@ -685,6 +685,13 @@ async function openSession() {
               speculativeController?.abort();
               speculativeBrainP = null;
               const r = await conversationalBrainTurn(utterance, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+              // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
+              // (switch_caddie / navigate) the conversational brain returned; this
+              // branch previously spoke the reply but dropped them.
+              if (r.toolActions?.length) {
+                const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+                dispatchConversationalToolActions(r.toolActions);
+              }
               if (r.text && getSessionState() === 'responding') {
                 await stopSpeaking().catch(() => {});
                 if (getSessionState() === 'responding') {
@@ -1002,7 +1009,20 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       console.log(`[handsFree-route] no tool handler for ${intent.intent_type} → conversational`);
       try {
         const r = await conversationalBrainTurn(text, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
-        if (r.text) {
+        // 2026-07-01 (re-audit — voice H2) — dispatch the service-safe tool actions
+        // the brain returned (switch_caddie / navigate) so a hands-free "switch to
+        // Tank" / "open SmartFinder" actually happens instead of only being spoken.
+        if (r.toolActions?.length) {
+          const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+          dispatchConversationalToolActions(r.toolActions);
+        }
+        // 2026-07-01 (re-audit — voice H1) — respect the SAME phone-speaker gate the
+        // main path uses: don't talk out loud when audio is on the phone speaker and
+        // "Voice on phone speaker" is off. voiceEnabled is still enforced inside speak().
+        const route = getCurrentRoute();
+        const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+        const ttsAllowed = (settings.voiceEnabled ?? true) && (route !== 'phone_speaker' || allowPhoneSpeaker);
+        if (r.text && ttsAllowed) {
           const { speak, speakFromBase64 } = await import('./voiceService');
           if (r.audioBase64) {
             await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
