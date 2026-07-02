@@ -114,7 +114,10 @@ export default function CloudBackupCard() {
         [{ text: 'Reload', onPress: () => { void Updates.reloadAsync().catch(() => {}); } }],
       );
     } else if (r.reason !== 'canceled') {
-      Alert.alert('Couldn’t restore', r.reason === 'not_a_backup' ? 'That file isn’t a SmartPlay backup.' : r.reason ?? 'Import failed.');
+      const msg = r.reason === 'not_a_backup' ? 'That file isn’t a SmartPlay backup.'
+        : r.reason === 'newer_version' ? 'That backup was made by a newer version of the app. Update SmartPlay, then restore.'
+        : r.reason ?? 'Import failed.';
+      Alert.alert('Couldn’t restore', msg);
     }
   };
 

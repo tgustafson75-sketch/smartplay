@@ -215,6 +215,10 @@ export async function restoreFromCloud(): Promise<{ ok: boolean; restored: numbe
     const fetched = await fetchCloudSnapshot();
     if (!fetched) { useCloudBackupStore.getState().setStatus('idle'); return { ok: false, restored: 0, reason: 'no_backup' }; }
     const restored = await applySnapshot(fetched.snapshot);
+    // 2026-07-01 (re-audit) — after a restore the on-device data now EQUALS the cloud
+    // snapshot, so record its fingerprint as the last-backed-up state. Prevents the
+    // next auto-backup from redundantly re-uploading identical data post-reload.
+    useCloudBackupStore.getState().markBackedUp(snapshotFingerprint(fetched.snapshot), Date.now());
     useCloudBackupStore.getState().setStatus('idle');
     return { ok: true, restored };
   } catch (e) {

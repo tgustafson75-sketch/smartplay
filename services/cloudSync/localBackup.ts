@@ -75,6 +75,11 @@ export async function importBackupFromFile(): Promise<{ ok: boolean; restored: n
     if (parsed?.magic !== FILE_MAGIC || !parsed.payload || typeof parsed.payload !== 'object') {
       return { ok: false, restored: 0, reason: 'not_a_backup' };
     }
+    // 2026-07-01 (re-audit) — refuse a file written by a NEWER schema than this
+    // build understands, rather than applying an unmigrated payload blindly.
+    if (typeof parsed.schema_version === 'number' && parsed.schema_version > SNAPSHOT_SCHEMA_VERSION) {
+      return { ok: false, restored: 0, reason: 'newer_version' };
+    }
     const restored = await applySnapshot(parsed.payload);
     return { ok: true, restored };
   } catch (e) {

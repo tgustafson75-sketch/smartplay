@@ -631,6 +631,28 @@ const MAX_ROUND_HISTORY = 1000;
 const capHistory = (h: RoundRecord[]): RoundRecord[] =>
   h.length > MAX_ROUND_HISTORY ? h.slice(-MAX_ROUND_HISTORY) : h;
 
+// 2026-07-01 (re-audit) — round-store-v1 is ONE persisted row. Each RoundRecord
+// carries a full `shots` array (and possibly base64 round_photos), so at ~150+
+// rounds the single row can exceed Android's ~2MB per-row read limit and become
+// UNREADABLE — the exact failure mode that killed the cage dashboard (which was
+// fixed by frame-stripping). Defend the crown-jewel store the same way: keep the
+// most recent FULL_DETAIL_ROUNDS full, and strip the heavy per-shot + media arrays
+// from OLDER rounds on PERSIST while preserving every scoring + handicap essential
+// (scores, putts, holePars, totals, scoreVsPar). In-memory history stays full for
+// the session; only the on-disk copy is compacted, so old rounds lose only their
+// shot-by-shot / photo detail after a reload — never their score or Index impact.
+const FULL_DETAIL_ROUNDS = 50;
+const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
+  if (rounds.length <= FULL_DETAIL_ROUNDS) return rounds;
+  const cutoff = rounds.length - FULL_DETAIL_ROUNDS;
+  return rounds.map((r, i) => {
+    if (i >= cutoff) return r; // most recent → keep full
+    const heavy = (r.shots?.length ?? 0) > 0 || r.round_photos != null || r.emotionalLog != null || r.health != null;
+    if (!heavy) return r; // already light
+    return { ...r, shots: [], round_photos: undefined, emotionalLog: undefined, health: undefined };
+  });
+};
+
 export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({
@@ -2410,7 +2432,9 @@ export const useRoundStore = create<RoundState>()(
         shots: s.shots,
         holeStats: s.holeStats,
         roundNumber: s.roundNumber,
-        roundHistory: s.roundHistory,
+        // 2026-07-01 (re-audit) — compact older rounds so this single row can't grow
+        // past Android's ~2MB read limit and brick the whole history. See helper.
+        roundHistory: compactHistoryForPersist(s.roundHistory),
         active_ghost: s.active_ghost,
         recentInsights: s.recentInsights,
         // Audit follow-up (2026-05-13) — these five fields were

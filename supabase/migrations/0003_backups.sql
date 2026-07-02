@@ -59,6 +59,13 @@ $$;
 grant usage on schema smartplay to authenticated;
 grant select, insert, update on smartplay.backups to authenticated;
 
+-- 2026-07-01 (re-audit — defense in depth) — 0002 set ALTER DEFAULT PRIVILEGES
+-- granting anon select/insert/update on every future table in `smartplay`, so anon
+-- auto-received a table grant on `backups` at creation. RLS (authenticated-only
+-- policies, no anon policy) already denies anon every row, but revoke the grant
+-- outright so the table never depends solely on RLS to keep anon out.
+revoke all on smartplay.backups from anon;
+
 -- ── Security hardening: lock down smartplay.messages (audit 0002 fix) ────────
 -- 0002_messages.sql granted select/insert/update to anon + authenticated with
 -- NO RLS, so any client holding the anon key could read/write ANY user's DMs.
