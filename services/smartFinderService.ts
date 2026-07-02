@@ -60,7 +60,7 @@ import { getCachedGolfbertHole, getGolfbertGreenCoord, getGolfbertTeeCoord } fro
  *                       for this course). Caller should show "Green
  *                       coordinates unavailable for this course."
  */
-export type GreenYardagesReason = 'ok' | 'no_fix' | 'no_hole' | 'no_geometry';
+export type GreenYardagesReason = 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'estimated';
 
 export type GreenYardages = {
   front: number | null;
@@ -556,6 +556,31 @@ function staticYardages(
   };
 }
 
+// 2026-07-02 (Tim — Wachusett: yardage wouldn't update on a new course) — golfcourseapi's free tier
+// returns TEE coords but NULL greens for most courses, and the OSM green fallback can fail (no data /
+// no signal on arrival). Without greens the old code returned a FROZEN scorecard number. Instead,
+// estimate distance-to-green as (hole total − how far you've walked from the tee): this UPDATES as
+// you move, flagged 'estimated' so the UI shows it's approximate. Requires a valid tee coord + a
+// known hole distance; returns null when it can't (caller falls back to the static number).
+function estimatedFromTee(
+  hData: import('../store/roundStore').CourseHole,
+  hole: number,
+  fix: LastFix,
+): GreenYardages | null {
+  const total = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance : null;
+  const teeValid = typeof hData.teeLat === 'number' && typeof hData.teeLng === 'number'
+    && Number.isFinite(hData.teeLat) && Number.isFinite(hData.teeLng)
+    && Math.abs(hData.teeLat) <= 90 && Math.abs(hData.teeLng) <= 180
+    && !(Math.abs(hData.teeLat) < 0.001 && Math.abs(hData.teeLng) < 0.001);
+  if (total == null || !teeValid) return null;
+  const walked = haversineYards(fix.location, { lat: hData.teeLat, lng: hData.teeLng });
+  if (!Number.isFinite(walked)) return null;
+  // Guard against a wildly-off fix (player nowhere near this tee) — don't fabricate a number then.
+  if (walked > total + 60) return null;
+  const remaining = Math.max(0, Math.round(total - walked));
+  return { front: null, middle: remaining, back: null, hole_number: hole, reason: 'estimated' };
+}
+
 export async function getGreenYardages(holeNumber?: number): Promise<GreenYardages> {
   const round = useRoundStore.getState();
   const hole = holeNumber ?? round.currentHole;
@@ -577,8 +602,10 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   const { front, middle, back, source } = resolveGreenCoords(hole);
 
   if (!front && !middle && !back) {
-    // GPS available but no green coords — still better to show
-    // scorecard yardages than blanks.
+    // GPS available but no green coords — try a LIVE tee-relative estimate (updates as you walk,
+    // flagged 'estimated') before the frozen scorecard number. (2026-07-02 Tim — Wachusett.)
+    const est = estimatedFromTee(hData, hole, fix);
+    if (est) return est;
     return staticYardages(hData, hole);
   }
 
@@ -634,6 +661,9 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   }
   const { front, middle, back, source } = resolveGreenCoords(hole);
   if (!front && !middle && !back) {
+    // Live tee-relative estimate (updates as you walk) before the frozen scorecard number.
+    const est = estimatedFromTee(hData, hole, syncFix);
+    if (est) return est;
     return staticYardages(hData, hole);
   }
   const yards = {

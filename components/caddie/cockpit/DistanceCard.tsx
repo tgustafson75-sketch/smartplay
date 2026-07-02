@@ -33,7 +33,7 @@ export interface FrontMiddleBack {
   // the player walks). UI labels it "SCORECARD ~Xy" so the user
   // can tell card-total from live distance. Optional for back-
   // compat with any caller still passing the older shape.
-  reason?: 'ok' | 'no_geometry' | 'no_fix' | 'no_hole';
+  reason?: 'ok' | 'no_geometry' | 'no_fix' | 'no_hole' | 'estimated';
 }
 
 export interface DistanceCardProps {

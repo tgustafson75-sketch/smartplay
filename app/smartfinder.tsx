@@ -1933,7 +1933,9 @@ function MapView({
     // under 'no_geometry' it's the scorecard tee→green total — say so
     // explicitly rather than implying live GPS.
     const geometryMsg =
-      yards.reason === 'no_geometry'
+      yards.reason === 'estimated'
+        ? '~GPS estimate from the tee — mark the green for exact yardage.'
+        : yards.reason === 'no_geometry'
         ? (yards.middle != null
             ? 'Scorecard distance — no live GPS green for this course.'
             : 'Green coordinates unavailable for this course.')
@@ -1961,7 +1963,7 @@ function MapView({
                   courseGreenOverrides; re-mark overwrites with a fresh
                   one-shot fix. See services/smartFinderService.ts
                   resolveGreenCoords() and app/mark-green.tsx. */}
-              {yards.reason === 'no_geometry' ? (
+              {(yards.reason === 'no_geometry' || yards.reason === 'estimated') ? (
                 <TouchableOpacity
                   onPress={() => router.push('/mark-green' as never)}
                   style={styles.markGreenBtn}
