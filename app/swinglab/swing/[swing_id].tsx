@@ -1396,6 +1396,9 @@ export default function SwingDetail() {
                 source={{ uri: playbackUri ?? shot.clipUri }}
                 style={styles.video}
                 resizeMode={ResizeMode.CONTAIN}
+                // 2026-07-02 (Tim — skeleton lags behind the motion) — ~25x/s time reports (vs
+                // expo-av's ~2x/s default) so the pose overlay tracks near frame-rate.
+                progressUpdateIntervalMillis={40}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the

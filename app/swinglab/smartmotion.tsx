@@ -2897,6 +2897,9 @@ export default function SmartMotion() {
             shouldPlay={!videoPaused}
             rate={playbackRate}
             shouldCorrectPitch={false}
+            // 2026-07-02 (Tim — skeleton lags/steps behind the motion) — report playback time ~25x/s
+            // instead of expo-av's ~2x/s default, so the pose overlay tracks near frame-rate.
+            progressUpdateIntervalMillis={40}
             // 2026-06-09 — Mute the review loop. The captured clip's audio
             // (e.g. a TV in the room) replaying on loop reads as "audio
             // feedback"; it adds nothing to silent skeleton/speed analysis.

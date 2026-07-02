@@ -79,6 +79,23 @@ function getKp(frame: PoseFrame, name: string): Keypoint | null {
   return k;
 }
 
+// 2026-07-02 (Tim's tempo-heat-map vision) — map a normalized swing speed [0..1] to the tempo
+// heat color: 0 = smooth (green #22c55e) → 0.5 (amber #eab308) → 1 = fast (red #ef4444). Matches the
+// SWING TEMPO gradient bar (slow/smooth/fast) so the arc reads as WHERE the swing runs hot.
+function speedHeatColor(t: number): string {
+  const c = Math.max(0, Math.min(1, t));
+  const lerp = (a: number, b: number, k: number) => Math.round(a + (b - a) * k);
+  let r: number, g: number, b: number;
+  if (c < 0.5) {
+    const k = c / 0.5;
+    r = lerp(0x22, 0xea, k); g = lerp(0xc5, 0xb3, k); b = lerp(0x5e, 0x08, k);
+  } else {
+    const k = (c - 0.5) / 0.5;
+    r = lerp(0xea, 0xef, k); g = lerp(0xb3, 0x44, k); b = lerp(0x08, 0x44, k);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
 function interpolateFrame(frames: PoseFrame[], timeMs: number): PoseFrame | null {
   if (frames.length === 0) return null;
   if (frames.length === 1) return frames[0];
@@ -149,27 +166,47 @@ export default function SwingBodyOverlay({
     };
   }, [frames]);
 
-  // Swing trace: smooth-ish path through the lead wrist across all frames.
-  // We try right_wrist first (right-handed setup, lead wrist of trail hand
-  // = right). If not detected we fall back to left_wrist.
-  const tracePath = useMemo(() => {
+  // 2026-07-02 (Tim's mockup vision) — the swing trace as a TEMPO HEAT MAP: a smooth Catmull-Rom
+  // spline through the lead-wrist path, split into per-segment colored strokes where color = the
+  // wrist SPEED at that part of the swing (green = smooth, amber → red = fast). This surfaces WHERE
+  // the swing is smooth vs rushing (the downswing runs hot), tying the arc to tempo. Real signal
+  // (wrist px/ms), not fabricated. (Clubhead-radius tracking + densified slow-mo detail are the next
+  // layer — see the note to Tim; for now the arc follows the wrist, the only pose-derived point.)
+  const traceSegments = useMemo(() => {
     const sx = aligned ? aligned.sx : 1;
     const sy = aligned ? aligned.sy : 1;
     const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
     const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
-    const pts = sorted
-      .map(f => getKp(f, traceName))
-      .filter((k): k is Keypoint => k != null);
-    if (pts.length < 2) return null;
-    let d = `M ${pts[0].x * sx} ${pts[0].y * sy}`;
-    for (let i = 1; i < pts.length; i++) {
-      const prev = pts[i - 1];
-      const cur = pts[i];
-      const cx = (prev.x + cur.x) / 2;
-      const cy = (prev.y + cur.y) / 2;
-      d += ` Q ${prev.x * sx} ${prev.y * sy} ${cx * sx} ${cy * sy} T ${cur.x * sx} ${cur.y * sy}`;
+    const raw = sorted
+      .map(f => ({ k: getKp(f, traceName), t: f.timestampMs }))
+      .filter((r): r is { k: Keypoint; t: number } => r.k != null);
+    if (raw.length < 2) return [];
+    const P = raw.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
+    // Per-segment speed (px/ms), normalized min→max across the swing → heat color.
+    const speeds: number[] = [];
+    for (let i = 0; i < P.length - 1; i++) {
+      const dist = Math.hypot(P[i + 1].x - P[i].x, P[i + 1].y - P[i].y);
+      const dt = Math.max(1, P[i + 1].t - P[i].t);
+      speeds.push(dist / dt);
     }
-    return d;
+    const maxS = Math.max(...speeds);
+    const minS = Math.min(...speeds);
+    const span = maxS - minS;
+    const segs: { d: string; color: string }[] = [];
+    for (let i = 0; i < P.length - 1; i++) {
+      const p0 = P[i - 1] ?? P[i];
+      const p1 = P[i];
+      const p2 = P[i + 1];
+      const p3 = P[i + 2] ?? P[i + 1];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      const d = `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
+      const norm = span > 1e-6 ? (speeds[i] - minS) / span : 0.5;
+      segs.push({ d, color: speedHeatColor(norm) });
+    }
+    return segs;
   }, [frames, aligned]);
 
   if (!live) return null;
@@ -198,16 +235,18 @@ export default function SwingBodyOverlay({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Svg width="100%" height="100%" viewBox={vb} preserveAspectRatio={par}>
-        {showTrace && tracePath && (
+        {showTrace && traceSegments.map((seg, i) => (
           <Path
-            d={tracePath}
-            stroke="#F0C030"
-            strokeWidth={sw * 0.8}
-            strokeOpacity={0.85}
+            key={`trace-${i}`}
+            d={seg.d}
+            stroke={seg.color}
+            strokeWidth={sw * 0.9}
+            strokeOpacity={0.9}
             fill="none"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        )}
+        ))}
         {showSkeleton && (
           <G>
             {SKELETON_EDGES.map(([a, b]) => {
