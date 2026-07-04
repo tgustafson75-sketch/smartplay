@@ -1809,6 +1809,14 @@ export const useRoundStore = create<RoundState>()(
           require('../services/cloudSync/autoBackup').scheduleBackup();
         } catch { /* best-effort — backup is additive */ }
 
+        // 2026-07-04 (Tim — offline log) — the round's captured offline notes are now
+        // part of the finished round (they stay in voiceLogStore for recap). Mark them
+        // ingested so the live caddie stops surfacing them.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../services/voiceLogService').markRoundNotesIngested(record.id);
+        } catch { /* best-effort */ }
+
         return record.id;
       },
 

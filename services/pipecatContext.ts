@@ -88,11 +88,20 @@ export function buildPipecatContext() {
     },
     memory: (() => {
       try {
-        return getCaddieContext({
+        const base = getCaddieContext({
           courseId: round.activeCourseId ?? undefined,
           hole: round.currentHole ?? undefined,
           club: round.club ?? undefined,
         }).promptBlock;
+        // 2026-07-04 (Tim — offline log "ingested later") — fold in anything the player
+        // said while offline this round so the caddie acknowledges + uses it once signal
+        // is back. Peek only (stays pending until round end); best-effort.
+        let offline = '';
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          offline = require('./voiceLogService').peekOfflineNotesBlock() as string;
+        } catch { /* voice-log is additive */ }
+        return offline ? `${base}\n\n${offline}` : base;
       } catch { return ''; }
     })(),
   };

@@ -273,7 +273,23 @@ export function usePipecatVoice({
           }
         } catch { /* offline best-effort */ }
         if (!spokeOffline) {
-          await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+          // 2026-07-04 (Tim — "when all else fails, log statements stored for the round,
+          // ingested later if no signal") — the brain is unreachable AND the local
+          // caddie had no answer, so this is a STATEMENT to save, not a status query.
+          // Capture it against the round so nothing is lost, and confirm via the DEVICE
+          // voice (expo-speech, works with zero signal). When we reconnect the note is
+          // handed back to the caddie + shown in recap.
+          let captured = false;
+          try {
+            const { captureOfflineStatement } = await import('../services/voiceLogService');
+            captured = captureOfflineStatement(transcript);
+          } catch { /* best-effort */ }
+          const { speakDeviceNotice } = await import('../services/voiceService');
+          if (captured) {
+            await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
+          } else {
+            await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
+          }
         }
         onVoiceStateChange?.('idle');
         return;

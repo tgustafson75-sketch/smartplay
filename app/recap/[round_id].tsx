@@ -125,6 +125,7 @@ import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { useRoundStore } from '../../store/roundStore';
+import { useVoiceLogStore } from '../../store/voiceLogStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
 import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
@@ -292,6 +293,14 @@ export default function RecapScreen() {
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
   const deleteRound = useRoundStore(s => s.deleteRound);
+  // 2026-07-04 (Tim — offline log "stored for the round, ingested later") — anything
+  // the player said with no signal this round, so it's reviewable here. Stable-selector
+  // + useMemo (whole entries array is a stable ref until a change) → no render loop.
+  const allVoiceLog = useVoiceLogStore(s => s.entries);
+  const offlineNotes = useMemo(
+    () => allVoiceLog.filter(e => e.roundId === round_id).sort((a, b) => a.capturedAt - b.capturedAt),
+    [allVoiceLog, round_id],
+  );
   // Build a hole→par lookup so score pills can show vs-par color
   // (green under, amber bogey, red double+). courseHoles lives on the
   // active store state — valid for just-ended rounds and any round
@@ -815,6 +824,24 @@ export default function RecapScreen() {
                         <Text style={styles.noteTime}>{time}</Text>
                       </View>
                       <Text style={styles.noteText}>{note.text}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {offlineNotes.length > 0 && (
+              <View style={styles.notesSection}>
+                <Text style={styles.holesHeader}>CAPTURED OFFLINE (no signal)</Text>
+                {offlineNotes.map(e => {
+                  const time = new Date(e.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                  return (
+                    <View key={e.id} style={styles.noteCard}>
+                      <View style={styles.noteHeaderRow}>
+                        <Text style={styles.noteHeader}>{e.hole != null ? `Hole ${e.hole}` : 'Off-course'}</Text>
+                        <Text style={styles.noteTime}>{time}</Text>
+                      </View>
+                      <Text style={styles.noteText}>{e.transcript}</Text>
                     </View>
                   );
                 })}
