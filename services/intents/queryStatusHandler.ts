@@ -185,7 +185,18 @@ export const queryStatusHandler: IntentHandler = {
           const here = await import('../shotLocationService').then(m => m.getCurrentLocation());
           const hole = context.current_hole ?? round.currentHole;
           const green = here ? (await import('../shotLocationService').then(m => m.getGreenCentroid(hole))) : null;
-          const rawYds = targetYards ?? (here && green ? Math.round((await import('../../utils/geoDistance').then(m => m.haversineYards))(here, green)) : null);
+          let rawYds = targetYards ?? (here && green ? Math.round((await import('../../utils/geoDistance').then(m => m.haversineYards))(here, green)) : null);
+          // 2026-07-02 (re-audit) — green-less course (no green coords, the Wachusett /
+          // new-course case): fall back to the SAME tee-relative GPS estimate the strip
+          // shows, so the club recommendation isn't blank while the strip counts down.
+          if (rawYds == null) {
+            try {
+              const est = await getGreenYardages(hole);
+              if (est && (est as { reason?: string }).reason === 'estimated' && typeof est.middle === 'number') {
+                rawYds = est.middle;
+              }
+            } catch { /* no estimate available — engine still degrades gracefully */ }
+          }
           if (rawYds != null && here) {
             const w = (await import('../weatherService').then(m => m.getCachedWeather))(here)
               ?? await (await import('../weatherService')).fetchWeatherAt(here).catch(() => null);

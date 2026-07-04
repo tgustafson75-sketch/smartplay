@@ -415,20 +415,9 @@ export const openToolHandler: IntentHandler = {
         angleRaw === 'down_the_line' || angleRaw === 'down-the-line' || angleRaw === 'dtl' ? 'down_the_line' :
         null;
       const autoStart = intent.parameters.auto_start === true;
-      // 2026-05-25 — Fix AJ Phase 1: surface voice-captured metadata.
-      // shotType ("chip" / "putt" / "swing") — from "chip cam" / "putt
-      // cam" phrasing. subject (capitalized first name) — from
-      // "watching Chris's swing". Forwarded as URL params so the
-      // quick-record screen pre-fills tag + activeMember properly.
-      const shotTypeRaw = String(intent.parameters.shot_type ?? '').toLowerCase();
-      const shotType =
-        shotTypeRaw === 'chip' || shotTypeRaw === 'putt' || shotTypeRaw === 'swing'
-          ? shotTypeRaw
-          : null;
-      const subjectRaw = typeof intent.parameters.subject === 'string'
-        ? intent.parameters.subject.trim()
-        : '';
-      const subject = subjectRaw.length > 0 ? subjectRaw : null;
+      // 2026-07-02 (re-audit) — removed shot_type/subject extraction: SmartMotion
+      // has no standalone shot-type tag and golfer/subject selection is still stubbed,
+      // so these were captured then dropped. Re-add when SmartMotion can consume them.
 
       // 2026-05-23 (Fix #9) — Coach Mode player-name resolution.
       // Voice "I'm coaching Emma" / "coach Mike" pre-sets the active
@@ -509,19 +498,17 @@ export const openToolHandler: IntentHandler = {
         // 2026-05-26 — Fix DW: ?send=1 tells owner-logs.tsx to fire
         // the mailto export on mount. One utterance, one tap-to-send.
         pushPath = `${action.path}?send=1`;
-      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || shotType || subject)) {
+      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart)) {
         const params: string[] = [];
         if (angle) params.push(`angle=${angle}`);
         // 2026-07-01 (audit RANK 2) — smartmotion.tsx keys on `autoRecord=1`, NOT
         // `autoStart`, so the old param was dead: voice "record my swing" opened
         // SmartMotion but never started recording. Emit the param the screen reads.
         if (autoStart) params.push('autoRecord=1');
-        // 2026-05-25 — Fix AJ Phase 1: shotType ("chip"/"putt"/"swing")
-        // and subject (whose swing) get forwarded as URL params so
-        // quick-record can pre-fill the tag + family-member context
-        // without requiring the user to tap through the picker.
-        if (shotType) params.push(`shotType=${encodeURIComponent(shotType)}`);
-        if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
+        // 2026-07-02 (re-audit) — dropped the shotType/subject params: SmartMotion
+        // never read them (no standalone shot-type tag; golfer/subject selection is
+        // still stubbed), so they were dead URL params. "Record Chris's swing" tagging
+        // is a future feature — wire these back once SmartMotion has subject state.
         pushPath = `${action.path}?${params.join('&')}`;
       } else {
         pushPath = action.path;
