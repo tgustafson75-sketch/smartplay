@@ -48,6 +48,7 @@ import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
 import { usePointsStore } from '../../store/pointsStore';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { buildRoundEndSummary } from '../../services/roundEndSummary';
 
 export function GlobalToolsMenu() {
   const router = useRouter();
@@ -208,37 +209,15 @@ export function GlobalToolsMenu() {
               Math.max(10, 50 - Math.max(0, vspar * 2)),
               'Round completed',
             );
-            // Build contextual spoken summary mirroring caddie.tsx buildContextualSummary.
-            const holesWithPar = Object.entries(snapshotScores)
-              .map(([h, s]) => {
-                const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? 4;
-                return { hole: Number(h), score: s as number, par, offset: (s as number) - par };
-              })
-              .filter(h => h.score > 0);
-            let summary: string;
-            if (holesWithPar.length === 0) {
-              summary = `${played} holes at ${cName} — let's see what the recap says.`;
-            } else {
-              const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
-              const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
-              const birdies = holesWithPar.filter(h => h.offset < 0).length;
-              const pars = holesWithPar.filter(h => h.offset === 0).length;
-              const bogeys = holesWithPar.filter(h => h.offset === 1).length;
-              const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
-              if (vspar <= -3) {
-                summary = `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
-              } else if (vspar === 0) {
-                summary = `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
-              } else if (vspar <= 3 && played >= 9) {
-                const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
-                summary = `${total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${played} holes at or under par.`;
-              } else if (played < 9) {
-                summary = `${played} hole${played === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
-              } else {
-                const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
-                summary = `${total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
-              }
-            }
+            // 2026-07-04 (elite-clean audit) — the summary line now comes from the
+            // SAME shared builder the caddie tab uses (services/roundEndSummary);
+            // the inline verbatim copy that lived here had already drifted.
+            const summary = buildRoundEndSummary({
+              total, vspar, played,
+              scores: snapshotScores,
+              courseHoles: snapshotCourseHoles,
+              activeCourse: cName,
+            });
             if (voiceEnabled) {
               try {
                 await configureAudioForSpeech();
@@ -248,7 +227,11 @@ export function GlobalToolsMenu() {
               }
             }
             useToastStore.getState().show('Round saved');
-            try { router.push(`/recap/${roundId}` as never); }
+            // 2026-07-04 (elite-clean audit) — route through the SAME post-round flow
+            // as the caddie tab: feelings first, then the recap. This menu used to
+            // skip straight to /recap/<id>, so ending from the Tools menu silently
+            // dropped the post-round feelings capture.
+            try { router.push(`/recap/feelings?roundId=${roundId}` as never); }
             catch (e) { console.log('[tools] recap nav failed', e); }
           },
         },

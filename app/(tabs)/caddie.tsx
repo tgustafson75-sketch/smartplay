@@ -116,6 +116,7 @@ import { OUTCOME_LABELS, OUTCOME_EMOJI } from '../../types/shot';
 import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { buildRoundEndSummary } from '../../services/roundEndSummary';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -773,18 +774,13 @@ export default function CaddieTab() {
   const [offlineFallbackText, setOfflineFallbackText] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
   const [showRoundSetup, setShowRoundSetup] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  // 2026-05-20 — Pre-round tools FAB expansion state. Collapsed = chevron
-  // arrow on the right; tapped = expands to the LEFT into a row of tool
-  // icons. Replaces the giant full-width green pill Tim flagged as
-  // "fucking giant ass button".
-  const [toolsExpanded, setToolsExpanded] = useState(false);
-  // 2026-06-13 (Tim) — HIDE the pre-round quick-tools FAB. It accreted so many
-  // shortcuts it became harder to scan than the canonical ••• Tools menu (which is
-  // also easy to lose on small screens — see the accented pill in the top nav). The
-  // 3-dot menu is now the single tools entry. Block kept (flagged off) for an easy
-  // revert; symbols below stay referenced so there's no unused-var churn.
-  const SHOW_QUICK_TOOLS_FAB = false;
+  // 2026-07-04 (elite-clean audit) — the legacy MORE MENU SHEET (~220 lines) was
+  // deleted: nothing ever opened it (no setShowMoreMenu(true) anywhere) and it
+  // duplicated GlobalToolsMenu with drifted entries (legacy /cage, a 3rd End Round).
+  // 2026-07-04 (elite-clean audit) — the flag-off pre-round Quick Tools FAB
+  // (SHOW_QUICK_TOOLS_FAB=false since 2026-06-13; ~140 dead lines incl. a 2nd voice
+  // toggle + a 4th trust cycler) was deleted along with its toolsExpanded state.
+  // The ••• Tools menu (GlobalToolsMenu) is the single canonical tools entry.
   // Phase 109-followup — Quick Log Shot modal visibility.
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [selectedPickedCourse, setSelectedPickedCourse] = useState<PickedCourse | null>(
@@ -1783,8 +1779,8 @@ export default function CaddieTab() {
 
   // Suspend orchestrator while modals or other voice flows are active.
   useEffect(() => {
-    conversationalLoggingOrchestrator.setSuspended(showShotCard || showRoundSetup || showMoreMenu);
-  }, [showShotCard, showRoundSetup, showMoreMenu]);
+    conversationalLoggingOrchestrator.setSuspended(showShotCard || showRoundSetup);
+  }, [showShotCard, showRoundSetup]);
 
   // ── VAD — continuous listening ───────────
   const { isListening: _vadListening } = useVoiceActivityDetection({
@@ -1844,43 +1840,15 @@ export default function CaddieTab() {
     const snapshotScores = snapshot?.scores ?? useRoundStore.getState().scores;
     const snapshotCourseHoles = snapshot?.courseHoles ?? useRoundStore.getState().courseHoles;
     const cName = snapshot?.activeCourse ?? useRoundStore.getState().activeCourse ?? 'this course';
-    const buildContextualSummary = (): string => {
-      // Find best / worst hole vs par
-      const holesWithPar = Object.entries(snapshotScores)
-        .map(([h, s]) => {
-          const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? 4;
-          return { hole: Number(h), score: s, par, offset: s - par };
-        })
-        .filter(h => h.score > 0);
-      if (holesWithPar.length === 0) return `${played} holes at ${cName} — let's see what the recap says.`;
-      const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
-      const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
-      const birdies = holesWithPar.filter(h => h.offset < 0).length;
-      const pars = holesWithPar.filter(h => h.offset === 0).length;
-      const bogeys = holesWithPar.filter(h => h.offset === 1).length;
-      const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
-
-      // Head-to-head: did we go low somewhere?
-      if (vspar <= -3) {
-        return `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
-      }
-      if (vspar === 0) {
-        return `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
-      }
-      if (vspar <= 3 && played >= 9) {
-        const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
-        return `${total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${played} holes at or under par.`;
-      }
-      if (played < 9) {
-        const fewHoles = played;
-        return `${fewHoles} hole${fewHoles === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
-      }
-      // Tough round
-      const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
-      return `${total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
-    };
-
-    let summary = buildContextualSummary();
+    // 2026-07-04 (elite-clean audit) — the contextual summary builder moved to
+    // services/roundEndSummary.ts (ONE implementation; GlobalToolsMenu had a
+    // drifting verbatim copy).
+    let summary = buildRoundEndSummary({
+      total, vspar, played,
+      scores: snapshotScores,
+      courseHoles: snapshotCourseHoles,
+      activeCourse: cName,
+    });
 
     const best = usePlayerProfileStore.getState().personalBest;
     const isNewPersonalBest = !!(best && total > 0 && total < best);
@@ -3373,147 +3341,6 @@ export default function CaddieTab() {
         />
       </Animated.View>
 
-      {/* 2026-05-20 — Pre-round Tools FAB. Small right-side green
-          chevron; tapping expands a row of tool icons to the LEFT.
-          Replaces the prior full-width green pill (rejected: "fucking
-          giant ass button"). Renders only when no round is active.
-          2026-06-13 — HIDDEN (SHOW_QUICK_TOOLS_FAB=false): the ••• Tools menu is the
-          canonical entry now; this shortcut got too crowded to be useful. */}
-      {SHOW_QUICK_TOOLS_FAB && !isRoundActive ? (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: insets.bottom + 16,
-            right: 16,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
-            zIndex: 12,
-          }}
-          pointerEvents="box-none"
-        >
-          {toolsExpanded ? (
-            <>
-              {/* 2026-05-26 — Tim's pre-round FAB additions:
-                  (a) mic = toggle voice on/off (voiceEnabled setting);
-                  (b) trust cycle = head silhouette with cycle hint, cycles
-                      through TRUST_LEVEL_SLIDER_ORDER. Stays inside this
-                      collapsed-by-default row so the home screen isn't
-                      cluttered when chevron is closed. */}
-              <ToolFabIcon
-                icon={voiceEnabled ? 'mic' : 'mic-off'}
-                label={voiceEnabled ? 'Mute caddie voice' : 'Unmute caddie voice'}
-                onPress={() => {
-                  // 2026-05-26 — Fix CI: compute the new value once and
-                  // use it for BOTH setState and the toast.
-                  // 2026-05-26 — Fix CT: when voice transitions OFF → ON,
-                  // immediately speak an audible "Voice on" confirmation
-                  // so the user (a) knows the toggle took and (b) has
-                  // proof the audio pipeline is alive. userInitiated:true
-                  // because the user just tapped this exact pill — it's
-                  // unambiguously user-initiated. The setVoiceEnabled
-                  // happens BEFORE the speak so isVoiceAllowed sees the
-                  // new true value.
-                  const next = !voiceEnabled;
-                  setVoiceEnabled(next);
-                  void Haptics.selectionAsync().catch(() => undefined);
-                  useToastStore.getState().show(next ? 'Caddie voice on' : 'Caddie voice off');
-                  if (next) {
-                    // Slight delay so React commits the new voiceEnabled
-                    // value before isVoiceAllowed reads it in speak().
-                    setTimeout(() => {
-                      void speak('Voice on', voiceGender, language, apiUrl, { userInitiated: true })
-                        .catch((e) => console.log('[caddie] voice-on confirm failed:', e));
-                    }, 50);
-                  }
-                }}
-              />
-              <ToolFabIconCycler
-                label={`Cycle trust level (now ${TRUST_LEVEL_META[trustLevel].label})`}
-                onPress={() => {
-                  const cur  = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
-                  const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
-                  setTrustLevel(next);
-                  void Haptics.selectionAsync().catch(() => undefined);
-                  useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
-                }}
-              />
-              <ToolFabIcon
-                icon="camera-outline"
-                label="SmartMotion"
-                onPress={() => { setToolsExpanded(false); router.push('/swinglab/smartmotion' as never); }}
-              />
-              {/* 2026-06-13 — Practice Engine (Tank's mode): Open Range = honest
-                  mash-quantifier; Focus = structured interleaved session. Both
-                  tally swings recorded in SmartMotion. */}
-              <ToolFabIcon
-                icon="golf-outline"
-                label="Open Range"
-                onPress={() => { setToolsExpanded(false); router.push('/practice/open-range' as never); }}
-              />
-              <ToolFabIcon
-                icon="list-outline"
-                label="Focus"
-                onPress={() => { setToolsExpanded(false); router.push('/practice/session' as never); }}
-              />
-              <ToolFabIcon
-                icon="calendar-outline"
-                label="SmartPlan"
-                onPress={() => { setToolsExpanded(false); router.push('/practice/smartplan' as never); }}
-              />
-              <ToolFabIcon
-                icon="golf-outline"
-                label="Ball Fit"
-                onPress={() => { setToolsExpanded(false); router.push('/ball-fit' as never); }}
-              />
-              <ToolFabIcon
-                icon="flag-outline"
-                label="Tee Goals"
-                onPress={() => { setToolsExpanded(false); router.push('/tee-goals' as never); }}
-              />
-              <ToolFabIcon
-                icon="library-outline"
-                label="Drills"
-                onPress={() => { setToolsExpanded(false); router.push('/drills' as never); }}
-              />
-              <ToolFabIcon
-                icon="albums-outline"
-                label="Library"
-                onPress={() => { setToolsExpanded(false); router.push('/swinglab/library' as never); }}
-              />
-              <ToolFabIcon
-                icon="apps-outline"
-                label="All Tools"
-                onPress={() => { setToolsExpanded(false); useToolsMenuStore.getState().open(); }}
-              />
-            </>
-          ) : null}
-          <TouchableOpacity
-            onPress={() => setToolsExpanded(s => !s)}
-            accessibilityRole="button"
-            accessibilityLabel={toolsExpanded ? 'Close tools' : 'Open tools'}
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: '#00C896',
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 6,
-              elevation: 8,
-            }}
-          >
-            <Ionicons
-              name={toolsExpanded ? 'chevron-forward' : 'chevron-back'}
-              size={22}
-              color="#060f09"
-            />
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
       {isRoundActive && showShotCard && (
@@ -4025,229 +3852,6 @@ export default function CaddieTab() {
       {/* Phase 109-followup — Quick Log Shot tap UI. */}
       <QuickLogShotSheet visible={quickLogOpen} onClose={() => setQuickLogOpen(false)} />
 
-      {/* ── MORE MENU SHEET ─────────────────── */}
-      <Modal
-        visible={showMoreMenu}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMoreMenu(false)}
-      >
-        <TouchableOpacity
-          style={styles.backdrop}
-          onPress={() => setShowMoreMenu(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.moreSheet}>
-            <View style={styles.handle} />
-            <Text style={styles.moreTitle}>Tools</Text>
-
-            {/* Status row — pinned at the top of the sheet so the round
-                state is visible at a glance whenever Tools is open. */}
-            {isRoundActive && (
-              <View style={styles.toolsStatusRow}>
-                <View style={styles.toolsStatusItem}>
-                  <Text style={styles.toolsStatusLabel}>MODE</Text>
-                  <Text style={styles.toolsStatusValue}>{ROUND_MODE_LABELS[mode]}</Text>
-                </View>
-                <View style={styles.toolsStatusDivider} />
-                <View style={styles.toolsStatusItem}>
-                  <Text style={styles.toolsStatusLabel}>HOLE</Text>
-                  <Text style={styles.toolsStatusValue}>{currentHole}</Text>
-                </View>
-                <View style={styles.toolsStatusDivider} />
-                <View style={styles.toolsStatusItem}>
-                  <Text style={styles.toolsStatusLabel}>SCORE</Text>
-                  <Text style={styles.toolsStatusValue}>{getTotalScore() || '—'}</Text>
-                </View>
-                <View style={styles.toolsStatusDivider} />
-                <View style={styles.toolsStatusItem}>
-                  <Text style={styles.toolsStatusLabel}>VOICE</Text>
-                  <Text style={[styles.toolsStatusValue, { color: voiceEnabled ? '#00C896' : '#6b7280' }]}>
-                    {voiceEnabled ? 'ON' : 'OFF'}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <ScrollView
-              style={styles.moreScroll}
-              contentContainerStyle={styles.moreScrollContent}
-              showsVerticalScrollIndicator
-            >
-
-            {(([
-              // Phase AY — Live / Pre-round yardage toggle. Switching to
-              // 'live' fires a fresh GPS read (acts as a Mark backup if
-              // the regular Mark didn't refresh things). 'preround' shows
-              // static scorecard yardages (planning, or when GPS is
-              // unreliable). Pinned to the top so it's always reachable
-              // mid-round if the data strip's middle yardage looks stale.
-              { icon: yardageMode === 'live' ? 'navigate-circle' as IconName : 'navigate-circle-outline' as IconName,
-                label: `Yardage: ${yardageMode === 'live' ? 'LIVE (GPS)' : 'PRE-ROUND (static)'}`,
-                sub: yardageMode === 'live' ? 'Tap to switch to scorecard yardages' : 'Tap to refresh GPS and go live',
-                action: () => { setYardageMode(yardageMode === 'live' ? 'preround' : 'live'); } },
-              // 2026-06-04 — L1 = Cockpit + Harry quick-toggle. First entry
-              // by design. Always shows "Cockpit Mode" here because the
-              // cockpit early-return at the top of render means we never
-              // reach this menu while already in L1. Tapping sets L1.
-              { icon: 'speedometer-outline' as IconName,
-                label: 'Cockpit Mode',
-                sub: "Harry's cockpit · tap to talk",
-                action: () => { setShowMoreMenu(false); setTrustLevel(1); } },
-              { icon: 'options-outline',     label: `${getCaddieName(caddiePersonality)}'s Presence: ${TRUST_LEVEL_META[trustLevel].label}`, sub: `${TRUST_LEVEL_META[trustLevel].one_liner} · Tap to cycle`, action: () => {
-                  // Cycle Quiet → Companion → Active → Quiet.
-                  const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
-                  const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
-                  setTrustLevel(next);
-                  // Match GlobalToolsMenu behavior — close modal,
-                  // haptic, toast. Without these the user tapped and
-                  // saw nothing happen except the modal staying open.
-                  setShowMoreMenu(false);
-                  void Haptics.selectionAsync().catch(() => undefined);
-                  useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
-                } },
-              // (Removed from Tools menu per Tim — Log a shot, Penalty
-              // Stroke, and Capture Photo don't belong here. Log a shot
-              // is reachable via voice ("log a shot") + auto-detection;
-              // Penalty Stroke moves to a future scorecard inline action;
-              // Capture Photo lives on the round-active surface camera
-              // button. Tools menu is for tools, not round actions.)
-
-              // Caddie persona cycler — Kevin → Serena → Tank → Kevin.
-              // Stays in the Tools sheet so the user can swap mid-round
-              // without diving into Settings. Drives off ACTIVE_PERSONAS
-              // so dormant personas (Harry) are skipped in the rotation.
-              { icon: 'sparkles-outline' as IconName,
-                label: 'Your Caddie',
-                sub: 'Selfie → AI portrait + voice',
-                action: () => { setShowMoreMenu(false); router.push('/profile/custom-caddie' as never); } },
-              { icon: 'people-outline' as IconName,
-                label: `Caddie: ${caddiePersonality === 'custom' ? (customCaddieName ?? 'My Caddie') : getCaddieName(caddiePersonality)}`,
-                sub: `Tap to cycle · ${ACTIVE_PERSONAS.map(p => p === 'custom' ? (customCaddieName ?? 'My Caddie') : getCaddieName(p)).join(' · ')}`,
-                action: () => {
-                  const list = ACTIVE_PERSONAS as readonly Persona[];
-                  const idx = list.indexOf(caddiePersonality as Persona);
-                  // If current persona is dormant (e.g. legacy Harry that
-                  // missed migration), -1 → start at index 0.
-                  const next = list[(Math.max(idx, -1) + 1) % list.length];
-                  setCaddiePersonality(next);
-                  // 2026-06-06 — Sync useCustomCaddie boolean when cycler
-                  // crosses the 'custom' boundary so the existing avatar +
-                  // voice-clip override paths fire / unfire correctly.
-                  setUseCustomCaddie(next === 'custom');
-                } },
-              { icon: 'golf-outline',        label: 'Practice',         sub: 'Cage & swing lab',         action: () => { setShowMoreMenu(false); router.push('/(tabs)/swinglab' as never); } },
-              { icon: 'videocam-outline',    label: 'Cage Mode',        sub: 'Range session',            action: () => { setShowMoreMenu(false); if (!canAccess('cage_mode', subscription_status)) { void triggerPaywall('cage_mode', () => router.push('/paywall' as never)); return; } router.push('/cage' as never); } },
-              { icon: 'telescope-outline',   label: 'SmartVision',      sub: 'Analyze the hole',         action: () => { setShowMoreMenu(false); openSmartVision(); } },
-              { icon: 'locate-outline',      label: 'SmartFinder',      sub: 'Tap-to-lock rangefinder',  action: () => { setShowMoreMenu(false); if (!canAccess('smartfinder', subscription_status)) { void triggerPaywall('smartfinder', () => router.push('/paywall' as never)); return; } router.push('/smartfinder' as never); } },
-              ...(isRoundActive ? [{
-                icon: 'flag-outline' as IconName, label: 'End Round',   sub: 'Finish and get summary',   action: async () => {
-                  setShowMoreMenu(false);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                  clearShotPending();
-                  // 2026-06-21 — capture scores/courseHoles/activeCourse BEFORE
-                  // endRound() resets them so buildContextualSummary gets real data.
-                  const preRound = useRoundStore.getState();
-                  const snapshot = {
-                    total: getTotalScore(),
-                    vspar: getScoreVsPar(),
-                    played: getHolesPlayed(),
-                    scores: { ...preRound.scores },
-                    courseHoles: [...preRound.courseHoles],
-                    activeCourse: preRound.activeCourse,
-                  };
-                  const roundId = endRound();
-                  await generateRoundSummary(snapshot, roundId ?? undefined);
-                  // FIX M15 — route through feelings screen first.
-                  if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
-                },
-              }] : []),
-              { icon: voiceEnabled ? 'volume-high-outline' : 'volume-mute-outline', label: voiceEnabled ? 'Voice On' : 'Voice Off',  sub: "Toggle Kevin's voice", action: () => { setShowMoreMenu(false); setVoiceEnabled(!voiceEnabled); } },
-              { icon: 'library-outline',     label: 'Tutorials',        sub: 'How each tool works',      action: () => { setShowMoreMenu(false); router.push('/tutorials' as never); } },
-              { icon: 'book-outline',        label: 'Rules & Handicap', sub: 'Quick reference + WHS calculator', action: () => { setShowMoreMenu(false); router.push('/reference' as never); } },
-              // Phase V.7+ — user-initiated GPS recalibration. Drops the
-              // current subscription + cached fix, pulls a single Highest-
-              // accuracy fix, restarts the watch in active mode. Useful when
-              // yardages feel off (under trees, by water, after backgrounding).
-              { icon: 'compass-outline',     label: 'GPS Refresh',      sub: 'Pull a fresh fix & refresh yardages', action: async () => {
-                  setShowMoreMenu(false);
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                  try {
-                    const gps = await import('../../services/gpsManager');
-                    const fix = await gps.recalibrateGps();
-                    if (fix) {
-                      // Phase BH — also fire the position-mark bus so every
-                      // non-gpsManager subscriber (smartFinder, holeDetection,
-                      // hole-view) refreshes against the new fix without
-                      // waiting for the next watch tick.
-                      try {
-                        const bus = await import('../../services/positionMarkBus');
-                        await bus.forceMarkPosition().catch(() => {});
-                      } catch (e) { console.log('[gps-refresh] mark cascade failed', e); }
-                      const acc = fix.accuracy_m != null ? `~${Math.round(fix.accuracy_m)}m` : 'unknown';
-                      Alert.alert('GPS Refresh', `Locked. Accuracy ${acc}.`);
-                    } else {
-                      Alert.alert('GPS Refresh', "Couldn't get a fresh fix. Step into the open and try again.");
-                    }
-                  } catch (e) {
-                    console.log('[gps-refresh] error', e);
-                    Alert.alert('GPS Refresh', 'Refresh failed. Try again in a moment.');
-                  }
-                } },
-              { icon: 'logo-youtube',        label: 'YouTube Channel',  sub: '@smartplaycaddie',         action: () => { void openYouTubeChannel('@smartplaycaddie'); setShowMoreMenu(false); } },
-              // Functional EAS Update check — fetches the latest preview-
-              // channel bundle if one is available and prompts to restart.
-              // Lets testers pull the latest fix without uninstall/reinstall.
-              { icon: 'cloud-download-outline' as IconName, label: 'App Refresh', sub: 'Pull the latest fix from the preview channel',
-                action: async () => {
-                  setShowMoreMenu(false);
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                  try {
-                    const Updates = await import('expo-updates');
-                    if (!Updates.isEnabled) {
-                      Alert.alert('App Refresh', 'Updates are not enabled in this build. Reinstall the latest APK to start receiving over-the-air updates.');
-                      return;
-                    }
-                    const result = await Updates.checkForUpdateAsync();
-                    if (!result.isAvailable) {
-                      Alert.alert('App Refresh', "You're on the latest build. Nothing to fetch.");
-                      return;
-                    }
-                    await Updates.fetchUpdateAsync();
-                    Alert.alert(
-                      'App Refresh',
-                      'A new bundle was downloaded. Restart the app now to apply it?',
-                      [
-                        { text: 'Later', style: 'cancel' },
-                        { text: 'Restart now', style: 'default', onPress: () => { void Updates.reloadAsync(); } },
-                      ],
-                    );
-                  } catch (e) {
-                    console.log('[app-refresh] check failed', e);
-                    Alert.alert('App Refresh', 'Refresh failed. Try again in a moment — if it keeps failing, your network may be blocking u.expo.dev.');
-                  }
-                } },
-              { icon: 'settings-outline',    label: 'Settings',         sub: 'App preferences',          action: () => { setShowMoreMenu(false); router.push('/settings' as never); } },
-            ]) as { icon: IconName; label: string; sub: string; action: () => void | Promise<void> }[]).map(item => (
-              <TouchableOpacity
-                key={item.label}
-                style={styles.moreItem}
-                onPress={item.action}
-                activeOpacity={0.8}
-              >
-                <View style={styles.moreIconWrap}>
-                  <AppIcon name={item.icon} size={22} color="#00C896" />
-                </View>
-                <View style={styles.moreText}>
-                  <Text style={styles.moreLabel}>{item.label}</Text>
-                  <Text style={styles.moreSub}>{item.sub}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
       <QuickTutorial
         slug="caddie_intro"
         title="Caddie"

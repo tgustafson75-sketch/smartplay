@@ -2811,7 +2811,11 @@ check('Open Range surface wired — Smart Motion stamps, screen + entry point ex
       /stampedClipsRef\.current\.has\(clipUri\)/.test(sm) &&        // exactly-once per clip
       /summarizeOpenRange\(active\.swings\)/.test(screen) &&        // screen shows the live read
       /name="practice\/open-range"/.test(layout) &&                // route registered
-      /\/practice\/open-range/.test(caddie)                        // reachable from the tools menu
+      // 2026-07-04 (elite-clean) — the old caddie.tsx entry lived inside the DEAD
+      // Quick Tools FAB (users never saw it; now deleted). The LIVE entries are the
+      // SwingLab hub card + voice (open_range → navigate).
+      /\/practice\/open-range/.test(read('app/(tabs)/swinglab.tsx')) &&
+      /open_range: \{ type: 'navigate', path: '\/practice\/open-range' \}/.test(read('services/intents/openToolHandler.ts'))
     );
   })(),
   'smartmotion stamps each analyzed swing into the active practice session (exactly-once, inert outside practice), and the Open Range screen + tools-menu entry surface the live honest read (Practice Engine surface wired, OTA-able)');
@@ -2831,7 +2835,10 @@ check('Structured Session Runner UI — focus picker + auto-advancing interleave
       /startSession\('focus'/.test(screen) &&                       // focus session
       /targetReps/.test(store) && /targetReps/.test(screen) &&      // plan length carried on the session
       /name="practice\/session"/.test(layout) &&                    // route registered
-      /\/practice\/session/.test(caddie)                            // reachable from the tools menu
+      // 2026-07-04 (elite-clean) — the caddie.tsx entry lived inside the DEAD Quick
+      // Tools FAB (deleted). Live entries: SwingLab hub card + voice.
+      /\/practice\/session/.test(read('app/(tabs)/swinglab.tsx')) &&
+      /focus_session: \{ type: 'navigate', path: '\/practice\/session' \}/.test(read('services/intents/openToolHandler.ts'))
     );
   })(),
   'the structured Session Runner lets you pick a focus and walks an interleaved plan that auto-advances as Smart Motion swings stamp in, completing at the target rep count (Practice Engine Session Runner UI)');
@@ -2870,7 +2877,10 @@ check('SmartPlan UI — goal+constraints picker that runs a day through the Sess
       /startSession\('focus', \{ focus: focusKey, targetReps: reps/.test(screen) && // tap a day → run it
       /\/practice\/session/.test(screen) &&                        // launches the Session Runner
       /name="practice\/smartplan"/.test(layout) &&                 // route registered
-      /\/practice\/smartplan/.test(caddie)                         // reachable from the tools menu
+      // 2026-07-04 (elite-clean) — the caddie.tsx entry lived inside the DEAD Quick
+      // Tools FAB (deleted). Live entries: SwingLab hub card + voice.
+      /\/practice\/smartplan/.test(read('app/(tabs)/swinglab.tsx')) &&
+      /smartplan: \{ type: 'navigate', path: '\/practice\/smartplan' \}/.test(read('services/intents/openToolHandler.ts'))
     );
   })(),
   'the SmartPlan screen lets you set goal + days/week + minutes + location, shows the weighted weekly plan, and launches any day through the Session Runner as a focus session (SmartPlan UI, OTA-able)');

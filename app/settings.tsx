@@ -62,17 +62,16 @@ export default function Settings() {
     responseMode,
     highContrast,
     autoListenEnabled,
-    earbudTapToTalk,
-    setEarbudTapToTalk,
     cartMode,
     skip_briefings,
     proactive_kevin_enabled,
     distance_unit,
     theme_preference,
-    // Phase AC — earbudTapToTalk + setEarbudTapToTalk intentionally
-    // dropped from this destructure. The toggle is rendered as a disabled
-    // "Coming soon" row because no native media-key listener exists in the
-    // build (track-player was removed; see services/mediaKeyBridge.ts).
+    // 2026-07-04 (elite-clean audit) — earbudTapToTalk + setEarbudTapToTalk dropped
+    // from this destructure FOR REAL this time (the old comment claimed it while the
+    // destructure remained and the toggle was live). The row now renders disabled
+    // "Coming soon" — no native media-key listener exists in the build
+    // (track-player was removed; see services/mediaKeyBridge.ts).
     voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
     setVoiceOnPhoneSpeaker,
@@ -979,15 +978,34 @@ export default function Settings() {
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 8 }]}>
             Manually override the active caddie (the team auto-selects per pillar — this picks who speaks right now).
           </Text>
+          {/* 2026-07-04 (elite-clean audit) — this pill duplicated the Tools-menu
+              persona cycler but DIVERGED: it omitted 'custom' and never synced
+              setUseCustomCaddie, so switching personas here while the custom caddie
+              was active left useCustomCaddie=true → stale avatar/voice overrides.
+              Now mirrors the cycler: same ACTIVE_PERSONAS set + the same sync. */}
           <PillRow
             label="Active Caddie"
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               { label: 'Tank', value: 'tank' },
+              {
+                label: (() => {
+                  try {
+                    const n = usePlayerProfileStore.getState().customCaddieName;
+                    return n && n.trim() ? n.trim() : 'My Caddie';
+                  } catch { return 'My Caddie'; }
+                })(),
+                value: 'custom',
+              },
             ]}
             value={caddiePersonality}
-            onSelect={(v) => setCaddiePersonality(v as 'kevin' | 'serena' | 'harry' | 'tank')}
+            onSelect={(v) => {
+              setCaddiePersonality(v as 'kevin' | 'serena' | 'tank' | 'custom');
+              try {
+                usePlayerProfileStore.getState().setUseCustomCaddie(v === 'custom');
+              } catch (e) { console.log('[settings] custom-caddie sync failed (non-fatal):', e); }
+            }}
           />
 
           <PillRow
@@ -1356,16 +1374,21 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-          <View style={rowDivStyle}>
+          {/* 2026-07-04 (elite-clean audit) — this toggle was LIVE but its only
+              consumer (services/mediaKeyBridge) is a documented no-op (the native
+              media-key listener was removed with react-native-track-player). A
+              switch the user can flip that does nothing is worse than honesty:
+              render it disabled + "Coming soon" until a build restores the bridge. */}
+          <View style={[rowDivStyle, { opacity: 0.45 }]}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Earbud / BT remote tap</Text>
+              <Text style={labelStyle}>Earbud / BT remote tap · Coming soon</Text>
               <Text style={subStyle}>
-                Off by default to reduce startup risk. Turn it on only if you want to test tap-to-talk with a build that has a native media-key listener.
+                Needs a native media-key listener that isn&apos;t in this build yet. Until then, tap the caddie badge to talk.
               </Text>
             </View>
             <Switch
-              value={earbudTapToTalk}
-              onValueChange={confirmToggle('Earbud tap-to-talk', setEarbudTapToTalk)}
+              value={false}
+              disabled
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor="#ffffff"
             />
