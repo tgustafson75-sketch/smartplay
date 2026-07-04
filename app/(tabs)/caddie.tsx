@@ -1328,6 +1328,11 @@ export default function CaddieTab() {
           outcome?: string;
           feel?: string;
           club?: string;
+          // 2026-07-04 (Tim — compound statements) — the brain now passes the full
+          // context it parsed: which hole, which shot, and how far it went.
+          hole?: number;
+          shot_number?: number;
+          distance_yards?: number;
         };
         const dirMap: Record<string, 'left' | 'straight' | 'right' | null> = {
           left: 'left', pull: 'left', hook: 'left',
@@ -1368,8 +1373,14 @@ export default function CaddieTab() {
           brainKevinRecClub != null && shotClub != null
             ? shotClub === brainKevinRecClub
             : null;
+        // 2026-07-04 (Tim — compound statements) — honor a hole/distance the player
+        // named ("...on hole 3 with 210 yards") instead of dropping them: log the shot
+        // against the stated hole, and stamp the stated yardage when nothing measured it.
+        const shotHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : currentHole;
+        const shotDistance = typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 500
+          ? Math.round(a.distance_yards) : null;
         const shot: ShotResult = {
-          hole: currentHole,
+          hole: shotHole,
           timestamp: Date.now(),
           feel,
           direction,
@@ -1380,12 +1391,36 @@ export default function CaddieTab() {
           swing_feel: a.feel ?? null,
           logged_via: 'voice',
           start_location: shotStartLocation,
+          distance_yards: shotDistance,
           kevin_rec_club: brainKevinRecClub,
           kevin_rec_shape: brainPendingRec?.shape ?? null,
           kevin_adhered: brainKevinAdhered,
         };
         logShot(shot);
         useRoundStore.getState().clearPendingKevinRec();
+        break;
+      }
+      case 'plan_shot': {
+        // 2026-07-04 (Tim — "parse anything I say into context") — a PRE-shot plan:
+        // "I'm going to hit a 5 wood for my second shot on hole 3 with 210 to go."
+        // Set the club + stated-yardage context (so the caddie's next reads use it) and
+        // confirm it back. Does NOT log a completed shot.
+        const p = action as { club?: string; distance_yards?: number; shot_number?: number; hole?: number; target?: string };
+        const rs = useRoundStore.getState();
+        if (typeof p.club === 'string' && p.club.trim()) rs.setClub(p.club.trim());
+        if (typeof p.distance_yards === 'number' && p.distance_yards > 0 && p.distance_yards <= 700) {
+          rs.setUserStatedYardage(Math.round(p.distance_yards), 'user');
+        }
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
+          const bits = [
+            typeof p.club === 'string' && p.club.trim() ? p.club.trim() : null,
+            typeof p.distance_yards === 'number' && p.distance_yards > 0 ? `${Math.round(p.distance_yards)}y` : null,
+            typeof p.shot_number === 'number' && p.shot_number > 0 ? `shot ${Math.round(p.shot_number)}` : null,
+          ].filter(Boolean).join(' · ');
+          toast.useToastStore.getState().show(bits ? `Plan set — ${bits}` : 'Plan noted');
+        } catch (e) { console.log('[caddie] plan_shot toast failed (non-fatal):', e); }
         break;
       }
       case 'log_emotional_state': {

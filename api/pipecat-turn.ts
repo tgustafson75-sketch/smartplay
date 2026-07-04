@@ -47,7 +47,7 @@ async function fetchCourse(path: string): Promise<unknown> {
 // ── UI tools dispatched to client; data tools executed server-side ─────────
 const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
-  'record_swing', 'log_shot', 'log_score', 'log_emotional_state',
+  'record_swing', 'log_shot', 'plan_shot', 'log_score', 'log_emotional_state',
   'mark_tee', 'mark_green', 'log_issue',
 ]);
 
@@ -93,15 +93,32 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_shot',
-    description: 'Log a shot the player just described. Pass only fields they actually mentioned.',
+    description: 'Log a shot the player just HIT / describes as already done. Capture EVERY detail they mentioned — never drop one. Pass only the fields they actually said.',
     parameters: {
       type: 'object',
       properties: {
-        club:          { type: 'string', description: 'Club used' },
+        club:          { type: 'string', description: 'Club used (e.g. "5 wood", "7 iron", "driver")' },
+        hole:          { type: 'number', description: 'Hole number IF they named one (e.g. "on hole 3" -> 3). Omit to use the current hole.' },
+        shot_number:   { type: 'number', description: 'Which shot on the hole IF they said it (e.g. "my second shot" -> 2).' },
+        distance_yards:{ type: 'number', description: 'How far the shot went / the yardage they gave for it, in yards.' },
         direction:     { type: 'string', enum: ['left','straight','right','pull','push','hook','slice','fade','draw'] },
         contactQuality:{ type: 'string', enum: ['fat','thin','pure','toe','heel','topped'] },
         outcome:       { type: 'string', description: 'Where it ended up' },
         feel:          { type: 'string', description: 'How the swing felt' },
+      },
+    },
+  },
+  {
+    name: 'plan_shot',
+    description: 'The player states their PLAN for a shot they are ABOUT to hit — the club, the yardage, and/or which shot on the hole. Examples: "I am going to use a 5 wood for my second shot on hole 3 with 210 yards to go", "hitting 7 iron here", "I have 150 to the pin, going with a smooth 8". This SETS the club + yardage context and confirms it back — it does NOT log a completed shot (use log_shot for a shot already hit). Capture EVERY detail they gave.',
+    parameters: {
+      type: 'object',
+      properties: {
+        club:           { type: 'string', description: 'Club they plan to hit (e.g. "5 wood", "7 iron").' },
+        distance_yards: { type: 'number', description: 'Yardage they stated (e.g. "210 yards to go" -> 210).' },
+        shot_number:    { type: 'number', description: 'Which shot on the hole (e.g. "my second shot" -> 2).' },
+        hole:           { type: 'number', description: 'Hole number IF they named one.' },
+        target:         { type: 'string', description: 'What they are aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
       },
     },
   },
@@ -128,7 +145,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'record_swing',
-    description: 'Open SwingLab / Smart Motion in RECORD mode to film the next swing, camera ready and rolling. Trigger for "record my swing", "watch my swing", "watch this swing", "watch this one", "film this swing", "watch me hit this", "watch me swing" — any time the player wants you to watch/record the FULL swing they are about to hit. (A putt/chip/bunker shot is different — that is putt watch, not this.) On the course this opens the course recording interface directly.',
+    description: 'Open SwingLab / Smart Motion in RECORD mode to film the next swing, camera ready and rolling. Trigger for "record my swing", "record", "SmartMotion and record", "start recording", "watch my swing", "watch this swing", "watch this one", "film this swing", "watch me hit this", "watch me swing" — any time the player wants you to watch/record the FULL swing they are about to hit. (A putt/chip/bunker shot is different — that is putt watch, not this.) On the course this opens the course recording interface directly. IMPORTANT: this is ALWAYS an explicit command — call it IMMEDIATELY, never ask "do you want me to record?" first, and never just talk about it.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -398,7 +415,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `\n\nCONFIRM BEFORE OPENING — DON'T JUMP (Tim 2026-06-30): If the player EXPLICITLY asks to open / go to / start / record / WATCH something ("open Smart Motion", "take me to the tempo drill", "record my swing", "watch this swing", "watch my swing", "let's go to drills"), call the tool directly as usual. BUT if they only CONVERSATIONALLY mention practicing, a drill, or working on a club ("let's work on irons", "I should do a drill", "my grip feels off", "I want to work on tempo") WITHOUT asking to open anything, do NOT call navigate / open_swinglab / record_swing / configure_drill yet. Instead have a NATURAL conversation: ASK them what specifically they want to work on — a real question, and END IT WITH A QUESTION MARK so the mic stays open for their answer ("Nice — what do you want to dial in, your irons or your tempo?"). Once they NAME something, give ONE short OFFER to open it phrased as a STATEMENT, not a question ("Say go and I'll open Smart Motion for that"), and fire the open tool only AFTER they confirm. Don't jump straight in; offer once; don't nag.
 
 KEEP THE CONVERSATION OPEN: whenever you ask the player a genuine question you want answered, END YOUR REPLY WITH "?" so the mic re-opens for their reply. The ONLY statement-not-question case is the open-OFFER above. You are a natural AI caddie having a conversation — not a command prompt.`;
-    let kbAddendum = confirmRule;
+    // 2026-07-04 (Tim — "parse anything I say into context, have a conversation for
+    // clarity when needed") — the core natural-understanding rule. ALWAYS present.
+    const parseRule =
+      `\n\nPARSE EVERYTHING INTO CONTEXT — CONVERSE FOR CLARITY (Tim 2026-07-04): Parse EVERYTHING the player says into structured context and the right tool call(s). Extract every detail they give — club, hole number, which shot, yardage, target, direction, contact, feel, outcome — and pass ALL of them to the tool. NEVER silently drop a detail you heard. Examples:
+- "I'm going to use a 5 wood for my second shot on hole 3 with 210 yards to go" -> plan_shot{club:"5 wood", shot_number:2, hole:3, distance_yards:210} (ALL four fields).
+- "I hit 7 iron to about 8 feet" -> log_shot{club:"7 iron", outcome:"8 feet"} plus any hole/shot/yardage they gave.
+A single statement can need MULTIPLE tools — call each one (e.g. "log that and record my next swing" -> log_shot + record_swing). If you have enough to act on a clear command, ACT — do not ask permission for something explicit. If a KEY detail you NEED to act is missing or genuinely ambiguous, ask ONE short natural clarifying question and END IT WITH "?" so the mic stays open, then finish the action on their answer — prefer a quick clarify over guessing wrong or dropping the ask. When you capture a rich statement, REFLECT back what you got so they know it landed ("5 wood from 210 on your second — got it"), never just "okay".`;
+    let kbAddendum = confirmRule + parseRule;
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
@@ -406,6 +430,7 @@ KEEP THE CONVERSATION OPEN: whenever you ask the player a genuine question you w
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
         + confirmRule
+        + parseRule
         + (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
