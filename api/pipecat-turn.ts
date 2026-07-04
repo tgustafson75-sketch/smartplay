@@ -172,11 +172,11 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'lookup_course',
-    description: 'Search for a golf course by name or location. Use for ANY question about courses: "what course is nearby?", "what course are we playing?", "find a course near me", "closest golf course", "courses in [city]".',
+    description: 'Search for a golf course, driving range, or practice facility by name or location. Use for ANY question about finding a place to play or practice: "what course is nearby?", "what course are we playing?", "find a course near me", "closest golf course", "courses in [city]", "find a driving range near me", "any ranges around here?".',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Course name or "name in city"' },
+        query: { type: 'string', description: 'Course / range name or "name in city" (append "driving range" when they asked for a range).' },
       },
       required: ['query'],
     },

@@ -109,7 +109,14 @@ export function buildPipecatContext() {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           plan = require('../store/practicePlanStore').practicePlanPromptBlock() as string;
         } catch { /* plan block is additive */ }
-        return [base, plan, offline].filter((b) => b && b.trim()).join('\n\n');
+        // 2026-07-04 (Tim — comprehensive coverage) — recent rounds + courses played +
+        // practice focus, so the caddie can converse about history from real data.
+        let history = '';
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          history = require('./caddieHistoryContext').historyPromptBlock() as string;
+        } catch { /* history block is additive */ }
+        return [base, plan, history, offline].filter((b) => b && b.trim()).join('\n\n');
       } catch { return ''; }
     })(),
   };
