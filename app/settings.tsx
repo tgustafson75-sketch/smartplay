@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
@@ -1690,7 +1691,11 @@ export default function Settings() {
           </View>
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Version</Text>
-            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>2.0.0</Text>
+            {/* 2026-07-04 (elite-clean audit, menu finding #15) — was hardcoded "2.0.0"
+                while app.json says 1.0.0. Read the REAL version from the expo config. */}
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>
+              {Constants.expoConfig?.version ?? '—'}
+            </Text>
           </View>
           {/* 2026-07-01 (Tim) — live OTA bundle stamp so you can confirm you're on the current
               update before judging a fix (OTA lands on cold start; this proves which one you have). */}
@@ -2178,13 +2183,10 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
       Alert.alert(
         t('settings.glasses_tutorial_title'),
         t('settings.glasses_tutorial_body'),
-        [
-          { text: 'Got it', style: 'default' },
-          {
-            text: 'Watch Tutorial',
-            onPress: () => Linking.openURL('https://smartplaygolf.com/glasses-setup').catch(() => {}),
-          },
-        ],
+        // 2026-07-04 (elite-clean audit, menu finding #15) — the "Watch Tutorial"
+        // button pointed at smartplaygolf.com (wrong domain, dead link). Removed
+        // until a real hosted tutorial exists; the alert body carries the setup steps.
+        [{ text: 'Got it', style: 'default' }],
       );
     } finally {
       setBusy(false);

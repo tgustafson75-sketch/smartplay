@@ -106,15 +106,18 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => [
     ],
   },
   {
+    // 2026-07-04 (elite-clean audit, menu finding #14) — this card described the
+    // PRE-rebuild menu (Cast Mode, "Open Practice / Cage", a Recap entry — none
+    // exist). Rewritten to match the live GlobalToolsMenu.
     id: 'tools',
     icon: 'construct-outline',
     title: 'Tools menu',
     blurb: 'Three-dot menu top-right of Caddie home.',
     steps: [
-      `Cycle ${caddieName}'s Presence (Trust Spectrum) without leaving the menu.`,
-      'Open Practice / Cage / SmartVision / SmartFinder.',
-      'Toggle Voice On/Off, Cast Mode, end the round, jump to Settings.',
-      'Tutorials (this screen) lives here too.',
+      `Switch your caddie or cycle ${caddieName}'s Presence without leaving the menu.`,
+      'Open SmartMotion, SwingLab, SmartVision, SmartFinder, Smart Play, or TightLie.',
+      'Refresh GPS, view the Shot Log, end the round, or toggle Coach Mode.',
+      'Tutorials (this screen) and Your Caddie live under Help.',
     ],
   },
 ];

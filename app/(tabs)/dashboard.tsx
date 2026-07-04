@@ -1004,14 +1004,23 @@ export default function Dashboard() {
                 {derivedLongestDrive != null ? `${derivedLongestDrive}y` : '—'}
               </Text>
             </View>
+            {/* 2026-07-04 (elite-clean audit, menu finding #9) — tap used to no-op
+                once a value existed (and the empty-state tap dumped the user at
+                generic Settings with no hint). It's a manual-entry stat: tap ALWAYS
+                opens Settings to edit it, with a toast pointing at the field. */}
             <TouchableOpacity
               style={styles.highlightCell}
               activeOpacity={0.7}
               onPress={() => {
-                if (longestPutt == null) router.push('/settings' as never);
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
+                  (require('../../store/toastStore') as typeof import('../../store/toastStore'))
+                    .useToastStore.getState().show('Longest Putt is under Settings → Profile');
+                } catch { /* toast is best-effort */ }
+                router.push('/settings' as never);
               }}
               accessibilityRole="button"
-              accessibilityLabel={longestPutt == null ? 'Set longest putt in Settings' : `Longest putt ${longestPutt} yards`}
+              accessibilityLabel={longestPutt == null ? 'Set longest putt in Settings' : `Longest putt ${longestPutt} yards — tap to edit`}
             >
               <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.longest_putt')}</Text>
               <Text style={[styles.highlightValue, { color: colors.text_primary }]}>

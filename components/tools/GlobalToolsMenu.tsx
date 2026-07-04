@@ -417,10 +417,23 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
               colors={colors}
             />
+            {/* 2026-07-04 (elite-clean audit, menu finding #8) — TightLie was the one
+                tool with NO Tools-menu entry (reachable only from the cockpit pill /
+                L4 row / voice). One menu, every tool. */}
+            <Row
+              icon="fitness-outline"
+              label="TightLie"
+              sub="Photo your lie · how to play it"
+              onPress={() => nav('/lie-analysis')}
+              colors={colors}
+            />
+            {/* 2026-07-04 (elite-clean audit, menu finding #18) — was labeled
+                "PuttingLab" but opens the GENERIC video-upload screen (putting is
+                one tag there). Honest label until a dedicated putting lab exists. */}
             <Row
               icon="golf-outline"
-              label="PuttingLab"
-              sub="Upload putt video · face / stroke / read analysis"
+              label="Upload a Swing or Putt"
+              sub="Video upload · swing + putt analysis"
               onPress={() => nav('/swinglab/upload')}
               colors={colors}
             />

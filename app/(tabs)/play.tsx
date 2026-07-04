@@ -35,11 +35,12 @@ import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { canAccess } from '../../services/featureAccess';
+import { triggerPaywall } from '../../services/paywallGuard';
 import { useSettingsStore } from '../../store/settingsStore';
 // 2026-05-24 — Quick-launch Tournament Mode from a course card. Sets
 // tournamentStore.courseName before navigating so the user lands on
 // /tournament with the course pre-filled (saves the free-text typing).
-import { useTournamentStore } from '../../store/tournamentStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { getBundledHoles } from '../../data/courses';
@@ -236,18 +237,11 @@ const LOCAL_COURSES: CourseSummary[] = [
   },
 ];
 
-// 2026-06-02 — Fix GO: HAYES_OPEN_COURSE_IDS removed alongside the
-// pinned card on the play tab. Memorial Day weekend trip passed; the
-// courses are still in LOCAL_COURSES + TOURNAMENT_QUICK_LAUNCH_IDS
-// so they remain reachable + tournament-mode-enabled via the normal
-// course discovery flow.
-
-// 2026-06-04 — Tournament Mode quick-launch set emptied with the
-// Maplewood + Pembroke Pines removal. Re-add course IDs here when
-// new tournament-eligible local courses get bundled.
-const TOURNAMENT_QUICK_LAUNCH_IDS = new Set<string>([]);
-
-type SearchKind = 'courses' | 'range_practice';
+// 2026-06-02 — Fix GO: HAYES_OPEN_COURSE_IDS removed alongside the pinned card
+// (courses remain reachable via normal discovery).
+// 2026-07-04 (elite-clean audit) — TOURNAMENT_QUICK_LAUNCH_IDS (an empty set since
+// 2026-06-04) + its trophy button + launchTournamentForCourse were DEAD code and
+// have been deleted. Tournament Mode stays reachable from the format chip row.
 
 export default function PlayTab() {
   const router = useRouter();
@@ -729,22 +723,6 @@ export default function PlayTab() {
     pushCourseGuarded(router, c.id);
   }, [router]);
 
-  // 2026-05-24 — One-tap Tournament Mode launch with course pre-filled.
-  // Sets tournamentStore.courseName BEFORE navigating so /tournament
-  // mounts with the course populated — saves the user typing the same
-  // course they just selected. Idempotent: if a tournament is already
-  // in progress on a different course, the user sees their existing
-  // setup with the courseName updated (they can tap reset on the
-  // tournament screen if they want a fresh slate).
-  const launchTournamentForCourse = useCallback((courseName: string) => {
-    try {
-      useTournamentStore.getState().setCourseName(courseName);
-    } catch (e) {
-      console.log('[play] launchTournamentForCourse setCourseName failed (non-fatal):', e);
-    }
-    router.push('/tournament' as never);
-  }, [router]);
-
   const handleStartRound = () => {
     if (!selected) return;
     // 2026-06-15 (Tim — pre-round brief fired ~25s late) — warm the brief + TTS
@@ -771,12 +749,31 @@ export default function PlayTab() {
     // 2026-06-12 — the legacy hole-view screen was retired (it was ~90% duplicated by
     // SmartVision). Preview the selected course's hole map in SmartVision, which resolves
     // the course from previewCourseId — set here so it's guaranteed before navigation.
+    // 2026-07-04 (elite-clean audit, menu finding #13) — gate like every other
+    // SmartVision entry (inert while subscriptions are off; correct when they turn on).
+    if (!canAccess('smartvision', usePlayerProfileStore.getState().subscription_status)) {
+      void triggerPaywall('smartvision', () => router.push('/paywall' as never));
+      return;
+    }
     useRoundStore.getState().setPreviewCourse(selected.id);
     router.push('/smartvision' as never);
   };
 
-  const handleRangeBook = () => {
+  const handleRangeBook = async () => {
     if (!selected) return;
+    // 2026-07-04 (elite-clean audit, menu finding #7) — "Log" used to push the raw
+    // id, so a LOCAL course landed on the synthetic local: route's "no detailed
+    // data" empty state while the (i) button on the SAME row resolved the real API
+    // id first and got full detail. Resolve local ids the same way (i) does.
+    if (String(selected.id).startsWith('local:')) {
+      try {
+        const found = await searchCourses(selected.club_name ?? selected.course_name ?? '');
+        const real = found.find(r => !r._error);
+        if (real) { pushCourseGuarded(router, real.id); return; }
+      } catch (e) {
+        console.log('[play] local-course log resolve failed:', e);
+      }
+    }
     pushCourseGuarded(router, selected.id);
   };
 
@@ -952,17 +949,6 @@ export default function PlayTab() {
                   </View>
                 )}
                 {isActive && <AppIcon name="checkmark" size={18} color="#00C896" />}
-                {TOURNAMENT_QUICK_LAUNCH_IDS.has(c.id) && (
-                  <TouchableOpacity
-                    onPress={() => launchTournamentForCourse(c.club_name)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={styles.infoBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Start Tournament Mode at ${c.club_name}`}
-                  >
-                    <AppIcon name="trophy" size={18} color="#fbbf24" />
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   onPress={() => onTapInfo(c)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

@@ -3113,10 +3113,18 @@ export default function CaddieTab() {
                 <Ionicons name="telescope-outline" size={22} color="#00C896" />
               </TouchableOpacity>
 
-              {/* SmartFinder rangefinder reticle */}
+              {/* SmartFinder rangefinder reticle.
+                  2026-07-04 (elite-clean audit, menu finding #13) — this was the ONE
+                  SmartFinder entry with no paywall gate (the other four gate). Inert
+                  while SUBSCRIPTIONS_ENABLED=false, but a real bypass the day billing
+                  turns on. Gate it like its siblings. */}
               <TouchableOpacity
                 onPress={() => {
                   setL4ActionsExpanded(false);
+                  if (!canAccess('smartfinder', subscription_status)) {
+                    void triggerPaywall('smartfinder', () => router.push('/paywall' as never));
+                    return;
+                  }
                   router.push('/smartfinder' as never);
                 }}
                 style={{

@@ -50,9 +50,13 @@ export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllToo
         bg={BG_SKY}
         onPress={onMotion}
       />
+      {/* 2026-07-04 (elite-clean audit, menu finding #8) — was labeled "Play",
+          colliding with the Play TAB and the Tools menu's "Smart Play"
+          (SmartFinder). It opens /lie-analysis, which every other surface —
+          the L4 row, voice — calls TightLie. One feature, one name. */}
       <Pill
         icon="fitness-outline"
-        label="Play"
+        label="TightLie"
         color={ACCENT_GREEN}
         bg={BG_GREEN}
         onPress={onPlay}
