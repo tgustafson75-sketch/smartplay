@@ -56,6 +56,19 @@ import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
+/**
+ * 2026-07-03 (Tim — "the AI needs to be front and center and the highlight") —
+ * JUDGMENT / advice reads the AI caddie should LEAD (rich, personality-forward),
+ * NOT a local template. tryLocalReply still computes these so answerOffline() can
+ * fall back to them as the OFFLINE safety net when the brain is unreachable (Tim's
+ * course had signal drops), but ONLINE they route to the caddie brain. Pure facts
+ * (yardage number, score, hole, par, holes-left, tee, handicap, wind, last shot,
+ * course/routine memory) stay INSTANT + local — the AI adds nothing but lag there.
+ */
+export const AI_LED_QUERY_TYPES: ReadonlySet<string> = new Set<string>([
+  'club_recommend', 'plays_like', 'reach',
+]);
+
 export type LocalReplyResult = {
   text: string;
   queryType:

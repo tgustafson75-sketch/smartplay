@@ -2096,25 +2096,35 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
   })(),
   'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
 
-check('Voice local-first: deterministic asks answered on-device before classify+brain',
-  // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — the 17-type local
-  // responder (distance/club/score/wind/plays-like/reach/last-shot/hole/par/...) is now
-  // tried BEFORE the cloud classify+brain on a precheck miss, skipping ~2 round-trips
-  // and working offline. Strategic 'hole_info' is intentionally NOT promoted (the brain
-  // stays richer online; localStatusResponder remains its offline fallback).
+check('Voice local-first: FACTUAL asks answer on-device; JUDGMENT asks lead with the AI',
+  // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — the local responder
+  // is tried BEFORE the cloud classify+brain on a precheck miss (offline + fast).
+  // 2026-07-03 (Tim — "the AI needs to be front and center and the highlight") — the
+  // JUDGMENT reads (club_recommend / plays_like / reach) were REMOVED from the instant
+  // local-primary set so they lead with the caddie brain; they remain the OFFLINE
+  // safety net via answerOffline→tryLocalReply. Pure FACTS (yardage/score/hole/par/…)
+  // still answer instantly + local.
   (() => {
     const ls = read('services/listeningSession.ts');
     const setBlock = (ls.match(/LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/) || [])[1] || '';
+    const lsr = read('services/localStatusResponder.ts');
+    const uvc = read('hooks/useVoiceCaddie.ts');
     return (
       /import \{ tryLocalReply \} from '\.\/localStatusResponder';/.test(ls) &&
       /localPrimary = tryLocalReply\(utterance, localLang\)/.test(ls) &&
       /LOCAL_PRIMARY_TYPES\.has\(localPrimary\.queryType\)/.test(ls) &&
       /local_primary type=/.test(ls) &&
-      /club_recommend/.test(setBlock) && /plays_like/.test(setBlock) && /score_round/.test(setBlock) &&
-      !/hole_info/.test(setBlock) && !/no_round/.test(setBlock)
+      // FACTS stay local; JUDGMENT types are OUT of the instant set (→ brain).
+      /score_round/.test(setBlock) && /yardage_middle/.test(setBlock) &&
+      !/club_recommend/.test(setBlock) && !/plays_like/.test(setBlock) && !/\breach\b/.test(setBlock) &&
+      !/hole_info/.test(setBlock) && !/no_round/.test(setBlock) &&
+      // The AI-led set is declared + the caddie-tab path defers those to the brain.
+      /export const AI_LED_QUERY_TYPES/.test(lsr) &&
+      /club_recommend'.*'plays_like'.*'reach'/s.test(lsr) &&
+      /!responder\.AI_LED_QUERY_TYPES\.has\(local\.queryType\)/.test(uvc)
     );
   })(),
-  'factual asks answer instantly + offline (skip classify+brain); strategic asks keep the brain');
+  'factual asks answer instantly + offline; judgment asks (club/plays-like/reach) lead with the AI brain');
 
 check('Voice local-first hit-rate metric: recorded at decision points + shown in Owner Tools',
   // 2026-06-16 (Tim — "I care about that stuff") — the self-growing-agent health metric:

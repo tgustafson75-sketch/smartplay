@@ -1856,7 +1856,12 @@ export const useVoiceCaddie = ({
           const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
             ? (language as 'en' | 'es' | 'zh') : 'en';
           const local = responder.tryLocalReply(transcript, langSafe);
-          if (local) {
+          // 2026-07-03 (Tim — "AI front and center") — a JUDGMENT read (what should I
+          // hit / plays-like / can I reach) leads with the AI caddie, not this local
+          // template. Only bare FACTS short-circuit to the instant local answer; the
+          // judgment types fall through to the brain (with tryLocalReply still the
+          // offline safety net via answerOffline when the brain can't be reached).
+          if (local && !responder.AI_LED_QUERY_TYPES.has(local.queryType)) {
             devLog('[voice] LOCAL-FIRST hit:', local.queryType);
             // Instrument the local hit-rate (self-growing-agent: brain grows →
             // tokens+network fall, so we measure how often the local path answers).

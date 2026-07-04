@@ -78,9 +78,13 @@ const INTENT_FETCH_TIMEOUT_MS = 8_000;
 // narrative is richer online; localStatusResponder stays its OFFLINE fallback), and
 // 'no_round'/anything not an answer. This only adds an instant path — it never blocks
 // the cloud for asks not in this set, so nothing existing is downgraded.
+// 2026-07-03 (Tim — "AI front and center") — dropped the JUDGMENT types
+// (club_recommend / plays_like / reach) from the instant local-primary set so they
+// route to the caddie brain (the AI leads the read). They remain the OFFLINE safety
+// net via answerOffline→tryLocalReply. Pure facts still answer instantly + local.
 const LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set([
   'yardage_middle', 'yardage_front', 'yardage_back', 'course_memory',
-  'club_recommend', 'plays_like', 'reach', 'wind', 'last_shot',
+  'wind', 'last_shot',
   'score_round', 'hole_current', 'par_current', 'holes_left',
   'tee_box', 'course_name', 'club_current', 'handicap',
   'routine_saved', 'routine_recall',
