@@ -146,6 +146,9 @@ export type ToolAction =
   // 2026-07-04 (Tim — compound "parse anything into context") — a PRE-shot plan the
   // player declared (club/yardage/shot/hole) that sets context + confirms, not a log.
   | { type: 'plan_shot'; club?: string; distance_yards?: number; shot_number?: number; hole?: number; target?: string }
+  // 2026-07-04 (Tim — verbal reminders) — "remind me to work on putting Thursday" → a
+  // SmartPlan reminder.
+  | { type: 'set_reminder'; text: string; when?: string }
   | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
   // 2026-06-26 — voice "log this issue" → a real issue-log entry (owner-gated client-side)
   | { type: 'log_issue'; note: string }

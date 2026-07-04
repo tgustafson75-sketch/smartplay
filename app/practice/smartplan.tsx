@@ -12,17 +12,18 @@
  * Pure JS, OTA-able. See memory practice-engine-smartmotion, simplified-sophistication.
  */
 
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useShallow } from 'zustand/react/shallow';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { usePracticePlanStore } from '../../store/practicePlanStore';
 import {
   buildGoalPlan,
   PRACTICE_GOALS,
-  type PracticeGoal,
   type PracticeLocation,
 } from '../../services/practice/goalPlan';
 
@@ -40,10 +41,24 @@ export default function SmartPlanScreen() {
   const { colors } = useTheme();
   const startSession = usePracticeSessionStore((s) => s.startSession);
 
-  const [goal, setGoal] = useState<PracticeGoal>('break_90');
-  const [days, setDays] = useState(3);
-  const [minutes, setMinutes] = useState(60);
-  const [location, setLocation] = useState<PracticeLocation>('full');
+  // 2026-07-04 (Tim) — the plan is now PERSISTED (this week's plan), drives caddie
+  // guidance, and carries a goals/challenges narrative + check-offs + reminders.
+  const { goal, days, minutes, location, narrative, completed, reminders } = usePracticePlanStore(
+    useShallow((s) => ({
+      goal: s.goal, days: s.daysPerWeek, minutes: s.minutesPerSession, location: s.location,
+      narrative: s.narrative, completed: s.completed, reminders: s.reminders,
+    })),
+  );
+  const setConfig = usePracticePlanStore((s) => s.setConfig);
+  const setNarrative = usePracticePlanStore((s) => s.setNarrative);
+  const toggleComplete = usePracticePlanStore((s) => s.toggleComplete);
+  const toggleReminderDone = usePracticePlanStore((s) => s.toggleReminderDone);
+  const removeReminder = usePracticePlanStore((s) => s.removeReminder);
+
+  const setGoal = (g: typeof goal) => setConfig({ goal: g });
+  const setDays = (d: number) => setConfig({ daysPerWeek: d });
+  const setMinutes = (m: number) => setConfig({ minutesPerSession: m });
+  const setLocation = (l: typeof location) => setConfig({ location: l });
 
   const plan = useMemo(
     () => buildGoalPlan({ goal, daysPerWeek: days, minutesPerSession: minutes, location }),
@@ -110,26 +125,65 @@ export default function SmartPlanScreen() {
           {plan.sessions.length === 0 ? (
             <Text style={[styles.note, { color: colors.text_secondary }]}>{plan.notes[plan.notes.length - 1]}</Text>
           ) : (
-            plan.sessions.map((s) => (
-              <TouchableOpacity
-                key={s.day}
-                style={[styles.dayRow, { borderBottomColor: colors.border }]}
-                onPress={() => runDay(s.focusKey, s.reps)}
-                accessibilityRole="button"
-                accessibilityLabel={`Run day ${s.day}: ${s.focusLabel}`}
-              >
-                <Text style={[styles.dayNum, { color: colors.text_muted }]}>D{s.day}</Text>
-                <Text style={[styles.dayFocus, { color: colors.text_primary }]}>{s.focusLabel}</Text>
-                <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{s.reps} balls</Text>
-                <Ionicons name="play-circle" size={22} color={colors.accent} />
-              </TouchableOpacity>
-            ))
+            plan.sessions.map((s) => {
+              const done = !!completed[s.focusKey];
+              return (
+                <View key={s.day} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
+                  <TouchableOpacity onPress={() => toggleComplete(s.focusKey)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Mark day ${s.day} ${done ? 'not done' : 'done'}`}>
+                    <Ionicons name={done ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={done ? colors.accent : colors.text_muted} />
+                  </TouchableOpacity>
+                  <Text style={[styles.dayNum, { color: colors.text_muted }]}>D{s.day}</Text>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => runDay(s.focusKey, s.reps)} accessibilityRole="button" accessibilityLabel={`Run day ${s.day}: ${s.focusLabel}`}>
+                    <Text style={[styles.dayFocus, { color: colors.text_primary }, done && { textDecorationLine: 'line-through', opacity: 0.55 }]}>{s.focusLabel}</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{s.reps} balls</Text>
+                  <TouchableOpacity onPress={() => runDay(s.focusKey, s.reps)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+                    <Ionicons name="play-circle" size={22} color={colors.accent} />
+                  </TouchableOpacity>
+                </View>
+              );
+            })
           )}
         </View>
 
         {plan.notes.map((n, i) => (
           <Text key={i} style={[styles.note, { color: colors.text_muted }]}>• {n}</Text>
         ))}
+
+        {/* 2026-07-04 (Tim) — free-text goals + challenges the CADDIE reads + considers
+            all week. Feeds buildPipecatContext so guidance is steered toward these. */}
+        <Text style={[styles.label, { color: colors.text_muted }]}>GOALS & CHALLENGES · your caddie reads this</Text>
+        <TextInput
+          style={[styles.narrative, { color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.surface }]}
+          value={narrative}
+          onChangeText={setNarrative}
+          multiline
+          placeholder="e.g. Round Saturday — want to stop the double-cross off the tee and get my speed on lag putts. Only have ~3 hrs this week."
+          placeholderTextColor={colors.text_muted}
+          textAlignVertical="top"
+        />
+
+        {reminders.length > 0 && (
+          <>
+            <Text style={[styles.label, { color: colors.text_muted }]}>REMINDERS · say &quot;remind me to…&quot;</Text>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {reminders.map((r) => (
+                <View key={r.id} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
+                  <TouchableOpacity onPress={() => toggleReminderDone(r.id)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+                    <Ionicons name={r.done ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={r.done ? colors.accent : colors.text_muted} />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.dayFocus, { color: colors.text_primary }, r.done && { textDecorationLine: 'line-through', opacity: 0.55 }]}>{r.text}</Text>
+                    {r.whenText ? <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{r.whenText}</Text> : null}
+                  </View>
+                  <TouchableOpacity onPress={() => removeReminder(r.id)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+                    <Ionicons name="close" size={18} color={colors.text_muted} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -153,4 +207,5 @@ const styles = StyleSheet.create({
   dayFocus: { flex: 1, fontSize: 14, fontWeight: '700' },
   dayReps: { fontSize: 12, fontWeight: '600' },
   note: { fontSize: 12, lineHeight: 17 },
+  narrative: { minHeight: 92, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 20 },
 });

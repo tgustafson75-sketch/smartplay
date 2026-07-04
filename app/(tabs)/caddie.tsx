@@ -1423,6 +1423,22 @@ export default function CaddieTab() {
         } catch (e) { console.log('[caddie] plan_shot toast failed (non-fatal):', e); }
         break;
       }
+      case 'set_reminder': {
+        // 2026-07-04 (Tim — verbal reminders) — "remind me to work on my putting
+        // Thursday" → a SmartPlan reminder the caddie surfaces + considers all week.
+        const rem = action as { text?: string; when?: string };
+        if (typeof rem.text === 'string' && rem.text.trim()) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const plan = require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore');
+            plan.usePracticePlanStore.getState().addReminder(rem.text.trim(), rem.when ?? null);
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
+            toast.useToastStore.getState().show(`⏰ Reminder set${rem.when ? ` — ${rem.when.trim()}` : ''}`);
+          } catch (e) { console.log('[caddie] set_reminder failed (non-fatal):', e); }
+        }
+        break;
+      }
       case 'log_emotional_state': {
         const a = action as { state: string; valence: 'positive' | 'neutral' | 'negative' };
         logEmotionalState(a.state, a.valence, currentHole);

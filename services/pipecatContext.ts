@@ -101,7 +101,15 @@ export function buildPipecatContext() {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           offline = require('./voiceLogService').peekOfflineNotesBlock() as string;
         } catch { /* voice-log is additive */ }
-        return offline ? `${base}\n\n${offline}` : base;
+        // 2026-07-04 (Tim — "SmartPlan should guide the week in terms of Caddie guidance")
+        // — fold in the persisted weekly plan + the player's goals/challenges narrative so
+        // the caddie steers coaching toward them all week.
+        let plan = '';
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          plan = require('../store/practicePlanStore').practicePlanPromptBlock() as string;
+        } catch { /* plan block is additive */ }
+        return [base, plan, offline].filter((b) => b && b.trim()).join('\n\n');
       } catch { return ''; }
     })(),
   };

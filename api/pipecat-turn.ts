@@ -48,7 +48,7 @@ async function fetchCourse(path: string): Promise<unknown> {
 const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'plan_shot', 'log_score', 'log_emotional_state',
-  'mark_tee', 'mark_green', 'log_issue',
+  'mark_tee', 'mark_green', 'log_issue', 'set_reminder',
 ]);
 
 // ── Kevin's tools (same definitions as api/kevin.ts AI_TOOLS) ─────────────
@@ -120,6 +120,18 @@ const KEVIN_TOOLS: AiToolDef[] = [
         hole:           { type: 'number', description: 'Hole number IF they named one.' },
         target:         { type: 'string', description: 'What they are aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
       },
+    },
+  },
+  {
+    name: 'set_reminder',
+    description: 'Set a reminder the player asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "remind me tomorrow to do the tempo drill", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if they said WHEN, the natural when-phrase. Saved to their SmartPlan reminders.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'What to be reminded of / the activity (wake phrase + "remind me to" stripped).' },
+        when: { type: 'string', description: 'Natural-language WHEN if they said it ("Thursday", "tomorrow morning", "before Saturday", "this week"). Omit if not mentioned.' },
+      },
+      required: ['text'],
     },
   },
   {
