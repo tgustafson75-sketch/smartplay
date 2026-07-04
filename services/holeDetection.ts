@@ -217,12 +217,28 @@ export function detectCurrentHole(
     }
   }
 
-  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen) {
+  // 2026-07-03 (Tim — Dudley Hills) — do NOT advance FORWARD off an UNSCORED hole.
+  // The next hole's tee is often within a few paces of the current green, so walking
+  // off the green toward it would jump the hole BEFORE the player finished putting +
+  // logging the score (Tim: "it'd give me hole 3's yardage while I'm still on 2").
+  // Hole advance is SCORE-driven — logScore auto-advances on the first score, and GPS
+  // only confirms a FORWARD transition once the current hole actually has a score.
+  // (The backward loop-back / re-entry check below is unaffected — it returns to an
+  // already-played hole. Manual + voice hole selection also bypass this via
+  // setCurrentHole.)
+  const currentHoleScored = (scoresByHole[currentHole] ?? 0) > 0;
+  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen && currentHoleScored) {
     return {
       hole_number: bestNextHole,
       confidence: bestNextDist < distFromCurrentGreen * 0.5 ? 'high' : 'medium',
       transition_recommended: true,
       reason: `closer to hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) than hole ${currentHole} green (${Math.round(distFromCurrentGreen)}y)`,
+    };
+  }
+  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen && !currentHoleScored) {
+    return {
+      hole_number: currentHole, confidence: 'high', transition_recommended: false,
+      reason: `near hole ${bestNextHole} tee but hole ${currentHole} not yet scored — advance holds until you log it`,
     };
   }
 
