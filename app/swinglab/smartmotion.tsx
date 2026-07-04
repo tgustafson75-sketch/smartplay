@@ -2898,8 +2898,12 @@ export default function SmartMotion() {
             rate={playbackRate}
             shouldCorrectPitch={false}
             // 2026-07-02 (Tim — skeleton lags/steps behind the motion) — report playback time ~25x/s
-            // instead of expo-av's ~2x/s default, so the pose overlay tracks near frame-rate.
-            progressUpdateIntervalMillis={40}
+            // so the pose overlay tracks near frame-rate. 2026-07-04 (elite-clean audit) —
+            // CONDITIONAL: 25x/s only while the Motion overlay is ON (it's the only consumer
+            // that needs frame-rate position). Overlay off → 4x/s, plenty for the scrubber,
+            // so the review loop doesn't re-render the whole screen 25x/s for nothing
+            // (restores the perf property the old showSkeleton setState gate provided).
+            progressUpdateIntervalMillis={showSkeleton ? 40 : 250}
             // 2026-06-09 — Mute the review loop. The captured clip's audio
             // (e.g. a TV in the room) replaying on loop reads as "audio
             // feedback"; it adds nothing to silent skeleton/speed analysis.
@@ -4026,10 +4030,6 @@ const styles = StyleSheet.create({
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
   framingPillText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
-  aimReadout: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10, backgroundColor: 'rgba(6,15,9,0.74)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.4)' },
-  aimReadoutCol: { alignItems: 'center' },
-  aimReadoutValue: { color: '#88F700', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
-  aimReadoutLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 7, fontWeight: '700', letterSpacing: 1 },
   aimReadoutDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },

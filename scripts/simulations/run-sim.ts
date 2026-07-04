@@ -735,8 +735,10 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     // read (degrade+flag), so a clearly-departed daytime ball still traces while a
     // loose anchor never draws a wrong direction. Acoustic anchors keep frame-accuracy.
     /const videoLocated = \(seg\?\.peakDb \?\? 0\) === 0;/.test(smSrc) &&
-    /videoLocated[\s\S]{0,160}r\.departed && r\.confidence === 'high' && r\.ball_present_before/.test(smSrc),
-  'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a high-confidence-only trace instead of going dark');
+    // 2026-07-04 (drift reconcile) — acceptance deliberately LOOSENED from
+    // confidence==='high' to !== 'low' (high-only threw away good medium reads).
+    /videoLocated[\s\S]{0,200}r\.departed && r\.confidence !== 'low' && r\.ball_present_before/.test(smSrc),
+  'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a not-low-confidence trace instead of going dark');
 
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
@@ -843,7 +845,8 @@ check('Motion OFF by default (lag fix) — toggle still gates compute/render',
   // Motion chip toggles it ON to process on demand. Toggle-gates still hold.
   /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
     /Motion overlay/.test(smSrc) &&
-    /!showSkeleton\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
+    // 2026-07-04 (drift reconcile) — the compute gate grew clipUri/ballArea guards.
+    /if \(!showSkeleton \|\| !clipUri \|\| !ballArea\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
   'skeleton/body-trace overlay defaults OFF (no lag) but is fully toggle-gated — process on demand');
 
 check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressable)',
@@ -1425,7 +1428,8 @@ check('Recap speed: stored round renders INSTANTLY from the record (no 30s spin)
     const wired = /synthesizeRecapFromRecord\(rec\)/.test(screen) &&
       /roundHistory\.find\(\(r\) => r\.id === round_id\)/.test(screen) &&
       /justEnded/.test(screen) &&            // old rounds don't background-poll
-      /Date\.now\(\) - rec2\.endedAt\) < 90_000/.test(screen);
+      // 2026-07-04 (drift reconcile) — mergeRecap refactor renamed rec2 → rec.
+      /Date\.now\(\) - rec\.endedAt\) < 90_000/.test(screen);
     // runtime: a record with scores → a renderable recap with matching holes + score.
     const rec: any = {
       id: 'r1', roundNumber: 1, courseName: 'Pebble', courseId: 'c1', startedAt: 1, endedAt: 2,
@@ -1614,13 +1618,14 @@ check('Voice polish: in-app "play" stays in-app · plain-speak mode · tutorials
       !detectPlainSpeakRequest('what club for 150');
     const voice = read('hooks/useVoiceCaddie.ts');
     const wired = /detectPlainSpeakRequest\(message\)/.test(voice) && /buildPlainSpeakPrefix\(\) \+ message/.test(voice);
-    // (c) tutorials forced on during testing, still skippable
+    // (c) 2026-07-04 (drift reconcile) — the testing-era FORCE_SHOW flag graduated to
+    // real gating: show until seen, throttled to SHOW_LIMIT opens (Tim's throttle ask).
     const tut = read('components/QuickTutorial.tsx');
-    const forced = /FORCE_SHOW_DURING_TESTING = true/.test(tut) &&
-      /FORCE_SHOW_DURING_TESTING \|\| !tutorialsSeen/.test(tut);
-    return inAppSafe && plain && wired && forced;
+    const gated = /const SHOW_LIMIT = 2/.test(tut) &&
+      /!tutorialsSeen\?\.\[slug\] && \(introOpens\?\.\[slug\] \?\? 0\) < SHOW_LIMIT/.test(tut);
+    return inAppSafe && plain && wired && gated;
   })(),
-  'in-app play never hits YouTube; plain-speak reshapes only on signal; quick instructions default-on + skippable for testing');
+  'in-app play never hits YouTube; plain-speak reshapes only on signal; quick instructions show until seen, throttled to 2 opens');
 
 // 2026-06-27 — REMOVED: 'Gyro-parallax wow v1' asserted components/ParallaxTilt.tsx,
 // an UNBUILT 3D-roadmap item — no component, no import anywhere (only a stray comment
@@ -1633,7 +1638,10 @@ check('Quick instructions: silent by default, 🔊 plays narration on demand (Ti
   (() => {
     const tut = read('components/QuickTutorial.tsx');
     return (
-      !/useEffect/.test(tut) &&                  // nothing auto-fires (no auto-narration)
+      // 2026-07-04 (drift reconcile) — a bookkeeping useEffect (open-count throttle)
+      // now exists; the honest assertion is that NOTHING auto-fires narration:
+      // playNarration is invoked ONLY from the 🔊 button's onPress.
+      !/useEffect\([\s\S]{0,200}playNarration/.test(tut) &&  // no effect auto-narrates
       !/setTutorialNarrating/.test(tut) &&       // no audio-ownership hack
       /volume-high/.test(tut) &&                 // the 🔊 button
       /const playNarration = \(\) =>/.test(tut) && /onPress=\{playNarration\}/.test(tut) &&
@@ -1797,7 +1805,9 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
       /const BASE_PER_DRILL = 5/.test(store) && /MAX_SWINGS_COUNTED = 5/.test(store) && // conservative + no farming
       /persist\(/.test(store) && // accumulates
       // awarded on a DRILL save (now via the unified award so it also feeds the tier)
-      /if \(sid && isDrill && drillId\)/.test(sm) &&
+      // 2026-07-04 (drift reconcile) — the guard dropped the sid check (award moved
+      // out of the session-scoped branch; drill saves award regardless).
+      /if \(isDrill && drillId\)/.test(sm) &&
       /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(sm) &&
       // surfaced on the dashboard, per-drill, hidden until earned
       /practiceTotal > 0 &&/.test(dash) &&
@@ -2494,22 +2504,22 @@ check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")'
   })(),
   'completed rounds now show on the dashboard by date (course/score/vs-par), tappable into the recap — the persisted history finally has a home');
 
-check('Scorecard clears to empty on save (Tim: "when saved, clear it")',
-  // 2026-06-13 — the scorecard no longer lingers on the last completed round. It
-  // shows ONLY the active round; with none active it renders a clean empty state
-  // and points to dashboard Recent Rounds. endRound already saves + clears state.
+check('Scorecard shows the just-finished round after save (Tim reversed the 2026-06-13 clear)',
+  // 2026-06-30 (Tim — Greenhill: "you end the round and can't see your scorecard") —
+  // REVERSED the 2026-06-13 no-linger rule. With no ACTIVE round the scorecard shows
+  // the MOST RECENT completed round for review; an active round always takes precedence.
+  // (History: the old check asserted lastCompletedRound was stubbed to null.)
   (() => {
     const sc = read('app/(tabs)/scorecard.tsx');
     return (
-      // no auto-show of the last round (typed null)
-      /const lastCompletedRound = useMemo<\(typeof roundHistory\)\[number\] \| null>\(\(\) => null, \[\]\)/.test(sc) &&
-      // empty state when no active round, pointing to Recent Rounds
-      /!isRoundActive && \(/.test(sc) &&
-      /No round in progress/.test(sc) &&
-      /Recent Rounds/.test(sc)
+      // most-recent completed round shown when idle; active round wins
+      /isRoundActive \? null : \(roundHistory\.length \? roundHistory\[roundHistory\.length - 1\] : null\)/.test(sc) &&
+      /const viewingRoundId = isRoundActive \? currentRoundId : lastCompletedRound\?\.id \?\? null/.test(sc) &&
+      // real par resolution for the completed round (holePars snapshot → bundled → 4)
+      /lastCompletedRound\.holePars/.test(sc)
     );
   })(),
-  'finished round → saved to history + scorecard clears to empty (review lives in dashboard Recent Rounds / recap)');
+  'with no active round the scorecard shows the just-finished round (Tim\'s Greenhill reversal); active round takes precedence; par resolves from the round\'s own snapshot');
 
 check('Club usage is COMPLETE — clubless shots inferred from distance (Tim)',
   // 2026-06-13 — a shot with no tagged club used to be skipped, so any shot where
@@ -2796,7 +2806,8 @@ check('Open Range surface wired — Smart Motion stamps, screen + entry point ex
     const layout = read('app/_layout.tsx');
     const caddie = read('app/(tabs)/caddie.tsx');
     return (
-      /recordPracticeSwingIfActive\(\{/.test(sm) &&                 // smartmotion stamps swings
+      // 2026-07-04 (drift reconcile) — the sample is built above the call now.
+      /recordPracticeSwingIfActive\(sample\)/.test(sm) &&           // smartmotion stamps swings
       /stampedClipsRef\.current\.has\(clipUri\)/.test(sm) &&        // exactly-once per clip
       /summarizeOpenRange\(active\.swings\)/.test(screen) &&        // screen shows the live read
       /name="practice\/open-range"/.test(layout) &&                // route registered
@@ -3386,7 +3397,8 @@ check('Points: practice awards from every surface + feeds the visible tier',
       /const swings = active\.swings\.length;\s*\n\s*if \(swings > 0\)/.test(ps) &&
       /awardPracticePoints\(\{ key, label, swings, now: Date\.now\(\) \}\)/.test(ps);
     // drill save uses the unified award (so drills also feed the tier) with a label
-    const drillAward = /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{\s*\n\s*key: drillId,\s*\n\s*label:/.test(sm);
+    // 2026-07-04 (drift reconcile) — the call went single-line.
+    const drillAward = /awardPracticePoints\(\{ key: drillId, label: drillLabel, swings, now: Date\.now\(\) \}\)/.test(sm);
     // dashboard renders non-drill keys via the stored label
     const dashOk = /getDrillEntry\(id\)\?\.title \?\? rec\.label \?\? id/.test(dash);
     return unifiedAward && sessionAward && drillAward && dashOk;
@@ -4287,8 +4299,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const liveTarget = targetPoint \?\? draftTarget/.test(smSrc2) &&  // draft target in setup, session in review
       /setDraftTarget\(isPutt \? \{ x: t\.x, y: t\.y \} : \{ x: t\.x, y: Math\.max\(EFFORT_TOP_CAP, t\.y\) \}\)/.test(smSrc2) && // DTL draggable + capped below header; putt = free CUP flag
       /const span = Math\.max\(0\.001, liveBall\.y - EFFORT_TOP_CAP\)/.test(smSrc2) &&        // top cap = 100% effort
-      /styles\.aimReadout/.test(smSrc2),                                // live effort% + aim direction readout
-    'server grades against declared effort from ball→target geometry; the DTL target is now DRAGGABLE in setup (floating end) and a live readout shows the effort % + aim direction updating as you move the line — the interactive geometry↔tempo Tim expected, plus the review EFFORT chip');
+      // 2026-07-04 (drift reconcile) — the readout moved into the shot-map deck
+      // (components/smartmotion/ShotMapPage.tsx renders the EFFORT stat).
+      /Stat label="EFFORT" value=\{effortPct != null \? `\$\{effortPct\}%` : '—'\}/.test(read('components/smartmotion/ShotMapPage.tsx')),
+    'server grades against declared effort from ball→target geometry; the DTL target is DRAGGABLE in setup and the shot-map deck shows the live EFFORT stat — the interactive geometry↔tempo Tim expected');
 
   check('SmartMotion: putt CUP flag replaces the stuck PUTT MODE pill; future card sits at the bottom',
     // 2026-06-12 (Tim) — (1) the persistent "PUTT MODE" pill is GONE (it never
@@ -4400,8 +4414,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   check('SmartMotion: DTL readout shows the carry estimate + cycling badge + icon set',
     /estimateCarryYards\(club, effortRaw, profile\.handicap\)/.test(smSrc2) &&
-      /~\{estCarry\}y/.test(smSrc2) &&
-      />CARRY</.test(smSrc2) &&
+      // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
+      /Stat label="CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
       /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
       /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)
@@ -4595,9 +4609,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     !/else \{ value = 'NEUTRAL'; statusTone = 'good'; \}/.test(smA),
     'CLUB PATH renders "—" when the model did not name a path fault, instead of a confident green NEUTRAL the server deliberately withheld');
 
-  check('Swing analysis: review playback setState gated behind the Motion overlay (perf)',
-    /if \(showSkeleton && 'positionMillis' in s/.test(smA),
-    'playbackMs only updates while the skeleton overlay is open, so the review loop stops re-rendering the whole screen every frame when it is off (default)');
+  check('Swing analysis: review playback updates at frame rate ONLY while the Motion overlay is on (perf)',
+    // 2026-07-04 (elite-clean audit) — playbackMs now tracks ALWAYS (the scrubber
+    // needs it), but the perf property moved to the update INTERVAL: 25x/s only when
+    // the overlay consumes frame-rate position; 4x/s otherwise.
+    /progressUpdateIntervalMillis=\{showSkeleton \? 40 : 250\}/.test(smA),
+    'position tracks always (scrubber), but the 25x/s frame-rate cadence is gated on the Motion overlay — the review loop never re-renders the whole screen 25x/s for nothing');
 
   check('Swing analysis: SmartMotion mount forces a warmup',
     /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smA),
