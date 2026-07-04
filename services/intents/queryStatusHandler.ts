@@ -147,6 +147,19 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'shot_strategy': {
+        // 2026-07-04 (Tim — "the AI needs to be front and center and the highlight") —
+        // in pipecat mode (default), the CONVERSATIONAL Claude caddie LEADS the "what
+        // should I hit" read (personality-forward, uses its live yardage+bag+hole
+        // context) instead of the deterministic strategy engine. Defer to the brain;
+        // the engine stays the read for kevin-mode + non-voice callers, and Claude's
+        // own failure path falls back to the offline caddie (which includes the local
+        // club-call), so a signal drop still answers.
+        try {
+          const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
+          if ((settingsMod.useSettingsStore.getState().voiceOrchestrator ?? 'pipecat') === 'pipecat') {
+            return { success: false, voice_response: null, side_effects: ['query:shot_strategy:route_to_brain'], follow_up_needed: false, route_to_brain: true };
+          }
+        } catch { /* settings unavailable — fall through to the engine */ }
         // 2026-05-22 — Caddie Brain: "what's the play here". Routes
         // through smartAnalysisEngine.analyze({kind:'shot_strategy'}) →
         // metaCourseIntelligence.recommendShot which composes 8 signals

@@ -816,6 +816,33 @@ async function openSession() {
       const responseAllowed =
         settings.voiceEnabled &&
         (route !== 'phone_speaker' || allowPhoneSpeaker);
+      // 2026-07-04 (Tim — "AI front and center") — the handler DEFERRED this judgment
+      // read (shot_strategy) to the conversational caddie brain. Answer with Claude
+      // (pipecat→kevin inside conversationalBrainTurn) + dispatch any tool actions; on a
+      // total brain miss (signal drop) fall back to the offline caddie (local club-call).
+      if (result.route_to_brain) {
+        try {
+          const r = await conversationalBrainTurn(utterance, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+          if (r.toolActions?.length) {
+            const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+            dispatchConversationalToolActions(r.toolActions);
+          }
+          if (r.text && responseAllowed && getSessionState() === 'responding') {
+            await stopSpeaking().catch(() => {});
+            if (getSessionState() === 'responding') {
+              if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speakFromBase64 failed', e));
+              else await speak(r.text, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speak failed', e));
+            }
+          } else if (!r.text && responseAllowed && getSessionState() === 'responding') {
+            const offLang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+            const off = require('./offlineCaddie').answerOffline(utterance, offLang) as { text?: string } | null;
+            if (off?.text) await speak(off.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true }).catch(() => {});
+            else await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
+          }
+        } catch (e) { console.log('[listeningSession] route_to_brain failed', e); }
+        setSessionStateMirror('idle');
+        return;
+      }
       if (result.voice_response && responseAllowed) {
         console.log('[ttfa]', JSON.stringify({
           intent: intent.intent_type,

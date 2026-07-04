@@ -37,6 +37,14 @@ export interface IntentResult {
   side_effects: string[];
   follow_up_needed: boolean;
   tool_action?: ToolAction | null;
+  /**
+   * 2026-07-04 (Tim — "AI front and center") — set true by a handler that wants the
+   * CONVERSATIONAL caddie brain to answer this turn instead of the handler (the
+   * shot_strategy / plays_like judgment reads defer to Claude in pipecat mode). The
+   * Caddie-tab path already falls through to the pipecat override on a non-success
+   * result; the earbud/watch path (listeningSession) routes it to conversationalBrainTurn.
+   */
+  route_to_brain?: boolean;
 }
 
 export interface IntentHandler {
