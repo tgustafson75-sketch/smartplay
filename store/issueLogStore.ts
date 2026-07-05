@@ -31,6 +31,10 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 // show speak/transcribe/kevin errors without an ADB cable.
 export type IssueLogKind =
   | 'user'
+  // 2026-07-04 (Tim — "when I run the sim round, does it go to a log so you can
+  // review the output?") — every sim-round event (start, narrated moves, tee
+  // jumps, end) persists here so the post-run export carries the full trace.
+  | 'sim_round'
   | 'voice_error'
   | 'voice_silent_fail'
   | 'transcribe_error'
@@ -114,7 +118,7 @@ interface IssueLogState {
   addAppEvent: (
     stage: string,
     details?: Record<string, unknown>,
-    kind?: 'analysis_error' | 'app_error',
+    kind?: 'analysis_error' | 'app_error' | 'sim_round',
   ) => void;
   /** Voice "log this issue" → a real, owner-only user entry. Self-builds context
    *  and owner-gates internally so the brain tool handler can call it directly. */

@@ -48,6 +48,7 @@ function kindLabel(kind: IssueLogKind): string {
     case 'app_error':         return 'APP';
     case 'voice_turn':        return 'VOICE';
     case 'boot':              return 'BOOT';
+    case 'sim_round':         return 'SIM';
     case 'user':              return 'USER';
   }
 }
@@ -63,6 +64,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'app_error':         return '#f97316'; // orange — other app failure
     case 'voice_turn':        return '#22c55e'; // green — a full voice turn (his words → reply)
     case 'boot':              return '#64748b'; // slate — boot-timing breadcrumb (temporary)
+    case 'sim_round':         return '#88F700'; // brand green — narrated sim-round trace
     case 'user':              return '#6b7280';
   }
 }
