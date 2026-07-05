@@ -76,7 +76,8 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
   // → a wildly-negative bogus differential that also craters the Index estimate.
   // Only postable rounds compute a differential; partials show an honest message.
   const holesPlayed = round ? (round.holesPlayed ?? Object.keys(round.scores ?? {}).length) : 0;
-  const isPostable = holesPlayed === 9 || holesPlayed === 18;
+  // 2026-07-04 — SIM rounds are never postable (narrated test rounds don't touch the Index).
+  const isPostable = (holesPlayed === 9 || holesPlayed === 18) && !round?.simulated;
   const result = useMemo(() => {
     if (handicapIndex == null || !round || !isPostable) return null;
     // Best-available rating + slope. Phase Q.5b's getHoleGeometry would be

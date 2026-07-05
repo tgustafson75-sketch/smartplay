@@ -317,6 +317,34 @@ export const openToolHandler: IntentHandler = {
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const toolName = String(intent.parameters.tool_name ?? '').toLowerCase();
 
+    // ── SIM ROUND (2026-07-04, Tim — "level one of the golf game") ────────────
+    // "start a sim round (at palms)" — starts a voice-narrated simulated round on
+    // the REAL round pipeline (simulated GPS, SIM-tagged record, learning gated).
+    // Not a navigation: the engine call IS the action; the say-line confirms it.
+    if (toolName === 'sim_round' || toolName === 'simround' || toolName === 'sim') {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sim = require('../simRound') as typeof import('../simRound');
+        const raw = String(intent.raw_text ?? intent.parameters.raw_utterance ?? '');
+        const eighteen = /\beighteen\b|\b18\b/i.test(raw);
+        const r = sim.startVoiceSimRound({ nineHoles: !eighteen });
+        return {
+          success: r.ok,
+          voice_response: r.say,
+          side_effects: [r.ok ? 'sim_round:started' : 'sim_round:refused'],
+          follow_up_needed: false,
+        };
+      } catch (e) {
+        console.log('[openTool] sim_round start failed:', e);
+        return {
+          success: false,
+          voice_response: "Couldn't start the sim round — check the issue log.",
+          side_effects: ['sim_round:error'],
+          follow_up_needed: false,
+        };
+      }
+    }
+
     // 2026-05-26 — Fix DW: detect the "send / email" verbiage before
     // navigation so "send the issue log" auto-fires the mailto export
     // (vs "show / open issue log" which just lands on the screen).

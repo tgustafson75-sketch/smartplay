@@ -2320,7 +2320,8 @@ check('Recap Handicap Impact: no differential on an incomplete round (was -33 on
   (() => {
     const card = read('components/recap/HandicapImpactCard.tsx');
     return (
-      /const isPostable = holesPlayed === 9 \|\| holesPlayed === 18/.test(card) &&
+      // 2026-07-04 — sim rounds are ALSO never postable (voice sim round).
+      /const isPostable = \(holesPlayed === 9 \|\| holesPlayed === 18\) && !round\?\.simulated/.test(card) &&
       /handicapIndex == null \|\| !round \|\| !isPostable/.test(card) &&
       /finish 9 or 18 to post a Score Differential/.test(card)
     );
@@ -4726,6 +4727,41 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       );
     })(),
     'earbud/badge/watch dispatch all 20 tool actions (was 3) — the caddie no longer says it acted without acting');
+
+  check('Sim Round: narrated round runs the REAL pipeline but never trains anything (Tim)',
+    // 2026-07-04 — voice sim round ("level one of the golf game"). The whole loop:
+    // "start a sim round" (precheck, offline) → REAL startRound tagged simulated →
+    // narrated shot distances MOVE the simulated fix toward the green → score-driven
+    // advance jumps to the next tee → SIM record excluded from every learner.
+    (() => {
+      const rs = read('store/roundStore.ts');
+      const sim = read('services/simRound.ts');
+      const pre = read('services/localIntentPrecheck.ts');
+      const ot = read('services/intents/openToolHandler.ts');
+      const card = read('components/recap/HandicapImpactCard.tsx');
+      return (
+        // engine: real startRound + simulated flag + movement + tee-follow + GPS restore
+        /startRound\(courseName, holes, \{/.test(sim) && /simulated: true/.test(sim) &&
+        /simAdvanceTowardGreen/.test(sim) && /placeAtTee\(s\.currentHole\)/.test(sim) &&
+        /startGpsManager/.test(sim) &&
+        // store: flag persisted + record tagged + shot movement wire + end restore wire
+        /isSimRound: s\.isSimRound/.test(rs) && /simulated: s\.isSimRound \|\| undefined/.test(rs) &&
+        /simAdvanceTowardGreen\(stated\)/.test(rs) && /stopVoiceSimRound\(\)/.test(rs) &&
+        // learning gates: handicap, both rebuild sites, points, CNS, reflection, drive, bag
+        /\(holesPlayed === 9 \|\| holesPlayed === 18\) && !s\.isSimRound/.test(rs) &&
+        (rs.match(/filter\(\(r: RoundRecord\) => !r\.simulated\)/g) ?? []).length >= 2 &&
+        /holesPlayed >= 9 && !s\.isSimRound/.test(rs) &&
+        /s\.activeCourseId && !s\.isSimRound/.test(rs) &&
+        /holesPlayed > 0 && !s\.isSimRound/.test(rs) &&
+        /driverYards != null && !s\.isSimRound/.test(rs) &&
+        /carry != null && !s\.isSimRound/.test(rs) &&
+        // voice entry (deterministic + offline) + handler + recap-card gate
+        /SIM ROUND/.test(pre) && /tool_name: 'sim_round'/.test(pre) &&
+        /toolName === 'sim_round'/.test(ot) && /startVoiceSimRound\(/.test(ot) &&
+        /!round\?\.simulated/.test(card)
+      );
+    })(),
+    'a narrated Palms sim exercises SmartFinder/brain/voice/advance end-to-end on simulated GPS, and the SIM-tagged record never touches handicap, points, CNS, longest drive, or the learned bag');
 
   const dashSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/dashboard.tsx'), 'utf-8');
   check('Dashboard: quick-score placeholder shots excluded from lifetime stats',

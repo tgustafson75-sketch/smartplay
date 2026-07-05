@@ -133,6 +133,15 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'query_status', { query_topic: 'shot_strategy' }),
   },
 
+  // ── SIM ROUND (2026-07-04, Tim — voice-narrated practice round) ──────────
+  // Deterministic + offline: "start a sim round (at palms)" / "sim round" /
+  // "start a simulated round" / "practice round simulation". Executed by
+  // openToolHandler tool_name 'sim_round' (starts the narrated Palms sim).
+  {
+    rx: /\b(?:start|begin|play|do)\s+(?:a\s+)?sim(?:ulated|ulation)?\s+round\b|\bsim\s+round\s+at\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'sim_round', raw_utterance: raw }),
+  },
+
   // ── TOOL OPEN (high frequency) ────────────────────────────
   // 2026-06-17 — "Hey Caddy, what's the smart play?" is THE tagline trigger.
   // Must be deterministic — "smart play" also appears in Haiku's shot_strategy

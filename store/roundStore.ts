@@ -285,6 +285,9 @@ export interface RoundRecord {
   // real pars here is the single source of truth. Optional: pre-this + imports omit
   // it (consumers fall back to getBundledHoles(courseId) then par-4).
   holePars?: Record<number, number>;
+  /** 2026-07-04 — true for a voice SIM round (narrated on simulated GPS).
+   *  Excluded from handicap rebuilds and shown as SIM in history. */
+  simulated?: boolean;
   // 2026-06-27 (smoke-test fix) — true once this round's score differential has
   // been posted to the WHS index. endRound auto-posts at round end; this flag
   // stops the recap card's "Post to my Index" button from posting the SAME
@@ -297,6 +300,9 @@ export interface RoundRecord {
 
 interface RoundState {
   isRoundActive: boolean;
+  /** 2026-07-04 — true while a voice SIM round is active (see startRound.simulated).
+   *  Gates every learning writer so narrated test rounds never train the brain. */
+  isSimRound: boolean;
   mode: RoundMode;
   currentRoundId: string | null;
   activeCourse: string | null;
@@ -444,6 +450,12 @@ interface RoundState {
       // yet). Defaults to 'white' when omitted.
       selectedTee?: TeeColor;
       transportMode?: TransportMode;
+      /** 2026-07-04 (Tim — voice sim round / "level one of the golf game") —
+       *  marks the round SIMULATED: played by narration on simulated GPS.
+       *  A sim round exercises the ENTIRE live pipeline but never trains
+       *  anything: no handicap post, no learned-bag carries, no CNS course
+       *  memory, no longestDrive, no points. Record is tagged simulated. */
+      simulated?: boolean;
     },
   ) => void;
   setSelectedTee: (color: TeeColor) => void;
@@ -661,6 +673,7 @@ export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({
       isRoundActive: false,
+      isSimRound: false,
       mode: 'free_play' as RoundMode,
       currentRoundId: null,
       activeCourse: null,
@@ -824,6 +837,7 @@ export const useRoundStore = create<RoundState>()(
           : null;
         set({
           isRoundActive: true,
+          isSimRound: options.simulated === true,
           mode: options.mode ?? 'free_play',
           currentRoundId: roundId,
           activeCourse: course,
@@ -1231,6 +1245,7 @@ export const useRoundStore = create<RoundState>()(
         console.log(`[roundStore] discardRound — abandoning ${s.currentRoundId ?? 'unknown'}`);
         set({
           isRoundActive: false,
+          isSimRound: false,
           currentHole: 1,
           currentYardage: null,
           userStatedYardage: null,
@@ -1298,7 +1313,8 @@ export const useRoundStore = create<RoundState>()(
           const profileMod = require('./playerProfileStore');
           const profile = profileMod.usePlayerProfileStore.getState();
           const diffs = calcMod.rebuildDifferentialsFromHistory(
-            next.map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+            // 2026-07-04 — SIM rounds never count toward the Index.
+            next.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
           );
           profile.resetDifferentials(diffs);
           const result = calcMod.estimateNewIndex(diffs);
@@ -1394,6 +1410,8 @@ export const useRoundStore = create<RoundState>()(
           // FIX M14 — persist the player's stated goal ("break 90") so recap
           // surfaces it and evaluateTeeGoal / post-round analysis can read it.
           goal: s.goal ?? undefined,
+          // 2026-07-04 — tag sim rounds so nothing downstream treats them as real.
+          simulated: s.isSimRound || undefined,
           // 2026-07-01 (audit) — snapshot real per-hole par so completed-round
           // surfaces don't fabricate par-4. courseHoles is cleared post-round.
           holePars: (() => {
@@ -1427,7 +1445,7 @@ export const useRoundStore = create<RoundState>()(
             });
 
           // Per-COURSE memory — only when we know the course.
-          if (s.activeCourseId) {
+          if (s.activeCourseId && !s.isSimRound) { // 2026-07-04 — sim rounds don't write course memory
             mem.useCaddieMemoryStore.getState().recordRoundEnd({
               round_id: record.id,
               course_id: s.activeCourseId,
@@ -1442,7 +1460,7 @@ export const useRoundStore = create<RoundState>()(
           // facts; gating this on activeCourseId meant local/manual rounds never learned
           // anything. course_id is null for those — the reflection is still kept.
           const holesPlayed = holesData.length;
-          if (holesPlayed > 0) {
+          if (holesPlayed > 0 && !s.isSimRound) { // 2026-07-04 — narrated sim rounds don't teach the CNS
             const scoreLine = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
             const summary = `${scoreLine} through ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}${s.activeCourse ? ` at ${s.activeCourse}` : ''}.`;
             const takeaways: string[] = [];
@@ -1485,6 +1503,7 @@ export const useRoundStore = create<RoundState>()(
         //       recentCourseIds (locator UX context).
         set(state => ({
           isRoundActive: false,
+          isSimRound: false,
           roundHistory: capHistory([...state.roundHistory, record]),
           currentHole: 1,
           currentYardage: null,
@@ -1560,7 +1579,7 @@ export const useRoundStore = create<RoundState>()(
         // PGA HOPE follow-up — auto-clear Tank's soft-intro after the player
         // has completed at least one full round (>=9 holes) with Tank as
         // their active caddie.
-        if (holesPlayed >= 9) {
+        if (holesPlayed >= 9 && !s.isSimRound) { // 2026-07-04 — no points farming via sim rounds
           try {
             const settingsMod = require('./settingsStore');
             const cur = settingsMod.useSettingsStore.getState();
@@ -1592,7 +1611,8 @@ export const useRoundStore = create<RoundState>()(
         // also need the ×2 scaling — previously a 40-stroke 9-hole
         // round computed differential ≈ −32 against the 72.0 baseline
         // and dragged the estimated Index into negative territory.
-        if (holesPlayed === 9 || holesPlayed === 18) {
+        // 2026-07-04 — SIM rounds never touch the Index.
+        if ((holesPlayed === 9 || holesPlayed === 18) && !s.isSimRound) {
           try {
             const profileMod = require('./playerProfileStore');
             const profile = profileMod.usePlayerProfileStore.getState();
@@ -1619,7 +1639,7 @@ export const useRoundStore = create<RoundState>()(
             void holes;
             const hist = get().roundHistory;
             const diffs = calcMod.rebuildDifferentialsFromHistory(
-              hist.map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+              hist.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
             );
             profile.resetDifferentials(diffs);
             const after = calcMod.estimateNewIndex(diffs);
@@ -1812,6 +1832,15 @@ export const useRoundStore = create<RoundState>()(
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/cloudSync/autoBackup').scheduleBackup();
         } catch { /* best-effort — backup is additive */ }
+
+        // 2026-07-04 (voice sim round) — restore the real GPS watcher + clear the
+        // simulated fix when a sim round ends. Uses the pre-reset snapshot flag.
+        if (s.isSimRound) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../services/simRound') as typeof import('../services/simRound')).stopVoiceSimRound();
+          } catch { /* best-effort */ }
+        }
 
         // 2026-07-04 (Tim — offline log) — the round's captured offline notes are now
         // part of the finished round (they stay in voiceLogStore for recap). Mark them
@@ -2213,7 +2242,7 @@ export const useRoundStore = create<RoundState>()(
           // dynamic-required to avoid a module cycle (playerProfileStore doesn't
           // import roundStore today, but this side-channel update is a single hop).
           const driverYards = enriched.club === 'Driver' ? measuredCarry(enriched) : null;
-          if (driverYards != null) {
+          if (driverYards != null && !s.isSimRound) { // 2026-07-04 — sim shots can't set records
             try {
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               const profileMod = require('./playerProfileStore') as typeof import('./playerProfileStore');
@@ -2232,13 +2261,25 @@ export const useRoundStore = create<RoundState>()(
             // 2026-06-14 (audit #5) — train the bag ONLY on a measured carry, never a
             // GPS estimate (see measuredCarry above). Keeps the learned model honest.
             const carry = measuredCarry(enriched);
-            if (enriched.club && carry != null) {
+            if (enriched.club && carry != null && !s.isSimRound) { // 2026-07-04 — sim shots never train the bag
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
               mem.useCaddieMemoryStore.getState().recordShot({ club: enriched.club, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
             }
           } catch (e) {
             console.log('[roundStore] caddie-memory recordShot failed (non-fatal):', e);
+          }
+
+          // 2026-07-04 (voice sim round) — a narrated shot MOVES the simulated
+          // player toward the green so yardages count down like a real hole.
+          if (s.isSimRound) {
+            const stated = enriched.distance_yards ?? enriched.carry_distance ?? null;
+            if (typeof stated === 'number' && stated > 0) {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                (require('../services/simRound') as typeof import('../services/simRound')).simAdvanceTowardGreen(stated);
+              } catch { /* sim movement is best-effort */ }
+            }
           }
 
           return {
@@ -2420,6 +2461,9 @@ export const useRoundStore = create<RoundState>()(
       },
       partialize: (s) => ({
         isRoundActive: s.isRoundActive,
+        // 2026-07-04 — persist the sim flag so an app restart mid-sim-round stays
+        // in sim mode (learning gates keep holding) instead of "going real".
+        isSimRound: s.isSimRound,
         mode: s.mode,
         currentRoundId: s.currentRoundId,
         activeCourse: s.activeCourse,

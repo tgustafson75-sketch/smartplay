@@ -1879,6 +1879,32 @@ export default function Settings() {
                     </View>
                     <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-07-04 (Tim — voice sim round) — tap-start for the narrated
+                      SIM round (voice: "start a sim round"). Palms, 9 holes; the
+                      round is SIM-tagged and never trains handicap/bag/CNS. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => {
+                      try {
+                        // eslint-disable-next-line @typescript-eslint/no-require-imports
+                        const sim = require('../services/simRound') as typeof import('../services/simRound');
+                        const r = sim.startVoiceSimRound({ nineHoles: true });
+                        // eslint-disable-next-line @typescript-eslint/no-require-imports
+                        (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState().show(r.ok ? '🎮 Sim round started — Palms, 9 holes' : r.say);
+                        if (r.ok) router.push('/(tabs)/caddie' as never);
+                      } catch (e) { console.log('[settings] sim round start failed:', e); }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start a sim round"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Sim Round (Palms · 9)</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Voice-narrated practice round on simulated GPS. Say &quot;start a sim round&quot; works too. Never touches your handicap or learned data.
+                      </Text>
+                    </View>
+                    <Ionicons name="game-controller-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-07-04 (elite-clean audit, menu finding #10) — the coach
                       tutorial manager (curate + upload instruction videos) was an
                       ORPHANED surface: registered routes reachable only from each
