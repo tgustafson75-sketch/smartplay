@@ -30,6 +30,8 @@
     { "src": "api/cv-scoring.ts",            "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/junior-swing-analysis.ts", "use": "@vercel/node", "config": { "maxDuration": 60 } },
     { "src": "api/course-import.ts",         "use": "@vercel/node", "config": { "maxDuration": 45 } },
+    { "src": "api/acoustic-detect.ts",       "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "api/context-synthesis.ts",     "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/pose-analysis.ts",         "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/preround.ts",              "use": "@vercel/node", "config": { "maxDuration": 30 } },
     { "src": "api/tutorial-analysis.ts",     "use": "@vercel/node", "config": { "maxDuration": 45 } },

@@ -808,10 +808,10 @@ check('Ghost match rebuilds running delta after a restart',
     /rehydrateProgress/.test(read('app/(tabs)/caddie.tsx')),
   'ghost delta recomputed from persisted scores (no reset-to-zero on relaunch)');
 
-check('AR shot tracer labels carry/apex as estimates',
-  /~\{trace\.flight\.carry_yd\}y/.test(read('components/ArShotTraceOverlay.tsx')) &&
-    /Landing around/.test(read('services/arShotTracer.ts')),
-  'simulated flight shown/spoken as ~estimate, not exact');
+// 2026-07-04 (clean-audit) — 'AR shot tracer labels carry/apex as estimates' check
+// REMOVED: the entire unmounted AR shot-trace vertical (ArShotTrace* components,
+// shotTrace.ts, arShotTracer.ts, arRenderCapability*) was deleted as confirmed dead
+// code. Shot tracing remains a roadmap feature — rebuild the check when it returns.
 
 check('Dashboard fairway % excludes untracked tee shots',
   /trackedTeeShots/.test(read('app/(tabs)/dashboard.tsx')),
@@ -3647,21 +3647,22 @@ check('Perf: on-course dot tickers ride the GPS watch cache (peekFix), not force
   (() => {
     const svc = read('services/smartFinderService.ts');
     const sf = read('app/smartfinder.tsx');
-    const card = read('components/smartfinder/SmartFinderCard.tsx');
+    // 2026-07-04 (clean-audit) — SmartFinderCard.tsx deleted (confirmed orphan:
+    // zero imports; the caddie.tsx hit was a comment). Check now covers the two
+    // LIVE tickers (SmartFinder screen + hole preview).
     const prev = read('components/caddie/L1HolePreview.tsx');
     return (
       /export async function peekFix\(\): Promise<LastFix \| null>/.test(svc) &&
       /getOneShotFix\(\{ maxAgeMs: 3000 \}\)/.test(svc) &&
       // refreshFix keeps its forced-fresh maxAgeMs:0 for explicit refresh
       /const fix = await getOneShotFix\(\{ maxAgeMs: 0 \}\)/.test(svc) &&
-      // all three timer callers switched to peekFix
+      // both live timer callers ride peekFix
       /const fix = await peekFix\(\)/.test(sf) &&
-      /const fix = await peekFix\(\)/.test(card) &&
       /await peekFix\(\)/.test(prev) &&
-      !/await refreshFix\(\)/.test(prev) && !/await refreshFix\(\)/.test(card)
+      !/await refreshFix\(\)/.test(prev)
     );
   })(),
-  'the SmartFinder screen, SmartFinder card, and hole-preview dot tickers read the running watch cache instead of each forcing a high-accuracy GPS pull every 3-4s — the dominant avoidable on-course battery cost; the manual Refresh button stays guaranteed-fresh');
+  'the SmartFinder screen and hole-preview dot tickers read the running watch cache instead of forcing a high-accuracy GPS pull every 3-4s — the dominant avoidable on-course battery cost; the manual Refresh button stays guaranteed-fresh');
 
 // 2026-06-14 (audit — perf) — SmartVisionTap was defined INSIDE L1HolePreview's
 // render, so every 4s dot-tick made a new component type and React remounted the

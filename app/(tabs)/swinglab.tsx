@@ -189,6 +189,17 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     route: '/practice/fit-profile',
     tag: 'FITTING',
   },
+  {
+    // 2026-07-04 (clean-audit) — Ball Fit's only entry point lived inside the
+    // deleted dead quick-tools FAB, orphaning the whole CNS ball-fitting vertical.
+    // It's a greenlit roadmap feature — it lives here with its Fit Profile sibling.
+    key: 'ball-fit',
+    icon: 'golf-outline',
+    title: 'Ball Fit',
+    sub: 'Match your game data to the right ball',
+    route: '/ball-fit',
+    tag: 'FITTING',
+  },
   ...(SETUP_CHECK_ENABLED ? [{
     key: 'setup-check',
     icon: 'body-outline' as const,

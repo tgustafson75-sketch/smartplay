@@ -112,6 +112,18 @@ export const APP_FEATURES: AppFeature[] = [
     whenToUse: 'they ask about their bag, gapping, or club fitting',
   },
   {
+    // 2026-07-04 (clean-audit) — re-homed: Ball Fit's only entry point was the
+    // deleted dead quick-tools FAB, which orphaned the CNS ball-fitting vertical.
+    // Now a SwingLab hub card + voice-openable here.
+    id: 'ball-fit',
+    name: 'Ball Fit',
+    aliases: ['ball fit', 'ball fitting', 'what ball should i play', 'ball recommendation'],
+    route: '/ball-fit',
+    category: 'prepare',
+    blurb: 'Match your game data to the right golf ball',
+    whenToUse: 'they ask which ball to play or about ball fitting',
+  },
+  {
     id: 'setup-check',
     name: 'Setup Check',
     aliases: ['setup check', 'check my setup', 'address check', 'alignment check'],
