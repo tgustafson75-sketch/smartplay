@@ -2795,13 +2795,10 @@ export default function CaddieTab() {
           <Ionicons name="chevron-back" size={24} color="#6b7d72" />
         </TouchableOpacity>
 
-        {/* 2026-06-04 — Coach Mode wide pill removed from the brand row
-            (was overlapping the SmartPlay logo). The Coach Mode entry
-            now lives as a small C★ badge overlaid on Kevin's avatar
-            box further down — see the L3 Kevin View. */}
-        {false ? null : (
-          <View style={styles.modeBadgePlaceholder} />
-        )}
+        {/* 2026-06-04 — Coach Mode wide pill removed from the brand row (now the C★
+            badge on Kevin's avatar). 2026-07-04 (elite-clean audit) — collapsed the
+            constant-false conditional that wrapped this placeholder. */}
+        <View style={styles.modeBadgePlaceholder} />
 
         {/* 2026-06-13 (Tim) — drop the Tools pill + leaf into the gap BELOW the
             tagline ("real-time caddie intelligence") and ABOVE Kevin's box

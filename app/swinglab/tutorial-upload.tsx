@@ -129,14 +129,16 @@ export default function TutorialUpload() {
     // Phase BR Component 11 — non-instruction guard. If Sonnet detected
     // the upload isn't golf instruction (off-topic title/notes, non-golf
     // frame), don't pollute the tutorial library with the entry. Suggest
-    // Cage Mode for actual user-swing analysis.
+    // Smart Motion for actual user-swing analysis.
     if (outcome.teaching_focus === 'not_instruction') {
       Alert.alert(
         "Doesn't look like a golf lesson",
-        "If this is your own swing video, use Cage Mode for swing analysis. Tutorials are for coaching content — instructor-led lessons or instruction videos.",
+        "If this is your own swing video, use Smart Motion for swing analysis. Tutorials are for coaching content — instructor-led lessons or instruction videos.",
         [
           { text: 'Try again', onPress: () => setStep('compose') },
-          { text: 'Open Cage Mode', onPress: () => router.replace('/cage' as never) },
+          // 2026-07-04 (elite-clean audit) — was the legacy /cage flow (the "wrong
+          // tool" route the Tools menu removed); Smart Motion is the analyzer now.
+          { text: 'Open Smart Motion', onPress: () => router.replace('/swinglab/smartmotion' as never) },
         ],
       );
       return;

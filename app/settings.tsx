@@ -1879,6 +1879,25 @@ export default function Settings() {
                     </View>
                     <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-07-04 (elite-clean audit, menu finding #10) — the coach
+                      tutorial manager (curate + upload instruction videos) was an
+                      ORPHANED surface: registered routes reachable only from each
+                      other, no entry anywhere. It's coach/owner tooling — its
+                      entry lives here. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/swinglab/tutorials' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Manage coach tutorials"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Coach Tutorials</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Curate + upload instruction videos for the tutorial library.
+                      </Text>
+                    </View>
+                    <Ionicons name="school-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   {/* 2026-05-24 — Swing-analysis telemetry card. Pairs
                       the client's frames-sent count with the server's
                       echoed image-block count so the multi-frame pipe

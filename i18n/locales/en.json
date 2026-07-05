@@ -128,7 +128,7 @@
     "saved_highlights": "SAVED HIGHLIGHTS",
     "milestones": "Milestones",
     "no_rounds": "No rounds yet",
-    "no_rounds_sub": "Start your first round with Kevin to see your stats here.",
+    "no_rounds_sub": "Start your first round with {{caddie}} to see your stats here.",
     "pattern_shift": "PATTERN SHIFT"
   },
   "play": {

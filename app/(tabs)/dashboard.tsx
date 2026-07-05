@@ -1054,7 +1054,9 @@ export default function Dashboard() {
           <View style={styles.emptyState}>
             <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('dashboard.no_rounds')}</Text>
             <Text style={[styles.emptySub, { color: colors.text_muted }]}>
-              {t('dashboard.no_rounds_sub')}
+              {/* 2026-07-04 (elite-clean audit) — persona-aware: was hardcoded "Kevin"
+                  even when Tank/Serena/custom is the active caddie. */}
+              {t('dashboard.no_rounds_sub', { caddie: getCaddieName(caddiePersonality) })}
             </Text>
           </View>
         )}

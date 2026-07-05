@@ -117,9 +117,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.5,
   },
-  // Legacy (kept temporarily; no consumer):
-  chip: { marginTop: 4 },
-  chipText: { color: '#00C896' },
+  // 2026-07-04 (elite-clean audit) — deleted the two legacy no-consumer keys
+  // (chip/chipText); backdrop/sheet/etc. below ARE consumed by the live modal.
   backdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center', alignItems: 'center',

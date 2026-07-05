@@ -128,7 +128,7 @@
     "saved_highlights": "MOMENTOS GUARDADOS",
     "milestones": "Logros",
     "no_rounds": "Aún no hay rondas",
-    "no_rounds_sub": "Juega tu primera ronda con Kevin para ver tus estadísticas aquí.",
+    "no_rounds_sub": "Juega tu primera ronda con {{caddie}} para ver tus estadísticas aquí.",
     "pattern_shift": "CAMBIO DE PATRÓN"
   },
   "play": {

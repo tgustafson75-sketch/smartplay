@@ -128,7 +128,7 @@
     "saved_highlights": "已保存精彩",
     "milestones": "里程碑",
     "no_rounds": "还没有球局",
-    "no_rounds_sub": "和 Kevin 打第一局来查看你的统计。",
+    "no_rounds_sub": "和 {{caddie}} 打第一局来查看你的统计。",
     "pattern_shift": "模式变化"
   },
   "play": {

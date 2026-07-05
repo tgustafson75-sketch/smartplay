@@ -1336,55 +1336,9 @@ function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
 return StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
 
-  // 2026-05-24 — Hayes Open card (Memorial Day weekend skin). Subtle
-  // red/blue stripe motif (USA flag colors) without going overboard;
-  // matches the dark-green Play tab palette in the body.
-  hayesCard: {
-    marginHorizontal: 12, marginTop: 10,
-    backgroundColor: '#0d1830',
-    borderRadius: 10,
-    borderWidth: 1, borderColor: '#1e3a5a',
-    overflow: 'hidden',
-  },
-  hayesStripeTop:    { height: 4, backgroundColor: '#b91c1c' },
-  hayesStripeBottom: { height: 4, backgroundColor: '#1d4ed8' },
-  hayesHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingTop: 12, paddingHorizontal: 14,
-    gap: 8,
-  },
-  hayesStar:       { color: '#fbbf24', fontSize: 16, fontWeight: '900' },
-  hayesTitle:      { color: '#f8fafc', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  hayesDedication: { color: '#cbd5e1', fontSize: 11, fontStyle: 'italic', textAlign: 'center', marginTop: 4, paddingHorizontal: 14 },
-  hayesDates:      { color: '#94a3b8', fontSize: 10, textAlign: 'center', marginTop: 2, marginBottom: 10, paddingHorizontal: 14 },
-  hayesRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: '#0a132b',
-    borderTopWidth: 1, borderTopColor: '#1e3a5a',
-  },
-  hayesRowTitle: { color: '#f8fafc', fontSize: 13, fontWeight: '700' },
-  hayesRowSub:   { color: '#94a3b8', fontSize: 11, marginTop: 2 },
-  hayesTrophyBtn: {
-    paddingHorizontal: 8, paddingVertical: 4,
-    marginRight: 6,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  banner: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: c.background, borderBottomWidth: 1, borderBottomColor: c.border,
-  },
-  bannerLogoWrap: {
-    width: 48, height: 48, borderRadius: 24,
-    borderWidth: 2, borderColor: c.accent,
-    alignItems: 'center', justifyContent: 'center', marginRight: 10,
-    overflow: 'hidden',
-  },
-  bannerLogo: { width: '100%', height: '100%' },
-  bannerTitle: { fontSize: 18, fontWeight: '900' },
-  bannerSub: { color: c.text_muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 2 },
+  // 2026-07-04 (elite-clean audit, menu finding #19) — deleted ~46 lines of
+  // orphaned hayes* (Memorial Day 2026 card, removed 2026-06-02) and banner*
+  // (old header, replaced) styles: zero JSX references remained.
 
   activeRoundBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
