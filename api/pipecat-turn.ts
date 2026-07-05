@@ -250,8 +250,21 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
 
   const name = String(player.name ?? 'golfer');
   const caddie = String(player.caddiePersonality ?? 'kevin');
-  const caddieName = { kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' }[caddie] ?? 'Kevin';
+  // 2026-07-04 (clean-audit, persona-map dedup) — include the CUSTOM caddie: it was
+  // missing here, so the user's self-made caddie spoke as "Kevin" in its own prompt.
+  const customName = typeof player.customCaddieName === 'string' && player.customCaddieName.trim()
+    ? player.customCaddieName.trim() : 'your caddie';
+  const caddieName = caddie === 'custom'
+    ? customName
+    : ({ kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' }[caddie] ?? 'Kevin');
   const trustLevel = Number(settings.trustLevel ?? player.trustLevel ?? 2);
+  // 2026-07-04 (clean-audit M3) — the client sends settings.language but this prompt
+  // never used it (legacy kevin localizes; the DEFAULT brain didn't). Spanish/Chinese
+  // players got English-biased replies from the primary path.
+  const lang = String(settings.language ?? 'en');
+  const langLine = lang === 'es' ? '\nResponde SIEMPRE en español.'
+    : lang === 'zh' ? '\n始终用中文回答。'
+    : '';
 
   const hcp = player.handicap != null ? `Handicap: ${player.handicap}.` : '';
   const miss = player.dominantMiss ? `Dominant miss: ${player.dominantMiss}.` : '';
@@ -339,7 +352,7 @@ ${roundSection}
 
 ${historySection}
 
-Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when asked.'}
+Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when asked.'}${langLine}
 
 Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
@@ -452,8 +465,13 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     // so the default pipecat brain actually "knows everything" about this player, the
     // same block the legacy /api/kevin path consumes. Capped for safety.
     const memoryRaw = context.memory;
+    // 2026-07-04 (clean-audit M2) — was slice(0, 2000). The client's memory block
+    // is now CNS + weekly plan + history + OFFLINE NOTES joined in that order, and
+    // a rich CNS alone ran ~1.2-2KB — so the newest blocks (offline notes: "I saved
+    // that, I'll bring it back up when we reconnect") were the FIRST thing silently
+    // truncated. 4000 chars ≈ 1k tokens: cheap, and fits the worst realistic case.
     const memoryBlock = typeof memoryRaw === 'string' && memoryRaw.trim()
-      ? `\n\nWHAT YOU'VE LEARNED ABOUT THIS PLAYER (their bag, course/hole history, tendencies, last round — use it naturally in conversation; NEVER read it aloud as raw data):\n${memoryRaw.slice(0, 2000)}`
+      ? `\n\nWHAT YOU'VE LEARNED ABOUT THIS PLAYER (their bag, course/hole history, tendencies, last round — use it naturally in conversation; NEVER read it aloud as raw data):\n${memoryRaw.slice(0, 4000)}`
       : '';
     const system = (_screenContext ? `${systemBase}\n\n${_screenContext}` : systemBase) + memoryBlock;
 
@@ -541,7 +559,9 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
         if (toolName === 'switch_caddie') {
           const p = String(toolInput.personality ?? '').toLowerCase();
           toolActions.push({ type: 'switch_caddie', personality: p });
-          const label = ({ kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank' } as Record<string, string>)[p] ?? 'your caddie';
+          // 2026-07-04 (clean-audit) — include 'custom' so switching to the user's
+          // own caddie doesn't announce "your caddie" as a fallback shrug.
+          const label = ({ kevin: 'Kevin', serena: 'Serena', harry: 'Harry', tank: 'Tank', custom: 'your custom caddie' } as Record<string, string>)[p] ?? 'your caddie';
           return `Switching you to ${label}.`;
         }
 

@@ -37,7 +37,9 @@ export function peekOfflineNotesBlock(): string {
   if (pending.length === 0) return '';
   const lines = pending
     .slice(-8)
-    .map((e) => `- ${e.hole != null ? `hole ${e.hole}: ` : ''}"${e.transcript}"`)
+    // 2026-07-04 (clean-audit M2) — cap each transcript so 8 long rambles can't
+    // blow past the server's memory-block budget and evict the CNS.
+    .map((e) => `- ${e.hole != null ? `hole ${e.hole}: ` : ''}"${e.transcript.slice(0, 160)}"`)
     .join('\n');
   return `WHILE OFFLINE the player said these (captured with no signal — acknowledge naturally + use them, don't re-ask):\n${lines}`;
 }

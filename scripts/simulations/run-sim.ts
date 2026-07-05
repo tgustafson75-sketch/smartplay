@@ -4705,9 +4705,26 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the swing-analysis model calls cap output (Gemini 800, OpenAI 1000) — bounded cost; the JSON-only one-sentence schema keeps real usage well under the cap');
 
   const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
-  check('Voice: listeningSession dispatches navigate tool_actions',
-    /=== 'navigate'/.test(listenSrc) && /router\.push\(path\)/.test(listenSrc),
-    'hands-free "open Smart Motion" now actually navigates (the navigate tool_action was previously dropped — only open_url was handled)');
+  check('Voice: hands-free paths dispatch EVERY tool_action through the full dispatcher',
+    // 2026-07-04 (clean-audit C1/C2/H4) — dispatch centralized: listeningSession routes
+    // every handler tool_action + every brain toolActions[] through the ONE full
+    // service dispatcher (which covers all ToolAction types, paywall gates, and the
+    // https-only URL allowlist). The watch path also handles route_to_brain now.
+    (() => {
+      const dispatchSrc = read('services/voice/conversationalToolDispatch.ts');
+      return (
+        /dispatchConversationalToolActions\(\[ta\]\)/.test(listenSrc) &&           // earbud handler actions
+        /dispatchConversationalToolActions\(\[result\.tool_action\]\)/.test(listenSrc) && // watch handler actions
+        (listenSrc.match(/dispatchConversationalToolActions\(r\.toolActions\)/g) ?? []).length >= 3 && // brain actions on all branches
+        // the dispatcher itself covers the full tool surface
+        ['record_swing', 'log_shot', 'plan_shot', 'set_reminder', 'log_score', 'log_emotional_state', 'log_issue',
+         'mark_tee', 'mark_green', 'open_smartvision', 'open_smartfinder', 'open_swinglab', 'configure_drill',
+         'close_swinglab', 'set_angle', 'set_golfer', 'switch_caddie', 'navigate', 'navigate_replace', 'open_url']
+          .every(t => new RegExp(`case '${t}'`).test(dispatchSrc)) &&
+        /protocol !== 'https:'/.test(dispatchSrc)                                   // allowlist stays https-only
+      );
+    })(),
+    'earbud/badge/watch dispatch all 20 tool actions (was 3) — the caddie no longer says it acted without acting');
 
   const dashSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/dashboard.tsx'), 'utf-8');
   check('Dashboard: quick-score placeholder shots excluded from lifetime stats',

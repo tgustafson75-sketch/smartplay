@@ -1388,6 +1388,8 @@ export default function CaddieTab() {
           logged_via: 'voice',
           start_location: shotStartLocation,
           distance_yards: shotDistance,
+          // 2026-07-04 (clean-audit M1) — stop dropping the stated shot ordinal.
+          shot_number: typeof a.shot_number === 'number' && a.shot_number > 0 ? Math.round(a.shot_number) : null,
           kevin_rec_club: brainKevinRecClub,
           kevin_rec_shape: brainPendingRec?.shape ?? null,
           kevin_adhered: brainKevinAdhered,
@@ -1414,6 +1416,8 @@ export default function CaddieTab() {
             typeof p.club === 'string' && p.club.trim() ? p.club.trim() : null,
             typeof p.distance_yards === 'number' && p.distance_yards > 0 ? `${Math.round(p.distance_yards)}y` : null,
             typeof p.shot_number === 'number' && p.shot_number > 0 ? `shot ${Math.round(p.shot_number)}` : null,
+            // 2026-07-04 (clean-audit M1) — surface the stated target too.
+            typeof p.target === 'string' && p.target.trim() ? `→ ${p.target.trim()}` : null,
           ].filter(Boolean).join(' · ');
           toast.useToastStore.getState().show(bits ? `Plan set — ${bits}` : 'Plan noted');
         } catch (e) { console.log('[caddie] plan_shot toast failed (non-fatal):', e); }

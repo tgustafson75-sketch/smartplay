@@ -1,4 +1,4 @@
-import { Linking, Vibration } from 'react-native';
+import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
 import { conversationalBrainTurn } from './conversationalBrain';
@@ -22,31 +22,9 @@ import { buildFullPracticeContext } from './tutorialContext';
 import { screenContextForPrompt } from './screenContext';
 import { getApiBaseUrl } from './apiBase';
 
-// ─── External URL allowlist ───────────────────────────────────────────────────
-// Audit P1 follow-up: server tool_use responses can include open_url actions.
-// Internal routes (starting with '/') are dispatched via router.push as before.
-// External (http(s)://) URLs go through isAllowedExternalUrl first to prevent
-// open-redirect via a compromised / malformed server response.
-const ALLOWED_HOSTS = [
-  'smartplaycaddie.com',
-  'support.smartplaycaddie.com',
-  'apps.apple.com',
-  'play.google.com',
-  'golfcourseapi.com',
-];
-
-function isAllowedExternalUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    const host = parsed.hostname.toLowerCase();
-    return ALLOWED_HOSTS.some(
-      allowed => host === allowed || host.endsWith(`.${allowed}`)
-    );
-  } catch {
-    return false;
-  }
-}
+// 2026-07-04 (clean-audit) — the external-URL allowlist moved to
+// services/voice/conversationalToolDispatch.ts (the one tool dispatcher);
+// all tool_action dispatch on this path now routes through it.
 
 /**
  * Phase O — Listening session orchestrator.
@@ -886,62 +864,18 @@ async function openSession() {
       // before. External URLs (http/https) are allowlisted to prevent
       // open-redirect through a compromised / malformed server response.
       const ta = result.tool_action;
-      if (ta && (ta as { type?: string }).type === 'open_url') {
-        const url = (ta as { type: 'open_url'; url: string }).url;
-        if (typeof url !== 'string' || url.length === 0) {
-          console.warn('[listeningSession] tool_action.open_url missing url');
-        } else if (url.startsWith('/')) {
-          try {
-            const router = require('expo-router').router;
-            router.push(url);
-          } catch (e) {
-            console.log('[listeningSession] nav failed', e);
-          }
-        } else if (url.startsWith('http://') || url.startsWith('https://')) {
-          if (isAllowedExternalUrl(url)) {
-            void Linking.openURL(url).catch((e) => {
-              console.log('[listeningSession] external open failed', e);
-            });
-          } else {
-            console.warn('[listeningSession] Rejected non-allowlisted URL:', url);
-          }
-        } else {
-          console.warn('[listeningSession] Rejected unsupported URL scheme:', url);
-        }
-      } else if (ta && (ta as { type?: string }).type === 'navigate') {
-        // 2026-06-11 (audit) — the brain emits {type:'navigate', path} for tool
-        // opens (Smart Motion, scorecard, library, settings…) since 2026-06-04.
-        // This path only handled 'open_url', so hands-free "open Smart Motion"
-        // spoke its line then went NOWHERE. Mirror caddie.tsx's internal-route
-        // push (same '/'-prefixed guard as open_url above).
-        const path = (ta as { type: 'navigate'; path?: string }).path;
-        if (typeof path === 'string' && path.startsWith('/')) {
-          try {
-            const router = require('expo-router').router;
-            router.push(path);
-          } catch (e) {
-            console.log('[listeningSession] navigate failed', e);
-          }
-        } else {
-          console.warn('[listeningSession] tool_action.navigate missing/invalid path:', path);
-        }
-      } else if (ta && (ta as { type?: string }).type === 'navigate_replace') {
-        // 2026-06-30 (audit, careful pass) — endRoundHandler ends the round
-        // INTERNALLY (round.endRound()) then returns {type:'navigate_replace',
-        // path:'/recap/<id>'} for the caller to drive. This dispatch handled
-        // navigate + open_url but NOT navigate_replace, so hands-free "end the
-        // round" ended it and spoke the summary but never opened the recap.
-        // Self-nav is NOT done inside the handler, so this can't double-fire.
-        const path = (ta as { type: 'navigate_replace'; path?: string }).path;
-        if (typeof path === 'string' && path.startsWith('/')) {
-          try {
-            const router = require('expo-router').router;
-            router.replace(path);
-          } catch (e) {
-            console.log('[listeningSession] navigate_replace failed', e);
-          }
-        } else {
-          console.warn('[listeningSession] tool_action.navigate_replace missing/invalid path:', path);
+      // 2026-07-04 (clean-audit H4) — this dispatch handled ONLY open_url /
+      // navigate / navigate_replace, so an earbud "open SmartVision" (which
+      // returns {type:'open_smartvision'}) spoke its line and opened NOTHING.
+      // Route EVERY tool_action through the full service dispatcher (it covers
+      // all ToolAction types incl. the open_* trio with paywall gates, and keeps
+      // the same open_url allowlist).
+      if (ta) {
+        try {
+          const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+          dispatchConversationalToolActions([ta]);
+        } catch (e) {
+          console.log('[listeningSession] tool_action dispatch failed', e);
         }
       }
     }
@@ -1015,20 +949,30 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
     const apiUrl = getApiBaseUrl();
-    const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-      body: JSON.stringify({
-        text,
-        voiceGender: settings.voiceGender ?? 'male',
-        persona: settings.caddiePersonality,
-      }),
-    }, INTENT_FETCH_TIMEOUT_MS);
-    if (!parseRes.ok) {
-      console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
-      return;
+    // 2026-07-04 (clean-audit H5) — the watch path went straight to the cloud and
+    // silently died offline. Try the LOCAL precheck first, like both other paths.
+    let intent = precheckLocalIntent(text);
+    if (!intent) {
+      const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
+        body: JSON.stringify({
+          text,
+          voiceGender: settings.voiceGender ?? 'male',
+          persona: settings.caddiePersonality,
+        }),
+      }, INTENT_FETCH_TIMEOUT_MS);
+      if (!parseRes.ok) {
+        console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
+        return;
+      }
+      intent = await parseRes.json();
     }
-    const intent = await parseRes.json();
+    // 2026-07-04 (clean-audit M4) — the cloud classifier response carries no
+    // raw_text; handlers' raw-text fallbacks (catalog lookup, hole parse, coach
+    // name) silently died on this path. Always carry the utterance.
+    if (!intent) return;
+    if (!intent.raw_text) intent.raw_text = text;
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (!handler) {
       // 2026-07-01 (audit — MIC CONVERGENCE) — the watch / hands-free path used to
@@ -1080,14 +1024,42 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         : null,
       current_hole: round.isRoundActive ? round.currentHole : null,
       recent_shots: round.shots.slice(-5),
-      trust_spectrum_level: 3,
+      // 2026-07-04 (clean-audit L5) — read the REAL trust level (was hardcoded 3).
+      trust_spectrum_level: (() => { try { return getTrustLevel() as 1 | 2 | 3; } catch { return 2 as const; } })(),
     };
     void settings;
     const result = await handler.execute(intent, ctx);
+    // 2026-07-04 (clean-audit C2) — in pipecat mode the judgment reads (shot_strategy)
+    // DEFER to the conversational brain; this path used to ignore the flag → total
+    // silence on "what's the play" from the watch. Mirror the earbud branch.
+    if (result?.route_to_brain) {
+      try {
+        const r = await conversationalBrainTurn(text, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+        if (r.toolActions?.length) {
+          const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+          dispatchConversationalToolActions(r.toolActions);
+        }
+        if (r.text) {
+          const { speak, speakFromBase64 } = await import('./voiceService');
+          if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+          else await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+        }
+      } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }
+      return;
+    }
     if (result?.voice_response) {
       const { speak } = await import('./voiceService');
       void speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
         ?.catch?.(() => undefined);
+    }
+    // 2026-07-04 (clean-audit C2) — dispatch the handler's tool_action. This path
+    // spoke "Opening SmartFinder" and then... nothing. The full service dispatcher
+    // handles every ToolAction type now.
+    if (result?.tool_action) {
+      try {
+        const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+        dispatchConversationalToolActions([result.tool_action]);
+      } catch (e) { console.log('[handsFree-route] tool_action dispatch failed:', e); }
     }
   } catch (e) {
     console.log('[handsFree-route] failed:', e);

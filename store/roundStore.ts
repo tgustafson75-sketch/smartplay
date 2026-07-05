@@ -165,6 +165,10 @@ export interface ShotResult {
   // silently overwritten; logShot back-fills distance_yards from this only
   // when distance_yards is absent. Null until end_location is known.
   gps_distance_yards?: number | null;
+  // 2026-07-04 (clean-audit M1) — which shot on the hole the player SAID this was
+  // ("my second shot" → 2). Was parsed by the brain but dropped on write. Optional;
+  // null when unstated (the shot's position in the hole's array is the fallback order).
+  shot_number?: number | null;
   raw_utterance?: string;
   logged_via?: 'voice' | 'tap';
   gps_location?: ShotLocation | null;       // legacy alias of start_location

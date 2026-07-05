@@ -28,6 +28,9 @@ export function buildPipecatContext() {
       name: profile.name ?? 'golfer',
       handicap: profile.handicap ?? undefined,
       dominantMiss: profile.dominantMiss ?? undefined,
+      // 2026-07-04 (clean-audit) — so the server prompt can speak AS the user's
+      // custom caddie by its real name instead of defaulting to "Kevin".
+      customCaddieName: profile.customCaddieName ?? undefined,
       caddiePersonality: settings.caddiePersonality,
       trustLevel,
     },
