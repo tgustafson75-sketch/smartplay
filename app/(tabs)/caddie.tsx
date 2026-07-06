@@ -1521,12 +1521,14 @@ export default function CaddieTab() {
         break;
       }
       case 'switch_caddie': {
-        // 2026-06-29 (Tim) — change the active caddie persona by voice. The setter
-        // fires the spoken per-persona handoff intro, so nothing else to speak here.
-        const p = (action as { personality?: string }).personality;
-        if (p && ['kevin', 'serena', 'harry', 'tank'].includes(p)) {
-          useSettingsStore.getState().setCaddiePersonality(p as 'kevin' | 'serena' | 'harry' | 'tank');
-        }
+        // 2026-07-06 (voice-lifecycle audit #13) — this tab case had drifted from the
+        // service dispatcher: it excluded 'custom' and skipped the setUseCustomCaddie
+        // sync (stale avatar/voice overrides). Delegate to the ONE implementation.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
+            .dispatchConversationalToolActions([action]);
+        } catch (e) { console.log('[caddie] switch_caddie dispatch failed:', e); }
         break;
       }
       case 'mark_tee':
@@ -1559,11 +1561,19 @@ export default function CaddieTab() {
         router.replace(action.path as never);
         break;
       case 'open_url': {
-        const url = (action as { type: 'open_url'; url: string }).url;
-        if (url) void Linking.openURL(url).catch(() => {});
+        // 2026-07-06 (voice-lifecycle audit #13) — this tab case opened ANY url with
+        // no https/host allowlist and no internal-path handling, while the service
+        // dispatcher enforced both. Delegate to the ONE implementation.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
+            .dispatchConversationalToolActions([action]);
+        } catch (e) { console.log('[caddie] open_url dispatch failed:', e); }
         break;
       }
       default:
+        // 2026-07-06 (audit L6) — log unknown tool types instead of silently swallowing.
+        console.log('[caddie] unhandled tool action type:', (action as { type?: string }).type);
     }
     // Phase A.4: first-tool hint after first launch in first round.
     const hint = getFirstToolHint();

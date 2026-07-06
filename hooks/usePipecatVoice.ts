@@ -377,7 +377,23 @@ export function usePipecatVoice({
           }
         } catch { /* offline best-effort */ }
         if (!spokeOffline) {
-          await speak('Give me one sec and ask me again.', settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+          // 2026-07-06 (voice-lifecycle audit #1) — a DEAD network THROWS the fetch,
+          // so it lands HERE — but the offline-statement capture only lived in the
+          // !resp.ok branch (server reachable-but-erroring). That inverted the whole
+          // feature: the exact scenario it was built for (no signal on-course) never
+          // captured. Mirror the capture + DEVICE-voice confirm here; cloud TTS can't
+          // work on a dead network anyway.
+          let captured = false;
+          try {
+            const { captureOfflineStatement } = await import('../services/voiceLogService');
+            captured = captureOfflineStatement(transcript);
+          } catch { /* best-effort */ }
+          const { speakDeviceNotice } = await import('../services/voiceService');
+          if (captured) {
+            await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
+          } else {
+            await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
+          }
         }
       }
       onVoiceStateChange?.('idle');

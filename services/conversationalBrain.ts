@@ -50,7 +50,13 @@ async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainRe
     }).finally(() => clearTimeout(t));
     if (!resp.ok) return null;
     const j = (await resp.json()) as { response_text?: string; tool_actions?: unknown[]; updated_history?: { role: string; content: string }[] };
-    const text = typeof j.response_text === 'string' && j.response_text.trim() ? j.response_text : null;
+    let text = typeof j.response_text === 'string' && j.response_text.trim() ? j.response_text : null;
+    const hasTools = Array.isArray(j.tool_actions) && j.tool_actions.length > 0;
+    // 2026-07-06 (voice-lifecycle audit #11) — a TOOL-ONLY reply (empty text, real
+    // actions) was thrown away and the turn RE-RUN through legacy kevin: second
+    // brain call, different answer, original actions lost. Keep the actions and
+    // speak a minimal ack instead.
+    if (!text && hasTools) text = 'Done.';
     if (!text) return null;
     if (Array.isArray(j.updated_history)) setPipecatHistory(j.updated_history);
     else appendPipecatTurn(utterance, text);

@@ -1967,6 +1967,15 @@ export default function SmartMotion() {
         return;
       }
     }
+    // 2026-07-06 (voice-lifecycle audit #4) — a voice "record my swing" dispatches the
+    // record tool BEFORE the caddie speaks its reply, so the reply audio landed IN the
+    // swing clip's audio track (polluting acoustic strike detection) and the TTS
+    // audio-session flip mid-recordAsync risked killing the capture's audio on iOS.
+    // Silence the caddie the moment ANY entry path starts a recording.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking();
+    } catch { /* best-effort — never block the capture */ }
     // 2026-06-12 (analysis speed) — warm the fault-read Lambda the MOMENT recording starts.
     // The open record window (up to 60s) is free warm time, so the first swing's read lands
     // on a HOT Lambda instead of eating a cold start → no more cold-first-swing NO READ.

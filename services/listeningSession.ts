@@ -88,6 +88,8 @@ let sessionInFlight = false;
 // tap signal (immediate sub + ~350ms pattern) can't open listening over the just-
 // freed mic.
 let recordingStopTapAt = 0;
+// 2026-07-06 (audit #2) — mirror cooldown for the CLOSE side of toggle().
+let sessionCloseTapAt = 0;
 const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
 export function isSessionInFlight(): boolean {
   return sessionInFlight;
@@ -236,10 +238,18 @@ export async function toggle(): Promise<void> {
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
   // See sessionInFlight comment above for rationale.
   if (sessionInFlight) return;
+  // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
+  // branch, on the CLOSE side: one physical tap reaches toggle() twice (legacy sub
+  // immediately + pattern sub ~350ms later). During 'responding' sessionInFlight is
+  // already false, so tap #1 closed the session and tap #2 saw 'idle' and REOPENED
+  // the mic right after the user tried to shush the caddie. Swallow toggles for a
+  // short window after any close.
+  if (Date.now() - sessionCloseTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
   if (state === 'idle') {
     sessionInFlight = true;
     await openSession();
   } else {
+    sessionCloseTapAt = Date.now();
     closeSession();
   }
 }
@@ -375,6 +385,18 @@ async function openSession() {
   if (state !== 'listening') return;
 
   if (!utterance || !utterance.trim()) {
+    // 2026-07-06 (voice-lifecycle audit #8b) — this was SILENT, so a transcribe
+    // failure was indistinguishable from the caddie ignoring you (deliberate
+    // cancels never reach here — the state check above catches them). Brief
+    // device-voice notice; device TTS so it works with no signal.
+    try {
+      const settingsNow = useSettingsStore.getState();
+      const lang = (['en', 'es', 'zh'] as const).includes(settingsNow.language as never) ? (settingsNow.language as 'en' | 'es' | 'zh') : 'en';
+      if (settingsNow.voiceEnabled) {
+        const { speakDeviceNotice } = await import('./voiceService');
+        await speakDeviceNotice("Didn't catch that.", lang, settingsNow.voiceGender).catch(() => {});
+      }
+    } catch { /* notice is best-effort */ }
     setSessionStateMirror('idle');
     return;
   }
@@ -490,6 +512,12 @@ async function openSession() {
       }, INTENT_FETCH_TIMEOUT_MS);
       if (!parseRes.ok) {
         speculativeController?.abort();
+        // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
+        // heard the opener, spoke, and got dead air. Speak the honest failure line
+        // (same treatment the diagnostic + small-talk branches already have).
+        if (ttsAllowed && getSessionState() === 'responding') {
+          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl).catch(() => {});
+        }
         setSessionStateMirror('idle');
         return;
       }

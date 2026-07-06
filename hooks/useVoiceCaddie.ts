@@ -2142,6 +2142,18 @@ export const useVoiceCaddie = ({
     // blocks functionally so a taps that beats the dim still no-ops.
     if (isSessionInFlight()) return;
 
+    // 2026-07-06 (voice-lifecycle audit #5/#6) — while SmartMotion is mounted, the
+    // CAMERA owns the mic. This handler is also reached by auto-listen
+    // (onReadyToListen), session_complete re-listen, and the VAD trigger — all of
+    // which could open an INVISIBLE caddie-tab recording under the SmartMotion
+    // screen ("Only one Recording object" crash when the swing capture starts,
+    // silent acoustic-track loss). SmartMotion's own mic button doesn't route
+    // through here, so this blocks only the collisions.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      if ((require('../services/smartMotionRecordBus') as typeof import('../services/smartMotionRecordBus')).isSmartMotionActive()) return;
+    } catch { /* guard is best-effort */ }
+
     if (isSpeaking()) {
       // 2026-06-06 — Tim's report: tapping to interrupt mid-speech
       // "gets stuck and I have to restart the app." Root cause: the
@@ -2233,6 +2245,11 @@ export const useVoiceCaddie = ({
 
       } catch (err) {
         console.log('[voice] stop error:', err);
+        // 2026-07-06 (voice-lifecycle audit #7) — if stopAndUnloadAsync threw, the
+        // ref still pointed at the DEAD recording, so every later tap re-entered
+        // this STOP branch, re-threw, and never recorded again — mic dead until
+        // remount. Null the ref so the next tap starts a fresh recording.
+        recordingRef.current = null;
         wrappedOnVoiceStateChange('idle');
       }
       return;
