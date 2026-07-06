@@ -601,7 +601,44 @@ export const WESTLAKE_NJ_HOLES: CourseHole[] = [
   { hole: 18, par: 4, distance: 288, front: 276, back: 300, teeLat: 40.10523078, teeLng: -74.28843498, middleLat: 40.10431375, middleLng: -74.28953201, frontLat: 40.10440401, frontLng: -74.28945959, backLat: 40.10418245, backLng: -74.28963125, note: '', estimated: false },
 ];
 
+// 2026-07-06 — Spessard Holland at Melbourne Beach, FL ('A Player's Paradise by the
+// Sea'). Par 67 (33/34), WHITE tees 4,233y (62.2/113 M). Yardage + par transcribed
+// from Tim's scorecard photo; F/B are ±14y green-depth estimates (estimated: true).
+// GPS coords 0 — golfcourseapi id 30168 has no hole data; on-course play uses live
+// GPS + the tee-estimate path + Mark Green, exactly like other coordless locals.
+// Hole imagery: assets/courses/spessard-holland/ (18 cleaned aerials).
+export const SPESSARD_HOLLAND_HOLES: CourseHole[] = [
+  { hole: 1, par: 4, distance: 287, front: 273, back: 301, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2, par: 4, distance: 294, front: 280, back: 308, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3, par: 4, distance: 325, front: 311, back: 339, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4, par: 3, distance: 110, front: 96, back: 124, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5, par: 4, distance: 334, front: 320, back: 348, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6, par: 4, distance: 233, front: 219, back: 247, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7, par: 3, distance: 125, front: 111, back: 139, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8, par: 4, distance: 269, front: 255, back: 283, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9, par: 3, distance: 118, front: 104, back: 132, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 277, front: 263, back: 291, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 142, front: 128, back: 156, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 4, distance: 270, front: 256, back: 284, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 5, distance: 442, front: 428, back: 456, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 4, distance: 284, front: 270, back: 298, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 129, front: 115, back: 143, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 4, distance: 250, front: 236, back: 264, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 3, distance: 111, front: 97, back: 125, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 233, front: 219, back: 247, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
+  {
+    id: 'spessard-holland',
+    name: 'Spessard Holland',
+    fullName: 'Spessard Holland Golf Course — Melbourne Beach',
+    rating: '62.2',
+    slope: '113',
+    par: 67,
+    totalYards: 4233,
+    holes: SPESSARD_HOLLAND_HOLES,
+  },
   {
     id: 'palms',
     name: 'Menifee Lakes Palms',

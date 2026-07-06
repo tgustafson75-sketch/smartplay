@@ -276,7 +276,32 @@ export type LocalCourseSlug =
   // course in Tim's local rotation. All 9 holes bundled.
   | 'echo-hills'
   // 2026-06-21 — Greenhill Golf Course, Worcester MA. Full 18-hole bundle.
-  | 'greenhill';
+  | 'greenhill'
+  // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL (Tim's Florida trip).
+  | 'spessard-holland';
+
+// 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
+// course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
+const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/spessard-holland/hole-01.jpg'),
+  2: require('../assets/courses/spessard-holland/hole-02.jpg'),
+  3: require('../assets/courses/spessard-holland/hole-03.jpg'),
+  4: require('../assets/courses/spessard-holland/hole-04.jpg'),
+  5: require('../assets/courses/spessard-holland/hole-05.jpg'),
+  6: require('../assets/courses/spessard-holland/hole-06.jpg'),
+  7: require('../assets/courses/spessard-holland/hole-07.jpg'),
+  8: require('../assets/courses/spessard-holland/hole-08.jpg'),
+  9: require('../assets/courses/spessard-holland/hole-09.jpg'),
+  10: require('../assets/courses/spessard-holland/hole-10.jpg'),
+  11: require('../assets/courses/spessard-holland/hole-11.jpg'),
+  12: require('../assets/courses/spessard-holland/hole-12.jpg'),
+  13: require('../assets/courses/spessard-holland/hole-13.jpg'),
+  14: require('../assets/courses/spessard-holland/hole-14.jpg'),
+  15: require('../assets/courses/spessard-holland/hole-15.jpg'),
+  16: require('../assets/courses/spessard-holland/hole-16.jpg'),
+  17: require('../assets/courses/spessard-holland/hole-17.jpg'),
+  18: require('../assets/courses/spessard-holland/hole-18.jpg'),
+};
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'palms': PALMS_HOLE_IMAGES,
@@ -289,6 +314,7 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'westlake-cc-nj': WESTLAKE_CC_NJ_HOLE_IMAGES,
   'echo-hills': ECHO_HILLS_HOLE_IMAGES,
   'greenhill': GREENHILL_HOLE_IMAGES,
+  'spessard-holland': SPESSARD_HOLLAND_HOLE_IMAGES,
   // 'journey-at-pechanga' intentionally omitted — hole imagery comes
   // from Mapbox satellite live; getLocalHoleImage() returns null which
   // the SmartVision render path already handles (falls through to the
@@ -326,6 +352,8 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // centroid from the Hemet-area property landmark; refine on-site
   // via Mark Location when Tim plays there.
   'echo-hills':       { lat: 33.7475,    lng: -116.9719 },
+  // 2026-07-06 — Spessard Holland (golfcourseapi id 30168; matches OSM greens).
+  'spessard-holland': { lat: 28.04947,   lng: -80.55063 },
   // 2026-05-26 — Journey at Pechanga Resort, Temecula CA.
   // Approximate centroid from Pechanga Resort & Casino landmark
   // (45100 Pechanga Pkwy). Refine on-site via Mark Location once
