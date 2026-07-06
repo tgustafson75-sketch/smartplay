@@ -55,7 +55,7 @@ const UI_TOOLS = new Set([
 const KEVIN_TOOLS: AiToolDef[] = [
   {
     name: 'open_smartvision',
-    description: 'Open the SmartVision hole-map overlay. Trigger when the player wants to see the hole layout, green, hazards, or yardage map.',
+    description: 'Open the SmartVision hole-map overlay. Trigger ONLY on an explicit ask to OPEN/SHOW it ("open SmartVision", "show me the hole map", "pull up the hole"). Talking ABOUT the hole, hazards, or strategy is CONVERSATION — answer it, don\'t open a screen.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -352,7 +352,8 @@ ${roundSection}
 
 ${historySection}
 
-Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when asked.'}${langLine}
+Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when asked.'}${langLine}${round.simRound ? `
+SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.` : ''}
 
 Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.

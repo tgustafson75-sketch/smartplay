@@ -32,6 +32,12 @@ import { logHarnessEvent } from './simulatedGPS';
 
 let simActive = false;
 let holeUnsub: (() => void) | null = null;
+// 2026-07-05 (Tim's first sim-round log: "moved 270y toward green, ~1372y LEFT" on a
+// ~350y hole) — simAdvanceTowardGreen read getLastFix(), which returned the REAL
+// last GPS fix (Tim's house, ~1600y from the course) instead of the simulated tee.
+// The sim's position is now tracked HERE, authoritatively: set at every tee placement
+// and every narrated move. Never read back from the GPS cache.
+let simPos: { lat: number; lng: number } | null = null;
 
 /** 2026-07-04 (Tim — "does the sim go to a log so you can review the output?") —
  *  every sim event goes BOTH to the live harness ticker AND the persisted issue
@@ -55,7 +61,8 @@ function placeAtTee(holeNumber: number): void {
   const round = useRoundStore.getState();
   const h = round.courseHoles.find((x) => x.hole === holeNumber);
   if (!h || !h.teeLat || !h.teeLng) return;
-  setSimulatedFix({ lat: h.teeLat, lng: h.teeLng }, 4);
+  simPos = { lat: h.teeLat, lng: h.teeLng };
+  setSimulatedFix(simPos, 4);
   simLog(`positioned at hole ${holeNumber} tee`, { hole: holeNumber });
 }
 
@@ -126,18 +133,22 @@ export function simAdvanceTowardGreen(distanceYds: number): void {
   if (!isVoiceSimRoundActive()) return;
   if (!Number.isFinite(distanceYds) || distanceYds <= 0) return;
   const round = useRoundStore.getState();
-  // Current simulated position: read through the same pipeline everything else uses.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fix = (require('./smartFinderService') as typeof import('./smartFinderService')).getLastFix();
-  if (!fix) return;
+  // 2026-07-05 — use the sim's OWN tracked position (see simPos note above). If it's
+  // somehow unset (app restarted mid-sim), re-anchor at the current hole's tee.
+  if (!simPos) {
+    const h = round.courseHoles.find((x) => x.hole === round.currentHole);
+    if (!h || !h.teeLat || !h.teeLng) return;
+    simPos = { lat: h.teeLat, lng: h.teeLng };
+  }
   const green = resolveGreenCoords(round.currentHole).middle;
   if (!green) return;
-  const from = { lat: fix.location.lat, lng: fix.location.lng };
+  const from = simPos;
   const remaining = haversineYards(from, green);
   const step = Math.min(distanceYds, Math.max(0, remaining - 3));
   if (step <= 0) return;
   const brg = bearingDegrees(from, green);
   const next = destinationPoint(from, brg, step);
+  simPos = next;
   setSimulatedFix(next, 4);
   simLog(`moved ${Math.round(step)}y toward green (hole ${round.currentHole}, ~${Math.round(remaining - step)}y left)`, { hole: round.currentHole, stated_yds: Math.round(distanceYds), moved_yds: Math.round(step), remaining_yds: Math.round(remaining - step) });
 }
@@ -145,6 +156,7 @@ export function simAdvanceTowardGreen(distanceYds: number): void {
 /** End the sim round cleanly: restore real GPS. Round teardown is endRound's job. */
 export function stopVoiceSimRound(): void {
   simActive = false;
+  simPos = null;
   holeUnsub?.();
   holeUnsub = null;
   clearSimulatedFix();

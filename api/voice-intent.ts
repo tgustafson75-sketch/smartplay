@@ -70,10 +70,9 @@ Available intents:
    - "open dashboard" -> { tool_name: "dashboard" }
    - "open settings" -> { tool_name: "settings" }
    - "go to settings" -> { tool_name: "settings" }
-   - "${caddieName} what should I do here" / "analyze my lie" / "look at this lie" / "take a look at this lie" / "open TightLie" / "tight lie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" }
+   - "analyze my lie" / "look at this lie" / "take a look at this lie" / "open TightLie" / "check my lie" / "show me TightLie" -> { tool_name: "lie_analysis" } (EXPLICIT camera requests ONLY. "What should I do here" / "it's a tight lie" / "I'm in the rough" are strategy talk or situation DESCRIPTIONS -> query_status shot_strategy or conversational — NEVER open the camera for those.)
    - "tell me what you see" / "what do you see" / "what do you see out there" / "open SmartVision and tell me what you see" / "what's out there" / "read the scene" / "read the hole for me" / "look around and tell me what's there" -> { tool_name: "scene_read" } (opens the camera scene read and SPEAKS what it perceives — the general "what's in front of me" read. Distinct from lie_analysis, which is a SPECIFIC ball-lie read: "analyze my lie", "check my lie".)
-   - "should I go for it" / "can I go at this pin" -> { tool_name: "lie_analysis", play_intent: "aggressive" }
-   - "should I lay up" / "should I play safe here" -> { tool_name: "lie_analysis", play_intent: "conservative" }
+   - NOTE: "should I go for it" / "can I go at this pin" / "should I lay up" / "should I play safe here" are STRATEGY QUESTIONS -> query_status { query_topic: "shot_strategy" } (spoken advice), NOT open_tool. Only an explicit "check/analyze/look at my lie" opens the TightLie camera.
    - "open SmartMotion" / "start SmartMotion" / "smart motion" / "quick swing" -> { tool_name: "smartmotion" }
    - "look at my club" / "register my club" / "add this club" / "add this club to my bag" / "scan my club" / "what club is this" / "read my club" / "register this club" -> { tool_name: "register_club" } (opens the camera guided club scan — the user shows the sole with the number/loft — and REGISTERS the recognized club to their bag. Distinct from club_change #13, which is naming a club you're about to hit, not registering one via the camera.)
    - "record me down the line" / "record down the line" / "down the line swing" / "DTL" -> { tool_name: "smartmotion", angle: "down_the_line", auto_start: true }
@@ -130,7 +129,7 @@ Available intents:
    - "analyze Emma's swing" / "analyze my daughter's swing" / "how was that swing" / "coach Emma's swing" -> { query_topic: "family_analysis", member_name: "Emma" }
    - "compare to last week" / "compare to her last swing" -> { query_topic: "family_analysis", member_name: "<active>", notes: "compare to last week" }
    - "how's the team doing" / "team progress" / "how's the team trending" / "team roll up" -> { query_topic: "team_progress" }
-   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "tell me the play" -> { query_topic: "shot_strategy" }
+   - "what's the play" / "what's the play here" / "what should I hit" / "give me the play" / "tell me the play" / "what should I do here" / "should I go for it" / "should I lay up" / "should I play safe" / "can I go at this pin" -> { query_topic: "shot_strategy" }
    NOTE: "the smart play" / "what's the smart play" means open_tool { tool_name: "smartplay" } (opens SmartFinder visual analysis), NOT shot_strategy. Only "what's the play" / "what should I hit" without the word "smart" are shot_strategy.
    - "what's the play from the rough" / "what's the play from fluffy lie" -> { query_topic: "shot_strategy", lie_hint: "rough" }
    - "I'm 140 yards out what club should I use" / "what club for 140 yards" / "best club for 140" / "what club from 140 out" -> { query_topic: "shot_strategy", target_yards: 140 } (EXTRACT the integer yardage from the phrase into target_yards — the yardage makes this a confident classify, not the generic "what club" fallback. Works for any 20-400 yard value.)

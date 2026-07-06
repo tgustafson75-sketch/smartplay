@@ -64,6 +64,8 @@ export function buildPipecatContext() {
         return { total, holesPlayed, vsPar: parPlayed ? total - parPlayed : undefined };
       })(),
       mode: round.mode ?? undefined,
+      // 2026-07-05 — sim awareness: the brain nudges for yardages so the sim moves.
+      simRound: round.isSimRound || undefined,
       isCompetition: round.isCompetition ?? undefined,
       holeNote: (round.holeNotes ?? {})[round.currentHole] ?? undefined,
       recentShots: (round.shots ?? []).slice(-5).map((s) => ({
