@@ -41,7 +41,6 @@ import { getApiBaseUrl } from '../services/apiBase';
 // 2026-06-14 (Tim) — quick instructions are SILENT pop-up cards by default (out of the
 // caddie's voice path). A 🔊 button plays the narration ON DEMAND only — accessibility
 // without ever clashing with the caddie's voice profile.
-const API_URL = getApiBaseUrl();
 
 interface QuickTutorialProps {
   /** Persisted-seen key. Matches Coach Mode's COACH_TUTORIAL_KEY pattern. */
@@ -107,7 +106,7 @@ export function QuickTutorial({
   // button below plays the narration ON DEMAND only (accessibility, user-initiated).
   const playNarration = () => {
     if (!spokenText) return;
-    void speak(spokenText, voiceGender, language, API_URL, { userInitiated: true }).catch(() => { /* non-fatal */ });
+    void speak(spokenText, voiceGender, language, getApiBaseUrl(), { userInitiated: true }).catch(() => { /* non-fatal */ });
   };
 
   if (!open) return null;

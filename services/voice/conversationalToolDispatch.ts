@@ -180,8 +180,8 @@ function dispatchOne(a: AnyAction): void {
       if (!name || /^(me|myself|i)$/i.test(name)) fam.setActiveMember(null);
       else {
         const lower = name.toLowerCase();
-        const m = fam.members.find((mm) => mm.firstName.toLowerCase() === lower)
-          ?? fam.members.find((mm) => mm.firstName.toLowerCase().startsWith(lower));
+        const m = fam.members.find((mm) => (mm.firstName ?? '').toLowerCase() === lower)
+          ?? fam.members.find((mm) => (mm.firstName ?? '').toLowerCase().startsWith(lower));
         if (m) fam.setActiveMember(m.id);
       }
       break;

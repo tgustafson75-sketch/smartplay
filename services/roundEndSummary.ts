@@ -20,12 +20,16 @@ export interface RoundEndSnapshot {
 
 export function buildRoundEndSummary(s: RoundEndSnapshot): string {
   const cName = s.activeCourse ?? 'this course';
+  // 2026-07-07 (audit) — was `par ?? 4`, which fabricated par 4 for any hole with
+  // unknown par: on a real par-3/par-5 the summary announced a par as a birdie/bogey
+  // and spoke the wrong tally. Only count holes whose par is actually KNOWN (the recap
+  // screen already greys unknown-par holes out — now the spoken summary agrees).
   const holesWithPar = Object.entries(s.scores)
     .map(([h, sc]) => {
-      const par = s.courseHoles.find((c) => c.hole === Number(h))?.par ?? 4;
-      return { hole: Number(h), score: sc as number, par, offset: (sc as number) - par };
+      const par = s.courseHoles.find((c) => c.hole === Number(h))?.par ?? null;
+      return { hole: Number(h), score: sc as number, par, offset: par != null ? (sc as number) - par : 0 };
     })
-    .filter((h) => h.score > 0);
+    .filter((h): h is { hole: number; score: number; par: number; offset: number } => h.score > 0 && h.par != null);
   if (holesWithPar.length === 0) return `${s.played} holes at ${cName} — let's see what the recap says.`;
 
   const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));

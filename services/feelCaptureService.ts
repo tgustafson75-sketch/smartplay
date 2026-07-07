@@ -47,8 +47,6 @@ import { getApiBaseUrl } from './apiBase';
 const inflight = new Set<string>();
 const done = new Set<string>();
 
-const API_URL = getApiBaseUrl();
-
 /**
  * One-shot transcription for a specific shot. Posts the clip's mp4 to
  * /api/transcribe and writes the transcript back via the cage store.
@@ -77,7 +75,7 @@ async function transcribeShotClip(sessionId: string, shot: CageShot): Promise<vo
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60_000);
-    const res = await fetch(API_URL + '/api/transcribe', {
+    const res = await fetch(getApiBaseUrl() + '/api/transcribe', {
       method: 'POST',
       body: formData,
       signal: controller.signal,

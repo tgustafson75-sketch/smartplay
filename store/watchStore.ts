@@ -128,8 +128,11 @@ export const useWatchStore = create<WatchState>()(
       // Audit follow-up — explicit version + migrate added defensively.
       version: 1,
       migrate: (persisted) => persisted as WatchState,
+      // 2026-07-07 (audit) — do NOT persist isConnected: it's ephemeral BLE/hardware
+      // state and there was no boot-time reset, so a stale `true` rehydrated as a
+      // phantom "Watch On" badge on every cold start when nothing was connected. Only
+      // deviceName is durable; isConnected starts false and flips on the live event.
       partialize: (s) => ({
-        isConnected: s.isConnected,
         deviceName: s.deviceName,
       }),
     },

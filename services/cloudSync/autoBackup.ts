@@ -58,7 +58,10 @@ function backupImmediate(): void {
 export function initAutoBackup(): void {
   if (appStateSub) return;
   appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-    if (next === 'background' || next === 'inactive') backupImmediate();
+    // 2026-07-07 (audit) — only real backgrounding, NOT iOS 'inactive' transients
+    // (call banner, Control Center, app-switcher peek, permission sheets), which
+    // otherwise fired a redundant upload on every interruption.
+    if (next === 'background') backupImmediate();
   });
 }
 

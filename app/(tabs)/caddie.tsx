@@ -1540,8 +1540,8 @@ export default function CaddieTab() {
           fam.setActiveMember(null);
         } else {
           const lower = name.toLowerCase();
-          const m = fam.members.find(mm => mm.firstName.toLowerCase() === lower)
-            ?? fam.members.find(mm => mm.firstName.toLowerCase().startsWith(lower));
+          const m = fam.members.find(mm => (mm.firstName ?? '').toLowerCase() === lower)
+            ?? fam.members.find(mm => (mm.firstName ?? '').toLowerCase().startsWith(lower));
           if (m) fam.setActiveMember(m.id);
         }
         break;

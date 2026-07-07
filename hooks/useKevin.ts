@@ -37,8 +37,6 @@ interface KevinCallbacks {
   onToolAction?: (action: ToolAction) => void;
 }
 
-const API_URL = getApiBaseUrl();
-
 export function useKevin(callbacks: KevinCallbacks = {}) {
   const [isThinking, setIsThinking] = useState(false);
   const { setIsThinking: setPresenceThinking } = useKevinPresence();
@@ -157,7 +155,11 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         return parts.length > 0 ? parts.join(' ') : null;
       })();
 
-      const res = await fetch(API_URL + '/api/kevin', {
+      // 2026-07-07 (audit) — read the LIVE host at call time. This was frozen to the
+      // module-load host, so after a mid-session dual-host failover the typed/tapped
+      // chat kept hitting the dead host forever (the voice path was already fixed for
+      // exactly this; useKevin wasn't).
+      const res = await fetch(getApiBaseUrl() + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,

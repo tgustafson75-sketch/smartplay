@@ -45,12 +45,14 @@ export const endRoundHandler: IntentHandler = {
     );
 
     // Build contextual spoken summary mirroring caddie.tsx buildContextualSummary.
+    // 2026-07-07 (audit) — was `par ?? 4`, which scored par-3/par-5 holes against
+    // par 4 and spoke the wrong birdie/bogey tally. Only count holes with KNOWN par.
     const holesWithPar = Object.entries(snapshotScores)
       .map(([h, s]) => {
-        const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? 4;
-        return { hole: Number(h), score: s, par, offset: s - par };
+        const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? null;
+        return { hole: Number(h), score: s, par, offset: par != null ? s - par : 0 };
       })
-      .filter(h => h.score > 0);
+      .filter((h): h is { hole: number; score: number; par: number; offset: number } => h.score > 0 && h.par != null);
     let summaryLine: string;
     if (holesWithPar.length === 0) {
       summaryLine = `${played} holes at ${cName} — let's see what the recap says.`;
