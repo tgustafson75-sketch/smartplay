@@ -18,11 +18,23 @@ Your data now has two safety nets:
 2. Open `supabase/migrations/0004_device_backups.sql` in the repo, copy the whole
    thing, paste, **Run**. (It just creates one table: `smartplay.device_backups`.)
 3. In the app: Settings → Backup & Restore → **Auto-backup to your account** → type
-   your email as the Backup ID → **Back up now**. Done — it's automatic from there.
-   On a new phone, enter the same email → **Restore**.
+   your email as the Backup ID **and a passphrase** → **Back up now**. Done — it's
+   automatic from there. On a new phone, enter the SAME email + passphrase → **Restore**.
 
 That's it. No anon key, no email-auth toggle, no sign-in flow needed — the server
 already has the Supabase service key from the Vercel↔Supabase integration.
+
+**Why the passphrase (2026-07-07 security fix):** the row is keyed by a hash of your
+email + passphrase, so nobody can pull your data by guessing an email. Keep the
+passphrase safe — it can't be recovered, and it must match to restore.
+
+## 1b. SmartPump golf-workout import (no setup — works now)
+
+Your SmartPump golf-workout export now feeds a **TRAINING → PERFORMANCE** card on the
+dashboard (training volume vs. your scoring). Settings → **Import SmartPump golf
+workouts** → pick the export. A PDF or image is read by the server AI parser; a JSON or
+CSV export is read on-device (instant, offline). Re-import any time — duplicates are
+skipped. Nothing to configure. If SmartPump can also emit JSON/CSV, that path is fastest.
 
 ## 2. Install the watch app on your Galaxy Watch (one-time)
 
