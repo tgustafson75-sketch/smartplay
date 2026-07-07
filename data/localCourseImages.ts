@@ -282,7 +282,7 @@ export type LocalCourseSlug =
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
-const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   1: require('../assets/courses/spessard-holland/hole-01.jpg'),
   2: require('../assets/courses/spessard-holland/hole-02.jpg'),
   3: require('../assets/courses/spessard-holland/hole-03.jpg'),

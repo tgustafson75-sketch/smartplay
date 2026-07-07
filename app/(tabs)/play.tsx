@@ -58,6 +58,7 @@ import {
   WESTLAKE_CC_NJ_HOLE_IMAGES,
   ECHO_HILLS_HOLE_IMAGES,
   GREENHILL_HOLE_IMAGES,
+  SPESSARD_HOLLAND_HOLE_IMAGES,
   getLocalHoleImageById,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
@@ -234,6 +235,22 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (GREENHILL_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 42.2677,
     lng: -71.8562,
+  },
+  // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL (Tim's Florida course).
+  // It was fully built into data/courses.ts + localCourseImages.ts this session but
+  // never added here, so it was invisible in the Play list. Coords are approximate
+  // course-center (the hole GPS in data/courses.ts is estimated 0,0 — refine when
+  // real tee coords land); enough for the list + a rough "you're here" detect.
+  {
+    id: 'local:spessard-holland',
+    club_name: 'Spessard Holland GC',
+    location: 'Melbourne Beach, FL',
+    rating: 62.2,
+    slope: 113,
+    isLocal: true,
+    thumbnail: (SPESSARD_HOLLAND_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 28.0686,
+    lng: -80.5603,
   },
 ];
 
