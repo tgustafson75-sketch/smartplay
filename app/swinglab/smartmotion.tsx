@@ -974,8 +974,11 @@ export default function SmartMotion() {
     const path = clubPathSpec(analysis);
     return [
       { key: 'club_path', img: ICON_METRIC.clubpath, value: path.value, unit: '', label: 'CLUB PATH' },
-      { key: 'shoulder', img: ICON_BIOMECH.shoulder, value: biomech?.shoulderTurnDeg != null ? `${Math.round(biomech.shoulderTurnDeg)}` : null, unit: '°', label: 'SHOULDER' },
-      { key: 'hip', img: ICON_BIOMECH.hip, value: biomech?.hipTurnDeg != null ? `${Math.round(biomech.hipTurnDeg)}` : null, unit: '°', label: 'HIP TURN' },
+      // 2026-07-06 (honesty audit) — hedge the monocular turn degrees with '~' when
+      // metric_confidence is low (same convention as deriveBodyItems), so a soft 2D
+      // read doesn't render as precise measured degrees.
+      { key: 'shoulder', img: ICON_BIOMECH.shoulder, value: biomech?.shoulderTurnDeg != null ? `${(biomech.metric_confidence?.shoulderTurn ?? 1) < 0.5 ? '~' : ''}${Math.round(biomech.shoulderTurnDeg)}` : null, unit: '°', label: 'SHOULDER' },
+      { key: 'hip', img: ICON_BIOMECH.hip, value: biomech?.hipTurnDeg != null ? `${(biomech.metric_confidence?.hipTurn ?? 1) < 0.5 ? '~' : ''}${Math.round(biomech.hipTurnDeg)}` : null, unit: '°', label: 'HIP TURN' },
     ];
   }, [isPutt, analysis, biomech]);
   // 2026-06-12 — LEFT rail: the ball/result metrics as custom badges (Tim). Honest +

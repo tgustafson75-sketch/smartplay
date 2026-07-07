@@ -987,7 +987,11 @@ function estimateCarryTotal(club: string | null, avgCarryDriver: number, avgCarr
     'LW': 62,
     'Putter': 12,
   };
-  const carry = Math.round(map[club] ?? 140);
+  // 2026-07-06 (honesty audit) — an UNMAPPED club used to fabricate a flat 140-yard
+  // carry that flowed into the hazard-clearance math + risk band as if real. Bail
+  // instead so the strategy line degrades to "—" rather than inventing a number.
+  if (map[club] == null) return null;
+  const carry = Math.round(map[club]);
   const rollout = club === 'Driver' ? 18 : club === '3 Wood' ? 14 : club === 'Hybrid' ? 10 : club.includes('Iron') ? 6 : 2;
   return { carry, total: carry + rollout, baseline };
 }
@@ -1413,7 +1417,7 @@ function TargetCameraOverlay({
     if (!recommendedClub || effectiveYards == null) return 'Aggressive: unavailable until GPS settles.';
     if (hazardIntel && landing) {
       const risk = riskBandFromHazards(hazardIntel.carryToClear, landing.carry);
-      return `Aggressive: ${recommendedClub} to ${effectiveYards}y, carry ${landing.carry} (${risk} risk near ${hazardIntel.label}).`;
+      return `Aggressive: ${recommendedClub} to ${effectiveYards}y, carry ${landing.carry}${landing.baseline ? ' est' : ''} (${risk} risk near ${hazardIntel.label}).`;
     }
     return `Aggressive: ${recommendedClub} to ${effectiveYards}y.`;
   }, [effectiveYards, hazardIntel, landing, recommendedClub]);
@@ -1582,7 +1586,7 @@ function TargetCameraOverlay({
               )}
               {landing && (
                 <Text style={styles.targetIntelLine}>
-                  Landing: carry {landing.carry} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
+                  Landing: carry {landing.carry}{landing.baseline ? ' est' : ''} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
                 </Text>
               )}
               {hazardSummary?.nearest ? (
