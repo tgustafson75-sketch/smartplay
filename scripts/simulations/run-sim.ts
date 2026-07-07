@@ -766,8 +766,8 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     return out;
   };
   // Endpoints NOT served by Vercel routes (and therefore exempt): Google
-  // Maps staticmap (external), and the Meta-glasses swing-tempo placeholder
-  // which is handled by an Expo Router app/api route, not vercel.json.
+  // Maps staticmap (external). (2026-07-06 audit: the Meta-glasses swing-tempo
+  // placeholder route was deleted — zero client callers.)
   const EXEMPT = new Set(['staticmap']);
   for (const f of walk('services')) {
     let src = '';

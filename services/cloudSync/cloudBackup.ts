@@ -189,15 +189,22 @@ export async function backupNow(opts?: { force?: boolean }): Promise<CloudResult
 }
 
 /** Fetch the latest cloud snapshot for the signed-in user (does NOT apply it). */
-export async function fetchCloudSnapshot(): Promise<{ snapshot: Snapshot; updatedAt: string | null } | null> {
+export async function fetchCloudSnapshot(): Promise<{ snapshot: Snapshot; updatedAt: string | null; schemaVersion: number | null } | null> {
   const client = getCloudClient();
   if (!client) return null;
   const { userId } = useCloudBackupStore.getState();
   if (!userId) return null;
   try {
-    const { data, error } = await client.from(BACKUPS_TABLE).select('payload, updated_at').eq('user_id', userId).maybeSingle();
+    // 2026-07-06 (elite audit) — also read the row's schema_version so the
+    // restore path can refuse a payload written by a NEWER app (parity with
+    // the file-restore guard in localBackup.ts).
+    const { data, error } = await client.from(BACKUPS_TABLE).select('payload, updated_at, schema_version').eq('user_id', userId).maybeSingle();
     if (error || !data?.payload) return null;
-    return { snapshot: data.payload as Snapshot, updatedAt: (data.updated_at as string | null) ?? null };
+    return {
+      snapshot: data.payload as Snapshot,
+      updatedAt: (data.updated_at as string | null) ?? null,
+      schemaVersion: typeof data.schema_version === 'number' ? data.schema_version : null,
+    };
   } catch {
     return null;
   }
@@ -214,6 +221,14 @@ export async function restoreFromCloud(): Promise<{ ok: boolean; restored: numbe
   try {
     const fetched = await fetchCloudSnapshot();
     if (!fetched) { useCloudBackupStore.getState().setStatus('idle'); return { ok: false, restored: 0, reason: 'no_backup' }; }
+    // 2026-07-06 (elite audit) — refuse a backup written by a NEWER schema than
+    // this build understands, rather than applying an unmigrated payload blindly.
+    // Same guard the file-restore path has had (localBackup.ts) — the cloud path
+    // previously applied ANY payload.
+    if (fetched.schemaVersion != null && fetched.schemaVersion > SNAPSHOT_SCHEMA_VERSION) {
+      useCloudBackupStore.getState().setStatus('idle');
+      return { ok: false, restored: 0, reason: 'newer_version' };
+    }
     const restored = await applySnapshot(fetched.snapshot);
     // 2026-07-01 (re-audit) — after a restore the on-device data now EQUALS the cloud
     // snapshot, so record its fingerprint as the last-backed-up state. Prevents the

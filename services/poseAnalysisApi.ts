@@ -571,13 +571,14 @@ export async function analyzeSwingFromVideo(
 /** 2026-05-22 — Path A (SmartMotion real pose overlay): same keyframe-
  *  extraction pipeline as analyzeSwingFromVideo, but returns the raw
  *  per-position PoseFrames instead of collapsing into a biomechanics
- *  summary. SmartMotion uses this to render a real skeleton at the
- *  most-diagnostic position (P6 impact by default) instead of the
- *  StubSkeletonOverlay's animated mock.
+ *  summary. SmartMotion feeds these frames to SwingBodyOverlay, which
+ *  draws the real skeleton + swing-arc trace over the video player.
+ *  (2026-07-04 — the old StubSkeletonOverlay animated mock is deleted;
+ *  real computed frames are the only skeleton source.)
  *
  *  Returns null when the video is too short or every frame failed
- *  pose detection (caller falls back to StubSkeletonOverlay so there's
- *  no regression vs the existing behavior).
+ *  pose detection (callers render no skeleton overlay in that case —
+ *  never a mock).
  */
 export async function extractPoseFramesFromVideo(
   videoUri: string,
@@ -662,13 +663,46 @@ export async function extractPoseFramesFromVideo(
     }
   }
 
-  // Sequential to be polite to the rate limit (RapidAPI throttles bursts).
+  // 2026-07-06 (Tim: "the skeletal overlay is super laggy... barely moves") —
+  // 5 anchor frames across a ~2s swing IS the lag: SwingBodyOverlay linearly
+  // interpolates between them, so the skeleton slides robotically between five
+  // poses. When ON-DEVICE MediaPipe is linked (~100-300ms/frame), densify to
+  // ~20 frames across the same span — smooth playback skeleton — while the
+  // P-position anchors keep their tags for the biomech read. Cloud-only
+  // installs keep the 5-frame behavior (5-15s/frame makes density unaffordable);
+  // the native build is what unlocks this. compactPoseFramesForPersist already
+  // keeps up to 28 frames, so the dense set persists intact.
+  let sampleTimes: { key: PoseFrame['position'] | undefined; timeMs: number }[] = [...positionTimes];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mp = require('./mediaPipePoseService') as { isMediaPipeAvailable: () => boolean };
+    if (mp.isMediaPipeAvailable()) {
+      const DENSE_TARGET = 20;
+      const anchorTimes = positionTimes.map(p => p.timeMs);
+      const spanStart = Math.min(...anchorTimes);
+      const spanEnd = Math.max(...anchorTimes);
+      const extra = DENSE_TARGET - positionTimes.length;
+      if (spanEnd - spanStart > 300 && extra > 0) {
+        for (let i = 1; i <= extra; i++) {
+          const t = Math.round(spanStart + ((spanEnd - spanStart) * i) / (extra + 1));
+          if (sampleTimes.every(p => Math.abs(p.timeMs - t) > 40)) {
+            sampleTimes.push({ key: undefined, timeMs: t });
+          }
+        }
+        sampleTimes.sort((a, b) => a.timeMs - b.timeMs);
+        console.log('[pose] on-device densification', { anchors: positionTimes.length, total: sampleTimes.length });
+      }
+    }
+  } catch { /* native module absent — keep anchors only */ }
+
+  // Sequential — on-device runs one detector instance; cloud is polite to the
+  // rate limit (RapidAPI throttles bursts).
   const frames: PoseFrame[] = [];
-  for (const { key, timeMs } of positionTimes) {
+  for (const { key, timeMs } of sampleTimes) {
     const f = await poseAtTime(videoUri, timeMs, key);
     if (f) frames.push(f);
   }
-  console.log('[pose] extracted frames', { requested: positionTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
+  console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) return null;
   return frames;
 }

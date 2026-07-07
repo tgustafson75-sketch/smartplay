@@ -226,14 +226,9 @@ export default function Settings() {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       const rounds = roundMod.useRoundStore.getState().roundHistory;
-      // 2026-06-06 — Phase 6.1 followup: match the rebuild filter
-      // (exactly 9 OR exactly 18 holes — no partial 10-17). Previously
-      // partials passed the gate then got silently dropped by
-      // rebuildDifferentialsFromHistory, surfacing as "Could not
-      // compute" with no explanation.
-      const eligible = rounds.filter(
-        r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0,
-      );
+      // 2026-07-06 (audit P0) — canonical filter from roundStore: also
+      // excludes sim rounds, which this site's inline copy missed.
+      const eligible = roundMod.eligibleHandicapRounds(rounds);
       if (eligible.length < 3) {
         Alert.alert(
           'Need more rounds',
@@ -1992,6 +1987,41 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="locate-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-07-06 (elite audit) — /native-modules-debug was a
+                      registered route with NO entry point anywhere, yet it's
+                      load-bearing: the capture-engine A/B flag is flipped
+                      there. Owner tooling — its entry lives here. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/native-modules-debug' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open native modules debug"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Native Modules</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        On-device module status + the capture-engine A/B flag lives here.
+                      </Text>
+                    </View>
+                    <Ionicons name="hardware-chip-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-07-06 (elite audit) — /cage-debug is the hub that
+                      links out to the other debug screens but was itself
+                      unreachable from any menu. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/cage-debug' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open cage debug hub"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Cage Debug</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Debug hub — captured cage tuples + links to the other debug screens.
+                      </Text>
+                    </View>
+                    <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}

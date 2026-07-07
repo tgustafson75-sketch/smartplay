@@ -47,6 +47,40 @@ const SKELETON_EDGES: [string, string][] = [
 
 const MIN_KP_SCORE = 0.2;
 
+// 2026-07-06 (Tim: "if the turn is wrong or the hips don't move, it needs to
+// go orange or red, kinda like GolfFix, so you see the AREA of error") —
+// map each diagnosable fault to the joints whose skeleton region renders hot.
+// Derived from the fault's biomechanical home, not fabricated per-frame error
+// detection: the ANALYSIS names the fault; this paints WHERE that fault lives.
+export const FAULT_REGION_JOINTS: Record<string, string[]> = {
+  over_the_top:          ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  swing_path_outside_in: ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  swing_path_inside_out: ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  plane_too_flat:        ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  plane_too_steep:       ['left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  attack_angle_steep:    ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  attack_angle_shallow:  ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  casting:               ['left_elbow', 'right_elbow', 'left_wrist', 'right_wrist'],
+  club_face_open:        ['left_wrist', 'right_wrist'],
+  club_face_closed:      ['left_wrist', 'right_wrist'],
+  chicken_wing:          ['left_elbow', 'left_wrist', 'right_elbow', 'right_wrist'],
+  early_extension:       ['left_hip', 'right_hip', 'left_knee', 'right_knee'],
+  sway:                  ['left_hip', 'right_hip', 'left_knee', 'right_knee'],
+  reverse_pivot:         ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'],
+  spine_angle_loss:      ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'],
+  head_movement:         ['nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear'],
+};
+
+/** Joints to paint hot for a fault id (primary_fault or canonical issue_id).
+ *  Empty array = no highlight (unknown/none/inconclusive). */
+export function faultJointsFor(faultId: string | null | undefined): string[] {
+  if (!faultId) return [];
+  return FAULT_REGION_JOINTS[faultId] ?? [];
+}
+
+const FAULT_HOT_COLOR = '#FF6B2C'; // orange — the error region
+const FAULT_HOT_SEVERE = '#EF4444'; // red — significant severity
+
 type Props = {
   frames: PoseFrame[];
   currentTimeMs: number;
@@ -56,6 +90,11 @@ type Props = {
    *  letterboxes/crops identically. 'contain' = letterbox (meet),
    *  'cover' = crop (slice). Defaults to 'contain'. */
   resizeMode?: 'contain' | 'cover';
+  /** 2026-07-06 — joints in the diagnosed fault's region render hot
+   *  (orange / red when severe) so the error AREA reads at a glance.
+   *  Empty/absent = all-green skeleton exactly as before. */
+  faultJoints?: string[];
+  faultSevere?: boolean;
 };
 
 /** Detect whether keypoint coords are normalized 0–1 vs pixel-absolute by
@@ -146,7 +185,11 @@ export default function SwingBodyOverlay({
   showSkeleton = true,
   showTrace = true,
   resizeMode = 'contain',
+  faultJoints,
+  faultSevere = false,
 }: Props) {
+  const hotSet = useMemo(() => new Set(faultJoints ?? []), [faultJoints]);
+  const hotColor = faultSevere ? FAULT_HOT_SEVERE : FAULT_HOT_COLOR;
   const live = useMemo(() => interpolateFrame(frames, currentTimeMs), [frames, currentTimeMs]);
   const bbox = useMemo(() => computeBBox(frames), [frames]);
 
@@ -253,12 +296,15 @@ export default function SwingBodyOverlay({
               const ka = getKp(live, a);
               const kb = getKp(live, b);
               if (!ka || !kb) return null;
+              // Edge renders hot when BOTH endpoints sit in the fault region —
+              // paints the region's segments, not stray connectors into it.
+              const hot = hotSet.has(a) && hotSet.has(b);
               return (
                 <Line
                   key={`${a}-${b}`}
                   x1={ka.x * sx} y1={ka.y * sy} x2={kb.x * sx} y2={kb.y * sy}
-                  stroke="#88F700"
-                  strokeWidth={sw}
+                  stroke={hot ? hotColor : '#88F700'}
+                  strokeWidth={hot ? sw * 1.25 : sw}
                   strokeOpacity={0.9}
                   strokeLinecap="round"
                 />
@@ -266,14 +312,15 @@ export default function SwingBodyOverlay({
             })}
             {live.keypoints.map((k, i) => {
               if (k.score < MIN_KP_SCORE) return null;
+              const hot = k.name != null && hotSet.has(k.name);
               return (
                 <Circle
                   key={i}
                   cx={k.x * sx}
                   cy={k.y * sy}
-                  r={dotR}
+                  r={hot ? dotR * 1.2 : dotR}
                   fill="#ffffff"
-                  stroke="#88F700"
+                  stroke={hot ? hotColor : '#88F700'}
                   strokeWidth={sw * 0.6}
                 />
               );

@@ -230,6 +230,8 @@ export default function CageDebug() {
         const res = await fetch(apiUrl + '/api/cage-review', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'extract', transcript }),
+          // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
+          signal: AbortSignal.timeout(68_000),
         });
         const data = await res.json() as { labels?: Parameters<typeof updateShotLabels>[2] };
         if (data.labels) updateShotLabels(session.id, shots[i].id, data.labels, transcript);
@@ -239,6 +241,8 @@ export default function CageDebug() {
       const vocabRes = await fetch(apiUrl + '/api/cage-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vocab', transcripts: mockTranscripts.slice(0, shots.length), total_reviewed: shots.length }),
+        // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
+        signal: AbortSignal.timeout(68_000),
       });
       const vocabData = await vocabRes.json() as { observed_terminology: VocabularyProfile['observed_terminology']; kevin_summary: string; total_clips_reviewed: number };
       const { saveGeneratedProfile } = await import('../services/vocabularyProfile');

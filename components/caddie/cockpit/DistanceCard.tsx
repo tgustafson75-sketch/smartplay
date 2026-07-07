@@ -66,14 +66,19 @@ export function DistanceCard({
   // downgrades to 'weak' so the GPS dot dims. Same no-fake-
   // precision principle as the Phase 418 validation gate.
   const isScorecardFallback = fmb?.reason === 'no_geometry';
-  const effectiveAccuracy: 'good' | 'weak' | 'off' = isScorecardFallback ? 'weak' : gpsAccuracy;
-  const middleDisplay = middle != null ? (isScorecardFallback ? `~${middle}` : String(middle)) : '—';
+  // 2026-07-06 (elite audit) — `reason === 'estimated'` (tee-relative GPS
+  // estimate from yardageResolver, tagged low/med confidence upstream) was
+  // rendered as a bare measured number. Same honesty treatment: "~" prefix,
+  // EST pill, dimmed GPS dot — never fake precision.
+  const isEstimated = fmb?.reason === 'estimated';
+  const effectiveAccuracy: 'good' | 'weak' | 'off' = (isScorecardFallback || isEstimated) ? 'weak' : gpsAccuracy;
+  const middleDisplay = middle != null ? ((isScorecardFallback || isEstimated) ? `~${middle}` : String(middle)) : '—';
 
   return (
     <Pressable
       onPress={onPressOpenRangefinder}
       accessibilityRole="button"
-      accessibilityLabel={isScorecardFallback ? 'Open SmartFinder rangefinder (scorecard distance, no live GPS green)' : 'Open SmartFinder rangefinder'}
+      accessibilityLabel={isScorecardFallback ? 'Open SmartFinder rangefinder (scorecard distance, no live GPS green)' : isEstimated ? 'Open SmartFinder rangefinder (estimated distance)' : 'Open SmartFinder rangefinder'}
       style={({ pressed }) => [
         styles.outer,
         {
@@ -90,9 +95,11 @@ export function DistanceCard({
         <Text style={[styles.label, { color: colors.text_primary }]}>
           <Text style={{ color: colors.accent }}>SMART </Text>FINDER
         </Text>
-        {isScorecardFallback ? (
+        {isScorecardFallback || isEstimated ? (
           <View style={[styles.scorecardPill, { borderColor: colors.text_muted }]}>
-            <Text style={[styles.scorecardPillText, { color: colors.text_muted }]}>SCORECARD</Text>
+            <Text style={[styles.scorecardPillText, { color: colors.text_muted }]}>
+              {isScorecardFallback ? 'SCORECARD' : 'EST'}
+            </Text>
           </View>
         ) : null}
         <View style={[styles.gpsBadge, { borderColor: colors.accent }]}>

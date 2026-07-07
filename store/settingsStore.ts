@@ -136,10 +136,9 @@ interface SettingsState {
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
-  brightMode: boolean;
-  // PGA HOPE follow-up (A1) — when true, BrightMode also bumps text scale
-  // and forces icon-button labels to render so low-vision users don't
-  // operate the app from muscle memory alone.
+  // PGA HOPE follow-up (A1) — when true, bumps text scale and forces
+  // icon-button labels to render so low-vision users don't operate the
+  // app from muscle memory alone.
   largeText: boolean;
   // PGA HOPE follow-up (A2) — pin TTS captions during voice playback so
   // hearing-impaired participants don't lose the persona-swap handoff
@@ -177,7 +176,7 @@ interface SettingsState {
   // native SDK all share one source of truth. Removed from this
   // store. See also the migrate() block below which strips the
   // field on hydration of persisted state from prior versions.
-  glassesConnected: boolean;
+  // (glassesConnected removed 2026-07-04 audit — zero consumers.)
   autoListenEnabled: boolean;
   skip_briefings: boolean;
   proactive_kevin_enabled: boolean;
@@ -251,14 +250,9 @@ interface SettingsState {
   // back to 'live' fires a fresh GPS read (synthetic Mark) so the
   // current position re-anchors the live yardages.
   yardageMode: 'live' | 'preround';
-  // Phase BL — auto club recognition during cage practice. When true,
-  // the cage session shows the "ID club" camera button and accepts
-  // voice intents like "switching to 6-iron". When false, only the
-  // manual tap-grid picker is exposed. Voice intents still parse the
-  // utterance but show the manual picker instead of registering.
-  autoClubDetection: boolean;
-  cageAutoClubDetection: boolean;
-  hasSeenAutoClubPrompt: boolean;
+  // (Phase BL autoClubDetection / cageAutoClubDetection /
+  // hasSeenAutoClubPrompt removed 2026-07-04 audit — zero consumers;
+  // stale persisted values are ignored on hydrate.)
 
   // 2026-06-10 — Practice/sensing environment. ONE switch the capture +
   // analysis paths branch on so sensing matches reality:
@@ -333,7 +327,6 @@ interface SettingsState {
   setGpsQualityDebugOverlay: (v: boolean) => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
   setHighContrast: (v: boolean) => void;
-  setBrightMode: (v: boolean) => void;
   setLargeText: (v: boolean) => void;
   setTtsCaptions: (v: boolean) => void;
   setTtsCaptionsBluetoothPrompt: (v: 'unasked' | 'asked' | 'never') => void;
@@ -341,7 +334,6 @@ interface SettingsState {
   setPersonaIntensity: (p: Persona, v: number) => void;
   setTankSoftIntro: (v: boolean) => void;
   // setWatchConnected moved to watchStore.setConnected (Consolidation 1 / Merge C).
-  setGlassesConnected: (v: boolean) => void;
   setAutoListenEnabled: (v: boolean) => void;
   setCartMode: (v: boolean) => void;
   // 2026-05-22 — Fix T.
@@ -364,10 +356,6 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
-  setAutoClubDetection: (v: boolean) => void;
-  // Phase BL
-  setCageAutoClubDetection: (v: boolean) => void;
-  setHasSeenAutoClubPrompt: (v: boolean) => void;
   // Phase Cockpit
   setCockpitMode: (v: boolean) => void;
   setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
@@ -428,7 +416,6 @@ export const useSettingsStore = create<SettingsState>()(
       gpsQualityDebugOverlay: false,
       theme_preference: 'system' as const,
       highContrast: false,
-      brightMode: false,
       largeText: false,
       ttsCaptions: true,
       ttsCaptionsBluetoothPrompt: 'unasked' as const,
@@ -444,7 +431,6 @@ export const useSettingsStore = create<SettingsState>()(
       // back active is a single-line edit.
       personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 },
       tankSoftIntro: true,
-      glassesConnected: false,
       autoListenEnabled: false,
       // 2026-05-22 — Cart-is-default product principle: ~95% of golfers
       // ride. Default cartMode TRUE so new installs get cart-aware shot
@@ -485,9 +471,6 @@ export const useSettingsStore = create<SettingsState>()(
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
-      autoClubDetection: true,
-      cageAutoClubDetection: true,
-      hasSeenAutoClubPrompt: false,
       environmentMode: 'cage' as const,
       cageCanvasFeet: 14,
       cameraBehindFeet: 7,
@@ -631,7 +614,6 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setThemePreference: (p) => set({ theme_preference: p }),
       setHighContrast: (v) => set({ highContrast: v }),
-      setBrightMode: (v) => set({ brightMode: v }),
       setLargeText: (v) => set({ largeText: v }),
       setTtsCaptions: (v) => set({ ttsCaptions: v }),
       setTtsCaptionsBluetoothPrompt: (v) => set({ ttsCaptionsBluetoothPrompt: v }),
@@ -652,7 +634,6 @@ export const useSettingsStore = create<SettingsState>()(
         },
       })),
       setTankSoftIntro: (v) => set({ tankSoftIntro: v }),
-      setGlassesConnected: (v) => set({ glassesConnected: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setCartMode: (v) => set({ cartMode: v }),
       // 2026-05-22 — Fix T setters.
@@ -695,9 +676,6 @@ export const useSettingsStore = create<SettingsState>()(
           })();
         }
       },
-      setAutoClubDetection: (v) => set({ autoClubDetection: v, cageAutoClubDetection: v }),
-      setCageAutoClubDetection: (v) => set({ cageAutoClubDetection: v, autoClubDetection: v }),
-      setHasSeenAutoClubPrompt: (v) => set({ hasSeenAutoClubPrompt: v }),
       setCockpitMode: (v) => set({ cockpitMode: v }),
       setEnvironmentMode: (mode) => set({ environmentMode: mode }),
       setCageCanvasFeet: (feet) => set({ cageCanvasFeet: Math.max(1, Math.round(feet)) }),
@@ -825,17 +803,10 @@ export const useSettingsStore = create<SettingsState>()(
             p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 };
           }
         }
-        // v9 — add auto-club prompt persistence and generic auto-club
-        // toggle alias. Existing users keep prior cageAutoClubDetection
-        // behavior; hasSeenAutoClubPrompt seeds false.
-        if (version < 9) {
-          if (p.autoClubDetection == null) {
-            p.autoClubDetection = p.cageAutoClubDetection ?? true;
-          }
-          if (p.hasSeenAutoClubPrompt == null) {
-            p.hasSeenAutoClubPrompt = false;
-          }
-        }
+        // v9 — added auto-club prompt persistence + generic auto-club
+        // toggle alias. Those keys were removed in the 2026-07-04 audit
+        // (zero consumers), so the v9 seeding block is gone too; stale
+        // persisted values are simply ignored on hydrate.
         // v10 — hands-free safety pass. Earbud tap-to-talk starts OFF
         // so app boot never enables the native media-key path unless
         // the user explicitly opts in from Settings.
@@ -906,7 +877,6 @@ export const useSettingsStore = create<SettingsState>()(
         gpsQualityDebugOverlay: s.gpsQualityDebugOverlay,
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
-        brightMode: s.brightMode,
         largeText: s.largeText,
         ttsCaptions: s.ttsCaptions,
         ttsCaptionsBluetoothPrompt: s.ttsCaptionsBluetoothPrompt,
@@ -938,9 +908,6 @@ export const useSettingsStore = create<SettingsState>()(
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
-        autoClubDetection: s.autoClubDetection,
-        cageAutoClubDetection: s.cageAutoClubDetection,
-        hasSeenAutoClubPrompt: s.hasSeenAutoClubPrompt,
         environmentMode: s.environmentMode,
         cageCanvasFeet: s.cageCanvasFeet,
         cameraBehindFeet: s.cameraBehindFeet,
@@ -951,7 +918,7 @@ export const useSettingsStore = create<SettingsState>()(
         analyticsOptIn: s.analyticsOptIn,
         voiceOrchestrator: s.voiceOrchestrator,
         pipecatServerUrl: s.pipecatServerUrl,
-        // watchConnected / glassesConnected not persisted — rechecked on mount
+        // watchConnected lives in watchStore; not persisted here
       }),
       // 2026-05-28 — Fix FS: post-splash audio race fix. settingsStore
       // had no hydration flag, so any module that read

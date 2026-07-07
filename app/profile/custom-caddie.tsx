@@ -53,7 +53,9 @@ import { getApiBaseUrl } from '../../services/apiBase';
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
 
-const apiUrl = getApiBaseUrl();
+// 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
+// snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
+const apiUrl = (): string => getApiBaseUrl();
 
 export default function CustomCaddieScreen() {
   const insets = useSafeAreaInsets();
@@ -207,10 +209,13 @@ export default function CustomCaddieScreen() {
     setBusy('generate');
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      const res = await fetch(apiUrl + '/api/image-edit', {
+      const res = await fetch(apiUrl() + '/api/image-edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: selfieB64, prompt }),
+        // 2026-07-06 (audit) — bound the wait (~1.5× the route's 60s maxDuration)
+        // so a dead connection surfaces as an error instead of hanging forever.
+        signal: AbortSignal.timeout(75_000),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.b64) {

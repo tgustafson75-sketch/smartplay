@@ -108,11 +108,12 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
 };
 
 // Tank counterparts. 2026-05-16 — fully migrated to the clean tank_v2_*
-// set. The legacy tank_emotions_*.png and tank_expressive_*.png images
-// have a text label baked into the bottom of the image itself ("Relief",
-// "Facepalm", "Confusion" etc) — Tim reported them visible on Caddie tab
-// while testing with Tank as the active persona. The v2 set has no
-// baked-in labels, so this map now exclusively uses v2. Some emotion
+// set. The legacy tank_emotions_*/tank_expressive_* images had a text
+// label baked into the bottom of the image itself ("Relief", "Facepalm",
+// "Confusion" etc) — Tim reported them visible on Caddie tab while
+// testing with Tank as the active persona. The v2 set has no baked-in
+// labels, so this map exclusively uses v2 (the legacy files were deleted
+// in the 2026-07-04 orphaned-asset sweep). Some emotion
 // slots reuse the same v2 image because we have 22 emotion keys but
 // only ~11 v2 portraits; that's fine — the slot mapping is best-fit by
 // character feel, not 1:1 unique imagery.

@@ -39,6 +39,7 @@ import {
   captureUtterance, speak, configureAudioForSpeech, stopSpeaking,
 } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
 interface Props {
   session: CageSession;
@@ -50,7 +51,10 @@ interface AskResponse {
   error?: string;
 }
 
-const apiUrl = getApiBaseUrl();
+// 2026-07-06 (elite audit) — no module-scope getApiBaseUrl() snapshot here:
+// the dual-host failover can flip the live base mid-session, and a cached
+// value would keep hitting the dead host (see services/apiBase.ts — "call at
+// fetch time; don't cache"). Every call site below reads it fresh.
 
 function resolveFrameUri(session: CageSession): string | null {
   if (session.primary_issue?.visual_reference_path) {
@@ -74,7 +78,11 @@ export default function AskYourSwingCard({ session }: Props) {
   const [provider, setProvider] = useState<AskResponse['provider'] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const frameUri = resolveFrameUri(session);
+  // 2026-07-06 (elite audit) — the fault frame is persisted as an ABSOLUTE
+  // file:// path and iOS regenerates the container UUID on every native build.
+  // This uri isn't just rendered — it's base64'd and SENT to the API, so a
+  // stale prefix silently degraded the answer. Re-anchor at read.
+  const frameUri = useResolvedImageUri(resolveFrameUri(session));
 
   const submitQuestion = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -85,9 +93,14 @@ export default function AskYourSwingCard({ session }: Props) {
     setProvider(null);
     try {
       const b64 = await FileSystem.readAsStringAsync(frameUri, { encoding: 'base64' });
-      const res = await fetch(`${apiUrl}/api/swing-question`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/swing-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // 2026-07-06 (elite audit) — bound the wait: the server route caps at
+        // 45s (vercel.json maxDuration), so anything past that is a hang, not
+        // a slow answer. Without this, a dead host left the card spinning
+        // forever.
+        signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({
           frames: [{ b64, media_type: 'image/jpeg' }],
           question: trimmed,
@@ -117,7 +130,7 @@ export default function AskYourSwingCard({ session }: Props) {
       // L1 (Quiet). The user just tapped Ask — that's an explicit
       // invitation to hear the response. [[voice-userinitiated-rule]]
       await configureAudioForSpeech();
-      void speak(data.answer, voiceGender, language as 'en' | 'es' | 'zh', apiUrl, { userInitiated: true });
+      void speak(data.answer, voiceGender, language as 'en' | 'es' | 'zh', getApiBaseUrl(), { userInitiated: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Question failed';
       setError(msg);
@@ -132,7 +145,7 @@ export default function AskYourSwingCard({ session }: Props) {
     try {
       // Stop any currently-speaking answer so the mic doesn't pick it up.
       await stopSpeaking().catch(() => {});
-      const heard = await captureUtterance(10_000, apiUrl, language as 'en' | 'es' | 'zh');
+      const heard = await captureUtterance(10_000, getApiBaseUrl(), language as 'en' | 'es' | 'zh');
       if (heard) {
         setQuestion(heard);
         // Auto-submit so the voice path is true one-tap.

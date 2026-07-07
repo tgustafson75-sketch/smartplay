@@ -16,7 +16,9 @@ import { generateRecap } from '../services/recapGenerator';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { getApiBaseUrl } from '../services/apiBase';
 
-const apiUrl = getApiBaseUrl();
+// 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
+// snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
+const apiUrl = (): string => getApiBaseUrl();
 
 // ─── Synthetic ghost for when roundHistory is empty ───────────────────────────
 
@@ -95,9 +97,11 @@ export default function GhostDebugScreen() {
     setCommentary(null);
     try {
       const playerName = usePlayerProfileStore.getState().firstName || usePlayerProfileStore.getState().name || 'Tim';
-      const res = await fetch(apiUrl + '/api/kevin', {
+      const res = await fetch(apiUrl() + '/api/kevin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // 2026-07-06 (audit) — bound the wait (~1.5× the route's 60s maxDuration).
+        signal: AbortSignal.timeout(75_000),
         body: JSON.stringify({
           message: 'How am I doing against past me?',
           language: 'en',
@@ -151,7 +155,7 @@ export default function GhostDebugScreen() {
         courseHoles,
         patternInsights: ['DEBUG: synthetic ghost match data'],
         playerName: usePlayerProfileStore.getState().firstName || 'Tim',
-        apiUrl,
+        apiUrl: apiUrl(),
         ghostSnapshot: snapshot,
       });
 

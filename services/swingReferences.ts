@@ -39,7 +39,31 @@
  */
 
 import type { ImageSourcePropType } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getAuthoredReference } from '../store/referenceAuthoringStore';
+
+/**
+ * 2026-07-06 (elite audit) — read-time re-anchor for authored capture uris.
+ * The authoring screen persists ABSOLUTE paths under documentDirectory/
+ * reference-authoring/, and iOS regenerates the app-container UUID on every
+ * native build/reinstall — so a stored path from a prior install silently
+ * points at the DEAD container even though the file survived (same reshuffle
+ * resolveClipUri in videoUpload.ts heals for swing clips). getSwingReference
+ * is SYNCHRONOUS (called straight from render), so re-anchor by prefix check
+ * instead of an async existence probe: a file:// uri whose prefix isn't the
+ * LIVE documentDirectory is guaranteed stale — rebuild it from the basename.
+ */
+function reanchorAuthoredUri(stored: string): string {
+  if (!stored.startsWith('file://')) return stored;
+  try {
+    const dir = FileSystem.documentDirectory;
+    if (!dir || stored.startsWith(dir)) return stored;
+    const base = stored.split('/').pop();
+    return base ? `${dir}reference-authoring/${base}` : stored;
+  } catch {
+    return stored; // FS unavailable — don't regress, hand back the original
+  }
+}
 
 // Mirror of api/swing-analysis.ts CanonicalIssue. Local copy so the
 // registry doesn't pull a server file (the API file is bundle-poison —
@@ -153,7 +177,7 @@ export function getSwingReference(issue: string | null | undefined): SwingRefere
   const authored = getAuthoredReference(issue);
   if (authored && authored.imageUri) {
     return {
-      image: { uri: authored.imageUri } as ImageSourcePropType,
+      image: { uri: reanchorAuthoredUri(authored.imageUri) } as ImageSourcePropType,
       position: baseline.position,
       callout: authored.callout && authored.callout.trim().length > 0
         ? authored.callout

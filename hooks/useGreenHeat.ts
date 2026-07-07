@@ -43,6 +43,7 @@ export function useGreenHeat(scope: 'career' | 'round' = 'career'): GreenHeatMod
   const liveScores = useRoundStore((s) => s.scores);
   const livePutts = useRoundStore((s) => s.putts);
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
+  const isSimRound = useRoundStore((s) => s.isSimRound);
   const rollsMap = useGreenRollStore((s) => s.rolls);
 
   return useMemo(() => {
@@ -55,9 +56,12 @@ export function useGreenHeat(scope: 'career' | 'round' = 'career'): GreenHeatMod
     }
 
     // Assemble the rounds to fold in.
+    // 2026-07-06 (elite audit) — sim rounds never feed green heat: narrated
+    // sim putts aren't real greens data. Same gate for the live sim round.
+    const realHistory = roundHistory.filter((r) => !r.simulated);
     const rounds: RoundRecord[] = [];
     const liveRound: RoundRecord | null =
-      isRoundActive && Object.keys(livePutts ?? {}).length > 0
+      isRoundActive && !isSimRound && Object.keys(livePutts ?? {}).length > 0
         ? ({
             // Minimal synthetic record — only the fields buildGreenHeatModel reads
             // (putts, scores, courseId). Real data only; no fabricated putts.
@@ -71,11 +75,11 @@ export function useGreenHeat(scope: 'career' | 'round' = 'career'): GreenHeatMod
     if (scope === 'round') {
       if (liveRound) rounds.push(liveRound);
       else {
-        const last = roundHistory[roundHistory.length - 1];
+        const last = realHistory[realHistory.length - 1];
         if (last) rounds.push(last);
       }
     } else {
-      rounds.push(...roundHistory);
+      rounds.push(...realHistory);
       if (liveRound) rounds.push(liveRound);
     }
 
@@ -97,6 +101,7 @@ export function useGreenHeat(scope: 'career' | 'round' = 'career'): GreenHeatMod
     liveScores,
     livePutts,
     isRoundActive,
+    isSimRound,
     rollsMap,
     scope,
   ]);

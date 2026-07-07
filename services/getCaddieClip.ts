@@ -31,11 +31,14 @@
  *   yardage     — yardage-to-pin readout
  *   wind        — wind read overlay
  *   club        — club selection / recommendation
- *   hazard      — hazard call / penalty-area awareness   (TODO — D-ID pending)
+ *   hazard      — hazard call / penalty-area awareness
  *   chip        — short-game chip read
  *   putt_read   — green read before the stroke
  *   putt_line   — line commit just before the putt
- *   celebrate   — hole complete / made-it celebration    (TODO — D-ID pending)
+ *   celebrate   — hole complete / made-it celebration
+ *
+ * (2026-07-04 — every slot above, hazard + celebrate included, has a
+ * bundled clip in the require() map below; no D-ID TODOs remain.)
  *
  * Test scaffolding note (per Tim 2026-05-25): the current Kevin clip
  * set is placeholder content from D-ID for beta testing. Clean rebuilds

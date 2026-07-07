@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, eligibleHandicapRounds } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
 import {
@@ -99,7 +99,9 @@ export default function ImportRoundsListScreen() {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
         const all = useRoundStore.getState().roundHistory;
-        const eligible = all.filter(r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0);
+        // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds
+        // (this recompute runs automatically after EVERY import).
+        const eligible = eligibleHandicapRounds(all);
         if (eligible.length >= 3) {
           const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);
           usePlayerProfileStore.setState({ recent_differentials: differentials });

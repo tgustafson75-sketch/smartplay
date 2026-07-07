@@ -335,9 +335,10 @@ const SCEN_13: Scenario = {
       a.skip('production skeleton gate', '__DEV__ is true; production-only assertion');
       return;
     }
-    // In production, StubSkeletonOverlay should never render. We can't
-    // directly probe its mount state from here, so we assert the gate
-    // value the component reads (__DEV__ === false).
+    // 2026-07-04 — the old StubSkeletonOverlay mock is deleted entirely;
+    // skeletons only render from real computed PoseFrames (SwingBodyOverlay).
+    // This assertion survives as a trivial production sanity check on the
+    // __DEV__ gate value the honesty gate historically read.
     a.expect('__DEV__ === false in production', dev === false);
   }),
 };

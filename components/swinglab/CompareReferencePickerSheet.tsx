@@ -20,6 +20,17 @@ import {
 import { useTheme } from '../../contexts/ThemeContext';
 import { searchSimilarSwings, type SimilarMatch } from '../../services/swingDatabase';
 import type { PoseEstimate } from '../../services/poseEstimator';
+import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
+
+// 2026-07-06 (elite audit) — reference thumbnails are persisted as ABSOLUTE
+// file:// paths and iOS regenerates the container UUID on every native build,
+// so render through the re-anchoring resolver instead of trusting the stored
+// prefix (a stale path rendered a blank tile). Remote (YouTube) thumbs pass
+// through untouched.
+const ReferenceThumb = ({ uri }: { uri: string }) => {
+  const healed = useResolvedImageUri(uri);
+  return <Image source={{ uri: healed ?? uri }} style={styles.rowThumb} resizeMode="cover" />;
+};
 
 export interface CompareReferencePickerSheetProps {
   visible: boolean;
@@ -144,11 +155,7 @@ export default function CompareReferencePickerSheet({
                 >
                   <View style={styles.rowThumbWrap}>
                     {m.reference.thumbnailUri ? (
-                      <Image
-                        source={{ uri: m.reference.thumbnailUri }}
-                        style={styles.rowThumb}
-                        resizeMode="cover"
-                      />
+                      <ReferenceThumb uri={m.reference.thumbnailUri} />
                     ) : (
                       <View style={[styles.rowThumb, { backgroundColor: colors.surface_elevated, alignItems: 'center', justifyContent: 'center' }]}>
                         <Text style={{ fontSize: 22 }}>

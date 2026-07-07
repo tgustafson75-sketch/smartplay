@@ -35,7 +35,9 @@ import {
 } from '../../services/clubRecognition';
 import { getApiBaseUrl } from '../../services/apiBase';
 
-const API_URL = getApiBaseUrl();
+// 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
+// snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
+const API_URL = (): string => getApiBaseUrl();
 
 type PendingConfirm = {
   club_id: ClubId;
@@ -121,7 +123,7 @@ export default function ClubIdentifyControls() {
   const runVisionCapture = useCallback(async () => {
     dismissBanners();
     setRecentAck(null);
-    if (!API_URL) {
+    if (!API_URL()) {
       fallToManual({ kind: 'error', detail: 'API not configured — pick manually.' });
       return;
     }
@@ -144,7 +146,7 @@ export default function ClubIdentifyControls() {
         return;
       }
       setIdentifying(true);
-      const outcome = await recognizeClubFromUri(asset.uri, API_URL);
+      const outcome = await recognizeClubFromUri(asset.uri, API_URL());
       handleOutcome(outcome);
     } catch (e) {
       console.log('[ClubIdentify] capture/recognize failed', e);

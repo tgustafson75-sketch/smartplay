@@ -149,6 +149,11 @@ export function confirmTrackedShot(shotId: string): void {
     confirmedShotIds.delete(confirmedShotIds.values().next().value as string);
   }
   const yards = shot.distance_yards ?? null;
+  // 2026-07-06 (elite audit P0) — sim rounds must NEVER train the learned bag.
+  // Sim distances come from the simulated-GPS pipeline; the parallel
+  // caddie-memory bag path was gated (roundStore recordShot) but this one was
+  // missed. The shot still logs to the sim scorecard — only training is skipped.
+  if (useRoundStore.getState().isSimRound) return;
   // 2026-07-01 (whole-app audit) — same >500y guard the longestDrive path got (a corrupt GPS jump
   // must not train the club-bag average with an impossible shot). No single shot exceeds ~500y.
   if (yards != null && yards > 0 && yards <= 500) {

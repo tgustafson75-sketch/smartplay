@@ -49,16 +49,15 @@ export default function LieAnalysisScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ intent?: string; smartplay?: string }>();
+  const params = useLocalSearchParams<{ intent?: string }>();
   const playIntent: PlayIntent = (params.intent === 'aggressive' || params.intent === 'conservative') ? params.intent : null;
-  // 2026-05-26 — Fix W.2: when entered via the SmartPlay voice command
-  // (openToolHandler appends ?smartplay=1), start in the conversational
-  // opener — caddie asks "what do you see?" and captures the player's
-  // verbal context BEFORE the photo. Direct routes to /lie-analysis
-  // (manual nav, intent-only voice triggers) skip the opener and land
-  // straight on the camera as before — no regression for the
-  // legacy/tactical path.
-  const smartplayMode = params.smartplay === '1';
+  // 2026-07-06 (elite audit) — the ?smartplay=1 route (Fix W.2 conversational
+  // opener) was retired: no caller passes the param anymore (the "smart play"
+  // voice/tap path routes to /smartfinder?autoread=1 instead). The opener
+  // machinery below (runOpener + the opener phases) touches the voice path,
+  // which is FROZEN — so it stays in place, permanently un-triggered, until a
+  // caller opts back in.
+  const smartplayMode = false;
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);

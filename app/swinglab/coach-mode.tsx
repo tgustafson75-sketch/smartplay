@@ -49,8 +49,18 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
 const COACH_TUTORIAL_KEY = 'coach_mode';
+
+// 2026-07-06 (elite audit) — swing-row thumbnail. The fault frame is persisted
+// as an ABSOLUTE file:// path and iOS regenerates the container UUID on every
+// native build, so render through the re-anchoring resolver instead of
+// trusting the stored prefix (a stale path rendered a blank tile).
+const SwingRowThumb = ({ uri }: { uri: string }) => {
+  const healed = useResolvedImageUri(uri);
+  return <Image source={{ uri: healed ?? uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />;
+};
 
 export default function CoachMode() {
   const router = useRouter();
@@ -494,7 +504,7 @@ export default function CoachMode() {
                   >
                     <View style={[styles.thumb, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
                       {thumb ? (
-                        <Image source={{ uri: thumb }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                        <SwingRowThumb uri={thumb} />
                       ) : (
                         <Ionicons name="golf-outline" size={22} color={colors.text_muted} />
                       )}

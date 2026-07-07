@@ -60,6 +60,9 @@ export async function detectBallSpeed(args: {
         impact_ms: args.impact_ms ?? null,
         club: args.club ?? 'unknown',
       }),
+      // 2026-07-06 (audit) — bound the wait (~1.5× the route's 30s maxDuration)
+      // so a stalled connection returns null instead of hanging forever.
+      signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<BallSpeedResult>;

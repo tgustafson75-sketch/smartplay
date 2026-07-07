@@ -15,6 +15,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
+import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -106,7 +107,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // 2026-06-13 (Tim) — course-data bootstrap: prefer a real captured shot of THIS hole
   // (snapped in SmartFinder) over the generic Mapbox tile. Self-built course imagery.
   const captured = useCourseCaptureStore(s => s.bestForward(activeCourseId, currentHole));
-  const capturedUri = captured?.kind === 'single' ? captured.uri : null;
+  // 2026-07-06 (elite audit) — manifest uris are ABSOLUTE file:// paths and iOS
+  // regenerates the container UUID on app update, so re-anchor under the LIVE
+  // documentDirectory before rendering (a stale prefix drew a blank hero tile).
+  const capturedUri = captured?.kind === 'single' ? resolveCaptureUri(captured.uri) : null;
 
   useEffect(() => {
     let cancelled = false;

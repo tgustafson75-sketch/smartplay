@@ -96,11 +96,17 @@ import { devLog } from '../services/devLog';
 // inlined here originally; audit moved it to remove a brittle
 // Zustand-internals cast from this file).
 
-// TODO (Wednesday MacBook setup): add EXPO_PUBLIC_SENTRY_DSN + Sentry org/project to eas.json,
-// then remove SENTRY_DISABLE_AUTO_UPLOAD=true from eas.json build profiles.
-if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+// 2026-07-06 (elite audit P1) — crash reporting was silently OFF fleet-wide:
+// the DSN lives in EAS env (build-time) but EXPO_PUBLIC_* is EMPTY in OTA
+// bundles published from a machine without a local .env, so the init gate
+// never fired and every Sentry.addBreadcrumb in the app wrote to nothing.
+// Hardcoded PUBLIC-DSN fallback (same OTA-safe pattern as mapboxImagery /
+// coursePlaces): a Sentry DSN is a public ingest key, safe to embed.
+const SENTRY_DSN_FALLBACK = 'https://94204d567ba053ad6f9dc3f39ff84655@o4511297513717760.ingest.us.sentry.io/4511297527283712';
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN || SENTRY_DSN_FALLBACK;
+if (sentryDsn) {
   Sentry.init({
-    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+    dsn: sentryDsn,
     tracesSampleRate: 0.2,
     environment: __DEV__ ? 'development' : 'production',
   });

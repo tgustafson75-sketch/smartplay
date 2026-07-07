@@ -568,7 +568,8 @@ function clubSpeedFromPose(
     devLog(`[swingMetrics] club_speed: bad duration ${clipDurationMs}ms → null`);
     return null;
   }
-  const duration = clipDurationMs && clipDurationMs > 200 ? clipDurationMs : 3000;
+  // (duration itself no longer scales the mph — see the unit-bug note below;
+  // the sanity gate above still rejects implausible clips.)
   // 2026-06-12 — track BOTH wrists and take the faster peak. The LEAD wrist is the
   // fastest through impact; it's the left wrist for a right-hander and the right wrist
   // for a lefty. Tracking only the literal 'left_wrist' gave lefties the slow TRAIL
@@ -603,9 +604,13 @@ function clubSpeedFromPose(
   if (peakVelocity === 0) return null;
   // Conversion: normalized image units → real-world m/s.
   // Empirical constant ~150 m/s per normalized-unit-per-ms for a
-  // typical full-body downswing capture at ~3s total clip length.
-  // Then m/s → mph: × 2.237.
-  const mph = peakVelocity * 150 * 2.237 * (3000 / duration);
+  // typical full-body downswing capture. Then m/s → mph: × 2.237.
+  // 2026-07-06 (elite audit — unit bug): peakVelocity is ALREADY
+  // time-normalized (dist/dt per-ms), so the old extra ×(3000/duration)
+  // made the SAME physical swing read half the mph in a 6s clip vs a 3s
+  // clip. At the typical 3s clip the factor was 1.0, so removing it keeps
+  // the existing calibration and makes the read clip-length-independent.
+  const mph = peakVelocity * 150 * 2.237;
 
   // Hard implausible: nothing in this range is a real golf swing.
   // Return null rather than fake a number — caller falls back to

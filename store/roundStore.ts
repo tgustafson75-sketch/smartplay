@@ -1656,8 +1656,11 @@ export const useRoundStore = create<RoundState>()(
           }
         }
 
-        // Points — completed round = 100 pts.
-        if (holesPlayed >= 9) {
+        // Points — completed round = 100 pts. 2026-07-06 (audit P0) — sim gate
+        // was documented ("no points farming via sim rounds") but the check
+        // landed on the tankSoftIntro block above; a narrated sim round was
+        // still worth 100 pts + tier climb. Gate THIS block too.
+        if (holesPlayed >= 9 && !s.isSimRound) {
           try {
             const pointsMod = require('./pointsStore');
             pointsMod.usePointsStore.getState().addPoints(100, `round_completed_${holesPlayed}h`);
@@ -2573,4 +2576,16 @@ export function whenRoundStoreHydrated(body: () => void | (() => void)): () => v
     unsub();
     if (typeof cleanup === 'function') cleanup();
   };
+}
+
+// 2026-07-06 (elite audit P0) — ONE eligibility filter for every handicap
+// rebuild. endRound/deleteRound already excluded sim rounds, but the three
+// external "Recalculate" sites (settings, profile, import-rounds-list — the
+// last runs automatically after every import) re-implemented the predicate
+// WITHOUT !r.simulated, so one tap silently posted sim differentials into
+// the Index. All rebuild sites import this so the filter can't drift again.
+export function eligibleHandicapRounds(rounds: RoundRecord[]): RoundRecord[] {
+  return rounds.filter(
+    r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0 && !r.simulated,
+  );
 }

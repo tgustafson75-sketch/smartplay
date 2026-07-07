@@ -15,7 +15,7 @@
  * property via the config plugin at prebuild. Takes effect on the next native build.
  */
 
-const { withGradleProperties } = require('@expo/config-plugins');
+const { withGradleProperties } = require('expo/config-plugins');
 
 const DEFAULT_SIZE_MB = 50;
 

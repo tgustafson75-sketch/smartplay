@@ -20,7 +20,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, eligibleHandicapRounds } from '../store/roundStore';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -41,7 +41,8 @@ export default function ProfileScreen() {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       const rounds = useRoundStore.getState().roundHistory;
-      const eligible = rounds.filter(r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0);
+      // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds.
+      const eligible = eligibleHandicapRounds(rounds);
       if (eligible.length < 3) {
         Alert.alert('Need more rounds', `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Import your round history to seed it.`);
         return;

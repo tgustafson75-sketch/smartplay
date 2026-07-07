@@ -256,7 +256,9 @@ export async function fetchHoleImagery(
   // image renders without waiting for disk I/O.
   void (async () => {
     try {
-      const res = await fetch(url);
+      // 2026-07-06 (audit) — bound the wait; a stalled Mapbox download should
+      // abandon the cache write (remote URL already returned), not hang forever.
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) return;
       const buf = await res.arrayBuffer();
       cacheFile.write(new Uint8Array(buf));

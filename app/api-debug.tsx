@@ -97,6 +97,9 @@ export default function ApiDebug() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(test.payload),
+        // 2026-07-06 (audit) — bound the wait (battery hits LLM routes up to
+        // 60s maxDuration) so a stalled test shows an error, not spins forever.
+        signal: AbortSignal.timeout(75_000),
       });
       const data = await res.json() as Record<string, unknown>;
       const result = String(data[test.responseKey] ?? JSON.stringify(data));

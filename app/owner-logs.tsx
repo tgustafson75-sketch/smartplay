@@ -174,6 +174,9 @@ export default function OwnerLogsScreen() {
           recentIssues,
           bundleInfo,
         }),
+        // 2026-07-06 (audit) — bound the wait (~1.5× the route's 30s maxDuration)
+        // so a stalled triage surfaces the failure message, not a forever spinner.
+        signal: AbortSignal.timeout(45_000),
       });
       const data = (await res.json()) as { triage?: string; error?: string };
       const text = data.triage ?? data.error ?? 'Triage returned no text.';

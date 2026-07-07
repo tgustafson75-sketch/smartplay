@@ -440,10 +440,14 @@ export function GlobalToolsMenu() {
             {/* 2026-06-04 — Coach Mode toggle. Tap the row to flip the
                 setting (no nav). When ON, shared-session surfaces appear
                 on Caddie + Dashboard; when OFF, both hide. Sub-label
-                reflects current state so users see what they're flipping. */}
+                reflects current state so users see what they're flipping.
+                2026-07-06 (elite audit) — retitled "Shared Sessions": the
+                SwingLab screen owns the "Coach Mode" name, and this row is a
+                visibility TOGGLE, not that screen — two rows sharing one name
+                for different things read as a bug. Behavior unchanged. */}
             <Row
               icon={coachModeEnabled ? 'people' : 'people-outline'}
-              label="Coach Mode"
+              label="Shared Sessions"
               sub={coachModeEnabled ? 'On — shared sessions visible' : 'Off — tap to enable shared sessions'}
               onPress={() => fire(() => {
                 setCoachModeEnabled(!coachModeEnabled);

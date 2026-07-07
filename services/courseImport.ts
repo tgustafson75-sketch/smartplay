@@ -48,6 +48,9 @@ export async function parseCourseScreenshot(uri: string): Promise<CourseParseRes
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_b64: b64, image_media_type: 'image/jpeg' }),
+      // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration)
+      // so a dead connection surfaces as no_network instead of hanging forever.
+      signal: AbortSignal.timeout(68_000),
     });
     if (res.status === 413) return { kind: 'too_large' };
     if (!res.ok) {

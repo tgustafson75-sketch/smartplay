@@ -89,7 +89,10 @@ function meetsTarget(goal: TeeScoreGoal, r: RoundRecord): boolean {
  * Evaluate a tee-score goal against the player's round history. Pure.
  */
 export function evaluateTeeGoal(goal: TeeScoreGoal, history: RoundRecord[]): TeeGoalProgress {
-  const rounds = (history ?? []).filter((r) => r && r.totalScore > 0);
+  // 2026-07-06 (elite audit) — sim rounds can't achieve a goal (or fire the
+  // spoken celebration). Gated HERE so every caller — round-end evaluation and
+  // the tee-goals screen — inherits it.
+  const rounds = (history ?? []).filter((r) => r && r.totalScore > 0 && !r.simulated);
 
   // First filter on the dimensions that always apply (holes + course).
   const holeCourseMatch = rounds.filter(

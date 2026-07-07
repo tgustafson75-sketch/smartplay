@@ -56,7 +56,7 @@ import { sendSwingToTank, isSendToTankAvailable, TANK_REVIEW_EMAIL } from '../..
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
-import SwingBodyOverlay from '../../../components/swinglab/SwingBodyOverlay';
+import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
 import { BodyAnalysisRow, TempoBar, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
@@ -364,6 +364,11 @@ export default function SwingDetail() {
   }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [showTrace, setShowTrace] = useState(true);
+  // 2026-07-06 (Tim: "remove the golfer and just move the overlay in a
+  // separate view") — MOTION ONLY: video keeps playing (it drives the
+  // clock) but renders invisible under a dark backdrop, leaving skeleton +
+  // trace alone. Forces the skeleton on while active.
+  const [motionOnly, setMotionOnly] = useState(false);
   // 2026-06-23 (RP-6) — autoplay-on-open is preserved (Tim: "videos all play"),
   // but the auto-LOOP fights "scrub then analyze this moment" on a re-opened
   // pending upload — the clip keeps restarting under the held frame. Once the
@@ -1442,11 +1447,15 @@ export default function SwingDetail() {
               <Video
                 ref={videoRef}
                 source={{ uri: playbackUri ?? shot.clipUri }}
-                style={styles.video}
+                style={[styles.video, motionOnly && { opacity: 0 }]}
                 resizeMode={ResizeMode.CONTAIN}
                 // 2026-07-02 (Tim — skeleton lags behind the motion) — ~25x/s time reports (vs
                 // expo-av's ~2x/s default) so the pose overlay tracks near frame-rate.
-                progressUpdateIntervalMillis={40}
+                // 2026-07-04 (elite-clean audit) — CONDITIONAL, matching smartmotion.tsx:
+                // 25x/s only while the pose overlay actually renders (same gate as the
+                // SwingBodyOverlay mount below). Overlay off → 4x/s, plenty for the
+                // seek bar, so playback doesn't re-render the screen 25x/s for nothing.
+                progressUpdateIntervalMillis={hasPose && (showSkeleton || showTrace || motionOnly) ? 40 : 250}
                 // 2026-06-11 — native controls OFF: tap-anywhere toggles play/pause
                 // (via ZoomableView) and a thin tap-to-seek bar replaces the native
                 // scrubber, so there's no native tap-handling competing with the
@@ -1485,13 +1494,22 @@ export default function SwingDetail() {
                   target overlays now live INSIDE the zoom so they TRACK the video when you
                   pinch in (before, only the video scaled and the overlays drifted off the
                   ball). Markup rail + watermark stay outside — they shouldn't scale. */}
-              {hasPose && (showSkeleton || showTrace) && (
+              {/* MOTION ONLY backdrop — sits above the (invisible) video,
+                  below the skeleton, so the overlay reads on clean dark. */}
+              {motionOnly && (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B1220' }]} pointerEvents="none" />
+              )}
+              {hasPose && (showSkeleton || showTrace || motionOnly) && (
                 <SwingBodyOverlay
                   frames={poseFrames}
                   currentTimeMs={position * 1000}
-                  showSkeleton={showSkeleton}
+                  showSkeleton={showSkeleton || motionOnly}
                   showTrace={showTrace}
                   resizeMode="contain"
+                  // 2026-07-06 (Tim — GolfFix-style region heat) — paint the
+                  // diagnosed fault's body region orange/red on the skeleton.
+                  faultJoints={faultJointsFor(session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id)}
+                  faultSevere={session?.primary_issue?.severity === 'significant'}
                 />
               )}
               <CageTargetingOverlay
@@ -1602,6 +1620,15 @@ export default function SwingDetail() {
                 >
                   <Ionicons name="analytics-outline" size={14} color={showTrace ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>Swing Trace</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { flexDirection: 'row' }, motionOnly && { backgroundColor: colors.accent }]}
+                  onPress={() => setMotionOnly(v => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle motion-only view (hide the golfer, keep the skeleton)"
+                >
+                  <Ionicons name="walk-outline" size={14} color={motionOnly ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                  <Text style={[styles.toggleText, motionOnly && { color: '#fff' }]}>Motion Only</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1782,11 +1809,21 @@ export default function SwingDetail() {
               {session.shots.map((s, idx) => {
                 const start = s.clipStartSeconds ?? 0;
                 const a = s.perShotAnalysis;
-                const issueLabel = a?.detected_issue && a.detected_issue !== 'none'
-                  ? a.detected_issue.replace(/_/g, ' ')
-                  : a
-                    ? 'no clear issue'
-                    : '—';
+                // 2026-07-06 (Tim's five-swing session) — title off the
+                // evidence-gated primary_fault FIRST; detected_issue is
+                // prompt-steered to 'none', so titling off it alone printed
+                // "no clear issue" directly above an observation describing
+                // the fault. Legacy sessions without primary_fault keep the
+                // old behavior.
+                const pf = a?.primary_fault;
+                const pfDiagnostic = !!pf && pf !== 'no_dominant_fault' && pf !== 'inconclusive';
+                const issueLabel = pfDiagnostic
+                  ? pf.replace(/_/g, ' ')
+                  : a?.detected_issue && a.detected_issue !== 'none'
+                    ? a.detected_issue.replace(/_/g, ' ')
+                    : a
+                      ? (pf === 'inconclusive' ? 'couldn\'t read this one' : 'no clear issue')
+                      : '—';
                 const conf = a?.confidence ?? null;
                 const isLeftPick = s.id === leftCompareShotId;
                 const goodRepIcon: keyof typeof Ionicons.glyphMap | null =

@@ -151,7 +151,10 @@ export function composeBagRecommendation(input: BagRecInput): BagRecommendation 
       club,
       count: v.count,
       carry: v.distCount > 0 ? Math.round(v.distSum / v.distCount) : distanceFor(club),
-      estimated: v.estCount > 0 && v.estCount === v.count,
+      // 2026-07-06 (elite audit) — honest flag: ANY inferred use marks the read
+      // estimated (was only all-inferred), and a club with zero measured
+      // distances falls back to chart/stated carry — that's an estimate too.
+      estimated: v.estCount > 0 || v.distCount === 0,
     }))
     // Putter has no carry — keep it in the bag but out of the gap math.
     .sort((a, b) => b.carry - a.carry);
@@ -246,7 +249,9 @@ export function recommendBagForCourse(courseId: string | null): BagRecommendatio
   // Lazy require — see the type-only import note above.
   const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
   const rounds = useRoundStore.getState().roundHistory.filter(
-    r => r.courseId === courseId && !r.id.startsWith('imported_'),
+    // 2026-07-06 (elite audit) — sim rounds use the REAL courseId with stated
+    // distances, so without this gate they train the course bag optimizer.
+    r => r.courseId === courseId && !r.id.startsWith('imported_') && !r.simulated,
   );
   const shots: ShotResult[] = [];
   for (const r of rounds) if (Array.isArray(r.shots)) shots.push(...r.shots);

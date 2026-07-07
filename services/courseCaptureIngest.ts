@@ -18,6 +18,30 @@ import { getLastFix } from './smartFinderService';
 
 const DIR = (FileSystem.documentDirectory ?? '') + 'course_captures/';
 
+/**
+ * 2026-07-06 (elite audit) — read-time re-anchor for stored capture uris.
+ * Captures are persisted as ABSOLUTE paths under course_captures/, and iOS
+ * regenerates the app-container UUID on every native build/reinstall — so a
+ * stored path from a prior install silently points at the DEAD container even
+ * though the file survived (same reshuffle resolveClipUri in videoUpload.ts
+ * heals for swing clips; captures live in their own dir so that resolver's
+ * candidate list misses them). Synchronous by design (called from render):
+ * a file:// uri whose prefix isn't the LIVE documentDirectory is guaranteed
+ * stale, so rebuild it from the basename — no FS probe needed.
+ */
+export function resolveCaptureUri(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  if (!stored.startsWith('file://')) return stored;
+  try {
+    const dir = FileSystem.documentDirectory;
+    if (!dir || stored.startsWith(dir)) return stored;
+    const base = stored.split('/').pop();
+    return base ? `${DIR}${base}` : stored;
+  } catch {
+    return stored; // FS unavailable — don't regress, hand back the original
+  }
+}
+
 /** Resolve the course this capture belongs to (active round, else a planned/preview course). */
 function resolveCourseId(): string | null {
   const r = useRoundStore.getState();

@@ -181,6 +181,9 @@ export default function CageReviewInterview() {
           voiceGender,
           persona: caddiePersonality,
         }),
+        // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration)
+        // so a stall falls to the catch's default question, not a forever spinner.
+        signal: AbortSignal.timeout(68_000),
       });
       const data = await res.json() as { question?: string };
       const q = data.question ?? 'How was that one?';
@@ -327,6 +330,8 @@ export default function CageReviewInterview() {
             voiceGender,
             persona: caddiePersonality,
           }),
+          // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
+          signal: AbortSignal.timeout(68_000),
         });
         const data = await res.json() as {
           observed_terminology: { strike_terms: string[]; contact_terms: string[]; diagnostic_terms: string[]; feel_terms: string[] };

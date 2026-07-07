@@ -6,6 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useCageStore } from '../../../store/cageStore';
 import { useFamilyStore } from '../../../store/familyStore';
+import { useResolvedImageUri } from '../../../hooks/useResolvedImageUri';
+
+// 2026-07-06 (elite audit) — thumbnails (fault frames) are persisted as
+// ABSOLUTE file:// paths and iOS regenerates the container UUID on every
+// native build, so render through the re-anchoring resolver instead of
+// trusting the stored prefix (a stale path rendered a blank tile).
+const RowThumb = ({ uri }: { uri: string }) => {
+  const healed = useResolvedImageUri(uri);
+  return <Image source={{ uri: healed ?? uri }} style={styles.thumbImage} resizeMode="cover" />;
+};
 
 type SwingRow = {
   id: string;
@@ -75,7 +85,7 @@ export default function PlayerLibraryScreen() {
             >
               <View style={[styles.thumb, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}> 
                 {s.thumbnail ? (
-                  <Image source={{ uri: s.thumbnail }} style={styles.thumbImage} resizeMode="cover" />
+                  <RowThumb uri={s.thumbnail} />
                 ) : (
                   <Ionicons name="golf-outline" size={22} color={colors.text_muted} />
                 )}

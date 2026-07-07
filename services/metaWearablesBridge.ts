@@ -85,7 +85,13 @@ function subscribeOnce(): void {
       // startMetaWearablesStreaming resolver also sets this, but
       // first-frame is the most honest "we're actually receiving data"
       // signal so we publish from here too — cheap idempotent update.
-      if (!currentStatus.streaming) publishStatus({ streaming: true, connected: true });
+      if (!currentStatus.streaming) {
+        publishStatus({ streaming: true, connected: true });
+        // Re-arm staleness watching — the probe may have been cleared by
+        // a prior stop/stale-flip (subscribeOnce only runs once, so it
+        // can't re-create it).
+        ensureStaleProbe();
+      }
       const frame: VisionFrame = {
         uri: payload.uri,
         captured_at: payload.captured_at ?? Date.now(),
@@ -160,6 +166,9 @@ export async function startMetaWearablesStreaming(
     effectiveFps: cfg.fps,
   });
   lastFrameAt = Date.now();
+  // Re-arm the stale probe on every (re)start — subscribeOnce only creates
+  // it on the FIRST subscribe, and stopMetaWearablesStreaming clears it.
+  ensureStaleProbe();
   devLog(
     `[mwdat-bridge] startStreaming ok device=${result.device} alreadyStreaming=${result.alreadyStreaming} effectiveFps=${cfg.fps}`,
   );
@@ -176,6 +185,9 @@ export async function stopMetaWearablesStreaming(): Promise<void> {
     devLog('[mwdat-bridge] stopStreaming threw (non-fatal): ' + String(e));
   } finally {
     publishStatus({ connected: false, streaming: false, effectiveFps: 0 });
+    // 2026-07-04 (elite-clean audit) — stop the 4s staleness interval with
+    // the stream; it re-arms on the next start / first frame.
+    clearStaleProbe();
   }
 }
 
@@ -251,8 +263,22 @@ function ensureStaleProbe(): void {
     if (age > STALE_MS) {
       devLog(`[mwdat-bridge] stream went stale (${age}ms since last frame) — flipping streaming=false`);
       publishStatus({ streaming: false });
+      // 2026-07-04 (elite-clean audit) — nothing left to watch once the
+      // stream is flagged stale; stop ticking. The probe re-arms on the
+      // next startMetaWearablesStreaming / first-frame publish.
+      clearStaleProbe();
     }
   }, 4_000);
+}
+
+// 2026-07-04 (elite-clean audit) — the probe used to run forever once
+// created (subscribeOnce is one-shot, so it survived every stop/teardown).
+// Defensive today (NativeMod is null until real DAT lands) but a real
+// 4s-interval leak the moment glasses streaming goes live.
+function clearStaleProbe(): void {
+  if (!staleProbe) return;
+  clearInterval(staleProbe);
+  staleProbe = null;
 }
 
 export function onGlassesStatusChange(cb: StatusListener): () => void {

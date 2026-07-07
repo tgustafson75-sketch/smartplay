@@ -298,7 +298,8 @@ export default function Scorecard() {
   // memory (patternInsights consumes the same data downstream).
   const lifetimeClubUsage: ClubAgg[] = useMemo(() => {
     const allShots: ShotResult[] = [];
-    roundHistory.forEach(r => { if (Array.isArray(r.shots)) allShots.push(...r.shots); });
+    // 2026-07-06 (elite audit) — sim rounds never feed lifetime stats.
+    roundHistory.forEach(r => { if (!r.simulated && Array.isArray(r.shots)) allShots.push(...r.shots); });
     return aggregateClubs(allShots);
   }, [roundHistory, aggregateClubs]);
 
@@ -308,7 +309,7 @@ export default function Scorecard() {
   // recommend-a-bag-for-this-course brain function. "Forming" until 2+ rounds.
   const courseRounds = useMemo(
     () => (activeCourseId
-      ? roundHistory.filter(r => r.courseId === activeCourseId && !r.id.startsWith('imported_'))
+      ? roundHistory.filter(r => r.courseId === activeCourseId && !r.id.startsWith('imported_') && !r.simulated)
       : []),
     [roundHistory, activeCourseId],
   );

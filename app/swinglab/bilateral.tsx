@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCageStore, type CageSession } from '../../store/cageStore';
 import { mergeBilateral, type BilateralSwingInput, type BilateralAngleRead } from '../../services/swing/bilateralMerge';
+import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
 function fmtDate(ms: number): string {
   try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; }
@@ -119,7 +120,10 @@ export default function BilateralReview() {
 
   // Side-by-side biplane strip: the two angles' representative frames together.
   const FrameTile = ({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) => {
-    const uri = frameUri(session);
+    // 2026-07-06 (elite audit) — thumbnails/fault frames are persisted as
+    // ABSOLUTE file:// paths and iOS regenerates the container UUID on every
+    // native build, so re-anchor at read instead of trusting the stored prefix.
+    const uri = useResolvedImageUri(frameUri(session));
     const [imgErr, setImgErr] = useState(false);
     return (
       <View style={[styles.tile, { borderColor: colors.border, backgroundColor: colors.surface }]}>

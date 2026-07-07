@@ -155,6 +155,9 @@ export async function flushUsage(): Promise<void> {
         anonId: id,
         ...(userId ? { userId } : {}),
       }),
+      // 2026-07-06 (audit) — bound the wait (~1.5× the route's 10s maxDuration);
+      // telemetry is best-effort, a stalled flush should die quietly, not hang.
+      signal: AbortSignal.timeout(15_000),
     });
     // If the server rejected the batch outright (very rare), drop it rather
     // than retry forever — telemetry is best-effort, not durable.

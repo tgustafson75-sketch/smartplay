@@ -56,6 +56,11 @@ export interface CageShot {
   // back-compat with legacy entries.
   perShotAnalysis?: {
     detected_issue: string;
+    // 2026-07-06 — the evidence-gated headline fault from the same analysis
+    // call. detected_issue is deliberately conservative (prompt steers it to
+    // 'none'), so rows titled off it alone read "no clear issue" UNDER a
+    // description of the fault. Absent on sessions analyzed before this ship.
+    primary_fault?: string | null;
     severity: 'minor' | 'moderate' | 'significant' | 'none';
     confidence: 'high' | 'medium' | 'low';
     observation: string;
@@ -204,9 +209,10 @@ export interface CageSession {
   dominantMiss: string | null;
   rootCause: string | null;
   summary: string | null;
-  // Phase J — reserved for Phase K (pose detection / issue identification).
-  // Phase J ships these always-null; cards render placeholder copy until
-  // Phase K populates them.
+  // Phase J reserved these for Phase K (pose detection / issue
+  // identification); Phase K is live — services/videoUpload.ts
+  // (classifySession / runPhaseKOnSession) populates primary_issue now.
+  // Old sessions may still carry null; cards render placeholder copy then.
   primary_issue?: PrimaryIssue | null;
   drill_recommendation?: DrillRecommendation | null;
   // 2026-06-12 — additive capture classifier (smart_motion / coach / upload) that drives
@@ -540,6 +546,8 @@ interface CageState {
     shotId: string,
     analysis: {
       detected_issue: string;
+      // 2026-07-06 — evidence-gated headline fault (see perShotAnalysis).
+      primary_fault?: string | null;
       severity: 'minor' | 'moderate' | 'significant' | 'none';
       confidence: 'high' | 'medium' | 'low';
       observation: string;

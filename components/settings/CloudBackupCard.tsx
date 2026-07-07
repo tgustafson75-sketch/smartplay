@@ -77,16 +77,30 @@ export default function CloudBackupCard() {
     }
   };
 
+  // 2026-07-06 (elite audit) — reload IMMEDIATELY after a successful restore.
+  // applySnapshot multiSets AsyncStorage, but every already-hydrated store still
+  // holds its PRE-restore state in memory — any set() in the gap re-persists the
+  // old data over the restored blob, and Android's back button could dismiss the
+  // old "tap Reload" Alert entirely, leaving the app in that hazard window
+  // indefinitely. No cancelable gap allowed. The fallback Alert only appears when
+  // reloadAsync itself fails (dev client) and offers no way to skip the restart.
+  const reloadAfterRestore = async () => {
+    try {
+      await Updates.reloadAsync();
+    } catch {
+      Alert.alert('Restart needed', 'Your data was restored. Close and reopen the app to finish applying it.');
+    }
+  };
+
   const doRestore = async () => {
     const r = await restoreFromCloud();
     if (r.ok) {
-      Alert.alert(
-        'Restored',
-        `Brought back ${r.restored} data set${r.restored === 1 ? '' : 's'}. The app will reload to apply it.`,
-        [{ text: 'Reload', onPress: () => { void Updates.reloadAsync().catch(() => {}); } }],
-      );
+      await reloadAfterRestore();
     } else {
-      Alert.alert('Nothing to restore', r.reason === 'no_backup' ? 'No cloud backup found for this account yet.' : r.reason ?? 'Restore failed.');
+      const msg = r.reason === 'no_backup' ? 'No cloud backup found for this account yet.'
+        : r.reason === 'newer_version' ? 'That backup was made by a newer version of the app. Update SmartPlay, then restore.'
+        : r.reason ?? 'Restore failed.';
+      Alert.alert('Nothing to restore', msg);
     }
   };
 
@@ -108,11 +122,8 @@ export default function CloudBackupCard() {
     const r = await importBackupFromFile();
     setFileBusy(false);
     if (r.ok) {
-      Alert.alert(
-        'Restored',
-        `Brought back ${r.restored} data set${r.restored === 1 ? '' : 's'} from the file. The app will reload to apply it.`,
-        [{ text: 'Reload', onPress: () => { void Updates.reloadAsync().catch(() => {}); } }],
-      );
+      // Same no-gap rule as doRestore — see reloadAfterRestore.
+      await reloadAfterRestore();
     } else if (r.reason !== 'canceled') {
       const msg = r.reason === 'not_a_backup' ? 'That file isn’t a SmartPlay backup.'
         : r.reason === 'newer_version' ? 'That backup was made by a newer version of the app. Update SmartPlay, then restore.'

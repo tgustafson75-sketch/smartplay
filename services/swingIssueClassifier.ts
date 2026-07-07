@@ -172,6 +172,121 @@ const SEVERITY_WEIGHT: Record<SwingAnalysis['severity'], number> = {
   significant: 3,
 };
 
+// 2026-07-06 (Tim's range session — "No Clear Issue on five swings even though
+// I have clear issues", while every card's own observation described an
+// over-the-top pattern) — the analyzer returns TWO fault fields: the legacy,
+// deliberately-conservative `detected_issue` (the prompt steers it to 'none')
+// and `primary_fault`, the evidence-gated headline. This classifier only ever
+// read detected_issue, so a session where the model called over_the_top five
+// times with frame evidence still rolled up as "no clear fault." These maps +
+// classifyByPrimaryFault() make primary_fault the fallback signal it was
+// always meant to be. Four ids overlap the canonical taxonomy and reuse its
+// display maps; the six pf-only ids get their own entries here.
+type DiagnosticFault = Exclude<NonNullable<SwingAnalysis['primary_fault']>, 'no_dominant_fault' | 'inconclusive'>;
+
+const PF_ONLY_DISPLAY: Record<string, { name: string; category: PrimaryIssue['category']; feel: string }> = {
+  casting: {
+    name: 'Casting (Early Release)',
+    category: 'tempo',
+    feel: 'Feel like you hold the hinge in your wrists until your hands reach your back pocket, then let it go.',
+  },
+  sway: {
+    name: 'Hip Sway Off the Ball',
+    category: 'setup',
+    feel: 'Feel your trail hip turn BEHIND you on the backswing, not slide away from the target.',
+  },
+  plane_too_flat: {
+    name: 'Swing Plane Too Flat',
+    category: 'swing_path',
+    feel: 'Feel your hands work more UP to the top, like reaching for a shelf just above your trail shoulder.',
+  },
+  plane_too_steep: {
+    name: 'Swing Plane Too Steep',
+    category: 'swing_path',
+    feel: 'Feel your trail elbow stay closer to your side going back — swing more around you, less straight up.',
+  },
+  head_movement: {
+    name: 'Head Movement Through the Swing',
+    category: 'setup',
+    feel: 'Feel like your head stays behind an imaginary pane of glass at the ball until after impact.',
+  },
+  spine_angle_loss: {
+    name: 'Losing Spine Angle',
+    category: 'setup',
+    feel: 'Feel your chest stay DOWN over the ball through impact — stand up only in the finish.',
+  },
+};
+
+function displayForPrimaryFault(pf: DiagnosticFault): { name: string; category: PrimaryIssue['category']; feel: string } {
+  if (pf in ISSUE_DISPLAY_NAME) {
+    const c = pf as CanonicalIssue;
+    return { name: ISSUE_DISPLAY_NAME[c], category: ISSUE_CATEGORY[c], feel: ISSUE_COACH_VOICE[c].feel };
+  }
+  return PF_ONLY_DISPLAY[pf] ?? { name: pf.replace(/_/g, ' '), category: 'other', feel: '' };
+}
+
+function isDiagnosticFault(pf: SwingAnalysis['primary_fault']): pf is DiagnosticFault {
+  return !!pf && pf !== 'no_dominant_fault' && pf !== 'inconclusive';
+}
+
+/**
+ * 2026-07-06 — Roll up a session by primary_fault when the detected_issue
+ * tally produced nothing. Confidence-weighted tally across swings with a
+ * diagnostic primary_fault; the winning fault becomes the session headline
+ * with the best matching swing's observation/cause/fix/drill/evidence.
+ * Honesty: 2+ agreeing swings (or a single-swing session) keep the model's
+ * own confidence; a lone diagnostic among many swings surfaces as 'low'.
+ */
+export function classifyByPrimaryFault(
+  swingAnalyses: { swing_id: string; analysis: SwingAnalysis }[],
+): PrimaryIssue | null {
+  const diag = swingAnalyses.filter(s => s.swing_id && isDiagnosticFault(s.analysis.primary_fault));
+  if (diag.length === 0) return null;
+
+  const confRank: Record<SwingAnalysis['confidence'], number> = { high: 3, medium: 2, low: 1 };
+  const tally = new Map<DiagnosticFault, { score: number; count: number; swing_ids: string[] }>();
+  for (const s of diag) {
+    const pf = s.analysis.primary_fault as DiagnosticFault;
+    const slot = tally.get(pf) ?? { score: 0, count: 0, swing_ids: [] };
+    slot.score += confRank[s.analysis.confidence];
+    slot.count += 1;
+    slot.swing_ids.push(s.swing_id);
+    tally.set(pf, slot);
+  }
+  const [topFault, top] = Array.from(tally.entries()).sort((a, b) => b[1].score - a[1].score)[0];
+
+  // Best source swing for the headline text: highest confidence among matches.
+  const matches = diag
+    .filter(s => s.analysis.primary_fault === topFault)
+    .sort((a, b) => confRank[b.analysis.confidence] - confRank[a.analysis.confidence]);
+  const best = matches[0].analysis;
+  const display = displayForPrimaryFault(topFault);
+
+  const agreeing = top.count >= 2 || swingAnalyses.length === 1;
+  const confidence: PrimaryIssue['confidence'] = agreeing ? best.confidence : 'low';
+  console.log('[classifier] primary_fault rollup: ' + topFault + ' count=' + top.count + '/' + swingAnalyses.length + ' conf=' + confidence);
+
+  return {
+    issue_id: topFault,
+    name: display.name,
+    category: display.category,
+    severity: top.count >= 2 ? 'moderate' : 'minor',
+    occurrence_count: top.count,
+    visual_reference_path: null,
+    mechanical_breakdown: (best.observation ?? '').trim() || (best.cause ?? '').trim() || display.name,
+    feel_cue: (best.fix ?? '').trim() || display.feel,
+    detected_in_shots: top.swing_ids,
+    confidence,
+    layman_explanation: (best.layman_explanation ?? '').trim() || undefined,
+    primary_fault: topFault,
+    cause: (best.cause ?? '').trim() || undefined,
+    fix: (best.fix ?? '').trim() || undefined,
+    drill: (best.drill ?? '').trim() || undefined,
+    evidence: (best.evidence ?? '').trim() || undefined,
+    strengths: cleanStrengths(best.strengths),
+  };
+}
+
 // Phase J / live cage thresholds — tuned for multi-swing sessions where
 // pattern consensus matters. Single-swing UPLOADS skip these and use the
 // single-swing branch below.
@@ -208,7 +323,10 @@ export function classifySession(
     // detected_in_shots would be [undefined] and break downstream shot lookups.
     if (!only.swing_id) return null;
     console.log('[classifier] single: detected=' + only.analysis.detected_issue + ' conf=' + only.analysis.confidence);
-    if (only.analysis.detected_issue === 'none') return null;
+    // 2026-07-06 — detected_issue 'none' no longer means "no read": the
+    // evidence-gated primary_fault is the real headline. Fall through to it
+    // before giving up (see classifyByPrimaryFault).
+    if (only.analysis.detected_issue === 'none') return classifyByPrimaryFault(swingAnalyses);
     const voice = ISSUE_COACH_VOICE[only.analysis.detected_issue];
     const observationText = (only.analysis.observation ?? '').trim();
     return {
@@ -360,6 +478,12 @@ export function classifySession(
     .filter(s => s.analysis.detected_issue !== 'none')
     .sort((a, b) => SEVERITY_WEIGHT[b.analysis.severity] - SEVERITY_WEIGHT[a.analysis.severity]);
   if (usable.length === 0) {
+    // 2026-07-06 — every detected_issue was 'none', but the model may still
+    // have made evidence-gated primary_fault calls (Tim's five-swing session:
+    // detected_issue 'none' ×5, primary_fault over_the_top ×5 → the old code
+    // returned null here and the session read "No clear fault").
+    const byFault = classifyByPrimaryFault(swingAnalyses);
+    if (byFault) return byFault;
     console.log('[classifier] no usable swings — returning null');
     return null;
   }

@@ -95,6 +95,12 @@ export default function Dashboard() {
     })),
   );
   const roundHistory = useRoundStore((s) => s.roundHistory);
+  // 2026-07-06 (elite audit P1) — sim rounds are persisted (tagged simulated)
+  // but must NEVER feed real stats: trend, streak, impact graphs, pattern
+  // shift, lifetime shots, longest drive, best round. One filtered view used
+  // by every aggregation below; the recent-rounds LIST still shows them (they
+  // are honest records of a sim session, not stats).
+  const realRounds = useMemo(() => roundHistory.filter((r) => !r.simulated), [roundHistory]);
   const deleteRound = useRoundStore((s) => s.deleteRound);
   const allShots = useRoundStore((s) => s.shots);
   // Conservative practice points (per-drill), surfaced here. The data is the
@@ -120,10 +126,10 @@ export default function Dashboard() {
   // 2026-06-16 (Tim — mockup SHOT STATS 4th tile) — honest score trend = avg
   // score-vs-par over the last few rounds. Null (→ "—") until there's history.
   const scoreTrend = useMemo(() => {
-    const recent = roundHistory.filter((r) => typeof r.scoreVsPar === 'number').slice(-5);
+    const recent = realRounds.filter((r) => typeof r.scoreVsPar === 'number').slice(-5);
     if (recent.length === 0) return null;
     return recent.reduce((a, r) => a + (r.scoreVsPar ?? 0), 0) / recent.length;
-  }, [roundHistory]);
+  }, [realRounds]);
   // 2026-06-30 (Tim — audit) — visible TIER/LEVEL + points. Every caddie chat, swing
   // and practice awards points and climbs a tier, but it was rendered NOWHERE after the
   // Progress card was removed. Surface a compact header chip so it's finally visible.
@@ -135,7 +141,7 @@ export default function Dashboard() {
   const dayStreak = useMemo(() => {
     const DAY = 86400000;
     const times: number[] = [];
-    for (const r of roundHistory) { const tt = r.endedAt ?? r.startedAt; if (typeof tt === 'number') times.push(tt); }
+    for (const r of realRounds) { const tt = r.endedAt ?? r.startedAt; if (typeof tt === 'number') times.push(tt); }
     for (const p of practiceHistory) { if (typeof p.startedAt === 'number') times.push(p.startedAt); }
     if (times.length === 0) return 0;
     const days = Array.from(new Set(times.map((tm) => { const d = new Date(tm); d.setHours(0, 0, 0, 0); return d.getTime(); }))).sort((a, b) => b - a);
@@ -144,7 +150,7 @@ export default function Dashboard() {
     let streak = 1;
     for (let i = 1; i < days.length; i++) { if (days[i] === days[i - 1] - DAY) streak++; else break; }
     return streak;
-  }, [roundHistory, practiceHistory]);
+  }, [realRounds, practiceHistory]);
   const clubStats = useClubStatsStore((s) => s.stats);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
@@ -159,10 +165,10 @@ export default function Dashboard() {
   const practiceImpact = useMemo(
     () => computePracticeImpact({
       sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
-      rounds: roundHistory.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
       nowMs: Date.now(),
     }),
-    [practiceHistory, roundHistory],
+    [practiceHistory, realRounds],
   );
 
   // 2026-06-15 (Tim — estimated points from the swing library + the point/performance
@@ -179,11 +185,11 @@ export default function Dashboard() {
       sessions: (libraryHistory ?? [])
         .filter((s) => (s.shots?.length ?? 0) > 0)
         .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
-      rounds: roundHistory.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
       nowMs: Date.now(),
       sinceMs: pointsBaselineMs ?? undefined, // clean-start baseline (live build)
     }),
-    [libraryHistory, roundHistory, pointsBaselineMs],
+    [libraryHistory, realRounds, pointsBaselineMs],
   );
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
@@ -220,8 +226,8 @@ export default function Dashboard() {
 
   // Phase U — pattern shift surfacing.
   const patternShift = useMemo(
-    () => detectPatternShift(roundHistory.map((r) => ({ shots: r.shots }))),
-    [roundHistory],
+    () => detectPatternShift(realRounds.map((r) => ({ shots: r.shots }))),
+    [realRounds],
   );
 
   // ─── Relationship + profile ──────────────────────────────────────
@@ -311,7 +317,7 @@ export default function Dashboard() {
   // (the par-3 caveat means a few iron tee shots count as "fairway
   // tries" — acceptable until we add par-aware filtering).
   const shotStats = useMemo(() => {
-    const allHistoricalShots = roundHistory.flatMap((r) => r.shots);
+    const allHistoricalShots = realRounds.flatMap((r) => r.shots);
     // 2026-06-11 (audit) — exclude quick-score placeholder shots (id "qs-…").
     // handleQuickScore mints synthetic 'clean' shots so a bare score tap logs a
     // stroke count; counting them here inflated lifetime fairway% and shot count
@@ -337,16 +343,16 @@ export default function Dashboard() {
       ? 0
       : Math.round(teeWithYds.reduce((sum, s) => sum + s.distance_yards, 0) / teeWithYds.length);
     return { shotsLogged, fairwayPct, avgYds, teeShots: teeShotCount };
-  }, [roundHistory, allShots]);
+  }, [realRounds, allShots]);
 
   // Recent shots — last 5, newest first. Drawn from the active round
   // when one exists, otherwise the most recent historical round.
   const recentShots = useMemo(() => {
     if (allShots.length > 0) return [...allShots].slice(-5).reverse();
-    const last = roundHistory[roundHistory.length - 1];
+    const last = realRounds[realRounds.length - 1];
     if (!last) return [];
     return [...last.shots].slice(-5).reverse();
-  }, [allShots, roundHistory]);
+  }, [allShots, realRounds]);
 
   // 2026-06-04 — topClubs derivation removed (Kevin's Read inline block
   // that consumed it is replaced by the AI-driven card below).
@@ -357,7 +363,7 @@ export default function Dashboard() {
     // capture leaking the course yardage into a shot). No human drive exceeds ~500y, so
     // anything above that is a corrupt capture — drop it. This also self-resets a bad value.
     const MAX_REAL_DRIVE = 500;
-    const fromHistory = roundHistory
+    const fromHistory = realRounds
       .flatMap(r => r.shots)
       .filter(s => s.club === 'Driver')
       .map(s => s.carry_distance ?? s.distance_yards ?? 0)
@@ -366,16 +372,16 @@ export default function Dashboard() {
     const fromProfile = (longestDrive != null && longestDrive <= MAX_REAL_DRIVE) ? longestDrive : 0;
     const best = Math.max(fromHistory, fromProfile);
     return best > 0 ? best : null;
-  }, [roundHistory, longestDrive]);
+  }, [realRounds, longestDrive]);
 
   const bestRound = useMemo(() => {
-    const completed = roundHistory
+    const completed = realRounds
       .filter(r => r.totalScore > 0 && r.holesPlayed >= 9)
       .map(r => r.totalScore);
     const fromHistory = completed.length > 0 ? Math.min(...completed) : null;
     if (fromHistory != null && personalBest != null) return Math.min(fromHistory, personalBest);
     return fromHistory ?? personalBest ?? null;
-  }, [roundHistory, personalBest]);
+  }, [realRounds, personalBest]);
 
   // 2026-06-04 — Kevin's Read regeneration. The card shows the cached
   // text immediately (instant render); tapping fires a fresh API call
@@ -393,10 +399,10 @@ export default function Dashboard() {
   const kevinReadText = kevinRead?.text ?? KEVIN_READ_DEFAULT;
   const kevinReadFooter = useMemo(() => {
     if (!kevinRead?.generatedAt) return 'Tap to generate';
-    const completedSince = roundHistory.filter(r => r.endedAt > kevinRead.generatedAt).length;
+    const completedSince = realRounds.filter(r => r.endedAt > kevinRead.generatedAt).length;
     if (completedSince === 0) return 'Up to date';
     return `${completedSince} round${completedSince === 1 ? '' : 's'} ago`;
-  }, [kevinRead, roundHistory]);
+  }, [kevinRead, realRounds]);
 
   // Welcome string falls back gracefully if the user never set a name.
   const welcomeName = firstName || name?.split(' ')[0] || 'Player';

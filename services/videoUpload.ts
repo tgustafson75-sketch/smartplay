@@ -429,7 +429,17 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   ) {
     try {
       const pose = await import('./poseDetection');
-      const durMs = await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
+      // 2026-07-04 (elite-clean audit) — the picker flow already probed this
+      // exact clip's duration at ingest (probeVideo → ingestVideoFromPick →
+      // session.upload.duration_sec, an Audio.Sound load identical to
+      // probeDurationMs's primary path). Reuse it instead of a second full
+      // media load; fall back to probeDurationMs (which adds the VT
+      // thumbnail rescue) only when the ingest probe came back null/0
+      // (silent clips defeat the Audio.Sound path).
+      const ingestSec = session.upload?.duration_sec;
+      const durMs = ingestSec != null && ingestSec > 0
+        ? Math.round(ingestSec * 1000)
+        : await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
       if (durMs >= MULTI_SWING_UPLOAD_MIN_MS) {
         const found = await pose.locateSwings(swings[0].clipUri, durMs);
         if (found.length > 1) {
@@ -756,6 +766,9 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
         useCageStore.getState().setShotAnalysis(sessionId, swing.id, {
           detected_issue: r.analysis.detected_issue,
+          // 2026-07-06 — carry the evidence-gated headline; the per-swing row
+          // titles off this first (detected_issue is prompt-steered to 'none').
+          primary_fault: r.analysis.primary_fault ?? null,
           severity: r.analysis.severity,
           confidence: r.analysis.confidence,
           observation: r.analysis.observation,

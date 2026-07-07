@@ -13,7 +13,9 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { getApiBaseUrl } from './apiBase';
 import { type ClubName, CLUB_ORDER } from '../store/clubStatsStore';
 
-const apiUrl = getApiBaseUrl();
+// 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
+// snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
+const apiUrl = (): string => getApiBaseUrl();
 
 export interface TopTracerClubRow {
   display_name: string;
@@ -77,10 +79,13 @@ export async function parseTopTracerScreenshot(uri: string): Promise<TopTracerPa
     const b64 = manipulated.base64;
     if (!b64) return { kind: 'error', message: 'Could not encode screenshot.' };
 
-    const res = await fetch(`${apiUrl}/api/toptracer-parse`, {
+    const res = await fetch(`${apiUrl()}/api/toptracer-parse`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_b64: b64, media_type: 'image/jpeg' }),
+      // 2026-07-06 (audit) — bound the wait (~1.5× the route's 30s maxDuration)
+      // so a dead connection surfaces as no_network instead of hanging forever.
+      signal: AbortSignal.timeout(45_000),
     });
 
     if (res.status === 413) return { kind: 'too_large' };
