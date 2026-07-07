@@ -183,7 +183,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'configure_drill',
-    description: 'Configure the SmartMotion drill session the player just described — set the club and number of swings. Call this whenever the player says what they want to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
+    description: 'Configure the SmartMotion drill session ONLY once the player is setting one up / SmartMotion is open and they state the club + number of swings ("7 iron, 3 swings", "driver, 5 balls"). This is NOT for narrative like "I need to work on my irons" or "irons today" — that is conversation about intent, not a command to configure a drill; answer it, do not configure or open anything. Wait for an explicit setup.',
     parameters: {
       type: 'object',
       properties: {
