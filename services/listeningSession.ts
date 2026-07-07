@@ -821,6 +821,27 @@ async function openSession() {
 
       const result = await handlerP;
       const t_response_start = Date.now();
+
+      // 2026-07-06 (voice audit — H1 on the hands-free path) — the DISRUPTIVE_OPEN
+      // gate that lives in useVoiceCaddie was MISSING here, so over the earbud /
+      // global mic a medium-confidence misread of NARRATIVE ("I want to work on my
+      // putting") could yank a tool open uninvited — on the owner's #1 surface. If a
+      // classifier tool-OPEN intent isn't HIGH confidence, don't fire it: make it an
+      // OFFER (confirm-before-open) and let the mic re-open. Data capture / queries
+      // (log_shot, state_yardage, etc.) are NOT gated — only tool-opens.
+      const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
+      if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
+        await stopSpeaking().catch(() => {});
+        if (ttsAllowed && getSessionState() === 'responding') {
+          await speak(
+            'Want me to open that? Just say it again and I will.',
+            settings.voiceGender, intent.language ?? settings.language, apiUrl,
+            { userInitiated: true },
+          ).catch(() => {});
+        }
+        setSessionStateMirror('idle');
+        return;
+      }
       // Phase V.7+ — the response is user-initiated (mic-tap reply), so it
       // speaks at L1 too via { userInitiated: true }. Opener + filler stay
       // suppressed at L1 above. Still respect voiceEnabled + phone-speaker
