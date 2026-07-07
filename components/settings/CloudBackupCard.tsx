@@ -25,6 +25,7 @@ import {
 } from '../../services/cloudSync/cloudBackup';
 import { shouldOfferRestore } from '../../services/cloudSync/autoBackup';
 import { exportBackupToFile, importBackupFromFile } from '../../services/cloudSync/localBackup';
+import { useServerBackupStore, serverBackupNow, serverRestore } from '../../services/cloudSync/serverBackup';
 
 function timeAgo(ms: number | null): string {
   if (!ms) return 'never';
@@ -132,6 +133,32 @@ export default function CloudBackupCard() {
     }
   };
 
+  // ── Server-mediated auto-backup (the OTA path: app → our API → Supabase) ──
+  const { backupKey, autoOn, lastBackupAt: serverLastAt, setBackupKey, setAutoOn } = useServerBackupStore();
+  const [keyInput, setKeyInput] = useState(backupKey);
+  const [serverBusy, setServerBusy] = useState(false);
+
+  const onServerBackup = async () => {
+    const k = keyInput.trim().toLowerCase();
+    if (!k) { Alert.alert('Add a Backup ID', 'Enter an email as your Backup ID first.'); return; }
+    setBackupKey(k);
+    setServerBusy(true);
+    const r = await serverBackupNow(k);
+    setServerBusy(false);
+    if (r.ok) Alert.alert('Backed up', 'Your data is saved to your account. It’ll auto-back-up from now on.');
+    else Alert.alert('Backup failed', r.reason === 'not_configured' ? 'Cloud isn’t reachable yet — the file backup above still protects you.' : (r.reason ?? 'Try again.'));
+  };
+  const onServerRestore = async () => {
+    const k = keyInput.trim().toLowerCase();
+    if (!k) { Alert.alert('Add a Backup ID', 'Enter the email you backed up with.'); return; }
+    setBackupKey(k);
+    setServerBusy(true);
+    const r = await serverRestore(k);
+    setServerBusy(false);
+    if (r.ok) await reloadAfterRestore();
+    else Alert.alert('Nothing to restore', r.reason === 'not_found' ? 'No backup found for that Backup ID yet.' : (r.reason ?? 'Restore failed.'));
+  };
+
   const s = makeStyles(colors);
 
   return (
@@ -158,82 +185,37 @@ export default function CloudBackupCard() {
       <View style={s.divider} />
       <View style={s.headerRow}>
         <Ionicons name="cloud-outline" size={18} color={colors.text_secondary} style={{ marginRight: 8 }} />
-        <Text style={[s.title, { fontSize: 14 }]}>Auto-sync to your account (optional)</Text>
+        <Text style={[s.title, { fontSize: 14 }]}>Auto-backup to your account</Text>
       </View>
-
-      {!configured ? (
-        <Text style={s.muted}>
-          Optional: hands-free background sync + one-tap restore on a new phone. Not set up on this build yet —
-          the file backup above already protects your data with no account.
-        </Text>
-      ) : userId ? (
-        // ── Signed in ────────────────────────────────────────────
-        <>
-          <Text style={s.body}>Signed in as <Text style={s.bold}>{email}</Text></Text>
-          <Text style={s.muted}>Last backup: {timeAgo(lastBackupAt)}{status === 'backing_up' ? ' · backing up…' : ''}</Text>
-
-          <View style={s.toggleRow}>
-            <Text style={s.body}>Auto-backup</Text>
-            <TouchableOpacity onPress={() => setAutoBackup(!autoBackupEnabled)} style={[s.toggle, { backgroundColor: autoBackupEnabled ? colors.accent : colors.border }]}>
-              <View style={[s.knob, { alignSelf: autoBackupEnabled ? 'flex-end' : 'flex-start' }]} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={s.btnRow}>
-            <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onBackupNow} disabled={busy}>
-              {status === 'backing_up' ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Back up now</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.accent }]} onPress={doRestore} disabled={busy}>
-              {status === 'restoring' ? <ActivityIndicator color={colors.accent} /> : <Text style={[s.btnText, { color: colors.accent }]}>Restore</Text>}
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={signOutCloud} style={{ marginTop: 10 }}>
-            <Text style={[s.muted, { color: colors.text_secondary }]}>Sign out</Text>
-          </TouchableOpacity>
-        </>
-      ) : phase === 'signed_out' ? (
-        // ── Signed out — enter email ─────────────────────────────
-        <>
-          <Text style={s.muted}>Sign in with your email to back up + restore your data. We’ll send a one-time code — no password.</Text>
-          <TextInput
-            style={s.input}
-            placeholder="you@example.com"
-            placeholderTextColor={colors.text_muted}
-            value={emailInput}
-            onChangeText={setEmailInput}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoCorrect={false}
-          />
-          <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent, marginTop: 10 }]} onPress={onSendCode} disabled={busy || emailInput.trim().length === 0}>
-            {status === 'sending_code' ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Send code</Text>}
-          </TouchableOpacity>
-        </>
-      ) : (
-        // ── Code sent — enter code ───────────────────────────────
-        <>
-          <Text style={s.muted}>Enter the 6-digit code we sent to <Text style={s.bold}>{emailInput}</Text>.</Text>
-          <TextInput
-            style={s.input}
-            placeholder="123456"
-            placeholderTextColor={colors.text_muted}
-            value={codeInput}
-            onChangeText={setCodeInput}
-            keyboardType="number-pad"
-            maxLength={8}
-          />
-          <View style={s.btnRow}>
-            <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onVerify} disabled={busy || codeInput.trim().length < 4}>
-              {status === 'verifying' ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Verify</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.border }]} onPress={() => { setPhase('signed_out'); setCodeInput(''); }} disabled={busy}>
-              <Text style={[s.btnText, { color: colors.text_secondary }]}>Back</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-      {status === 'error' && lastError ? <Text style={[s.muted, { color: '#ef4444' }]}>{lastError}</Text> : null}
+      <Text style={s.muted}>
+        Enter an email as your Backup ID. Your data auto-backs-up and restores on ANY phone with the same ID —
+        no password, no sign-in. This is what makes a new phone pick up right where you left off.
+      </Text>
+      <TextInput
+        style={s.input}
+        placeholder="you@example.com"
+        placeholderTextColor={colors.text_muted}
+        value={keyInput}
+        onChangeText={setKeyInput}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoCorrect={false}
+      />
+      <Text style={s.muted}>Last cloud backup: {timeAgo(serverLastAt)}</Text>
+      <View style={s.toggleRow}>
+        <Text style={s.body}>Auto-backup</Text>
+        <TouchableOpacity onPress={() => setAutoOn(!autoOn)} style={[s.toggle, { backgroundColor: autoOn ? colors.accent : colors.border }]}>
+          <View style={[s.knob, { alignSelf: autoOn ? 'flex-end' : 'flex-start' }]} />
+        </TouchableOpacity>
+      </View>
+      <View style={s.btnRow}>
+        <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onServerBackup} disabled={serverBusy}>
+          {serverBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Back up now</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.accent }]} onPress={onServerRestore} disabled={serverBusy}>
+          <Text style={[s.btnText, { color: colors.accent }]}>Restore</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

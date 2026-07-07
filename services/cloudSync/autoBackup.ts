@@ -13,6 +13,9 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { isCloudConfigured } from './cloudClient';
 import { backupNow, useCloudBackupStore, fetchCloudSnapshot } from './cloudBackup';
+// 2026-07-06 — server-mediated backup (no client Supabase key). Fires alongside the
+// legacy OTP path; either that is configured OR a Backup ID is set → we back up.
+import { serverBackupConfigured, serverBackupNow } from './serverBackup';
 
 const DEBOUNCE_MS = 4000;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -24,20 +27,31 @@ function canBackup(): boolean {
   return !!s.userId && s.autoBackupEnabled;
 }
 
+/** True when EITHER backup path can run. */
+function anyBackupPossible(): boolean {
+  return canBackup() || serverBackupConfigured();
+}
+
+/** Fire whichever backup paths are configured (both are safe no-ops otherwise). */
+function runBackups(): void {
+  if (canBackup()) void backupNow();
+  if (serverBackupConfigured()) void serverBackupNow();
+}
+
 /** Debounced background backup. Safe to call often — coalesces + no-op gated. */
 export function scheduleBackup(): void {
-  if (!canBackup()) return;
+  if (!anyBackupPossible()) return;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
     timer = null;
-    if (canBackup()) void backupNow();
+    runBackups();
   }, DEBOUNCE_MS);
 }
 
 /** Fire a backup immediately (app backgrounding — don't wait out the debounce). */
 function backupImmediate(): void {
   if (timer) { clearTimeout(timer); timer = null; }
-  if (canBackup()) void backupNow();
+  runBackups();
 }
 
 /** Install the AppState listener. Idempotent; call once at boot. */
