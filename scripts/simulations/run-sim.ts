@@ -3595,7 +3595,8 @@ check('Store hygiene: previously-unversioned stores carry version + migrate',
     const files = ['agentBrainStats', 'conversationLogStore', 'clubSelectionStore', 'practicePointsStore'];
     return files.every(f => {
       const s = read(`store/${f}.ts`);
-      return /version: 1,/.test(s) && /migrate: \(s\) => s as never,/.test(s);
+      // any explicit version (practicePoints bumped to v2 for watchedVideos, 2026-07-06)
+      return /version: \d+,/.test(s) && /migrate: \(s\) => s as never,/.test(s);
     });
   })(),
   'agentBrainStats / conversationLog / clubSelection / practicePoints all have an explicit version + passthrough migrate, so a future bump upgrades instead of wiping persisted state');

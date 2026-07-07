@@ -30,7 +30,6 @@ import {
   ScrollView,
   Modal,
   TouchableOpacity,
-  Linking,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -203,10 +202,29 @@ export default function DrillDetail() {
           </>
         )}
 
-        {/* WATCH — instructor video card */}
+        {/* WATCH — instructor video card. 2026-07-06 (pro-video → drill loop moat) —
+            plays IN-APP with full-watch detection: finishing awards one-time points
+            and offers "try this drill" → drill-aware Smart Motion, instead of the old
+            terminal Linking.openURL link-out. */}
         <Text style={[styles.sectionLabel, { color: colors.accent }]}>WATCH</Text>
         <TouchableOpacity
-          onPress={() => { void Linking.openURL(video.url).catch(() => undefined); }}
+          onPress={() => router.push({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            pathname: '/drill-video' as any,
+            params: {
+              url: video.url,
+              title: video.title,
+              instructor: video.instructor,
+              drillId: entry.id,
+              drillName: entry.title,
+              ...(entry.practice ? {
+                drillShots: String(entry.practice.shotCount),
+                drillFocus: entry.practice.focus,
+                drillShotType: entry.practice.shotType,
+                angle: entry.practice.angle,
+              } : {}),
+            },
+          })}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel={`Watch ${video.title} by ${video.instructor}`}

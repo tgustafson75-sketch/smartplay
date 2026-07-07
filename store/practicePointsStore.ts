@@ -20,6 +20,10 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 const BASE_PER_DRILL = 5;
 const PER_SWING = 1;
 const MAX_SWINGS_COUNTED = 5; // keep it conservative — no farming
+// 2026-07-06 (Tim — pro-video → drill loop moat) — a small, ONE-TIME reward for
+// watching a pro drill video all the way through (a real learning action). One-time
+// so re-watching can't farm points; modest so the number stays honest.
+const WATCH_POINTS = 5;
 
 export interface DrillPointRecord {
   points: number;
@@ -35,6 +39,15 @@ interface PracticePointsState {
   /** Points per practice key — a drill id ('tempo_consistency'), a focus
    *  ('focus:irons'), or 'open_range'. */
   byDrill: Record<string, DrillPointRecord>;
+  /** 2026-07-06 — drill-video keys that have already been rewarded for a full
+   *  watch, so the one-time watch points can't be farmed by re-watching. */
+  watchedVideos: Record<string, number>;
+  /**
+   * 2026-07-06 (pro-video → drill loop) — award the one-time full-watch points for
+   * a drill video. No-ops (returns 0) if this drill's video was already rewarded.
+   * Also feeds the visible tiered points. Returns points granted (0 if repeat).
+   */
+  awardVideoWatch: (drillId: string, label: string | null, now: number) => number;
   /**
    * 2026-06-14 (Tim — wire the points) — the unified practice award. Records the
    * per-key practice ledger AND feeds the visible tiered pointsStore so ALL
@@ -52,6 +65,31 @@ export const usePracticePointsStore = create<PracticePointsState>()(
     (set, get) => ({
       total: 0,
       byDrill: {},
+      watchedVideos: {},
+      awardVideoWatch: (drillId, label, now) => {
+        if (!drillId) return 0;
+        const key = `watch:${drillId}`;
+        if (get().watchedVideos[key]) return 0; // already rewarded — no farming
+        set((s) => ({
+          total: s.total + WATCH_POINTS,
+          watchedVideos: { ...s.watchedVideos, [key]: now },
+          byDrill: {
+            ...s.byDrill,
+            [key]: {
+              points: (s.byDrill[key]?.points ?? 0) + WATCH_POINTS,
+              sessions: (s.byDrill[key]?.sessions ?? 0) + 1,
+              lastAt: now,
+              label: label && label.trim() ? `Watched: ${label.trim()}` : 'Watched a drill video',
+            },
+          },
+        }));
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pts = require('./pointsStore') as typeof import('./pointsStore');
+          pts.usePointsStore.getState().addPoints(WATCH_POINTS, label ? `Watched: ${label}` : 'Watched a drill video');
+        } catch { /* tier feed best-effort */ }
+        return WATCH_POINTS;
+      },
       awardPracticePoints: ({ key, label, swings, now }) => {
         if (!key) return 0;
         const counted = Math.max(0, Math.min(MAX_SWINGS_COUNTED, Math.round(swings)));
@@ -79,14 +117,16 @@ export const usePracticePointsStore = create<PracticePointsState>()(
         return granted;
       },
       awardDrill: (drillId, swings, now) => get().awardPracticePoints({ key: drillId, swings, now }),
-      reset: () => set({ total: 0, byDrill: {} }),
+      reset: () => set({ total: 0, byDrill: {}, watchedVideos: {} }),
     }),
     {
       name: 'practice-points',
       storage: createJSONStorage(() => getPersistStorage()),
       // 2026-06-14 (audit — store hygiene) — explicit version + passthrough migrate
       // so a future shape bump upgrades cleanly instead of wiping persisted state.
-      version: 1,
+      // v2 (2026-07-06) adds watchedVideos; passthrough is safe (missing key falls
+      // back to the initial {} via zustand's shallow merge).
+      version: 2,
       migrate: (s) => s as never,
     },
   ),
