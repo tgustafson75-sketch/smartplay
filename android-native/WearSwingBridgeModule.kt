@@ -41,6 +41,9 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
     private val tag = "WearSwingBridge"
     private val swingPath = "/smartplay/swing"
     private val helloPath = "/smartplay/hello"
+    // 2026-07-06 — inbound from the watch mic + tap (watch → phone).
+    private val voicePath = "/smartplay/voice"
+    private val tapPath = "/smartplay/tap"
     @Volatile private var listening = false
 
     override fun getName(): String = "WearSwingBridge"
@@ -94,9 +97,61 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
             when (event.path) {
                 swingPath -> emitSwing(event)
                 helloPath -> emitConnection(true, event.sourceNodeId)
+                // 2026-07-06 — the watch mic ships transcribed text here; the JS
+                // side (watchCaddieBridge → notifyWatchVoice) routes it through the
+                // regular voice-intent pipeline so "how far to the pin" is answered.
+                voicePath -> emitVoice(event)
+                tapPath -> emitTap(event)
             }
         } catch (t: Throwable) {
             Log.w(tag, "onMessageReceived parse failed (non-fatal)", t)
+        }
+    }
+
+    private fun emitVoice(event: MessageEvent) {
+        val text = String(event.data, Charsets.UTF_8)
+        val payload = Arguments.createMap().apply { putString("text", text) }
+        emit("onWatchVoice", payload)
+        emitConnection(true, event.sourceNodeId)
+    }
+
+    private fun emitTap(event: MessageEvent) {
+        val pattern = String(event.data, Charsets.UTF_8).ifEmpty { "single" }
+        val payload = Arguments.createMap().apply { putString("pattern", pattern) }
+        emit("onWatchTap", payload)
+        emitConnection(true, event.sourceNodeId)
+    }
+
+    /**
+     * 2026-07-06 — Phone → watch. Ships a message to every connected node (the
+     * watch) on the given path. JS (watchCaddieBridge, via watchBridge's registered
+     * sender) calls this to push pin-yardage / notifications / round state / a
+     * spoken-prompt request. Best-effort; resolves true if at least one node got it.
+     */
+    @ReactMethod
+    fun sendToWatch(path: String, data: String, promise: Promise) {
+        try {
+            val ctx = reactApplicationContext.applicationContext
+            val bytes = data.toByteArray(Charsets.UTF_8)
+            Wearable.getNodeClient(ctx).connectedNodes
+                .addOnSuccessListener { nodes ->
+                    if (nodes.isEmpty()) { promise.resolve(false); return@addOnSuccessListener }
+                    val client = Wearable.getMessageClient(ctx)
+                    for (node in nodes) {
+                        client.sendMessage(node.id, path, bytes)
+                            .addOnFailureListener { e ->
+                                Log.w(tag, "sendToWatch ${node.id} failed (non-fatal): ${e.message}")
+                            }
+                    }
+                    promise.resolve(true)
+                }
+                .addOnFailureListener { e ->
+                    Log.w(tag, "connectedNodes failed (non-fatal): ${e.message}")
+                    promise.resolve(false)
+                }
+        } catch (t: Throwable) {
+            Log.e(tag, "sendToWatch failed", t)
+            promise.reject("WEAR_SEND_FAILED", t.message ?: t.toString())
         }
     }
 

@@ -1350,8 +1350,13 @@ export default function Settings() {
               value={watchSwingEnabled}
               onValueChange={(v) => {
                 setWatchSwingEnabled(v);
-                if (v) void initWatchSwingBridge().catch(() => {});
-                else void stopWatchSwingBridge().catch(() => {});
+                if (v) {
+                  void initWatchSwingBridge().catch(() => {});
+                  void import('../services/watchCaddieBridge').then(m => m.initWatchCaddieBridge()).catch(() => {});
+                } else {
+                  void stopWatchSwingBridge().catch(() => {});
+                  void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
+                }
               }}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.text_primary}

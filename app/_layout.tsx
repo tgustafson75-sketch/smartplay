@@ -228,11 +228,15 @@ function AppNavigator() {
       try {
         const m = await import('../services/watchSwingBridge');
         if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+        // 2026-07-06 — same watch, second half: pin-yardage push + watch-mic → caddie.
+        const c = await import('../services/watchCaddieBridge');
+        if (active && c.isWatchCaddieBridgeAvailable()) await c.initWatchCaddieBridge();
       } catch { /* non-fatal — bridge absent on this build */ }
     })();
     return () => {
       active = false;
       void import('../services/watchSwingBridge').then(m => m.stopWatchSwingBridge()).catch(() => {});
+      void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
     };
   }, []);
 
