@@ -558,7 +558,10 @@ export default function SmartMotion() {
   // to the putt analyzer instead of the swing analyzer — swings silently stopped
   // getting a swing read. Now putt mode is turned on deliberately (PUTT toggle,
   // or picking the putter) and reset on every new recording, so it can't stick.
-  const [puttMode, setPuttMode] = useState(false);
+  // 2026-07-06 (voice audit) — "record me putting" opens SmartMotion with ?angle=putt
+  // when it's closed; without this it fell to down_the_line (putt isn't an Angle, it's
+  // a separate mode). Seed putt mode from the param on cold open.
+  const [puttMode, setPuttMode] = useState(angleParam === 'putt');
   const isPutt = puttMode;
   const puttModeRef = useRef(false);
   useEffect(() => { puttModeRef.current = puttMode; }, [puttMode]);

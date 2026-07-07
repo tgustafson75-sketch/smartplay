@@ -196,7 +196,12 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
 
   const handleShotDetected = useCallback((d: ShotDetection) => {
     if (!isMountedRef.current) return;
-    if (!sessionRef.current || phase !== 'recording') return;
+    // 2026-07-06 (cage audit CRIT) — the detector stores this callback ONCE at start
+    // (when phase was 'preview'), so a captured `phase` was frozen at 'preview' and
+    // EVERY acoustic strike was dropped (swing counter stuck at 0). Read the live
+    // phaseRef instead, and keep the callback stable (no [phase] dep) so it isn't
+    // rebuilt after the detector already captured it.
+    if (!sessionRef.current || phaseRef.current !== 'recording') return;
     const offsetSec = d.offset_ms / 1000;
     addClipEvent(sessionRef.current.id, offsetSec, 'audio_transient');
     cageLog('swing-detected', 'ok', {
@@ -208,7 +213,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
       session_id: sessionRef.current.id,
     });
     setSwingCount((c) => c + 1);
-  }, [phase]);
+  }, []);
 
   const startMetering = useCallback(async () => {
     if (!meterAvailable) return;

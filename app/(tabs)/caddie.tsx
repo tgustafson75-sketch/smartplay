@@ -538,7 +538,11 @@ export default function CaddieTab() {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getGreenYardagesSync } = require('../../services/smartFinderService');
       const y = getGreenYardagesSync(currentHole);
-      return y?.middle ?? null;
+      // 2026-07-06 (course audit) — only count as LIVE when the read is genuinely
+      // GPS-live ('ok') or a walking tee-relative estimate ('estimated'). 'no_fix' /
+      // 'no_geometry' / 'no_hole' return the FROZEN scorecard number — badging that
+      // "live" is a lie (it doesn't count down as you walk). Those → null → 'static'.
+      return (y && (y.reason === 'ok' || y.reason === 'estimated')) ? (y.middle ?? null) : null;
     } catch { return null; }
     // markTick listed as a re-render signal: getGreenYardagesSync reads
     // from a cache the Mark handler writes; without it, the data-strip
