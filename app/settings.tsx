@@ -37,6 +37,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
+import { syncBluetoothMediaButtonState } from '../services/voiceTriggers';
+import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import {
   startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
   subscribeToWalk, isSimulatedActive, type SimulatedWalkState,
@@ -68,11 +70,12 @@ export default function Settings() {
     proactive_kevin_enabled,
     distance_unit,
     theme_preference,
-    // 2026-07-04 (elite-clean audit) — earbudTapToTalk + setEarbudTapToTalk dropped
-    // from this destructure FOR REAL this time (the old comment claimed it while the
-    // destructure remained and the toggle was live). The row now renders disabled
-    // "Coming soon" — no native media-key listener exists in the build
-    // (track-player was removed; see services/mediaKeyBridge.ts).
+    // 2026-07-06 — earbud tap-to-talk is REAL and back. The native listener
+    // (BluetoothMediaButtonModule + withBluetoothMediaButton plugin, app.json) has
+    // been in the build; the removed track-player path (mediaKeyBridge) was a DEAD
+    // second implementation. Live toggle restored.
+    earbudTapToTalk,
+    setEarbudTapToTalk,
     voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
     setVoiceOnPhoneSpeaker,
@@ -1370,23 +1373,28 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-          {/* 2026-07-04 (elite-clean audit) — this toggle was LIVE but its only
-              consumer (services/mediaKeyBridge) is a documented no-op (the native
-              media-key listener was removed with react-native-track-player). A
-              switch the user can flip that does nothing is worse than honesty:
-              render it disabled + "Coming soon" until a build restores the bridge. */}
-          <View style={[rowDivStyle, { opacity: 0.45 }]}>
+          {/* 2026-07-06 — Earbud button tap-to-talk, LIVE. The native media-button
+              listener (BluetoothMediaButtonModule via the withBluetoothMediaButton
+              plugin, app.json) is compiled into the build and initialized app-wide at
+              boot (_layout.tsx initVoiceTriggers), so a tap opens the caddie mic from
+              launch, anywhere — no round needed. On by default (hands-free is the
+              point); toggle off if it fights your music's play/pause. */}
+          <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Earbud button as mic trigger · Coming soon</Text>
+              <Text style={labelStyle}>Earbud button → talk to caddie</Text>
               <Text style={subStyle}>
-                Your earbuds already work with the caddie — pair them for audio and use Active Listening, or tap the caddie badge, to talk hands-free. This row is only about starting the mic with the earbud&apos;s physical button/stem tap, which needs a native media-key listener that isn&apos;t in this build yet.
+                Tap your earbud (or BT remote) button anytime — even from the home screen — and the caddie starts listening. Works hands-free without opening anything. Turn off only if it interferes with pausing music.
               </Text>
             </View>
             <Switch
-              value={false}
-              disabled
+              value={earbudTapToTalk}
+              onValueChange={(v) => {
+                setEarbudTapToTalk(v);
+                setEarbudEnabled(v);
+                void syncBluetoothMediaButtonState(v);
+              }}
               trackColor={{ false: colors.border, true: colors.accent }}
-              thumbColor="#ffffff"
+              thumbColor={colors.text_primary}
             />
           </View>
           <View style={rowDivStyle}>

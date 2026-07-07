@@ -464,7 +464,7 @@ export const useSettingsStore = create<SettingsState>()(
       // The native media-key bridge is still a future APK path, so
       // new installs start in the safer state and users opt in from
       // Settings when they want to test it.
-      earbudTapToTalk: false,
+      earbudTapToTalk: true,
       glassesMode: false,
       feelCaptureEnabled: false,
       voiceOnPhoneSpeaker: true,
@@ -716,7 +716,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 16,
+      version: 17,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -855,6 +855,14 @@ export const useSettingsStore = create<SettingsState>()(
         // existing installs so telemetry stays off until the user opts in.
         if (version < 16) {
           if (p.analyticsOptIn == null) p.analyticsOptIn = false;
+        }
+        // v17 — 2026-07-06 — earbud button tap-to-talk turned ON. The native
+        // media-button listener (BluetoothMediaButtonModule, withBluetoothMediaButton
+        // plugin) has been in the build all along; the v10 "safety off" was written
+        // when the DEAD react-native-track-player path was mistaken for the only one.
+        // Hands-free from launch is the #1 priority — default it on for everyone.
+        if (version < 17) {
+          p.earbudTapToTalk = true;
         }
         return p as SettingsState;
       },
