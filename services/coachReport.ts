@@ -25,6 +25,11 @@ export interface CoachReportInput {
   sessionNumber: number | null;
   /** Local image URI of the fault/keyframe to feature. */
   faultFrameUri: string | null;
+  /** MIME of faultFrameUri. Defaults to image/jpeg (raw thumbnail); pass
+   *  image/png when the frame is an overlay-baked composite (PNG). Data URLs
+   *  are MIME-declarative, so this must match the real bytes or WebKit/print
+   *  can render it blank. */
+  faultFrameMime?: string;
   /** Real, measured metrics to show (tempo, etc.). Only pass values that exist — never fabricate. */
   metrics?: { label: string; value: string }[];
   analysis: {
@@ -71,7 +76,7 @@ async function logoDataUrl(): Promise<string | null> {
 export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: boolean; reason?: string }> {
   try {
     const [frameUrl, logoUrl] = await Promise.all([
-      toDataUrl(input.faultFrameUri, 'image/jpeg'),
+      toDataUrl(input.faultFrameUri, input.faultFrameMime ?? 'image/jpeg'),
       logoDataUrl(),
     ]);
 

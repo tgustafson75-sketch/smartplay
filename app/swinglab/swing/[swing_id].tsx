@@ -57,6 +57,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
+import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { BodyAnalysisRow, TempoBar, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
@@ -381,6 +382,23 @@ export default function SwingDetail() {
 
   const poseFrames = session?.biomechanics?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
+
+  // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
+  // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
+  // mount below), so "Grab Frame" and the coach report carry the skeleton + trace
+  // + fault heat, not a clean frame. Video burn-in needs a native encoder (absent
+  // today) — this covers the still + reporting half now.
+  const overlayFaultJoints = faultJointsFor(
+    session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id,
+  );
+  const overlayFaultSevere = session?.primary_issue?.severity === 'significant';
+  const { capture: captureOverlayStill, element: overlayStillCaptureEl } = useSwingStillCapture({
+    poseFrames,
+    faultJoints: overlayFaultJoints,
+    faultSevere: overlayFaultSevere,
+    showSkeleton: true,
+    showTrace: true,
+  });
 
   // 2026-05-17 — dropped the Coach Audio / Kevin Analysis toggle.
   // The dual-audio path was confusing and the coach-audio detection was
@@ -808,7 +826,11 @@ export default function SwingDetail() {
 
   // 2026-06-29 (Tim) — GRAB THE CURRENT FRAME. At the slowest slow-mo you can see the
   // ball; this captures exactly the frame on screen (live positionMillis from the
-  // player) as a still and saves it to Photos. The clean frame, no overlay baked in.
+  // player) as a still and saves it to Photos.
+  // 2026-07-06 (Tim carry-over #2) — when the overlay is showing, bake it IN: the
+  // saved still now carries the skeleton + tempo trace + fault heat exactly as on
+  // screen (via SwingStillComposite). Falls back to the clean frame if pose is
+  // absent, the overlay is toggled off, or the composite can't render.
   const handleGrabFrame = async () => {
     if (!shot?.clipUri) {
       Alert.alert('Nothing to capture', 'This session has no video file.');
@@ -823,9 +845,17 @@ export default function SwingDetail() {
       const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
       const st = await videoRef.current?.getStatusAsync();
       const timeMs = (st && st.isLoaded ? st.positionMillis : 0) ?? 0;
-      const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 });
-      await MediaLibrary.saveToLibraryAsync(thumbUri);
-      useToastStore.getState().show('Frame saved to your Photos');
+      const overlayOn = hasPose && (showSkeleton || showTrace || motionOnly);
+      let outUri: string | null = null;
+      if (overlayOn) {
+        outUri = await captureOverlayStill(uri, timeMs);
+      }
+      if (!outUri) {
+        const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: timeMs, quality: 1 });
+        outUri = thumbUri;
+      }
+      await MediaLibrary.saveToLibraryAsync(outUri);
+      useToastStore.getState().show(overlayOn && outUri ? 'Frame + overlay saved to your Photos' : 'Frame saved to your Photos');
     } catch (e) {
       console.log('[swing-detail] grab frame failed', e);
       Alert.alert('Capture failed', 'Could not grab this frame — try pausing on it first.');
@@ -848,15 +878,47 @@ export default function SwingDetail() {
     // it with resolveImageUri so a post-reinstall export embeds the real picture
     // instead of a stale (UUID-rotated) path that resolves to nothing.
     const rawFaultFrame = session.fault_frame_uri ?? pi?.visual_reference_path ?? null;
-    const faultFrameUri = (await resolveImageUri(rawFaultFrame)) ?? rawFaultFrame;
+    const cleanFaultFrame = (await resolveImageUri(rawFaultFrame)) ?? rawFaultFrame;
+    // 2026-07-06 (Tim carry-over #2 — "report with overlays") — when we have pose,
+    // feature an OVERLAY-BAKED frame (skeleton + trace + fault heat) instead of the
+    // clean keyframe. Extract at peak lead-wrist speed (downswing/impact, where the
+    // fault reads) off the actual clip so the skeleton aligns exactly. Falls back to
+    // the clean frame if pose is absent or the composite can't render.
+    let faultFrameUri = cleanFaultFrame;
+    let faultFrameMime: string | undefined;
+    if (hasPose && shot?.clipUri) {
+      try {
+        const clip = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
+        const sorted = [...poseFrames].sort((a, b) => a.timestampMs - b.timestampMs);
+        const wristName = sorted.some(f => f.keypoints.some(k => k.name === 'right_wrist' && k.score >= 0.2))
+          ? 'right_wrist' : 'left_wrist';
+        let bestT = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.66))]?.timestampMs
+          ?? sorted[sorted.length - 1].timestampMs;
+        let bestSpeed = -1;
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const ka = sorted[i].keypoints.find(k => k.name === wristName);
+          const kb = sorted[i + 1].keypoints.find(k => k.name === wristName);
+          if (!ka || !kb) continue;
+          const dt = Math.max(1, sorted[i + 1].timestampMs - sorted[i].timestampMs);
+          const sp = Math.hypot(kb.x - ka.x, kb.y - ka.y) / dt;
+          if (sp > bestSpeed) { bestSpeed = sp; bestT = sorted[i + 1].timestampMs; }
+        }
+        const composite = await captureOverlayStill(clip, bestT);
+        if (composite) { faultFrameUri = composite; faultFrameMime = 'image/png'; }
+      } catch (e) {
+        console.log('[swing-detail] overlay report frame failed (non-fatal)', e);
+      }
+    }
     const res = await exportCoachReport({
       studentName: swinger,
       instructorName: profile.name || profile.firstName || 'Your Instructor',
       instructorCredentials: profile.coachCredentials ?? null,
       sessionDateMs: session.upload?.uploaded_at ?? Date.now(),
       sessionNumber: sameStudent.length > 0 ? sameStudent.length : null,
-      // image frames only (never the video clip) for the embedded picture
+      // 2026-07-06 — overlay-baked composite (PNG) when pose exists, else the
+      // clean keyframe (JPEG). Never the video clip.
       faultFrameUri,
+      faultFrameMime,
       // 2026-07-02 (Tim — the report had no metrics) — pass REAL measured values only (honest;
       // omitted when absent). Tempo + club are what we reliably have per swing today.
       metrics: (() => {
@@ -1193,6 +1255,9 @@ export default function SwingDetail() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* 2026-07-06 (Tim carry-over #2) — off-screen compositor for overlay-baked
+          stills (Grab Frame + coach report). Mounts only while capturing. */}
+      {overlayStillCaptureEl}
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
