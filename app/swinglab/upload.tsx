@@ -12,7 +12,7 @@ import {
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 // 2026-05-25 — Z Fold open: upload flow was left-aligned in the wide
 // viewport. Same isWide + WIDE_CONTENT_MAX_WIDTH pattern used by Play
@@ -108,7 +108,12 @@ export default function UploadSwing() {
     recent.forEach(s => push(s.upload?.swinger));
     return out;
   }, [activeMember, familyMembers, sessionHistory]);
-  const [tag, setTag] = useState<SwingTag | null>(null);
+  // 2026-07-06 (nav audit) — honor a ?tag= deep-link param (e.g. voice "open
+  // PuttingLab" → ?tag=putt) so the screen opens PRE-SET to that tag instead of
+  // landing untagged and making the user hunt for it. Validated against TAGS.
+  const { tag: tagParam } = useLocalSearchParams<{ tag?: string }>();
+  const initialTag: SwingTag | null = TAGS.some(t => t.id === tagParam) ? (tagParam as SwingTag) : null;
+  const [tag, setTag] = useState<SwingTag | null>(initialTag);
   // 2026-05-22 — Meta Ray-Ban glasses tag. POV downward video of hands/
   // putter/ball can't be read by the full-body swing-pose model. When
   // ON, the session is routed through puttingAnalysisService instead of

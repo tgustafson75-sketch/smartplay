@@ -130,8 +130,11 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // legacy cage voice phrasings ("start cage session", "start practice",
   // "open cage mode") now route to the unified Smart Motion screen,
   // which captures in place. Aliases kept so existing phrasings resolve.
-  cage_mode: { type: 'navigate', path: '/swinglab/smartmotion' },
-  cagemode: { type: 'navigate', path: '/swinglab/smartmotion' },
+  // 2026-07-06 (nav audit) — Cage Mode's spoken reply promises "I'll capture every
+  // swing", but the bare route landed in SmartMotion's setup PREVIEW and waited for
+  // a manual tap. autoRecord=1 rolls the camera on arrival so the promise holds.
+  cage_mode: { type: 'navigate', path: '/swinglab/smartmotion?autoRecord=1' },
+  cagemode: { type: 'navigate', path: '/swinglab/smartmotion?autoRecord=1' },
   // 2026-05-25 — Swing Library voice route. "Open library", "swing
   // library", "show me my swings" all land on the library list inside
   // SwingLab. Distinct from "open SwingLab" (which lands on the hub);
@@ -155,11 +158,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   look: { type: 'navigate', path: '/smartfinder?autoread=1' },
   what_you_see: { type: 'navigate', path: '/smartfinder?autoread=1' },
   // 2026-06-21 — PuttingLab voice route. "Open PuttingLab", "putting lab",
-  // "putting analysis" all land on the upload screen (swinglab/upload) where
-  // the user picks their putt video and the Putt tag is self-selected.
-  putting_lab: { type: 'navigate', path: '/swinglab/upload' },
-  puttinglab:  { type: 'navigate', path: '/swinglab/upload' },
-  putting_analysis: { type: 'navigate', path: '/swinglab/upload' },
+  // "putting analysis" land on the upload screen (swinglab/upload).
+  // 2026-07-06 (nav audit) — carry ?tag=putt so the upload screen opens PRE-SET to
+  // putt analysis instead of dumping the user on the generic untagged upload hub to
+  // hunt for the Putt tag (the old "self-selected" comment was false).
+  putting_lab: { type: 'navigate', path: '/swinglab/upload?tag=putt' },
+  puttinglab:  { type: 'navigate', path: '/swinglab/upload?tag=putt' },
+  putting_analysis: { type: 'navigate', path: '/swinglab/upload?tag=putt' },
   // 2026-05-26 — Fix DW: voice "open / send / email / show issue log"
   // routes to /owner-logs. Issue Log is visible to ALL beta testers
   // (Fix AE). The execute() path below reads parameters.send_log to
