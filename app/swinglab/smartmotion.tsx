@@ -1487,13 +1487,27 @@ export default function SmartMotion() {
   useEffect(() => {
     if (!clipUri || videoDurationMs == null || phase !== 'review') return;
     let cancelled = false;
+    // 2026-07-06 (SmartMotion audit H3 — "skeleton barely moves / doesn't match my
+    // swing") — WINDOW the pose extraction to the SELECTED swing. A SmartMotion
+    // session records ONE clip with multiple swings; this used to sample the 5 pose
+    // positions across the WHOLE clip, so the skeleton for swing #3 was built from
+    // frames scattered across every swing (SwingBodyOverlay then blended a pose from
+    // swing #1 with one from swing #4 → it floated off the body and barely moved),
+    // and the body card mixed one swing's address with another's impact. Tempo/ball
+    // already window per-swing; pose now matches. Re-runs on selectedSwing change so
+    // picking a different swing rebuilds its skeleton. Falls back to whole-clip when
+    // there's no usable segment (single un-segmented clips are unchanged).
+    const seg = segments[selectedSwing];
+    const poseWindow = seg && typeof seg.startMs === 'number' && typeof seg.endMs === 'number' && seg.endMs - seg.startMs >= 500
+      ? { startMs: seg.startMs, endMs: seg.endMs }
+      : null;
     void (async () => {
       try {
         // trustDuration=true: videoDurationMs is the player's real onLoad
         // durationMillis, so skip the ~2-8s reprobe inside the pose path (SPEED).
-        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true);
+        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow);
         if (!cancelled) setPoseFrames(frames);
-        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle, true);
+        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle, true, poseWindow);
         if (!cancelled && bio) {
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
@@ -1506,7 +1520,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs, phase, angle]);
+  }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing]);
 
   // Acoustic-anchored tempo + transition for the selected swing. Impact
   // comes from the acoustic strike detector (segment.strikeMs);

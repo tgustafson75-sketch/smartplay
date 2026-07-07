@@ -1836,9 +1836,10 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
       /if \(!canTrust\) \{/.test(pose) && // probe only runs when NOT trusted
       /analyzeSwingFromVideo\([\s\S]*?trustDuration = false/.test(pose) &&
       /\[pose\] on-device hit/.test(pose) && // latency telemetry
-      // Motion path trusts the player's real duration
-      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true\)/.test(sm) &&
-      /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true\)/.test(sm)
+      // Motion path trusts the player's real duration AND windows to the selected
+      // swing (2026-07-06 H3 — pose no longer smears across a multi-swing clip).
+      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true, poseWindow\)/.test(sm) &&
+      /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true, poseWindow\)/.test(sm)
     );
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); on-device pose latency is measurable');
@@ -3958,7 +3959,7 @@ const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
   /angle\?: 'down_the_line' \| 'face_on' \| 'glasses_pov' \| null/.test(poseApiSrc) &&
     /if \(angle === 'down_the_line'\) \{\s*\n\s*hipTurnDeg = null;\s*\n\s*shoulderTurnDeg = null;\s*\n\s*weightShiftPct = null;/.test(poseApiSrc) &&
-    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true\)/.test(smSrc),
+    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true, poseWindow\)/.test(smSrc),
   'down-the-line nulls the width-foreshortening turn + lateral weight metrics (invalid from behind) instead of reporting wrong numbers; angle threaded end-to-end');
 
 // 2026-06-10 — Caddie CNS Phase 1: memory store + writers (additive, honest).
