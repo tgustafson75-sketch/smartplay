@@ -126,11 +126,17 @@ export default function Index() {
 
   // Cold-launch greeting hop — happens once per process. Warm starts
   // (Index re-renders) hit the flag and route straight to caddie.
-  // 2026-07-06 (hands-free / fast-open) — ALSO throttle by time: if the app was
-  // opened within the last 4h, skip the ~4s greeting and go straight to the caddie.
-  // A returning golfer opening the app repeatedly on the range/course wants IN, not
-  // a hello every time. Still greets once per real session (or after a real gap).
-  const GREETING_THROTTLE_MS = 4 * 60 * 60 * 1000;
+  // 2026-07-06 (hands-free / fast-open) — ALSO throttle by time so a golfer
+  // reopening the app repeatedly on the range/course gets IN, not a hello every time.
+  // 2026-07-07 (Tim — "8s awkward dead gap when it skips the splash") — the greeting
+  // was never ADDING the warmup (that fires at app_init in _layout regardless); it was
+  // MASKING the backend cold-start (3-8s to wake the voice Lambdas) with a visible beat.
+  // A 4h skip window meant a reopen after the backend had gone cold (idle ~15min+) went
+  // straight to a SILENT caddie while the pipeline woke — the funky gap. Tie the skip
+  // window to how long the backend plausibly stays warm: a recent reopen (Lambdas still
+  // hot) skips the greeting with NO gap; a longer gap (cold backend) shows the greeting,
+  // which masks the warmup exactly as before. Best of both — fast reopen + no dead air.
+  const GREETING_THROTTLE_MS = 15 * 60 * 1000;
   const recentlyOpened = lastAppOpenAt > 0 && (Date.now() - lastAppOpenAt) < GREETING_THROTTLE_MS;
   if (kevinGreetingEnabled && !greetingShownThisProcess && !recentlyOpened) {
     greetingShownThisProcess = true;
