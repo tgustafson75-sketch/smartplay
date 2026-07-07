@@ -515,7 +515,13 @@ async function openSession() {
         // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
         // heard the opener, spoke, and got dead air. Speak the honest failure line
         // (same treatment the diagnostic + small-talk branches already have).
-        if (ttsAllowed && getSessionState() === 'responding') {
+        // 2026-07-06 (voice-parity F4) — this branch runs BEFORE the state moves to
+        // 'responding' (that happens at line ~534, after a SUCCESSFUL parse). At a
+        // parse FAILURE the state is still 'thinking' (set at openSession), so the
+        // old `=== 'responding'` guard was never true → the honest line never fired
+        // (the exact dead-air this block was added to fix). Check the state actually
+        // set here so the failure line speaks.
+        if (ttsAllowed && getSessionState() === 'thinking') {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl).catch(() => {});
         }
         setSessionStateMirror('idle');
