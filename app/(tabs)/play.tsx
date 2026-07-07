@@ -59,6 +59,7 @@ import {
   ECHO_HILLS_HOLE_IMAGES,
   GREENHILL_HOLE_IMAGES,
   SPESSARD_HOLLAND_HOLE_IMAGES,
+  WEBSTER_DUDLEY_HOLE_IMAGES,
   getLocalHoleImageById,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
@@ -251,6 +252,20 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (SPESSARD_HOLLAND_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 28.0686,
     lng: -80.5603,
+  },
+  // 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-view shots.
+  // Approx town-center coords (hole GPS isn't in the screenshots); enough for the
+  // list + a rough "you're here" detect. Real front/center/back yardages per hole.
+  {
+    id: 'local:webster-dudley',
+    club_name: 'Webster Dudley',
+    location: 'Dudley, MA',
+    rating: null,
+    slope: null,
+    isLocal: true,
+    thumbnail: (WEBSTER_DUDLEY_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 42.0479,
+    lng: -71.9048,
   },
 ];
 

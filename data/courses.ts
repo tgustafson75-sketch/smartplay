@@ -628,7 +628,34 @@ export const SPESSARD_HOLLAND_HOLES: CourseHole[] = [
   { hole: 18, par: 4, distance: 233, front: 219, back: 247, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
 ];
 
+// 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-view screenshots
+// (~/Downloads/websterdudley, 2216-2224 → holes 1-9). front/center/back yardages are
+// REAL (read off the shots); par is derived from length (standard convention →
+// estimated:true); hole GPS coords aren't in the shots (0,0) so — like Spessard —
+// static scorecard yardage works and Mark Green gives a live counting-down number.
+export const WEBSTER_DUDLEY_HOLES: CourseHole[] = [
+  { hole: 1, par: 4, distance: 352, front: 341, back: 364, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2, par: 4, distance: 348, front: 336, back: 359, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3, par: 3, distance: 142, front: 133, back: 151, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4, par: 4, distance: 360, front: 348, back: 372, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5, par: 4, distance: 301, front: 288, back: 313, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6, par: 3, distance: 172, front: 158, back: 185, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7, par: 4, distance: 391, front: 380, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8, par: 5, distance: 477, front: 466, back: 487, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9, par: 4, distance: 459, front: 447, back: 472, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
+  {
+    id: 'webster-dudley',
+    name: 'Webster Dudley',
+    fullName: 'Webster / Dudley GC (9)',
+    rating: '',
+    slope: '',
+    par: 35,
+    totalYards: 3002,
+    holes: WEBSTER_DUDLEY_HOLES,
+  },
   {
     id: 'spessard-holland',
     name: 'Spessard Holland',

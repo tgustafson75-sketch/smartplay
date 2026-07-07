@@ -278,7 +278,9 @@ export type LocalCourseSlug =
   // 2026-06-21 — Greenhill Golf Course, Worcester MA. Full 18-hole bundle.
   | 'greenhill'
   // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL (Tim's Florida trip).
-  | 'spessard-holland';
+  | 'spessard-holland'
+  // 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-views.
+  | 'webster-dudley';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -303,7 +305,22 @@ export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> =
   18: require('../assets/courses/spessard-holland/hole-18.jpg'),
 };
 
+// 2026-07-06 — Webster/Dudley (MA) 9-hole. Cropped aerials from Tim's Golf Pad
+// hole-view screenshots (2216-2224 → holes 1-9).
+export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/webster-dudley/hole-01.jpg'),
+  2: require('../assets/courses/webster-dudley/hole-02.jpg'),
+  3: require('../assets/courses/webster-dudley/hole-03.jpg'),
+  4: require('../assets/courses/webster-dudley/hole-04.jpg'),
+  5: require('../assets/courses/webster-dudley/hole-05.jpg'),
+  6: require('../assets/courses/webster-dudley/hole-06.jpg'),
+  7: require('../assets/courses/webster-dudley/hole-07.jpg'),
+  8: require('../assets/courses/webster-dudley/hole-08.jpg'),
+  9: require('../assets/courses/webster-dudley/hole-09.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
+  'webster-dudley': WEBSTER_DUDLEY_HOLE_IMAGES,
   'palms': PALMS_HOLE_IMAGES,
   'lakes': LAKES_HOLE_IMAGES,
   'rancho-california': RANCHO_CALIFORNIA_HOLE_IMAGES,
@@ -354,6 +371,9 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   'echo-hills':       { lat: 33.7475,    lng: -116.9719 },
   // 2026-07-06 — Spessard Holland (golfcourseapi id 30168; matches OSM greens).
   'spessard-holland': { lat: 28.04947,   lng: -80.55063 },
+  // 2026-07-06 — Webster/Dudley (MA) 9-hole. Approx town-center; refine on-site
+  // via Mark Location (hole GPS wasn't in the screenshots).
+  'webster-dudley':   { lat: 42.0479,    lng: -71.9048 },
   // 2026-05-26 — Journey at Pechanga Resort, Temecula CA.
   // Approximate centroid from Pechanga Resort & Casino landmark
   // (45100 Pechanga Pkwy). Refine on-site via Mark Location once
