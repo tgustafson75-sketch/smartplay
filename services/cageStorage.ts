@@ -37,6 +37,33 @@ async function writeIndex(sessions: CageSession[]): Promise<void> {
   await FileSystem.writeAsStringAsync(INDEX_PATH, JSON.stringify(sessions));
 }
 
+// 2026-07-06 (persistence audit H2) — SERIALIZE every index read-modify-write.
+// Before this, each writer did readIndex() → mutate → writeIndex() with no lock,
+// so two overlapping operations (e.g. endSession attaching the master video while
+// a clip finalize or a new createSession runs) both read the SAME on-disk snapshot
+// and the later writeIndex overwrote the whole array — silently dropping an entire
+// recorded session or its master_video_path. That is the most likely cause of
+// "a round's data was lost at the course." This mutex chains all mutations so each
+// reads the freshest index INSIDE the lock and writes before the next one reads.
+let _indexChain: Promise<unknown> = Promise.resolve();
+
+function mutateIndex<T>(
+  mutator: (sessions: CageSession[]) => { sessions: CageSession[]; result: T },
+): Promise<T> {
+  const run = async (): Promise<T> => {
+    const current = await readIndex();
+    const { sessions, result } = mutator(current);
+    await writeIndex(sessions);
+    return result;
+  };
+  // Chain onto the prior op regardless of whether it resolved or rejected, so one
+  // failed mutation can't wedge the queue. Keep _indexChain error-swallowed; return
+  // the real (possibly-rejecting) promise to the caller.
+  const next = _indexChain.then(run, run);
+  _indexChain = next.then(() => undefined, () => undefined);
+  return next;
+}
+
 // In-memory pending events per session — survives the session lifecycle, cleared on finalize
 const _pendingEvents = new Map<
   string,
@@ -44,7 +71,6 @@ const _pendingEvents = new Map<
 >();
 
 export async function createSession(): Promise<CageSession> {
-  const sessions = await readIndex();
   const id = uuid();
   const session: CageSession = {
     id,
@@ -58,35 +84,38 @@ export async function createSession(): Promise<CageSession> {
     notes: null,
     player_roster: ['primary'],
   };
-  sessions.push(session);
-  await writeIndex(sessions);
+  const created = await mutateIndex((sessions) => {
+    sessions.push(session);
+    return { sessions, result: session };
+  });
   _pendingEvents.set(id, []);
   cageLog('storage-create-session', 'ok', { session_id: id });
-  return session;
+  return created;
 }
 
 export async function endSession(
   session_id: string,
   master_video_path: string,
 ): Promise<void> {
-  const sessions = await readIndex();
-  const idx = sessions.findIndex((s) => s.id === session_id);
-  if (idx === -1) {
-    cageLog('storage-end-session', 'fail', { session_id, reason: 'not-found-in-index' });
-    return;
-  }
-  const now = Date.now();
-  sessions[idx].ended_at = now;
-  sessions[idx].duration_seconds = Math.round(
-    (now - sessions[idx].started_at) / 1000,
-  );
-  sessions[idx].master_video_path = master_video_path;
-  await writeIndex(sessions);
-  cageLog('storage-end-session', 'ok', {
-    session_id,
-    duration_seconds: sessions[idx].duration_seconds,
-    has_master_video: master_video_path.length > 0,
+  const duration = await mutateIndex((sessions) => {
+    const idx = sessions.findIndex((s) => s.id === session_id);
+    if (idx === -1) {
+      cageLog('storage-end-session', 'fail', { session_id, reason: 'not-found-in-index' });
+      return { sessions, result: null as number | null };
+    }
+    const now = Date.now();
+    sessions[idx].ended_at = now;
+    sessions[idx].duration_seconds = Math.round((now - sessions[idx].started_at) / 1000);
+    sessions[idx].master_video_path = master_video_path;
+    return { sessions, result: sessions[idx].duration_seconds };
   });
+  if (duration !== null) {
+    cageLog('storage-end-session', 'ok', {
+      session_id,
+      duration_seconds: duration,
+      has_master_video: master_video_path.length > 0,
+    });
+  }
 }
 
 export function addClipEvent(
@@ -110,32 +139,33 @@ export async function finalizeClips(
   duration_seconds: number,
 ): Promise<void> {
   const events = _pendingEvents.get(session_id) ?? [];
-  const sessions = await readIndex();
-  const idx = sessions.findIndex((s) => s.id === session_id);
-  if (idx === -1) {
-    cageLog('storage-finalize-clips', 'fail', { session_id, reason: 'not-found-in-index' });
-    return;
-  }
-
-  sessions[idx].clips = events.map((ev) => ({
-    id: uuid(),
-    session_id,
-    detected_at_session_offset_seconds: ev.offset,
-    detection_method: ev.method,
-    start_time_seconds: Math.max(0, ev.offset - 2),
-    end_time_seconds: Math.min(duration_seconds, ev.offset + 3),
-    speaker_id: 'primary',
-    labels: {},
-    raw_transcript: null,
-  }));
-
-  await writeIndex(sessions);
-  _pendingEvents.delete(session_id);
-  cageLog('storage-finalize-clips', 'ok', {
-    session_id,
-    clip_count: events.length,
-    duration_seconds,
+  const ok = await mutateIndex((sessions) => {
+    const idx = sessions.findIndex((s) => s.id === session_id);
+    if (idx === -1) {
+      cageLog('storage-finalize-clips', 'fail', { session_id, reason: 'not-found-in-index' });
+      return { sessions, result: false };
+    }
+    sessions[idx].clips = events.map((ev) => ({
+      id: uuid(),
+      session_id,
+      detected_at_session_offset_seconds: ev.offset,
+      detection_method: ev.method,
+      start_time_seconds: Math.max(0, ev.offset - 2),
+      end_time_seconds: Math.min(duration_seconds, ev.offset + 3),
+      speaker_id: 'primary',
+      labels: {},
+      raw_transcript: null,
+    }));
+    return { sessions, result: true };
   });
+  if (ok) {
+    _pendingEvents.delete(session_id);
+    cageLog('storage-finalize-clips', 'ok', {
+      session_id,
+      clip_count: events.length,
+      duration_seconds,
+    });
+  }
 }
 
 export async function listSessions(): Promise<CageSession[]> {
@@ -148,12 +178,19 @@ export async function getSession(session_id: string): Promise<CageSession | null
 }
 
 export async function deleteSession(session_id: string): Promise<void> {
-  const sessions = await readIndex();
-  const session = sessions.find((s) => s.id === session_id);
-  if (session?.master_video_path) {
-    const info = await FileSystem.getInfoAsync(session.master_video_path);
+  // Remove from the index atomically first (returns the removed session's video
+  // path), THEN clean up the files it referenced. Doing the index write through the
+  // mutex prevents a concurrent createSession/endSession from resurrecting or
+  // clobbering the delete.
+  const removedPath = await mutateIndex((sessions) => {
+    const session = sessions.find((s) => s.id === session_id);
+    const path = session?.master_video_path ?? null;
+    return { sessions: sessions.filter((s) => s.id !== session_id), result: path };
+  });
+  if (removedPath) {
+    const info = await FileSystem.getInfoAsync(removedPath);
     if (info.exists) {
-      await FileSystem.deleteAsync(session.master_video_path, { idempotent: true });
+      await FileSystem.deleteAsync(removedPath, { idempotent: true });
     }
     // Also attempt to delete the session directory
     const sessionDir = BASE + session_id + '/';
@@ -162,7 +199,6 @@ export async function deleteSession(session_id: string): Promise<void> {
       await FileSystem.deleteAsync(sessionDir, { idempotent: true });
     }
   }
-  await writeIndex(sessions.filter((s) => s.id !== session_id));
 }
 
 export async function getSessionDir(session_id: string): Promise<string> {
@@ -175,7 +211,6 @@ export async function getSessionDir(session_id: string): Promise<string> {
 }
 
 export async function createSyntheticSession(): Promise<CageSession> {
-  const sessions = await readIndex();
   const id = uuid();
   const now = Date.now();
   const clips: CageClip[] = [
@@ -197,7 +232,8 @@ export async function createSyntheticSession(): Promise<CageSession> {
     notes: 'SYNTHETIC TEST — no real video',
     player_roster: ['primary'],
   };
-  sessions.push(session);
-  await writeIndex(sessions);
-  return session;
+  return mutateIndex((sessions) => {
+    sessions.push(session);
+    return { sessions, result: session };
+  });
 }

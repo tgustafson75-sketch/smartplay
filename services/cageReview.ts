@@ -26,6 +26,27 @@ async function saveSessions(sessions: ReviewSession[]): Promise<void> {
   }
 }
 
+// 2026-07-06 (persistence audit H2) — the public writers below are called
+// fire-and-forget and each did load → mutate → save with no lock, so two
+// concurrent calls both read the same snapshot and the later save clobbered the
+// other's change. Serialize every read-modify-write through this mutex so each
+// reads the freshest list inside the lock.
+let _reviewChain: Promise<unknown> = Promise.resolve();
+
+function mutateSessions<T>(
+  mutator: (sessions: ReviewSession[]) => { sessions: ReviewSession[]; result: T },
+): Promise<T> {
+  const run = async (): Promise<T> => {
+    const current = await loadSessions();
+    const { sessions, result } = mutator(current);
+    await saveSessions(sessions);
+    return result;
+  };
+  const next = _reviewChain.then(run, run);
+  _reviewChain = next.then(() => undefined, () => undefined);
+  return next;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function startReviewSession(
@@ -42,9 +63,7 @@ export async function startReviewSession(
     shots_reviewed: [],
     vocabulary_observations: [],
   };
-  const all = await loadSessions();
-  await saveSessions([...all, session]);
-  return session;
+  return mutateSessions((all) => ({ sessions: [...all, session], result: session }));
 }
 
 export async function getReviewSession(id: string): Promise<ReviewSession | null> {
@@ -53,17 +72,19 @@ export async function getReviewSession(id: string): Promise<ReviewSession | null
 }
 
 export async function updateReviewSession(updated: ReviewSession): Promise<void> {
-  const all = await loadSessions();
-  await saveSessions(all.map(s => (s.id === updated.id ? updated : s)));
+  await mutateSessions((all) => ({
+    sessions: all.map(s => (s.id === updated.id ? updated : s)),
+    result: undefined,
+  }));
 }
 
 export async function endReviewSession(id: string): Promise<ReviewSession> {
-  const all = await loadSessions();
-  const session = all.find(s => s.id === id);
-  if (!session) throw new Error('Review session not found: ' + id);
-  const completed: ReviewSession = { ...session, completed_at: Date.now() };
-  await saveSessions(all.map(s => (s.id === id ? completed : s)));
-  return completed;
+  return mutateSessions((all) => {
+    const session = all.find(s => s.id === id);
+    if (!session) throw new Error('Review session not found: ' + id);
+    const completed: ReviewSession = { ...session, completed_at: Date.now() };
+    return { sessions: all.map(s => (s.id === id ? completed : s)), result: completed };
+  });
 }
 
 export async function listReviewSessions(): Promise<ReviewSession[]> {
