@@ -45,6 +45,7 @@ export default function Index() {
   const isSetupComplete = usePlayerProfileStore(s => s.isSetupComplete);
   const has_completed_onboarding = usePlayerProfileStore(s => s.has_completed_onboarding);
   const kevinGreetingEnabled = useSettingsStore(s => s.kevinGreetingEnabled);
+  const lastAppOpenAt = useSettingsStore(s => s.lastAppOpenAt);
 
   // Persist launch markers when we're skipping the greeting screen
   // (greeting disabled OR warm second-render). When the greeting IS shown,
@@ -55,6 +56,15 @@ export default function Index() {
     if (!(has_completed_onboarding || isSetupComplete)) return;
     if (kevinGreetingEnabled && !greetingShownThisProcess) return;
     void recordLaunch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // 2026-07-06 — stamp this cold-open time so the NEXT open can throttle the
+  // greeting (the render below read the PREVIOUS value first). Kills the ~4s
+  // hello replaying on every rapid reopen (range/course open-close-open).
+  useEffect(() => {
+    if (!hydrated) return;
+    useSettingsStore.setState({ lastAppOpenAt: Date.now() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
@@ -116,7 +126,13 @@ export default function Index() {
 
   // Cold-launch greeting hop — happens once per process. Warm starts
   // (Index re-renders) hit the flag and route straight to caddie.
-  if (kevinGreetingEnabled && !greetingShownThisProcess) {
+  // 2026-07-06 (hands-free / fast-open) — ALSO throttle by time: if the app was
+  // opened within the last 4h, skip the ~4s greeting and go straight to the caddie.
+  // A returning golfer opening the app repeatedly on the range/course wants IN, not
+  // a hello every time. Still greets once per real session (or after a real gap).
+  const GREETING_THROTTLE_MS = 4 * 60 * 60 * 1000;
+  const recentlyOpened = lastAppOpenAt > 0 && (Date.now() - lastAppOpenAt) < GREETING_THROTTLE_MS;
+  if (kevinGreetingEnabled && !greetingShownThisProcess && !recentlyOpened) {
     greetingShownThisProcess = true;
     return <Redirect href="/greeting" />;
   }
