@@ -45,8 +45,10 @@ import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
 import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
+import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
 import { useCageStore } from '../../store/cageStore';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
+import { useWorkoutStore } from '../../store/workoutStore';
 import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
@@ -190,6 +192,19 @@ export default function Dashboard() {
       sinceMs: pointsBaselineMs ?? undefined, // clean-start baseline (live build)
     }),
     [libraryHistory, realRounds, pointsBaselineMs],
+  );
+
+  // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
+  // vs. score-vs-par per round. Third correlation rail alongside practice + points.
+  // Honest: association, never causation; quiet until enough on both sides.
+  const workoutHistory = useWorkoutStore((s) => s.history);
+  const workoutPerf = useMemo(
+    () => computeWorkoutPerformance({
+      workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),
+      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      nowMs: Date.now(),
+    }),
+    [workoutHistory, realRounds],
   );
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
@@ -855,6 +870,46 @@ export default function Dashboard() {
               {pointsBaselineMs
                 ? `Running live since ${new Date(pointsBaselineMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${pointsPerf.sessionsCounted} ${pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} so far. Watch it build — we'll re-estimate your earlier history later.`
                 : 'Building live as you practice. We\'ll re-estimate your earlier history later.'}
+            </Text>
+          </View>
+        )}
+
+        {/* ─── WORKOUT · TRAINING → PERFORMANCE (Tim, 2026-07-07 — SmartPump third rail) —
+            imported golf-workout volume per week paired with scoring. Honest: association,
+            never causation; only charts once there's enough on both sides. */}
+        {workoutHistory.length > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>TRAINING → PERFORMANCE</Text>
+              <Text style={[styles.practiceLabel, { color: colors.accent }]}>
+                {workoutPerf.totalWorkouts} {workoutPerf.totalWorkouts === 1 ? 'WORKOUT' : 'WORKOUTS'}
+              </Text>
+            </View>
+            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{workoutPerf.headline}</Text>
+            {workoutPerf.hasEnough && (
+              <>
+                <TrendChart
+                  data={workoutPerf.workoutSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label={workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK'}
+                  higherIsBetter
+                  emptyText="—"
+                />
+                <TrendChart
+                  data={workoutPerf.scoreSeries}
+                  width={chartW}
+                  height={64}
+                  color={colors.accent}
+                  label="SCORE VS PAR"
+                  higherIsBetter={false}
+                  emptyText="—"
+                />
+              </>
+            )}
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
+              From your SmartPump golf workouts{workoutPerf.metric === 'minutes' ? ` · ${Math.round(workoutPerf.totalMinutes / 60)}h total` : ''}. Import updates in Settings → Backup & Data.
             </Text>
           </View>
         )}

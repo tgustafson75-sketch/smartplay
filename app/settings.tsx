@@ -310,6 +310,37 @@ export default function Settings() {
     })();
   }, []);
 
+  // 2026-07-07 (Tim — SmartPump third rail) — import a SmartPump golf-workout export
+  // (PDF/image AI-parsed server-side, or JSON/CSV parsed on-device). Dated workouts
+  // feed the dashboard's TRAINING → PERFORMANCE correlation card.
+  const onImportSmartPump = useCallback(() => {
+    void (async () => {
+      try {
+        useToastStore.getState().show('Reading your workout export…');
+        const { ingestSmartPumpExport } = await import('../services/smartPumpIngest');
+        const result = await ingestSmartPumpExport();
+        if (!result.ok) {
+          if (result.reason === 'canceled') return;
+          const msg = result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
+            ? 'Couldn’t find any dated workouts in that file.'
+            : result.reason.startsWith('http_') || /pdf/i.test(result.reason)
+              ? 'Couldn’t read that export. Try an image or a JSON/CSV export.'
+              : 'That file couldn’t be read as a SmartPump export.';
+          useToastStore.getState().show(msg);
+          return;
+        }
+        if (result.imported === 0) {
+          useToastStore.getState().show(`Already up to date — no new workouts in that export (${result.parsed} read).`);
+          return;
+        }
+        useToastStore.getState().show(`Imported ${result.imported} workout${result.imported === 1 ? '' : 's'}. See TRAINING → PERFORMANCE on your dashboard.`);
+      } catch (e) {
+        console.log('[settings] SmartPump import failed:', e);
+        useToastStore.getState().show('That workout export couldn’t be read.');
+      }
+    })();
+  }, []);
+
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
@@ -1429,6 +1460,24 @@ export default function Settings() {
               </Text>
             </View>
             <Ionicons name="cloud-upload-outline" size={20} color={colors.accent} />
+          </TouchableOpacity>
+          {/* 2026-07-07 (Tim — SmartPump third rail) — import a date-stamped golf-workout
+              export from SmartPump. PDF/image is AI-parsed server-side; a JSON/CSV export
+              is parsed on-device. Dated workouts feed the dashboard's TRAINING →
+              PERFORMANCE correlation card (training volume vs. scoring). */}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={onImportSmartPump}
+            accessibilityRole="button"
+            accessibilityLabel="Import SmartPump golf workouts"
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Import SmartPump golf workouts</Text>
+              <Text style={subStyle}>
+                Pick your SmartPump workout export (PDF, image, or JSON/CSV). We read the dated golf workouts and chart your TRAINING → PERFORMANCE on the dashboard — whether the gym work is showing up in your scoring. Re-import any time; we skip duplicates.
+              </Text>
+            </View>
+            <Ionicons name="barbell-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
           {/* 2026-06-10 — Health Data merged into "Devices & Health" (both are
               external integrations). Master toggle for the Health Connect

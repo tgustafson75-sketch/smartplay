@@ -2888,6 +2888,32 @@ check('SmartPlan UI — goal+constraints picker that runs a day through the Sess
   })(),
   'the SmartPlan screen lets you set goal + days/week + minutes + location, shows the weighted weekly plan, and launches any day through the Session Runner as a focus session (SmartPlan UI, OTA-able)');
 
+// 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume becomes a
+// third dashboard correlation rail (training → performance), ingested from a
+// date-stamped export (PDF/image AI-parsed, JSON/CSV on-device), deduped + persisted
+// + backed up. End-to-end wired: store → builder → dashboard card → ingest → route.
+check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboard card',
+  (() => {
+    const dash = read('app/(tabs)/dashboard.tsx');
+    return (
+      // Store exists + is on the backup allowlist (survives a phone swap).
+      /addWorkouts/.test(read('store/workoutStore.ts')) &&
+      /'workout-store-v1'/.test(read('services/cloudSync/snapshot.ts')) &&
+      // Pure weekly-bucket builder, honest (association not causation).
+      /export function computeWorkoutPerformance/.test(read('services/practice/workoutPerformance.ts')) &&
+      // Dashboard reads the store, builds the series, and renders the third card.
+      /useWorkoutStore/.test(dash) &&
+      /computeWorkoutPerformance/.test(dash) &&
+      /TRAINING → PERFORMANCE/.test(dash) &&
+      // Ingest service + settings entry point + server route all present.
+      /ingestSmartPumpExport/.test(read('services/smartPumpIngest.ts')) &&
+      /ingestSmartPumpExport/.test(read('app/settings.tsx')) &&
+      /\/api\/workout-import/.test(read('services/smartPumpIngest.ts')) &&
+      /"\/api\/workout-import"/.test(read('vercel.json'))
+    );
+  })(),
+  'a SmartPump golf-workout export imports (deduped, persisted, backed up) and drives a third dashboard rail correlating training volume vs. scoring — honest, quiet until enough data');
+
 check('Verdict no longer claims ANALYZING forever',
   /function deriveVerdict\(/.test(smSrc) &&
     /a: SwingAnalysis \| null,\s*\n\s*analyzing: boolean,/.test(smSrc) &&
