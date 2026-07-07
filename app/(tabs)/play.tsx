@@ -744,6 +744,26 @@ export default function PlayTab() {
     router.push('/(tabs)/caddie' as never);
   };
 
+  // 2026-07-06 (hands-free / fast-open) — ONE-TAP start from the GPS "you're here"
+  // banner. The banner only shows when GPS puts you AT a known course, so the obvious
+  // action is "go" — not select → scroll → Start Round → briefing. Start directly with
+  // that course id (the same id the banner already resolves via selectSummary→getCourse,
+  // and which the Caddie tab's runStartRound resolves), carrying current setup defaults.
+  const startRoundAtCourse = (s: CourseSummary) => {
+    prewarmBriefing(getApiBaseUrl());
+    prewarmVoice();
+    void selectSummary(s); // keep the Play-tab UI in sync (fire-and-forget)
+    useRoundStore.getState().setPendingStartFactors({
+      mode: setupMode,
+      nineHole: setupNineHole,
+      isCompetition: setupCompetition,
+      mentalState: setupMental,
+      notes: setupNotes,
+    });
+    useRoundStore.getState().setPendingStartCourse(s.id);
+    router.push('/(tabs)/caddie' as never);
+  };
+
   const handleHoleMap = () => {
     if (!selected) return;
     // 2026-06-12 — the legacy hole-view screen was retired (it was ~90% duplicated by
@@ -902,13 +922,13 @@ export default function PlayTab() {
         {atCourse && selected?.id !== atCourse.course.id && (
           <TouchableOpacity
             style={styles.atCourseBanner}
-            onPress={() => selectSummary(atCourse.course)}
+            onPress={() => startRoundAtCourse(atCourse.course)}
             accessibilityRole="button"
-            accessibilityLabel={`Confirm you are at ${atCourse.course.club_name}`}
+            accessibilityLabel={`Start a round at ${atCourse.course.club_name}`}
           >
-            <AppIcon name="location" size={14} color="#00C896" />
+            <AppIcon name="golf" size={14} color="#00C896" />
             <Text style={styles.atCourseBannerText} numberOfLines={2}>
-              You&apos;re at <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name}</Text> · tap to use
+              You&apos;re at <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name}</Text> · tap to start your round
             </Text>
             <AppIcon name="chevron-forward" size={14} color="#00C896" />
           </TouchableOpacity>
