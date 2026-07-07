@@ -86,6 +86,7 @@ import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeD
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
@@ -847,6 +848,27 @@ export default function SmartMotion() {
   const setSessionTarget = useCageStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
   const targetPoint = cageSession?.target_norm ?? null;
+
+  // 2026-07-06 (MOAT Phase 2 — the judge) — grade the drill set against the fault
+  // it's meant to fix. The drill id IS the CanonicalIssue it targets; the session's
+  // rolled-up primary_issue tells us whether that fault still dominated the reps.
+  // Honest + directional (per-set), never "you fixed your slice". Only once analysis
+  // has resolved ('ok').
+  const drillVerdict = useMemo(() => {
+    if (!isDrill || !drillId || cageSession?.analysis_status !== 'ok') return null;
+    const pi = cageSession?.primary_issue ?? null;
+    return deriveDrillVerdict({
+      drillId,
+      drillName: typeof drillName === 'string' ? drillName : null,
+      issueId: pi?.issue_id ?? null,
+      issueName: pi?.name ?? null,
+      severity: pi?.severity ?? null,
+      confidence: pi?.confidence ?? null,
+    });
+  }, [isDrill, drillId, drillName, cageSession?.analysis_status, cageSession?.primary_issue]);
+  const drillVerdictColor = drillVerdict
+    ? (drillVerdict.grade === 'got_it' ? '#88F700' : drillVerdict.grade === 'closer' ? '#F0C030' : '#FF6B2C')
+    : '#88F700';
   // Refs so the analyze callbacks read the CURRENT ball/target anchor without
   // needing them in their dep arrays (avoids stale-closure + dep churn).
   const ballAreaRef = useRef(ballArea);
@@ -3245,6 +3267,19 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
+        {/* DRILL CHECK — 2026-07-06 (MOAT Phase 2, the judge): after a drill set the
+            caddie grades whether the fault the drill targets still showed. Sits in the
+            same slot the setup drill banner used (free in review). Colored by grade
+            (green got-it / amber closer / orange not-yet). Honest, directional. */}
+        {isDrill && isReview && drillVerdict ? (
+          <View
+            style={[styles.drillCheckCard, { bottom: insets.bottom + (isNarrow ? 138 : 64), borderLeftColor: drillVerdictColor }]}
+            pointerEvents="none"
+          >
+            <Text style={styles.drillCheckLine} numberOfLines={4}>{drillVerdict.line}</Text>
+          </View>
+        ) : null}
+
         {/* SETUP TOOLS — 2026-06-13 (Tim): collapsed to a single chevron by default
             so the right third stays CLEAR for framing. Tap to pop a labeled CARD
             (icon + what it does) over a dark scrim, so people learn the icons.
@@ -4037,6 +4072,8 @@ const styles = StyleSheet.create({
   drillBanner: { position: 'absolute', alignSelf: 'center', alignItems: 'center', zIndex: 6, paddingHorizontal: 20, paddingVertical: 7, borderRadius: 14, backgroundColor: 'rgba(6,20,11,0.74)', borderWidth: 1.5, borderColor: '#88F700' },
   drillBannerKicker: { color: '#88F700', fontSize: 10, fontWeight: '700', letterSpacing: 4, marginBottom: 2 },
   drillBannerName: { color: '#FFFFFF', fontSize: 21, fontWeight: '900', letterSpacing: 1.5 },
+  drillCheckCard: { position: 'absolute', alignSelf: 'center', maxWidth: '86%', zIndex: 6, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(6,20,11,0.88)', borderWidth: 1, borderLeftWidth: 4, borderColor: 'rgba(255,255,255,0.12)' },
+  drillCheckLine: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', lineHeight: 19 },
 
   rightRail: { position: 'absolute', right: 8, width: 124, gap: 8, zIndex: 4 },
   leftRail: { position: 'absolute', left: 8, width: 124, gap: 8, zIndex: 4 },

@@ -48,6 +48,7 @@ import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
+import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { usePracticeSessionStore, recordPracticeSwingIfActive } from '../../store/practiceSessionStore';
 import { getFocus, buildInterleavedPlan, isInterleaved, PRACTICE_FOCUSES } from '../../services/practice/sessionPlan';
@@ -3600,6 +3601,33 @@ check('Store hygiene: previously-unversioned stores carry version + migrate',
     });
   })(),
   'agentBrainStats / conversationLog / clubSelection / practicePoints all have an explicit version + passthrough migrate, so a future bump upgrades instead of wiping persisted state');
+
+// 2026-07-06 (MOAT Phase 2 — the judge) — the Drill Check grades a drill set against
+// the fault it targets, honestly + directionally (per-set, never "you fixed it").
+check('Drill Check: grades the set vs the drill target, honest + directional',
+  (() => {
+    // Target fault still dominant + significant → not_yet
+    const notYet = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'over_the_top', issueName: 'Over the Top', severity: 'significant', confidence: 'high' });
+    // Related family fault (outside-in path) still counts as the same target
+    const family = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'swing_path_outside_in', issueName: 'Outside-In Path', severity: 'moderate', confidence: 'high' });
+    // Target present but only minor / low-confidence → closer
+    const closer = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: 'over_the_top', issueName: 'Over the Top', severity: 'minor', confidence: 'high' });
+    // Target fault no longer dominant (or none) → got_it
+    const gotIt = deriveDrillVerdict({ drillId: 'over_the_top', drillName: 'Over the Top', issueId: null });
+    // Not a drill → no verdict
+    const none = deriveDrillVerdict({ drillId: '', issueId: 'over_the_top' });
+    const noOverclaim = [notYet, family, closer, gotIt].every(v => v != null && !/fixed your|cured|no longer slice|slice is gone/i.test(v.line));
+    return (
+      notYet?.grade === 'not_yet' &&
+      family?.grade === 'not_yet' &&           // related-fault family match works
+      closer?.grade === 'closer' &&
+      gotIt?.grade === 'got_it' &&
+      none === null &&
+      noOverclaim &&                            // honesty: never claims a permanent fix
+      /this set/i.test(notYet!.line)            // per-set framing, not a cure
+    );
+  })(),
+  'drill target still dominant → not_yet; related-fault family counts; minor/low → closer; gone → got_it; non-drill → null; never overclaims a permanent fix');
 
 // 2026-06-14 (audit — store hygiene) — roundHistory grew unbounded (each record
 // carries its full shots[] and the whole blob re-serializes on every persist write).
