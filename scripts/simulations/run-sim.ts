@@ -2744,6 +2744,39 @@ check('Overlay registration: CV points mapped frame→container before the trace
   })(),
   'the frame→container transform is numerically correct (edge x=1 → 1.125, center fixed, round-trip exact, same-aspect no-op) and smartmotion maps every CV point through it before drawing/measuring — the trace lands on the ball and the divergence isn\'t computed across two coordinate spaces');
 
+// 2026-07-07 (Tim — REAL clubhead swing arc, not the wrist) — a vision pass locates the
+// CLUBHEAD across the swing frames (same honest pattern as ball-path: null where blurred,
+// never guessed). The overlay draws through the DETECTED points (with a dot at each real
+// detection) and only when there are enough of them; otherwise it keeps the honest
+// hand/tempo trace. No fabricated club path.
+check('Real clubhead arc: detected-only, honestly gated, wired end-to-end',
+  (() => {
+    const ep = read('api/club-path.ts');
+    const svc = read('services/swing/clubPath.ts');
+    const ov = read('components/swinglab/SwingBodyOverlay.tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      // Endpoint: locate the CLUBHEAD, return null per-frame it can't clearly see, never guess.
+      /report_club_path/.test(ep) &&
+      /CLUBHEAD/.test(ep) &&
+      /return null for that frame/.test(ep) &&
+      // Server not configured → honest not-configured (client keeps the hand trace).
+      /configured: false/.test(ep) &&
+      // Client service: swing-wide sampling, drops undetected frames, surfaces frame dims.
+      /export async function detectClubPath/.test(svc) &&
+      // Overlay: draws the club arc ONLY with enough real points, else the wrist proxy.
+      /MIN_CLUB_POINTS/.test(ov) &&
+      /clubArc && clubArc\.length >= MIN_CLUB_POINTS/.test(ov) &&
+      /clubDots/.test(ov) &&
+      // smartmotion runs it on the Motion step + passes it to the overlay.
+      /detectClubPath\(/.test(sm) &&
+      /clubArc=\{clubArcPoints\}/.test(sm) &&
+      // Routed.
+      /"\/api\/club-path"/.test(read('vercel.json'))
+    );
+  })(),
+  'the clubhead arc is drawn through ACTUALLY-DETECTED clubhead positions (dotted at each real detection), gapped/absent when detection is thin, and falls back to the honest hand/tempo trace — a legitimate club path, never a fabricated one');
+
 check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
   // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on
   // swings where flight was seen (honest), reports tempo REPEATABILITY (not a

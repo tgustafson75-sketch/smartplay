@@ -55,6 +55,7 @@ import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
 import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { detectBallPath } from '../../services/swing/ballPath';
+import { detectClubPath } from '../../services/swing/clubPath';
 import { frameToContainerNorm } from '../../services/swing/overlayCoords';
 import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
@@ -654,6 +655,12 @@ export default function SmartMotion() {
   // 2026-07-07 — the SOURCE frame aspect (frameW/frameH) the ball-path was detected in,
   // so the overlay can map the frame-normalized points into the container's cover space.
   const [ballPathFrameAR, setBallPathFrameAR] = useState<number | null>(null);
+  // 2026-07-07 (Tim — real clubhead swing arc) — the DETECTED clubhead path for the
+  // selected swing (frame-normalized + tMs), from detectClubPath. null = not run /
+  // nothing clearly detected → the overlay keeps the honest hand/tempo trace. Cached
+  // per swing index like the ball path (one server pass per swing, on the Motion step).
+  const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  const clubPathCacheRef = useRef<Record<number, { x: number; y: number; tMs: number }[] | null>>({});
   const [liveDb, setLiveDb] = useState<number | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
@@ -1307,6 +1314,35 @@ export default function SmartMotion() {
     return () => { cancelled = true; };
   }, [showSkeleton, clipUri, ballArea, segments, selectedSwing, angle, isPutt]);
 
+  // 2026-07-07 (Tim — real clubhead swing arc) — on the Motion step, run the clubhead
+  // detector across the SELECTED swing's window. Unlike the ball path this is NOT
+  // DTL-gated (the arc reads face-on too). One server pass per swing, cached. Honest:
+  // detectClubPath returns null on any failure / no-server, and the overlay falls back
+  // to the hand/tempo trace when there aren't enough clearly-detected clubhead points.
+  useEffect(() => {
+    if (!showSkeleton || !clipUri) { setClubArcPoints(null); return; }
+    const seg = segments[selectedSwing];
+    if (!seg || typeof seg.startMs !== 'number' || typeof seg.endMs !== 'number' || !(seg.endMs > seg.startMs)) {
+      setClubArcPoints(null);
+      return;
+    }
+    if (selectedSwing in clubPathCacheRef.current) {
+      setClubArcPoints(clubPathCacheRef.current[selectedSwing]);
+      return;
+    }
+    setClubArcPoints(null);
+    let cancelled = false;
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs })
+      .then((r) => {
+        if (cancelled) return;
+        const pts = r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null;
+        clubPathCacheRef.current[selectedSwing] = pts;
+        setClubArcPoints(pts);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [showSkeleton, clipUri, segments, selectedSwing]);
+
   // Compose the tiered multi-point shot trace from the measured positions +
   // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
   // launch + a DASHED PROJECTED continuation; 'none' = no honest path (caller
@@ -1941,6 +1977,7 @@ export default function SmartMotion() {
     firstStrikeMsRef.current = null;
     ballDepartureCacheRef.current = {}; // 2026-06-14 — drop per-swing trace cache on reset
     ballPathCacheRef.current = {};
+    clubPathCacheRef.current = {};
     setBallPathPoints(null);
     setLiveDb(null);
     setMeteringActive(false);
@@ -2273,6 +2310,7 @@ export default function SmartMotion() {
     setBallDeparture(null);
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     ballPathCacheRef.current = {};
+    clubPathCacheRef.current = {};
     setBallPathPoints(null);
     // Clear the prior swing's results so the next minute starts clean (the
     // voice loop uses startRecording, not reset).
@@ -3380,6 +3418,7 @@ export default function SmartMotion() {
               // screen), so a significant over-the-top actually reads red as you watch.
               faultJoints={faultJointsFor(analysis?.primary_fault ?? analysis?.detected_issue)}
               faultSevere={analysis?.severity === 'significant'}
+              clubArc={clubArcPoints}
             />
           </View>
         ) : null}

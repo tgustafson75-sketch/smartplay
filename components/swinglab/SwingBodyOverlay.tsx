@@ -95,7 +95,16 @@ type Props = {
    *  Empty/absent = all-green skeleton exactly as before. */
   faultJoints?: string[];
   faultSevere?: boolean;
+  /** 2026-07-07 (Tim — real clubhead swing arc) — the DETECTED clubhead positions
+   *  (full-frame normalized, from services/swing/clubPath → /api/club-path), in time
+   *  order. When present with enough points, the swing trace is drawn through the REAL
+   *  clubhead path (with a dot at each detected position) instead of the wrist proxy.
+   *  Absent/too-few → the honest hand/tempo trace, exactly as before. */
+  clubArc?: { x: number; y: number; tMs: number }[] | null;
 };
+
+/** Minimum detected clubhead points before we draw the club arc (vs the wrist proxy). */
+const MIN_CLUB_POINTS = 4;
 
 /** Detect whether keypoint coords are normalized 0–1 vs pixel-absolute by
  *  the largest coordinate seen. Pixel coords are in the 100s; normalized
@@ -187,6 +196,7 @@ export default function SwingBodyOverlay({
   resizeMode = 'contain',
   faultJoints,
   faultSevere = false,
+  clubArc,
 }: Props) {
   const hotSet = useMemo(() => new Set(faultJoints ?? []), [faultJoints]);
   const hotColor = faultSevere ? FAULT_HOT_SEVERE : FAULT_HOT_COLOR;
@@ -215,16 +225,26 @@ export default function SwingBodyOverlay({
   // the swing is smooth vs rushing (the downswing runs hot), tying the arc to tempo. Real signal
   // (wrist px/ms), not fabricated. (Clubhead-radius tracking + densified slow-mo detail are the next
   // layer — see the note to Tim; for now the arc follows the wrist, the only pose-derived point.)
+  // 2026-07-07 (Tim — real clubhead arc) — draw the trace through the DETECTED clubhead
+  // path when we have enough real points; else fall back to the wrist proxy. Same heat
+  // coloring (speed between points), same aligned frame space. `useClub` also drives the
+  // per-detection dots below so the user sees the REAL detected clubhead positions.
+  const useClub = !!(clubArc && clubArc.length >= MIN_CLUB_POINTS);
   const traceSegments = useMemo(() => {
     const sx = aligned ? aligned.sx : 1;
     const sy = aligned ? aligned.sy : 1;
-    const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
-    const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
-    const raw = sorted
-      .map(f => ({ k: getKp(f, traceName), t: f.timestampMs }))
-      .filter((r): r is { k: Keypoint; t: number } => r.k != null);
-    if (raw.length < 2) return [];
-    const P = raw.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
+    let P: { x: number; y: number; t: number }[];
+    if (clubArc && clubArc.length >= MIN_CLUB_POINTS) {
+      P = clubArc.map(p => ({ x: p.x * sx, y: p.y * sy, t: p.tMs }));
+    } else {
+      const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
+      const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
+      const raw = sorted
+        .map(f => ({ k: getKp(f, traceName), t: f.timestampMs }))
+        .filter((r): r is { k: Keypoint; t: number } => r.k != null);
+      if (raw.length < 2) return [];
+      P = raw.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
+    }
     // Per-segment speed (px/ms), normalized min→max across the swing → heat color.
     const speeds: number[] = [];
     for (let i = 0; i < P.length - 1; i++) {
@@ -250,7 +270,16 @@ export default function SwingBodyOverlay({
       segs.push({ d, color: speedHeatColor(norm) });
     }
     return segs;
-  }, [frames, aligned]);
+  }, [frames, aligned, clubArc]);
+
+  // Real detected clubhead positions to dot on the arc (only when drawing the club
+  // path) — these are the actual per-frame detections, so the user sees the truth.
+  const clubDots = useMemo(() => {
+    if (!useClub || !clubArc) return [];
+    const sx = aligned ? aligned.sx : 1;
+    const sy = aligned ? aligned.sy : 1;
+    return clubArc.map(p => ({ x: p.x * sx, y: p.y * sy }));
+  }, [useClub, clubArc, aligned]);
 
   if (!live) return null;
   // Aligned mode draws in true frame space and matches the video resizeMode;
@@ -289,6 +318,11 @@ export default function SwingBodyOverlay({
             strokeLinecap="round"
             strokeLinejoin="round"
           />
+        ))}
+        {/* Real detected clubhead positions — a dot at each actual detection so the
+            arc reads as MEASURED (not a synthetic curve). Only shown for the club path. */}
+        {showTrace && clubDots.map((d, i) => (
+          <Circle key={`club-${i}`} cx={d.x} cy={d.y} r={sw * 1.1} fill="#FFFFFF" fillOpacity={0.95} stroke="#88F700" strokeWidth={sw * 0.4} />
         ))}
         {showSkeleton && (
           <G>
