@@ -1,12 +1,13 @@
 /**
  * Settings · Cloud Backup & Sync card.
  *
- * Email-OTP sign-in → per-account backup of the structured stores so a phone
- * swap never wipes the player's data again (the Wachusett warranty-swap loss).
- * Auto-backs-up in the background; offers a one-tap restore on a fresh device.
- *
- * Honest states: when the cloud isn't configured yet (anon key not set) it says
- * so plainly instead of pretending to work.
+ * Two ways to protect the player's data so a phone swap never wipes it again
+ * (the Wachusett warranty-swap loss):
+ *   1. Local file backup — always available, no account.
+ *   2. Server auto-backup — a Backup ID (email) + a passphrase. Data restores on
+ *      ANY phone with the same pair. The email alone is useless without the
+ *      passphrase (the server keys rows by a hash of the two), so no one can pull
+ *      your data by guessing an email.
  */
 
 import React, { useState } from 'react';
@@ -14,16 +15,6 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
 import { useTheme } from '../../contexts/ThemeContext';
-import { isCloudConfigured } from '../../services/cloudSync/cloudClient';
-import {
-  useCloudBackupStore,
-  requestLoginCode,
-  verifyLoginCode,
-  backupNow,
-  restoreFromCloud,
-  signOutCloud,
-} from '../../services/cloudSync/cloudBackup';
-import { shouldOfferRestore } from '../../services/cloudSync/autoBackup';
 import { exportBackupToFile, importBackupFromFile } from '../../services/cloudSync/localBackup';
 import { useServerBackupStore, serverBackupNow, serverRestore } from '../../services/cloudSync/serverBackup';
 
@@ -38,45 +29,6 @@ function timeAgo(ms: number | null): string {
 
 export default function CloudBackupCard() {
   const { colors } = useTheme();
-  const configured = isCloudConfigured();
-  const { email, userId, autoBackupEnabled, lastBackupAt, status, lastError, setAutoBackup } = useCloudBackupStore();
-
-  const [emailInput, setEmailInput] = useState('');
-  const [codeInput, setCodeInput] = useState('');
-  const [phase, setPhase] = useState<'signed_out' | 'code_sent'>('signed_out');
-  const busy = status === 'sending_code' || status === 'verifying' || status === 'backing_up' || status === 'restoring';
-
-  const promptRestoreIfFresh = async () => {
-    const { offer, updatedAt } = await shouldOfferRestore();
-    if (!offer) return;
-    const when = updatedAt ? new Date(updatedAt).toLocaleString() : 'your last backup';
-    Alert.alert(
-      'Restore your data?',
-      `We found a cloud backup from ${when}. Restore it to this device?`,
-      [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Restore', onPress: doRestore },
-      ],
-    );
-  };
-
-  const onSendCode = async () => {
-    const r = await requestLoginCode(emailInput);
-    if (r.ok) { setPhase('code_sent'); }
-    else if (r.reason === 'bad_email') Alert.alert('Check your email', 'That email address doesn’t look right.');
-    else Alert.alert('Couldn’t send code', r.reason);
-  };
-
-  const onVerify = async () => {
-    const r = await verifyLoginCode(emailInput, codeInput);
-    if (r.ok) {
-      setPhase('signed_out');
-      setCodeInput('');
-      await promptRestoreIfFresh();
-    } else {
-      Alert.alert('Couldn’t verify', r.reason === 'verify_failed' ? 'That code didn’t work — try again.' : r.reason);
-    }
-  };
 
   // 2026-07-06 (elite audit) — reload IMMEDIATELY after a successful restore.
   // applySnapshot multiSets AsyncStorage, but every already-hydrated store still
@@ -91,24 +43,6 @@ export default function CloudBackupCard() {
     } catch {
       Alert.alert('Restart needed', 'Your data was restored. Close and reopen the app to finish applying it.');
     }
-  };
-
-  const doRestore = async () => {
-    const r = await restoreFromCloud();
-    if (r.ok) {
-      await reloadAfterRestore();
-    } else {
-      const msg = r.reason === 'no_backup' ? 'No cloud backup found for this account yet.'
-        : r.reason === 'newer_version' ? 'That backup was made by a newer version of the app. Update SmartPlay, then restore.'
-        : r.reason ?? 'Restore failed.';
-      Alert.alert('Nothing to restore', msg);
-    }
-  };
-
-  const onBackupNow = async () => {
-    const r = await backupNow({ force: true });
-    if (r.ok) Alert.alert('Backed up', 'Your data is saved to the cloud.');
-    else Alert.alert('Backup failed', r.reason);
   };
 
   const [fileBusy, setFileBusy] = useState(false);
@@ -134,29 +68,38 @@ export default function CloudBackupCard() {
   };
 
   // ── Server-mediated auto-backup (the OTA path: app → our API → Supabase) ──
-  const { backupKey, autoOn, lastBackupAt: serverLastAt, setBackupKey, setAutoOn } = useServerBackupStore();
+  const { backupKey, secret, autoOn, lastBackupAt: serverLastAt, setBackupKey, setSecret, setAutoOn } = useServerBackupStore();
   const [keyInput, setKeyInput] = useState(backupKey);
+  const [secretInput, setSecretInput] = useState(secret);
   const [serverBusy, setServerBusy] = useState(false);
 
-  const onServerBackup = async () => {
+  /** Validate + commit the Backup ID + passphrase; returns them or null with an alert. */
+  const commitCredentials = (verb: string): { k: string; sec: string } | null => {
     const k = keyInput.trim().toLowerCase();
-    if (!k) { Alert.alert('Add a Backup ID', 'Enter an email as your Backup ID first.'); return; }
+    const sec = secretInput.trim();
+    if (!k) { Alert.alert('Add a Backup ID', `Enter an email as your Backup ID to ${verb}.`); return null; }
+    if (sec.length < 4) { Alert.alert('Add a passphrase', 'Choose a passphrase of at least 4 characters. You’ll need the SAME email + passphrase to restore on another phone.'); return null; }
     setBackupKey(k);
+    setSecret(sec);
+    return { k, sec };
+  };
+
+  const onServerBackup = async () => {
+    if (!commitCredentials('back up')) return;
     setServerBusy(true);
-    const r = await serverBackupNow(k);
+    const r = await serverBackupNow({ force: true });
     setServerBusy(false);
-    if (r.ok) Alert.alert('Backed up', 'Your data is saved to your account. It’ll auto-back-up from now on.');
+    if (r.ok) Alert.alert('Backed up', 'Your data is saved to your account. It’ll auto-back-up from now on. Keep your email + passphrase to restore on a new phone.');
     else Alert.alert('Backup failed', r.reason === 'not_configured' ? 'Cloud isn’t reachable yet — the file backup above still protects you.' : (r.reason ?? 'Try again.'));
   };
   const onServerRestore = async () => {
-    const k = keyInput.trim().toLowerCase();
-    if (!k) { Alert.alert('Add a Backup ID', 'Enter the email you backed up with.'); return; }
-    setBackupKey(k);
+    const creds = commitCredentials('restore');
+    if (!creds) return;
     setServerBusy(true);
-    const r = await serverRestore(k);
+    const r = await serverRestore(creds.k, creds.sec);
     setServerBusy(false);
     if (r.ok) await reloadAfterRestore();
-    else Alert.alert('Nothing to restore', r.reason === 'not_found' ? 'No backup found for that Backup ID yet.' : (r.reason ?? 'Restore failed.'));
+    else Alert.alert('Nothing to restore', r.reason === 'not_found' ? 'No backup found for that email + passphrase. Double-check both — they must match what you backed up with.' : (r.reason ?? 'Restore failed.'));
   };
 
   const s = makeStyles(colors);
@@ -188,8 +131,9 @@ export default function CloudBackupCard() {
         <Text style={[s.title, { fontSize: 14 }]}>Auto-backup to your account</Text>
       </View>
       <Text style={s.muted}>
-        Enter an email as your Backup ID. Your data auto-backs-up and restores on ANY phone with the same ID —
-        no password, no sign-in. This is what makes a new phone pick up right where you left off.
+        Pick a Backup ID (your email) and a passphrase. Your data auto-backs-up and restores on ANY phone with
+        the same pair — that’s what makes a new phone pick up right where you left off. The email alone won’t
+        unlock your data without the passphrase, so keep the passphrase somewhere safe — we can’t recover it.
       </Text>
       <TextInput
         style={s.input}
@@ -199,6 +143,16 @@ export default function CloudBackupCard() {
         onChangeText={setKeyInput}
         autoCapitalize="none"
         keyboardType="email-address"
+        autoCorrect={false}
+      />
+      <TextInput
+        style={s.input}
+        placeholder="Passphrase (keep it safe)"
+        placeholderTextColor={colors.text_muted}
+        value={secretInput}
+        onChangeText={setSecretInput}
+        autoCapitalize="none"
+        secureTextEntry
         autoCorrect={false}
       />
       <Text style={s.muted}>Last cloud backup: {timeAgo(serverLastAt)}</Text>

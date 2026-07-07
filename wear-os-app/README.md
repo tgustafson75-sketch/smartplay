@@ -1,12 +1,21 @@
 # SmartPlay Watch (Wear OS companion)
 
-Standalone Wear OS app that captures **wrist-IMU motion during a golf
-swing** (accelerometer + gyroscope at ~200 Hz), segments it on-device,
-and streams a per-swing summary to the SmartPlay phone app over the
-**Wearable Data Layer**. On the phone, the summary lands in
-`store/watchStore.ts` via `recordSwing()` and promotes club speed / tempo
-/ smash factor to the truth-grade `'watch'` source tier in
-`services/swingMetricsService.ts`.
+Standalone Wear OS app with three jobs, all over the **Wearable Data Layer**:
+
+1. **Live pin yardage** (2026-07-06) — the phone pushes GPS-live front/middle/back
+   yardage to the green; the watch shows the big middle number + F/B/hole. Updates as
+   you walk (phone recomputes on hole change + an 18s tick).
+2. **Ask-caddie mic** (2026-07-06) — tap **Ask caddie** → the watch speech recognizer
+   transcribes → ships the text to the phone, which runs it through the full caddie
+   brain (`handsFreeOrchestrator` → `listeningSession.handleTranscribedUtterance`) and
+   speaks the answer. The phone can also push a spoken prompt the watch TTS reads.
+3. **Swing capture** — wrist-IMU motion during a swing (accel + gyro ~200 Hz),
+   segmented on-device, streamed as a per-swing summary that lands in
+   `store/watchStore.ts` via `recordSwing()` and promotes club speed / tempo / smash
+   to the truth-grade `'watch'` tier in `services/swingMetricsService.ts`.
+
+Phone side is `services/watchCaddieBridge.ts` (yardage push + mic routing) +
+`services/watchSwingBridge.ts` (swings), both on `android-native/WearSwingBridgeModule.kt`.
 
 ## Why this is a separate project (not an Expo module)
 

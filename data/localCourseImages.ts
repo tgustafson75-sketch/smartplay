@@ -423,6 +423,11 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('westlake')) return 'westlake-cc-nj';
   // 2026-06-21 — Greenhill Golf Course, Worcester MA.
   if (c.includes('greenhill')) return 'greenhill';
+  // 2026-07-07 — the two courses added from SmartVision screenshots. Name-lookup
+  // parity so voice ("I'm at Spessard", "open Dudley Hill") + homeCourse matching
+  // resolve to bundled imagery/centroid, not just the `local:` id path.
+  if (c.includes('spessard') || c.includes('holland')) return 'spessard-holland';
+  if (c.includes('webster') || c.includes('dudley')) return 'webster-dudley';
   return null;
 }
 
