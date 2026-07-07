@@ -41,6 +41,7 @@ import { classifyStroke } from '../../utils/geometryFitting';
 import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
 import { evaluateFraming } from '../../services/swing/framingCheck';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
+import { frameToContainerNorm, containerToFrameNorm } from '../../services/swing/overlayCoords';
 import { estimateCarryYards, fullCarryYards } from '../../services/swing/carryEstimate';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
@@ -2711,6 +2712,38 @@ check('SmartTrace confidence-tiered read — degrades, never goes dark (Tim)',
   })(),
   'composeSmartTrace returns a flight read when the ball is seen, a flagged "STRUCK" contact read when only a strike fired, and an honest no-read otherwise — degrading instead of going dark (SmartTrace confidence tiers)');
 
+// 2026-07-07 (Tim — "shot tracing that actually lines up on the user") — the ball trace
+// drifted off the ball because CV points are FRAME-normalized but were drawn in the
+// COVER video's CONTAINER space with no aspect compensation, and the divergence angle
+// was computed across the two spaces. frameToContainerNorm reconciles them; smartmotion
+// maps every CV point (departure + ball-path) through it before the trace math.
+check('Overlay registration: CV points mapped frame→container before the trace math',
+  (() => {
+    // Numeric truth — the audit's worked example (1080×1920 clip on a 1080×2400 screen,
+    // COVER): a frame edge point x=1 must land at container x=1.125; center stays center.
+    const fAR = 1080 / 1920, cAR = 1080 / 2400;
+    const edge = frameToContainerNorm({ x: 1, y: 1 }, fAR, cAR, 'cover');
+    const center = frameToContainerNorm({ x: 0.5, y: 0.5 }, fAR, cAR, 'cover');
+    const rt = containerToFrameNorm(frameToContainerNorm({ x: 0.8, y: 0.3 }, fAR, cAR, 'cover'), fAR, cAR, 'cover');
+    const identity = frameToContainerNorm({ x: 0.9, y: 0.2 }, 0.5625, 0.5625, 'cover'); // same aspect → no-op
+    const mathOk =
+      Math.abs(edge.x - 1.125) < 1e-9 && Math.abs(edge.y - 1) < 1e-9 &&
+      Math.abs(center.x - 0.5) < 1e-9 && Math.abs(center.y - 0.5) < 1e-9 &&
+      Math.abs(rt.x - 0.8) < 1e-9 && Math.abs(rt.y - 0.3) < 1e-9 &&
+      Math.abs(identity.x - 0.9) < 1e-9 && Math.abs(identity.y - 0.2) < 1e-9;
+    // Wiring — smartmotion converts CV points through cvToContainer before the trace math,
+    // and both detectors surface the source frame dims.
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const wired =
+      /frameToContainerNorm/.test(sm) &&
+      /cvToContainer\(ballDeparture\.departurePoint\)/.test(sm) &&
+      /ballPathPoints\.map\(cvToContainer\)/.test(sm) &&
+      /frameW/.test(read('services/swing/ballDeparture.ts')) &&
+      /frameW/.test(read('services/swing/ballPath.ts'));
+    return mathOk && wired;
+  })(),
+  'the frame→container transform is numerically correct (edge x=1 → 1.125, center fixed, round-trip exact, same-aspect no-op) and smartmotion maps every CV point through it before drawing/measuring — the trace lands on the ball and the divergence isn\'t computed across two coordinate spaces');
+
 check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
   // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on
   // swings where flight was seen (honest), reports tempo REPEATABILITY (not a
@@ -4407,7 +4440,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('SmartMotion: ball-trace is DTL-only + wired to the real departure point + peakDb colour',
     /angle !== 'down_the_line' \|\| isPutt\) return null/.test(smSrc2) &&
       /ballDeparture\?\.departurePoint/.test(smSrc2) &&
-      /computeTraceDirection\(ballArea, ballDeparture\.departurePoint, targetPoint\)/.test(smSrc2) &&
+      /computeTraceDirection\(ballArea, cvToContainer\(ballDeparture\.departurePoint\), targetPoint\)/.test(smSrc2) &&
       /traceColor\(ballTrace\.divergenceDeg, seg\?\.peakDb/.test(smSrc2) &&
       /ball_after_norm/.test(read('api/ball-departure.ts')) &&
       /<BallTraceOverlay trace=\{ballTrace\}/.test(smSrc2),

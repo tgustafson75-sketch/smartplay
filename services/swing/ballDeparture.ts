@@ -34,6 +34,12 @@ export interface BallDepartureResult {
    *  (0..1), mapped back from the wide after-frame crop. Feeds the DTL ball-trace
    *  direction (services/swing/ballTrace.ts). Null when the ball wasn't seen. */
   departurePoint?: { x: number; y: number } | null;
+  /** 2026-07-07 — the SOURCE frame pixel dimensions (the thumbnail the detection ran
+   *  on). departurePoint is normalized against THESE, so the overlay needs the frame
+   *  aspect (frameW/frameH) to map it into the on-screen container's cover/contain space
+   *  (services/swing/overlayCoords.ts). Null when the ball wasn't seen. */
+  frameW?: number | null;
+  frameH?: number | null;
 }
 
 /** Normalized ball spot on the frame (0..1). r is a radius as a fraction of
@@ -142,7 +148,11 @@ export async function detectBallDeparture(args: {
     if (data.ball_after_norm && afterWide) {
       departurePoint = cropToFullNorm(data.ball_after_norm, afterWide.box);
     }
-    return { ...(data as BallDepartureResult), departurePoint };
+    // Surface the source frame dims (from the wide after-crop's full W/H) so the overlay
+    // can map departurePoint into the on-screen container's cover/contain space.
+    const frameW = afterWide?.box.W ?? null;
+    const frameH = afterWide?.box.H ?? null;
+    return { ...(data as BallDepartureResult), departurePoint, frameW, frameH };
   } catch {
     return null;
   } finally {

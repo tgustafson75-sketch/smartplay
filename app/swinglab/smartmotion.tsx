@@ -55,6 +55,7 @@ import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
 import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild } from '../../services/swing/ballTrace';
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { detectBallPath } from '../../services/swing/ballPath';
+import { frameToContainerNorm } from '../../services/swing/overlayCoords';
 import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
 // The component is lazy-required ONLY when the runtime toggle is on (a vision build),
@@ -650,6 +651,9 @@ export default function SmartMotion() {
   // run / nothing detected (the overlay degrades to the single-line trace + a note).
   const [ballPathPoints, setBallPathPoints] = useState<{ x: number; y: number }[] | null>(null);
   const ballPathCacheRef = useRef<Record<number, { x: number; y: number }[] | null>>({});
+  // 2026-07-07 — the SOURCE frame aspect (frameW/frameH) the ball-path was detected in,
+  // so the overlay can map the frame-normalized points into the container's cover space.
+  const [ballPathFrameAR, setBallPathFrameAR] = useState<number | null>(null);
   const [liveDb, setLiveDb] = useState<number | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
@@ -1079,23 +1083,41 @@ export default function SmartMotion() {
   // 2026-06-12 — yardage estimate from the SELECTED CLUB + effort % (Tim). Reuses the
   // app's club carry table scaled by handicap; null when we can't honestly estimate.
   const estCarry = useMemo(() => estimateCarryYards(club, effortRaw, profile.handicap), [club, effortRaw, profile.handicap]);
+  // 2026-07-07 (Tim — "shot tracing that actually lines up on the user") — the CV points
+  // (departure / ball-path) are FRAME-normalized; the ball box + target the user placed
+  // are CONTAINER-normalized. Over the full-bleed COVER review video those spaces DON'T
+  // coincide, so the trace drifted off the ball (and off the correctly-mapped skeleton).
+  // Map every CV point into the SAME container space the anchors live in before the trace
+  // math, so the line lands on the ball and the divergence isn't computed across two
+  // spaces. frameAR from whichever detector ran; container aspect from the measured root.
+  const frameAR = useMemo(() => {
+    if (ballDeparture?.frameW && ballDeparture?.frameH) return ballDeparture.frameW / ballDeparture.frameH;
+    return ballPathFrameAR;
+  }, [ballDeparture, ballPathFrameAR]);
+  const containerAR = rootSize.w > 0 && rootSize.h > 0 ? rootSize.w / rootSize.h : null;
+  const cvToContainer = useCallback(
+    (p: { x: number; y: number }) =>
+      frameAR != null && containerAR != null ? frameToContainerNorm(p, frameAR, containerAR, 'cover') : p,
+    [frameAR, containerAR],
+  );
+
   // 2026-06-11 — DTL ball-trace. DOWN-THE-LINE ONLY (no flight to see face-on or in a
   // putt). The real departure point (from ballDeparture, detected off the acoustic
   // anchor) → the initial direction line measured against the ball→target aim line.
   const ballTrace = useMemo(() => {
     if (angle !== 'down_the_line' || isPutt) return null;
     if (!ballDeparture?.departurePoint || !ballArea) return null;
-    return computeTraceDirection(ballArea, ballDeparture.departurePoint, targetPoint);
-  }, [angle, isPutt, ballDeparture, ballArea, targetPoint]);
+    return computeTraceDirection(ballArea, cvToContainer(ballDeparture.departurePoint), targetPoint);
+  }, [angle, isPutt, ballDeparture, ballArea, targetPoint, cvToContainer]);
   // 2026-06-15 (Tim — shot-shape drills) — when this is a shot-shape drill, read
   // the actual LAUNCH (origin → the one departure point) and compare it to the
   // intended shape. Honest: launch height + direction only; roll is never claimed.
   const shotShapeDef = useMemo(() => getShotShape(drillShotType), [drillShotType]);
   const shotShapeVerdict = useMemo(() => {
     if (!shotShapeDef || !ballArea) return null;
-    const actual = ballDeparture?.departurePoint ? readActualLaunch(ballArea, ballDeparture.departurePoint) : null;
+    const actual = ballDeparture?.departurePoint ? readActualLaunch(ballArea, cvToContainer(ballDeparture.departurePoint)) : null;
     return compareShotShape(shotShapeDef, actual);
-  }, [shotShapeDef, ballArea, ballDeparture]);
+  }, [shotShapeDef, ballArea, ballDeparture, cvToContainer]);
   // Green→red by how far off the aim line it started, dimmed by a weak strike (peakDb
   // vs the session's strongest). Honest: divergence + real strike energy, no faked curve.
   const ballTraceColor = useMemo(() => {
@@ -1279,6 +1301,7 @@ export default function SmartMotion() {
         const pts = r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y })) : null;
         ballPathCacheRef.current[selectedSwing] = pts;
         setBallPathPoints(pts);
+        if (r?.frameW && r?.frameH) setBallPathFrameAR(r.frameW / r.frameH);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -1291,8 +1314,10 @@ export default function SmartMotion() {
   const shotTrace = useMemo<ShotTraceBuild | null>(() => {
     if (angle !== 'down_the_line' || isPutt) return null;
     if (!ballPathPoints || ballPathPoints.length < 1 || !ballArea) return null;
-    return buildShotTrace(ballPathPoints, ballArea, targetPoint);
-  }, [angle, isPutt, ballPathPoints, ballArea, targetPoint]);
+    // Map the frame-normalized measured points into the container space the anchors +
+    // overlay draw in, so the polyline sits on the ball and the divergence is honest.
+    return buildShotTrace(ballPathPoints.map(cvToContainer), ballArea, targetPoint);
+  }, [angle, isPutt, ballPathPoints, ballArea, targetPoint, cvToContainer]);
   // Colour the measured/projected trace by how far off the aim line it launched
   // (reuses traceColor — green on line → red way off), dimmed by a weak strike.
   const shotTraceColor = useMemo(() => {

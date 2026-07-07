@@ -49,6 +49,11 @@ export interface BallPathResult {
   /** How many frames we sampled (detected + missed). Lets the caller reason
    *  about coverage ("seen in 4 of 6"). */
   framesSampled: number;
+  /** 2026-07-07 — SOURCE frame pixel dims. points[] are normalized against THESE, so
+   *  the overlay needs the frame aspect to map them into the container's cover/contain
+   *  space (services/swing/overlayCoords.ts). Null when nothing was sampled. */
+  frameW?: number | null;
+  frameH?: number | null;
 }
 
 interface Frame { uri: string; width: number; height: number }
@@ -160,7 +165,9 @@ export async function detectBallPath(args: {
     // duplicate positions (the model occasionally repeats a static read).
     const deduped = points.filter((p, i) =>
       i === 0 || Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) > 0.004);
-    return { points: deduped, framesSampled: usable.length };
+    const frameW = usable[0]?.box.W ?? null;
+    const frameH = usable[0]?.box.H ?? null;
+    return { points: deduped, framesSampled: usable.length, frameW, frameH };
   } catch {
     return null;
   } finally {
