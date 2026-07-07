@@ -752,7 +752,11 @@ export const useVoiceCaddie = ({
 
   // ── SEND TO BRAIN ─────────────────────────
 
-  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null }> => {
+  // 2026-07-06 (voice-parity F3) — `fallback` marks a canned degrade line (the
+  // server returns a graceful HTTP 200 with an `error`/`errorType` when the brain
+  // is down, or we hit the local dead-end). The caller still SPEAKS it, but must
+  // NOT log it as a real conversational turn or award engagement points for it.
+  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null; fallback: boolean }> => {
     // 2026-06-29 (fix A) — read the LIVE host at call-time. The hook-level
     // apiUrl (~line 671) is captured per render, so a mid-session dual-host
     // failover (ensureBackendReachable → activeBase switch) never reached these
@@ -778,7 +782,7 @@ export const useVoiceCaddie = ({
       const help = sh.detectHelpRequest(message);
       if (help) {
         const h = sh.getScreenHelp(help.key);
-        if (h) return { text: h.spoken, audioBase64: null, toolAction: null };
+        if (h) return { text: h.spoken, audioBase64: null, toolAction: null, fallback: false };
       }
     } catch { /* non-fatal */ }
     try {
@@ -793,7 +797,7 @@ export const useVoiceCaddie = ({
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
       const handled = await ps.tryPlaySong(message);
-      if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null };
+      if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null, fallback: false };
     } catch { /* non-fatal — fall through to the brain */ }
     // 2026-06-13 (Tim) — plain-speak: if the user asked for it simple (or signals they're
     // new), reshape so the brain answers short, jargon-free, and conversational.
@@ -1121,21 +1125,30 @@ export const useVoiceCaddie = ({
         throw new Error(`brain_http_${res.status}`);
       }
       recordVoiceEndpointSuccess('kevin');
-      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
+      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; error?: string; errorType?: string };
 
-      // Points — every successful caddie response is a real interaction
-      // (3 pts per Tim's spec). Failed / network-error returns above
-      // don't qualify, so we only emit on the success path here. Dynamic
-      // require avoids any risk of an import cycle through pointsStore.
-      try {
-        const pointsMod = require('../store/pointsStore');
-        pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
-      } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
+      // 2026-07-06 (voice-parity F3) — the brain endpoint returns a graceful HTTP
+      // 200 with an `error`/`errorType` when the real brain is down (canned "having
+      // trouble connecting" / "servers are busy"). res.ok is true, so the client
+      // was treating it as a genuine answer: it awarded points AND logged it as a
+      // real turn. Detect the flag and mark it a fallback — still spoken, never
+      // scored/logged.
+      const isFallback = Boolean(data.error || data.errorType);
+
+      // Points — every REAL caddie response is a 3-pt interaction (Tim's spec).
+      // A fallback canned line is not an interaction, so skip it.
+      if (!isFallback) {
+        try {
+          const pointsMod = require('../store/pointsStore');
+          pointsMod.usePointsStore.getState().addPoints(3, 'caddie_interaction');
+        } catch (e) { console.log('[points] caddie-interaction emit failed:', e); }
+      }
 
       return {
         text:        data.text       ?? 'Got nothing back from the brain. Try again.',
         audioBase64: data.audioBase64 ?? null,
         toolAction:  data.toolAction  ?? null,
+        fallback:    isFallback,
       };
 
     } catch (err) {
@@ -1170,11 +1183,14 @@ export const useVoiceCaddie = ({
         }).finally(() => clearTimeout(rt));
         if (retryRes.ok) {
           recordVoiceEndpointSuccess('kevin');
-          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null };
+          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; error?: string; errorType?: string };
+          // 2026-07-06 (voice-parity F3) — same graceful-200 masking applies on the
+          // minimal retry; don't log/score a canned degrade line.
           return {
             text: d.text ?? 'Ready when you are.',
             audioBase64: d.audioBase64 ?? null,
             toolAction: d.toolAction ?? null,
+            fallback: Boolean(d.error || d.errorType),
           };
         }
       } catch (retryErr) {
@@ -1208,7 +1224,9 @@ export const useVoiceCaddie = ({
             language: langSafe,
             transcriptHead: message.slice(0, 60),
           });
-          return { text: local.text, audioBase64: null, toolAction: null };
+          // Local responder IS a real answer (round state / on-device KB), so it
+          // logs + scores normally — not a fallback.
+          return { text: local.text, audioBase64: null, toolAction: null, fallback: false };
         }
         logVoiceSilentFail('local_responder_miss', {
           transcriptHead: message.slice(0, 60),
@@ -1219,7 +1237,7 @@ export const useVoiceCaddie = ({
       }
       // Reached only if the healthy endpoint, the minimal retry, AND the local
       // responder all came up empty — genuinely rare. Keep it warm, not alarmy.
-      return { text: 'Give me one sec and ask me again.', audioBase64: null, toolAction: null };
+      return { text: 'Give me one sec and ask me again.', audioBase64: null, toolAction: null, fallback: true };
     }
   };
 
@@ -1345,7 +1363,8 @@ export const useVoiceCaddie = ({
         // for the rationale (audio-session race when destination claims mic
         // or camera on mount).
         onResponseReceived(checked.text);
-        recordKevinTurn(checked.text);
+        // 2026-07-06 (voice-parity F3) — skip logging a fallback degrade line.
+        if (!checked.fallback) recordKevinTurn(checked.text);
         wrappedOnVoiceStateChange('speaking');
         await stopSpeaking();
         if (checked.audioBase64 && voiceEnabled) {
@@ -2032,7 +2051,10 @@ export const useVoiceCaddie = ({
       onResponseReceived(kevinResponse.text);
       // Phase AR — record Kevin's reply so the next user follow-up has it
       // available as conversational antecedent.
-      recordKevinTurn(kevinResponse.text);
+      // 2026-07-06 (voice-parity F3) — but NOT when it's a fallback degrade line:
+      // logging a canned "having trouble connecting" as a real turn poisons the
+      // conversational antecedent (the next turn thinks the caddie "said" that).
+      if (!kevinResponse.fallback) recordKevinTurn(kevinResponse.text);
       wrappedOnVoiceStateChange('speaking');
       // Defensive: clear any lingering audio (e.g. an interrupted prior reply)
       // before the answer. stopSpeaking() bumps the speak-queue generation, so
