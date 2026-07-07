@@ -263,14 +263,31 @@ export function classifyByPrimaryFault(
   const display = displayForPrimaryFault(topFault);
 
   const agreeing = top.count >= 2 || swingAnalyses.length === 1;
-  const confidence: PrimaryIssue['confidence'] = agreeing ? best.confidence : 'low';
+  const rawConfidence: PrimaryIssue['confidence'] = agreeing ? best.confidence : 'low';
+  // 2026-07-06 (SmartMotion audit) — a LONE swing must not headline 'high'. The
+  // conservative detected_issue biases to 'none', so this primary_fault rollup can
+  // fire off a single swing whose own detector declined to call anything; forcing
+  // agreeing=true for length===1 then surfaced the model's own 'high'. Cap a
+  // single-swing read at 'medium' so one swing never reads as a confident verdict.
+  const confidence: PrimaryIssue['confidence'] =
+    swingAnalyses.length === 1 && rawConfidence === 'high' ? 'medium' : rawConfidence;
   console.log('[classifier] primary_fault rollup: ' + topFault + ' count=' + top.count + '/' + swingAnalyses.length + ' conf=' + confidence);
 
   return {
     issue_id: topFault,
     name: display.name,
     category: display.category,
-    severity: top.count >= 2 ? 'moderate' : 'minor',
+    // 2026-07-06 (SmartMotion audit) — carry the REAL max severity across the
+    // matching swings, not a count heuristic. The old `count>=2 ? moderate : minor`
+    // could NEVER reach 'significant', so a genuinely severe fault never lit the
+    // skeleton region red (faultSevere = severity === 'significant').
+    severity: (() => {
+      const mx = matches.reduce(
+        (m, s) => (SEVERITY_WEIGHT[s.analysis.severity] > SEVERITY_WEIGHT[m] ? s.analysis.severity : m),
+        'none' as SwingAnalysis['severity'],
+      );
+      return mx === 'none' ? 'minor' : mx;
+    })(),
     occurrence_count: top.count,
     visual_reference_path: null,
     mechanical_breakdown: (best.observation ?? '').trim() || (best.cause ?? '').trim() || display.name,
