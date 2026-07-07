@@ -1951,10 +1951,29 @@ export const useVoiceCaddie = ({
         // making the greeting clips dead code AND paying the full
         // brain round-trip on every "hey kevin". Including it here
         // makes the local handler reply fire + the greeting clip play.
+        // 2026-07-06 (Tim — "less predictive, more explicit; don't open tools when
+        // I'm just narrating") — a DISRUPTIVE tool-open (record, open a screen,
+        // navigate, start a drill) fired from the FAST classifier bypasses the
+        // brain's confirm-before-open rule entirely, so a medium-confidence misread
+        // of NARRATIVE ("I want to work on my putting", "irons today") would yank a
+        // tool open uninvited. Require HIGH confidence to fire those from the
+        // classifier; anything less falls through to the brain, which converses +
+        // offers before opening (and captures the narrative to the CNS). Data
+        // capture (log_shot/score/emotional_state) and greetings are NOT gated —
+        // they build the database and don't disrupt.
+        const DISRUPTIVE_OPEN_ACTIONS = new Set([
+          'record_swing', 'open_smartvision', 'open_smartfinder', 'open_swinglab',
+          'navigate', 'configure_drill', 'set_angle', 'close_swinglab',
+        ]);
+        const actionType = result.tool_action?.type;
+        const isDisruptiveOpen = typeof actionType === 'string' && DISRUPTIVE_OPEN_ACTIONS.has(actionType);
+        const openGatePassed = !isDisruptiveOpen || intent.confidence === 'high';
+
         const isCommandHit =
           intent.intent_type !== 'unknown' &&
           intent.intent_type !== 'conversational' &&
           intent.confidence !== 'low' &&
+          openGatePassed &&
           (result.success || result.follow_up_needed);
 
         if (isCommandHit) {

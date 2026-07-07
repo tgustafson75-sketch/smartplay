@@ -24,6 +24,7 @@ import { devLog } from '../services/devLog';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
 // mic and the earbud/badge path keep the same conversation + reset together.
 import { getPipecatHistory, setPipecatHistory, clearPipecatHistory } from '../services/voice/pipecatHistory';
+import { useConversationLog } from '../store/conversationLogStore';
 import type { ToolAction } from '../app/api/kevin+api';
 
 // Simplified history entry — persisted in a ref, sent to /turn each call
@@ -230,6 +231,14 @@ export function usePipecatVoice({
       return;
     }
     turnInFlightRef.current = true;
+
+    // 2026-07-06 (Tim — "less predictive, more narrative to build a database") —
+    // capture the user's spoken turn to the conversation log NOW, before any tool
+    // or reply. Previously only the follow-up-listen loop wrote logUser, so a
+    // primary narrated turn (mental state, sleep, "my game's off") never reached
+    // the round-end CNS distill. This is what builds the database from narrative
+    // even when NO tool fires. Best-effort; never blocks the turn.
+    try { if (transcript.trim()) useConversationLog.getState().logUser(transcript.trim(), Date.now()); } catch { /* CNS capture is best-effort */ }
 
     const apiBase = getApiBaseUrl().replace(/\/+$/, '');
     const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
