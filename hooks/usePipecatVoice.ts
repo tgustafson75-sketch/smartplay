@@ -68,6 +68,12 @@ export function usePipecatVoice({
   const wsRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const stateRef = useRef<PipecatSessionState>('idle');
+  // 2026-07-06 (voice-parity F2) — one brain turn at a time. A mic tap while the
+  // caddie is still 'thinking' releases isProcessingRef in the consumer BEFORE
+  // this await resolves, so a second processTurn could start and race the ONE
+  // shared pipecat history (last-writer-wins), double-award points, and log two
+  // turns. This ref makes processTurn re-entrancy-safe at the true chokepoint.
+  const turnInFlightRef = useRef(false);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setSessionState = useCallback((s: PipecatSessionState) => {
@@ -217,6 +223,14 @@ export function usePipecatVoice({
    * No Railway or Python server needed for Phase 2.
    */
   const processTurn = useCallback(async (transcript: string): Promise<void> => {
+    // 2026-07-06 (voice-parity F2) — block a re-entrant turn. If one is already in
+    // flight, drop this call rather than start a second that races history/points.
+    if (turnInFlightRef.current) {
+      devLog('[pipecat] turn already in flight — ignoring re-entrant call');
+      return;
+    }
+    turnInFlightRef.current = true;
+
     const apiBase = getApiBaseUrl().replace(/\/+$/, '');
     const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
 
@@ -397,6 +411,9 @@ export function usePipecatVoice({
         }
       }
       onVoiceStateChange?.('idle');
+    } finally {
+      // 2026-07-06 (voice-parity F2) — always release so the NEXT tap/turn works.
+      turnInFlightRef.current = false;
     }
   }, [buildContext, onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
 
