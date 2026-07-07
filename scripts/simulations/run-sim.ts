@@ -2914,6 +2914,37 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
   })(),
   'a SmartPump golf-workout export imports (deduped, persisted, backed up) and drives a third dashboard rail correlating training volume vs. scoring — honest, quiet until enough data');
 
+// 2026-07-07 (Tim — chunk honesty PROPAGATED) — the deep SwingLab audit found the badge
+// fix reached only ONE consumer; every other swing-judge still read motion-only faults.
+// This locks the contact signal into ALL of them: saved report, per-swing row, drill
+// verdict, CNS learning, spoken narration.
+check('Chunk honesty propagates to every swing-judge (not just the live badge)',
+  (() => {
+    const drill = read('services/drillVerdict.ts');
+    return (
+      // Shared contact helper reused everywhere (single source of truth).
+      /function deriveContact\(/.test(smSrc) &&
+      /function contactIssue\(/.test(smSrc) &&
+      // Saved report: a contact mishit / no-launch OVERRIDES the motion classification.
+      /const primaryIssue: PrimaryIssue = contactIssue\(contact\)/.test(smSrc) &&
+      // CNS learns the evidence-gated / contact fault, NOT the 'none'-biased detected_issue.
+      /recordSwingFault\(\{ fault: learnedFault/.test(smSrc) &&
+      /contactMishitFaultId\(contact\.reportedMishit\)/.test(smSrc) &&
+      // Multi-swing report re-persists over the COMPLETE cache (was swing-0 only).
+      /F2\b/.test(smSrc) &&
+      // Spoken narration + summary carry per-swing contact so they match the badge.
+      /deriveVerdict\(a, false, deriveContact\(a\)\)/.test(smSrc) &&
+      // Drill Check never grades a mishit 'got_it'.
+      /contactMishit\?: 'fat' \| 'thin' \| 'topped' \| null/.test(drill) &&
+      /can't credit the \$\{drill\} yet/.test(drill) &&
+      // Per-swing library row labels a fat strike instead of "no clear issue".
+      /contactLabel/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // Metric honesty: a handicap-table lookup shows "—", not a fake per-swing number.
+      /isSwingDerived/.test(smSrc)
+    );
+  })(),
+  'the contact signal (feel/ball-departure/contact_read) reaches the saved report, per-swing row, drill verdict, CNS, and narration — a chunk is never called clean on any surface, and lookup-only metrics render "—"');
+
 check('Verdict no longer claims ANALYZING forever',
   /function deriveVerdict\(/.test(smSrc) &&
     /a: SwingAnalysis \| null,\s*\n\s*analyzing: boolean,/.test(smSrc) &&
@@ -4505,7 +4536,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('SmartMotion: DTL readout shows the carry estimate + cycling badge + icon set',
     /estimateCarryYards\(club, effortRaw, profile\.handicap\)/.test(smSrc2) &&
       // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
-      /Stat label="CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      // 2026-07-07 (audit M2) — relabeled "PLAN CARRY" so a projection isn't shown as an outcome.
+      /Stat label="PLAN CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
       /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
       /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)

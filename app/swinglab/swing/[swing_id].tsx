@@ -1882,13 +1882,23 @@ export default function SwingDetail() {
                 // old behavior.
                 const pf = a?.primary_fault;
                 const pfDiagnostic = !!pf && pf !== 'no_dominant_fault' && pf !== 'inconclusive';
-                const issueLabel = pfDiagnostic
-                  ? pf.replace(/_/g, ' ')
-                  : a?.detected_issue && a.detected_issue !== 'none'
-                    ? a.detected_issue.replace(/_/g, ' ')
-                    : a
-                      ? (pf === 'inconclusive' ? 'couldn\'t read this one' : 'no clear issue')
-                      : '—';
+                // 2026-07-07 (Tim — chunk honesty) — a contact mishit the MOTION read
+                // can't see wins the label, so a fat strike never lists as "no clear
+                // issue". contact_read is 'unknown' by default (no false positives).
+                const cr = a?.contact_read;
+                const contactLabel = cr === 'fat' ? 'heavy / fat contact'
+                  : cr === 'thin' ? 'thin contact'
+                  : cr === 'topped' ? 'topped'
+                  : null;
+                const issueLabel = contactLabel
+                  ? contactLabel
+                  : pfDiagnostic
+                    ? pf.replace(/_/g, ' ')
+                    : a?.detected_issue && a.detected_issue !== 'none'
+                      ? a.detected_issue.replace(/_/g, ' ')
+                      : a
+                        ? (pf === 'inconclusive' ? 'couldn\'t read this one' : 'no clear issue')
+                        : '—';
                 const conf = a?.confidence ?? null;
                 const isLeftPick = s.id === leftCompareShotId;
                 const goodRepIcon: keyof typeof Ionicons.glyphMap | null =

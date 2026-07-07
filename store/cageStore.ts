@@ -73,6 +73,10 @@ export interface CageShot {
     // still renders fully.
     fault_frame_index?: number;
     visual_reference_path?: string | null;
+    // 2026-07-07 (Tim — chunk honesty) — the model's honest strike read ('unknown'
+    // by default). Persisted so the per-swing row labels a fat/thin strike instead of
+    // "no clear issue". Absent on sessions analyzed before this ship.
+    contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
   } | null;
 
   // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
@@ -557,6 +561,9 @@ interface CageState {
       // continue to call setShotAnalysis without them).
       fault_frame_index?: number;
       visual_reference_path?: string | null;
+      // 2026-07-07 (Tim — chunk honesty) — the model's honest strike read, persisted
+      // so the per-swing row can label a fat/thin strike.
+      contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
     },
   ) => void;
   /** Phase R — patch Phase K analysis onto an existing session, used both

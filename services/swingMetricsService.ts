@@ -91,6 +91,18 @@ export function isTruthGrade(source: MetricSource): boolean {
   return TRUTH_GRADE_SOURCES.includes(source);
 }
 
+// 2026-07-07 (audit M1) — a metric that actually reflects THIS swing (a sensor/pose/
+// acoustic read) vs. a handicap-table LOOKUP ('profile'/'placeholder') that is identical
+// for every swing of that club and carries ZERO signal from the rep just recorded. The
+// per-swing tiles show "—" for a lookup rather than print a constant as if it were a
+// read of your swing (which read like a fabricated number with only a tiny "~/est" hedge).
+const SWING_DERIVED_SOURCES: readonly MetricSource[] = [
+  'pose', 'acoustic', 'watch', 'calibrated', 'measured', 'pose_estimated',
+];
+export function isSwingDerived(source: MetricSource): boolean {
+  return SWING_DERIVED_SOURCES.includes(source);
+}
+
 export interface SwingMetric {
   /** Numeric value when present; null when unknown OR when inputs
    *  were degenerate enough that any number would be a lie (see the

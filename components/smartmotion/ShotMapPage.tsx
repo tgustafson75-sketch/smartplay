@@ -189,7 +189,10 @@ function CourseMap({
 
       {has ? (
         <View style={styles.readRow}>
-          <Stat label="CARRY" value={`~${estCarry}y`} colors={colors} est />
+          {/* 2026-07-07 (audit M2) — this is a PLANNED carry (full-club distance ×
+              your target effort), NOT a measured outcome. Label it so a chunk that
+              flew 30y isn't shown here as "~129y CARRY" like a real result. */}
+          <Stat label="PLAN CARRY" value={`~${estCarry}y`} colors={colors} est />
           <Stat label="DIRECTION" value={dirLabel ?? '—'} colors={colors} est={!!dirLabel} />
           <Stat label="EFFORT" value={effortPct != null ? `${effortPct}%` : '—'} colors={colors} />
         </View>

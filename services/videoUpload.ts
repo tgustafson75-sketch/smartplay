@@ -779,6 +779,9 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           observation: r.analysis.observation,
           fault_frame_index: r.analysis.fault_frame_index ?? -1,
           visual_reference_path: r.fault_frame_uri ?? null,
+          // 2026-07-07 (Tim — chunk honesty) — persist the model's strike read so the
+          // per-swing library row labels a fat/thin strike, not "no clear issue".
+          contact_read: r.analysis.contact_read ?? 'unknown',
         });
         // 2026-07-01 (audit M3) — collect the fault-frame candidate instead of
         // writing it here. Promotion happens once, after all swings finish, from

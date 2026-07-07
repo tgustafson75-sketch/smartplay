@@ -71,6 +71,7 @@ import { evaluateSwingValidity } from '../../services/swingValidity';
 import {
   synthesizeSwingMetrics,
   isTruthGrade,
+  isSwingDerived,
   type SwingMetricSet,
 } from '../../services/swingMetricsService';
 import {
@@ -335,12 +336,99 @@ function isCleanVerdict(v: { tone: SmTone; text: string }): boolean {
   return v.text === 'SOLID SWING' || v.text === 'MOTION LOOKS CLEAN';
 }
 
+/** Scan a free-text feel note for a self-reported mishit — the human's read wins. */
+function mishitFromFeel(feelText: string): SmContact['reportedMishit'] {
+  const f = (feelText ?? '').toLowerCase();
+  return /\b(fat|chunk|chunked|chunky|heavy|duff|duffed|dug|dig)\b/.test(f) ? 'fat'
+    : /\b(thin|thinned|skull|skulled|blade|bladed|skinny)\b/.test(f) ? 'thin'
+    : /\b(top|topped|topping|worm|worm.?burner)\b/.test(f) ? 'topped'
+    : null;
+}
+
+// 2026-07-07 (Tim — chunk honesty, propagate everywhere) — build the SmContact from
+// every signal the motion read can't see: the camera ball-departure check, the
+// player's feel note, and the model's own contact_read. Used by EVERY swing-judging
+// surface (live badge, spoken narration, saved report, drill verdict) so a chunk is
+// never called clean on one screen and a fault on another.
+function deriveContact(
+  a: SwingAnalysis | null,
+  extras?: { ballDeparture?: BallDepartureResult | null; feelText?: string },
+): SmContact {
+  const bd = extras?.ballDeparture;
+  const ballLaunched: boolean | null = bd == null
+    ? null
+    : bd.departed
+      ? true
+      : bd.ball_present_before
+        ? false
+        : null;
+  const cr = a?.contact_read;
+  const fromModel: SmContact['reportedMishit'] = cr === 'fat' || cr === 'thin' || cr === 'topped' ? cr : null;
+  return { ballLaunched, reportedMishit: mishitFromFeel(extras?.feelText ?? '') ?? fromModel };
+}
+
+/** A human-readable contact-fault name for a reported mishit. */
+function contactMishitName(m: NonNullable<SmContact['reportedMishit']>): string {
+  return m === 'thin' ? 'Thin Contact' : m === 'topped' ? 'Topped' : 'Heavy / Fat Contact';
+}
+
+/** CNS tendency id for a contact mishit (so the brain learns "tends to chunk"). */
+function contactMishitFaultId(m: NonNullable<SmContact['reportedMishit']>): string {
+  return m === 'thin' ? 'thin_contact' : m === 'topped' ? 'topped_contact' : 'heavy_contact';
+}
+
+// 2026-07-07 (Tim — chunk honesty everywhere) — build the SAVED report's PrimaryIssue
+// for a contact mishit, so the library card + Drill Check never call a chunk clean.
+// A fat/thin/topped strike is a real, scoring-relevant miss → significant.
+function contactMishitIssue(m: NonNullable<SmContact['reportedMishit']>): PrimaryIssue {
+  return {
+    issue_id: contactMishitFaultId(m),
+    name: contactMishitName(m),
+    category: 'other',
+    severity: 'significant',
+    occurrence_count: 1,
+    visual_reference_path: null,
+    mechanical_breakdown: m === 'fat'
+      ? 'Heavy contact — the club caught the ground before the ball. That saps distance and consistency even when the body motion looks fine.'
+      : m === 'thin'
+        ? 'Thin contact — caught the ball above center. The motion can look clean; low-point control is the thing to groove.'
+        : 'Topped — the club caught the top of the ball, usually a low-point / posture-through-impact issue.',
+    feel_cue: 'Ball-first contact: feel the low point just AHEAD of the ball. Put a towel a few inches behind the ball you have to miss — the classic groove drill.',
+    detected_in_shots: [],
+    confidence: 'medium',
+  };
+}
+
+// The SAVED report's issue for a contact problem: a named mishit, OR a ball that never
+// left its spot (a duff/whiff — definitely not clean, even if we can't name the miss).
+// null when contact is fine/unknown → the caller keeps the motion classification.
+function contactIssue(contact: SmContact): PrimaryIssue | null {
+  if (contact.reportedMishit) return contactMishitIssue(contact.reportedMishit);
+  if (contact.ballLaunched === false) {
+    return {
+      issue_id: 'no_launch',
+      name: 'Ball Didn’t Launch',
+      category: 'other',
+      severity: 'significant',
+      occurrence_count: 1,
+      visual_reference_path: null,
+      mechanical_breakdown: 'The ball never left its spot — a duff, heavy hit, or whiff. The body motion can look fine; the strike is what to groove.',
+      feel_cue: 'Make ball-first contact — feel the low point just ahead of the ball. Re-record and I\'ll read the next one.',
+      detected_in_shots: [],
+      confidence: 'medium',
+    };
+  }
+  return null;
+}
+
 // 2026-06-15 (Tim — pipelined per-swing narration) — a short spoken headline for
 // ONE swing in a multi-swing read. Reuses deriveVerdict's honest logic (no read /
 // no swing / clean / the named fault). One breath per swing so a 3-swing reel
 // reads "Swing 1, over the top. Swing 2, early extension. Swing 3, clean."
+// 2026-07-07 — carries the swing's OWN contact read so the spoken line matches the
+// badge (was contact-blind → could say "motion looked clean" on a model-flagged fat).
 function swingNarrationLine(n: number, a: SwingAnalysis): string {
-  const v = deriveVerdict(a, false);
+  const v = deriveVerdict(a, false, deriveContact(a));
   if (v.text === 'NO SWING DETECTED' || v.text.startsWith('NO READ')) return `Swing ${n}, couldn't get a clean read.`;
   if (v.text === 'SOLID SWING') return `Swing ${n}, solid.`;
   if (v.text === 'MOTION LOOKS CLEAN') return `Swing ${n}, motion looked clean.`;
@@ -912,6 +1000,17 @@ export default function SmartMotion() {
   const drillVerdict = useMemo(() => {
     if (!isDrill || !drillId || cageSession?.analysis_status !== 'ok') return null;
     const pi = cageSession?.primary_issue ?? null;
+    // 2026-07-07 (Tim — chunk honesty in the MOAT loop) — the saved primary_issue now
+    // encodes a contact mishit (H1), and ballDeparture tells us if the ball ever left.
+    // Feed both so a chunked drill rep is NEVER graded "got it".
+    const savedMishit: 'fat' | 'thin' | 'topped' | null =
+      pi?.issue_id === 'heavy_contact' ? 'fat'
+      : pi?.issue_id === 'thin_contact' ? 'thin'
+      : pi?.issue_id === 'topped_contact' ? 'topped'
+      : null;
+    const ballLaunched: boolean | null = ballDeparture == null
+      ? null
+      : ballDeparture.departed ? true : ballDeparture.ball_present_before ? false : null;
     return deriveDrillVerdict({
       drillId,
       drillName: typeof drillName === 'string' ? drillName : null,
@@ -919,8 +1018,10 @@ export default function SmartMotion() {
       issueName: pi?.name ?? null,
       severity: pi?.severity ?? null,
       confidence: pi?.confidence ?? null,
+      contactMishit: savedMishit,
+      ballLaunched: pi?.issue_id === 'no_launch' ? false : ballLaunched,
     });
-  }, [isDrill, drillId, drillName, cageSession?.analysis_status, cageSession?.primary_issue]);
+  }, [isDrill, drillId, drillName, cageSession?.analysis_status, cageSession?.primary_issue, ballDeparture]);
   const drillVerdictColor = drillVerdict
     ? (drillVerdict.grade === 'got_it' ? '#88F700' : drillVerdict.grade === 'closer' ? '#F0C030' : '#FF6B2C')
     : '#88F700';
@@ -1207,27 +1308,10 @@ export default function SmartMotion() {
   // can't see: the camera strike check (did the ball actually leave?) and the
   // player's own feel note ("I chunked it"). These override a "no fault" motion
   // read so a fat/thin/topped strike is never shown as a good swing.
-  const swingContact = useMemo<SmContact>(() => {
-    const ballLaunched: boolean | null = ballDeparture == null
-      ? null
-      : ballDeparture.departed
-        ? true
-        : ballDeparture.ball_present_before
-          ? false // sound/swing but the ball didn't leave its spot
-          : null; // couldn't see the ball to confirm either way
-    // Scan the player's feel note for a self-reported mishit — the human's read wins.
-    const f = feelText.toLowerCase();
-    const fromFeel: SmContact['reportedMishit'] =
-      /\b(fat|chunk|chunked|chunky|heavy|duff|duffed|dug|dig)\b/.test(f) ? 'fat'
-      : /\b(thin|thinned|skull|skulled|blade|bladed|skinny)\b/.test(f) ? 'thin'
-      : /\b(top|topped|topping|worm|worm.?burner)\b/.test(f) ? 'topped'
-      : null;
-    // The model's own visible-evidence strike read (honest 'unknown' by default).
-    const cr = analysis?.contact_read;
-    const fromModel: SmContact['reportedMishit'] =
-      cr === 'fat' || cr === 'thin' || cr === 'topped' ? cr : null;
-    return { ballLaunched, reportedMishit: fromFeel ?? fromModel };
-  }, [ballDeparture, feelText, analysis]);
+  const swingContact = useMemo<SmContact>(
+    () => deriveContact(analysis, { ballDeparture, feelText }),
+    [ballDeparture, feelText, analysis],
+  );
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
   // Putt mode has its own verdict (the swing `analysis` stays null for putts,
   // so deriveVerdict would wrongly say ANALYZING/NO READ).
@@ -1532,46 +1616,58 @@ export default function SmartMotion() {
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
-          // Caddie CNS Phase 1 — feed the detected fault into the learning
-          // tendencies (rolling dominant miss). Additive + best-effort.
+          const a = result.analysis;
+          // 2026-07-07 (Tim — chunk honesty) — the contact this swing's MOTION read
+          // can't see (model contact_read + the ball-departure check). Overrides both
+          // the saved report and what the CNS learns, exactly like the live badge.
+          const contact = deriveContact(a, { ballDeparture });
+          // Route the SAVED report + the CNS write through the REAL session classifier,
+          // not the conservative `detected_issue` (biased to 'none'). Computed ONCE.
+          let rolled: PrimaryIssue | null = null;
           try {
-            const fault = result.analysis.detected_issue ?? null;
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
+            const resolvedCns = Object.entries(analysisCacheRef.current)
+              .filter(([, an]) => !!an)
+              .map(([idx, an]) => ({ swing_id: `smresolve-swing-${idx}`, analysis: an as typeof a }));
+            rolled = resolvedCns.length ? classifySession(resolvedCns) : null;
+          } catch { /* classifier is best-effort */ }
+          // Caddie CNS Phase 1 — 2026-07-07 (H4): feed the EVIDENCE-GATED fault (rolled /
+          // primary_fault), NOT detected_issue (biases to 'none' → the brain never learned
+          // the real miss), and record a contact mishit as its OWN tendency ("tends to chunk").
+          try {
+            const learnedFault = contact.reportedMishit
+              ? contactMishitFaultId(contact.reportedMishit)
+              : rolled && rolled.issue_id !== 'smartmotion_observation'
+                ? rolled.issue_id
+                : a.primary_fault && a.primary_fault !== 'no_dominant_fault' && a.primary_fault !== 'inconclusive'
+                  ? a.primary_fault
+                  : null;
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
-            mem.useCaddieMemoryStore.getState().recordSwingFault({ fault, nowMs: Date.now() });
+            mem.useCaddieMemoryStore.getState().recordSwingFault({ fault: learnedFault, nowMs: Date.now() });
           } catch { /* non-fatal */ }
           const sessionId = ingestedSessionIdRef.current;
           if (sessionId) {
             try {
-              const a = result.analysis;
-              // 2026-07-06 (range audit RANK 1) — route the SAVED report through the
-              // REAL session classifier instead of a hand-rolled read off the
-              // conservative `detected_issue` (which the analyzer biases to 'none').
-              // classifySession carries the evidence-gated primary_fault + cause/fix/
-              // drill/strengths + max severity across ALL captured swings. This one
-              // seam repairs: the saved library report (was a generic "Smart Motion
-              // observation" with an empty GolfFix card), the Drill Check honesty (was
-              // fed 'smartmotion_observation' → the fault's family never matched → it
-              // always said "clean/got it" — breaking the moat), and the severity→red
-              // skeleton. Falls back to the light observation when no fault is found.
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
-              const resolved = Object.entries(analysisCacheRef.current)
-                .filter(([, an]) => !!an)
-                .map(([idx, an]) => ({ swing_id: `${sessionId}-swing-${idx}`, analysis: an as typeof a }));
-              const rolled = resolved.length ? classifySession(resolved) : null;
-              const primaryIssue: PrimaryIssue = rolled ?? {
-                issue_id: 'smartmotion_observation',
-                name: 'Smart Motion observation',
-                category: 'other',
-                severity: (a.severity ?? 'minor') as PrimaryIssue['severity'],
-                occurrence_count: 1,
-                visual_reference_path: null,
-                mechanical_breakdown: a.observation ?? 'Captured this swing.',
-                feel_cue: a.follow_up_question ?? 'Re-record from another angle for a fuller read.',
-                detected_in_shots: [],
-                confidence: (a.confidence ?? 'low') as PrimaryIssue['confidence'],
-              };
+              // 2026-07-06 (range audit RANK 1) + 2026-07-07 (H1): the SAVED report is
+              // the rolled evidence-gated classification, EXCEPT a contact mishit
+              // overrides it so the library card + the Drill Check that reads it never
+              // celebrate a chunk. `rolled` was computed once above. Falls back to a
+              // light observation when there's no fault and no mishit.
+              const primaryIssue: PrimaryIssue = contactIssue(contact)
+                ?? rolled ?? {
+                    issue_id: 'smartmotion_observation',
+                    name: 'Smart Motion observation',
+                    category: 'other',
+                    severity: (a.severity ?? 'minor') as PrimaryIssue['severity'],
+                    occurrence_count: 1,
+                    visual_reference_path: null,
+                    mechanical_breakdown: a.observation ?? 'Captured this swing.',
+                    feel_cue: a.follow_up_question ?? 'Re-record from another angle for a fuller read.',
+                    detected_in_shots: [],
+                    confidence: (a.confidence ?? 'low') as PrimaryIssue['confidence'],
+                  };
               useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
               useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
             } catch (e) {
@@ -2028,11 +2124,39 @@ export default function SmartMotion() {
         if (!a) continue;
         await speakLine(swingNarrationLine(idx + 1, a));
       }
+      // 2026-07-07 (F2) — the SAVED report was persisted after SWING 0 only. Now that
+      // the whole reel is analyzed, re-classify over the COMPLETE cache and re-persist
+      // so the library report + the Drill Check that reads it reflect the WORST swing
+      // (e.g. the chunk on swing 3), not just the first one.
+      if (!cancelled()) {
+        try {
+          const sessionId = ingestedSessionIdRef.current;
+          if (sessionId) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
+            const resolved = Object.entries(analysisCacheRef.current)
+              .filter(([, an]) => !!an)
+              .map(([idx2, an]) => ({ swing_id: `smresolve-swing-${idx2}`, analysis: an as SwingAnalysis }));
+            const rolled = resolved.length ? classifySession(resolved) : null;
+            // Session-level contact: ANY swing the model flagged as a mishit → not clean.
+            let sessionMishit: SmContact['reportedMishit'] = null;
+            for (const an of Object.values(analysisCacheRef.current)) {
+              const m = deriveContact(an ?? null).reportedMishit;
+              if (m) { sessionMishit = m; break; }
+            }
+            const primaryIssue = contactIssue({ ballLaunched: null, reportedMishit: sessionMishit }) ?? rolled;
+            if (primaryIssue) {
+              useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+              useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+            }
+          }
+        } catch { /* re-persist is best-effort */ }
+      }
       // Session complete — let Kevin offer a next drill or close.
       if (!cancelled() && st.voiceEnabled) {
         const issues = resolvedAnalyses
           .filter((a): a is SwingAnalysis => a != null)
-          .map((a) => { const v = deriveVerdict(a, false); return isCleanVerdict(v) ? null : v.text.toLowerCase(); })
+          .map((a) => { const v = deriveVerdict(a, false, deriveContact(a)); return isCleanVerdict(v) ? null : v.text.toLowerCase(); })
           .filter((t): t is string => !!t);
         const clean = resolvedAnalyses.length - issues.length;
         const summary = issues.length === 0
@@ -2234,9 +2358,20 @@ export default function SmartMotion() {
     let meteredDurationMs: number | null = null;
     try {
       if (meteringRef.current) {
-        const { samples, uri, durationMs } = await meteringRef.current.stop();
+        // 2026-07-07 (F1 — cage record could strand on "Analyzing…" forever) — the only
+        // UNBOUNDED await in the stop→analyze handoff. expo-av's stopAndUnloadAsync can
+        // hang (worse here because the audio session is flipped for TTS around recording);
+        // a hang meant the catch never fired and phase never reached 'review'. Race it
+        // against an 8s fallback — on timeout we lose only the ACOUSTIC read and degrade
+        // to whole-clip video analysis, never a permanent spinner.
+        const stopP = meteringRef.current.stop();
+        const { samples, uri, durationMs } = await Promise.race([
+          stopP,
+          new Promise<Awaited<typeof stopP>>((resolve) =>
+            setTimeout(() => resolve({ samples: [], uri: null, durationMs: 0 } as Awaited<typeof stopP>), 8000)),
+        ]);
         meteringRef.current = null;
-        meteredDurationMs = durationMs ?? null;
+        meteredDurationMs = durationMs && durationMs > 0 ? durationMs : null;
         audioUriRef.current = uri;
         const meterMode = useRoundStore.getState().isRoundActive
           ? 'course'
@@ -3607,23 +3742,28 @@ export default function SmartMotion() {
               {showSkeleton ? (
                 <>
                   <View style={styles.speedRow}>
+                    {/* 2026-07-07 (audit M1) — show a number only when it's DERIVED
+                        from this swing (pose/acoustic/sensor). A 'profile'/'placeholder'
+                        handicap-table lookup is identical for every swing and carries no
+                        signal from the rep — render "—" instead of a constant dressed up
+                        as a per-swing read. */}
                     <SpeedStat
                       label="CLUB"
-                      value={metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
+                      value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
                       unit="mph"
                       estimate={!isTruthGrade(metrics.club_speed.source)}
                       style={{ flex: 1 }}
                     />
                     <SpeedStat
                       label="BALL"
-                      value={metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
+                      value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
                       unit="mph"
                       estimate={!isTruthGrade(metrics.ball_speed.source)}
                       style={{ flex: 1 }}
                     />
                     <SpeedStat
                       label="CARRY"
-                      value={metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
+                      value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
                       unit="yds"
                       estimate={!isTruthGrade(metrics.carry_yards.source)}
                       style={{ flex: 1 }}
@@ -3804,8 +3944,8 @@ export default function SmartMotion() {
             club={club ? clubIdLabel(club) : null}
             onClubPress={() => setClubMenuOpen(true)}
             shot={isReview ? selectedSwing + 1 : null}
-            distanceYds={isReview ? metrics.carry_yards.value : null}
-            distanceEst={isReview && metrics.carry_yards.value != null}
+            distanceYds={isReview && isSwingDerived(metrics.carry_yards.source) ? metrics.carry_yards.value : null}
+            distanceEst={isReview && isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null}
             style={styles.glassCard}
           />
         </View>

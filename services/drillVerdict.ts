@@ -50,12 +50,28 @@ export function deriveDrillVerdict(input: {
   issueName?: string | null;
   severity?: 'minor' | 'moderate' | 'significant' | null;
   confidence?: 'high' | 'medium' | 'low' | null;
+  /** 2026-07-07 (Tim — chunk honesty in the MOAT loop) — a strike the MOTION read
+   *  can't see. A fat/thin/topped rep (or a ball that never launched) must NEVER grade
+   *  'got_it' — we can't credit the drill as landing off a mishit. */
+  contactMishit?: 'fat' | 'thin' | 'topped' | null;
+  ballLaunched?: boolean | null;
 }): DrillVerdict | null {
   if (!input.drillId) return null;
   const drill = input.drillName && input.drillName.trim() ? input.drillName.trim() : 'drill';
   const targets = targetsForDrill(input.drillId);
   const stillPresent = input.issueId != null && targets.includes(input.issueId);
   const faultName = input.issueName && input.issueName.trim() ? input.issueName.trim() : 'that fault';
+
+  // A mishit means the rep can't be credited as the drill "landing", even if the
+  // motion looked clean. Honest, non-green — reset and make ball-first contact.
+  const mishit = input.contactMishit ?? null;
+  if (mishit || input.ballLaunched === false) {
+    const what = mishit === 'thin' ? 'thin' : mishit === 'topped' ? 'topped' : 'heavy';
+    return {
+      grade: 'closer',
+      line: `Drill check: that rep was ${what} — I can't confirm the strike, so I can't credit the ${drill} yet. Reset and make ball-first contact.`,
+    };
+  }
 
   if (!stillPresent) {
     return {
