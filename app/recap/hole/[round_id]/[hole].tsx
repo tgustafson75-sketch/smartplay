@@ -19,16 +19,23 @@ export default function HoleShotMapScreen() {
   const round_id = params.round_id;
   const hole = parseInt(params.hole ?? '1', 10);
 
-  const live = useRoundStore.getState();
-  const isLive = live.isRoundActive && live.currentRoundId === round_id;
+  // 2026-07-07 (audit) — SUBSCRIBE to the store (was a one-time getState() snapshot),
+  // so viewing the current hole mid-round updates as new shots are logged instead of
+  // freezing to the mount-time snapshot.
+  const isRoundActive = useRoundStore(s => s.isRoundActive);
+  const currentRoundId = useRoundStore(s => s.currentRoundId);
+  const liveShots = useRoundStore(s => s.shots);
+  const activeCourseId = useRoundStore(s => s.activeCourseId);
+  const activeCourse = useRoundStore(s => s.activeCourse);
+  const roundHistory = useRoundStore(s => s.roundHistory);
+  const isLive = isRoundActive && currentRoundId === round_id;
   const record = useMemo(
-    () => live.roundHistory.find(r => r.id === round_id) ?? null,
-    [round_id, live.roundHistory],
+    () => roundHistory.find(r => r.id === round_id) ?? null,
+    [round_id, roundHistory],
   );
 
-  const courseId = isLive ? live.activeCourseId : record?.courseId ?? null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const allShots: ShotResult[] = isLive ? live.shots : record?.shots ?? [];
+  const courseId = isLive ? activeCourseId : record?.courseId ?? null;
+  const allShots: ShotResult[] = isLive ? liveShots : record?.shots ?? [];
   const playedHoles = useMemo(() => {
     const set = new Set<number>();
     for (const s of allShots) set.add(s.hole);
@@ -69,7 +76,7 @@ export default function HoleShotMapScreen() {
   // static hole image for a bundled course, so the hole view shows the hole even
   // when shot tracking dropped out that round (network errors). Prefer the
   // courseId-keyed lookup; fall back to the record's course name.
-  const courseName = isLive ? live.activeCourse : record?.courseName ?? null;
+  const courseName = isLive ? activeCourse : record?.courseName ?? null;
   const staticHoleImage = getLocalHoleImageById(courseId, hole) ?? getLocalHoleImage(courseName, hole);
 
   if (!geometryLoaded) {

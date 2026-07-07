@@ -84,6 +84,11 @@ export default function CageSummary() {
     if (!session || analysisStatus !== 'pending') return;
     let cancelled = false;
     (async () => {
+      // 2026-07-07 (audit) — no outer catch meant any throw between setAnalyzing(true)
+      // and setAnalyzing(false) stuck the spinner forever (the 'error' status was
+      // declared but never set). Wrap so a failure surfaces the error state + clears
+      // the spinner instead of a permanent "analyzing…".
+      try {
       const swingsWithClips = session.shots.filter(s => s.clipUri);
       cageLog('summary-mount', 'ok', {
         session_id: session.id,
@@ -161,6 +166,10 @@ export default function CageSummary() {
         }
       }
       setAnalysisStatus('done');
+      } catch (e) {
+        if (!cancelled) { setAnalyzing(false); setAnalysisStatus('error'); }
+        cageLog('summary-phase-k-error', 'fail', { session_id: session?.id ?? null, error: e instanceof Error ? e.message : String(e) });
+      }
     })();
     return () => { cancelled = true; };
   }, [session, analysisStatus]);
