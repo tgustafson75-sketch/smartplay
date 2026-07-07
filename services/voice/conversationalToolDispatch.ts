@@ -140,7 +140,16 @@ function dispatchOne(a: AnyAction): void {
     case 'configure_drill': {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
-      bus.emitDrillConfig({ club: a.club, shotCount: a.shot_count });
+      // 2026-07-06 (nav audit) — if SmartMotion is CLOSED there are no bus listeners,
+      // so the drill config was silently dropped. Open SmartMotion carrying the shot
+      // count + rolling (parity with the record_swing fallback above).
+      if (bus.isSmartMotionActive()) {
+        bus.emitDrillConfig({ club: a.club, shotCount: a.shot_count });
+      } else {
+        const parts = ['autoRecord=1'];
+        if (typeof a.shot_count === 'number' && a.shot_count > 0) parts.push(`drillShots=${Math.round(a.shot_count)}`);
+        router.push(`/swinglab/smartmotion?${parts.join('&')}` as never);
+      }
       break;
     }
     case 'close_swinglab': {
@@ -152,9 +161,16 @@ function dispatchOne(a: AnyAction): void {
     case 'set_angle': {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
-      if (a.angle === 'face_on') bus.emitSmartMotionCommand('angleFaceOn');
-      else if (a.angle === 'putt') bus.emitSmartMotionCommand('puttOn');
-      else bus.emitSmartMotionCommand('angleDtl');
+      // 2026-07-06 (nav audit) — same as configure_drill: a closed SmartMotion has no
+      // listeners, so "record me face on" was dropped. Open it set to that angle + rolling.
+      if (bus.isSmartMotionActive()) {
+        if (a.angle === 'face_on') bus.emitSmartMotionCommand('angleFaceOn');
+        else if (a.angle === 'putt') bus.emitSmartMotionCommand('puttOn');
+        else bus.emitSmartMotionCommand('angleDtl');
+      } else {
+        const angleParam = a.angle === 'face_on' ? 'face_on' : a.angle === 'putt' ? 'putt' : 'down_the_line';
+        router.push(`/swinglab/smartmotion?angle=${angleParam}&autoRecord=1` as never);
+      }
       break;
     }
     case 'set_golfer': {

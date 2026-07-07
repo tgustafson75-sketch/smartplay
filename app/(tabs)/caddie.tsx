@@ -1497,20 +1497,35 @@ export default function CaddieTab() {
         }
         break;
       case 'configure_drill':
-        emitDrillConfig({
-          club: (action as { type: string; club?: string }).club,
-          shotCount: (action as { type: string; shot_count?: number }).shot_count,
-        });
+        // 2026-07-06 (nav audit) — open SmartMotion (rolling) with the shot count when
+        // it's closed, instead of emitting into a bus with no listeners.
+        if (isSmartMotionActive()) {
+          emitDrillConfig({
+            club: (action as { type: string; club?: string }).club,
+            shotCount: (action as { type: string; shot_count?: number }).shot_count,
+          });
+        } else {
+          const sc = (action as { shot_count?: number }).shot_count;
+          const parts = ['autoRecord=1'];
+          if (typeof sc === 'number' && sc > 0) parts.push(`drillShots=${Math.round(sc)}`);
+          router.push(`/swinglab/smartmotion?${parts.join('&')}` as never);
+        }
         break;
       case 'close_swinglab':
         emitSmartMotionCommand('close');
         break;
       case 'set_angle': {
         // 2026-06-29 (Tim) — voice camera-angle on the SmartMotion screen.
+        // 2026-07-06 (nav audit) — open it set to that angle + rolling when closed.
         const a = (action as { angle?: string }).angle;
-        if (a === 'face_on') emitSmartMotionCommand('angleFaceOn');
-        else if (a === 'putt') emitSmartMotionCommand('puttOn');
-        else emitSmartMotionCommand('angleDtl');
+        if (isSmartMotionActive()) {
+          if (a === 'face_on') emitSmartMotionCommand('angleFaceOn');
+          else if (a === 'putt') emitSmartMotionCommand('puttOn');
+          else emitSmartMotionCommand('angleDtl');
+        } else {
+          const angleParam = a === 'face_on' ? 'face_on' : a === 'putt' ? 'putt' : 'down_the_line';
+          router.push(`/swinglab/smartmotion?angle=${angleParam}&autoRecord=1` as never);
+        }
         break;
       }
       case 'set_golfer': {
