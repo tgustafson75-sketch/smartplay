@@ -80,11 +80,11 @@ export default function DrillsIndex() {
           <Ionicons name="chevron-back" size={22} color={colors.accent} />
           <Text style={[styles.backText, { color: colors.accent }]}>SwingLab</Text>
         </Pressable>
-        <Image
-          source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-          style={styles.headerBadge}
-          resizeMode="contain"
-        />
+        {/* 2026-07-06 (Tim carry-over #1) — removed the decorative caddie-badge
+            Image that sat UPPER-RIGHT here. It was non-tappable branding that
+            reused the mic badge art, so it read as a SECOND caddie mic next to
+            the global GlobalCaddieMic (upper-left) and blocked the nav/tools.
+            One canonical mic everywhere = the global one only. */}
       </View>
 
       <ScrollView
@@ -205,7 +205,6 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', padding: 4 },
   backText: { fontSize: 17, fontWeight: '700' },
-  headerBadge: { width: 40, height: 40, borderRadius: 20 },
   scroll: {
     paddingHorizontal: 12,
     paddingTop: 12,

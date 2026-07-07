@@ -1377,9 +1377,9 @@ export default function Settings() {
               render it disabled + "Coming soon" until a build restores the bridge. */}
           <View style={[rowDivStyle, { opacity: 0.45 }]}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Earbud / BT remote tap · Coming soon</Text>
+              <Text style={labelStyle}>Earbud button as mic trigger · Coming soon</Text>
               <Text style={subStyle}>
-                Needs a native media-key listener that isn&apos;t in this build yet. Until then, tap the caddie badge to talk.
+                Your earbuds already work with the caddie — pair them for audio and use Active Listening, or tap the caddie badge, to talk hands-free. This row is only about starting the mic with the earbud&apos;s physical button/stem tap, which needs a native media-key listener that isn&apos;t in this build yet.
               </Text>
             </View>
             <Switch

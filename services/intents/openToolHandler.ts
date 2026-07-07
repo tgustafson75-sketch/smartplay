@@ -443,6 +443,14 @@ export const openToolHandler: IntentHandler = {
         angleRaw === 'down_the_line' || angleRaw === 'down-the-line' || angleRaw === 'dtl' ? 'down_the_line' :
         null;
       const autoStart = intent.parameters.auto_start === true;
+      // 2026-07-06 (Tim carry-over #3) — "open SmartMotion TO RECORD" was landing
+      // one level deep (setup preview) because the classifier only sets auto_start
+      // when an angle/subject is named, so bare "open SmartMotion to record" /
+      // "record my swing" arrived with auto_start=false and never armed the recorder.
+      // Detect record-intent straight from the utterance so the record surface rolls
+      // regardless of what the LLM classifier tagged. Deterministic backstop.
+      const recordIntent = /\brecord(ing)?\b|\bcapture\b|\btake\s+(a|my|another)\s+swing\b/i
+        .test(intent.raw_text ?? '');
       // 2026-07-02 (re-audit) — removed shot_type/subject extraction: SmartMotion
       // has no standalone shot-type tag and golfer/subject selection is still stubbed,
       // so these were captured then dropped. Re-add when SmartMotion can consume them.
@@ -526,13 +534,15 @@ export const openToolHandler: IntentHandler = {
         // 2026-05-26 — Fix DW: ?send=1 tells owner-logs.tsx to fire
         // the mailto export on mount. One utterance, one tap-to-send.
         pushPath = `${action.path}?send=1`;
-      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart)) {
+      } else if ((toolName === 'smartmotion' || toolName === 'smart_motion') && (angle || autoStart || recordIntent)) {
         const params: string[] = [];
         if (angle) params.push(`angle=${angle}`);
         // 2026-07-01 (audit RANK 2) — smartmotion.tsx keys on `autoRecord=1`, NOT
         // `autoStart`, so the old param was dead: voice "record my swing" opened
         // SmartMotion but never started recording. Emit the param the screen reads.
-        if (autoStart) params.push('autoRecord=1');
+        // 2026-07-06 — also arm on recordIntent (utterance said "record"/"capture"),
+        // so "open SmartMotion to record" rolls the camera instead of stalling in setup.
+        if (autoStart || recordIntent) params.push('autoRecord=1');
         // 2026-07-02 (re-audit) — dropped the shotType/subject params: SmartMotion
         // never read them (no standalone shot-type tag; golfer/subject selection is
         // still stubbed), so they were dead URL params. "Record Chris's swing" tagging

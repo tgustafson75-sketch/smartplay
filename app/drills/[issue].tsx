@@ -92,11 +92,9 @@ export default function DrillDetail() {
           <Ionicons name="chevron-back" size={22} color={colors.accent} />
           <Text style={[styles.backText, { color: colors.accent }]}>Drills</Text>
         </Pressable>
-        <Image
-          source={require('../../assets/avatars/smartplay_caddie_badge.png')}
-          style={styles.headerBadge}
-          resizeMode="contain"
-        />
+        {/* 2026-07-06 (Tim carry-over #1) — removed the decorative caddie-badge
+            Image that sat UPPER-RIGHT here. Non-tappable branding reusing the mic
+            art read as a SECOND caddie mic beside the global one. One mic only. */}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -331,7 +329,6 @@ const styles = StyleSheet.create({
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', padding: 4 },
   backText: { fontSize: 17, fontWeight: '700' },
-  headerBadge: { width: 40, height: 40, borderRadius: 20 },
   scroll: {
     paddingHorizontal: 16,
     paddingTop: 12,
