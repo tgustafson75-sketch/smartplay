@@ -431,7 +431,11 @@ export const useSettingsStore = create<SettingsState>()(
       // back active is a single-line edit.
       personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 },
       tankSoftIntro: true,
-      autoListenEnabled: false,
+      // 2026-07-06 — hands-free is the #1 priority. Active Listening on by default so
+      // "start a round → just talk" works without digging into Settings. The
+      // ActiveListeningPill shows it's live; the Settings toggle mutes it. Still scoped
+      // to in-round + Caddie tab + idle by the vadEnabled gate.
+      autoListenEnabled: true,
       // 2026-05-22 — Cart-is-default product principle: ~95% of golfers
       // ride. Default cartMode TRUE so new installs get cart-aware shot
       // thresholds + Fix L's cart-mode hole-detection bonus without
@@ -716,7 +720,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 17,
+      version: 18,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -863,6 +867,11 @@ export const useSettingsStore = create<SettingsState>()(
         // Hands-free from launch is the #1 priority — default it on for everyone.
         if (version < 17) {
           p.earbudTapToTalk = true;
+        }
+        // v18 — 2026-07-06 — Active Listening on by default (hands-free #1 priority).
+        // Flip existing installs on so in-round "just talk" works out of the box.
+        if (version < 18) {
+          p.autoListenEnabled = true;
         }
         return p as SettingsState;
       },
