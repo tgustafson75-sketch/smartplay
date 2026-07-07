@@ -46,7 +46,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
-import SwingBodyOverlay from '../../components/swinglab/SwingBodyOverlay';
+import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
@@ -1466,10 +1466,25 @@ export default function SmartMotion() {
           if (sessionId) {
             try {
               const a = result.analysis;
-              const issueId = a.detected_issue && a.detected_issue !== 'none' ? a.detected_issue : 'smartmotion_observation';
-              const primaryIssue: PrimaryIssue = {
-                issue_id: issueId,
-                name: issueId === 'smartmotion_observation' ? 'Smart Motion observation' : issueId.replace(/_/g, ' '),
+              // 2026-07-06 (range audit RANK 1) — route the SAVED report through the
+              // REAL session classifier instead of a hand-rolled read off the
+              // conservative `detected_issue` (which the analyzer biases to 'none').
+              // classifySession carries the evidence-gated primary_fault + cause/fix/
+              // drill/strengths + max severity across ALL captured swings. This one
+              // seam repairs: the saved library report (was a generic "Smart Motion
+              // observation" with an empty GolfFix card), the Drill Check honesty (was
+              // fed 'smartmotion_observation' → the fault's family never matched → it
+              // always said "clean/got it" — breaking the moat), and the severity→red
+              // skeleton. Falls back to the light observation when no fault is found.
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
+              const resolved = Object.entries(analysisCacheRef.current)
+                .filter(([, an]) => !!an)
+                .map(([idx, an]) => ({ swing_id: `${sessionId}-swing-${idx}`, analysis: an as typeof a }));
+              const rolled = resolved.length ? classifySession(resolved) : null;
+              const primaryIssue: PrimaryIssue = rolled ?? {
+                issue_id: 'smartmotion_observation',
+                name: 'Smart Motion observation',
                 category: 'other',
                 severity: (a.severity ?? 'minor') as PrimaryIssue['severity'],
                 occurrence_count: 1,
@@ -3113,7 +3128,18 @@ export default function SmartMotion() {
         {/* Attached skeletal overlay — real keypoints tracked to playback. */}
         {isReview && showResults && showSkeleton && poseFrames && poseFrames.length > 0 ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <SwingBodyOverlay frames={poseFrames} currentTimeMs={playbackMs} showSkeleton showTrace={showSkeleton} resizeMode="cover" />
+            <SwingBodyOverlay
+              frames={poseFrames}
+              currentTimeMs={playbackMs}
+              showSkeleton
+              showTrace={showSkeleton}
+              resizeMode="cover"
+              // 2026-07-06 (range audit RANK 3) — light the diagnosed fault's body
+              // region orange/red in the LIVE review too (was only on the saved-swing
+              // screen), so a significant over-the-top actually reads red as you watch.
+              faultJoints={faultJointsFor(analysis?.primary_fault ?? analysis?.detected_issue)}
+              faultSevere={analysis?.severity === 'significant'}
+            />
           </View>
         ) : null}
 
