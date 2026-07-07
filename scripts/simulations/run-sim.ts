@@ -4605,6 +4605,28 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /if \(prev !== p && p !== 'custom'\)/.test(settingsSrc2),
     'switching to the user\'s custom caddie no longer announces it in Kevin\'s voice (no custom opener clip) or flashes a literal "custom stepping in"');
 
+  // 2026-07-07 (Tim — "a while before it says tap the mic; splash removal wasn't needed")
+  // — the caddie's spoken opener awaits awaitGreetingComplete() with a 10s safety race.
+  // The greeting-skip THROTTLE meant a reopen skipped the greeting, so that promise never
+  // resolved and the opener sat 10s (a dead, error-looking gap). Fix: the throttle is
+  // GONE (splash shows once per cold launch again), and when the greeting is DISABLED the
+  // Index signals completion immediately so the opener never waits on a greeting that
+  // won't play.
+  check('Launch: greeting shows (no time-throttle) + opener never waits 10s on a skip',
+    (() => {
+      const idx = read('app/index.tsx');
+      return (
+        // The time-throttle skip is removed — greeting is gated only by the per-process flag.
+        !/recentlyOpened/.test(idx) &&
+        !/GREETING_THROTTLE_MS/.test(idx) &&
+        /if \(kevinGreetingEnabled && !greetingShownThisProcess\) \{\s*\n\s*greetingShownThisProcess = true;\s*\n\s*return <Redirect href="\/greeting"/.test(idx) &&
+        // The greeting-complete promise is resolved on the disabled-greeting bypass.
+        /signalGreetingComplete/.test(idx) &&
+        /export function signalGreetingComplete/.test(read('app/greeting.tsx'))
+      );
+    })(),
+    'the splash/greeting shows on every cold launch (warmup mask + tap-to-talk handoff restored), and a disabled greeting resolves the completion signal so the opener fires immediately instead of after a 10s dead wait');
+
   const seqSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/sequenceHandler.ts'), 'utf-8');
   check('Voice: chained commands forward a navigating step\'s tool_action (audit 4a)',
     /lastToolAction = result\.tool_action/.test(seqSrc) && /tool_action: lastToolAction/.test(seqSrc),

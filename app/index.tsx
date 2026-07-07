@@ -3,6 +3,7 @@ import { Redirect } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { recordLaunch } from '../services/kevinGreeting';
+import { signalGreetingComplete } from './greeting';
 
 // Module-level guard so the greeting only runs once per cold launch.
 // Warm starts (background → foreground) re-render this Index but the flag
@@ -45,7 +46,6 @@ export default function Index() {
   const isSetupComplete = usePlayerProfileStore(s => s.isSetupComplete);
   const has_completed_onboarding = usePlayerProfileStore(s => s.has_completed_onboarding);
   const kevinGreetingEnabled = useSettingsStore(s => s.kevinGreetingEnabled);
-  const lastAppOpenAt = useSettingsStore(s => s.lastAppOpenAt);
 
   // Persist launch markers when we're skipping the greeting screen
   // (greeting disabled OR warm second-render). When the greeting IS shown,
@@ -59,12 +59,16 @@ export default function Index() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
-  // 2026-07-06 — stamp this cold-open time so the NEXT open can throttle the
-  // greeting (the render below read the PREVIOUS value first). Kills the ~4s
-  // hello replaying on every rapid reopen (range/course open-close-open).
+  // 2026-07-07 (Tim — "a while before it says tap the mic; might be an error") — when
+  // the greeting is DISABLED it never plays, so its completion promise never resolves
+  // and the caddie's spoken opener sat out its full 10s safety race before "Tap to talk".
+  // Resolve it immediately in that case so the opener fires at once. Guarded strictly on
+  // kevinGreetingEnabled=false (NOT greetingShownThisProcess, which is already true by the
+  // time effects run on a launch that DID show the greeting — signalling there would let
+  // the opener talk over the greeting).
   useEffect(() => {
     if (!hydrated) return;
-    useSettingsStore.setState({ lastAppOpenAt: Date.now() });
+    if (!kevinGreetingEnabled) signalGreetingComplete();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
@@ -124,21 +128,17 @@ export default function Index() {
     return <Redirect href={'/welcome' as never} />;
   }
 
-  // Cold-launch greeting hop — happens once per process. Warm starts
-  // (Index re-renders) hit the flag and route straight to caddie.
-  // 2026-07-06 (hands-free / fast-open) — ALSO throttle by time so a golfer
-  // reopening the app repeatedly on the range/course gets IN, not a hello every time.
-  // 2026-07-07 (Tim — "8s awkward dead gap when it skips the splash") — the greeting
-  // was never ADDING the warmup (that fires at app_init in _layout regardless); it was
-  // MASKING the backend cold-start (3-8s to wake the voice Lambdas) with a visible beat.
-  // A 4h skip window meant a reopen after the backend had gone cold (idle ~15min+) went
-  // straight to a SILENT caddie while the pipeline woke — the funky gap. Tie the skip
-  // window to how long the backend plausibly stays warm: a recent reopen (Lambdas still
-  // hot) skips the greeting with NO gap; a longer gap (cold backend) shows the greeting,
-  // which masks the warmup exactly as before. Best of both — fast reopen + no dead air.
-  const GREETING_THROTTLE_MS = 15 * 60 * 1000;
-  const recentlyOpened = lastAppOpenAt > 0 && (Date.now() - lastAppOpenAt) < GREETING_THROTTLE_MS;
-  if (kevinGreetingEnabled && !greetingShownThisProcess && !recentlyOpened) {
+  // Cold-launch greeting hop — happens once per process. Warm starts (Index
+  // re-renders) hit the flag and route straight to caddie.
+  // 2026-07-07 (Tim — "taking the splash away wasn't necessary; there's still a gap
+  // before it says tap the mic, the prompting is missing, and it might error") —
+  // REVERTED the time-throttle skip. The greeting is not a cosmetic hello: it plays
+  // the persona voice, fires prewarmVoice() right before handoff, and MASKS the
+  // backend cold-start so the caddie is warm + ready-to-talk when you arrive. Skipping
+  // it dropped the user on a cold, silent, prompt-less caddie — and risked a
+  // tap-while-cold error. It shows once per cold launch/reload again; the per-process
+  // guard (greetingShownThisProcess) still prevents any replay on a warm foreground.
+  if (kevinGreetingEnabled && !greetingShownThisProcess) {
     greetingShownThisProcess = true;
     return <Redirect href="/greeting" />;
   }

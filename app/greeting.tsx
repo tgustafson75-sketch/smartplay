@@ -71,6 +71,17 @@ export function awaitGreetingComplete(): Promise<void> {
   return _greetingCompletePromise;
 }
 
+// 2026-07-07 (Tim — "a while before it says tap the mic; might be an error") — resolve
+// the greeting-complete signal WITHOUT the greeting playing. The caddie's spoken opener
+// awaits awaitGreetingComplete() with a 10s safety race; when the greeting is skipped
+// (disabled in settings, or a warm re-entry) that promise never resolved, so the opener
+// sat for the full 10s before "Tap to talk" — a dead, error-looking gap. Index calls
+// this on any route-to-caddie that BYPASSES the greeting so the opener fires at once.
+// Idempotent: resolving an already-resolved promise is a no-op.
+export function signalGreetingComplete(): void {
+  _greetingCompleteResolve?.();
+}
+
 type Phase = 'ENTERING' | 'SPEAKING' | 'TRANSITIONING' | 'COMPLETE';
 
 const ENTER_DURATION_MS = 300;
