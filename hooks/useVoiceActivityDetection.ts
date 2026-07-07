@@ -6,6 +6,7 @@ import { Audio } from 'expo-av';
 // flip routing / silent-mode mid-utterance.
 import { setAudioModeSerial } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
+import { isSmartMotionActive, isSmartMotionRecording } from '../services/smartMotionRecordBus';
 
 // ─── TUNABLE CONSTANTS ────────────────────
 // Phase AB — SILENCE_DURATION_MS bumped from 1500 → 2800. Natural
@@ -110,6 +111,11 @@ export function useVoiceActivityDetection({
 
   const startRecording = async (): Promise<void> => {
     if (startingRef.current || recordingRef.current) return;
+    // 2026-07-06 (voice-parity F1) — call-time hard guard: the VAD recorder
+    // self-restarts each cycle (finishRecording→startRecording), so even if the
+    // caddie-tab gate didn't re-render when SmartMotion took over, this catches
+    // the camera owning the mic on the next cycle. No phantom recorder under it.
+    if (isSmartMotionActive() || isSmartMotionRecording()) return;
     startingRef.current = true;
     const myToken = stopTokenRef.current;
     try {

@@ -52,7 +52,7 @@ import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
-import { isSmartMotionActive, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
+import { isSmartMotionActive, isSmartMotionRecording, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
@@ -1169,7 +1169,14 @@ export default function CaddieTab() {
   // empty submission). VAD restarts naturally once voiceState returns to
   // 'idle' via the useEffect dep on `vadEnabled` in
   // useVoiceActivityDetection.
-  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle';
+  // 2026-07-06 (voice-parity F1) — also gate on SmartMotion: while the camera
+  // capture surface is mounted/recording it OWNS the mic, and a continuous VAD
+  // recorder starting under it is a phantom mic (two Audio.Recording sessions
+  // racing). The MANUAL mic handler already guards this (useVoiceCaddie
+  // isSmartMotionActive → return); the VAD path had no equivalent. Gate here at
+  // the single chokepoint so VAD pauses under SmartMotion and resumes on exit.
+  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle'
+    && !isSmartMotionActive() && !isSmartMotionRecording();
 
   // ── Keep Vercel warm ────────────────────
   // 2026-06-16 (Tim — voice cleanup) — REMOVED the per-tab keepWarm setInterval that
