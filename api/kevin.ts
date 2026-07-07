@@ -72,7 +72,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_shot',
-    description: 'Log a shot Tim just hit, extracting whatever he mentioned: direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit it fat and it\'s short", "pulled it left, in the trees", "striped it", "pushed it but it\'s playable", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
+    description: 'Log a shot Tim just hit, capturing EVERY detail he mentioned — never drop one: club, hole, which shot on the hole, how far it went, direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit 7-iron 150 to the green", "pulled it left, in the trees", "striped it", "my second shot on 3 came up short", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
     parameters: {
       type: 'object',
       properties: {
@@ -80,6 +80,9 @@ const AI_TOOLS: AiToolDef[] = [
           type: 'string',
           description: "Club the player used for this shot (e.g. '7I', 'Driver', 'PW'). Include if player mentioned it or if Kevin recommended it.",
         },
+        hole:           { type: 'number', description: 'Hole number IF Tim named one (e.g. "on hole 3" -> 3). Omit to use the current hole.' },
+        shot_number:    { type: 'number', description: 'Which shot on the hole IF he said it (e.g. "my second shot" -> 2).' },
+        distance_yards: { type: 'number', description: 'How far the shot went / the yardage he gave for it, in yards.' },
         direction: {
           type: 'string',
           enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],
@@ -129,6 +132,78 @@ const AI_TOOLS: AiToolDef[] = [
         note: { type: 'string', description: 'The issue / bug / feedback description, wake phrase stripped.' },
       },
       required: ['note'],
+    },
+  },
+  // 2026-07-06 (voice-parity F5) — the kevin fallback brain was missing 7 tools the
+  // primary pipecat brain has, so on a degraded turn these voice commands silently
+  // did nothing. Mirrored from api/pipecat-turn.ts so the fallback reaches parity.
+  {
+    name: 'plan_shot',
+    description: 'Tim states his PLAN for a shot he is ABOUT to hit — the club, the yardage, and/or which shot on the hole. Examples: "I am going to use a 5 wood for my second shot on hole 3 with 210 yards to go", "hitting 7 iron here", "I have 150 to the pin, going with a smooth 8". This SETS the club + yardage context — it does NOT log a completed shot (use log_shot for a shot already hit). Capture EVERY detail he gave.',
+    parameters: {
+      type: 'object',
+      properties: {
+        club:           { type: 'string', description: 'Club he plans to hit (e.g. "5 wood", "7 iron").' },
+        distance_yards: { type: 'number', description: 'Yardage he stated (e.g. "210 yards to go" -> 210).' },
+        shot_number:    { type: 'number', description: 'Which shot on the hole (e.g. "my second shot" -> 2).' },
+        hole:           { type: 'number', description: 'Hole number IF he named one.' },
+        target:         { type: 'string', description: 'What he is aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
+      },
+    },
+  },
+  {
+    name: 'set_reminder',
+    description: 'Set a reminder Tim asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if he said WHEN, the natural when-phrase. Saved to his SmartPlan reminders.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'What to be reminded of / the activity (wake phrase + "remind me to" stripped).' },
+        when: { type: 'string', description: 'Natural-language WHEN if he said it ("Thursday", "tomorrow morning", "before Saturday", "this week"). Omit if not mentioned.' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'configure_drill',
+    description: 'Configure the SmartMotion drill session Tim just described — set the club and number of swings. Call this whenever he says what he wants to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
+    parameters: {
+      type: 'object',
+      properties: {
+        club:       { type: 'string', description: 'Club ID (e.g. "7I", "DR", "PW", "PT"). Omit if not mentioned.' },
+        shot_count: { type: 'number', enum: [1, 3, 5], description: 'Number of swings. Default 3 if not specified.' },
+      },
+    },
+  },
+  {
+    name: 'close_swinglab',
+    description: 'Close SmartMotion / SwingLab and return to the caddie screen. Use when Tim says "close", "done", "go back", or "that\'s enough" while SmartMotion is open.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'set_angle',
+    description: 'Set the SmartMotion camera angle when Tim says how he wants to film his swing: "down the line" / "DTL", "face on" / "face-on", or "putting" / "putt". Use ONLY when SmartMotion is open (he is at the capture screen).',
+    parameters: {
+      type: 'object',
+      properties: { angle: { type: 'string', enum: ['down_the_line', 'face_on', 'putt'], description: 'The camera angle to set.' } },
+      required: ['angle'],
+    },
+  },
+  {
+    name: 'set_golfer',
+    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when Tim says he is filming someone else, or himself again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
+    parameters: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or "me" for the user themselves.' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'switch_caddie',
+    description: 'Switch the active caddie persona when Tim asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
+    parameters: {
+      type: 'object',
+      properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry', 'tank'], description: 'The caddie to switch to.' } },
+      required: ['personality'],
     },
   },
   {
@@ -1279,6 +1354,14 @@ ${onCourseContextBlock}${baseMessage}`
           if (typeof input.contactQuality === 'string') a.contactQuality = input.contactQuality;
           if (typeof input.outcome === 'string') a.outcome = input.outcome;
           if (typeof input.feel === 'string') a.feel = input.feel;
+          // 2026-07-06 (voice-parity F5) — the kevin fallback DROPPED club (and hole/
+          // distance/shot_number), so "I hit 7-iron" logged a shot with NO club — the
+          // client dispatcher silently fell back to round.club and kevin_adhered broke.
+          // Forward everything the client log_shot case reads (parity with pipecat-turn).
+          if (typeof input.club === 'string') a.club = input.club;
+          if (typeof input.hole === 'number') a.hole = input.hole;
+          if (typeof input.distance_yards === 'number') a.distance_yards = input.distance_yards;
+          if (typeof input.shot_number === 'number') a.shot_number = input.shot_number;
           capture.action = a;
           break;
         }
@@ -1292,6 +1375,45 @@ ${onCourseContextBlock}${baseMessage}`
         }
         case 'log_issue': {
           capture.action = { type: 'log_issue', note: String(input.note ?? '') };
+          break;
+        }
+        // 2026-07-06 (voice-parity F5) — the 7 tools the fallback was missing.
+        // Payload shapes mirror what the client dispatcher reads
+        // (services/voice/conversationalToolDispatch.ts + caddie.tsx handleToolAction).
+        case 'plan_shot': {
+          const a: ActionPayload = { type: 'plan_shot' };
+          if (typeof input.club === 'string') a.club = input.club;
+          if (typeof input.distance_yards === 'number') a.distance_yards = input.distance_yards;
+          if (typeof input.shot_number === 'number') a.shot_number = input.shot_number;
+          if (typeof input.hole === 'number') a.hole = input.hole;
+          if (typeof input.target === 'string') a.target = input.target;
+          capture.action = a;
+          break;
+        }
+        case 'set_reminder': {
+          const a: ActionPayload = { type: 'set_reminder', text: String(input.text ?? '') };
+          if (typeof input.when === 'string') a.when = input.when;
+          capture.action = a;
+          break;
+        }
+        case 'configure_drill': {
+          const a: ActionPayload = { type: 'configure_drill' };
+          if (typeof input.club === 'string') a.club = input.club;
+          if (typeof input.shot_count === 'number') a.shot_count = input.shot_count;
+          capture.action = a;
+          break;
+        }
+        case 'close_swinglab': capture.action = { type: 'close_swinglab' }; break;
+        case 'set_angle': {
+          capture.action = { type: 'set_angle', angle: String(input.angle ?? 'down_the_line') };
+          break;
+        }
+        case 'set_golfer': {
+          capture.action = { type: 'set_golfer', name: String(input.name ?? '') };
+          break;
+        }
+        case 'switch_caddie': {
+          capture.action = { type: 'switch_caddie', personality: String(input.personality ?? '') };
           break;
         }
       }
