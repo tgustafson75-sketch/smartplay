@@ -2889,9 +2889,30 @@ check('SmartPlan UI — goal+constraints picker that runs a day through the Sess
   'the SmartPlan screen lets you set goal + days/week + minutes + location, shows the weighted weekly plan, and launches any day through the Session Runner as a focus session (SmartPlan UI, OTA-able)');
 
 check('Verdict no longer claims ANALYZING forever',
-  /deriveVerdict\(a: SwingAnalysis \| null, analyzing: boolean\)/.test(smSrc) &&
+  /function deriveVerdict\(/.test(smSrc) &&
+    /a: SwingAnalysis \| null,\s*\n\s*analyzing: boolean,/.test(smSrc) &&
     /NO READ — RECORD AGAIN/.test(smSrc),
   'errored/empty read shows honest state, not a perpetual spinner');
+
+// 2026-07-07 (Tim — "I hit a chunk and it says GOOD SWING / clean") — the motion
+// read can't see strike, so a "no fault" motion read must NOT be celebrated as a
+// good shot. Contact signals (feel note / camera ball-departure / model contact_read)
+// override it; a clean-motion read with unconfirmed contact is a neutral
+// informational verdict, never a green "GOOD SWING".
+check('Chunk-shot honesty: verdict never green-lights a mishit as a good swing',
+  // The old unconditional "GOOD SWING" on any 'none' is gone.
+  !/return \{ text: 'GOOD SWING', tone: 'good' \}/.test(smSrc) &&
+    // Contact overrides exist and downgrade.
+    /reportedMishit/.test(smSrc) &&
+    /BALL DIDN.T LAUNCH/.test(smSrc) &&
+    // Clean motion with unconfirmed contact is neutral (info), not a green check.
+    /return \{ text: 'MOTION LOOKS CLEAN', tone: 'neutral' \}/.test(smSrc) &&
+    // A confirmed strike is the ONLY path to the triumphant green verdict.
+    /contact\?\.ballLaunched === true.*'SOLID SWING'/s.test(smSrc) &&
+    // The server carries an honest, evidence-gated strike read defaulting to unknown.
+    /contact_read/.test(read('api/swing-analysis.ts')) &&
+    /parsed\.contact_read = 'unknown'/.test(read('api/swing-analysis.ts')),
+  'a chunk/fat/thin strike (from feel note, ball-departure, or the model contact_read) downgrades the verdict; clean MOTION with unconfirmed contact is a neutral read, and only a confirmed ball launch shows the green "SOLID SWING"');
 
 check('Acoustic Listening only while recording AND actually metering',
   /listening\?: boolean/.test(read('components/smartmotion/SmartMotionHud.tsx')) &&
@@ -4241,7 +4262,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // transient mid-pipeline state (bounded acoustic pass → whole-clip video re-scan)
   // before the real read landed. Now keyed off phase so it's strictly terminal.
   check('SmartMotion: NO-READ is terminal (phase-gated, not a mid-pipeline flash)',
-    /return deriveVerdict\(analysis, phase === 'analyzing'\)/.test(smSrc2) &&
+    /return deriveVerdict\(analysis, phase === 'analyzing', swingContact\)/.test(smSrc2) &&
       /phase === 'review' && analysisError \? 'NO READ' : 'READING…'/.test(smSrc2),
     'the verdict shows ANALYZING for every in-flight pass (including the video re-scan) and only says NO READ once a read has terminally finished in review — no more fail-state flash before the read lands');
 

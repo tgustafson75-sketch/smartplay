@@ -117,11 +117,12 @@ const SWING_ANALYSIS_SCHEMA = {
     validity_reason: { type: ['string', 'null'] },
     follow_up_question: { type: ['string', 'null'] },
     strengths: { type: 'array', items: { type: 'string' } },
+    contact_read: { type: 'string', enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
   },
   required: [
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
-    'drill', 'evidence', 'layman_explanation', 'strengths',
+    'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
   ],
   additionalProperties: false,
 } as const;
@@ -145,11 +146,12 @@ const SWING_ANALYSIS_GEMINI_SCHEMA = {
     validity_reason: { type: Type.STRING, nullable: true },
     follow_up_question: { type: Type.STRING, nullable: true },
     strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+    contact_read: { type: Type.STRING, enum: ['clean', 'fat', 'thin', 'topped', 'unknown'] },
   },
   required: [
     'detected_issue', 'severity', 'confidence', 'primary_fault',
     'valid_swing', 'fault_frame_index', 'observation', 'cause', 'fix',
-    'drill', 'evidence', 'layman_explanation', 'strengths',
+    'drill', 'evidence', 'layman_explanation', 'strengths', 'contact_read',
   ],
 };
 
@@ -213,6 +215,14 @@ type SwingAnalysisResponse = {
   // the new client hides the affordance entirely when this is absent
   // or empty. Quality bar enforced by the SYSTEM_PROMPT below.
   layman_explanation?: string;
+  // 2026-07-07 (Tim — chunk-shot honesty) — an HONEST strike read the model fills
+  // ONLY from visible evidence (a divot opening before the ball, the club digging
+  // into the ground behind the ball, the ball barely moving after contact). The
+  // motion analysis usually can't see contact, so this defaults to 'unknown' — it
+  // is NOT a guess. When the model DOES see a fat/thin/topped strike, this carries
+  // it so the verdict never celebrates a mishit as a good swing. Separate from the
+  // biomech fault fields on purpose (contact quality ≠ a motion fault).
+  contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
 };
 
 // Phase BL/U1 — Tentative observation mode. Used by the upload pipeline
@@ -490,7 +500,8 @@ EXAMPLES (use these as the bar — do NOT copy verbatim):
 
 Rules:
 - Default to NAMING what you see at low confidence rather than returning 'none'. The player can rule out a low-confidence read; they cannot act on silence.
-- 'none' is reserved for: unreadable frames OR a swing that genuinely looks clean across all 5 frames (no recognizable tendency at all).
+- 'none' is reserved for: unreadable frames OR a swing whose MOTION genuinely looks clean across all 5 frames (no recognizable tendency at all). CRITICAL: 'none' means the MOTION looks clean — it does NOT mean the shot was good. You are judging body/club motion; you usually CANNOT see the quality of ball contact (fat/thin) from these frames. Never write an observation, layman_explanation, or strength that claims the shot, strike, or contact was "good", "clean", "solid", or "pure" — you did not see the ball being struck. Praise only what is visible in the motion (posture, tempo, balance, sequence).
+- contact_read: an HONEST strike read. Set it to 'unknown' by DEFAULT — from body-motion frames you almost never see contact. ONLY set 'fat' when there is clear visible evidence the club hit the ground behind the ball (a divot opening up before the ball, the clubhead visibly digging into the turf behind the ball, a steep decelerating chop into the ground); 'thin'/'topped' only when you can see the club catch the ball high / above center or the ball squirting low along the ground. If you cannot actually see the strike, it is 'unknown' — do NOT infer 'clean' from clean-looking motion. 'clean' requires seeing a centered, ball-first strike, which is rare from these angles. When in any doubt: 'unknown'.
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
 - Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Tank = clipped imperative, military cadence ("Weight's hanging back at impact. Not acceptable."). Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
@@ -593,6 +604,16 @@ function normalizeAnalysis(
   }
   if (parsed.detected_issue === 'none' || parsed.valid_swing === false) {
     parsed.layman_explanation = '';
+  }
+  // 2026-07-07 (Tim — chunk-shot honesty) — contact_read is an HONEST strike read,
+  // 'unknown' unless the model actually saw contact evidence. Coerce anything off-
+  // enum to 'unknown' (never guess), and force 'unknown' when there's no valid swing
+  // to read.
+  if (!['clean', 'fat', 'thin', 'topped', 'unknown'].includes(parsed.contact_read as string)) {
+    parsed.contact_read = 'unknown';
+  }
+  if (parsed.valid_swing === false) {
+    parsed.contact_read = 'unknown';
   }
   if (typeof parsed.primary_fault !== 'string' || !PRIMARY_FAULTS.includes(parsed.primary_fault as PrimaryFault)) {
     parsed.primary_fault = 'inconclusive';

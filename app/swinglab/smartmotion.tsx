@@ -270,18 +270,69 @@ function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null)
   ];
 }
 
-function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: string; tone: SmTone } {
+// Contact/strike signals the BODY-MOTION analysis can't see. The vision model
+// judges motion from a handful of frames — it does NOT measure whether the club
+// hit the ball fat/thin/pure. These come from the camera strike check
+// (ballDeparture), the acoustic/ball-launch read, or the player's own feel note,
+// and they OVERRIDE a "no fault" motion read — a chunk with tidy-looking mechanics
+// must never be celebrated as a good swing.
+type SmContact = {
+  /** true = ball confirmed to leave its spot; false = sound/swing but ball didn't
+   *  launch (duff/whiff/heavy); null = we couldn't see the ball to confirm. */
+  ballLaunched: boolean | null;
+  /** A mishit the PLAYER reported (feel note) or the model flagged from visible
+   *  evidence: 'fat' | 'thin' | 'topped' | null. The human's read wins. */
+  reportedMishit: 'fat' | 'thin' | 'topped' | null;
+};
+
+function deriveVerdict(
+  a: SwingAnalysis | null,
+  analyzing: boolean,
+  contact?: SmContact,
+): { text: string; tone: SmTone } {
   // Honest state: only say "ANALYZING…" while a read is actually in flight. Once
   // it's done (or errored) with no result, say so instead of spinning forever.
   if (!a) return { text: analyzing ? 'ANALYZING…' : 'NO READ — RECORD AGAIN', tone: analyzing ? 'neutral' : 'warn' };
   const validity = evaluateSwingValidity(a);
   if (!validity.valid) return { text: 'NO SWING DETECTED', tone: 'warn' };
-  if (a.severity === 'none' || a.detected_issue === 'none') return { text: 'GOOD SWING', tone: 'good' };
-  const headline =
+
+  // 2026-07-07 (Tim — "I hit a chunk and it says GOOD SWING / clean") — CONTACT
+  // overrides come first. Motion analysis can't see strike; these signals can, so
+  // they beat any "no fault" motion read.
+  if (contact?.reportedMishit) {
+    const label = contact.reportedMishit === 'thin' ? 'THIN CONTACT'
+      : contact.reportedMishit === 'topped' ? 'TOPPED'
+      : 'HEAVY / FAT CONTACT';
+    return { text: label, tone: 'bad' };
+  }
+  if (contact?.ballLaunched === false) {
+    // Sound/motion but the ball never left its spot — a duff, whiff, or heavy hit.
+    return { text: 'BALL DIDN’T LAUNCH', tone: 'bad' };
+  }
+
+  // A named, evidence-gated fault wins even when the conservative detected_issue is
+  // 'none' (detected_issue biases toward 'none', so it alone must NOT green-light).
+  const namedFault =
     a.primary_fault && a.primary_fault !== 'no_dominant_fault' && a.primary_fault !== 'inconclusive'
       ? a.primary_fault
-      : a.detected_issue;
-  return { text: headline.replace(/_/g, ' ').toUpperCase(), tone: a.severity === 'significant' ? 'bad' : 'warn' };
+      : a.detected_issue && a.detected_issue !== 'none'
+        ? a.detected_issue
+        : null;
+  if (namedFault) {
+    return { text: namedFault.replace(/_/g, ' ').toUpperCase(), tone: a.severity === 'significant' ? 'bad' : 'warn' };
+  }
+
+  // No motion fault found. Be HONEST about what that means: we checked the MOTION,
+  // not the strike. Only show a triumphant green verdict when a strike was actually
+  // confirmed; otherwise it's an informational "motion looks clean" — never a claim
+  // that the shot itself was good (which is exactly what mislabelled the chunk).
+  if (contact?.ballLaunched === true) return { text: 'SOLID SWING', tone: 'good' };
+  return { text: 'MOTION LOOKS CLEAN', tone: 'neutral' };
+}
+
+/** A positive/no-fault verdict (either a confirmed solid swing or clean motion). */
+function isCleanVerdict(v: { tone: SmTone; text: string }): boolean {
+  return v.text === 'SOLID SWING' || v.text === 'MOTION LOOKS CLEAN';
 }
 
 // 2026-06-15 (Tim — pipelined per-swing narration) — a short spoken headline for
@@ -291,7 +342,8 @@ function deriveVerdict(a: SwingAnalysis | null, analyzing: boolean): { text: str
 function swingNarrationLine(n: number, a: SwingAnalysis): string {
   const v = deriveVerdict(a, false);
   if (v.text === 'NO SWING DETECTED' || v.text.startsWith('NO READ')) return `Swing ${n}, couldn't get a clean read.`;
-  if (v.text === 'GOOD SWING') return `Swing ${n}, clean.`;
+  if (v.text === 'SOLID SWING') return `Swing ${n}, solid.`;
+  if (v.text === 'MOTION LOOKS CLEAN') return `Swing ${n}, motion looked clean.`;
   return `Swing ${n}, ${v.text.toLowerCase()}.`;
 }
 
@@ -1150,6 +1202,32 @@ export default function SmartMotion() {
   }, [shotTrace, segments, selectedSwing]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
+
+  // 2026-07-07 (Tim — chunk-shot honesty) — the CONTACT signals the motion read
+  // can't see: the camera strike check (did the ball actually leave?) and the
+  // player's own feel note ("I chunked it"). These override a "no fault" motion
+  // read so a fat/thin/topped strike is never shown as a good swing.
+  const swingContact = useMemo<SmContact>(() => {
+    const ballLaunched: boolean | null = ballDeparture == null
+      ? null
+      : ballDeparture.departed
+        ? true
+        : ballDeparture.ball_present_before
+          ? false // sound/swing but the ball didn't leave its spot
+          : null; // couldn't see the ball to confirm either way
+    // Scan the player's feel note for a self-reported mishit — the human's read wins.
+    const f = feelText.toLowerCase();
+    const fromFeel: SmContact['reportedMishit'] =
+      /\b(fat|chunk|chunked|chunky|heavy|duff|duffed|dug|dig)\b/.test(f) ? 'fat'
+      : /\b(thin|thinned|skull|skulled|blade|bladed|skinny)\b/.test(f) ? 'thin'
+      : /\b(top|topped|topping|worm|worm.?burner)\b/.test(f) ? 'topped'
+      : null;
+    // The model's own visible-evidence strike read (honest 'unknown' by default).
+    const cr = analysis?.contact_read;
+    const fromModel: SmContact['reportedMishit'] =
+      cr === 'fat' || cr === 'thin' || cr === 'topped' ? cr : null;
+    return { ballLaunched, reportedMishit: fromFeel ?? fromModel };
+  }, [ballDeparture, feelText, analysis]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
   // Putt mode has its own verdict (the swing `analysis` stays null for putts,
   // so deriveVerdict would wrongly say ANALYZING/NO READ).
@@ -1164,8 +1242,8 @@ export default function SmartMotion() {
     // null. Keying NO READ off `phase === 'analyzing'` (not the old null+no-error
     // test) keeps every in-flight pass — including the re-scan — showing ANALYZING,
     // so the read no longer flashes a fail state before it lands (cage findings).
-    return deriveVerdict(analysis, phase === 'analyzing');
-  }, [isPutt, puttAnalysis, analysis, analysisError, phase]);
+    return deriveVerdict(analysis, phase === 'analyzing', swingContact);
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact]);
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;
@@ -1954,11 +2032,11 @@ export default function SmartMotion() {
       if (!cancelled() && st.voiceEnabled) {
         const issues = resolvedAnalyses
           .filter((a): a is SwingAnalysis => a != null)
-          .map((a) => { const v = deriveVerdict(a, false); return v.text === 'GOOD SWING' ? null : v.text.toLowerCase(); })
+          .map((a) => { const v = deriveVerdict(a, false); return isCleanVerdict(v) ? null : v.text.toLowerCase(); })
           .filter((t): t is string => !!t);
         const clean = resolvedAnalyses.length - issues.length;
         const summary = issues.length === 0
-          ? `${segs.length} swings — all clean.`
+          ? `${segs.length} swings — motion looked clean across the board. Tell me how they felt and I'll confirm the strike.`
           : `${segs.length} swings — ${clean} clean, ${issues.length} with ${issues[0]}${issues.length > 1 ? ' and others' : ''}.`;
         setScreenContext({ screen: 'Smart Motion — just finished a session', focus: SESSION_DONE_FOCUS });
         emitSmartMotionVoiceEvent({ type: 'session_complete', swingCount: segs.length, summary });

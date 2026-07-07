@@ -85,6 +85,13 @@ export type SwingAnalysis = {
   // address frame + balance from the finish). Empty when nothing observable;
   // absent until the /api/swing-analysis `strengths` field is deployed.
   strengths?: string[];
+  // 2026-07-07 (Tim — chunk-shot honesty) — an honest strike read, filled by the
+  // model ONLY from visible contact evidence (divot before the ball, club digging
+  // behind the ball, ball squirting low). 'unknown' by default — the motion read
+  // usually can't see contact. SmartMotion's verdict uses this (alongside the
+  // camera ball-departure check + the player's feel note) so a chunk is never shown
+  // as a good swing. Absent on legacy server deploys → treated as 'unknown'.
+  contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
   // 2026-05-24 — Owner-tool telemetry. The server echoes the REAL
   // counts of image + text content blocks it sent to Sonnet so the
   // in-app swing-analysis debug screen can prove the whole pipe
