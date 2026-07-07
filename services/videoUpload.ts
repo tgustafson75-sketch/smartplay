@@ -122,9 +122,14 @@ export async function resolveClipUri(stored: string | null | undefined): Promise
     if (!dir) return null;
     const base = stored.split('/').pop();
     if (!base) return null;
-    // 2. Re-anchor the basename under the CURRENT container's Documents. Check
-    //    the canonical swing_clips subdir first, then the doc root, then thumbs.
+    // 2. Re-anchor under the CURRENT container's Documents.
     const candidates = [`${dir}swing_clips/${base}`, `${dir}${base}`];
+    // 2026-07-06 (cage audit) — live cage masters live at cage_sessions/<id>/master.mp4,
+    // and every one is named master.mp4, so basename re-anchoring is ambiguous AND the
+    // subdir isn't checked → post-reinstall the cage video "won't play". Re-anchor the
+    // FULL cage_sessions/<id>/... suffix (id preserved → unambiguous) first.
+    const cageIdx = stored.indexOf('cage_sessions/');
+    if (cageIdx >= 0) candidates.unshift(`${dir}${stored.slice(cageIdx)}`);
     for (const c of candidates) {
       try { if ((await FS.getInfoAsync(c)).exists) return c; } catch { /* try next */ }
     }
