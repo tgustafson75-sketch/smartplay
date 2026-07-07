@@ -1618,9 +1618,12 @@ export default function SmartMotion() {
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
           const a = result.analysis;
           // 2026-07-07 (Tim — chunk honesty) — the contact this swing's MOTION read
-          // can't see (model contact_read + the ball-departure check). Overrides both
-          // the saved report and what the CNS learns, exactly like the live badge.
-          const contact = deriveContact(a, { ballDeparture });
+          // can't see. Overrides the saved report + what the CNS learns. Uses ONLY the
+          // model's contact_read here: ballDeparture isn't computed until the review-
+          // phase effect (after this runs), so reading it at save time would be a stale/
+          // null value — a false-positive vector on the persisted report. The live badge
+          // + Drill Check read the correctly-timed ballDeparture for the duff case.
+          const contact = deriveContact(a);
           // Route the SAVED report + the CNS write through the REAL session classifier,
           // not the conservative `detected_issue` (biased to 'none'). Computed ONCE.
           let rolled: PrimaryIssue | null = null;
