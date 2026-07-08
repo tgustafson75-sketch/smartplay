@@ -107,6 +107,31 @@ export function missBiasFor(dominantMiss: string | null | undefined): number {
   return 0;
 }
 
+/**
+ * 2026-07-08 (SwingSim ladder — family match). Generate a BELIEVABLE per-hole scorecard
+ * for a simulated opponent from their handicap, so you can race a family member (or a
+ * target handicap) hole-by-hole with the same ghost machinery. Not a real round — a
+ * fair, handicap-shaped opponent. Pure; rng injected.
+ */
+export function simOpponentScorecard(
+  holes: { hole: number; par: number }[],
+  handicap: number,
+  rng: () => number = Math.random,
+): Record<number, number> {
+  const perHole = Math.max(0, handicap) / 18; // avg strokes over par per hole
+  const spread = 1.1 + Math.max(0, handicap) / 34; // higher handicap = streakier
+  const out: Record<number, number> = {};
+  for (const h of holes) {
+    const noise = (rng() * 2 - 1) * spread;
+    // Occasional blow-up hole, more likely for higher handicaps.
+    const blowUp = rng() < Math.min(0.18, 0.04 + handicap / 260) ? 1 + Math.round(rng() * 2) : 0;
+    let s = Math.round(h.par + perHole + noise) + blowUp;
+    s = Math.max(1, Math.min(h.par + 5, s));
+    out[h.hole] = s;
+  }
+  return out;
+}
+
 export function scoreName(strokes: number, par: number): string {
   const d = strokes - par;
   if (strokes === 1) return 'ACE';

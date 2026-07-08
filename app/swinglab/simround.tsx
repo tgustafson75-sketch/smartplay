@@ -19,7 +19,8 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Polyline, Circle as SvgCircle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { IndoorRepDetector, type IndoorRep } from '../../services/indoorSwing';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, type SimLie } from '../../services/simGame';
+import { useFamilyStore } from '../../store/familyStore';
 import { COURSES } from '../../data/courses';
 import { getLocalHoleImageById } from '../../data/localCourseImages';
 import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
@@ -66,16 +67,19 @@ export default function SwingSimScreen() {
   const [scorecard, setScorecard] = useState<{ hole: number; par: number; strokes: number }[]>([]);
   const [banner, setBanner] = useState<{ title: string; sub: string; tone: 'good' | 'warn' | 'bad' } | null>(null);
   const [marks, setMarks] = useState<ShotMark[]>([]);
-  // 2026-07-08 (Tim — SwingSim ladder: GHOST MODE) — play against YOUR OWN real round
-  // at this course. The ghost just replays its recorded per-hole scores; you swing the
-  // phone. The most personal opponent in golf: past you. Only real (non-sim) rounds.
-  const [ghost, setGhost] = useState<RoundRecord | null>(null);
+  // 2026-07-08 (Tim — SwingSim ladder) — race an OPPONENT: your own real GHOST round at
+  // this course, or a FAMILY member (their handicap generates a fair per-hole card). Same
+  // machinery: an opponent is just {name, scores}. You swing the phone; they play their card.
+  const [ghost, setGhost] = useState<{ name: string; scores: Record<number, number>; kind: 'ghost' | 'family' } | null>(null);
   const ghostRounds = useMemo(() => {
     return useRoundStore.getState().roundHistory
       .filter((r) => !r.simulated && r.courseId === courseId && Object.keys(r.scores ?? {}).length > 0)
       .sort((a, b) => b.endedAt - a.endedAt)
       .slice(0, 4);
   }, [courseId]);
+  const familyOpponents = useMemo(() => {
+    return useFamilyStore.getState().members.filter((m) => m.firstName?.trim());
+  }, []);
   const [club, setClub] = useState<string>('7 Iron');
   const [armed, setArmed] = useState(false);
   // 2026-07-08 (Tim — "screen goes white after the flyover") — the tracer Polyline was
@@ -199,7 +203,8 @@ export default function SwingSimScreen() {
     const g = ghost?.scores?.[hole.hole];
     let sub = finalStrokes - hole.par <= -1 ? callLine(persona, 'birdie') : finalStrokes - hole.par >= 1 ? callLine(persona, 'bogey') : 'Steady.';
     if (typeof g === 'number' && g > 0) {
-      sub = finalStrokes < g ? `You ${finalStrokes}, ghost ${g} — you win the hole. 👻` : finalStrokes > g ? `You ${finalStrokes}, ghost ${g} — ghost takes it.` : `You ${finalStrokes}, ghost ${g} — halved.`;
+      const oppName = ghost?.name ?? 'ghost';
+      sub = finalStrokes < g ? `You ${finalStrokes}, ${oppName} ${g} — you win the hole. 👍` : finalStrokes > g ? `You ${finalStrokes}, ${oppName} ${g} — ${oppName} takes it.` : `You ${finalStrokes}, ${oppName} ${g} — halved.`;
     }
     setBanner({ title: scoreName(finalStrokes, hole.par), sub, tone: finalStrokes <= hole.par ? 'good' : 'warn' });
     setStage('holeout');
@@ -228,7 +233,6 @@ export default function SwingSimScreen() {
     }
     return holes > 0 ? { diff: mine - theirs, holes } : null;
   }, [ghost, scorecard]);
-  const ghostHoleScore = ghost?.scores?.[hole?.hole ?? -1] ?? null;
   const ghostLabel = (r: RoundRecord) => {
     const d = new Date(r.endedAt);
     const vp = r.scoreVsPar;
@@ -245,7 +249,7 @@ export default function SwingSimScreen() {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={s.title}>SWINGSIM</Text>
-          <Text style={s.simBadge}>{ghost && stage !== 'lobby' ? 'VS YOUR GHOST' : 'SIM ROUND · NOT REAL STATS'}</Text>
+          <Text style={s.simBadge}>{ghost && stage !== 'lobby' ? `VS ${ghost.name.toUpperCase()}` : 'SIM ROUND · NOT REAL STATS'}</Text>
         </View>
         {ghostDiff ? (
           <Text style={[s.toPar, { color: ghostDiff.diff <= 0 ? NEON : '#F0C030' }]}>{ghostDiff.diff === 0 ? 'AS' : ghostDiff.diff < 0 ? `${ghostDiff.diff}` : `+${ghostDiff.diff}`}</Text>
@@ -273,20 +277,36 @@ export default function SwingSimScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {/* GHOST MODE — play your past self at this course */}
-          {ghostRounds.length > 0 ? (
+          {/* OPPONENT — race your past self (ghost) or a family member */}
+          {ghostRounds.length > 0 || familyOpponents.length > 0 ? (
             <View style={{ marginTop: 16 }}>
-              <Text style={s.ghostHeader}>👻 PLAY YOUR GHOST</Text>
-              <Text style={s.ghostSub}>Race a real round you played here. The ghost plays its card; you swing.</Text>
+              <Text style={s.ghostHeader}>🏆 PLAY AN OPPONENT</Text>
+              <Text style={s.ghostSub}>Race your own past round here, or a family member. They play their card; you swing.</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                 <TouchableOpacity style={[s.ghostChip, !ghost && s.ghostChipActive]} onPress={() => setGhost(null)} accessibilityRole="button">
-                  <Text style={[s.ghostChipText, !ghost && { color: '#0b1220' }]}>NO GHOST</Text>
+                  <Text style={[s.ghostChipText, !ghost && { color: '#0b1220' }]}>SOLO</Text>
                 </TouchableOpacity>
-                {ghostRounds.map((r) => (
-                  <TouchableOpacity key={r.id} style={[s.ghostChip, ghost?.id === r.id && s.ghostChipActive]} onPress={() => setGhost(r)} accessibilityRole="button">
-                    <Text style={[s.ghostChipText, ghost?.id === r.id && { color: '#0b1220' }]}>{ghostLabel(r)}</Text>
-                  </TouchableOpacity>
-                ))}
+                {ghostRounds.map((r) => {
+                  const active = ghost?.kind === 'ghost' && ghost.name === ghostLabel(r);
+                  return (
+                    <TouchableOpacity key={r.id} style={[s.ghostChip, active && s.ghostChipActive]} onPress={() => setGhost({ name: ghostLabel(r), scores: r.scores ?? {}, kind: 'ghost' })} accessibilityRole="button">
+                      <Text style={[s.ghostChipText, active && { color: '#0b1220' }]}>👻 {ghostLabel(r)}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {familyOpponents.map((m) => {
+                  const active = ghost?.kind === 'family' && ghost.name === m.firstName;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      style={[s.ghostChip, active && s.ghostChipActive]}
+                      onPress={() => setGhost({ name: m.firstName, scores: simOpponentScorecard(course.holes.map((h) => ({ hole: h.hole, par: h.par })), m.approximate_handicap ?? 18), kind: 'family' })}
+                      accessibilityRole="button"
+                    >
+                      <Text style={[s.ghostChipText, active && { color: '#0b1220' }]}>{m.avatar_emoji ?? '🧑'} {m.firstName}{m.approximate_handicap != null ? ` (${m.approximate_handicap})` : ''}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
           ) : null}
@@ -303,9 +323,9 @@ export default function SwingSimScreen() {
           {ghostDiff ? (
             <View style={s.ghostVerdict}>
               <Text style={s.ghostVerdictText}>
-                {ghostDiff.diff < 0 ? `👻 YOU BEAT YOUR GHOST BY ${Math.abs(ghostDiff.diff)} over ${ghostDiff.holes}` : ghostDiff.diff > 0 ? `Ghost wins by ${ghostDiff.diff} over ${ghostDiff.holes} — run it back` : `Dead even with your ghost over ${ghostDiff.holes} — photo finish`}
+                {ghostDiff.diff < 0 ? `🏆 YOU BEAT ${(ghost?.name ?? 'THEM').toUpperCase()} BY ${Math.abs(ghostDiff.diff)} over ${ghostDiff.holes}` : ghostDiff.diff > 0 ? `${ghost?.name ?? 'They'} win by ${ghostDiff.diff} over ${ghostDiff.holes} — run it back` : `Dead even over ${ghostDiff.holes} — photo finish`}
               </Text>
-              <Text style={s.ghostVerdictSub}>{ghost ? ghostLabel(ghost) : ''}</Text>
+              <Text style={s.ghostVerdictSub}>{ghost?.kind === 'family' ? `${ghost.name} played to their number` : ghost?.name ?? ''}</Text>
             </View>
           ) : null}
           {scorecard.map((h) => {
