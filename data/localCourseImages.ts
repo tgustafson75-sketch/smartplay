@@ -305,9 +305,11 @@ export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> =
   18: require('../assets/courses/spessard-holland/hole-18.jpg'),
 };
 
-// 2026-07-06 — Webster/Dudley (MA) 9-hole. Cropped aerials from Tim's Golf Pad
-// hole-view screenshots (2216-2224 → holes 1-9).
-export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+// 2026-07-06 — Webster/Dudley (MA). Cropped aerials from Tim's Golf Pad hole-view
+// screenshots (2216-2224 → holes 1-9). 2026-07-07 — reprocessed (tighter crop +
+// unfade + vivid color) and extended to 18: the course plays 18 as the NINE TWICE
+// (scorecard-confirmed), so holes 10-18 show the same aerials as 1-9.
+const WD = {
   1: require('../assets/courses/webster-dudley/hole-01.jpg'),
   2: require('../assets/courses/webster-dudley/hole-02.jpg'),
   3: require('../assets/courses/webster-dudley/hole-03.jpg'),
@@ -317,6 +319,11 @@ export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   7: require('../assets/courses/webster-dudley/hole-07.jpg'),
   8: require('../assets/courses/webster-dudley/hole-08.jpg'),
   9: require('../assets/courses/webster-dudley/hole-09.jpg'),
+} as Record<number, ImageSourcePropType>;
+export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  ...WD,
+  10: WD[1], 11: WD[2], 12: WD[3], 13: WD[4], 14: WD[5],
+  15: WD[6], 16: WD[7], 17: WD[8], 18: WD[9],
 };
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {

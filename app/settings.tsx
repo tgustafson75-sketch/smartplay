@@ -926,6 +926,25 @@ export default function Settings() {
             Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
           </Text>
 
+          {/* 2026-07-07 (Tim — narrative profile intake) — the relationship layer.
+              An open conversation that teaches the caddie WHO you are (practice
+              reality, time, likes/dislikes, work areas, goals); merged into the CNS
+              so every answer shapes coaching everywhere from then on. */}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/caddie-intake' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Let your caddie get to know you"
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Let {caddieName} get to know you</Text>
+              <Text style={subStyle}>
+                A short open conversation — how you practice, the time you really have, what you enjoy, where the game needs work, what you&apos;re chasing. {caddieName} remembers all of it and coaches inside YOUR reality. Re-visit anytime; the caddie keeps learning from every conversation.
+              </Text>
+            </View>
+            <Ionicons name="chatbubbles-outline" size={20} color={colors.accent} />
+          </TouchableOpacity>
+
           <PillRow
             label="Round (on-course)  ·  default Kevin"
             options={[

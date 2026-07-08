@@ -229,12 +229,15 @@ export default function SwingBodyOverlay({
   // path when we have enough real points; else fall back to the wrist proxy. Same heat
   // coloring (speed between points), same aligned frame space. `useClub` also drives the
   // per-detection dots below so the user sees the REAL detected clubhead positions.
-  const useClub = !!(clubArc && clubArc.length >= MIN_CLUB_POINTS);
+  // Club path REQUIRES aligned frame space: club points are full-frame normalized, so
+  // in the legacy bbox-fallback space (no frameW/frameH) they can't be placed honestly —
+  // keep the wrist trace there instead of drawing a misregistered club arc.
+  const useClub = !!(aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS);
   const traceSegments = useMemo(() => {
     const sx = aligned ? aligned.sx : 1;
     const sy = aligned ? aligned.sy : 1;
     let P: { x: number; y: number; t: number }[];
-    if (clubArc && clubArc.length >= MIN_CLUB_POINTS) {
+    if (aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) {
       P = clubArc.map(p => ({ x: p.x * sx, y: p.y * sy, t: p.tMs }));
     } else {
       const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);

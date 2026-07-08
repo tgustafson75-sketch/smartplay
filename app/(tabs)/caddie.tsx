@@ -884,7 +884,11 @@ export default function CaddieTab() {
             .catch(() => {});
         }
       } else if (event.type === 'session_complete') {
-        const line = `${event.summary} Want to try another drill, or are we done?`;
+        // 2026-07-07 (Tim — "prompt for another round so I never go back to the phone")
+        // — after the per-swing reads, offer the NEXT ROUND explicitly. A "yes / run it
+        // back" fires record_swing → beginNextRecording (auto-saves the finished set,
+        // camera rolling). Naming a club/drill reconfigures first (SESSION_DONE_FOCUS).
+        const line = `${event.summary} Want another round? Say run it back and I'll start it — or name a club or drill and I'll set that up instead.`;
         configureAudioForSpeech()
           .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))

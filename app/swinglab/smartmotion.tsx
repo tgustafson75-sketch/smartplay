@@ -241,7 +241,7 @@ function clubPathSpec(a: SwingAnalysis | null): MetricSpec {
 // session_complete, cleared when they actually go again) tells the brain to ACT on
 // the next club/angle/drill answer.
 const SESSION_DONE_FOCUS =
-  'choosing whether to go again. If the player names a club, angle, or drill ("driver full swing", "face on", "nine iron easy"), ACT immediately — call configure_drill and/or set_angle to set it up, then tell them to hit when ready. Do NOT merely offer.';
+  'choosing whether to go again. If the player says YES / "another round" / "run it back" / "again" / "let\'s go", ACT immediately — call record_swing to start the next set (their last set auto-saves; same club and setup) and tell them it\'s rolling. If they name a club, angle, or drill ("driver full swing", "face on", "nine iron easy"), ACT immediately — call configure_drill and/or set_angle to set it up, then record_swing so it\'s rolling. Do NOT merely offer, do NOT ask again — they are standing at the ball, not at the phone.';
 
 function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null): BodyItem[] {
   const fault = a?.primary_fault;
@@ -791,7 +791,11 @@ export default function SmartMotion() {
   // 2026-06-14 — guards the windowed-loop re-seek so a burst of playback-status
   // ticks past a swing's endMs only fires one setPositionAsync (no seek spam/stutter).
   const loopSeekGuardRef = useRef(false);
-  const [playbackRate, setPlaybackRate] = useState(1); // review slow-mo (1 / .5 / .25)
+  // 2026-07-07 (Tim — "does evaluation improve with slow-mo first?") — YES: at ½ speed
+  // the positions (top, transition, impact) are actually readable on a phone and the
+  // skeleton/arc overlays track visibly, so the FIRST replay defaults to ½. The speed
+  // badge still cycles (½ → ¼ → 1×) — one tap back to real-time for tempo feel.
+  const [playbackRate, setPlaybackRate] = useState(0.5); // review slow-mo (1 / .5 / .25)
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
   // Status-perimeter pulse — a thin border around the video that ties to the
   // analysis phase (green active/done, amber while thinking), like the caddie
@@ -1116,6 +1120,14 @@ export default function SmartMotion() {
     if (!ballDeparture?.departurePoint || !ballArea) return null;
     return computeTraceDirection(ballArea, cvToContainer(ballDeparture.departurePoint), targetPoint);
   }, [angle, isPutt, ballDeparture, ballArea, targetPoint, cvToContainer]);
+  // 2026-07-07 — ref mirrors so runAnalysis (a stable callback) reads the CURRENT
+  // measured signals at call time without dep churn (same pattern as ballAreaRef).
+  const tempoRef = useRef(tempo);
+  const biomechRef = useRef(biomech);
+  const ballTraceRef = useRef(ballTrace);
+  useEffect(() => { tempoRef.current = tempo; }, [tempo]);
+  useEffect(() => { biomechRef.current = biomech; }, [biomech]);
+  useEffect(() => { ballTraceRef.current = ballTrace; }, [ballTrace]);
   // 2026-06-15 (Tim — shot-shape drills) — when this is a shot-shape drill, read
   // the actual LAUNCH (origin → the one departure point) and compare it to the
   // intended shape. Honest: launch height + direction only; roll is never claimed.
@@ -1225,6 +1237,20 @@ export default function SmartMotion() {
     };
     recordPracticeSwingIfActive(sample);
     practiceSwingSamplesRef.current.push(sample);
+    // 2026-07-07 (Tim — "tie the tracing into the caddie brain") — the same measured
+    // signals also feed the CNS rolling tendencies, so the brain can cite YOUR real
+    // tempo average / start-line % / contact pattern (was: computed but never learned).
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
+      const cr = analysis?.contact_read;
+      mem.useCaddieMemoryStore.getState().recordSwingMetrics({
+        tempoRatio: tempo?.ratio ?? null,
+        divergenceDeg: signedDiv,
+        mishit: cr === 'fat' || cr === 'thin' || cr === 'topped' ? cr : null,
+        nowMs: Date.now(),
+      });
+    } catch { /* non-fatal — learning is additive */ }
   }, [phase, clipUri, analysis, smartTrace, ballTrace, club, tempo]);
 
   // Camera strike-verification — did the ball actually leave its spot at
@@ -1654,6 +1680,22 @@ export default function SmartMotion() {
           // Was carried on the route but dropped before the analysis request.
           drill_focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
           drill_name: isDrill && typeof drillName === 'string' && drillName.trim() ? drillName.trim() : undefined,
+          // 2026-07-07 (Tim — "tie the tracing into the analysis") — the app's OWN
+          // measured signals as instrument readings the vision model corroborates
+          // against (it was judging frames blind to our measurements). On the FIRST
+          // pass most are still computing (they land on the Motion step) — that's
+          // fine, absent = vision-only; re-analyze + later swings carry the numbers.
+          measured: {
+            tempo_ratio: tempoRef.current?.ratio ?? null,
+            backswing_ms: tempoRef.current?.backswingMs ?? null,
+            downswing_ms: tempoRef.current?.downswingMs ?? null,
+            shoulder_tilt_deg: biomechRef.current?.shoulderTiltDeg ?? null,
+            spine_delta_deg: biomechRef.current?.spineAngleDeltaDeg ?? null,
+            weight_shift_pct: biomechRef.current?.weightShiftPct ?? null,
+            launch_divergence_deg: ballTraceRef.current?.divergenceDeg ?? null,
+            launch_side: ballTraceRef.current?.side ?? null,
+            strike_peak_db: segment?.peakDb ?? null,
+          },
         };
         // 2026-06-23 (Tim — "failure states wrapped in analysis delay it; you get
         // the analysis eventually but there's a bug in the parse/review") — the old
@@ -2869,6 +2911,9 @@ export default function SmartMotion() {
   // CameraView's onCameraReady then auto-starts the next recording. This keeps
   // the hands-free "do a minute, review, go again" loop working by voice.
   const pendingStartRef = useRef(false);
+  // Ref indirection: persistReviewToLibrary is defined below (it needs the full review
+  // state); beginNextRecording only fires from user taps, long after both exist.
+  const persistReviewRef = useRef<(navigate: boolean) => void>(() => {});
   const beginNextRecording = useCallback(() => {
     // 2026-06-29 (Tim) — the player chose to go again, so clear the post-session
     // "act on their answer" directive and restore the normal capture context.
@@ -2878,6 +2923,12 @@ export default function SmartMotion() {
       drillId: isDrill ? drillId : undefined,
     });
     if (phase === 'review') {
+      // 2026-07-07 (Tim) — moving to a NEW set auto-saves the current one: the report,
+      // notes, and swings flush to the Swing Library (with points) before the reset, so
+      // going again never silently drops a set. Same core as the explicit Save badge.
+      if (ingestedSessionIdRef.current) {
+        try { persistReviewRef.current(false); } catch { /* non-fatal — session is already ingested */ }
+      }
       pendingStartRef.current = true;
       reset(); // → setup; CameraView mounts; onCameraReady fires startRecording
     } else if (phase !== 'analyzing' && phase !== 'recording') {
@@ -2932,7 +2983,11 @@ export default function SmartMotion() {
   // and never took them to the library (Tim's "reports didn't save / didn't go to
   // the swing library"). Now it flushes any review-time coach note, confirms, and
   // navigates to the library so the saved swing is right there.
-  const confirmSave = useCallback(() => {
+  // 2026-07-07 (Tim — "when I move to a new round of swings, the report + swings should
+  // automatically go to the swing library") — the flush/credit core, shared by the
+  // explicit Save badge (navigate: true) AND the go-again path (navigate: false), so a
+  // new set NEVER silently drops the last set's report.
+  const persistReviewToLibrary = useCallback((navigate: boolean) => {
     const sid = ingestedSessionIdRef.current;
     if (sid && coachNote.trim()) {
       try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
@@ -3006,11 +3061,16 @@ export default function SmartMotion() {
         // Mark credited so the one-time backfill never double-counts this session — whether
         // the points came from here (no session) or from endSession (session active).
         useCageStore.getState().setSessionCreditedPractice(sid, true);
+        // 2026-07-07 — samples were credited with THIS set; clear so a go-again set
+        // doesn't re-stamp them (the accumulate-across-loop design predates per-set saves).
+        practiceSwingSamplesRef.current = [];
       } catch { /* non-fatal */ }
     }
-    useToastStore.getState().show(savedMsg);
-    router.push('/swinglab/library' as never);
+    useToastStore.getState().show(navigate ? savedMsg : `${savedMsg} — fresh set rolling`);
+    if (navigate) router.push('/swinglab/library' as never);
   }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
+  const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);
+  persistReviewRef.current = persistReviewToLibrary;
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
@@ -3125,15 +3185,25 @@ export default function SmartMotion() {
         <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel="Re-analyze this swing">
           <Ionicons name="refresh" size={24} color={analysisError ? colors.accent : '#fff'} />
         </TactilePressable>
-        <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
-          <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
-        </TactilePressable>
+        {/* 2026-07-07 (Tim — "still hard to start a new session") — the two decisions
+            that matter get NAMED: SAVE and NEW SET. New Set auto-saves the current set
+            first (persistReviewToLibrary in beginNextRecording), so it's one obvious
+            tap to keep rolling without losing anything. */}
+        <View style={styles.ctrlLabeled}>
+          <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
+            <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
+          </TactilePressable>
+          <Text style={styles.ctrlLabelText}>SAVE</Text>
+        </View>
         <TactilePressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Delete swing">
           <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
         </TactilePressable>
-        <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Record again">
-          <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
-        </TactilePressable>
+        <View style={styles.ctrlLabeled}>
+          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="New set — saves this one and records again">
+            <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
+          </TactilePressable>
+          <Text style={[styles.ctrlLabelText, { color: '#88F700' }]}>NEW SET</Text>
+        </View>
       </View>
     ) : phase === 'setup' ? (
       <TactilePressable haptic="medium" onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel="Record">
@@ -4425,6 +4495,9 @@ const styles = StyleSheet.create({
   // backing (a shadow, not a competing green ring), so it keeps the "icon's own circle is
   // the button" look. Active state brightens to the lime fill.
   toolBtnBare: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.42)', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, elevation: 4 },
+  // 2026-07-07 — named review controls (SAVE / NEW SET) so the next action is obvious.
+  ctrlLabeled: { alignItems: 'center', gap: 2 },
+  ctrlLabelText: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   toolBtnBareActive: { backgroundColor: 'rgba(136,247,0,0.30)' },
   toolIconFull: { width: 46, height: 46 },
   // 2026-06-13 (Tim) — single tools icon → labeled card. Collapsed = just this pill

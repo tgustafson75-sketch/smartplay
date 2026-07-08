@@ -153,6 +153,42 @@ export function getCaddieContext(input: {
       } catch { /* book optional */ }
     }
     if (tendencies) lines.push(tendencies);
+    // 2026-07-07 (Tim — tie the tracing into the brain) — the MEASURED swing tendencies,
+    // so "how's my tempo" has a real number behind it. Honest floors: only surfaced once
+    // enough real reads have landed; mishit counts only when meaningful.
+    const sm = p.swingMetrics;
+    if (sm) {
+      const mParts: string[] = [];
+      if (sm.tempoAvg != null && sm.tempoSamples >= 5) mParts.push(`tempo averaging ${sm.tempoAvg.toFixed(1)}:1 over ${sm.tempoSamples} measured swings (3:1 is the classic benchmark)`);
+      if (sm.divergenceAvgDeg != null && sm.tracedCount >= 5) {
+        mParts.push(`start line: ${Math.round((sm.onLineCount / sm.tracedCount) * 100)}% within 4° of target (avg miss ${Math.round(sm.divergenceAvgDeg)}°) across ${sm.tracedCount} traced shots`);
+      }
+      const mishitTotal = Object.values(sm.mishits ?? {}).reduce((a, b) => a + b, 0);
+      if (mishitTotal >= 3 && sm.swingCount > 0) {
+        const top = Object.entries(sm.mishits).sort((a, b) => b[1] - a[1])[0];
+        mParts.push(`contact: ${top[0].replace(/_/g, ' ')} showing up ${top[1]}x recently`);
+      }
+      if (mParts.length > 0) lines.push(`Measured swing tendencies — ${mParts.join('; ')}.`);
+    }
+    // 2026-07-07 (Tim — narrative profile) — WHO this golfer is, in their own words.
+    // The relationship layer: practice reality, time, likes/dislikes, where they feel
+    // the work is needed. The brain should coach INSIDE this reality (never prescribe
+    // an hour of drills to someone with 20 minutes) and reference it naturally.
+    const nv = p.narrative;
+    if (nv) {
+      const nParts: string[] = [];
+      if (nv.experience) nParts.push(`experience: ${nv.experience}`);
+      if (nv.practiceFrequency) nParts.push(`practice: ${nv.practiceFrequency}`);
+      if (nv.timeAvailable) nParts.push(`time: ${nv.timeAvailable}`);
+      if (nv.workAreas.length > 0) nParts.push(`wants work on: ${nv.workAreas.slice(0, 4).join(', ')}`);
+      if (nv.goals.length > 0) nParts.push(`goals: ${nv.goals.slice(0, 3).join(', ')}`);
+      if (nv.likes.length > 0) nParts.push(`enjoys: ${nv.likes.slice(0, 3).join(', ')}`);
+      if (nv.dislikes.length > 0) nParts.push(`avoid pushing: ${nv.dislikes.slice(0, 3).join(', ')}`);
+      if (nv.story.length > 0) nParts.push(`worth knowing: ${nv.story.slice(-3).join('; ')}`);
+      if (nParts.length > 0) {
+        lines.push(`Who this golfer is (their own words — coach inside this reality, reference it naturally) — ${nParts.join(' | ')}.`);
+      }
+    }
     if (recentReflection) {
       lines.push(`Last round takeaway: ${recentReflection}`);
       const keyTakeaways = p.reflections[0]?.keyTakeaways;

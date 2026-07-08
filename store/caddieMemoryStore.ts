@@ -69,14 +69,68 @@ export interface Reflection {
   keyTakeaways: string[];
 }
 
+// 2026-07-07 (Tim — "tie the tracing together into the caddie brain") — the MEASURED
+// swing tendencies the brain can actually cite: rolling tempo, start-line dispersion,
+// and contact mishit counts. EWMA + counts so "how's my tempo trending" has a real
+// number behind it. Honest: null until MIN_METRIC_SAMPLES real reads land.
+export interface SwingMetricTendencies {
+  /** EWMA of tempo ratio (backswing:downswing, ~3.0 ideal). Null until enough samples. */
+  tempoAvg: number | null;
+  tempoSamples: number;
+  /** EWMA of |divergence| off the aim line at launch (deg). Null until enough samples. */
+  divergenceAvgDeg: number | null;
+  /** Of the traced swings, how many started within 4° of the line (rolling counts). */
+  onLineCount: number;
+  tracedCount: number;
+  /** Contact mishits observed (fat/thin/topped/no-launch), rolling counts. */
+  mishits: Record<string, number>;
+  swingCount: number;
+  updated_at: number;
+}
+
+// 2026-07-07 (Tim — narrative profile intake) — WHO the golfer is, in their own words:
+// how they practice, the time they actually have, what they like/avoid, where the game
+// needs work, how it's gone. Written by the intake conversation + ongoing chats
+// (api/narrative-extract), read by EVERY brain surface via the CNS prompt block — the
+// relationship layer that makes it a coach who knows you, not an app.
+export interface GolferNarrative {
+  /** e.g. "playing ~20 years, self-taught, never had a lesson". */
+  experience: string | null;
+  /** e.g. "range 2x/week; short-game rarely". */
+  practiceFrequency: string | null;
+  /** e.g. "45-min windows on weeknights; travels for work, hotel nights". */
+  timeAvailable: string | null;
+  likes: string[];
+  dislikes: string[];
+  /** Where THEY feel the game needs the most work (their words). */
+  workAreas: string[];
+  strengths: string[];
+  goals: string[];
+  /** Free-form remembered facts worth knowing ("plays with his son Tank", ...). */
+  story: string[];
+  updated_at: number;
+}
+
 export interface PlayerMemory {
   player_id: string;
   bag: Record<string, ClubModel>;
   tendencies: { dominantMiss: string | null; recentFaults: string[] };
+  /** Measured swing tendencies (tempo / start-line / contact). Optional for legacy
+   *  persisted players — readers must tolerate absence. */
+  swingMetrics?: SwingMetricTendencies;
+  /** The golfer's narrative profile. Optional for legacy persisted players. */
+  narrative?: GolferNarrative;
   preferences: { respondsTo: string | null; tone: string | null };
   courses: Record<string, CourseMemory>;
   reflections: Reflection[];
   updated_at: number;
+}
+
+export function emptySwingMetrics(): SwingMetricTendencies {
+  return { tempoAvg: null, tempoSamples: 0, divergenceAvgDeg: null, onLineCount: 0, tracedCount: 0, mishits: {}, swingCount: 0, updated_at: 0 };
+}
+export function emptyNarrative(): GolferNarrative {
+  return { experience: null, practiceFrequency: null, timeAvailable: null, likes: [], dislikes: [], workAreas: [], strengths: [], goals: [], story: [], updated_at: 0 };
 }
 
 // ─── Course Book (static, player-INDEPENDENT course knowledge) ───────────────
@@ -186,6 +240,14 @@ interface CaddieMemoryState {
   }) => void;
   recordReflection: (input: { round_id: string; course_id?: string | null; summary: string; keyTakeaways?: string[]; nowMs: number; playerId?: string }) => void;
   recordPreference: (input: { respondsTo?: string | null; tone?: string | null; playerId?: string }) => void;
+  /** 2026-07-07 — record a swing's MEASURED signals (tempo / divergence / mishit) into
+   *  rolling tendencies so the brain can cite real numbers. All fields optional —
+   *  record whatever was honestly measured for this swing. */
+  recordSwingMetrics: (input: { tempoRatio?: number | null; divergenceDeg?: number | null; mishit?: string | null; nowMs: number; playerId?: string }) => void;
+  /** 2026-07-07 — merge narrative-profile facts (from the intake conversation or any
+   *  chat via api/narrative-extract). Additive: scalars overwrite only when non-empty,
+   *  lists dedupe + cap. Never wipes what's already known. */
+  recordNarrative: (input: Partial<Omit<GolferNarrative, 'updated_at'>> & { nowMs: number; playerId?: string }) => void;
 }
 
 function pid(explicit?: string): string {
@@ -360,6 +422,67 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             respondsTo: respondsTo ?? p.preferences.respondsTo,
             tone: tone ?? p.preferences.tone,
           } } } };
+        });
+      },
+
+      recordSwingMetrics: ({ tempoRatio, divergenceDeg, mishit, nowMs, playerId }) => {
+        const id = pid(playerId);
+        set((s) => {
+          const p = s.players[id] ?? emptyPlayer(id);
+          const m: SwingMetricTendencies = { ...(p.swingMetrics ?? emptySwingMetrics()) };
+          const W = 0.15; // EWMA weight — recent swings matter more, history smooths
+          if (typeof tempoRatio === 'number' && tempoRatio > 0.5 && tempoRatio < 8) {
+            m.tempoAvg = m.tempoAvg == null ? tempoRatio : m.tempoAvg + (tempoRatio - m.tempoAvg) * W;
+            m.tempoSamples += 1;
+          }
+          if (typeof divergenceDeg === 'number' && Number.isFinite(divergenceDeg)) {
+            const abs = Math.abs(divergenceDeg);
+            m.divergenceAvgDeg = m.divergenceAvgDeg == null ? abs : m.divergenceAvgDeg + (abs - m.divergenceAvgDeg) * W;
+            m.tracedCount += 1;
+            if (abs <= 4) m.onLineCount += 1;
+          }
+          if (mishit && mishit.trim()) {
+            const k = mishit.trim();
+            m.mishits = { ...m.mishits, [k]: (m.mishits[k] ?? 0) + 1 };
+          }
+          m.swingCount += 1;
+          m.updated_at = nowMs;
+          return { players: { ...s.players, [id]: { ...p, swingMetrics: m, updated_at: nowMs } } };
+        });
+      },
+
+      recordNarrative: ({ nowMs, playerId, ...facts }) => {
+        const id = pid(playerId);
+        const cleanStr = (v: string | null | undefined): string | null => {
+          const t = (v ?? '').trim();
+          return t.length > 0 ? t.slice(0, 200) : null;
+        };
+        const mergeList = (prev: string[], add: string[] | undefined, cap: number): string[] => {
+          if (!add || add.length === 0) return prev;
+          const seen = new Set(prev.map((x) => x.toLowerCase()));
+          const out = [...prev];
+          for (const raw of add) {
+            const t = (raw ?? '').trim().slice(0, 160);
+            if (!t || seen.has(t.toLowerCase())) continue;
+            seen.add(t.toLowerCase());
+            out.push(t);
+          }
+          return out.slice(-cap); // keep the newest facts when over cap
+        };
+        set((s) => {
+          const p = s.players[id] ?? emptyPlayer(id);
+          const n: GolferNarrative = { ...emptyNarrative(), ...(p.narrative ?? {}) };
+          n.experience = cleanStr(facts.experience) ?? n.experience;
+          n.practiceFrequency = cleanStr(facts.practiceFrequency) ?? n.practiceFrequency;
+          n.timeAvailable = cleanStr(facts.timeAvailable) ?? n.timeAvailable;
+          n.likes = mergeList(n.likes, facts.likes, 12);
+          n.dislikes = mergeList(n.dislikes, facts.dislikes, 12);
+          n.workAreas = mergeList(n.workAreas, facts.workAreas, 10);
+          n.strengths = mergeList(n.strengths, facts.strengths, 10);
+          n.goals = mergeList(n.goals, facts.goals, 8);
+          n.story = mergeList(n.story, facts.story, 20);
+          n.updated_at = nowMs;
+          return { players: { ...s.players, [id]: { ...p, narrative: n, updated_at: nowMs } } };
         });
       },
     }),

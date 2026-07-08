@@ -1110,6 +1110,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ctxLines.push(`Player first name: ${pc.first_name.trim()}`);
       }
     }
+    // 2026-07-07 (Tim — "tie the tracing into the analysis") — the app's OWN measured
+    // signals (pose tempo, biomech angles, acoustic strike, launch divergence). The
+    // model has been judging frames BLIND to these. Threaded as corroborating
+    // instrument readings: trust them over what 5 sparse frames suggest, and use them
+    // to confirm/deny a suspected fault (e.g. weight_shift 28% corroborates hanging
+    // back; a 9° left launch corroborates an out-to-in path). Absent = vision-only.
+    if (ctx.measured && typeof ctx.measured === 'object') {
+      const m = ctx.measured as Record<string, unknown>;
+      const mParts: string[] = [];
+      if (typeof m.tempo_ratio === 'number') mParts.push(`tempo ${m.tempo_ratio.toFixed(1)}:1 (backswing:downswing; ~3:1 classic)`);
+      if (typeof m.backswing_ms === 'number' && typeof m.downswing_ms === 'number') mParts.push(`backswing ${Math.round(m.backswing_ms)}ms, downswing ${Math.round(m.downswing_ms)}ms`);
+      if (typeof m.shoulder_tilt_deg === 'number') mParts.push(`shoulder tilt ${Math.round(m.shoulder_tilt_deg)}°`);
+      if (typeof m.spine_delta_deg === 'number') mParts.push(`spine-angle change ${Math.round(m.spine_delta_deg)}°`);
+      if (typeof m.weight_shift_pct === 'number') mParts.push(`weight shift ${Math.round(m.weight_shift_pct)}% to lead side`);
+      if (typeof m.launch_divergence_deg === 'number' && typeof m.launch_side === 'string') mParts.push(`ball launched ${m.launch_divergence_deg}° ${m.launch_side} of the aim line (camera-tracked)`);
+      if (typeof m.strike_peak_db === 'number' && m.strike_peak_db !== 0) mParts.push(`acoustic strike energy ${Math.round(m.strike_peak_db)}dB`);
+      if (mParts.length > 0) {
+        ctxLines.push(`MEASURED INSTRUMENT READINGS from this swing (device pose/acoustic/camera tracking — treat as reliable; corroborate or challenge what the sparse frames suggest): ${mParts.join('; ')}.`);
+      }
+    }
     // Phase 502 — swing_tag routes putt/chip uploads to PUTT_SYSTEM_PROMPT
     // (short-game-specific reads) instead of full-swing fault classification.
     const swingTag = typeof ctx.swing_tag === 'string' ? ctx.swing_tag.toLowerCase() : '';

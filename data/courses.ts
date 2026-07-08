@@ -628,32 +628,41 @@ export const SPESSARD_HOLLAND_HOLES: CourseHole[] = [
   { hole: 18, par: 4, distance: 233, front: 219, back: 247, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
 ];
 
-// 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-view screenshots
+// 2026-07-06 — Webster/Dudley (MA), from Tim's Golf Pad hole-view screenshots
 // (~/Downloads/websterdudley, 2216-2224 → holes 1-9). front/center/back yardages are
-// REAL (read off the shots); par is derived from length (standard convention →
-// estimated:true); hole GPS coords aren't in the shots (0,0) so — like Spessard —
-// static scorecard yardage works and Mark Green gives a live counting-down number.
+// REAL (read off the shots). 2026-07-07 — PARS are now REAL from the physical
+// scorecard (~/Downloads/scorecards): 4,4,3,4,4,3,4,5,5 = 36 (fixes hole 9, a par 5
+// the length-derivation called a 4). The card also confirms 18 IS PLAYED AS THE NINE
+// TWICE (back-nine yardages repeat the front), so holes 10-18 mirror 1-9 below.
+// Hole GPS coords aren't in the shots (0,0) so — like Spessard — static scorecard
+// yardage works and Mark Green gives a live counting-down number.
+const WEBSTER_DUDLEY_FRONT: CourseHole[] = [
+  { hole: 1, par: 4, distance: 352, front: 341, back: 364, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 2, par: 4, distance: 348, front: 336, back: 359, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 3, par: 3, distance: 142, front: 133, back: 151, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 4, par: 4, distance: 360, front: 348, back: 372, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 5, par: 4, distance: 301, front: 288, back: 313, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 6, par: 3, distance: 172, front: 158, back: 185, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 7, par: 4, distance: 391, front: 380, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 8, par: 5, distance: 477, front: 466, back: 487, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 9, par: 5, distance: 459, front: 447, back: 472, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+];
 export const WEBSTER_DUDLEY_HOLES: CourseHole[] = [
-  { hole: 1, par: 4, distance: 352, front: 341, back: 364, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 2, par: 4, distance: 348, front: 336, back: 359, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 3, par: 3, distance: 142, front: 133, back: 151, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 4, par: 4, distance: 360, front: 348, back: 372, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 5, par: 4, distance: 301, front: 288, back: 313, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 6, par: 3, distance: 172, front: 158, back: 185, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 7, par: 4, distance: 391, front: 380, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 8, par: 5, distance: 477, front: 466, back: 487, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
-  { hole: 9, par: 4, distance: 459, front: 447, back: 472, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  ...WEBSTER_DUDLEY_FRONT,
+  // Back nine = the same nine again (holes 10-18 mirror 1-9, per the scorecard).
+  ...WEBSTER_DUDLEY_FRONT.map((h) => ({ ...h, hole: h.hole + 9 })),
 ];
 
 export const COURSES: Course[] = [
   {
     id: 'webster-dudley',
     name: 'Webster Dudley',
-    fullName: 'Webster / Dudley GC (9)',
+    // 18 is played as the nine twice (scorecard-confirmed); front = holes 1-9.
+    fullName: 'Webster / Dudley GC (9 twice = 18)',
     rating: '',
     slope: '',
-    par: 35,
-    totalYards: 3002,
+    par: 72,
+    totalYards: 6004,
     holes: WEBSTER_DUDLEY_HOLES,
   },
   {

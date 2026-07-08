@@ -87,6 +87,7 @@
     { "src": "/api/ball-departure",    "dest": "/api/ball-departure.ts" },
     { "src": "/api/ball-path",         "dest": "/api/ball-path.ts" },
     { "src": "/api/club-path",         "dest": "/api/club-path.ts" },
+    { "src": "/api/narrative-extract", "dest": "/api/narrative-extract.ts" },
     { "src": "/api/putting-analysis",  "dest": "/api/putting-analysis.ts" },
     { "src": "/api/junior-swing-analysis", "dest": "/api/junior-swing-analysis.ts" },
     { "src": "/api/course-intelligence",   "dest": "/api/course-intelligence.ts" },

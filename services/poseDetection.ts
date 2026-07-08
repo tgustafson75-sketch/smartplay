@@ -820,6 +820,21 @@ export async function analyzeSwing(
     // weigh against what it sees ("you said X, I see Y") — like coach_audio, but from the
     // golfer. Was persisted + displayed but never reached any brain/analysis prompt.
     feel_note?: string | null;
+    // 2026-07-07 (Tim — "tie the tracing into the analysis") — the app's OWN measured
+    // signals for THIS swing (pose tempo/biomech, camera launch tracking, acoustic
+    // strike). Instrument readings the vision model corroborates against — it was
+    // judging frames blind to our measurements. All optional; pass what's real.
+    measured?: {
+      tempo_ratio?: number | null;
+      backswing_ms?: number | null;
+      downswing_ms?: number | null;
+      shoulder_tilt_deg?: number | null;
+      spine_delta_deg?: number | null;
+      weight_shift_pct?: number | null;
+      launch_divergence_deg?: number | null;
+      launch_side?: string | null;
+      strike_peak_db?: number | null;
+    } | null;
   },
   boundaries?: { startSec: number; endSec: number },
   // Phase 403b — when provided, the persisted fault-frame JPEG will be

@@ -58,6 +58,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
+import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -193,6 +194,13 @@ export default function Dashboard() {
     }),
     [libraryHistory, realRounds, pointsBaselineMs],
   );
+
+  // 2026-07-07 (Tim — narrative intake) — does the caddie know this golfer yet? When
+  // the narrative is empty, surface the get-to-know-you card (the relationship layer).
+  const caddieKnowsYou = useCaddieMemoryStore((s) => {
+    const n = s.getPlayer().narrative;
+    return !!n && (n.experience != null || n.practiceFrequency != null || n.workAreas.length > 0 || n.goals.length > 0);
+  });
 
   // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
   // vs. score-vs-par per round. Third correlation rail alongside practice + points.
@@ -789,6 +797,29 @@ export default function Dashboard() {
               );
             })}
           </View>
+        )}
+
+        {/* ─── GET TO KNOW YOU (Tim, 2026-07-07 — narrative intake) — until the caddie
+            actually knows this golfer, the relationship layer is the highest-value
+            5 minutes in the app. Disappears once a real narrative exists. */}
+        {!caddieKnowsYou && (
+          <TouchableOpacity
+            style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: '#88F700' }]}
+            onPress={() => router.push('/caddie-intake' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Let your caddie get to know you"
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="chatbubbles" size={22} color="#88F700" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>YOUR CADDIE DOESN&apos;T KNOW YOU YET</Text>
+                <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>
+                  Five minutes of real talk — how you practice, the time you have, what you&apos;re chasing — and every read, drill and plan starts fitting YOUR game.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+            </View>
+          </TouchableOpacity>
         )}
 
         {/* ─── PRACTICE → PERFORMANCE (Tim, phase 3) — the honest connection:
