@@ -503,6 +503,10 @@ function AppNavigator() {
   useEffect(() => {
     bootMark('app_init_effect'); // root layout init effect running
     initListeningSession();
+    // 2026-07-08 (Tim — always-on narrative learning) — observe the caddie conversation
+    // off-round and distill what the golfer says about themselves into the CNS narrative.
+    // Pure observer of the conversation-log store; never touches the voice path.
+    void import('../services/narrativeIngest').then((m) => m.initNarrativeIngest()).catch(() => undefined);
     // 2026-05-22 — Hands-Free orchestrator runs alongside the legacy
     // listeningSession.toggle() subscription. It adds pattern-aware
     // dispatch (single/double/triple/long-press) + watch-bridge tap

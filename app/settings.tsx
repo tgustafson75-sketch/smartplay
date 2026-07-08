@@ -43,6 +43,12 @@ import {
   startSimulatedWalk, stopSimulatedWalk, getAvailableWalks,
   subscribeToWalk, isSimulatedActive, type SimulatedWalkState,
 } from '../services/simulatedGPS';
+import { setScreenContext } from '../services/screenContext';
+
+// 2026-07-08 (Tim) — primes the caddie brain to interview the golfer warmly when they
+// open the Caddie tab from the "get to know you" entry. Ingested to CNS via narrativeIngest.
+const GET_TO_KNOW_FOCUS =
+  'getting to know this golfer as a person and a player. Have a warm, natural, OPEN conversation — not a form. Ask about their experience, how and how often they really practice, the time they honestly have, what they enjoy and what they avoid, where they feel their game needs work, and what they are chasing. Ask ONE question at a time, listen, and follow up on what they actually say. You are building a lasting understanding of them — reflect it back so they know you heard it.';
 
 export default function Settings() {
   const router = useRouter();
@@ -926,15 +932,18 @@ export default function Settings() {
             Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
           </Text>
 
-          {/* 2026-07-07 (Tim — narrative profile intake) — the relationship layer.
-              An open conversation that teaches the caddie WHO you are (practice
-              reality, time, likes/dislikes, work areas, goals); merged into the CNS
-              so every answer shapes coaching everywhere from then on. */}
+          {/* 2026-07-08 (Tim — "it has to be talking to Kevin, not typing on a keyboard")
+              — the relationship layer is now a REAL voice conversation, not a form. This
+              primes the caddie to interview the golfer warmly and opens the Caddie tab;
+              everything you say is ingested into the CNS narrative (narrativeIngest). */}
           <TouchableOpacity
             style={rowDivStyle}
-            onPress={() => router.push('/caddie-intake' as never)}
+            onPress={() => {
+              setScreenContext({ screen: 'getting to know the golfer', focus: GET_TO_KNOW_FOCUS });
+              router.push('/(tabs)/caddie' as never);
+            }}
             accessibilityRole="button"
-            accessibilityLabel="Let your caddie get to know you"
+            accessibilityLabel="Talk to your caddie so it gets to know you"
           >
             <View style={styles.rowText}>
               <Text style={labelStyle}>Let {caddieName} get to know you</Text>

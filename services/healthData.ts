@@ -83,6 +83,26 @@ export async function initHealth(): Promise<boolean> {
   }
   try {
     const hc = await import('react-native-health-connect');
+    // 2026-07-08 (Tim — "Connect Health Data white-screens") — GATE on getSdkStatus
+    // BEFORE initialize(). On devices where Health Connect isn't installed / needs a
+    // provider update (common on some Samsung/older Android), calling initialize() or
+    // requestPermission() directly can throw a NATIVE (JNI) fatal that JS try/catch
+    // cannot catch — the app goes white. getSdkStatus() is the library's safe
+    // availability probe; only proceed when it reports SDK_AVAILABLE (3).
+    try {
+      const status = await hc.getSdkStatus();
+      if (status !== 3 /* SdkAvailabilityStatus.SDK_AVAILABLE */) {
+        console.log('[healthData] Health Connect not available (sdkStatus=' + status + ') — skipping init');
+        cachedAvailable = false;
+        return false;
+      }
+    } catch (statusErr) {
+      // Even the status probe failed — treat as unavailable rather than risk init.
+      console.log('[healthData] getSdkStatus failed — treating HC as unavailable:', statusErr);
+      cachedAvailable = false;
+      initFailed = true;
+      return false;
+    }
     const ok = await hc.initialize();
     initialized = !!ok;
     cachedAvailable = !!ok;

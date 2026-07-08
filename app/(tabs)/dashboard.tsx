@@ -59,6 +59,13 @@ import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
+import { setScreenContext } from '../../services/screenContext';
+
+// 2026-07-08 (Tim — get-to-know-you = a real voice conversation, not a form) — primes
+// the caddie brain to interview the golfer warmly when they open the Caddie tab from the
+// dashboard card. Everything they say is ingested to the CNS narrative (narrativeIngest).
+const GET_TO_KNOW_FOCUS =
+  'getting to know this golfer as a person and a player. Have a warm, natural, OPEN conversation — not a form. Ask about their experience, how and how often they really practice, the time they honestly have, what they enjoy and what they avoid, where they feel their game needs work, and what they are chasing. Ask ONE question at a time, listen, and follow up on what they actually say. You are building a lasting understanding of them — reflect it back so they know you heard it.';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -799,28 +806,33 @@ export default function Dashboard() {
           </View>
         )}
 
-        {/* ─── GET TO KNOW YOU (Tim, 2026-07-07 — narrative intake) — until the caddie
-            actually knows this golfer, the relationship layer is the highest-value
-            5 minutes in the app. Disappears once a real narrative exists. */}
-        {!caddieKnowsYou && (
-          <TouchableOpacity
-            style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: '#88F700' }]}
-            onPress={() => router.push('/caddie-intake' as never)}
-            accessibilityRole="button"
-            accessibilityLabel="Let your caddie get to know you"
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Ionicons name="chatbubbles" size={22} color="#88F700" />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>YOUR CADDIE DOESN&apos;T KNOW YOU YET</Text>
-                <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>
-                  Five minutes of real talk — how you practice, the time you have, what you&apos;re chasing — and every read, drill and plan starts fitting YOUR game.
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        {/* ─── TALK TO YOUR CADDIE (Tim, 2026-07-08) — the relationship layer, reworked
+            from the typed "intake form" (which just prompted, didn't listen) into the
+            REAL voice conversation: this opens the Caddie tab primed to get to know you,
+            you talk, and everything you say about your game is ingested into your profile
+            (services/narrativeIngest). ALWAYS present — the caddie is always learning. */}
+        <TouchableOpacity
+          style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: '#88F700' }]}
+          onPress={() => {
+            setScreenContext({ screen: 'getting to know the golfer', focus: GET_TO_KNOW_FOCUS });
+            router.push('/(tabs)/caddie' as never);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Talk to your caddie about your game"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name="chatbubbles" size={22} color="#88F700" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{caddieKnowsYou ? 'TELL YOUR CADDIE MORE' : 'LET YOUR CADDIE GET TO KNOW YOU'}</Text>
+              <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>
+                {caddieKnowsYou
+                  ? 'Tap, hit the mic, and just talk golf — your caddie keeps learning your game and folds it into every read, drill and plan.'
+                  : 'Tap, hit the mic, and talk to your caddie about your game — how you practice, the time you have, what you’re chasing. It listens and fits everything to YOU.'}
+              </Text>
             </View>
-          </TouchableOpacity>
-        )}
+            <Ionicons name="mic" size={18} color="#88F700" />
+          </View>
+        </TouchableOpacity>
 
         {/* ─── PRACTICE → PERFORMANCE (Tim, phase 3) — the honest connection:
             practice volume vs scoring trend. Shows once there's any of both. */}
