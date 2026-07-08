@@ -42,6 +42,7 @@ import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/
 import { evaluateFraming } from '../../services/swing/framingCheck';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { frameToContainerNorm, containerToFrameNorm } from '../../services/swing/overlayCoords';
+import { IndoorRepDetector, summarizeIndoorReps, type IndoorRep } from '../../services/indoorSwing';
 import { estimateCarryYards, fullCarryYards } from '../../services/swing/carryEstimate';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
 import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
@@ -2776,6 +2777,46 @@ check('Real clubhead arc: detected-only, honestly gated, wired end-to-end',
     );
   })(),
   'the clubhead arc is drawn through ACTUALLY-DETECTED clubhead positions (dotted at each real detection), gapped/absent when detection is thin, and falls back to the honest hand/tempo trace — a legitimate club path, never a fabricated one');
+
+// 2026-07-07 (Tim — Hotel Mode) — phone-in-hand tempo from the gyroscope. The detector
+// must (a) read a clean synthetic swing set with the right tempo shape, (b) read putts
+// with the accel/decel through-stroke call, and (c) NEVER fabricate reps from hand
+// jitter. Runs the REAL detector on synthetic 100Hz signals.
+check('Hotel Mode: gyro rep detector reads swings + putts, never fabricates from jitter',
+  (() => {
+    const synth = (det: IndoorRepDetector, t0: number, backMs: number, downMs: number, peakBack: number, peakDown: number): { rep: IndoorRep | null; tEnd: number } => {
+      let rep: IndoorRep | null = null;
+      const dt = 10; let t = t0;
+      for (let i = 0; i < 30; i++) { rep = det.onSample({ t, x: 0.02, y: 0.01, z: 0 }) ?? rep; t += dt; }
+      const nb = Math.round(backMs / dt);
+      for (let i = 0; i <= nb; i++) { rep = det.onSample({ t, x: Math.sin((i / nb) * Math.PI) * peakBack + 0.01, y: 0.02, z: 0 }) ?? rep; t += dt; }
+      const nd = Math.round(downMs / dt);
+      for (let i = 0; i <= nd; i++) { rep = det.onSample({ t, x: -Math.sin((i / nd) * (Math.PI / 2)) * peakDown, y: 0.02, z: 0 }) ?? rep; t += dt; }
+      for (let i = 0; i < 60; i++) { rep = det.onSample({ t, x: -Math.max(0, peakDown * (1 - i / 25)), y: 0.01, z: 0 }) ?? rep; t += dt; }
+      return { rep, tEnd: t };
+    };
+    // (a) 5 swings ~900/300ms → all detected, tempo in a sane band, high consistency.
+    const det = new IndoorRepDetector('swing');
+    let t = 0; const reps: IndoorRep[] = [];
+    for (let k = 0; k < 5; k++) { const r = synth(det, t, 900 + k * 20, 300, 3, 8); if (r.rep) reps.push(r.rep); t = r.tEnd + 500; }
+    const sum = summarizeIndoorReps(reps, 'swing');
+    const swingsOk = reps.length === 5 && sum.avgTempo != null && sum.avgTempo > 2.2 && sum.avgTempo < 3.4 && (sum.consistency ?? 0) >= 80;
+    // (b) putts detected with the through-stroke read present.
+    const dp = new IndoorRepDetector('putt');
+    t = 0; const preps: IndoorRep[] = [];
+    for (let k = 0; k < 4; k++) { const r = synth(dp, t, 600, 300, 0.8, 1.2); if (r.rep) preps.push(r.rep); t = r.tEnd + 400; }
+    const puttsOk = preps.length === 4 && preps.every((r) => r.throughStroke === 'accelerating' || r.throughStroke === 'decelerating');
+    // (c) sub-threshold hand jitter must create ZERO reps.
+    const dn = new IndoorRepDetector('swing');
+    let noise = 0;
+    for (let i = 0; i < 2000; i++) { if (dn.onSample({ t: i * 10, x: (((i * 7919) % 100) / 100 - 0.5) * 0.8, y: (((i * 104729) % 100) / 100 - 0.5) * 0.8, z: 0 })) noise++; }
+    // Wiring: hub card + screen + CNS/points crediting present.
+    const scr = read('app/swinglab/indoor.tsx');
+    const wired = /route: '\/swinglab\/indoor'/.test(read('app/(tabs)/swinglab.tsx')) &&
+      /recordSwingMetrics/.test(scr) && /awardPracticePoints/.test(scr) && /no ball flight is claimed indoors/i.test(scr);
+    return swingsOk && puttsOk && noise === 0 && wired;
+  })(),
+  'the real IndoorRepDetector reads 5/5 synthetic swings (sane tempo, ≥80 consistency) and 4/4 putts with an accel/decel call, produces ZERO reps from hand jitter, and the screen is wired to the hub + points + CNS with the honest no-ball-flight label');
 
 check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
   // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on

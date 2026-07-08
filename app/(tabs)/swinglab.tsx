@@ -139,6 +139,18 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     route: '/practice/open-range',
     tag: 'RANGE',
   },
+  // 2026-07-07 (Tim — "build the indoor and hotel mode... I wanna try it tonight") —
+  // phone-in-hand tempo practice for the road: no camera, no space, no ball. Gyro
+  // reads tempo/transition/consistency at ~100Hz and feeds the same CNS tempo
+  // picture as the range. Honest: rhythm only, no ball flight claimed.
+  {
+    key: 'hotel-mode',
+    icon: 'moon-outline',
+    title: 'Hotel Mode',
+    sub: 'No club, no ball, no space — swing the phone, get your real tempo',
+    route: '/swinglab/indoor',
+    tag: 'ANYWHERE',
+  },
 ];
 
 // 2026-06-17 (Tim) — Play Smarter: Coach Mode + Focus Session + Shot Shapes.
