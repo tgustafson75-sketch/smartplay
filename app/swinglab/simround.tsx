@@ -67,6 +67,11 @@ export default function SwingSimScreen() {
   const [marks, setMarks] = useState<ShotMark[]>([]);
   const [club, setClub] = useState<string>('7 Iron');
   const [armed, setArmed] = useState(false);
+  // 2026-07-08 (Tim — "screen goes white after the flyover") — the tracer Polyline was
+  // fed PERCENTAGE point strings ("50%,90%"), which react-native-svg's points parser
+  // does NOT accept (circles tolerate %, polylines don't) → native parse throw → white
+  // screen the moment the shot stage rendered. Measure the board and draw in PIXELS.
+  const [boardSize, setBoardSize] = useState({ w: 0, h: 0 });
   const detRef = useRef<IndoorRepDetector | null>(null);
   const subRef = useRef<{ remove: () => void } | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
@@ -255,16 +260,24 @@ export default function SwingSimScreen() {
       ) : (
         <View style={{ flex: 1 }}>
           {/* THE BOARD — hole aerial with the broadcast tracer */}
-          <ImageBackground source={holeImg ?? undefined} style={s.board} imageStyle={{ borderRadius: 18 }} resizeMode="cover">
+          <ImageBackground
+            source={holeImg ?? undefined}
+            style={s.board}
+            imageStyle={{ borderRadius: 18 }}
+            resizeMode="cover"
+            onLayout={(e) => setBoardSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+          >
             <View style={s.boardShade} />
-            {stage !== 'flyover' ? (
-              <Svg style={StyleSheet.absoluteFill}>
-                <Polyline
-                  points={marks.map((m) => `${m.x * 100}%,${m.y * 100}%`).join(' ')}
-                  fill="none" stroke={NEON} strokeWidth={3} strokeOpacity={0.9} strokeLinecap="round" strokeLinejoin="round"
-                />
+            {stage !== 'flyover' && boardSize.w > 0 && boardSize.h > 0 ? (
+              <Svg style={StyleSheet.absoluteFill} width={boardSize.w} height={boardSize.h}>
+                {marks.length >= 2 ? (
+                  <Polyline
+                    points={marks.map((m) => `${m.x * boardSize.w},${m.y * boardSize.h}`).join(' ')}
+                    fill="none" stroke={NEON} strokeWidth={3} strokeOpacity={0.9} strokeLinecap="round" strokeLinejoin="round"
+                  />
+                ) : null}
                 {marks.map((m, i) => (
-                  <SvgCircle key={i} cx={`${m.x * 100}%`} cy={`${m.y * 100}%`} r={i === marks.length - 1 ? 7 : 4}
+                  <SvgCircle key={i} cx={m.x * boardSize.w} cy={m.y * boardSize.h} r={i === marks.length - 1 ? 7 : 4}
                     fill={i === marks.length - 1 ? '#fff' : NEON} stroke={NEON} strokeWidth={2} />
                 ))}
               </Svg>
