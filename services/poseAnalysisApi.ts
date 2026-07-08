@@ -261,6 +261,17 @@ function pairWidth(frame: PoseFrame, leftName: string, rightName: string): numbe
   return Math.hypot(dx, dy);
 }
 
+/** 2026-07-07 (biomech audit #7) — HORIZONTAL width only, for the TURN ratio.
+ *  The full hypot keeps the segment long at the top (the tilt's dy), inflating
+ *  the ratio and systematically under-reading real coils (a 90° coil with 30°
+ *  tilt read ≈60°). Rotation foreshortens the projected x-extent specifically. */
+function pairWidthX(frame: PoseFrame, leftName: string, rightName: string): number | null {
+  const l = getKp(frame, leftName);
+  const r = getKp(frame, rightName);
+  if (!l || !r) return null;
+  return Math.abs(r.x - l.x);
+}
+
 // ─── Swing-position keyframe sampling + biomechanics ─────────────────────────
 
 /** Approximate timestamps in a swing video where canonical PGA positions
@@ -330,11 +341,11 @@ async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame[
  *  frames tagged with `position` (P1_address / P4_top / P6_impact)
  *  for the metric reads — callers must populate those tags before
  *  calling. */
-export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null): SwingBiomechanics {
-  return computeBiomechanics(frames, angle);
+export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness?: 'right' | 'left' | null): SwingBiomechanics {
+  return computeBiomechanics(frames, angle, handedness);
 }
 
-function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null): SwingBiomechanics {
+function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness: 'right' | 'left' | null = 'right'): SwingBiomechanics {
   const address = frames.find(f => f.position === 'P1_address');
   const top = frames.find(f => f.position === 'P4_top');
   const impact = frames.find(f => f.position === 'P6_impact');
@@ -344,8 +355,8 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   // arccos. Crude but illustrative for a single-camera setup.
   let hipTurnDeg: number | null = null;
   if (address && top) {
-    const wA = pairWidth(address, 'left_hip', 'right_hip');
-    const wT = pairWidth(top, 'left_hip', 'right_hip');
+    const wA = pairWidthX(address, 'left_hip', 'right_hip');
+    const wT = pairWidthX(top, 'left_hip', 'right_hip');
     if (wA && wT && wA > 0) {
       const ratio = Math.min(1, Math.max(0, wT / wA));
       hipTurnDeg = Math.round((Math.acos(ratio) * 180) / Math.PI);
@@ -353,40 +364,61 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   }
   let shoulderTurnDeg: number | null = null;
   if (address && top) {
-    const wA = pairWidth(address, 'left_shoulder', 'right_shoulder');
-    const wT = pairWidth(top, 'left_shoulder', 'right_shoulder');
+    const wA = pairWidthX(address, 'left_shoulder', 'right_shoulder');
+    const wT = pairWidthX(top, 'left_shoulder', 'right_shoulder');
     if (wA && wT && wA > 0) {
       const ratio = Math.min(1, Math.max(0, wT / wA));
       shoulderTurnDeg = Math.round((Math.acos(ratio) * 180) / Math.PI);
     }
   }
 
-  // Weight shift: lead-ankle x-position relative to mid-stance from
-  // address to impact. Positive = moved forward (toward target).
+  // Weight shift — 2026-07-07 (biomech audit #1): the old proxy compared ANKLE
+  // midpoints address→impact, but feet stay planted, so it read ~0 noise on every
+  // swing → chronic false "hanging back". The coach-standard 2D proxy is PELVIS
+  // position IN the stance: hip-midpoint x relative to ankle-midpoint x, normalized
+  // by stance width. Signed toward the LEAD ankle (handedness-aware: righty lead =
+  // left foot) so positive = onto the lead side. 0% = centered; ~30-50% = strong move.
   let weightShiftPct: number | null = null;
   if (address && impact) {
-    const lead = getKp(impact, 'left_ankle');
-    const trail = getKp(impact, 'right_ankle');
-    const leadAddr = getKp(address, 'left_ankle');
-    const trailAddr = getKp(address, 'right_ankle');
-    if (lead && trail && leadAddr && trailAddr) {
-      const stance = Math.abs(trail.x - lead.x) || 1;
-      const midAddr = (leadAddr.x + trailAddr.x) / 2;
-      const midImpact = (lead.x + trail.x) / 2;
-      weightShiftPct = Math.round(((midImpact - midAddr) / stance) * 100);
+    const la = getKp(impact, 'left_ankle');
+    const ra = getKp(impact, 'right_ankle');
+    const laA = getKp(address, 'left_ankle');
+    const raA = getKp(address, 'right_ankle');
+    const lhI = getKp(impact, 'left_hip');
+    const rhI = getKp(impact, 'right_hip');
+    const lhA = getKp(address, 'left_hip');
+    const rhA = getKp(address, 'right_hip');
+    if (la && ra && laA && raA && lhI && rhI && lhA && rhA) {
+      const stance = Math.abs(ra.x - la.x) || 1;
+      // Pelvis position within the stance, address → impact.
+      const pelvisAddr = (lhA.x + rhA.x) / 2 - (laA.x + raA.x) / 2;
+      const pelvisImpact = (lhI.x + rhI.x) / 2 - (la.x + ra.x) / 2;
+      const raw = ((pelvisImpact - pelvisAddr) / stance) * 100;
+      // Sign convention: positive = toward the LEAD ankle (target side).
+      const lead = handedness === 'left' ? ra : la;
+      const trail = handedness === 'left' ? la : ra;
+      const towardLead = Math.sign(lead.x - trail.x) || 1;
+      weightShiftPct = Math.round(raw * towardLead);
     }
   }
 
   // Spine angle delta — head-to-pelvis line angle change.
+  // 2026-07-07 (biomech audit #5) — use score-gated getKp (was raw find(), so a
+  // score-0 placeholder hip fabricated posture numbers) and require the SAME side
+  // hip in both frames (was left-at-address vs right-at-impact = different lines).
   let spineAngleDeltaDeg: number | null = null;
   if (address && impact) {
     const noseA = getKp(address, 'nose');
     const noseI = getKp(impact, 'nose');
-    const hipA = address.keypoints.find(k => k.name === 'left_hip' || k.name === 'right_hip');
-    const hipI = impact.keypoints.find(k => k.name === 'left_hip' || k.name === 'right_hip');
-    if (noseA && noseI && hipA && hipI) {
-      const angA = angleDeg(noseA, hipA);
-      const angI = angleDeg(noseI, hipI);
+    const sameSide = (name: string) => {
+      const a = getKp(address, name);
+      const i = getKp(impact, name);
+      return a && i ? { a, i } : null;
+    };
+    const hips = sameSide('left_hip') ?? sameSide('right_hip');
+    if (noseA && noseI && hips) {
+      const angA = angleDeg(noseA, hips.a);
+      const angI = angleDeg(noseI, hips.i);
       spineAngleDeltaDeg = Math.round(Math.abs(angI - angA));
     }
   }
@@ -405,12 +437,14 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
 
   // Hip slide: compare hip x-translation vs hip-width "rotation" between
   // address and top. >1 = sliding more than rotating (the bad pattern).
+  // 2026-07-07 (biomech audit #5) — score-gated keypoints (was raw find → junk
+  // coords from score-0 placeholder joints could fabricate a slide read).
   let hipSlideRatio: number | null = null;
   if (address && top) {
-    const hipA = address.keypoints.find(k => k.name === 'left_hip');
-    const hipT = top.keypoints.find(k => k.name === 'left_hip');
-    const wA = pairWidth(address, 'left_hip', 'right_hip');
-    const wT = pairWidth(top, 'left_hip', 'right_hip');
+    const hipA = getKp(address, 'left_hip');
+    const hipT = getKp(top, 'left_hip');
+    const wA = pairWidthX(address, 'left_hip', 'right_hip');
+    const wT = pairWidthX(top, 'left_hip', 'right_hip');
     if (hipA && hipT && wA && wT && wA > 0) {
       const slide = Math.abs(hipT.x - hipA.x);
       const rotate = Math.abs(wA - wT);
@@ -475,6 +509,28 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     hipTurnDeg = null;
     shoulderTurnDeg = null;
     weightShiftPct = null;
+    // 2026-07-07 (biomech audit #4) — sequencing + hip-slide use the SAME
+    // width-foreshortening / lateral-x geometry the gate declares invalid from
+    // behind; they were slipping through and printing confident wrong numbers.
+    sequencingScore = null;
+    hipSlideRatio = null;
+  }
+  // 2026-07-07 (biomech audit #3) — the tilt gate was INVERTED from the geometry:
+  // from FACE-ON the projected shoulder tilt inflates toward 90° as the turn grows
+  // (atan(tanφ/cosθ) — a perfect ~30° tour tilt at a normal ~80° turn projects to
+  // ~73° → false "exaggerated dip"). From DTL the projection ≈ true tilt. So tilt is
+  // valid DTL and INVALID face-on — null it there.
+  if (angle === 'face_on') {
+    shoulderTiltDeg = null;
+  }
+  // glasses_pov (first-person) satisfies NEITHER geometry — null everything angular.
+  if (angle === 'glasses_pov') {
+    hipTurnDeg = null;
+    shoulderTurnDeg = null;
+    weightShiftPct = null;
+    sequencingScore = null;
+    hipSlideRatio = null;
+    shoulderTiltDeg = null;
   }
 
   // Verdicts — short coaching one-liners based on tour standards.
@@ -491,7 +547,7 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
       `Shoulder turn ${shoulderTurnDeg}° — solid coil.`,
     weightShift:
       weightShiftPct == null ? null :
-      weightShiftPct < 10 ? `Weight shift +${weightShiftPct}% — hanging back; thin/topped contact risk.` :
+      weightShiftPct < 10 ? `Weight shift ${weightShiftPct >= 0 ? '+' : ''}${weightShiftPct}% — hanging back; thin/topped contact risk.` :
       weightShiftPct > 50 ? `Weight shift +${weightShiftPct}% — over-shifting forward.` :
       `Weight shift +${weightShiftPct}% — solid forward move.`,
     posture:
@@ -520,7 +576,7 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     hipTurn: avgScore(address, top, ['left_hip', 'right_hip']),
     shoulderTurn: avgScore(address, top, ['left_shoulder', 'right_shoulder']),
     shoulderTilt: avgScore(top, null, ['left_shoulder', 'right_shoulder']),
-    weightShift: avgScore(address, impact, ['left_ankle', 'right_ankle']),
+    weightShift: avgScore(address, impact, ['left_ankle', 'right_ankle', 'left_hip', 'right_hip']),
     spineAngleDelta: avgScore(address, impact, ['nose', 'left_hip', 'right_hip']),
     headDrift: avgScore(address, impact, ['nose', 'left_shoulder', 'right_shoulder']),
     hipSlide: avgScore(address, top, ['left_hip', 'right_hip']),
@@ -562,10 +618,12 @@ export async function analyzeSwingFromVideo(
   angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null,
   trustDuration = false,
   window?: { startMs: number; endMs: number } | null,
+  impactMs?: number | null,
+  handedness?: 'right' | 'left' | null,
 ): Promise<SwingBiomechanics | null> {
-  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration, window);
+  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration, window, impactMs);
   if (!frames) return null;
-  return computeBiomechanics(frames, angle);
+  return computeBiomechanics(frames, angle, handedness);
 }
 
 /** 2026-05-22 — Path A (SmartMotion real pose overlay): same keyframe-
@@ -585,16 +643,29 @@ export async function extractPoseFramesFromVideo(
   durationMs: number,
   trustDuration = false,
   window?: { startMs: number; endMs: number } | null,
+  impactMs?: number | null,
 ): Promise<PoseFrame[] | null> {
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
 
-  // 2026-06-15 (Tim — uploads never showed a skeleton) — when the caller hands us
-  // an explicit swing window (the user scrubbed to their swing and tapped "Analyze
-  // this moment"), sample DENSELY across just that window. The old path spread 5
-  // frames over the whole 30-60s upload, so they landed on walk-up / setup instead
-  // of the swing — which is exactly why uploads produced no usable pose. We already
-  // know where the swing is here, so skip the duration probe + tiered fallback.
-  if (window && window.endMs - window.startMs >= 500) {
+  // 2026-07-07 (biomech audit #2) — STRIKE-ANCHORED sampling. The fixed window
+  // fractions put "P4_top" mid-backswing and "P6_impact" 100ms past the ball (or,
+  // on a clamped first swing, into the FOLLOW-THROUGH) — every address→top/impact
+  // metric was then computed across the wrong phases. The app already KNOWS the
+  // acoustic strike time; when the caller passes it, anchor the phases to it:
+  // impact = the strike exactly, the rest at swing-physics offsets around it.
+  if (impactMs != null && impactMs > 0) {
+    const lo = window ? window.startMs : 0;
+    const hi = window ? window.endMs : durationMs > 500 ? durationMs : Number.MAX_SAFE_INTEGER;
+    const clamp = (t: number) => Math.round(Math.max(lo, Math.min(hi, t)));
+    positionTimes = [
+      { key: 'P1_address' as const, timeMs: clamp(impactMs - 2000) },
+      { key: 'P2_takeaway' as const, timeMs: clamp(impactMs - 1200) },
+      { key: 'P4_top' as const, timeMs: clamp(impactMs - 320) },
+      { key: 'P6_impact' as const, timeMs: clamp(impactMs) },
+      { key: 'P10_finish' as const, timeMs: clamp(impactMs + 700) },
+    ];
+    console.log('[pose] strike-anchored sampling', { impact_ms: impactMs });
+  } else if (window && window.endMs - window.startMs >= 500) {
     const span = window.endMs - window.startMs;
     positionTimes = SWING_POSITIONS.map(p => ({
       key: p.key,

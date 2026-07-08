@@ -1169,7 +1169,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       void (async () => {
         try {
           const poseMod = await import('./poseAnalysisApi');
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, null, false, poseWindow);
+          // 2026-07-07 (biomech audit #9) — pass the KNOWN camera angle (was null,
+          // so a DTL-tagged upload got un-gated face-on turn/weight numbers the
+          // live SmartMotion path would have nulled).
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow);
           useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
         } catch (poseErr) {

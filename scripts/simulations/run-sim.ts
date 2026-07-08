@@ -1830,22 +1830,27 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
     const pose = read('services/poseAnalysisApi.ts');
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      // 2026-06-15 — signature now carries an optional swing window (uploads).
-      /extractPoseFramesFromVideo\(\s*videoUri: string,\s*durationMs: number,\s*trustDuration = false,\s*window\?: \{ startMs: number; endMs: number \} \| null,/.test(pose) &&
+      // 2026-06-15 — signature carries an optional swing window (uploads);
+      // 2026-07-07 (biomech #2) — plus the acoustic impactMs anchor.
+      /extractPoseFramesFromVideo\(\s*videoUri: string,\s*durationMs: number,\s*trustDuration = false,\s*window\?: \{ startMs: number; endMs: number \} \| null,\s*impactMs\?: number \| null,/.test(pose) &&
+      // Strike-anchored sampling: phases placed at swing-physics offsets around the
+      // REAL acoustic strike, not window fractions (impact was landing 100ms+ late).
+      /strike-anchored sampling/.test(pose) &&
       // Windowed sampling: an explicit swing window samples densely across it
       // (uploads land on the swing instead of smearing 5 frames over a minute).
-      /if \(window && window\.endMs - window\.startMs >= 500\)/.test(pose) &&
+      /window && window\.endMs - window\.startMs >= 500/.test(pose) &&
       /const canTrust = trustDuration && durationMs >= 500/.test(pose) &&
       /if \(!canTrust\) \{/.test(pose) && // probe only runs when NOT trusted
       /analyzeSwingFromVideo\([\s\S]*?trustDuration = false/.test(pose) &&
       /\[pose\] on-device hit/.test(pose) && // latency telemetry
       // Motion path trusts the player's real duration AND windows to the selected
-      // swing (2026-07-06 H3 — pose no longer smears across a multi-swing clip).
-      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true, poseWindow\)/.test(sm) &&
-      /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true, poseWindow\)/.test(sm)
+      // swing (2026-07-06 H3) — and 2026-07-07 (biomech #8): extracts ONCE, computes
+      // biomech from the SAME frames (skeleton + numbers can't diverge, half the poses).
+      /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs\)/.test(sm) &&
+      /computeBiomechanicsFromFrames\(frames, angle/.test(sm)
     );
   })(),
-  'trusted real duration skips the reprobe (2-8s saved on Motion); on-device pose latency is measurable');
+  'trusted real duration skips the reprobe (2-8s saved on Motion); acoustic strike anchors the phase frames; one extraction feeds both skeleton and biomech; on-device pose latency is measurable');
 
 check('Uploads: skeleton + 4-card read windowed on the pointed swing',
   // 2026-06-15 (Tim — "uploads aren't treated into the Smart Motion UI, can't see
@@ -1860,7 +1865,8 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
       /firstClipSwing\.clipEndSeconds > firstClipSwing\.clipStartSeconds/.test(up) &&
-      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, null, false, poseWindow\)/.test(up) &&
+      // 2026-07-07 (biomech #9) — the upload now passes its KNOWN camera angle.
+      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow\)/.test(up) &&
       /session\.source === 'uploaded_video' \? \(/.test(detail) &&
       /onPress=\{onAnalyzeAtPosition\}/.test(detail)
     );
@@ -4174,8 +4180,16 @@ const poseApiSrc = read('services/poseAnalysisApi.ts');
 check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
   /angle\?: 'down_the_line' \| 'face_on' \| 'glasses_pov' \| null/.test(poseApiSrc) &&
     /if \(angle === 'down_the_line'\) \{\s*\n\s*hipTurnDeg = null;\s*\n\s*shoulderTurnDeg = null;\s*\n\s*weightShiftPct = null;/.test(poseApiSrc) &&
-    /analyzeSwingFromVideo\(clipUri, videoDurationMs, angle, true, poseWindow\)/.test(smSrc),
-  'down-the-line nulls the width-foreshortening turn + lateral weight metrics (invalid from behind) instead of reporting wrong numbers; angle threaded end-to-end');
+    // 2026-07-07 (biomech audit) — DTL also nulls the same-geometry sequencing +
+    // hip-slide; face-on nulls the tilt (projection inflates it with the turn);
+    // glasses_pov nulls all angular metrics. And the pelvis-in-stance weight shift
+    // replaced the planted-ankle drift that read ~0 on every swing.
+    /sequencingScore = null;\s*\n\s*hipSlideRatio = null;/.test(poseApiSrc) &&
+    /if \(angle === 'face_on'\) \{\s*\n\s*shoulderTiltDeg = null;/.test(poseApiSrc) &&
+    /if \(angle === 'glasses_pov'\)/.test(poseApiSrc) &&
+    /pelvisImpact - pelvisAddr/.test(poseApiSrc) &&
+    /computeBiomechanicsFromFrames\(frames, angle/.test(smSrc),
+  'down-the-line nulls turn/weight/sequencing/hip-slide (invalid from behind), face-on nulls the projected tilt, glasses nulls all angular reads; weight shift measures the pelvis-in-stance move; angle threaded end-to-end');
 
 // 2026-06-10 — Caddie CNS Phase 1: memory store + writers (additive, honest).
 const memSrc = read('store/caddieMemoryStore.ts');

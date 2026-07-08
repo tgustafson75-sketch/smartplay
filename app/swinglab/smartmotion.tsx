@@ -79,6 +79,7 @@ import {
 import {
   extractPoseFramesFromVideo,
   analyzeSwingFromVideo,
+  computeBiomechanicsFromFrames,
   deriveSwingTempo,
   type PoseFrame,
   type SwingBiomechanics,
@@ -1824,13 +1825,22 @@ export default function SmartMotion() {
     const poseWindow = seg && typeof seg.startMs === 'number' && typeof seg.endMs === 'number' && seg.endMs - seg.startMs >= 500
       ? { startMs: seg.startMs, endMs: seg.endMs }
       : null;
+    // 2026-07-07 (biomech audit #2) — anchor the phase frames to the ACOUSTIC strike
+    // when we have one (peakDb !== 0 = real metering hit; video-located strikes are
+    // only ±1s accurate and stay on window fractions). Fixes "impact" landing 100ms+
+    // past the ball / "top" landing mid-backswing — the wrong-phase numbers.
+    const acousticImpactMs = seg && seg.strikeMs != null && (seg.peakDb ?? 0) !== 0 ? seg.strikeMs : null;
     void (async () => {
       try {
         // trustDuration=true: videoDurationMs is the player's real onLoad
         // durationMillis, so skip the ~2-8s reprobe inside the pose path (SPEED).
-        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow);
-        if (!cancelled) setPoseFrames(frames);
-        const bio = await analyzeSwingFromVideo(clipUri, videoDurationMs, angle, true, poseWindow);
+        // 2026-07-07 (biomech audit #8) — extract ONCE and compute biomech from the
+        // SAME frames (was two independent extraction runs → ~2× pose inferences and
+        // a skeleton that could diverge from the numbers).
+        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
+        if (cancelled) return;
+        setPoseFrames(frames);
+        const bio = frames ? computeBiomechanicsFromFrames(frames, angle, swingerHandedness === 'left' ? 'left' : 'right') : null;
         if (!cancelled && bio) {
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
@@ -1843,7 +1853,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing]);
+  }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing, swingerHandedness]);
 
   // Acoustic-anchored tempo + transition for the selected swing. Impact
   // comes from the acoustic strike detector (segment.strikeMs);
