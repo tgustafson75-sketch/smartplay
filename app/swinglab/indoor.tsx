@@ -37,6 +37,11 @@ export default function IndoorHotelModeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const [mode, setMode] = useState<IndoorMode>('swing');
+  // 2026-07-08 (pre-release sweep) — the abandon-mid-set unmount cleanup below has [] deps
+  // and would otherwise capture the FIRST-render mode ('swing'), mislabeling putting reps
+  // as "Hotel Tempo". Mirror the live mode into a ref so the cleanup credits correctly.
+  const modeRef = useRef<IndoorMode>('swing');
+  modeRef.current = mode;
   const [stage, setStage] = useState<Stage>('intro');
   const [reps, setReps] = useState<IndoorRep[]>([]);
   const repsRef = useRef<IndoorRep[]>([]);
@@ -115,10 +120,11 @@ export default function IndoorHotelModeScreen() {
       savedRef.current = true;
       try {
         const set = repsRef.current;
-        const label = mode === 'swing' ? 'Hotel Tempo' : 'Hotel Putting';
-        usePracticePointsStore.getState().awardPracticePoints({ key: `indoor:${mode}`, label, swings: set.length, now: Date.now() });
+        const m = modeRef.current;
+        const label = m === 'swing' ? 'Hotel Tempo' : 'Hotel Putting';
+        usePracticePointsStore.getState().awardPracticePoints({ key: `indoor:${m}`, label, swings: set.length, now: Date.now() });
         usePracticeSessionStore.getState().recordCompletedSession({
-          kind: 'focus', focus: `indoor_${mode}`, label, swingCount: set.length, environment: 'indoor',
+          kind: 'focus', focus: `indoor_${m}`, label, swingCount: set.length, environment: 'indoor',
           swingSamples: set.map((r) => ({ club: null, tier: 'none' as const, tempoRatio: r.tempoRatio, divergenceDeg: null })),
         });
       } catch { /* additive */ }

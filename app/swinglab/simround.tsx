@@ -89,6 +89,10 @@ export default function SwingSimScreen() {
   const [boardSize, setBoardSize] = useState({ w: 0, h: 0 });
   const detRef = useRef<IndoorRepDetector | null>(null);
   const subRef = useRef<{ remove: () => void } | null>(null);
+  // 2026-07-08 (pre-release sweep) — the flyover beat is a setTimeout; keep its id so we
+  // can cancel it if the player leaves the hole (or the screen) mid-flyover, instead of
+  // firing setStage on an unmounted screen.
+  const flyoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
 
   const hole = course.holes[holeIdx];
@@ -114,31 +118,47 @@ export default function SwingSimScreen() {
   }, [bag]);
 
   const stopSensor = useCallback(() => { try { subRef.current?.remove(); } catch { /* gone */ } subRef.current = null; setArmed(false); }, []);
-  useEffect(() => () => stopSensor(), [stopSensor]);
+  useEffect(() => () => { stopSensor(); if (flyoverTimerRef.current) clearTimeout(flyoverTimerRef.current); }, [stopSensor]);
 
   const beginHole = useCallback((idx: number) => {
-    const h = course.holes[idx];
-    setHoleIdx(idx); setStrokes(0); setRemaining(h.distance); setLie('tee');
+    // Clamp to the course's real hole list — today both SIM courses have 18, but a
+    // shorter course + "18 holes" pick must not read course.holes[idx].distance off the end.
+    const safeIdx = Math.min(idx, course.holes.length - 1);
+    const h = course.holes[safeIdx];
+    setHoleIdx(safeIdx); setStrokes(0); setRemaining(h.distance); setLie('tee');
     setMarks([{ x: 0.5, y: 0.9 }]); setBanner(null);
     const s = suggest(h.distance, 'tee');
     setClub(s.club);
     setStage('flyover');
     fade.setValue(0);
     Animated.timing(fade, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    setTimeout(() => setStage('shot'), 2400); // the flyover beat
+    if (flyoverTimerRef.current) clearTimeout(flyoverTimerRef.current);
+    flyoverTimerRef.current = setTimeout(() => setStage('shot'), 2400); // the flyover beat
   }, [course, suggest, fade]);
 
   // Arm the detector for a swing or putt.
   const arm = useCallback((mode: 'swing' | 'putt') => {
     detRef.current = new IndoorRepDetector(mode);
-    setArmed(true);
-    try {
-      Gyroscope.setUpdateInterval(10);
-      subRef.current = Gyroscope.addListener((g) => {
-        const rep = detRef.current?.onSample({ t: Date.now(), x: g.x, y: g.y, z: g.z }) ?? null;
-        if (rep) { stopSensor(); onRep(rep, mode); }
-      });
-    } catch { setArmed(false); }
+    // 2026-07-08 (pre-release sweep) — Gyroscope.addListener does NOT throw on a device
+    // without a gyro (iOS Simulator, gyro-less hardware); it just never emits, leaving the
+    // player stuck on "I'M WATCHING" with no rep and no way out. Confirm the sensor first
+    // and surface a clear message instead of arming into a dead end.
+    void (async () => {
+      let ok = false;
+      try { ok = await Gyroscope.isAvailableAsync(); } catch { ok = false; }
+      if (!ok) {
+        setBanner({ title: 'NO MOTION SENSOR', sub: 'This device has no gyroscope — SwingSim reads your swing from phone motion.', tone: 'bad' });
+        return;
+      }
+      setArmed(true);
+      try {
+        Gyroscope.setUpdateInterval(10);
+        subRef.current = Gyroscope.addListener((g) => {
+          const rep = detRef.current?.onSample({ t: Date.now(), x: g.x, y: g.y, z: g.z }) ?? null;
+          if (rep) { stopSensor(); onRep(rep, mode); }
+        });
+      } catch { setArmed(false); }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopSensor]);
 
@@ -409,7 +429,7 @@ export default function SwingSimScreen() {
               </TouchableOpacity>
             ) : stage === 'holeout' ? (
               <TouchableOpacity style={s.teeOff} onPress={nextHole} accessibilityRole="button">
-                <Text style={s.teeOffText}>{holeIdx + 1 >= holeCount ? 'TO THE CLUBHOUSE' : `HOLE ${course.holes[holeIdx + 1].hole} →`}</Text>
+                <Text style={s.teeOffText}>{holeIdx + 1 >= holeCount || holeIdx + 1 >= course.holes.length ? 'TO THE CLUBHOUSE' : `HOLE ${course.holes[holeIdx + 1].hole} →`}</Text>
               </TouchableOpacity>
             ) : null}
           </View>

@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { prewarmVoice } from '../../services/voiceWarmup';
+import { clearScreenContext } from '../../services/screenContext';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
@@ -764,6 +765,18 @@ export default function CaddieTab() {
       };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [setMode]),
+  );
+
+  // 2026-07-08 (Tim — get-to-know-you rework) — the dashboard card / settings row prime
+  // the brain with a "getting to know the golfer" screenContext before opening this tab.
+  // Nothing else clears it, so without this it would leak into EVERY later voice turn
+  // (an on-course "what club here?" would be mis-framed as get-to-know chatter). Clear it
+  // when the caddie tab loses focus. clearScreenContext(label) only clears if that label
+  // is still current, so it can't stomp another screen's context.
+  useFocusEffect(
+    useCallback(() => {
+      return () => clearScreenContext('getting to know the golfer');
+    }, []),
   );
 
   // ── Local state ─────────────────────────

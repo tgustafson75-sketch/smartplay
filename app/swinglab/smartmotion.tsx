@@ -1456,6 +1456,8 @@ export default function SmartMotion() {
       // before the normal call sites (putt return / swing path exit). Without
       // this, any uncaught synchronous throw above the existing calls leaves
       // the screen stuck on "Analyzing…" forever.
+      // Hoisted so the catch/finally (siblings of the try body) can read the run token.
+      let myRun = 0;
       try {
       // Prewarm the TTS function NOW (analysis takes seconds) so the spoken
       // verdict that follows fires hot, not cold (Tim's report-read lag).
@@ -1476,6 +1478,14 @@ export default function SmartMotion() {
       analysisCacheRef.current = {};
       sessionRunRef.current += 1; // drop any prior session's in-flight analysis
       analysisInflightRef.current = {};
+      // 2026-07-08 (pre-release sweep — cross-session poisoning, primary path) — the
+      // multi-swing path (runWindowedAnalysis) already tokens each run and drops a stale
+      // resolve; this PRIMARY path had no such guard. analysisP has a 130s hang window, so
+      // a slow read from THIS session could resolve AFTER the player has started a NEW
+      // session (reset() / startRecording()), landing session A's verdict on session B's
+      // clip + saved report + CNS. Capture the run token now; every apply below is gated on
+      // it still being current.
+      myRun = sessionRunRef.current;
       // Persist the recorded clip into documents so it survives OS cache
       // eviction — otherwise an old SmartMotion recording later can't replay
       // OR re-analyze (the temp recorder file is gone). Already-persistent or
@@ -1690,7 +1700,12 @@ export default function SmartMotion() {
         // every verdict.) The 130s outer hang-guard is folded into analysisP so a true
         // hang still can't strand the screen, and a real-but-late read is never discarded.
         const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!;
-        if (result.kind === 'ok') {
+        // A newer session started while this read was in flight — drop it entirely so it
+        // can't land on the new session's clip, saved report, or CNS. (Mirrors the
+        // multi-swing guard in runWindowedAnalysis.)
+        if (sessionRunRef.current !== myRun) {
+          // superseded — nothing to apply
+        } else if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
           const a = result.analysis;
@@ -1760,13 +1775,18 @@ export default function SmartMotion() {
           try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setAnalysisError(msg);
-        try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+        // Only surface the failure if this is still the current session (a superseded
+        // late error must not clobber the new session's state).
+        if (sessionRunRef.current === myRun) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setAnalysisError(msg);
+          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+        }
       }
 
       } finally {
-        setPhase('review');
+        // Don't yank a newer session (which may be mid-record) into 'review'.
+        if (sessionRunRef.current === myRun) setPhase('review');
       }
     },
     [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount],

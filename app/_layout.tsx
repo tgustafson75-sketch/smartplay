@@ -598,18 +598,33 @@ function AppNavigator() {
   useEffect(() => whenRoundStoreHydrated(() => {
     const s = useRoundStore.getState();
     if (!s.isRoundActive) return;
-    const stale =
-      !s.currentRoundId ||
-      !s.activeCourse ||
-      !s.roundStartTime ||
-      (Date.now() - s.roundStartTime) > 8 * 60 * 60 * 1000;
-    if (stale) {
-      console.log('[boot-guard] discarding phantom round', {
-        currentRoundId: s.currentRoundId,
-        activeCourse: s.activeCourse,
-        ageHours: s.roundStartTime ? (Date.now() - s.roundStartTime) / 3_600_000 : null,
-      });
-      try { s.discardRound(); } catch (e) { console.log('[boot-guard] discardRound failed', e); }
+    const missingMarkers = !s.currentRoundId || !s.activeCourse || !s.roundStartTime;
+    const tooOld = !!s.roundStartTime && (Date.now() - s.roundStartTime) > 8 * 60 * 60 * 1000;
+    if (missingMarkers || tooOld) {
+      // 2026-07-08 (pre-release sweep — data loss is the worst failure) — a round that is
+      // stale ONLY because it's been open >8h but otherwise has valid markers AND logged
+      // scores is a real, long-paused round (start in the morning, phone dies, resume that
+      // evening), not a phantom. FINALIZE it into history instead of discarding, so the
+      // player never loses a round's worth of scoring. Truly broken phantoms (missing
+      // currentRoundId / course / startTime), and aged rounds with no scores, still discard.
+      const hasScores = Object.values(s.scores ?? {}).some((sc) => (sc ?? 0) > 0);
+      if (tooOld && !missingMarkers && hasScores) {
+        console.log('[boot-guard] finalizing aged in-progress round with scores instead of discarding', {
+          currentRoundId: s.currentRoundId,
+          ageHours: s.roundStartTime ? (Date.now() - s.roundStartTime) / 3_600_000 : null,
+        });
+        try { s.endRound(); } catch (e) {
+          console.log('[boot-guard] endRound failed, falling back to discard', e);
+          try { s.discardRound(); } catch (e2) { console.log('[boot-guard] discardRound failed', e2); }
+        }
+      } else {
+        console.log('[boot-guard] discarding phantom round', {
+          currentRoundId: s.currentRoundId,
+          activeCourse: s.activeCourse,
+          ageHours: s.roundStartTime ? (Date.now() - s.roundStartTime) / 3_600_000 : null,
+        });
+        try { s.discardRound(); } catch (e) { console.log('[boot-guard] discardRound failed', e); }
+      }
     }
   }), []);
 

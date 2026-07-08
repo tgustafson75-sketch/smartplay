@@ -82,9 +82,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const liveCourseHolesLen = useRoundStore(s => s.courseHoles.length);
   const courseHolesCount = getCourseHoleCount(activeCourseId, liveCourseHolesLen);
-  const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const logShot = useRoundStore(s => s.logShot);
-  const shotsCount = useRoundStore(s => s.shots.filter(x => (x.hole_number ?? x.hole) === s.currentHole).length);
 
   const [club, setClub] = useState<string | null>(null);
   const [distance, setDistance] = useState('');
@@ -131,7 +129,12 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
     // the cached gpsManager / smartFinder lastFix.
     const location = pinnedLoc ? pinnedLoc.loc : snapshotLocation().loc;
     const effectiveHole = holeOverride ?? currentHole;
-    if (holeOverride && holeOverride !== currentHole) setCurrentHole(holeOverride);
+    // 2026-07-08 (pre-release sweep) — do NOT move the live round pointer when logging a
+    // catch-up shot for a PAST hole. The old setCurrentHole(holeOverride) yanked the whole
+    // round back (re-spoke the hole intro, reset yardage, stranded the player on the old
+    // hole) and violated the app's "logging is decoupled from hole advance" invariant. The
+    // shot carries `hole: effectiveHole`, so it lands on the right hole with the pointer
+    // untouched.
     const shot: ShotResult = {
       id: `${Date.now()}_tap`,
       hole: effectiveHole,
@@ -148,7 +151,9 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
       gps_location: location,
       start_location: location,
       end_location: null,
-      shot_in_hole_index: shotsCount + 1,
+      // Omit shot_in_hole_index: logShot computes it from the shots already on
+      // `effectiveHole` (roundStore.ts) — the old `shotsCount + 1` counted the CURRENT
+      // hole's shots, mis-stamping a catch-up shot logged for a different hole.
     };
     logShot(shot);
     track('quick_log_shot_submitted', {
@@ -162,7 +167,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
     });
     reset();
     onClose();
-  }, [club, distance, outcome, direction, currentHole, holeOverride, shotsCount, logShot, onClose, pinnedLoc, setCurrentHole]);
+  }, [club, distance, outcome, direction, currentHole, holeOverride, logShot, onClose, pinnedLoc]);
 
   if (!isRoundActive) return null;
 
