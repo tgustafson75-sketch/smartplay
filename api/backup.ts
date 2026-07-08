@@ -28,6 +28,68 @@ function norm(v: unknown): string {
   return String(v ?? '').trim();
 }
 
+// The persisted round store — zustand writes it into the snapshot as a JSON STRING
+// under this AsyncStorage key. Its state.roundHistory is append-only (every finished
+// round, each with a stable id), and is the data this whole feature exists to protect.
+const ROUND_STORE_KEY = 'round-store-v1';
+
+type RoundRec = { id?: unknown; endedAt?: unknown };
+
+/** Pull state.roundHistory out of a persisted round-store blob (string or object). */
+function extractRoundHistory(blob: unknown): RoundRec[] | null {
+  try {
+    const obj = typeof blob === 'string' ? JSON.parse(blob) : blob;
+    const hist = (obj as { state?: { roundHistory?: unknown } })?.state?.roundHistory;
+    return Array.isArray(hist) ? (hist as RoundRec[]) : null;
+  } catch { return null; }
+}
+
+/** Write a merged roundHistory back into a persisted round-store blob, preserving the
+ *  rest of `blob`'s state (settings, current values). Returns the same type it got. */
+function withRoundHistory(blob: unknown, history: RoundRec[]): unknown {
+  const wasString = typeof blob === 'string';
+  const obj = wasString ? JSON.parse(blob as string) : { ...(blob as object) };
+  obj.state = { ...(obj.state ?? {}), roundHistory: history };
+  return wasString ? JSON.stringify(obj) : obj;
+}
+
+/** Union two round histories by id, newest-wins on collision (larger endedAt), so a
+ *  backup from a device that is MISSING rounds can never delete them from the cloud. */
+function unionRoundHistory(prev: RoundRec[], next: RoundRec[]): RoundRec[] {
+  const byId = new Map<string, RoundRec>();
+  const add = (r: RoundRec) => {
+    const id = r?.id == null ? null : String(r.id);
+    if (id == null) return; // real records always have an id; skip id-less noise
+    const cur = byId.get(id);
+    if (!cur || Number(r.endedAt ?? 0) >= Number(cur.endedAt ?? 0)) byId.set(id, r);
+  };
+  prev.forEach(add);
+  next.forEach(add);
+  return Array.from(byId.values());
+}
+
+/**
+ * Merge the incoming snapshot OVER the stored one. Non-round keys are last-write-wins
+ * (settings etc. — the most recent device's values are fine). The round store is
+ * UNIONED so no finished round is ever lost when the same Backup ID is used from a
+ * second/fresh phone that has fewer rounds locally. On any parse trouble we keep
+ * whichever blob has MORE rounds — we never shrink the round history.
+ */
+function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...prev, ...next };
+  try {
+    const prevHist = extractRoundHistory(prev[ROUND_STORE_KEY]);
+    const nextHist = extractRoundHistory(next[ROUND_STORE_KEY]);
+    if (prevHist && nextHist) {
+      merged[ROUND_STORE_KEY] = withRoundHistory(next[ROUND_STORE_KEY], unionRoundHistory(prevHist, nextHist));
+    } else if (prevHist && (!nextHist || prevHist.length > (nextHist?.length ?? 0))) {
+      // Incoming has no parseable / fewer rounds — keep the stored round blob intact.
+      merged[ROUND_STORE_KEY] = prev[ROUND_STORE_KEY];
+    }
+  } catch { /* keep the last-write-wins merge; better than throwing on backup */ }
+  return merged;
+}
+
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email
  *  alone can't derive it, so there's no enumeration/overwrite without the secret. */
 function storageKey(email: string, secret: string): string {
@@ -68,10 +130,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (serialized.length > MAX_DATA_BYTES) {
         return res.status(413).json({ ok: false, error: 'too_large' });
       }
+      const key = storageKey(email, secret);
+      // 2026-07-08 (pre-release sweep — HIGH: phone-swap data loss) — this used to be a
+      // whole-blob REPLACE. Using the same Backup ID from a fresh/second phone (or a
+      // mis-tap of "Back up now" instead of "Restore") would overwrite the cloud rounds
+      // with the near-empty local snapshot. Read the existing snapshot first and UNION the
+      // append-only round history so a device with fewer rounds can never delete them.
+      const existing = await db.from(TABLE).select('data').eq('backup_key', key).maybeSingle();
+      const incoming = body.data as Record<string, unknown>;
+      const toStore = existing.data?.data && typeof existing.data.data === 'object'
+        ? mergeSnapshots(existing.data.data as Record<string, unknown>, incoming)
+        : incoming;
       const { error } = await db
         .from(TABLE)
         .upsert(
-          { backup_key: storageKey(email, secret), data: body.data, updated_at: new Date().toISOString() },
+          { backup_key: key, data: toStore, updated_at: new Date().toISOString() },
           { onConflict: 'backup_key' },
         );
       if (error) return res.status(200).json({ ok: false, error: error.message });

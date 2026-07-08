@@ -17,7 +17,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 18_000, maxRetries: 1 });
+// 2026-07-08 (pre-release sweep) — SDK timeout kept UNDER the ~15s platform function
+// default so the SDK aborts cleanly (route returns gracefully, client no-ops) instead of
+// the platform 504'ing the request mid-call. Haiku at max_tokens:500 is fast; extraction
+// is best-effort and non-blocking, so a short cap costs nothing.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 12_000, maxRetries: 0 });
 
 const PROMPT = `You are the memory of a personal golf caddie. The golfer just said something (possibly answering a question). Extract ONLY the durable facts about WHO THEY ARE AS A GOLFER that are actually present in their words — things a great caddie/coach would remember for years.
 

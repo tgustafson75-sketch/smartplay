@@ -120,9 +120,16 @@ function getGemini(): GoogleGenAI {
   return new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 }
 
-function getAnthropic(): Anthropic {
+function getAnthropic(timeoutMs = 25_000): Anthropic {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // 2026-07-08 (pre-release sweep) — mirror getOpenAI: honor the caller's timeout and
+  // disable retries under a tight budget. Without this, Anthropic fell back to the SDK
+  // defaults (10-min timeout, 2 retries), so the timeoutMs a caller set (e.g. kevin.ts's
+  // 12s cap on the OpenAI→Anthropic fallback, sized to stay under the client's 30s abort)
+  // was silently ignored — a slow/hanging Anthropic round ran unbounded to Vercel's 60s
+  // maxDuration while the client already showed a failure.
+  const maxRetries = timeoutMs < 25_000 ? 0 : 1;
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: timeoutMs, maxRetries });
 }
 
 // ─── Gemini timeout helper ────────────────────────────────────────────────────
@@ -166,7 +173,7 @@ export async function completeText(
   }
 
   if (provider === 'anthropic') {
-    const ant = getAnthropic();
+    const ant = getAnthropic(timeoutMs);
     const res = await ant.messages.create({
       model,
       max_tokens: maxTokens,
@@ -228,7 +235,7 @@ export async function completeJSON(
   }
 
   if (provider === 'anthropic') {
-    const ant = getAnthropic();
+    const ant = getAnthropic(timeoutMs);
     if (schema) {
       // Tool-use pattern: forces Anthropic to fill the schema exactly.
       const inputSchema = schema.anthropic?.input_schema ?? schema.openai;
@@ -334,7 +341,7 @@ export async function completeVision(
   }
 
   if (provider === 'anthropic') {
-    const ant = getAnthropic();
+    const ant = getAnthropic(timeoutMs);
     const imageBlocks: Anthropic.ImageBlockParam[] = images.map(img => ({
       type: 'image',
       source: {
@@ -473,7 +480,7 @@ export async function completeWithTools(
   }
 
   if (provider === 'anthropic') {
-    const ant = getAnthropic();
+    const ant = getAnthropic(timeoutMs);
     const antTools: Anthropic.Tool[] = tools.map(t => ({
       name: t.name,
       description: t.description,
@@ -694,9 +701,9 @@ async function _anthropicAgenticLoop(
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
   opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[] },
 ): Promise<AgenticLoopResult> {
-  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools } = opts;
+  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, timeoutMs } = opts;
   const model = MODELS['anthropic'][tier];
-  const ant = getAnthropic();
+  const ant = getAnthropic(timeoutMs);
 
   const antTools: Anthropic.Tool[] = tools.map(t => ({
     name: t.name,
