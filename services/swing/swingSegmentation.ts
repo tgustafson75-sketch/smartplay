@@ -80,6 +80,33 @@ export interface SegmentOptions {
 }
 
 /**
+ * 2026-07-08 (segmentation audit #3) — collapse REBOUND transients into their real
+ * strike. The detector's 500ms debounce is right for calibration/chip, but in a cage
+ * a ball-off-net thud or floor bounce lands 0.5–2.5s after the true strike, passes
+ * every per-peak gate, and used to become a PHANTOM segment ("Got it — 4 swings" on a
+ * 3-swing set). No human hits two real swings inside ~2s, so within that gap keep the
+ * LOUDER, higher-confidence peak. Applied at the CAGE call sites only — never inside
+ * detectStrikes (calibration legitimately runs tighter debounces).
+ */
+export function filterReboundStrikes(strikes: DetectedStrike[], minGapMs = 2000): DetectedStrike[] {
+  const ordered = [...strikes].sort((a, b) => a.timeMs - b.timeMs);
+  const kept: DetectedStrike[] = [];
+  const confRank = (c: DetectedStrike['confidence']) => (c === 'high' ? 2 : c === 'medium' ? 1 : 0);
+  for (const s of ordered) {
+    const last = kept[kept.length - 1];
+    if (last && s.timeMs - last.timeMs < minGapMs) {
+      // Same swing: keep the stronger read (confidence first, then loudness).
+      const better = confRank(s.confidence) > confRank(last.confidence)
+        || (confRank(s.confidence) === confRank(last.confidence) && s.peakDb > last.peakDb);
+      if (better) kept[kept.length - 1] = s;
+      continue;
+    }
+    kept.push(s);
+  }
+  return kept;
+}
+
+/**
  * Map detected strikes → swing segments over a clip of `durationMs`.
  * Segments are clamped to the clip and trimmed at the midpoint between
  * adjacent strikes so back-to-back swings don't bleed into each other.

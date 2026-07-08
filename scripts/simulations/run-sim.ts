@@ -38,7 +38,7 @@ import {
 } from '../../lib/persona';
 import { detectStrikes, type MeterSample } from '../../services/swing/strikeDetector';
 import { classifyStroke } from '../../utils/geometryFitting';
-import { mergeSwingDetections, correlateStrikesWithVideo } from '../../services/swing/swingSegmentation';
+import { mergeSwingDetections, correlateStrikesWithVideo, filterReboundStrikes } from '../../services/swing/swingSegmentation';
 import { evaluateFraming } from '../../services/swing/framingCheck';
 import { computeTraceDirection, traceColor } from '../../services/swing/ballTrace';
 import { frameToContainerNorm, containerToFrameNorm } from '../../services/swing/overlayCoords';
@@ -2824,6 +2824,33 @@ check('Hotel Mode: gyro rep detector reads swings + putts, never fabricates from
   })(),
   'the real IndoorRepDetector reads 5/5 synthetic swings (sane tempo, ≥80 consistency) and 4/4 putts with an accel/decel call, produces ZERO reps from hand jitter, and the screen is wired to the hub + points + CNS with the honest no-ball-flight label');
 
+// 2026-07-08 (segmentation audit #1/#3/#4/#5/#8) — the 1/3/5 count bar. Runs the REAL
+// filterReboundStrikes on synthetic strike sets + verifies the session-token/dedupe
+// wiring, the cage fallback keeping acoustic anchors, and earliest-peak debounce.
+check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors kept',
+  (() => {
+    // (a) A real strike + a net thud 1.2s later = ONE swing (the real strike's time
+    //     kept); three clean swings 6s apart = THREE.
+    const mk = (timeMs: number, peakDb: number, confidence: 'high' | 'medium' | 'low') => ({ timeMs, peakDb, confidence, attackMs: 40 } as never);
+    const withRebound = filterReboundStrikes([mk(1000, -8, 'high'), mk(2200, -12, 'low'), mk(8000, -9, 'high')]);
+    const clean3 = filterReboundStrikes([mk(1000, -8, 'high'), mk(7000, -9, 'high'), mk(13000, -7, 'medium')]);
+    const reboundsOk = withRebound.length === 2 && withRebound[0].timeMs === 1000 && clean3.length === 3;
+    // (b) merge separation scales with the coarse frame interval on long clips.
+    const scaled = /mergeSwingDetections\(raw, Math\.max\(2\.5, frameIntervalSec\)\)/.test(read('services/poseDetection.ts'));
+    // (c) session token + in-flight dedupe on the per-swing analysis cache.
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const tokenOk = /sessionRunRef\.current !== myRun\) return null/.test(sm) &&
+      /analysisInflightRef\.current\[idx\] = job/.test(sm) &&
+      (sm.match(/sessionRunRef\.current \+= 1/g) ?? []).length >= 2;
+    // (d) cage fallback keeps acoustic anchors; cage strikes rebound-filtered.
+    const anchorsOk = /acousticStrikes\.length > 0\s*\n\s*\? correlateStrikesWithVideo\(acousticStrikes, swings, durMs\)/.test(sm) &&
+      /filterReboundStrikes\(res\.strikes\)/.test(sm);
+    // (e) detector debounce keeps the EARLIEST peak (impact, not the louder net hit).
+    const earliestOk = /same strike group — the earlier peak \(impact\) already kept/.test(read('services/swing/strikeDetector.ts'));
+    return reboundsOk && scaled && tokenOk && anchorsOk && earliestOk;
+  })(),
+  'a net/floor rebound 0.5-2.5s after impact never becomes a phantom swing; long-clip locate merges at the real frame interval; an in-flight read can\'t poison the next session\'s cache (token + dedupe); the cage video fallback keeps the real acoustic strike; debounce keeps the earliest (impact) peak');
+
 check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
   // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on
   // swings where flight was seen (honest), reports tempo REPEATABILITY (not a
@@ -4109,7 +4136,8 @@ check('Environment mode phase 2: range acoustic↔video correlation (propose/dis
     /if \(stopMode === 'range'\) \{/.test(smEnvSrc) &&
     /correlateStrikesWithVideo\(acousticStrikes, swings, durMs\)/.test(smEnvSrc) &&
     /segmentsFromVideoSwings\(swings, durMs\); \/\/ nothing heard cleanly/.test(smEnvSrc) &&
-    /segmentsFromStrikes\(acousticStrikes, durMs\); \/\/ vision empty/.test(smEnvSrc),
+    // 2026-07-08 (segmentation audit #3) — acoustic-only best effort now rebound-filtered.
+    /segmentsFromStrikes\(filterReboundStrikes\(acousticStrikes\), durMs\)/.test(smEnvSrc),
   'range makes the VIDEO locator the spine (count never inflated by a neighbour); correlateStrikesWithVideo snaps each acoustic candidate onto its in-frame swing for a precise impact + peakDb; degrades to video-only (nothing heard) or acoustic-only (vision empty); unmatched neighbour strikes are dropped');
 
 // 2026-06-11 — Behavioral: the correlation itself is neighbour-proof + precise.

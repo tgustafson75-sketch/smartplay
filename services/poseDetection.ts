@@ -710,7 +710,13 @@ export async function locateSwings(
     // labeled as multiple swings on ~1-1.5s-spaced coarse frames). Verified on
     // real clips: a 1-swing DTL clip came back as 3, a face-on as 6. See
     // mergeSwingDetections.
-    const out = mergeSwingDetections(raw);
+    // 2026-07-08 (segmentation audit #4) — the 2.5s merge floor was validated at
+    // 2.5s FRAME SPACING (60s clip / 24 frames). A 120s range clip still caps at 24
+    // frames → 5s spacing, exactly the geometry the 2026-06-11 note says over-
+    // detected (adjacent-frame phantoms sit ~5s apart and survived a 2.5s merge).
+    // Scale the separation to the ACTUAL frame interval so the merge keeps up.
+    const frameIntervalSec = durationMs / 1000 / Math.max(1, frames.length);
+    const out = mergeSwingDetections(raw, Math.max(2.5, frameIntervalSec));
     logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length });
     return out;
   } catch (e) {

@@ -87,7 +87,7 @@ import {
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
-import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
@@ -946,6 +946,12 @@ export default function SmartMotion() {
   const [targetFrameUri, setTargetFrameUri] = useState<string | null>(null);
   const [autoDetectingBall, setAutoDetectingBall] = useState(false);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
+  // 2026-07-08 (segmentation audit #1/#8) — session token + in-flight dedupe for the
+  // per-swing analysis. Bumping the token on reset/new-recording makes any still-in-
+  // flight read from the PRIOR session drop its result instead of poisoning the new
+  // session's cache; the inflight map stops duplicate concurrent reads per swing.
+  const sessionRunRef = useRef(0);
+  const analysisInflightRef = useRef<Record<number, Promise<SwingAnalysis | null> | undefined>>({});
   const tempoCacheRef = useRef<Record<string, SwingTempo>>({});
   const pipelineNarratedRef = useRef(false); // 2026-06-15 — guards one-time per-session pipeline narration
   const pipelineAbortRef = useRef(false);    // 2026-06-16 — abort in-flight narration on exit / new session (no ghost reads)
@@ -1468,6 +1474,8 @@ export default function SmartMotion() {
       // also clear them. (audit 2026-06-11)
       ingestedSessionIdRef.current = null;
       analysisCacheRef.current = {};
+      sessionRunRef.current += 1; // drop any prior session's in-flight analysis
+      analysisInflightRef.current = {};
       // Persist the recorded clip into documents so it survives OS cache
       // eviction — otherwise an old SmartMotion recording later can't replay
       // OR re-analyze (the temp recorder file is gone). Already-persistent or
@@ -2037,6 +2045,8 @@ export default function SmartMotion() {
     // analysis/tempo can be read for the new recording (audit #2).
     tempoCacheRef.current = {};
     analysisCacheRef.current = {};
+    sessionRunRef.current += 1;          // segmentation audit #1 — a still-in-flight read from the
+    analysisInflightRef.current = {};    // prior session drops its result instead of poisoning this one
     pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
     pipelineAbortRef.current = true;     // abort any still-running narration from the prior session
     pipelineRunRef.current++;            // invalidate the prior pipeline run (cache-collision guard)
@@ -2122,6 +2132,19 @@ export default function SmartMotion() {
       if (!seg || !uri) return null;
       const cachedHit = analysisCacheRef.current[idx];
       if (cachedHit) return cachedHit;
+      // 2026-07-08 (segmentation audit #8) — dedupe concurrent launches for the same
+      // swing: the pipeline head-start and the prefetch could both fire idx 1 before
+      // either cached, producing TWO reads whose later resolve overwrote the first —
+      // the narrated fault could differ from the card shown on tap.
+      const inflight = analysisInflightRef.current[idx];
+      if (inflight) return inflight;
+      // 2026-07-08 (segmentation audit #1 — cross-session cache poisoning) — an
+      // in-flight read can outlive reset() ("go again" mid-analysis) and used to write
+      // its result into the NEXT session's cache slot: the new set's swing 3 showed +
+      // narrated the OLD clip's analysis. Capture the session run at entry; a stale
+      // resolve is dropped (same pattern as pipelineRunRef).
+      const myRun = sessionRunRef.current;
+      const job = (async (): Promise<SwingAnalysis | null> => {
       // 2026-06-11 — multi-swing variety: hand the analyzer the DISTINCT faults
       // already read on this session's earlier swings (whatever's cached so far).
       // The server treats this (on swing 2+) as a "don't just echo swing 1 — surface
@@ -2157,9 +2180,20 @@ export default function SmartMotion() {
             setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), 60000),
           ),
         ]);
-        if (r.kind === 'ok') { analysisCacheRef.current[idx] = r.analysis; return r.analysis; }
+        if (r.kind === 'ok') {
+          if (sessionRunRef.current !== myRun) return null; // stale session — drop, don't poison
+          analysisCacheRef.current[idx] = r.analysis;
+          return r.analysis;
+        }
       } catch { /* non-fatal */ }
       return null;
+      })();
+      analysisInflightRef.current[idx] = job;
+      try {
+        return await job;
+      } finally {
+        delete analysisInflightRef.current[idx];
+      }
     },
     [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
   );
@@ -2518,8 +2552,11 @@ export default function SmartMotion() {
           // CAGE: trust acoustics as the final segmentation here. RANGE waits for
           // video confirmation (correlateStrikesWithVideo) in the clip branch.
           if (meterMode === 'cage') {
-            detectedSegments = segmentsFromStrikes(res.strikes, durationMs);
-            firstStrikeMs = res.strikes[0]?.timeMs ?? null;
+            // 2026-07-08 (segmentation audit #3) — drop rebound thuds (net/floor
+            // 0.5–2.5s after the true strike) so a 3-swing set never reads as 4.
+            const real = filterReboundStrikes(res.strikes);
+            detectedSegments = segmentsFromStrikes(real, durationMs);
+            firstStrikeMs = real[0]?.timeMs ?? null;
           } else if (meterMode === 'course') {
             // CHIP on COURSE (off-round, single shot): no multi-segmentation — just
             // take the chip's strike as the impact anchor for tempo / ball-departure.
@@ -2631,7 +2668,8 @@ export default function SmartMotion() {
           } else if (swings.length > 0) {
             segsForAnalysis = segmentsFromVideoSwings(swings, durMs); // nothing heard cleanly
           } else if (acousticStrikes.length > 0) {
-            segsForAnalysis = segmentsFromStrikes(acousticStrikes, durMs); // vision empty — best effort
+            // vision empty — best effort, rebounds filtered (segmentation audit #3)
+            segsForAnalysis = segmentsFromStrikes(filterReboundStrikes(acousticStrikes), durMs);
           }
           if (segsForAnalysis.length > 0) {
             setSegments(segsForAnalysis);
@@ -2685,7 +2723,15 @@ export default function SmartMotion() {
             // Use the video segments only if they found MORE swings than acoustics
             // — never reduce the count, just recover missed ones.
             if (swings.length > segsForAnalysis.length) {
-              segsForAnalysis = segmentsFromVideoSwings(swings, durMs);
+              // 2026-07-08 (segmentation audit #2) — KEEP the real acoustic anchor(s).
+              // Plain segmentsFromVideoSwings stamps every segment peakDb:0, which
+              // threw away the precisely-heard strike → tempo + acoustic ball-speed/
+              // departure went dark for EVERY swing including the clean one. The range
+              // branch already merges via correlateStrikesWithVideo — do the same here
+              // whenever we actually heard something.
+              segsForAnalysis = acousticStrikes.length > 0
+                ? correlateStrikesWithVideo(acousticStrikes, swings, durMs)
+                : segmentsFromVideoSwings(swings, durMs);
               setSegments(segsForAnalysis);
               setSelectedSwing(0);
             }

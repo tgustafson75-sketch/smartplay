@@ -186,16 +186,19 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
     if (c.peakDb - minAfter >= MIN_DECAY_DB) isolated.push(c);
   }
 
-  // Fourth pass: debounce. Walk in time order; when two sharp peaks are
-  // within minDebounceMs (default MIN_DEBOUNCE_MS), keep only the louder.
+  // Fourth pass: debounce. Walk in time order; when two sharp peaks are within
+  // minDebounceMs (default MIN_DEBOUNCE_MS), keep the EARLIEST.
+  // 2026-07-08 (segmentation audit #5) — was keep-the-LOUDER: in a cage the ball
+  // reaches the net 50-150ms after impact, and when the phone sits nearer the net
+  // the net hit meters louder — the collapsed strike's timestamp snapped to the NET
+  // hit, inflating tempo's downswing by the flight time and sliding the departure
+  // window past the ball. Every peak here already passed the attack/decay gates, so
+  // the earliest IS the impact; later louder peaks in the group are the net/bounce.
   const debounced: Sharp[] = [];
   for (const s of isolated) {
     const last = debounced[debounced.length - 1];
     if (last && s.timeMs - last.timeMs < minDebounceMs) {
-      if (s.peakDb > last.peakDb) {
-        debounced[debounced.length - 1] = s;
-      }
-      continue;
+      continue; // same strike group — the earlier peak (impact) already kept
     }
     debounced.push(s);
   }
