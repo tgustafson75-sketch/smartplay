@@ -26,6 +26,7 @@ import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useRoundStore, type RoundRecord } from '../../store/roundStore';
 
 const NEON = '#88F700';
 const SIM_COURSES = ['webster-dudley', 'spessard-holland'];
@@ -65,6 +66,16 @@ export default function SwingSimScreen() {
   const [scorecard, setScorecard] = useState<{ hole: number; par: number; strokes: number }[]>([]);
   const [banner, setBanner] = useState<{ title: string; sub: string; tone: 'good' | 'warn' | 'bad' } | null>(null);
   const [marks, setMarks] = useState<ShotMark[]>([]);
+  // 2026-07-08 (Tim — SwingSim ladder: GHOST MODE) — play against YOUR OWN real round
+  // at this course. The ghost just replays its recorded per-hole scores; you swing the
+  // phone. The most personal opponent in golf: past you. Only real (non-sim) rounds.
+  const [ghost, setGhost] = useState<RoundRecord | null>(null);
+  const ghostRounds = useMemo(() => {
+    return useRoundStore.getState().roundHistory
+      .filter((r) => !r.simulated && r.courseId === courseId && Object.keys(r.scores ?? {}).length > 0)
+      .sort((a, b) => b.endedAt - a.endedAt)
+      .slice(0, 4);
+  }, [courseId]);
   const [club, setClub] = useState<string>('7 Iron');
   const [armed, setArmed] = useState(false);
   // 2026-07-08 (Tim — "screen goes white after the flyover") — the tracer Polyline was
@@ -184,9 +195,15 @@ export default function SwingSimScreen() {
 
   const finishHole = useCallback((finalStrokes: number) => {
     setScorecard((sc) => [...sc, { hole: hole.hole, par: hole.par, strokes: finalStrokes }]);
-    setBanner({ title: scoreName(finalStrokes, hole.par), sub: finalStrokes - hole.par <= -1 ? callLine(persona, 'birdie') : finalStrokes - hole.par >= 1 ? callLine(persona, 'bogey') : 'Steady.', tone: finalStrokes <= hole.par ? 'good' : 'warn' });
+    // Ghost comparison for THIS hole when the ghost round has a score for it.
+    const g = ghost?.scores?.[hole.hole];
+    let sub = finalStrokes - hole.par <= -1 ? callLine(persona, 'birdie') : finalStrokes - hole.par >= 1 ? callLine(persona, 'bogey') : 'Steady.';
+    if (typeof g === 'number' && g > 0) {
+      sub = finalStrokes < g ? `You ${finalStrokes}, ghost ${g} — you win the hole. 👻` : finalStrokes > g ? `You ${finalStrokes}, ghost ${g} — ghost takes it.` : `You ${finalStrokes}, ghost ${g} — halved.`;
+    }
+    setBanner({ title: scoreName(finalStrokes, hole.par), sub, tone: finalStrokes <= hole.par ? 'good' : 'warn' });
     setStage('holeout');
-  }, [hole, persona]);
+  }, [hole, persona, ghost]);
 
   const nextHole = useCallback(() => {
     const nextIdx = holeIdx + 1;
@@ -201,6 +218,22 @@ export default function SwingSimScreen() {
   }, [holeIdx, holeCount, beginHole, scorecard]);
 
   const toPar = scorecard.reduce((a, h) => a + (h.strokes - h.par), 0);
+  // Running ghost differential over the holes we've both "played" (ghost has a score).
+  const ghostDiff = useMemo(() => {
+    if (!ghost) return null;
+    let mine = 0, theirs = 0, holes = 0;
+    for (const h of scorecard) {
+      const g = ghost.scores?.[h.hole];
+      if (typeof g === 'number' && g > 0) { mine += h.strokes; theirs += g; holes += 1; }
+    }
+    return holes > 0 ? { diff: mine - theirs, holes } : null;
+  }, [ghost, scorecard]);
+  const ghostHoleScore = ghost?.scores?.[hole?.hole ?? -1] ?? null;
+  const ghostLabel = (r: RoundRecord) => {
+    const d = new Date(r.endedAt);
+    const vp = r.scoreVsPar;
+    return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${r.totalScore} (${vp === 0 ? 'E' : vp > 0 ? `+${vp}` : vp})`;
+  };
   const s = makeStyles(colors);
 
   // ── Render ──
@@ -212,9 +245,13 @@ export default function SwingSimScreen() {
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
           <Text style={s.title}>SWINGSIM</Text>
-          <Text style={s.simBadge}>SIM ROUND · NOT REAL STATS</Text>
+          <Text style={s.simBadge}>{ghost && stage !== 'lobby' ? 'VS YOUR GHOST' : 'SIM ROUND · NOT REAL STATS'}</Text>
         </View>
-        <Text style={s.toPar}>{scorecard.length > 0 ? (toPar === 0 ? 'E' : toPar > 0 ? `+${toPar}` : `${toPar}`) : ''}</Text>
+        {ghostDiff ? (
+          <Text style={[s.toPar, { color: ghostDiff.diff <= 0 ? NEON : '#F0C030' }]}>{ghostDiff.diff === 0 ? 'AS' : ghostDiff.diff < 0 ? `${ghostDiff.diff}` : `+${ghostDiff.diff}`}</Text>
+        ) : (
+          <Text style={s.toPar}>{scorecard.length > 0 ? (toPar === 0 ? 'E' : toPar > 0 ? `+${toPar}` : `${toPar}`) : ''}</Text>
+        )}
       </View>
 
       {stage === 'lobby' ? (
@@ -236,9 +273,26 @@ export default function SwingSimScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          {/* GHOST MODE — play your past self at this course */}
+          {ghostRounds.length > 0 ? (
+            <View style={{ marginTop: 16 }}>
+              <Text style={s.ghostHeader}>👻 PLAY YOUR GHOST</Text>
+              <Text style={s.ghostSub}>Race a real round you played here. The ghost plays its card; you swing.</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
+                <TouchableOpacity style={[s.ghostChip, !ghost && s.ghostChipActive]} onPress={() => setGhost(null)} accessibilityRole="button">
+                  <Text style={[s.ghostChipText, !ghost && { color: '#0b1220' }]}>NO GHOST</Text>
+                </TouchableOpacity>
+                {ghostRounds.map((r) => (
+                  <TouchableOpacity key={r.id} style={[s.ghostChip, ghost?.id === r.id && s.ghostChipActive]} onPress={() => setGhost(r)} accessibilityRole="button">
+                    <Text style={[s.ghostChipText, ghost?.id === r.id && { color: '#0b1220' }]}>{ghostLabel(r)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           {bag.length === 0 ? <Text style={s.honest}>No learned club distances yet — the sim will use a stock 150y club until your bag learns.</Text> : null}
           <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button" accessibilityLabel="Tee off">
-            <Text style={s.teeOffText}>TEE OFF</Text>
+            <Text style={s.teeOffText}>{ghost ? 'TEE OFF vs GHOST' : 'TEE OFF'}</Text>
           </TouchableOpacity>
           <Text style={s.honest}>Swing the phone like a club when prompted. Every swing is a real tempo rep — it all feeds your caddie.</Text>
         </ScrollView>
@@ -246,14 +300,25 @@ export default function SwingSimScreen() {
         <ScrollView contentContainerStyle={{ padding: 20 }}>
           <Text style={s.flyPar}>FINAL</Text>
           <Text style={s.finalScore}>{toPar === 0 ? 'EVEN' : toPar > 0 ? `+${toPar}` : `${toPar}`}</Text>
-          {scorecard.map((h) => (
+          {ghostDiff ? (
+            <View style={s.ghostVerdict}>
+              <Text style={s.ghostVerdictText}>
+                {ghostDiff.diff < 0 ? `👻 YOU BEAT YOUR GHOST BY ${Math.abs(ghostDiff.diff)} over ${ghostDiff.holes}` : ghostDiff.diff > 0 ? `Ghost wins by ${ghostDiff.diff} over ${ghostDiff.holes} — run it back` : `Dead even with your ghost over ${ghostDiff.holes} — photo finish`}
+              </Text>
+              <Text style={s.ghostVerdictSub}>{ghost ? ghostLabel(ghost) : ''}</Text>
+            </View>
+          ) : null}
+          {scorecard.map((h) => {
+            const g = ghost?.scores?.[h.hole];
+            return (
             <View key={h.hole} style={s.scRow}>
               <Text style={s.scHole}>{h.hole}</Text>
               <Text style={s.scPar}>par {h.par}</Text>
               <Text style={[s.scStrokes, { color: h.strokes < h.par ? NEON : h.strokes === h.par ? '#fff' : '#F0C030' }]}>{h.strokes}</Text>
+              {typeof g === 'number' && g > 0 ? <Text style={s.scGhost}>👻 {g}</Text> : null}
               <Text style={s.scName}>{scoreName(h.strokes, h.par)}</Text>
             </View>
-          ))}
+          ); })}
           <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button"><Text style={s.teeOffText}>RUN IT BACK</Text></TouchableOpacity>
           <TouchableOpacity style={s.ghostBtn} onPress={() => router.back()} accessibilityRole="button"><Text style={s.ghostText}>Clubhouse</Text></TouchableOpacity>
         </ScrollView>
@@ -377,7 +442,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     scHole: { color: '#6b7280', width: 22, fontWeight: '800' },
     scPar: { color: '#9aa5b1', width: 50, fontSize: 12 },
     scStrokes: { fontSize: 16, fontWeight: '900', width: 30 },
-    scName: { color: '#9aa5b1', fontSize: 12, fontWeight: '800' },
+    scGhost: { color: '#9aa5b1', fontSize: 12, width: 40 },
+    scName: { color: '#9aa5b1', fontSize: 12, fontWeight: '800', flex: 1, textAlign: 'right' },
+    ghostHeader: { color: NEON, fontSize: 12, fontWeight: '900', letterSpacing: 1.2 },
+    ghostSub: { color: '#9aa5b1', fontSize: 12, marginTop: 3 },
+    ghostChip: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 },
+    ghostChipActive: { backgroundColor: NEON, borderColor: NEON },
+    ghostChipText: { color: '#c2cbd4', fontSize: 12, fontWeight: '800' },
+    ghostVerdict: { backgroundColor: 'rgba(136,247,0,0.08)', borderWidth: 1, borderColor: NEON, borderRadius: 14, padding: 14, marginBottom: 14 },
+    ghostVerdictText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+    ghostVerdictSub: { color: '#9aa5b1', fontSize: 12, marginTop: 4 },
     ghostBtn: { marginTop: 12, alignItems: 'center', paddingVertical: 12 },
     ghostText: { color: '#9aa5b1', fontSize: 14, fontWeight: '700' },
   });
