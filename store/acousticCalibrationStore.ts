@@ -33,6 +33,10 @@ export interface CalibrationSession {
   corrected: DetectedStrike[];
   sampleCount: number;
   notes?: string | null;
+  /** 2026-07-08 (cage audit #1) — the environment this was captured in ('cage' /
+   *  'range' / 'course'), so a calibration is only trusted when it matches where the
+   *  user is now. A home-cage calibration must not silently under-detect at a facility. */
+  env?: string | null;
 }
 
 // 2026-05-28 — Fix FC (Path C, Pass A): the LIVE acoustic detector
@@ -53,6 +57,10 @@ export interface AppliedCalibration {
   sourceSessionId: string;
   /** When the user applied this calibration. */
   appliedAt: number;
+  /** 2026-07-08 (cage audit #1) — env it was captured in, so the live detector can
+   *  ignore it when the user is somewhere acoustically different (else a quiet-room
+   *  calibration drops every strike at a loud facility with no honesty flag). */
+  env?: string | null;
 }
 
 interface AcousticCalibrationState {
@@ -187,17 +195,22 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
         const sorted = [...peaks].sort((a, b) => a - b);
         const medianPeak = sorted[Math.floor(sorted.length / 2)];
         const floor = sess.floorDb;
-        // 60% of the way from floor to medianPeak, but at minimum 8dB
-        // over floor. Hardcoded constant default is 18dB; user-tuned
-        // values typically land 10-22dB depending on mic distance.
+        // 60% of the way from floor to medianPeak. 2026-07-08 (cage audit #2) — this
+        // is now meaningful in BOTH directions: calibrate.tsx detects at the LIVE
+        // detector's 18dB basis (not the old 30dB gate), so a DISTANT-mic user whose
+        // real strikes meter quiet derives a span < 30 → an offset BELOW 18 that makes
+        // the cage MORE sensitive (the whole point of calibrating). Clamped to a sane
+        // band so it can't mis-tune to "everything is a strike" (min 8) or absurdly
+        // strict (max 30). The old max(8,…) was dead code under the 30dB gate.
         const span = medianPeak - floor;
-        const recommended = Math.max(8, Math.round(span * 0.6));
+        const recommended = Math.max(8, Math.min(30, Math.round(span * 0.6)));
         set({
           appliedCalibration: {
             noiseFloorDb: floor,
             transientThresholdDb: recommended,
             sourceSessionId: sessionId,
             appliedAt: Date.now(),
+            env: sess.env ?? null,
           },
         });
         console.log(`[acousticCalibration] applied calibration from session=${sessionId} floor=${floor.toFixed(1)} thresh=${recommended}dB (medianPeak=${medianPeak.toFixed(1)})`);

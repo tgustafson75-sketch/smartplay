@@ -22,9 +22,10 @@ export interface BallSpeedResult {
   delta_ms: number;
   /** Cage distance derived from echo delay — real measurement. */
   cage_distance_yards: number;
-  /** Ball-speed estimate (heuristic: club-typical × peak-amplitude
-   *  factor). True ball speed needs 2 mics / radar / doppler. */
-  ball_speed_mph: number;
+  /** Ball-speed estimate (heuristic: club-typical × peak-amplitude factor). True
+   *  ball speed needs 2 mics / radar / doppler. NULL when no club was provided —
+   *  the honest split: cage distance + timing are still real. (audit #4) */
+  ball_speed_mph: number | null;
   /** Detection confidence 0-1. */
   confidence: number;
   /** Peak loudness at impact, dBFS. */
@@ -65,8 +66,13 @@ export async function detectBallSpeed(args: {
       signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as Partial<BallSpeedResult>;
-    if (typeof data.ball_speed_mph !== 'number') return null;
+    const data = (await res.json()) as Partial<BallSpeedResult> & { configured?: boolean };
+    // 2026-07-08 (cage audit #4) — the server intentionally returns a valid payload
+    // (real impact/echo/cage-distance) with ball_speed_mph:null for an unknown club.
+    // Dropping the WHOLE payload on a null speed threw away the real cage-distance
+    // measurement and defeated the server's honesty contract. Keep the object when the
+    // detection itself is real (a real impact_ms); let ball_speed_mph be independently null.
+    if (data.configured === false || typeof data.impact_ms !== 'number') return null;
     return data as BallSpeedResult;
   } catch (e) {
     console.log('[acoustic-detect] failed:', e);

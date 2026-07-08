@@ -20,6 +20,7 @@ import { useMicrophonePermissions } from 'expo-camera';
 import { useTheme } from '../../contexts/ThemeContext';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { TRANSIENT_THRESHOLD_DB } from '../../constants/cageDetection';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 
 const TARGET_STRIKES = 10;
@@ -108,7 +109,12 @@ export default function CalibrateAcoustics() {
       // floors. Raise the threshold from the default -30 dBFS so calibration isn't
       // blocked by wind / bay neighbors / range machinery.
       const noisyFloorDb = (env === 'range' || env === 'course') ? -18 : -28;
-      res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350, noisyFloorDb });
+      // 2026-07-08 (cage audit #2) — detect at the LIVE detector's threshold basis (18dB
+      // over floor), not the old default 30. The old gate meant every calibration strike
+      // had ≥30 headroom → the derived offset was ALWAYS ≥18 → calibrating could only make
+      // the cage STRICTER, never more sensitive for a distant mic. At 18 the span reflects
+      // the user's real strikes, so a quiet/distant setup can legitimately lower the bar.
+      res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350, noisyFloorDb, thresholdDb: TRANSIENT_THRESHOLD_DB });
     } catch (e) {
       setPhase('idle');
       Alert.alert('Calibration failed', e instanceof Error ? e.message : String(e));
@@ -142,6 +148,7 @@ export default function CalibrateAcoustics() {
       corrected: r.strikes,
       sampleCount: r.sampleCount,
       notes: `10-strike calibration · ${env}`,
+      env,
     });
     autoAppliedRef.current = true;
     const ok = applyCalibration(id);
@@ -166,6 +173,7 @@ export default function CalibrateAcoustics() {
       corrected: result.strikes,
       sampleCount: result.sampleCount,
       notes: `10-strike calibration · ${env}`,
+      env,
     });
     const ok = applyCalibration(id);
     if (ok) {

@@ -2851,6 +2851,34 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
   })(),
   'a net/floor rebound 0.5-2.5s after impact never becomes a phantom swing; long-clip locate merges at the real frame interval; an in-flight read can\'t poison the next session\'s cache (token + dedupe); the cage video fallback keeps the real acoustic strike; debounce keeps the earliest (impact) peak');
 
+// 2026-07-08 (cage acoustic audit) — calibration must be able to make the cage MORE
+// sensitive (not only stricter) and must NOT silently under-detect at a different venue.
+check('Cage calibration: env-gated + can lower the bar, not just raise it',
+  (() => {
+    const cal = read('store/acousticCalibrationStore.ts');
+    const calScreen = read('app/swinglab/calibrate.tsx');
+    const det = read('services/acousticImpactDetector.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const api = read('services/acousticDetectApi.ts');
+    return (
+      // #2 — calibrate detects at the LIVE 18dB basis (was default 30 → always ≥18);
+      // applied offset clamped to a two-sided band so it CAN go below 18.
+      /thresholdDb: TRANSIENT_THRESHOLD_DB/.test(calScreen) &&
+      /Math\.max\(8, Math\.min\(30, Math\.round\(span \* 0\.6\)\)\)/.test(cal) &&
+      // #1 — env stamped on the applied calibration + captured session, and BOTH the
+      // native detector and the post-hoc path gate on the indoor/outdoor env class.
+      /env: sess\.env \?\? null/.test(cal) &&
+      /const envClass = /.test(det) && /envClass\(applied\.env\) === envClass\(curEnv\)/.test(det) &&
+      /calOk \? appliedCalibration\?\.transientThresholdDb : undefined/.test(sm) &&
+      // #3 — real floor stashed for honest telemetry (not threshold−18).
+      /ts: Date\.now\(\), noiseFloor \}/.test(det) &&
+      // #4 — client keeps the real payload when speed is null (honest server contract).
+      /ball_speed_mph: number \| null/.test(api) &&
+      /typeof data\.impact_ms !== 'number'\) return null/.test(api)
+    );
+  })(),
+  'calibration derives at the live 18dB basis so a distant mic can LOWER the threshold (not only raise it), is trusted only when its indoor/outdoor env class matches where you are now (a quiet-room calibration never zeroes out detection at a loud venue), reports the real noise floor, and the ball-speed client keeps the real cage-distance payload when speed is null');
+
 check('Open Range quantifier — makes the mash visible + flags blocked practice (Tim+Tank)',
   // 2026-06-13 — Tank's "5 of 60" made real. summarizeOpenRange judges line ONLY on
   // swings where flight was seen (honest), reports tempo REPEATABILITY (not a
@@ -4704,7 +4732,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('SmartMotion: chip sensitivity — lower threshold + mode-aware acoustics + clear toggle',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
-      /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration\?\.transientThresholdDb/.test(smSrc2) &&
+      // 2026-07-08 (cage audit #1) — the calibration branch is now env-gated (calOk).
+      /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : \(calOk \? appliedCalibration\?\.transientThresholdDb : undefined\)/.test(smSrc2) &&
       // mode-aware: chip → cage+course (off-round), NOT range; default → cage+range
       /chipOnStart\s*\n?\s*\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smSrc2) &&
       // course+chip single-shot anchor

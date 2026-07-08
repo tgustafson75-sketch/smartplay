@@ -2532,7 +2532,14 @@ export default function SmartMotion() {
         // noisy floor can't fabricate a swing); cage keeps the strict default.
         // CHIP sensitivity drops the threshold so a quiet pitch/chip still registers.
         const chipOn = useSettingsStore.getState().chipSensitivity;
-        const thresholdDb = chipOn ? CHIP_STRIKE_THRESHOLD_DB : appliedCalibration?.transientThresholdDb;
+        // 2026-07-08 (cage audit #1) — only apply a calibration whose env class matches
+        // where we are now (indoor cage≈backyard vs outdoor range/course); else fall
+        // back to the constant so a mismatched (quiet-room) calibration can't zero out
+        // detection at a loud venue. Chip sensitivity still wins when on.
+        const envClass = (e: string | null | undefined): string | null =>
+          !e ? null : (e === 'range' || e === 'course') ? 'outdoor' : 'indoor';
+        const calOk = !appliedCalibration?.env || envClass(appliedCalibration.env) === envClass(meterMode);
+        const thresholdDb = chipOn ? CHIP_STRIKE_THRESHOLD_DB : (calOk ? appliedCalibration?.transientThresholdDb : undefined);
         let res = detectStrikes(samples, {
           thresholdDb,
           noisyFloorDb: meterMode === 'range' ? 0 : undefined,

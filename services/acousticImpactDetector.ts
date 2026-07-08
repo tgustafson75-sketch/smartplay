@@ -103,7 +103,7 @@ interface RunningRecorder {
   meterBuffer: number[];
   /** Candidate peak waiting for next-sample verification (multi-shot
    *  uses peak-then-decay validation to reject sustained sound). */
-  pendingPeak: { db: number; threshold: number; offset_ms: number; ts: number } | null;
+  pendingPeak: { db: number; threshold: number; offset_ms: number; ts: number; noiseFloor: number } | null;
   /** Last accepted detection timestamp — for DEBOUNCE_MS gating. */
   lastDetectionTs: number;
   /** Multi-shot: fires for EVERY validated strike. */
@@ -268,7 +268,7 @@ export async function startImpactRecording(opts?: {
               const ts = Date.now();
               if (ts - state.lastDetectionTs > MULTISHOT_DEBOUNCE_MS) {
                 state.lastDetectionTs = ts;
-                const noiseFloor = pending.threshold - TRANSIENT_THRESHOLD_DB;
+                const noiseFloor = pending.noiseFloor; // real floor (audit #3), not threshold−18
                 if (state.onShotDetected) {
                   try {
                     state.onShotDetected({
@@ -306,13 +306,36 @@ export async function startImpactRecording(opts?: {
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               const calMod = require('../store/acousticCalibrationStore') as typeof import('../store/acousticCalibrationStore');
               const applied = calMod.useAcousticCalibrationStore.getState().appliedCalibration;
-              if (applied && typeof applied.transientThresholdDb === 'number') {
+              // 2026-07-08 (cage audit #1) — ONLY trust an applied calibration whose env
+              // matches where the user is now. A quiet-room ('backyard') calibration used
+              // at a loud facility set an over-tuned offset that dropped every strike
+              // (counter stuck at 0) with no honesty flag. On a mismatch (or an untagged
+              // legacy calibration), fall back to the safe constant — the detector is
+              // designed to work uncalibrated. environmentMode is 'cage'|'range'|'course';
+              // environmentMode is 'cage'|'range'|'course'; calibrate.tsx captures
+              // 'range'|'backyard'|'course'. Match on a broad INDOOR/OUTDOOR acoustic
+              // class (cage≈backyard = quiet/close; range/course = open/noisy) so the
+              // naming mismatch doesn't wrongly disable a legit cage calibration. A
+              // null/legacy env skips the gate (keeps prior behavior for old data).
+              const envClass = (e: string | null | undefined): string | null =>
+                !e ? null : (e === 'range' || e === 'course') ? 'outdoor' : 'indoor';
+              let curEnv: string | null = null;
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const setMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
+                curEnv = setMod.useSettingsStore.getState().environmentMode ?? null;
+              } catch { /* settings optional */ }
+              const envOk = !applied?.env || !curEnv || envClass(applied.env) === envClass(curEnv);
+              if (applied && typeof applied.transientThresholdDb === 'number' && envOk) {
                 thresholdOffset = applied.transientThresholdDb;
               }
             } catch { /* ignore — fall back to constant */ }
             const threshold = noiseFloor + thresholdOffset;
             if (db > threshold) {
-              state.pendingPeak = { db, threshold, offset_ms: offset, ts: Date.now() };
+              // 2026-07-08 (cage audit #3) — stash the REAL floor so the emitted
+              // noise_floor_db telemetry is right; reconstructing it as
+              // threshold−18 was wrong whenever a calibrated offset was in play.
+              state.pendingPeak = { db, threshold, offset_ms: offset, ts: Date.now(), noiseFloor };
             }
           }
           // 3. Add current sample to the rolling buffer.

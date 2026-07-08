@@ -109,8 +109,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const distanceYards = Math.round(distanceMeters * 1.0936 * 10) / 10;
 
   // Ball speed heuristic.
-  // Peak factor: -10 dBFS = 1.0× (clean center hit), -25 dBFS = 0.75×
-  // (heel/toe/thin). Linearly interpolated between -10 and -40.
+  // Peak factor: linear in dBFS over [-10, -40] → [1.0×, 0.0×], clamped to [0.5, 1.05].
+  // So -10 dBFS = 1.0× (clean center hit), -25 dBFS = 0.5× (clamp floor), quieter than
+  // ~-25 stays at the 0.5× floor. (2026-07-08 cage audit #5 — the old comment said
+  // -25 = 0.75×, which the formula never produced; corrected to match the math.)
   const peakFactor = Math.max(0.5, Math.min(1.05, 1 + (detection.peakDb + 10) / 30));
   // 2026-05-24 P1.1 — Removed silent '7I' fallback. When the client
   // posts no club (or 'unknown' / empty), we DO NOT fake-calibrate
