@@ -1852,6 +1852,25 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); acoustic strike anchors the phase frames; one extraction feeds both skeleton and biomech; on-device pose latency is measurable');
 
+// 2026-07-08 (timeliness audit RANK 1) — the swing vision read must be PRE-STARTED on
+// the raw recorder file, IN PARALLEL with the durable-clip byte-copy + session ingest.
+// The old order awaited persistClipToDocuments (a full copy) in front of every verdict.
+check('Timeliness: swing read runs in parallel with the clip persist (not behind it)',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      // The read is kicked off on rawUri before the persist await, guarded for putts.
+      /const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> \| null = isPutt \? null : Promise\.race\(\[\s*\n\s*analyzeSwing\(rawUri,/.test(sm) &&
+      // The verdict awaits the PRE-STARTED promise (not a fresh analyzeSwing after persist).
+      /const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!/.test(sm) &&
+      // persist still runs (durability) — just no longer in front of the read.
+      /uri = await persistClipToDocuments\(rawUri\)/.test(sm) &&
+      // and it is NOT re-awaited before an analyzeSwing on the verdict path anymore.
+      !/analyzeSwing\(uri, analyzeOpts, boundaries\)/.test(sm)
+    );
+  })(),
+  'the first-verdict path pre-starts the vision read on the raw recorder file and awaits that promise, running the durable-clip copy + session ingest concurrently instead of blocking the verdict behind a full byte-copy');
+
 check('Uploads: skeleton + 4-card read windowed on the pointed swing',
   // 2026-06-15 (Tim — "uploads aren't treated into the Smart Motion UI, can't see
   // the skeleton") — an uploaded clip is 30-60s with the swing buried inside, so the

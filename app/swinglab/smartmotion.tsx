@@ -1480,15 +1480,67 @@ export default function SmartMotion() {
       // eviction — otherwise an old SmartMotion recording later can't replay
       // OR re-analyze (the temp recorder file is gone). Already-persistent or
       // stale uris pass through unchanged. Best-effort; never blocks.
+      const boundaries = segment ? { startSec: segment.startMs / 1000, endSec: segment.endMs / 1000 } : undefined;
+      // CNS learned tendencies as SOFT priors (cheap store read; hoisted so the parallel
+      // read below can carry them — identical to reading them just before the request).
+      const cnsTend = (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
+          return mem.useCaddieMemoryStore.getState().getPlayer().tendencies;
+        } catch { return { dominantMiss: null as string | null, recentFaults: [] as string[] }; }
+      })();
+      // 2026-07-08 (timeliness audit RANK 1) — START the SWING vision read on the RAW
+      // recorder file NOW, so it runs in PARALLEL with the durable-clip byte-copy +
+      // session ingest below. The old order AWAITED persistClipToDocuments (a full copy
+      // of the recording) IN FRONT of the read — pure latency before every verdict. The
+      // raw file is valid for the few seconds extractKeyFrames needs; the durable copy
+      // only matters for later replay/re-analyze. Putts take the analyzePutt path below,
+      // so only the swing path pre-starts. analyzeOpts reads live refs that are "absent
+      // on first pass by design", so building it here (vs after the ingest) changes nothing.
+      const hangGuardMs = 130_000;
+      const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> | null = isPutt ? null : Promise.race([
+        analyzeSwing(rawUri, {
+          club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
+          swing_number: segment?.index ?? 1,
+          caddie_name: caddiePersonality,
+          angle,
+          handedness: swingerHandedness,
+          language,
+          prior_issues: cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined,
+          player_context: {
+            handicap: profile.handicap ?? null,
+            dominant_miss: cnsTend.dominantMiss ?? profile.dominantMiss ?? null,
+            first_name: profile.firstName ?? null,
+          },
+          tier: 'quick' as const,
+          ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
+          target_norm: targetPointRef.current ?? null,
+          drill_focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
+          drill_name: isDrill && typeof drillName === 'string' && drillName.trim() ? drillName.trim() : undefined,
+          measured: {
+            tempo_ratio: tempoRef.current?.ratio ?? null,
+            backswing_ms: tempoRef.current?.backswingMs ?? null,
+            downswing_ms: tempoRef.current?.downswingMs ?? null,
+            shoulder_tilt_deg: biomechRef.current?.shoulderTiltDeg ?? null,
+            spine_delta_deg: biomechRef.current?.spineAngleDeltaDeg ?? null,
+            weight_shift_pct: biomechRef.current?.weightShiftPct ?? null,
+            launch_divergence_deg: ballTraceRef.current?.divergenceDeg ?? null,
+            launch_side: ballTraceRef.current?.side ?? null,
+            strike_peak_db: segment?.peakDb ?? null,
+          },
+        }, boundaries),
+        new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
+          setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), hangGuardMs)),
+      ]);
+      // Persist the durable copy in PARALLEL with the in-flight read above.
       let uri = rawUri;
       try {
         const { persistClipToDocuments } = await import('../../services/videoUpload');
         uri = await persistClipToDocuments(rawUri);
-        // Point the review/replay + re-analyze state at the DURABLE copy (not
-        // the temp recorder file) so it survives OS cache eviction.
+        // Point review/replay + re-analyze at the DURABLE copy (survives cache eviction).
         if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
-      const boundaries = segment ? { startSec: segment.startMs / 1000, endSec: segment.endMs / 1000 } : undefined;
 
       try {
         // Coach Mode attribution: when a family member is active (coach
@@ -1630,101 +1682,14 @@ export default function SmartMotion() {
         return;
       }
 
-      // Brain → analysis pretext: feed the CNS learned tendencies as SOFT
-      // priors. The server biases toward a named dominant_miss + lists prior
-      // faults but always trusts the visual read and notes any disagreement.
-      const cnsTend = (() => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
-          return mem.useCaddieMemoryStore.getState().getPlayer().tendencies;
-        } catch { return { dominantMiss: null as string | null, recentFaults: [] as string[] }; }
-      })();
-
       try {
-        // Watchdog so a hung network call can't strand the screen on the
-        // "Analyzing…" overlay. BOUNDED clips (a segment was passed) skip
-        // analyzeSwing's internal locate. UNBOUNDED clips run an internal
-        // probe(≤8s)+locate(≤25s) BEFORE the analysis fetch so they need ~70s.
-        // (audit 2026-06-11)
-        // 2026-06-22 — Phase 5 migrated quick-tier from Haiku (2-6s warm) to
-        // Gemini 2.5 Flash. On a cold Lambda or a complex real-world scene
-        // (driving range, busy background), Gemini can take 10-25s. The old
-        // 15s watchdog fired consistently before Gemini responded → NO READ on
-        // every swing. The server-side tryGemini now caps at 13s (fails fast →
-        // tier=quick 502 retry in poseDetection.ts fires on the now-warm Lambda
-        // → succeeds in 3-8s). Total path: 13s + 1.2s retry wait + 8s warm =
-        // ~22s worst case. 30s gives comfortable headroom. UNBOUNDED still 70s.
-        const watchdogMs = boundaries ? 30_000 : 70_000;
-        const maxAttempts = boundaries ? 2 : 1;
-        const analyzeOpts = {
-          // Thread the tagged club so the analyst has club context (a driver
-          // vs wedge fault read differs); 'unknown' only when truly untagged.
-          club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
-          swing_number: segment?.index ?? 1,
-          caddie_name: caddiePersonality,
-          angle,
-          // Handedness pretext so direction-dependent faults read correctly.
-          handedness: swingerHandedness,
-          language,
-          // CNS recent faults as prior context (server: "Prior swings showed…").
-          prior_issues: cnsTend.recentFaults.length > 0 ? cnsTend.recentFaults : undefined,
-          player_context: {
-            handicap: profile.handicap ?? null,
-            // Prefer the LEARNED dominant miss (from real swings) over the
-            // static profile value when we have it.
-            dominant_miss: cnsTend.dominantMiss ?? profile.dominantMiss ?? null,
-            first_name: profile.firstName ?? null,
-          },
-          tier: 'quick' as const,
-          // Ball/stand anchor — where the ball sits (and by extension where the
-          // golfer stands). The analyzer uses it as a strong prior: "ball is at
-          // (x,y); impact is the frame it leaves that area." Wires the set ball
-          // area into the SWING read (was only wired to the putt read before).
-          ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
-          target_norm: targetPointRef.current ?? null,
-          // 2026-06-29 (Tim — drill-aware analysis) — when launched from a drill card,
-          // carry the drill's premise so the read GRADES the swing against the drill's
-          // intent ("did they execute the pump move?"), not a generic full-swing fault.
-          // Was carried on the route but dropped before the analysis request.
-          drill_focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
-          drill_name: isDrill && typeof drillName === 'string' && drillName.trim() ? drillName.trim() : undefined,
-          // 2026-07-07 (Tim — "tie the tracing into the analysis") — the app's OWN
-          // measured signals as instrument readings the vision model corroborates
-          // against (it was judging frames blind to our measurements). On the FIRST
-          // pass most are still computing (they land on the Motion step) — that's
-          // fine, absent = vision-only; re-analyze + later swings carry the numbers.
-          measured: {
-            tempo_ratio: tempoRef.current?.ratio ?? null,
-            backswing_ms: tempoRef.current?.backswingMs ?? null,
-            downswing_ms: tempoRef.current?.downswingMs ?? null,
-            shoulder_tilt_deg: biomechRef.current?.shoulderTiltDeg ?? null,
-            spine_delta_deg: biomechRef.current?.spineAngleDeltaDeg ?? null,
-            weight_shift_pct: biomechRef.current?.weightShiftPct ?? null,
-            launch_divergence_deg: ballTraceRef.current?.divergenceDeg ?? null,
-            launch_side: ballTraceRef.current?.side ?? null,
-            strike_peak_db: segment?.peakDb ?? null,
-          },
-        };
-        // 2026-06-23 (Tim — "failure states wrapped in analysis delay it; you get
-        // the analysis eventually but there's a bug in the parse/review") — the old
-        // 30s watchdog DISCARDED a read that landed a hair late (race returns
-        // 'error', the real 'ok' resolving at 32s was thrown away → review showed a
-        // false failure), and the 2× retry DOUBLED the wait. The server now runs its
-        // OWN 2-way provider fallback (Gemini→OpenAI, quick-tier short-circuits after Gemini)
-        // + tier retry, so one awaited call is right.
-        // Keep only a GENEROUS outer hang-guard so a true hang still can't strand
-        // the "Analyzing…" screen, but a real read is shown, not thrown away. The
-        // 130s value must exceed the inner per-fetch ceiling (63+1.2+63s) so a valid
-        // late analysis read is never discarded.
-        void watchdogMs; void maxAttempts; // superseded by hangGuardMs
-        const hangGuardMs = 130_000;
-        const result: Awaited<ReturnType<typeof analyzeSwing>> = await Promise.race([
-          analyzeSwing(uri, analyzeOpts, boundaries),
-          new Promise<Awaited<ReturnType<typeof analyzeSwing>>>((resolve) =>
-            setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), hangGuardMs),
-          ),
-        ]);
+        // 2026-07-08 (timeliness audit RANK 1) — the read was PRE-STARTED on the raw
+        // recorder file above, in parallel with the durable-clip copy + ingest. Await
+        // it here for the verdict. (Old order built analyzeOpts + fired analyzeSwing HERE,
+        // strictly AFTER awaiting persistClipToDocuments — the byte-copy sat in front of
+        // every verdict.) The 130s outer hang-guard is folded into analysisP so a true
+        // hang still can't strand the screen, and a real-but-late read is never discarded.
+        const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!;
         if (result.kind === 'ok') {
           setAnalysis(result.analysis);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
