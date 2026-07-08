@@ -151,6 +151,17 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     route: '/swinglab/indoor',
     tag: 'ANYWHERE',
   },
+  // 2026-07-07 (Tim — "a real motion sim game... Road to the Masters feel") — SwingSim:
+  // the phone is the club, your REAL bag is the physics, your CNS miss shapes the
+  // dispersion, real course aerials are the board. Every swing is a real tempo rep.
+  {
+    key: 'swingsim',
+    icon: 'game-controller-outline',
+    title: 'SwingSim',
+    sub: 'Play a full sim round with your real bag — swing the phone, watch the tracer',
+    route: '/swinglab/simround',
+    tag: 'GAME',
+  },
 ];
 
 // 2026-06-17 (Tim) — Play Smarter: Coach Mode + Focus Session + Shot Shapes.
