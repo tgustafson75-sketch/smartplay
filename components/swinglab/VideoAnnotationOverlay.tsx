@@ -55,8 +55,15 @@ import { classifyStroke } from '../../utils/geometryFitting';
 //    reads as "focus area" (e.g., impact zone, hip position) instead
 //    of the existing solid-outline circle (which reads as "this
 //    specific shape"). Distinct tools so the coach picks intent.
-type Tool = 'freehand' | 'circle' | 'line' | 'straight' | 'roi' | 'text';
+// 2026-07-09 (Tim — "make our annotation as intuitive as the reference"): two adds —
+//  - 'select' = tap an existing mark to SELECT it (direct manipulation), then Delete it.
+//    Closes the "undo-only" gap; you can fix ONE mark without clearing everything.
+//  - 'calibrate' = drag a circle over the ball (known 1.68") to set a px→inch scale, so
+//    ROI diameters read in REAL inches instead of % (closes the line-447 measurement gap).
+type Tool = 'freehand' | 'circle' | 'line' | 'straight' | 'roi' | 'text' | 'select' | 'calibrate';
 type ShapeColor = '#ffffff' | '#00C896' | '#ef4444' | '#f59e0b';
+
+const BALL_DIAMETER_IN = 1.68; // regulation golf ball diameter
 
 interface Shape {
   id: string;
@@ -72,7 +79,7 @@ interface Shape {
 }
 
 interface PendingTwoPoint {
-  type: 'circle' | 'line' | 'straight' | 'roi';
+  type: 'circle' | 'line' | 'straight' | 'roi' | 'calibrate';
   x1: number; y1: number;
 }
 
@@ -96,6 +103,15 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
   // PanResponder's stable closure reads fresh coords.
   const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
   const dragEndRef = useRef<{ x: number; y: number } | null>(null);
+
+  // 2026-07-09 — select-to-edit + real-world scale.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+  const [pxPerInch, setPxPerInch] = useState<number | null>(null);
+  // Mirror shapes so the stable PanResponder closure hit-tests against the CURRENT set.
+  const shapesRef = useRef<Shape[]>([]);
+  shapesRef.current = shapes;
 
   // Track the latest pendingPath in a ref so PanResponder's stable
   // closure can read the current value when onPanResponderRelease
@@ -143,6 +159,51 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
     setShapes([]); setPendingTwoPoint(null);
     setPendingPath(''); pendingPathRef.current = '';
     setDragEnd(null); dragEndRef.current = null;
+    setSelectedId(null);
+  };
+  const deleteSelected = () => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    setShapes(prev => prev.filter(s => s.id !== id));
+    setSelectedId(null);
+  };
+
+  // Perpendicular distance from a point to a segment (for line/straight hit-testing).
+  const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  };
+
+  // Hit-test a tap against existing shapes; returns the id of the closest within
+  // HIT_TOL, preferring the TOP-most (last-drawn) on ties. Reads shapesRef so the
+  // stable PanResponder closure sees the current set.
+  const HIT_TOL = 26;
+  const hitTest = (x: number, y: number): string | null => {
+    let best: { id: string; d: number } | null = null;
+    const list = shapesRef.current;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const s = list[i];
+      let d = Infinity;
+      if ((s.type === 'circle' || s.type === 'roi' || s.type === 'calibrate') && s.cx != null && s.cy != null && s.r != null) {
+        d = Math.abs(Math.hypot(x - s.cx, y - s.cy) - s.r); // distance to the ring
+      } else if ((s.type === 'line' || s.type === 'straight') && s.x1 != null && s.y1 != null && s.x2 != null && s.y2 != null) {
+        d = distToSegment(x, y, s.x1, s.y1, s.x2, s.y2);
+      } else if (s.type === 'text' && s.x != null && s.y != null) {
+        d = Math.hypot(x - s.x, y - s.y);
+      } else if (s.type === 'freehand' && s.d) {
+        // nearest vertex of the path
+        const nums = s.d.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+        for (let k = 0; k + 1 < nums.length; k += 2) {
+          d = Math.min(d, Math.hypot(x - nums[k], y - nums[k + 1]));
+        }
+      }
+      if (d <= HIT_TOL && (!best || d < best.d)) best = { id: s.id, d };
+    }
+    return best?.id ?? null;
   };
 
   // 2026-05-26 — Fix DX: extend a two-point line to the overlay edges.
@@ -220,13 +281,16 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
         if (!enabledRef.current) return;
         const { locationX, locationY } = e.nativeEvent;
         const t = toolRef.current;
-        if (t === 'freehand') {
+        if (t === 'select') {
+          // Tap-to-select the closest existing mark (direct manipulation → Delete).
+          setSelectedId(hitTest(locationX, locationY));
+        } else if (t === 'freehand') {
           const p = `M ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
           setPendingPath(p);
           pendingPathRef.current = p;
         } else if (t === 'text') {
           setTextInputModal({ x: locationX, y: locationY });
-        } else if (t === 'straight' || t === 'roi') {
+        } else if (t === 'straight' || t === 'roi' || t === 'calibrate') {
           // 2026-05-26 — Fix DX: drag-to-size for the CT-scanner-style
           // tools. Touch-down anchors the start point; Move updates
           // the live endpoint preview; Release commits the shape.
@@ -246,7 +310,7 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
           const next = `${pendingPathRef.current} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
           pendingPathRef.current = next;
           setPendingPath(next);
-        } else if (t === 'straight' || t === 'roi') {
+        } else if (t === 'straight' || t === 'roi' || t === 'calibrate') {
           const end = { x: locationX, y: locationY };
           dragEndRef.current = end;
           setDragEnd(end);
@@ -275,7 +339,7 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
           }
           pendingPathRef.current = '';
           setPendingPath('');
-        } else if (t === 'straight' || t === 'roi') {
+        } else if (t === 'straight' || t === 'roi' || t === 'calibrate') {
           const start = pendingTwoPoint;
           const end = dragEndRef.current;
           if (start && end) {
@@ -286,7 +350,19 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
             // miss-tap (typically the user picked the tool then tapped
             // to confirm); we don't want to commit a zero-size shape.
             if (distSq >= 64) {
-              if (t === 'straight') {
+              if (t === 'calibrate') {
+                // The drag circle sits over the ball (1.68"). Its radius sets the scale.
+                const r = Math.hypot(dx, dy);
+                if (r > 4) {
+                  setPxPerInch((2 * r) / BALL_DIAMETER_IN);
+                  // Drop a persistent marker so the player sees what was calibrated; replace
+                  // any prior calibrate marker so there's only ever one.
+                  setShapes(prev => [
+                    ...prev.filter(s => s.type !== 'calibrate'),
+                    { id: `${Date.now()}_cal`, type: 'calibrate', color: colorRef.current, cx: start.x1, cy: start.y1, r },
+                  ]);
+                }
+              } else if (t === 'straight') {
                 addShape({
                   id: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                   type: 'straight',
@@ -350,7 +426,9 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
           />
           {enabled && (
             <>
-              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => setTool('freehand')} accessibilityLabel="Freehand" />
+              {/* 2026-07-09 — Select: tap a mark to select, then Delete (direct editing). */}
+              <ToolPill icon="hand-left-outline" active={tool === 'select'} onPress={() => setTool('select')} accessibilityLabel="Select a mark" />
+              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => { setSelectedId(null); setTool('freehand'); }} accessibilityLabel="Freehand" />
               <ToolPill icon="ellipse-outline" active={tool === 'circle'} onPress={() => setTool('circle')} accessibilityLabel="Circle" />
               <ToolPill icon="remove-outline" active={tool === 'line'} onPress={() => setTool('line')} accessibilityLabel="Line segment" />
               {/* 2026-05-26 — Fix DX: 'straight' = swing-plane / spine /
@@ -362,6 +440,9 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
               <ToolPill icon="git-network-outline" active={tool === 'straight'} onPress={() => setTool('straight')} accessibilityLabel="Straight alignment line" />
               <ToolPill icon="aperture-outline" active={tool === 'roi'} onPress={() => setTool('roi')} accessibilityLabel="ROI region" />
               <ToolPill icon="text-outline" active={tool === 'text'} onPress={() => setTool('text')} accessibilityLabel="Text label" />
+              {/* 2026-07-09 — Calibrate: drag a ring over the ball (1.68") to unlock real
+                  inch readouts on ROI measurements. Green pill when a scale is set. */}
+              <ToolPill icon="golf-outline" label={pxPerInch ? 'SCALED' : undefined} active={tool === 'calibrate' || !!pxPerInch} onPress={() => { setSelectedId(null); setTool('calibrate'); }} accessibilityLabel="Calibrate scale to the ball" />
             </>
           )}
         </View>
@@ -378,6 +459,10 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
                 accessibilityLabel={`Color ${c}`}
               />
             ))}
+            {/* Delete the selected mark (from the Select tool) — distinct from Clear all. */}
+            {selectedId ? (
+              <ToolPill icon="close-circle" label="DELETE" active onPress={deleteSelected} accessibilityLabel="Delete selected mark" />
+            ) : null}
             <ToolPill icon="arrow-undo-outline" onPress={undo} accessibilityLabel="Undo" />
             <ToolPill icon="trash-outline" onPress={clearAll} accessibilityLabel="Clear all" />
             <ToolPill
@@ -444,7 +529,11 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
               // not absolute, since pixels don't translate to a real
               // measurement without per-frame scale calibration.
               if (s.type === 'roi' && s.r != null && s.cx != null && s.cy != null) {
-                const diaPct = size.h > 0 ? Math.round((2 * s.r / size.h) * 100) : 0;
+                // 2026-07-09 — once calibrated (px→inch via the ball), show a REAL diameter
+                // in inches; otherwise fall back to the relative % readout.
+                const label = pxPerInch
+                  ? `Ø ${(2 * s.r / pxPerInch).toFixed(1)}"`
+                  : `Ø ${size.h > 0 ? Math.round((2 * s.r / size.h) * 100) : 0}%`;
                 const labelY = s.cy - s.r - 8;
                 return (
                   <React.Fragment key={s.id}>
@@ -453,8 +542,19 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
                         coach sees the anchor point even with semi-fill. */}
                     <Line x1={s.cx - 5} y1={s.cy} x2={s.cx + 5} y2={s.cy} stroke={s.color} strokeWidth={1.5} />
                     <Line x1={s.cx} y1={s.cy - 5} x2={s.cx} y2={s.cy + 5} stroke={s.color} strokeWidth={1.5} />
-                    <Rect x={s.cx - 26} y={labelY - 10} width={52} height={16} rx={4} fill="rgba(0,0,0,0.55)" />
-                    <SvgText x={s.cx} y={labelY + 2} fill={s.color} fontSize="10" fontWeight="800" textAnchor="middle">{`Ø ${diaPct}%`}</SvgText>
+                    <Rect x={s.cx - 28} y={labelY - 10} width={56} height={16} rx={4} fill="rgba(0,0,0,0.55)" />
+                    <SvgText x={s.cx} y={labelY + 2} fill={s.color} fontSize="10" fontWeight="800" textAnchor="middle">{label}</SvgText>
+                  </React.Fragment>
+                );
+              }
+              // 2026-07-09 — calibration marker: the ball ring that set the px→inch scale.
+              if (s.type === 'calibrate' && s.r != null && s.cx != null && s.cy != null) {
+                const labelY = s.cy - s.r - 8;
+                return (
+                  <React.Fragment key={s.id}>
+                    <Circle cx={s.cx} cy={s.cy} r={s.r} stroke="#88F700" strokeWidth={2} fill="#88F700" fillOpacity={0.10} />
+                    <Rect x={s.cx - 34} y={labelY - 10} width={68} height={16} rx={4} fill="rgba(0,0,0,0.6)" />
+                    <SvgText x={s.cx} y={labelY + 2} fill="#88F700" fontSize="10" fontWeight="800" textAnchor="middle">BALL 1.68&quot;</SvgText>
                   </React.Fragment>
                 );
               }
@@ -463,6 +563,35 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
               }
               return null;
             })}
+            {/* 2026-07-09 — selection highlight for the 'select' tool (neon, dashed). */}
+            {selectedId ? (() => {
+              const s = shapes.find(x => x.id === selectedId);
+              if (!s) return null;
+              if (s.cx != null && s.cy != null && s.r != null) {
+                return <Circle cx={s.cx} cy={s.cy} r={s.r + 6} stroke="#88F700" strokeWidth={1.5} strokeDasharray="4,3" fill="none" />;
+              }
+              if (s.x1 != null && s.y1 != null && s.x2 != null && s.y2 != null) {
+                return (
+                  <React.Fragment>
+                    <Circle cx={s.x1} cy={s.y1} r={7} stroke="#88F700" strokeWidth={1.5} fill="none" />
+                    <Circle cx={s.x2} cy={s.y2} r={7} stroke="#88F700" strokeWidth={1.5} fill="none" />
+                  </React.Fragment>
+                );
+              }
+              if (s.x != null && s.y != null) {
+                return <Circle cx={s.x} cy={s.y - 6} r={10} stroke="#88F700" strokeWidth={1.5} fill="none" />;
+              }
+              if (s.d) {
+                const nums = s.d.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+                if (nums.length >= 2) return <Circle cx={nums[0]} cy={nums[1]} r={10} stroke="#88F700" strokeWidth={1.5} fill="none" />;
+              }
+              return null;
+            })() : null}
+            {/* Live calibration drag preview — a neon ball ring. */}
+            {pendingTwoPoint && dragEnd && pendingTwoPoint.type === 'calibrate' ? (() => {
+              const r = Math.hypot(dragEnd.x - pendingTwoPoint.x1, dragEnd.y - pendingTwoPoint.y1);
+              return <Circle cx={pendingTwoPoint.x1} cy={pendingTwoPoint.y1} r={r} stroke="#88F700" strokeWidth={2} strokeDasharray="4,3" fill="#88F700" fillOpacity={0.08} />;
+            })() : null}
             {pendingPath ? (
               <Path d={pendingPath} stroke={color} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
             ) : null}
