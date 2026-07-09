@@ -49,6 +49,10 @@ const VOICE_INTENT_SCHEMA: StructuredSchema = {
     },
     required: ['intent_type', 'parameters', 'confidence', 'follow_up_question', 'language'],
   },
+  // 2026-07-09 (single-provider) — `parameters` is a free-form bag (varies by intent), so
+  // OpenAI structured-outputs STRICT mode 400s on it (strict rejects additionalProperties:true).
+  // Opt out of strict so voice-intent runs on OpenAI as the single provider.
+  strict: false,
 };
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.

@@ -48,6 +48,8 @@ const VOICE_INTENT_SCHEMA: StructuredSchema = {
     },
     required: ['intent_type', 'parameters', 'confidence', 'follow_up_question', 'language'],
   },
+  // 2026-07-09 (single-provider) — free-form `parameters` bag; opt out of OpenAI strict mode.
+  strict: false,
 };
 
 // Audit 101 / B4 — accept Persona | VoiceGender so callers can pass either.
@@ -417,7 +419,7 @@ ${JSON.stringify(context, null, 2)}
 Parse the intent. Return JSON only.`;
 
     const rawProvider = request.headers.get('x-ai-provider');
-    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'gemini';
+    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'openai';
     const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0, schema: VOICE_INTENT_SCHEMA });
 
     let parsed: Record<string, unknown>;

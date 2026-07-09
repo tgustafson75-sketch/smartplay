@@ -1467,7 +1467,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Lambda) there was NO fallback and the server 502'd, surfacing to the user as the
     // misleading "stand back so I can see head to feet". Exempt setup from the
     // short-circuit so Gemini failure escalates to OpenAI (reliability > a few seconds).
-    const quickShortCircuit = tier === 'quick' && !isSetup;
+    // 2026-07-09 (single-provider resilience) — only short-circuit when Gemini actually
+    // PRODUCED a read. If Gemini failed / is unavailable (winner.parsed == null — e.g.
+    // OpenAI-only, no GOOGLE key), DON'T short-circuit: fall through to the OpenAI escalation
+    // below so live SmartMotion swings still get a read instead of 502'ing. Keeps the fast
+    // path when Gemini works; adds the fallback when it doesn't.
+    const quickShortCircuit = tier === 'quick' && !isSetup && winner.parsed != null;
     if (quickShortCircuit) {
       console.log('[swing-analysis] tier=quick short-circuit; skipping OpenAI escalation', {
         winner_provider: winner.provider,

@@ -488,8 +488,10 @@ export const useSettingsStore = create<SettingsState>()(
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
       ghostAutoActivate: true,
-      // 2026-06-21 — AI provider default 'gemini' (fastest vision path).
-      aiProvider: 'gemini' as const,
+      // 2026-07-09 (Tim — "single provider") — default 'openai' so ALL analysis routes
+      // match the OpenAI brain. Was 'gemini'; the split (brain=openai, analysis=gemini)
+      // was a source of inconsistency and single-key breakage.
+      aiProvider: 'openai' as const,
       // 2026-06-24 — Usage telemetry OPT-IN, default OFF.
       analyticsOptIn: false,
       // Pipecat voice orchestrator — off by default until server is deployed.
@@ -725,7 +727,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 18,
+      version: 19,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -877,6 +879,12 @@ export const useSettingsStore = create<SettingsState>()(
         // Flip existing installs on so in-round "just talk" works out of the box.
         if (version < 18) {
           p.autoListenEnabled = true;
+        }
+        // v19 — 2026-07-09 (Tim — "single provider") — move existing installs off the
+        // 'gemini' default onto 'openai' so ALL analysis matches the OpenAI brain. The old
+        // split (brain=openai, analysis=gemini) caused inconsistency; consolidate.
+        if (version < 19) {
+          if (p.aiProvider !== 'openai') p.aiProvider = 'openai';
         }
         return p as SettingsState;
       },

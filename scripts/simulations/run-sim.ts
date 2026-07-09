@@ -3453,10 +3453,10 @@ check('Analysis honesty: kids\' progress delta only when both scores are real',
   'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
-  // refreshed: store is at version 18 now (v17 earbud on, v18 active-listening on);
-  // the one-time version<12 localMode clear is still present (migrations are
-  // cumulative), which is what this guards.
-  /version: 18/.test(read('store/settingsStore.ts')) &&
+  // refreshed: store is at version 19 now (v18 active-listening on, v19 single-provider
+  // aiProvider→openai); the one-time version<12 localMode clear is still present
+  // (migrations are cumulative), which is what this guards.
+  /version: 19/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 

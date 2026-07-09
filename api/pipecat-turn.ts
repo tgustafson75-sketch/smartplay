@@ -396,7 +396,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // provider client and return fast (no auth, no full turn). ~$0.0001/warmup.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     try {
-      await completeText('anthropic', 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
+      await completeText('openai', 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
     } catch { /* warmup is best-effort */ }
     return res.status(200).json({ ok: true, warmed: true });
   }

@@ -67,6 +67,11 @@ export interface StructuredSchema {
   anthropic?: {
     input_schema: { [key: string]: unknown };
   };
+  /** 2026-07-09 — OpenAI structured-outputs STRICT mode (default true). Set false for a
+   *  schema that legitimately needs a free-form object (e.g. voice-intent's `parameters`
+   *  bag, additionalProperties:true) — strict mode rejects additionalProperties:true with
+   *  a 400. false → OpenAI json_schema without strict, which allows the open object. */
+  strict?: boolean;
 }
 
 export interface CompleteOpts {
@@ -219,7 +224,7 @@ export async function completeJSON(
   if (provider === 'openai') {
     const oai = getOpenAI(timeoutMs);
     const responseFormat = schema
-      ? { type: 'json_schema' as const, json_schema: { name: schema.name, strict: true, schema: schema.openai } }
+      ? { type: 'json_schema' as const, json_schema: { name: schema.name, strict: schema.strict ?? true, schema: schema.openai } }
       : { type: 'json_object' as const };
     const res = await oai.chat.completions.create({
       model,
@@ -867,10 +872,13 @@ async function _geminiAgenticLoop(
 
 /**
  * Read the AI provider from an incoming request header.
- * Falls back to 'gemini' if the header is absent or invalid.
+ * 2026-07-09 (Tim — "single provider") — falls back to 'openai' (was 'gemini') so every
+ * header-routed analysis endpoint defaults to the SAME provider as the brain (kevin/pipecat
+ * are pinned to openai). Previously these silently ran on Gemini while the brain ran on
+ * OpenAI — a split that broke consistency and died entirely if only OPENAI_API_KEY was set.
  */
 export function providerFromHeader(headers: Record<string, string | string[] | undefined>): AiProvider {
   const raw = headers['x-ai-provider'];
   const val = Array.isArray(raw) ? raw[0] : raw;
-  return val === 'openai' || val === 'gemini' || val === 'anthropic' ? val : 'gemini';
+  return val === 'openai' || val === 'gemini' || val === 'anthropic' ? val : 'openai';
 }

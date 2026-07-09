@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     }
 
     const rawProvider = request.headers.get('x-ai-provider');
-    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'gemini';
+    const provider: AiProvider = rawProvider === 'openai' || rawProvider === 'gemini' ? rawProvider : 'openai';
 
     if (isLieFollowup) {
       const raw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0 });
