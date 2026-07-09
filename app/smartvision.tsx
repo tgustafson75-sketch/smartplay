@@ -2126,6 +2126,16 @@ export default function SmartVisionScreen() {
             : { height: BOTTOM_PANEL_H, paddingBottom: Math.max(insets.bottom, 8) },
         ]}
       >
+        {/* 2026-07-08 (Tim — "if I move the cart I lose the tee→cart distance, which I need
+            to plan the first shot"). carryYards (tee→cart/target) was computed and fed to the
+            caddie but never shown on screen. Surface it as the first cell once the cart has
+            actually moved off the tee (>10y) so the panel reads tee→cart THEN cart→green. */}
+        {carryYards != null && carryYards > 10 && (
+          <>
+            <YdCell label="CARRY" value={carryYards} stacked={isSplit} />
+            <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
+          </>
+        )}
         <YdCell label="FRONT" value={yardages.front} stacked={isSplit} />
         <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
         <YdCell label="MIDDLE" value={yardages.middle} emphasis stacked={isSplit} />
