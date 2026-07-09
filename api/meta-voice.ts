@@ -90,6 +90,10 @@ const META_VOICE_SCHEMA: StructuredSchema = {
     },
     required: ['speak', 'tone'],
   },
+  // 2026-07-09 — openai `required` omits optional props (details/alt/user_note), which
+  // OpenAI STRICT rejects (400) → the Meta-glasses caddie fell back to a canned stub on
+  // every turn after the gemini→openai flip. Opt out of strict.
+  strict: false,
 };
 
 // ─── Intent classification ──────────────────────────────────────────────

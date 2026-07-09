@@ -322,7 +322,10 @@ export async function completeVision(
     }));
     let responseFormat: OpenAI.ResponseFormatJSONSchema | OpenAI.ResponseFormatJSONObject | undefined;
     if (schema) {
-      responseFormat = { type: 'json_schema', json_schema: { name: schema.name, strict: true, schema: schema.openai } };
+      // 2026-07-09 — honor schema.strict (default true), same as completeJSON. Some vision
+      // schemas legitimately can't satisfy OpenAI structured-outputs STRICT rules (optional
+      // fields, minimum/maximum, oneOf) and must opt out with strict:false or they 400.
+      responseFormat = { type: 'json_schema', json_schema: { name: schema.name, strict: schema.strict ?? true, schema: schema.openai } };
     } else if (forceJSON) {
       responseFormat = { type: 'json_object' };
     }

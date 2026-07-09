@@ -1778,6 +1778,28 @@ export default function SmartMotion() {
                   };
               useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
               useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+              // 2026-07-09 (audit BACKLOG #1) — LIVE capture previously wrote only the
+              // SESSION analysis, never the PER-SHOT row, so a live-recorded swing showed an
+              // empty per-shot diagnostic in the review reel while the same swing UPLOADED
+              // (videoUpload.ts:772) showed the full read. Mirror that write here, mapping
+              // this segment's index → the matching session shot id.
+              const sess = useCageStore.getState().sessionHistory.find((s) => s.id === sessionId);
+              const shotIdx = Math.max(0, (segment?.index ?? 1) - 1);
+              const shotId = sess?.shots[shotIdx]?.id ?? sess?.shots[0]?.id ?? null;
+              if (shotId) {
+                useCageStore.getState().setShotAnalysis(sessionId, shotId, {
+                  detected_issue: a.detected_issue,
+                  primary_fault: a.primary_fault ?? null,
+                  severity: a.severity,
+                  confidence: a.confidence,
+                  observation: a.observation,
+                  fault_frame_index: a.fault_frame_index ?? -1,
+                  // Fault-frame image is captured in the review-phase pose effect (after this
+                  // runs); the per-shot row only needs the issue/contact label now.
+                  visual_reference_path: null,
+                  contact_read: a.contact_read ?? 'unknown',
+                });
+              }
             } catch (e) {
               console.log('[smartmotion] attach analysis failed (non-fatal):', e);
             }

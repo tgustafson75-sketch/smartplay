@@ -130,6 +130,11 @@ const JUNIOR_SWING_SCHEMA: StructuredSchema = {
       required: ['swingId', 'timestamp', 'club', 'fundamentals', 'wins', 'next_focus', 'fun_drill', 'vs_previous', 'overallScore', 'coachComment'],
     },
   },
+  // 2026-07-09 — the openai schema uses minimum/maximum + oneOf, which OpenAI
+  // structured-outputs STRICT mode rejects (400). Opt out of strict (the model still
+  // returns the JSON; the client parses defensively). Fixes the 500 the gemini→openai
+  // default flip introduced on this vision route.
+  strict: false,
 };
 
 interface MemberInfo {

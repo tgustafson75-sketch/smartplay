@@ -163,6 +163,9 @@ const SCORECARD_SCHEMA: StructuredSchema = {
     },
     required: ['course_name', 'played_date', 'tee_color', 'holes_played', 'total_score', 'total_par', 'score_vs_par', 'holes', 'notes', 'confidence', 'warnings'],
   },
+  // 2026-07-09 — nested holes.items lacks additionalProperties:false, which OpenAI STRICT
+  // rejects (400) → the OpenAI fallback 502'd. Relax strict.
+  strict: false,
 };
 
 const GEMINI_LISTED_ROUND_SCHEMA = {
@@ -210,6 +213,8 @@ const LIST_SCHEMA: StructuredSchema = {
     },
     required: ['rounds', 'confidence', 'warnings'],
   },
+  // 2026-07-09 — nested rounds.items lacks additionalProperties:false → OpenAI STRICT 400.
+  strict: false,
 };
 
 interface ImportedRound {

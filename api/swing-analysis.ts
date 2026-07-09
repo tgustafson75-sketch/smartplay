@@ -1352,9 +1352,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           temperature: 0.2,
           response_format: {
             type: 'json_schema',
+            // 2026-07-09 — strict false: SWING_ANALYSIS_SCHEMA leaves optional fields
+            // (validity_reason, follow_up_question) out of `required`, which OpenAI STRICT
+            // rejects (400) — so the gpt-4o quality-escalation stage ALWAYS 400'd and was
+            // never actually used. Relax it so the escalation can serve.
             json_schema: {
               name: 'swing_analysis',
-              strict: true,
+              strict: false,
               schema: SWING_ANALYSIS_SCHEMA,
             },
           },

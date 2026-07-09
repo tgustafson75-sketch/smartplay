@@ -61,8 +61,10 @@ export interface PuttingAnalysis {
 const PUTTING_ANALYSIS_SCHEMA: OpenAI.ResponseFormatJSONSchema = {
   type: 'json_schema',
   json_schema: {
+    // 2026-07-09 — strict false: root `required` omits holeNumber, which OpenAI STRICT
+    // rejects (400) → the OpenAI fallback 502'd whenever Gemini was unavailable. Relax it.
     name: 'PuttingAnalysis',
-    strict: true,
+    strict: false,
     schema: {
       type: 'object',
       additionalProperties: false,
