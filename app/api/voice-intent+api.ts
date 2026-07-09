@@ -312,8 +312,8 @@ Available intents:
 15. sequence — User chained two or more independent commands in one utterance (separated by "and", "then", commas, or implicit pause). Each step is a real first-class intent above. Use ONLY when the steps are distinct actions; don't bundle a single clause that already encodes multiple params.
    parameters: { steps: [{ intent_type, parameters }, ...] }
    Examples:
-   - "tell ${caddieName} I'm on hole 7, then refresh GPS" -> { steps: [ { intent_type: "change_setting", parameters: { setting: "currentHole", value: 7 } }, { intent_type: "query_status", parameters: { kind: "refresh_gps" } } ] }
-   - "log a 5 and move to the next tee" -> { steps: [ { intent_type: "log_score", parameters: { strokes: 5 } }, { intent_type: "change_setting", parameters: { setting: "advance_hole" } } ] }
+   - "tell ${caddieName} I'm on hole 7, then refresh GPS" -> { steps: [ { intent_type: "declare_hole", parameters: { hole_number: 7 } }, { intent_type: "refresh_gps", parameters: {} } ] }
+   - "log a 5 and move to the next tee" -> { steps: [ { intent_type: "log_score", parameters: { strokes: 5 } }, { intent_type: "navigate", parameters: { direction: "next_hole" } } ] }
    - "open SmartFinder and go quiet" -> { steps: [ { intent_type: "open_tool", parameters: { tool_name: "smartfinder" } }, { intent_type: "set_trust_quiet", parameters: {} } ] }
    Order matters. Cap at 3 steps; if more, fall back to unknown with a clarifying question.
 
