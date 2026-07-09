@@ -43,7 +43,8 @@ import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
-import { useClubStatsStore, CLUB_ORDER } from '../../store/clubStatsStore';
+import { useClubStatsStore, CLUB_ORDER, clubIdToClubName } from '../../store/clubStatsStore';
+import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
 import { useCageStore } from '../../store/cageStore';
@@ -162,14 +163,24 @@ export default function Dashboard() {
     return streak;
   }, [realRounds, practiceHistory]);
   const clubStats = useClubStatsStore((s) => s.stats);
+  // 2026-07-09 (audit fix) — subscribe to the registered bag so scanned / "added to my bag"
+  // clubs actually appear here (they used to be invisible unless they had a tracked distance).
+  const registeredBag = useClubBagStore((s) => s.clubs);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
-    return CLUB_ORDER
+    const withDist: { club: string; yards: number | null; measured: boolean }[] = CLUB_ORDER
       .filter((c) => c !== 'Putter' && st.hasDistance(c))
-      .map((c) => ({ club: c, yards: Math.round(st.distanceFor(c)), measured: st.hasSamples(c) }))
-      .sort((a, b) => b.yards - a.yards);
+      .map((c) => ({ club: c as string, yards: Math.round(st.distanceFor(c)), measured: st.hasSamples(c) }))
+      .sort((a, b) => (b.yards ?? 0) - (a.yards ?? 0));
+    // Registered-but-no-distance-yet clubs, appended honestly (no fabricated yardage).
+    const shown = new Set(withDist.map((x) => x.club));
+    const registered = Object.values(registeredBag)
+      .map((c) => clubIdToClubName(c.club_id))
+      .filter((n): n is NonNullable<typeof n> => !!n && n !== 'Putter' && !shown.has(n))
+      .map((n) => ({ club: n as string, yards: null, measured: false }));
+    return [...withDist, ...registered];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clubManual, clubStats]);
+  }, [clubManual, clubStats, registeredBag]);
   // 2026-06-14 (Tim — phase 3) — the honest practice→course connection: practice
   // volume per week vs score-vs-par per round. Association, never causation.
   const practiceImpact = useMemo(
@@ -766,7 +777,7 @@ export default function Dashboard() {
                   {bagClubs.slice(rowIdx * 3, rowIdx * 3 + 3).map((c) => (
                     <View key={c.club} style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline' }}>
                       <Text style={[styles.bagPillClub, { color: c.measured ? colors.accent_lime : colors.text_primary }]}>{c.club}</Text>
-                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}> {c.yards}y</Text>
+                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}>{c.yards != null ? ` ${c.yards}y` : ' — in bag'}</Text>
                     </View>
                   ))}
                 </View>

@@ -258,12 +258,28 @@ export function recommendBagForCourse(courseId: string | null): BagRecommendatio
   const courseName = rounds.find(r => r.courseName)?.courseName ?? null;
   const learned = getLearnedClubDistances();
   const clubStats = useClubStatsStore.getState();
+  // 2026-07-09 (audit fix) — union the EXPLICITLY REGISTERED bag (camera scan / "add this
+  // club to my bag") into ownedClubs. Previously ownedClubs was only clubs with a LEARNED
+  // DISTANCE, so a club you scanned into your bag but haven't hit yet was invisible to the
+  // gap/overlap recommendations. Map ClubId ('DR','7I') → ClubName via clubIdToClubName.
+  const registered = (() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { clubIdToClubName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+      return useClubBagStore.getState().bagList()
+        .map(c => clubIdToClubName(c.club_id))
+        .filter((n): n is NonNullable<typeof n> => !!n);
+    } catch { return []; }
+  })();
+  const ownedClubs = [...new Set([...Object.keys(learned), ...registered])];
   return composeBagRecommendation({
     courseName,
     shots,
     roundsPlayed: rounds.length,
     clubDistances: learned,
-    ownedClubs: Object.keys(learned),
+    ownedClubs,
     inferClub: (yards: number) => clubStats.inferClub(yards),
   });
 }
