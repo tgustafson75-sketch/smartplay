@@ -179,7 +179,19 @@ export async function recognizeClubFromUri(
  * in that case.
  */
 export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: ClubType } | null {
-  const p = phrase.toLowerCase().trim();
+  // 2026-07-08 (Tim — "an intelligent golf app can't tell what a club is when I say it")
+  // — people say clubs SPELLED OUT as often as with a digit ("seven iron", "five hybrid",
+  // "three wood"). The parser below only matched digits, so every spoken-number club fell
+  // through to null → the caddie asked "which club?". Normalize number-words to digits up
+  // front so "seven iron" → "7 iron" flows through the existing matchers.
+  const NUM_WORDS: Record<string, string> = {
+    one: '1', two: '2', three: '3', four: '4', five: '5',
+    six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
+  };
+  const p = phrase
+    .toLowerCase()
+    .trim()
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/g, (m) => NUM_WORDS[m] ?? m);
   if (!p) return null;
 
   // Driver

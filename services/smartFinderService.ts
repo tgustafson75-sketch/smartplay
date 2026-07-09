@@ -691,6 +691,14 @@ export async function distanceToPoint(target: ShotLocation): Promise<number | nu
   const fix = getLastFixInternal() ?? (await refreshFix());
   if (!fix) return null;
   const yards = Math.round(haversineYards(fix.location, target));
+  // 2026-07-08 (Tim — Green Hill: "reports over 7000 yards for a hole") — same sanity clamp
+  // the green-yardage path has, which this tapped-target path was missing. A yardage >800
+  // means the GPS fix is nowhere near the target (a stale/garbage fix); return null so the
+  // caller shows "no distance" instead of an absurd 7000 that sends the golfer for the wrong club.
+  if (yards > 800) {
+    console.log('[smartFinder] distanceToPoint out of range — bad fix, returning null:', yards);
+    return null;
+  }
   // 2026-05-28 — Fix FU: tag the source so calcLog rows from
   // user-tapped targets don't appear as the green-resolution cascade's
   // 'none' (which would falsely suggest a missing-data state).

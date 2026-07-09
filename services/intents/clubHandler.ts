@@ -28,6 +28,35 @@ function noActiveSession(): IntentResult {
   };
 }
 
+// 2026-07-08 (Tim) — pull a stated yardage out of a club utterance, e.g. "5 hybrid from
+// 215", "seven iron, 175 yards", "from 210 to the pin". Prefers an explicit "from N" /
+// "N yards", then any bare 2-3 digit number in a plausible golf range. Returns null when
+// there's no credible number so we never invent a distance.
+export function parseStatedYardage(text: string): number | null {
+  const t = text.toLowerCase();
+  const pick = (n: number) => (n >= 20 && n <= 400 ? n : null);
+  const from = t.match(/\bfrom\s+(\d{2,3})\b/);
+  if (from) return pick(Number(from[1]));
+  const yds = t.match(/\b(\d{2,3})\s*(?:yards?|yds?)\b/);
+  if (yds) return pick(Number(yds[1]));
+  const bare = t.match(/\b(\d{2,3})\b/);
+  if (bare) return pick(Number(bare[1]));
+  return null;
+}
+
+// 2026-07-08 (Tim — "it asks which WEDGE when I said a hybrid") — when we couldn't resolve
+// the club, don't blanket-assume a wedge. If the player clearly named an iron / hybrid /
+// wood but we couldn't pin the number, ask about THAT family; only ask the wedge menu when
+// they actually said "wedge"; otherwise a neutral prompt.
+function clubClarifyPrompt(phrase: string): string {
+  const p = phrase.toLowerCase();
+  if (/\bwedge\b/.test(p)) return 'Which one — pitching, gap, sand, or lob wedge?';
+  if (/\bhybrid|rescue\b/.test(p)) return 'Which hybrid — 2, 3, 4, or 5?';
+  if (/\bwood\b/.test(p)) return 'Which wood — 3, 5, or 7?';
+  if (/\biron\b/.test(p)) return 'Which iron?';
+  return 'Which club?';
+}
+
 export const clubChangeHandler: IntentHandler = {
   intent_type: 'club_change',
 
@@ -93,16 +122,24 @@ export const clubChangeHandler: IntentHandler = {
         track('club_voice_ambiguous', { phrase: phrase.slice(0, 60) });
         return {
           success: false,
-          voice_response: "Which one — pitching, gap, sand, or lob wedge?",
+          voice_response: clubClarifyPrompt(phrase),
           side_effects: ['round:club_ambiguous'],
           follow_up_needed: true,
         };
       }
       round.setClub(parsed.club_id);
+      // 2026-07-08 (Tim — "I say I'm using a 5 hybrid from 215 and it asks which wedge")
+      // — capture a stated yardage in the SAME utterance ("... from 215") so the caddie
+      // registers the whole plan (club AND distance), not just the club. setUserStatedYardage
+      // is the same call the brain's plan_shot uses (conversationalToolDispatch).
+      const statedYds = parseStatedYardage(String(intent.raw_text ?? phrase));
+      if (statedYds != null) round.setUserStatedYardage(statedYds, 'user');
       track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
       return {
         success: true,
-        voice_response: `Got it, ${clubLabel(parsed.club_id)}.`,
+        voice_response: statedYds != null
+          ? `Got it — ${clubLabel(parsed.club_id)} from ${statedYds}.`
+          : `Got it, ${clubLabel(parsed.club_id)}.`,
         side_effects: [`round:club_switched:${parsed.club_id}`],
         follow_up_needed: false,
       };

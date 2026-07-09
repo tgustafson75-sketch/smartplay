@@ -52,6 +52,15 @@ export function buildPipecatContext() {
           return y.middle != null ? { front: y.front, middle: y.middle, back: y.back } : undefined;
         } catch { return undefined; }
       })(),
+      // 2026-07-08 (Tim — Green Hill: "why won't it tell me the yardage") — when we have
+      // no live green distance AND no GPS fix at all, flag it so the caddie SAYS it's
+      // reacquiring GPS rather than asking the golfer for the number (the backwards ask).
+      gpsLost: (() => {
+        try {
+          const y = getGreenYardagesSync(round.currentHole);
+          return y.middle == null && getLastFix() == null;
+        } catch { return false; }
+      })(),
       score: (() => {
         const scores = round.scores ?? {};
         const holesPlayed = Object.values(scores).filter((v) => typeof v === 'number' && v > 0).length;

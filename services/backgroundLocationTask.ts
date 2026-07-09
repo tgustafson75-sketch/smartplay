@@ -232,11 +232,12 @@ export async function startBackgroundLocation(): Promise<void> {
     try {
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
         accuracy: Location.Accuracy.High,
-        // 10s cadence + 5m distance hysteresis. Keeps OS-level GPS warm
-        // without burning battery; watchPositionAsync provides the
-        // high-cadence foreground fixes when the app is open.
+        // 10s cadence. 2026-07-08 (Tim — Green Hill) — distanceInterval was 5m, which
+        // suppressed ALL background fixes while the golfer stood still, so neither the
+        // background nor foreground source held lastFix fresh → stale/hard-clear. 0 =
+        // deliver on the 10s cadence regardless of movement (still battery-modest).
         timeInterval: 10_000,
-        distanceInterval: 5,
+        distanceInterval: 0,
         // showsBackgroundLocationIndicator is iOS-only; surfaces the blue
         // bar in the status row when location is being used.
         showsBackgroundLocationIndicator: true,

@@ -175,12 +175,24 @@ function armStaleHardTimer(): void {
       // that could be wrong-by-100yd after walking.
       staleHardTimer = setTimeout(() => {
         if (lastFix) {
+          // 2026-07-08 (Tim — Green Hill: caddie went dark on yardage) — do NOT wipe a
+          // GOOD position just because the phone was stationary. A ≤10m fix from a golfer
+          // standing still is STILL correct; nulling it is exactly what left the caddie
+          // with no distance to answer. Keep it (low confidence, already set in stage 1) and
+          // let the next real tick / the evaluateMode stall-recovery refresh it. Only truly
+          // weak/unknown-accuracy fixes get hard-cleared to fall back to the static card.
+          const acc = lastFix.accuracy_m ?? null;
+          if (acc != null && acc <= 10) {
+            console.log('[gps] hard-clear SUPPRESSED — last fix was accurate (', acc, 'm); keeping low-confidence position');
+            staleHardTimer = null;
+            return;
+          }
           console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_FULL_CLEAR_MS, 'ms');
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
               sinceMs: STALE_FULL_CLEAR_MS,
-              lastAccuracy_m: lastFix.accuracy_m ?? null,
+              lastAccuracy_m: acc,
               lastSource: lastFix.source,
             });
           } catch { /* best-effort */ }
@@ -616,7 +628,14 @@ async function startWatchInternal() {
           {
             accuracy,
             timeInterval: cfg.intervalMs,
-            distanceInterval: 2,
+            // 2026-07-08 (Tim — Green Hill: "why won't it tell me the yardage") — was 2m.
+            // The native distance filter suppresses ALL callbacks until the phone moves
+            // that far, so a golfer standing on a tee / reading a putt / waiting / in a
+            // cart got ZERO fixes → lastTickAt went stale → 60s stale_degrade → 300s
+            // hard_clear wiped a perfectly good 3.7m fix → caddie had no distance and asked
+            // the golfer. 0 = deliver on the timeInterval cadence regardless of movement;
+            // the smoothing buffer + notify throttle already coalesce stationary jitter.
+            distanceInterval: 0,
           },
           onLocationUpdate,
         );
@@ -724,6 +743,16 @@ async function handleAppStateChange(next: AppStateStatus): Promise<void> {
 
 function evaluateMode() {
   const now = Date.now();
+  // 2026-07-08 (Tim — Green Hill: GPS died on the course while the app was open) — the
+  // foreground stall-recovery (handleAppStateChange) only restarts the watch on a
+  // background→active bounce. Held open on the caddie/hole screen, a genuinely dead
+  // subscription (no fixes past FIX_STALENESS_MS) never got restarted. This 5s tick is
+  // the right place to self-heal: if we have a subscription but it's gone quiet, tear it
+  // down and restart so fixes (and yardage) come back without the golfer touching anything.
+  if (subscription && lastTickAt > 0 && now - lastTickAt > FIX_STALENESS_MS) {
+    console.log(`[gps] watch stalled (${now - lastTickAt}ms since last fix) — restarting`);
+    void restartWatch();
+  }
   // Cool down from active 60s after the most recent bump
   if (mode === 'active' && now - lastActiveBumpAt > ACTIVE_HOLD_MS) {
     setMode('walking', 'active_hold_expired');

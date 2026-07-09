@@ -298,6 +298,11 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
         rYards && rYards.middle != null
           ? `Live distance to the green — front ${rYards.front ?? '?'}, MIDDLE ${rYards.middle}, back ${rYards.back ?? '?'}. Use the MIDDLE number for "how far" unless he asks front/back.`
           : '',
+        // 2026-07-08 (Tim — Green Hill: the caddie asked HIM the yardage) — when there's no
+        // live GPS distance, the caddie must OWN it, never put the question back on the golfer.
+        (round.gpsLost || (!(rYards && rYards.middle != null)))
+          ? `NO LIVE GPS DISTANCE right now (GPS is reacquiring). If he asks "how far": say you're getting the GPS back and give him the tee yardage as a reference if you have it — NEVER ask him for the distance, that's YOUR job. Don't stall repeatedly; one honest "reacquiring GPS, one sec".`
+          : '',
         rScore ? `Score so far: ${rScore.total} through ${rScore.holesPlayed}${rScore.vsPar != null ? ` (${rScore.vsPar >= 0 ? '+' : ''}${rScore.vsPar} vs par)` : ''}` : '',
         (typeof round.mode === 'string' && round.mode !== 'free_play') ? `Round mode/goal: ${round.mode} — shape every call to it (e.g. break-100 = keep the big number off the card).` : '',
         round.isCompetition ? `COMPETITION round — bias conservative, protect against the blow-up.` : '',

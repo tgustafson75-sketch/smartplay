@@ -1106,7 +1106,7 @@ The body may include a yardageInsight blob: { yardage, source, confidence, reaso
 - source 'gps_live' with confidence 'high' → clean GPS. Use the number with confidence, no qualifier.
 - source 'gps_live' with confidence 'med' → GPS okay, mild hedge optional ("Reading 168, fix is decent").
 - source 'static_card' → GPS is soft / warming up; the number is the tee→green scorecard distance. ALWAYS state this honestly: "Reading 168 from the static card right now — GPS hasn't locked. Once I get a fresh fix I'll dial it in."
-- source 'none' → no yardage available. "I don't have a clean number yet — give me a few seconds for GPS, or tell me what your rangefinder says."
+- source 'none' → no yardage available. OWN it — you're getting the GPS back; do NOT put the question on the player. Say something like "GPS is reacquiring — one sec and I'll have your number." If he VOLUNTEERS a rangefinder number, take it, but never ask him to do your job. (2026-07-08, Tim: the caddie asking HIM the distance is the single worst failure — it's the reason this app exists.)
 Use the \`reason\` field as a guide for the natural language of the hedge — it's already written caddie-style. NEVER assert a static-card number as truth — the player needs to know it's a tee number, not their current position.
 
 ${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}
@@ -1287,18 +1287,14 @@ ${onCourseContextBlock}${baseMessage}`
       maxTokens: aiTier === 'fast' ? 300 : 400,
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
-      // 2026-06-23 (Tim — "I have signal but it gives a failure state") —
-      // per-round timeout TIGHTENED 15s → 12s to keep the brain's realistic
-      // worst-case UNDER the client's BRAIN_TIMEOUT_MS (30s). The old 15s × 3
-      // rounds = 45s exceeded the client's 25s patience, so a healthy-but-slow
-      // brain (cold Lambda + a tool round) got ABORTED client-side on perfect
-      // signal and logged as a failure. Realistic path now: cold round ~12s +
-      // local-short-circuit rounds ~3-5s ≈ 20s < 30s client. maxRounds stays 3
-      // so legitimate lookup_course→lookup_hole→answer chains aren't truncated;
-      // lookup_hole short-circuits to courseHoles so round-2 is fast.
-      //   OpenAI/Gemini: 12s × 3 rounds = 36s pathological cap (rare; the
-      //   client's graceful minimal-retry + local responder catch it).
-      timeoutMs: 12_000,
+      // 2026-07-08 (Tim — "reevaluate the single-provider path; that whole cascade time is
+      // better spent letting ONE agent figure it out"). The 12s per-round cap was tightened
+      // specifically to leave room for a 3-PROVIDER cascade (openai→anthropic→gemini) inside
+      // the client's 30s. There is no cascade anymore (OpenAI only), so give the one agent a
+      // real window: 16s/round. Realistic turn is 1 round ~2-5s; the cap is just a hang guard.
+      // A turn that genuinely can't finish in the client's window hands off to the local
+      // responder (the intended backup) rather than being split across doomed fallbacks.
+      timeoutMs: 16_000,
     };
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
       if (name === 'lookup_course') {
@@ -1427,18 +1423,31 @@ ${onCourseContextBlock}${baseMessage}`
     // → graceful text → local brain. No cross-provider cloud fallback (single-provider).
     let loopResult;
     {
-      const MAX_ATTEMPTS = 2;
+      // Single provider (OpenAI) gets the window; we retry ONCE, but only when the first
+      // attempt failed FAST (a cold-start / transient blip, not a slow timeout that already
+      // spent the budget). Retrying after a full timeout would just blow the client's window
+      // for nothing — better to hand that turn to the local responder. (Tim: "let one agent
+      // figure it out" + "retry if an initial failure happens".)
+      const FAST_FAIL_MS = 7_000;   // below this, the failure was a blip worth retrying
+      const startedLoop = Date.now();
       let lastErr: unknown;
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const attemptStart = Date.now();
         try {
           loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-          if (attempt > 1) console.log(`[kevin] openai succeeded on retry (attempt ${attempt})`);
+          if (attempt > 1) console.log('[kevin] openai succeeded on retry');
           break;
         } catch (err) {
           lastErr = err;
-          capture.action = null; capture.dataToolCalls = 0; // reset partial tool state before retrying
-          console.warn(`[kevin] openai attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err instanceof Error ? err.message : String(err)}`);
-          if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 300));
+          capture.action = null; capture.dataToolCalls = 0; // reset partial tool state
+          const attemptMs = Date.now() - attemptStart;
+          console.warn(`[kevin] openai attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
+          const budgetLeft = 26_000 - (Date.now() - startedLoop);
+          if (attempt === 1 && attemptMs < FAST_FAIL_MS && budgetLeft > 12_000) {
+            await new Promise((r) => setTimeout(r, 300));
+            continue; // fast blip + time to spare → one real retry
+          }
+          break; // slow failure or no budget → fall through to local responder
         }
       }
       if (!loopResult) throw lastErr ?? new Error('brain failed after retries');
