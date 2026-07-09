@@ -21,18 +21,18 @@
  * routes through this — there is no other place the base URL is decided.
  */
 
-/** Backend hosts. PRIMARY is the branded custom domain (NOT *.vercel.app).
+/** THE backend host — the branded custom domain, never *.vercel.app.
  *  2026-06-27 (root-cause of the recurring "voice breaks again"): *.vercel.app is
  *  DNS-blocked by content filters (OpenDNS/Cisco Umbrella → block-page IP
  *  146.112.61.104 → every backend fetch "Network request failed" → voice/brain/
  *  transcribe dead, intermittently by the network's resolver). The Vercel SERVER
  *  was always healthy; only the *.vercel.app NAME was filtered. A branded custom
  *  domain isn't on those blocklists (verified: api.smartplaycaddie.com resolves +
- *  serves 200 through OpenDNS itself). FALLBACK is the old *.vercel.app alias (same
- *  backend) — kept so ensureBackendReachable() can fail OVER to it if the custom
- *  domain is ever unreachable, and vice versa. */
+ *  serves 200 through OpenDNS itself).
+ *  2026-07-08: the *.vercel.app FALLBACK was REMOVED — failing over to the
+ *  blocklisted name was the cause of the on-course voice death (see
+ *  ensureBackendReachable). This is now the single host. */
 const PRIMARY_HOST = 'https://api.smartplaycaddie.com';
-const FALLBACK_HOST = 'https://smartplay-beta.vercel.app';
 
 /** @deprecated kept for back-compat; the LIVE value is getApiBaseUrl(). */
 export const PROD_API_BASE_URL = PRIMARY_HOST;
@@ -84,35 +84,32 @@ let healInFlight: Promise<string> | null = null;
 let healedThisSession = false;
 
 /**
- * SELF-HEALING HOST FAILOVER (Tim 2026-06-27 — "the app should triage + self-repair").
- * If the active backend host is unreachable but the OTHER host responds, switch to
- * it for the rest of the session. Handles a content-filter block or outage on
- * EITHER host (the recurring *.vercel.app DNS block, or a future block on the
- * custom domain). Best-effort, deduped, never throws, never blocks the UI. Logs the
- * failover to the issue log so there's a triage / self-repair trail.
- * Call once at launch (before warmup) and again with {force:true} on a voice
- * network failure so the NEXT attempt uses the healthy host.
+ * 2026-07-08 (Tim — Green Hill round: voice died on the course) — the old
+ * self-healing failover was ACTIVELY HARMFUL and is now DISABLED. Root cause from
+ * the field logs: on a weak course signal the 4s probe to the custom domain flaked,
+ * a same-instant probe to the *.vercel.app alias happened to succeed, so the app
+ * switched the whole session to *.vercel.app — the exact name Tim's network content-
+ * filter INTERMITTENTLY blocks — and pinned there (healedThisSession=true). Real
+ * requests then hit the block → 15s transcribe AbortErrors → on-device STT fallback,
+ * which mangled "seven iron from 170" into "Kevin iron from January" → the classifier
+ * failed → the caddie asked dumb clarifying questions. Failing OVER to the blocklisted
+ * domain is never an upgrade; the custom domain is specifically the name that is NOT
+ * filtered. So: ONE host (the custom domain). No cross-host failover to *.vercel.app.
+ * A transient weak-signal blip on the custom domain is retried on the custom domain,
+ * not swapped for a blocked alias. If we ever need a real second host it must be
+ * another clean custom domain, never *.vercel.app. See [[voice-recurring-outage-root-cause-vercel-dns-filter]].
+ * Kept as a best-effort probe (warms DNS/TLS, records reachability) that NEVER
+ * switches hosts, so the many existing callers keep working unchanged.
  */
 export async function ensureBackendReachable(opts?: { force?: boolean }): Promise<string> {
-  if (isExplicitOverride()) return activeBase;             // dev/preview pin — never failover
+  if (isExplicitOverride()) return activeBase;             // dev/preview pin
   if (healedThisSession && !opts?.force) return activeBase;
   if (healInFlight) return healInFlight;                   // dedupe concurrent callers
   healInFlight = (async () => {
     try {
-      if (await pingHost(activeBase)) { healedThisSession = true; return activeBase; }
-      const other = activeBase === FALLBACK_HOST ? PRIMARY_HOST : FALLBACK_HOST;
-      if (await pingHost(other)) {
-        const from = activeBase;
-        activeBase = other;
-        healedThisSession = true;
-        console.log(`[apiBase] host failover: ${from} unreachable → ${other}`);
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
-          useIssueLogStore.getState().addAppEvent('host_failover', { from, to: other }, 'app_error');
-        } catch { /* issue-log best-effort */ }
-      }
-      // both unreachable → leave activeBase; calls fail + surface the network notice.
+      // Best-effort probe only — warms the connection, but NEVER switches away from the
+      // custom domain to the blocklisted *.vercel.app alias. activeBase is left as-is.
+      if (await pingHost(activeBase)) healedThisSession = true;
       return activeBase;
     } finally {
       healInFlight = null;

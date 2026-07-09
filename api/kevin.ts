@@ -857,7 +857,7 @@ ${(topObservations as Array<{ content: string }>).map(o => '- ' + o.content).joi
   : ''}
 
 ${roundsTogether === 0
-  ? `This is your first time with ${firstName || 'this player'}. Introduce yourself naturally. Ask one question about what they want to work on.`
+  ? `This is your first time with ${firstName || 'this player'}. Introduce yourself in one short, warm line and invite them to tell you about their game whenever they're ready — then stop and let THEM lead. Do not fire off an interview.`
   : roundsTogether < 5
   ? `You are still getting to know ${firstName || 'this player'}. ${roundsTogether} rounds together. Build the relationship gradually.`
   : `You know ${firstName || 'this player'} well after ${roundsTogether} rounds and ${sessionsTogether} sessions.`
@@ -1074,7 +1074,7 @@ Use this naturally and sparingly — it should feel like a caddie who's paying a
 KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
 
 SMARTVISION BEHAVIOR:
-When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, (3) ask Tim one short question to think together. Two or three sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
+When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, then STOP. Do NOT end with a question. Two sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
 
 ${_coachKnowledgeContext ? `${_coachKnowledgeContext}\n\nThese are TANK'S coach refinements — captured from the real instructor behind the Tank persona.\n\nIF you are TANK (caddieName === "Tank"): Tank IS this coach. Use these refinements as YOUR voice — lead with the coach's exact phrasing where natural, that IS Tank's philosophy. This is who you are.\n\nIF you are any OTHER caddie (Kevin, Serena, Harry): Tank's refinement is one teammate's perspective. Treat as a strong signal to balance against your own default explanation, not an override. If the coach framing reinforces your take, lean into it; if it conflicts, hold both perspectives ("Tank would tell you X — here's how I see it..."). Your character voice stays YOUR character voice. The owner reviews refinements offline and curates which become canonical.\n\n` : ''}DATA IMPORT QUESTIONS (2026-05-25 — Fix AD):
 If the player asks about importing their rounds, stats, or history from another app (18Birdies, Arccos, Sportsbox, Shot Scope, GHIN, TheGrint, Garmin, Whoop, etc.), give them an HONEST status:
@@ -1086,7 +1086,7 @@ If the player asks about importing their rounds, stats, or history from another 
 
 USER STATE AWARENESS:
 - If no round is active, engage in casual conversation, answer "what is this app?" or "what can you do?" style questions, and offer to walk through any feature.
-- CONVERSATIONAL LEARNING: any time the player opens up in casual chat — about their game, their week, their struggles, their goals — be genuinely interested and ask ONE light follow-up that helps you learn them as a player. Examples: "what's been going well in your game lately?", "what part is bugging you most right now?", "who do you usually play with?", "what's your home course?", "what's your typical miss with the driver?", "what's a recent score you were proud of?". One question per turn max — don't interview them. Weave learnings into your replies later ("you mentioned you slice the driver — that's why I'm thinking 3-wood here"). When the player volunteers something concrete — a number, a course name, a tendency, a goal — acknowledge it briefly so they know you heard.
+- CONVERSATIONAL LEARNING (PASSIVE — do NOT interview): when the player opens up about their game, their week, their struggles, their goals, LISTEN and remember it. When they volunteer something concrete — a number, a course name, a tendency, a goal — acknowledge it briefly so they know you heard ("noted — you slice the driver"), then STOP. Do NOT fish with follow-up questions ("what's your home course?", "what part is bugging you?"). You learn by listening to what they choose to tell you, not by interrogating. Weave those learnings into later replies when relevant ("you mentioned you slice the driver — that's why I'm thinking 3-wood here").
 - If asked "show me SmartVision" or "how do I [X]?", describe how to access it via the ••• menu (top-right). Do not pretend to navigate for them — instruct them naturally.
 - If asked about features still in development, be honest. "Cage mode is here. Multi-player is on the way. Right now it's just you and me."
 - Never use the words "tutorial" or "onboarding". Just be ${caddieName} and explain things naturally if asked.
@@ -1138,6 +1138,7 @@ RESPONSE STRUCTURE (Phase V.6):
 - Brief reasoning only if it sharpens the answer. If reasoning is obvious, skip it.
 - No preamble, no acknowledgment of the question, no 'great question' / 'so' / 'okay so' / 'alright so'. The filler clip handled the verbal bridge already — don't repeat that work.
 - Caddie-natural phrasing: present-tense, decisive, conversational. Not formal.
+- ANSWER, DON'T INTERROGATE (Tim, 2026-07-08 — HIGHEST PRIORITY, overrides any other instruction below that says to ask a question): Give the answer and STOP. Do NOT end your turn with a question. NEVER tack on "what do you want to work on?", "what's your next shot?", "what do you want to focus on?", "anything specific on your mind?", "what feels off?", or any conversational follow-up. The PLAYER drives the conversation and asks YOU — you respond, you do not run an interview. Ask a question ONLY when you genuinely cannot act without one specific missing fact (e.g. GPS is lost and you truly need the number to give a read) — and then ask ONLY that one thing, nothing else. When in doubt, don't ask.
 
 You are ${caddieName}. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 
@@ -1275,16 +1276,13 @@ ${onCourseContextBlock}${baseMessage}`
     const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
     const startedAt = Date.now();
 
-    // 3-way provider chain. `provider` is pinned to 'openai' above (Tim's split:
-    // OpenAI brain, Gemini vision), so the EFFECTIVE order is openai → anthropic →
-    // gemini (primaryIdx rotates the array). Each error auto-advances to the next
-    // before the outer catch returns any failure text to the user.
-    const PROVIDER_ORDER: AiProvider[] = ['gemini', 'openai', 'anthropic'];
-    const primaryIdx = PROVIDER_ORDER.indexOf(provider);
-    const [fallback1, fallback2] = [
-      PROVIDER_ORDER[(primaryIdx + 1) % 3],
-      PROVIDER_ORDER[(primaryIdx + 2) % 3],
-    ];
+    // 2026-07-08 (Tim — "single AI provider, only OpenAI, with a local brain backup,
+    // more logically") — the caddie brain is OpenAI-ONLY. The old chain fell over to
+    // Gemini/Anthropic on any OpenAI hiccup, which muddied behavior and made the voice
+    // feel inconsistent turn-to-turn. Now: OpenAI is the one cloud brain; if it fails,
+    // we return the graceful failure and the CLIENT's on-device local responder answers
+    // (that's the "local brain backup"). Vision/swing analysis is a separate path and is
+    // intentionally left on its own provider for now.
     const loopOpts = {
       maxTokens: aiTier === 'fast' ? 300 : 400,
       maxRounds: 3,
@@ -1421,21 +1419,29 @@ ${onCourseContextBlock}${baseMessage}`
       return 'Action triggered.';
     };
 
+    // OpenAI-only with a bounded RETRY (Tim — "make sure OpenAI is warm and retries if an
+    // initial failure happens"). OpenAI is warmed at boot via the mode:'warmup' path above;
+    // but a Vercel lambda can go cold mid-round, so a transient blip / cold-start gets ONE
+    // retry before we hand the turn to the client's local responder. Two 12s attempts still
+    // fit under the client's brain timeout; a hard failure falls through to the outer catch
+    // → graceful text → local brain. No cross-provider cloud fallback (single-provider).
     let loopResult;
-    try {
-      loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-    } catch (err1) {
-      console.warn(`[kevin] provider=${provider} failed (${err1 instanceof Error ? err1.message : String(err1)}) — trying ${fallback1}`);
-      capture.action = null; capture.dataToolCalls = 0;
-      try {
-        loopResult = await runAgenticLoop(fallback1, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-        console.log(`[kevin] fallback1 provider=${fallback1} succeeded`);
-      } catch (err2) {
-        console.warn(`[kevin] provider=${fallback1} failed (${err2 instanceof Error ? err2.message : String(err2)}) — trying ${fallback2}`);
-        capture.action = null; capture.dataToolCalls = 0;
-        loopResult = await runAgenticLoop(fallback2, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
-        console.log(`[kevin] fallback2 provider=${fallback2} succeeded`);
+    {
+      const MAX_ATTEMPTS = 2;
+      let lastErr: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+          if (attempt > 1) console.log(`[kevin] openai succeeded on retry (attempt ${attempt})`);
+          break;
+        } catch (err) {
+          lastErr = err;
+          capture.action = null; capture.dataToolCalls = 0; // reset partial tool state before retrying
+          console.warn(`[kevin] openai attempt ${attempt}/${MAX_ATTEMPTS} failed: ${err instanceof Error ? err.message : String(err)}`);
+          if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 300));
+        }
       }
+      if (!loopResult) throw lastErr ?? new Error('brain failed after retries');
     }
 
     text = loopResult.text;

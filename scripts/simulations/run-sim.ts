@@ -4129,14 +4129,16 @@ check('Re-analyze hardening: content:// persisted, legacy clips rescued on open,
 // and analysis all silently failed. Now a single getApiBaseUrl() with a prod
 // fallback that can never emit a relative/dead URL; no site reads the env raw.
 const apiBaseSrc = read('services/apiBase.ts');
-check('API base URL — one resolver, never relative/dead (spine fix)',
+check('API base URL — one resolver, single custom-domain host, no *.vercel.app failover',
   /export function getApiBaseUrl/.test(apiBaseSrc) &&
-    /https:\/\/smartplay-beta\.vercel\.app/.test(apiBaseSrc) &&
+    /https:\/\/api\.smartplaycaddie\.com/.test(apiBaseSrc) &&             // the branded custom domain is THE host
+    !/const FALLBACK_HOST/.test(apiBaseSrc) &&                            // 2026-07-08: harmful failover to the blocklisted *.vercel.app removed
+    !/activeBase = other/.test(apiBaseSrc) &&                             // ensureBackendReachable never switches hosts anymore
     /\^https\?:\\\/\\\/\.\+/.test(apiBaseSrc) &&                          // absolute-url guard present
     !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useVoiceCaddie.ts')) && // voice no longer reads env raw
     !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useKevin.ts')) &&       // brain no longer reads env raw
     /getApiBaseUrl\(\)/.test(read('hooks/useVoiceCaddie.ts')),
-  'every backend fetch resolves through getApiBaseUrl(), which honors EXPO_PUBLIC_API_URL only when it is an absolute http(s) url and otherwise falls back to production — so an env var missing from an OTA bundle can never again leave the client with no server address');
+  'every backend fetch resolves through getApiBaseUrl() (absolute prod custom-domain fallback, never relative/dead), and the app no longer fails over to the content-filter-blocklisted *.vercel.app alias — the root cause of the recurring on-course voice death');
 
 // 2026-06-10 — Voice warmup coverage. prewarmVoice() previously fired ONLY on the
 // greeting screen, so the first mic tap after navigating in (or after the app

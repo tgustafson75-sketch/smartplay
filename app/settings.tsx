@@ -45,10 +45,10 @@ import {
 } from '../services/simulatedGPS';
 import { setScreenContext } from '../services/screenContext';
 
-// 2026-07-08 (Tim) — primes the caddie brain to interview the golfer warmly when they
-// open the Caddie tab from the "get to know you" entry. Ingested to CNS via narrativeIngest.
+// 2026-07-08 (Tim — "answer, don't interview") — primes the caddie to INVITE the golfer
+// to talk and then LISTEN, not run a Q&A. Ingested to CNS via narrativeIngest.
 const GET_TO_KNOW_FOCUS =
-  'getting to know this golfer as a person and a player. Have a warm, natural, OPEN conversation — not a form. Ask about their experience, how and how often they really practice, the time they honestly have, what they enjoy and what they avoid, where they feel their game needs work, and what they are chasing. Ask ONE question at a time, listen, and follow up on what they actually say. You are building a lasting understanding of them — reflect it back so they know you heard it.';
+  'the player wants to tell you about their game so you get to know them. Open with ONE short, warm line inviting them to talk (e.g. "Tell me about your game — how you practice, what you\'re chasing"), then LISTEN. Do NOT interrogate or run a checklist of questions. Acknowledge what they volunteer so they know you heard it. They lead; you listen and remember.';
 
 export default function Settings() {
   const router = useRouter();
