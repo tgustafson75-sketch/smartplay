@@ -2000,7 +2000,11 @@ export default function SwingDetail() {
             <TouchableOpacity
               style={[styles.reanalyzeBtn, { borderColor: colors.border, marginTop: 8 }]}
               onPress={() => {
-                useCageStore.getState().patchSessionUpload(swing_id, { tag: 'putt' });
+                // 2026-07-08 (audit) — getAnalyzerKind returns 'swing' for perspective
+                // 'watching_someone' BEFORE it checks the tag (set when a family member was
+                // active at upload). So flip perspective to pov_self too, or re-tagging as a
+                // putt silently no-ops and re-runs the swing analyzer again.
+                useCageStore.getState().patchSessionUpload(swing_id, { tag: 'putt', perspective: 'pov_self' });
                 useToastStore.getState().show('Reading this as a putt…');
                 onReanalyze();
               }}

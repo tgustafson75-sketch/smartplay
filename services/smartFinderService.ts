@@ -622,12 +622,13 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   // calcLog debug data matters most. When the clamp fires below, we
   // overwrite with a second entry tagged outcome='clamp_fallback'.
   logYardageCalc(hole, fix, { front, middle, back }, yards, source);
-  // 2026-05-18 / tightened 2026-07-08 (Tim — "the clamp should be no greater than the hole
-  // yardage") — the distance to the green physically cannot exceed the hole's length (the
-  // player is between tee and green), so bound by the scorecard hole distance (+40y slack
-  // for behind-the-tee / back-of-green) instead of a loose flat 800. Anything past that means
-  // the GPS fix doesn't match this course's geometry → fall back to the scorecard number.
-  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 40 : 600;
+  // 2026-05-18 / 2026-07-08 (Tim — "no greater than the hole yardage"; audit-loosened) — the
+  // distance to the green is bounded by the hole's length, so bound by the scorecard hole
+  // distance to catch an absurd (>7000) fix. Slack is +100y (not +40): the loaded tee set may
+  // be SHORTER than the tee the player is actually on (forward card, tips played), plus deep/
+  // double greens — +40 wrongly clamped those CORRECT live reads to the static card. +100 still
+  // catches a geometry mismatch by hundreds/thousands of yards.
+  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 100 : 600;
   if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
     console.log('[smartFinder] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: emit a second calcLog entry with
@@ -674,8 +675,8 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     reason: 'ok' as const,
   };
   logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
-  // 2026-07-08 — same hole-yardage-bounded clamp as the async path above. See note.
-  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 40 : 600;
+  // 2026-07-08 — same hole-yardage-bounded clamp as the async path above (+100 slack). See note.
+  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 100 : 600;
   if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
     console.log('[smartFinder:sync] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: same clamp_fallback log emission as the

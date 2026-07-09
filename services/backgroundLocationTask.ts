@@ -232,12 +232,14 @@ export async function startBackgroundLocation(): Promise<void> {
     try {
       await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
         accuracy: Location.Accuracy.High,
-        // 10s cadence. 2026-07-08 (Tim — Green Hill) — distanceInterval was 5m, which
-        // suppressed ALL background fixes while the golfer stood still, so neither the
-        // background nor foreground source held lastFix fresh → stale/hard-clear. 0 =
-        // deliver on the 10s cadence regardless of movement (still battery-modest).
+        // 10s cadence + 5m hysteresis. 2026-07-08 (audit) — an earlier pass set this to 0 to
+        // hold fixes fresh while stationary, but High-accuracy every 10s with NO distance
+        // filter for a whole 4-5h round is a real battery cost (and doubles ingest while the
+        // app is foregrounded). The FOREGROUND watch already uses distanceInterval:0 — that's
+        // what fixes the stationary-yardage bug when the app is open (the only time yardage is
+        // read). Keep the background keepalive battery-modest at 5m.
         timeInterval: 10_000,
-        distanceInterval: 0,
+        distanceInterval: 5,
         // showsBackgroundLocationIndicator is iOS-only; surfaces the blue
         // bar in the status row when location is being used.
         showsBackgroundLocationIndicator: true,

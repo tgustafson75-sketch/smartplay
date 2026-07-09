@@ -175,24 +175,18 @@ function armStaleHardTimer(): void {
       // that could be wrong-by-100yd after walking.
       staleHardTimer = setTimeout(() => {
         if (lastFix) {
-          // 2026-07-08 (Tim — Green Hill: caddie went dark on yardage) — do NOT wipe a
-          // GOOD position just because the phone was stationary. A ≤10m fix from a golfer
-          // standing still is STILL correct; nulling it is exactly what left the caddie
-          // with no distance to answer. Keep it (low confidence, already set in stage 1) and
-          // let the next real tick / the evaluateMode stall-recovery refresh it. Only truly
-          // weak/unknown-accuracy fixes get hard-cleared to fall back to the static card.
-          const acc = lastFix.accuracy_m ?? null;
-          if (acc != null && acc <= 10) {
-            console.log('[gps] hard-clear SUPPRESSED — last fix was accurate (', acc, 'm); keeping low-confidence position');
-            staleHardTimer = null;
-            return;
-          }
+          // 2026-07-08 (audit) — an EARLIER attempt kept a good-accuracy fix here instead of
+          // clearing; the audit showed that pins a possibly-300y-wrong position forever (timer
+          // not re-armed) and the caddie can voice a confidently-wrong number. Reverted: with
+          // distanceInterval:0 fixes now flow continuously while there's ANY signal, so this
+          // hard-clear only fires on a GENUINE signal loss — and then clearing to null is right
+          // (the caddie honestly says "reacquiring GPS" rather than trusting a stale coordinate).
           console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_FULL_CLEAR_MS, 'ms');
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
               sinceMs: STALE_FULL_CLEAR_MS,
-              lastAccuracy_m: acc,
+              lastAccuracy_m: lastFix.accuracy_m ?? null,
               lastSource: lastFix.source,
             });
           } catch { /* best-effort */ }
@@ -563,8 +557,16 @@ function setMode(next: GpsMode, reason: string) {
   if (subscription) restartWatch();
 }
 
+let lastWatchRestartAt = 0;
 async function restartWatch() {
   if (!subscription) return;
+  lastWatchRestartAt = Date.now();
+  // 2026-07-08 (audit fix) — give the fresh subscription a grace window: seed lastTickAt to
+  // now so the stall-recovery in evaluateMode doesn't immediately judge the brand-new (not-yet-
+  // ticked) watch as stale and tear it down again. Cold GPS re-acquisition takes 30-60s; without
+  // this seed the recovery restarted every 5s and could STARVE re-acquisition (never letting the
+  // chip lock). Paired with the restart cooldown in evaluateMode.
+  lastTickAt = Date.now();
   try { subscription.remove(); } catch {}
   subscription = null;
   await startWatchInternal();
@@ -749,7 +751,9 @@ function evaluateMode() {
   // subscription (no fixes past FIX_STALENESS_MS) never got restarted. This 5s tick is
   // the right place to self-heal: if we have a subscription but it's gone quiet, tear it
   // down and restart so fixes (and yardage) come back without the golfer touching anything.
-  if (subscription && lastTickAt > 0 && now - lastTickAt > FIX_STALENESS_MS) {
+  // Cooldown: at most one restart per 60s so a genuine dead-signal pocket (trees, cart barn)
+  // gets a full re-acquisition window instead of being torn down every tick.
+  if (subscription && lastTickAt > 0 && now - lastTickAt > FIX_STALENESS_MS && now - lastWatchRestartAt > 60_000) {
     console.log(`[gps] watch stalled (${now - lastTickAt}ms since last fix) — restarting`);
     void restartWatch();
   }

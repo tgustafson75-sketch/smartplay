@@ -33,14 +33,17 @@ function noActiveSession(): IntentResult {
 // "N yards", then any bare 2-3 digit number in a plausible golf range. Returns null when
 // there's no credible number so we never invent a distance.
 export function parseStatedYardage(text: string): number | null {
+  // 2026-07-08 (audit) — ONLY accept an EXPLICIT distance phrase ("from 215", "150 yards").
+  // A bare number in a club utterance is dangerously ambiguous: "sand wedge, 56 degrees" (loft),
+  // "7 iron into 22 mph wind" (wind), a hole number — all would be mis-captured as a yardage, and
+  // setUserStatedYardage overrides live GPS at HIGH confidence for 5 minutes (yardageResolver
+  // Tier 3). So no bare-number fallback: if they didn't say "from"/"yards", we don't guess.
   const t = text.toLowerCase();
   const pick = (n: number) => (n >= 20 && n <= 400 ? n : null);
   const from = t.match(/\bfrom\s+(\d{2,3})\b/);
   if (from) return pick(Number(from[1]));
   const yds = t.match(/\b(\d{2,3})\s*(?:yards?|yds?)\b/);
   if (yds) return pick(Number(yds[1]));
-  const bare = t.match(/\b(\d{2,3})\b/);
-  if (bare) return pick(Number(bare[1]));
   return null;
 }
 

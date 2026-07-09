@@ -86,9 +86,30 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
       // Incoming has no parseable / fewer rounds — keep the stored round blob intact.
       merged[ROUND_STORE_KEY] = prev[ROUND_STORE_KEY];
     }
+    // 2026-07-08 (audit) — the round union alone left ~34 OTHER learned-data stores
+    // (CNS tendencies, the bag, learned club distances, handicap/profile, practice/workout
+    // history, family) as last-write-wins → a fresh/second phone with near-default blobs would
+    // WIPE the cloud's richer copies. For these grow-mostly stores, keep whichever blob has MORE
+    // data (longer serialized JSON ≈ more learned) so an emptier device can't clobber them.
+    // Non-learned/config stores (settings, ui state) stay last-write-wins — most recent wins.
+    for (const key of GROW_MOSTLY_KEYS) {
+      const p = prev[key], n = next[key];
+      const pLen = typeof p === 'string' ? p.length : p != null ? JSON.stringify(p).length : 0;
+      const nLen = typeof n === 'string' ? n.length : n != null ? JSON.stringify(n).length : 0;
+      if (pLen > nLen) merged[key] = p; // stored copy is richer — don't let the emptier device win
+    }
   } catch { /* keep the last-write-wins merge; better than throwing on backup */ }
   return merged;
 }
+
+// Learned/earned data that only grows over a player's history — never let a fresh or
+// second device's near-empty blob overwrite the cloud's richer copy. (Round history has its
+// own id-union above.) Keys mirror store/cloudSync BACKED_UP_STORE_KEYS learned-data set.
+const GROW_MOSTLY_KEYS = [
+  'caddie-memory-v1', 'club-stats-v1', 'club-bag-v1', 'player-profile-v2',
+  'practice-points', 'points-store-v1', 'workout-store-v1', 'family-store-v1',
+  'vocabulary-profile-v1', 'practice-session-store-v1',
+];
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email
  *  alone can't derive it, so there's no enumeration/overwrite without the secret. */
@@ -137,6 +158,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // with the near-empty local snapshot. Read the existing snapshot first and UNION the
       // append-only round history so a device with fewer rounds can never delete them.
       const existing = await db.from(TABLE).select('data').eq('backup_key', key).maybeSingle();
+      // 2026-07-08 (audit) — if the pre-read FAILED (transient Supabase blip), we CANNOT safely
+      // merge; a blind write here would revert to the destructive whole-blob replace and could
+      // wipe the cloud. Reject so the client retries later rather than risking data loss.
+      if (existing.error) {
+        return res.status(200).json({ ok: false, error: 'read_failed_retry' });
+      }
       const incoming = body.data as Record<string, unknown>;
       const toStore = existing.data?.data && typeof existing.data.data === 'object'
         ? mergeSnapshots(existing.data.data as Record<string, unknown>, incoming)

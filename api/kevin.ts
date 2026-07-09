@@ -994,7 +994,7 @@ ${(() => {
   };
   const insightLines = pi && Array.isArray(pi.insights) && pi.insights.length > 0
     ? pi.insights.map((s: string) => '- ' + s).join('\n')
-    : '- Insufficient shot history — ask about tendencies naturally during round.';
+    : '- Insufficient shot history — note his tendencies as you observe them (do not interrogate him about them).';
   return `PLAYER PATTERNS:
 - Mode: ${modeLabel[_roundMode] ?? _roundMode}
 ${insightLines}
@@ -1138,7 +1138,7 @@ RESPONSE STRUCTURE (Phase V.6):
 - Brief reasoning only if it sharpens the answer. If reasoning is obvious, skip it.
 - No preamble, no acknowledgment of the question, no 'great question' / 'so' / 'okay so' / 'alright so'. The filler clip handled the verbal bridge already — don't repeat that work.
 - Caddie-natural phrasing: present-tense, decisive, conversational. Not formal.
-- ANSWER, DON'T INTERROGATE (Tim, 2026-07-08 — HIGHEST PRIORITY, overrides any other instruction below that says to ask a question): Give the answer and STOP. Do NOT end your turn with a question. NEVER tack on "what do you want to work on?", "what's your next shot?", "what do you want to focus on?", "anything specific on your mind?", "what feels off?", or any conversational follow-up. The PLAYER drives the conversation and asks YOU — you respond, you do not run an interview. Ask a question ONLY when you genuinely cannot act without one specific missing fact (e.g. GPS is lost and you truly need the number to give a read) — and then ask ONLY that one thing, nothing else. When in doubt, don't ask.
+- ANSWER, DON'T INTERROGATE (Tim, 2026-07-08 — HIGHEST PRIORITY, overrides any other instruction ANYWHERE in this prompt that says to ask a question, offer a confirm-question, or "ask what he wants"): Give the answer and STOP. Do NOT end your turn with a question. NEVER tack on "what do you want to work on?", "what's your next shot?", "what do you want to focus on?", "anything specific on your mind?", "what feels off?", or any conversational follow-up. The PLAYER drives the conversation and asks YOU — you respond, you do not run an interview. Ask a question ONLY when you genuinely cannot act without one specific missing fact (e.g. GPS is lost and you truly need the number to give a read) — and then ask ONLY that one thing, nothing else. When in doubt, don't ask.
 
 You are ${caddieName}. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 
@@ -1287,14 +1287,13 @@ ${onCourseContextBlock}${baseMessage}`
       maxTokens: aiTier === 'fast' ? 300 : 400,
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
-      // 2026-07-08 (Tim — "reevaluate the single-provider path; that whole cascade time is
-      // better spent letting ONE agent figure it out"). The 12s per-round cap was tightened
-      // specifically to leave room for a 3-PROVIDER cascade (openai→anthropic→gemini) inside
-      // the client's 30s. There is no cascade anymore (OpenAI only), so give the one agent a
-      // real window: 16s/round. Realistic turn is 1 round ~2-5s; the cap is just a hang guard.
-      // A turn that genuinely can't finish in the client's window hands off to the local
-      // responder (the intended backup) rather than being split across doomed fallbacks.
-      timeoutMs: 16_000,
+      // 2026-07-08 (Tim — "let ONE agent figure it out"; audit-corrected). No provider cascade
+      // anymore (OpenAI only), so the old 12s cap (sized to fit a 3-provider chain) can relax a
+      // bit — BUT the real ceiling is the CLIENT's voice abort, which is 20s
+      // (constants/voiceTimeouts.ts BRAIN_FETCH_TIMEOUT_MS), NOT the 30s an earlier note assumed.
+      // 14s/round keeps a 1-round answer (the common case) comfortably under 20s; the cap is just
+      // a hang guard. A turn that can't finish in the client window hands off to the local responder.
+      timeoutMs: 14_000,
     };
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
       if (name === 'lookup_course') {
@@ -1418,9 +1417,9 @@ ${onCourseContextBlock}${baseMessage}`
     // OpenAI-only with a bounded RETRY (Tim — "make sure OpenAI is warm and retries if an
     // initial failure happens"). OpenAI is warmed at boot via the mode:'warmup' path above;
     // but a Vercel lambda can go cold mid-round, so a transient blip / cold-start gets ONE
-    // retry before we hand the turn to the client's local responder. Two 12s attempts still
-    // fit under the client's brain timeout; a hard failure falls through to the outer catch
-    // → graceful text → local brain. No cross-provider cloud fallback (single-provider).
+    // retry — bounded so the RETRY can't run past the client's 20s voice abort (a late attempt-2
+    // that finishes after the client gave up just burns lambda time). A hard failure falls through
+    // to the outer catch → graceful text → local brain. No cross-provider cloud fallback.
     let loopResult;
     {
       // Single provider (OpenAI) gets the window; we retry ONCE, but only when the first
@@ -1442,8 +1441,10 @@ ${onCourseContextBlock}${baseMessage}`
           capture.action = null; capture.dataToolCalls = 0; // reset partial tool state
           const attemptMs = Date.now() - attemptStart;
           console.warn(`[kevin] openai attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
-          const budgetLeft = 26_000 - (Date.now() - startedLoop);
-          if (attempt === 1 && attemptMs < FAST_FAIL_MS && budgetLeft > 12_000) {
+          // Ceiling is the client's 20s voice abort — only retry if attempt-2 can plausibly
+          // finish before then (leave ~10s for it), so we never run past the user's patience.
+          const budgetLeft = 19_000 - (Date.now() - startedLoop);
+          if (attempt === 1 && attemptMs < FAST_FAIL_MS && budgetLeft > 10_000) {
             await new Promise((r) => setTimeout(r, 300));
             continue; // fast blip + time to spare → one real retry
           }
