@@ -1155,7 +1155,19 @@ export const speak = async (
   language: 'en' | 'es' | 'zh' = 'en',
   apiUrl: string,
   opts?: SpeakOpts,
-): Promise<void> => enqueueSpeak(async () => {
+): Promise<void> => {
+  // 2026-07-08 (Tim — "preprogrammed hole intros get run over by feedback from the AI") —
+  // PROACTIVE speech YIELDS. A non-user-initiated line (hole intro, proactive observation,
+  // summary) must never cut off or stack on top of speech that's already playing. Only a
+  // user-initiated reply (a mic-tap answer, which routes through stopSpeaking first) is
+  // allowed to interrupt. Checked SYNCHRONOUSLY at call time so it sees the truly-active
+  // sound; speakChunked awaits each chunk, so mid-report chunks (also proactive) aren't
+  // dropped — the prior chunk has already finished when the next speak() is invoked.
+  if (!opts?.userInitiated && isSpeaking()) {
+    console.log('[voice] proactive line yielded — already speaking:', text.slice(0, 40));
+    return;
+  }
+  return enqueueSpeak(async () => {
   // Phase V.7 — shared guard (formerly inlined here).
   if (!isVoiceAllowed(opts)) return;
   // 2026-06-13 — ingest the caddie's line into the conversation log (learning
@@ -1599,7 +1611,8 @@ export const speak = async (
       await deviceSpeakFallback(text, language, myId, effectiveGender);
     }
   }
-});
+  });
+};
 
 // 2026-06-13 — warmVoice: fire a tiny, throttled prewarm at the /api/voice
 // serverless function the moment a spoken read becomes IMMINENT (analysis /

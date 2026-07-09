@@ -26,7 +26,7 @@ import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
 import { useFamilyStore } from '../../../store/familyStore';
 import { exportCoachReport } from '../../../services/coachReport';
-import { getCaptureKind } from '../../../services/swingLibrary';
+import { getCaptureKind, isPuttingSession } from '../../../services/swingLibrary';
 import { getSwingReference } from '../../../services/swingReferences';
 import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -1988,6 +1988,24 @@ export default function SwingDetail() {
               onPress={() => setActionShotId(shot.id)}
             >
               <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Manage swing</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* 2026-07-08 (Tim — "I uploaded a meta glasses putt and it won't read it") — an
+              uploaded putt that wasn't tagged as one routes to the full-SWING analyzer, which
+              can't read a putt (no full-body swing to locate → useless/no read). Give an
+              explicit escape hatch: re-tag as a putt and re-run through the putting analyzer.
+              Only shown when this upload isn't already a putting session. */}
+          {session.source === 'uploaded_video' && !isPuttingSession(session) && (
+            <TouchableOpacity
+              style={[styles.reanalyzeBtn, { borderColor: colors.border, marginTop: 8 }]}
+              onPress={() => {
+                useCageStore.getState().patchSessionUpload(swing_id, { tag: 'putt' });
+                useToastStore.getState().show('Reading this as a putt…');
+                onReanalyze();
+              }}
+            >
+              <Text style={[styles.reanalyzeText, { color: colors.accent }]}>This is a putt — read it as one</Text>
             </TouchableOpacity>
           )}
 

@@ -893,7 +893,7 @@ check('Phase 2: library detail wears a capture-kind badge (Smart Motion / Coach 
   // a badge under the title; the multi-swing label keys off carved shots.
   (() => {
     const s = read('app/swinglab/swing/[swing_id].tsx');
-    return /import \{ getCaptureKind \} from '\.\.\/\.\.\/\.\.\/services\/swingLibrary'/.test(s) &&
+    return /import \{[^}]*\bgetCaptureKind\b[^}]*\} from '\.\.\/\.\.\/\.\.\/services\/swingLibrary'/.test(s) &&
       /const captureKind = getCaptureKind\(session\)/.test(s) &&
       /smart_motion:\s*\{ label:/.test(s) && /coach:\s*\{ label: 'Coach Lesson'/.test(s) &&
       /upload:\s*\{ label: 'Upload'/.test(s) &&
