@@ -1213,6 +1213,38 @@ function TargetCameraOverlay({
     if (yards.middle == null) return;
     setTargetYards(prev => (prev === yards.middle ? prev : yards.middle));
   }, [yards.reason, yards.middle, locked, currentHole, statedYardageFor]);
+
+  // 2026-07-09 (audit fix) — write the ranged lock to the SHARED store so the voice caddie
+  // knows "the target you locked". Prod SmartFinder kept lock state LOCAL, so the caddie's
+  // currentLock read (useKevin/useVoiceCaddie) was always null unless you used the debug
+  // screen. On lock: build an honest RangefinderLock from the live GPS fix + compass heading
+  // + the on-screen target yardage (target_position projected + flagged estimated). On unlock:
+  // clear it. No fabrication — if there's no GPS or no yardage, we don't write a lock.
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const store = (require('../store/smartFinderStore') as typeof import('../store/smartFinderStore')).useSmartFinderStore.getState();
+    if (!locked) { store.clearLock(); return; }
+    const fix = getLastFix();
+    const dist = targetYards ?? yards.middle;
+    if (!fix || fix.location.lat == null || fix.location.lng == null || dist == null) return;
+    const heading = headingRef.current ?? 0;
+    // Destination point from (user, bearing=heading, distance) — standard great-circle projection.
+    const R = 6371000, d = dist * 0.9144, br = (heading * Math.PI) / 180;
+    const lat1 = (fix.location.lat * Math.PI) / 180, lng1 = (fix.location.lng * Math.PI) / 180;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d / R) + Math.cos(lat1) * Math.sin(d / R) * Math.cos(br));
+    const lng2 = lng1 + Math.atan2(Math.sin(br) * Math.sin(d / R) * Math.cos(lat1), Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2));
+    store.setLock({
+      id: `lock_${fix.timestamp}`,
+      locked_at: fix.timestamp,
+      user_position: { lat: fix.location.lat, lng: fix.location.lng, accuracy: fix.accuracy_m ?? 0 },
+      target_position: { lat: (lat2 * 180) / Math.PI, lng: (lng2 * 180) / Math.PI, estimated: true },
+      distance_yards: Math.round(dist),
+      distance_meters: Math.round(dist * 0.9144),
+      compass_heading: Math.round(heading),
+      tap_y_normalized: 0.52,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked, targetYards, yards.middle]);
   // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
   // target from the new hole's GPS so hole N's aim doesn't bleed into hole N+1.
   // Keyed on currentHole; the re-sync effect above then re-syncs from the new
