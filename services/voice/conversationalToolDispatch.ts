@@ -187,12 +187,19 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'mark_tee': {
+      // 2026-07-09 — actually PERSIST the mark from GPS (was only signalling the usually-
+      // unmounted SmartVision screen, so "marked" was a lie off that screen). Still signal so
+      // a mounted SmartVision updates its on-screen marker too.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      void (require('../gpsMarkOverride') as typeof import('../gpsMarkOverride')).writeGpsMarkOverride('tee');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore'))
         .useSmartVisionSignalStore.getState().signalMark('tee');
       break;
     }
     case 'mark_green': {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      void (require('../gpsMarkOverride') as typeof import('../gpsMarkOverride')).writeGpsMarkOverride('green');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore'))
         .useSmartVisionSignalStore.getState().signalMark('pin');

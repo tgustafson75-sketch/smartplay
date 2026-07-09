@@ -38,11 +38,23 @@ export const APP_FEATURES: AppFeature[] = [
   {
     id: 'smart-tempo',
     name: 'Smart Tempo',
-    aliases: ['smart tempo', 'tempo', 'tempo drill', 'tempo trainer', 'tempo card', 'work on my tempo'],
+    // 2026-07-09 — 'smart tempo' → the camera-first analysis; generic 'tempo' / 'tempo
+    // trainer' / 'tempo drill' now belong to the Tempo Trainer selector (below), matching
+    // openToolHandler so the SAME words don't land on two different screens by route.
+    aliases: ['smart tempo', 'tempo card', 'work on my tempo'],
     route: '/swinglab/smart-tempo',
     category: 'practice',
     blurb: 'Measures your real backswing:downswing ratio vs the 3:1 ideal',
-    whenToUse: 'they ask about tempo, rhythm, or the 3:1 ratio',
+    whenToUse: 'they explicitly ask for "smart tempo" or a personal tempo analysis of their swing',
+  },
+  {
+    id: 'tempo-trainer',
+    name: 'Tempo Trainer',
+    aliases: ['tempo', 'tempo trainer', 'tempo drill', 'tempo trainer and analysis'],
+    route: '/swinglab/tempo-trainer',
+    category: 'practice',
+    blurb: 'Choose a 3:1 full-swing or 2:1 short-game tempo trainer, or a personal analysis',
+    whenToUse: 'they ask about tempo, rhythm, the beat/metronome, or the 3:1 ratio in general',
   },
   {
     id: 'drills',

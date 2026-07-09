@@ -207,10 +207,20 @@ export const useFamilyStore = create<FamilyState>()(
       },
 
       removeMember: (id) => {
-        // Hard delete — only used when the parent explicitly removes
-        // a member from Settings → Family with a confirm dialog. Any
-        // recorded swings keyed to this id stay in cageStore but
-        // become "unknown golfer" until the user re-tags or deletes.
+        // Hard delete — only used when the parent explicitly removes a member from
+        // Settings → Family with a confirm dialog.
+        // 2026-07-09 (audit fix) — RE-ATTRIBUTE this member's recorded swings to
+        // OTHER_PLAYER_ID FIRST. The old comment claimed orphaned swings become "unknown
+        // golfer", but cageStore.resolvePlayerName maps an orphaned player_id to the ACCOUNT
+        // HOLDER ("Me") — so deleting a kid silently merged their swings into the parent's own
+        // library. Reassigning to '__other__' keeps them labeled "Other".
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cage = require('./cageStore') as typeof import('./cageStore');
+          for (const sess of cage.useCageStore.getState().sessionHistory) {
+            if (sess.player_id === id) cage.useCageStore.getState().setSessionPlayer(sess.id, cage.OTHER_PLAYER_ID);
+          }
+        } catch (e) { console.log('[familyStore] reassign-on-remove failed:', e); }
         set((s) => ({
           members: s.members.filter((m) => m.id !== id),
           active_member_id: s.active_member_id === id ? null : s.active_member_id,

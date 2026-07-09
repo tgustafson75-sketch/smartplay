@@ -1575,10 +1575,16 @@ export default function CaddieTab() {
         break;
       }
       case 'mark_tee':
+        // 2026-07-09 — persist the GPS override (was signal-only → "marked" saved nothing off
+        // the SmartVision screen). Still signal a mounted SmartVision.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        void (require('../../services/gpsMarkOverride') as typeof import('../../services/gpsMarkOverride')).writeGpsMarkOverride('tee');
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('tee');
         break;
       case 'mark_green':
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        void (require('../../services/gpsMarkOverride') as typeof import('../../services/gpsMarkOverride')).writeGpsMarkOverride('green');
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('pin');
         break;
