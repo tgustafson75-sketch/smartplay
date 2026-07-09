@@ -1567,7 +1567,7 @@ export default function SwingDetail() {
               {hasPose && (showSkeleton || showTrace || motionOnly) && (
                 <SwingBodyOverlay
                   frames={poseFrames}
-                  currentTimeMs={position * 1000}
+                  currentTimeMs={Number.isFinite(position) ? position * 1000 : 0}
                   showSkeleton={showSkeleton || motionOnly}
                   showTrace={showTrace}
                   resizeMode="contain"

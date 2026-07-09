@@ -248,6 +248,11 @@ export default function SwingBodyOverlay({
       if (raw.length < 2) return [];
       P = raw.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
     }
+    // 2026-07-08 (Tim — white screen in swing replay) — a single non-finite coord in the
+    // path `d` string makes react-native-svg's native parser THROW → white screen. Drop any
+    // non-finite point before we build the spline so a bad frame can never crash the replay.
+    P = P.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.t));
+    if (P.length < 2) return [];
     // Per-segment speed (px/ms), normalized min→max across the swing → heat color.
     const speeds: number[] = [];
     for (let i = 0; i < P.length - 1; i++) {
@@ -281,7 +286,9 @@ export default function SwingBodyOverlay({
     if (!useClub || !clubArc) return [];
     const sx = aligned ? aligned.sx : 1;
     const sy = aligned ? aligned.sy : 1;
-    return clubArc.map(p => ({ x: p.x * sx, y: p.y * sy }));
+    return clubArc
+      .map(p => ({ x: p.x * sx, y: p.y * sy }))
+      .filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)); // never emit a NaN <Circle> → white screen
   }, [useClub, clubArc, aligned]);
 
   if (!live) return null;
@@ -336,10 +343,12 @@ export default function SwingBodyOverlay({
               // Edge renders hot when BOTH endpoints sit in the fault region —
               // paints the region's segments, not stray connectors into it.
               const hot = hotSet.has(a) && hotSet.has(b);
+              const x1 = ka.x * sx, y1 = ka.y * sy, x2 = kb.x * sx, y2 = kb.y * sy;
+              if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return null;
               return (
                 <Line
                   key={`${a}-${b}`}
-                  x1={ka.x * sx} y1={ka.y * sy} x2={kb.x * sx} y2={kb.y * sy}
+                  x1={x1} y1={y1} x2={x2} y2={y2}
                   stroke={hot ? hotColor : '#88F700'}
                   strokeWidth={hot ? sw * 1.25 : sw}
                   strokeOpacity={0.9}
@@ -349,12 +358,14 @@ export default function SwingBodyOverlay({
             })}
             {live.keypoints.map((k, i) => {
               if (k.score < MIN_KP_SCORE) return null;
+              const cx = k.x * sx, cy = k.y * sy;
+              if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
               const hot = k.name != null && hotSet.has(k.name);
               return (
                 <Circle
                   key={i}
-                  cx={k.x * sx}
-                  cy={k.y * sy}
+                  cx={cx}
+                  cy={cy}
                   r={hot ? dotR * 1.2 : dotR}
                   fill="#ffffff"
                   stroke={hot ? hotColor : '#88F700'}

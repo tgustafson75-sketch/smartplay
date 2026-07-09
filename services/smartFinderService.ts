@@ -622,14 +622,14 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   // calcLog debug data matters most. When the clamp fires below, we
   // overwrite with a second entry tagged outcome='clamp_fallback'.
   logYardageCalc(hole, fix, { front, middle, back }, yards, source);
-  // 2026-05-18 — Sanity clamp. If any computed yardage exceeds 800y the
-  // GPS fix is in a different city than the green coord (Tim hit
-  // "80,000 yards" on Standard's F/M/B strip when his real-GPS fix
-  // didn't match the active course geometry). Fall back to the
-  // scorecard yardage rather than showing absurd numbers that will
-  // mislead a user reaching for a club.
-  if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
-    console.log('[smartFinder] yardages out of range — falling back to scorecard:', yards);
+  // 2026-05-18 / tightened 2026-07-08 (Tim — "the clamp should be no greater than the hole
+  // yardage") — the distance to the green physically cannot exceed the hole's length (the
+  // player is between tee and green), so bound by the scorecard hole distance (+40y slack
+  // for behind-the-tee / back-of-green) instead of a loose flat 800. Anything past that means
+  // the GPS fix doesn't match this course's geometry → fall back to the scorecard number.
+  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 40 : 600;
+  if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
+    console.log('[smartFinder] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: emit a second calcLog entry with
     // outcome='clamp_fallback' so debug surfaces can see WHICH
     // decision drove the displayed scorecard yardage. The raw bad
@@ -674,9 +674,10 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     reason: 'ok' as const,
   };
   logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
-  // 2026-05-18 — same sanity clamp as the async path above. See note.
-  if ((yards.middle ?? 0) > 800 || (yards.front ?? 0) > 800 || (yards.back ?? 0) > 800) {
-    console.log('[smartFinder:sync] yardages out of range — falling back to scorecard:', yards);
+  // 2026-07-08 — same hole-yardage-bounded clamp as the async path above. See note.
+  const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 40 : 600;
+  if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
+    console.log('[smartFinder:sync] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: same clamp_fallback log emission as the
     // async path above. See note there.
     const fallback = staticYardages(hData, hole);
@@ -692,10 +693,10 @@ export async function distanceToPoint(target: ShotLocation): Promise<number | nu
   if (!fix) return null;
   const yards = Math.round(haversineYards(fix.location, target));
   // 2026-07-08 (Tim — Green Hill: "reports over 7000 yards for a hole") — same sanity clamp
-  // the green-yardage path has, which this tapped-target path was missing. A yardage >800
-  // means the GPS fix is nowhere near the target (a stale/garbage fix); return null so the
-  // caller shows "no distance" instead of an absurd 7000 that sends the golfer for the wrong club.
-  if (yards > 800) {
+  // the green-yardage path has, which this tapped-target path was missing. A tapped target
+  // beyond 600y means the GPS fix is nowhere near it (a stale/garbage fix); return null so
+  // the caller shows "no distance" instead of an absurd number that sends him for the wrong club.
+  if (yards > 600) {
     console.log('[smartFinder] distanceToPoint out of range — bad fix, returning null:', yards);
     return null;
   }
