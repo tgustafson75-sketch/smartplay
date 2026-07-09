@@ -183,11 +183,13 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // but couldn't open them. Each path is verified against the app/ tree and
   // mirrors services/knowledgeBase/appCatalog.ts. Smart Tempo (the new one) is
   // the headline fix: "open smart tempo" / "the tempo drill" now navigates.
+  // 2026-07-09 — "smart tempo" (explicit) → camera-first analysis; generic "tempo" /
+  // "tempo trainer" → the Tempo Trainer & Analysis mode selector (its front door).
   smart_tempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
   smarttempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
-  tempo: { type: 'navigate', path: '/swinglab/smart-tempo' },
-  tempo_drill: { type: 'navigate', path: '/swinglab/smart-tempo' },
-  tempo_trainer: { type: 'navigate', path: '/swinglab/smart-tempo' },
+  tempo: { type: 'navigate', path: '/swinglab/tempo-trainer' },
+  tempo_drill: { type: 'navigate', path: '/swinglab/tempo-trainer' },
+  tempo_trainer: { type: 'navigate', path: '/swinglab/tempo-trainer' },
   drills: { type: 'navigate', path: '/drills' },
   drill: { type: 'navigate', path: '/drills' },
   open_range: { type: 'navigate', path: '/practice/open-range' },
