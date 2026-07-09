@@ -1182,6 +1182,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       })();
     }
 
+    // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the now-updated
+    // cage history, so the cage setup "X% confidence" badge has a real value.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('./clubConfidence') as typeof import('./clubConfidence')).updateClubConfidenceFromCage(session.club);
+    } catch { /* non-fatal */ }
+
     return { primary_issue, drill_recommendation };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

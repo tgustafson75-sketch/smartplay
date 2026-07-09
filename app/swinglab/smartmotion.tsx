@@ -1799,6 +1799,13 @@ export default function SmartMotion() {
                   visual_reference_path: null,
                   contact_read: a.contact_read ?? 'unknown',
                 });
+                // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the
+                // now-updated cage history, so the cage setup badge has a real value.
+                try {
+                  // eslint-disable-next-line @typescript-eslint/no-require-imports
+                  (require('../../services/clubConfidence') as typeof import('../../services/clubConfidence'))
+                    .updateClubConfidenceFromCage(sess?.club);
+                } catch { /* non-fatal */ }
               }
             } catch (e) {
               console.log('[smartmotion] attach analysis failed (non-fatal):', e);
