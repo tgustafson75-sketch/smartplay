@@ -164,6 +164,9 @@ export default function DrillDetail() {
                 drillFocus: entry.practice!.focus,
                 drillShotType: entry.practice!.shotType,
                 angle: entry.practice!.angle,
+                // 2026-07-09 (audit — flagship TEMPO×SWING% drill dropped its ladder) —
+                // forward the swing-% ladder so Smart Motion can guide the 50/75/100 reps.
+                drillSwingPercents: entry.practice!.swingPercents?.join(',') ?? '',
               },
             })}
             style={[styles.practiceBtn, { backgroundColor: colors.accent }]}

@@ -525,8 +525,14 @@ export default function SmartMotion() {
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
   const isNarrow = windowWidth < 400;
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, captureMode, returnTo, autoRecord, autoScan } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, drillSwingPercents, captureMode, returnTo, autoRecord, autoScan } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; drillSwingPercents?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string }>();
+  // 2026-07-09 (audit — flagship TEMPO×SWING% drill) — the swing-% ladder (e.g. 50/75/100)
+  // the player should cycle through. Parsed from the forwarded param; drives the drill cue.
+  const drillSwingPct: number[] = React.useMemo(() => {
+    if (typeof drillSwingPercents !== 'string' || !drillSwingPercents.trim()) return [];
+    return drillSwingPercents.split(',').map((n) => Number(n.trim())).filter((n) => Number.isFinite(n) && n > 0);
+  }, [drillSwingPercents]);
   // 2026-06-24 (Tim — camera-first Smart Tempo) — TEMPO capture mode. When
   // Smart Tempo opens its own camera it routes here with captureMode='tempo'
   // (+ returnTo='/swinglab/smart-tempo'). On a single-swing completion we route
@@ -554,9 +560,16 @@ export default function SmartMotion() {
     const label = isDrill && typeof drillName === 'string' && drillName.trim()
       ? `the ${drillName.trim()} drill`
       : 'Smart Motion (recording swings)';
+    // 2026-07-09 (audit) — when the drill carries a swing-% ladder (the flagship
+    // TEMPO×SWING% drill), fold it into the focus so the caddie actively cues the player
+    // through 50/75/100 across the reps instead of running a generic tempo capture.
+    const baseFocus = isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined;
+    const focus = drillSwingPct.length > 0
+      ? `${baseFocus ? baseFocus + '. ' : ''}Cycle the player through swing efforts of ${drillSwingPct.join('%, ')}% across the set — call out the target effort for each rep and have them feel the SAME tempo at every effort.`
+      : baseFocus;
     setScreenContext({
       screen: label,
-      focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
+      focus,
       drillId: isDrill ? drillId : undefined,
     });
     // 2026-06-29 (Tim — audit) — clear UNCONDITIONALLY on leave. session_complete
@@ -564,7 +577,7 @@ export default function SmartMotion() {
     // directive); a label-matched clear would no-op and LEAK that directive to the
     // next screen (saying "nine iron" on the dashboard could fire configure_drill).
     return () => clearScreenContext();
-  }, [isDrill, drillName, drillFocus, drillId]);
+  }, [isDrill, drillName, drillFocus, drillId, drillSwingPct]);
   // 2026-06-16 (Tim — shot-rest cycles) — user-chosen swing count: null = OPEN (the
   // existing free window), or 1/3/5 → cap the session to exactly N swings (the read +
   // narration cover N). A drill's own count still wins. Ref mirror so the stop

@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useFamilyStore, ageBand, type AgeBand } from '../../store/familyStore';
+import { useCageStore } from '../../store/cageStore';
 import {
   getMemberSwingHistory,
   analyzeJuniorSwing,
@@ -54,6 +55,14 @@ export default function FamilyMemberScreen() {
   // so hook order stays stable — rules-of-hooks.
   const [comparing, setComparing] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
+  // 2026-07-09 (audit — family libraries were disjoint) — swings a parent records for this
+  // member via SmartMotion / Coach Mode land in cageStore keyed by player_id, NOT in the
+  // junior-analysis history this screen shows. Surface that count so the primary Family
+  // entry point bridges to the real library instead of looking empty.
+  const recordedCount = useCageStore((s) => {
+    const id = member?.id;
+    return id ? s.sessionHistory.filter((x) => x.player_id === id).length : 0;
+  });
 
   const refreshHistory = useCallback(async () => {
     if (!member) return;
@@ -186,6 +195,25 @@ export default function FamilyMemberScreen() {
             ) : null}
           </View>
         </View>
+
+        {/* 2026-07-09 — bridge to the member's REAL recorded-swing library (SmartMotion /
+            Coach Mode swings, stored in cageStore by player_id). Without this the parent
+            couldn't reach the swings they actually recorded from the Family entry point. */}
+        {recordedCount > 0 && (
+          <Pressable
+            onPress={() => router.push(`/swinglab/player-library/${member.id}` as never)}
+            style={[styles.ctaCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${member.firstName}'s recorded swings`}
+          >
+            <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>
+              {recordedCount} recorded swing{recordedCount === 1 ? '' : 's'}
+            </Text>
+            <Text style={[styles.ctaHint, { color: colors.text_muted }]}>
+              Open {member.firstName}&apos;s swing library — everything you&apos;ve captured in Smart Motion or Coach Mode.
+            </Text>
+          </Pressable>
+        )}
 
         {/* Voice + tap CTAs */}
         <View style={[styles.ctaCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>

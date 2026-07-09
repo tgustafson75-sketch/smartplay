@@ -390,10 +390,15 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
           perspective,
         };
+        // 2026-07-09 (audit — "Select Club discarded") — the club the user picked on the
+        // cage setup screen (startSession(selectedClub)) AND any mid-session change via the
+        // Phase-402 chip both live on cageStore.activeSession.club. This ingest hardcoded
+        // 'unknown', so every saved cage session lost the club. Read the live value.
+        const activeClub = useCageStore.getState().activeSession?.club || 'unknown';
         if (clipMetadata.length > 0) {
           libraryEntryId = useCageStore.getState().ingestLiveCageSession({
             masterVideoPath,
-            club: 'unknown',
+            club: activeClub,
             upload,
             shots: clipMetadata.map(clip => ({
               correlationId: clip.id,
@@ -413,7 +418,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           // so the library still has an entry the user can review.
           libraryEntryId = useCageStore.getState().ingestUploadedSwing({
             clipUri: masterVideoPath,
-            club: 'unknown',
+            club: activeClub,
             upload,
             source: 'live_cage',
           });
