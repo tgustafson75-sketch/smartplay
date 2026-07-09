@@ -1,50 +1,99 @@
 /**
  * 2026-06-11 — Tempo Trainer (Tour Tempo style).
+ * 2026-07-08 — Reworked into a "Choose Your Training Mode" selector (Tim): a clean
+ *   card menu — 3:1 Full Swing trainer, 2:1 Short Game trainer, and GolfFather
+ *   personal swing analysis — modeled on the intuitive tempo layout, rendered in
+ *   OUR product language (dark surface, neon-green #88F700 accent, persona-brand
+ *   feel). The metronome engine below is unchanged; the menu just picks its ratio.
  *
- * Tank's idea, v1 (the "works best for now" piece): a fixed-ratio audio
- * metronome the player swings to. Three tones per swing at a 3:1
- * backswing:downswing ratio — tick (takeaway) · tick (top) · tock (strike) —
- * looped with a rest so you reset between reps. Pure audio + haptics; no
- * detection, no analysis dependency.
+ * Tank's idea, v1 (the "works best for now" piece): a fixed-ratio audio metronome
+ * the player swings to. Three tones per swing — tick (takeaway) · tick (top) ·
+ * tock (strike) — looped with a rest so you reset between reps. Pure audio +
+ * haptics; no detection, no analysis dependency.
  *
- * NOTE: this plays tones through the speaker, so it is NOT meant to run during
- * CAGE acoustic capture (the strike mic would hear the tones). It's a standalone
- * drill — practice the beat here, or run it on headphones alongside a recording.
+ * NOTE: this plays tones through the speaker, so it is NOT meant to run during CAGE
+ * acoustic capture (the strike mic would hear the tones). Standalone drill, or on
+ * headphones alongside a recording.
  *
- * The adaptive, event-driven version (tones tied to real ball-departure + smash,
- * which also restores honest range tempo) is the bigger follow-up — see memory
- * tempo-tones-idea.
+ * The adaptive, event-driven version (tones tied to real ball-departure + smash) is
+ * the bigger follow-up — see memory tempo-tones-idea.
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, AppState } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, AppState, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../contexts/ThemeContext';
 
-// Tour Tempo presets — frames at 30fps, ratio 3:1 (backswing:downswing).
-const PRESETS = [
+// Canonical SmartPlay neon green — the brand accent (mirrors colors.accent, pinned
+// here for the ratio badges so they read the same in either theme).
+const NEON = '#88F700';
+const GOLD = '#E8B23A';
+
+type TrainerMode = 'full' | 'short';
+
+// Full-swing presets — Tour Tempo, 30fps, 3:1 (backswing:downswing).
+const FULL_PRESETS = [
   { key: 'learn',    label: 'Learning', frames: '30/10', back: 1000, down: 333 },
   { key: 'smooth',   label: 'Smooth',   frames: '27/9',  back: 900,  down: 300 },
   { key: 'standard', label: 'Standard', frames: '24/8',  back: 800,  down: 267 },
   { key: 'quick',    label: 'Quick',    frames: '21/7',  back: 700,  down: 233 },
 ] as const;
 
+// Short-game presets — 2:1 (a shorter, quieter motion; chips/pitches/bunker/putt-style).
+const SHORT_PRESETS = [
+  { key: 'learn',    label: 'Learning', frames: '20/10', back: 667, down: 333 },
+  { key: 'smooth',   label: 'Smooth',   frames: '18/9',  back: 600, down: 300 },
+  { key: 'standard', label: 'Standard', frames: '16/8',  back: 533, down: 267 },
+  { key: 'quick',    label: 'Quick',    frames: '14/7',  back: 467, down: 233 },
+] as const;
+
 const REST_MS = 2000; // pause between reps so the player can reset/re-address
 
 type Beat = 'takeaway' | 'top' | 'strike' | null;
 
+// ─── The mode-selection cards (the "Choose Your Training Mode" screen) ───────────
+const MODE_CARDS: {
+  key: TrainerMode;
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  ratio: string;
+  blurb: string;
+  chips: string[];
+}[] = [
+  {
+    key: 'full',
+    icon: 'trending-up',
+    title: '3:1 Full Swing Tempo Trainer',
+    ratio: '3:1',
+    blurb: 'For driver, irons, hybrids, fairway woods, and full wedges.',
+    chips: ['Driver', 'Irons', 'Hybrids', 'Fairway Woods', 'Full Wedges'],
+  },
+  {
+    key: 'short',
+    icon: 'flag',
+    title: '2:1 Short Game Tempo Trainer',
+    ratio: '2:1',
+    blurb: 'For chips, pitches, partial wedges, bunker shots, and putting-style strokes.',
+    chips: ['Chips', 'Pitches', 'Partial Wedges', 'Bunker Shots', 'Putting-style'],
+  },
+];
+
 export default function TempoTrainerScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const [presetKey, setPresetKey] = useState<typeof PRESETS[number]['key']>('standard');
+
+  // 'menu' = the mode selector; 'full'/'short' = the running metronome for that mode.
+  const [mode, setMode] = useState<'menu' | TrainerMode>('menu');
+  const presets = mode === 'short' ? SHORT_PRESETS : FULL_PRESETS;
+  const [presetKey, setPresetKey] = useState<string>('standard');
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState<Beat>(null);
   const [ready, setReady] = useState(false);
 
-  const preset = PRESETS.find((p) => p.key === presetKey)!;
+  const preset = presets.find((p) => p.key === presetKey) ?? presets[2];
 
   const tickRef = useRef<Audio.Sound | null>(null);
   const tockRef = useRef<Audio.Sound | null>(null);
@@ -98,9 +147,8 @@ export default function TempoTrainerScreen() {
 
   const start = useCallback(async () => {
     if (!ready) return;
-    // 2026-06-11 (audit) — set the playback audio mode only when actually
-    // starting (so merely visiting the screen doesn't change the app's global
-    // audio session). playsInSilentModeIOS lets the tones be heard on silent.
+    // 2026-06-11 (audit) — set the playback audio mode only when actually starting
+    // (so merely visiting the screen doesn't change the app's global audio session).
     try { await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false, shouldDuckAndroid: true }); } catch { /* tones may be muted on silent */ }
     runningRef.current = true; setRunning(true);
     scheduleCycle(preset.back, preset.down);
@@ -113,8 +161,6 @@ export default function TempoTrainerScreen() {
   }, []);
 
   // Stop the metronome when the app backgrounds (phone call, home button).
-  // Without this, the recursive setTimeout loop keeps draining battery
-  // and the audio session stays open against OS policy.
   useEffect(() => {
     const sub = AppState.addEventListener('change', next => {
       if (next !== 'active') stop();
@@ -123,37 +169,122 @@ export default function TempoTrainerScreen() {
   }, [stop]);
 
   // Changing the tempo while running restarts cleanly on the new ratio.
-  const selectPreset = useCallback((k: typeof PRESETS[number]['key']) => {
+  const selectPreset = useCallback((k: string) => {
     setPresetKey(k);
     if (runningRef.current) {
       timersRef.current.forEach(clearTimeout); timersRef.current = [];
-      const p = PRESETS.find((x) => x.key === k)!;
+      const p = presets.find((x) => x.key === k) ?? presets[2];
       scheduleCycle(p.back, p.down);
     }
-  }, [scheduleCycle]);
+  }, [presets, scheduleCycle]);
+
+  // Enter a trainer from the menu; leaving a trainer stops it and returns to the menu.
+  const openMode = useCallback((m: TrainerMode) => { setPresetKey('standard'); setMode(m); }, []);
+  const backToMenu = useCallback(() => { stop(); setMode('menu'); }, [stop]);
 
   const ratio = (preset.back / preset.down).toFixed(1);
   const beats: { key: Beat; label: string }[] = [
     { key: 'takeaway', label: 'TAKEAWAY' },
-    { key: 'top', label: 'TOP' },
+    { key: 'top', label: mode === 'short' ? 'HINGE' : 'TOP' },
     { key: 'strike', label: 'STRIKE' },
   ];
 
+  // ─── MENU: Choose Your Training Mode ──────────────────────────────────────────
+  if (mode === 'menu') {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={26} color={colors.accent} />
+          </Pressable>
+          <Text style={[styles.title, { color: colors.text_primary }]}>Tempo Trainer & Analysis</Text>
+          <View style={styles.headerIcon} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.menuBody} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.h1, { color: colors.text_primary }]}>Choose your training mode</Text>
+          <Text style={[styles.h1sub, { color: colors.text_muted }]}>
+            Pick a tempo trainer to swing to the beat, or let your caddie read your real swing.
+          </Text>
+
+          {MODE_CARDS.map((card) => (
+            <Pressable
+              key={card.key}
+              onPress={() => openMode(card.key)}
+              style={({ pressed }) => [
+                styles.card,
+                { backgroundColor: colors.surface, borderColor: NEON, opacity: pressed ? 0.9 : 1 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={card.title}
+            >
+              <View style={styles.cardTop}>
+                <View style={[styles.cardIcon, { backgroundColor: 'rgba(136,247,0,0.12)' }]}>
+                  <Ionicons name={card.icon} size={22} color={NEON} />
+                </View>
+                <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{card.title}</Text>
+                <View style={[styles.ratioBadge, { backgroundColor: 'rgba(136,247,0,0.14)', borderColor: NEON }]}>
+                  <Text style={[styles.ratioBadgeText, { color: NEON }]}>{card.ratio}</Text>
+                </View>
+              </View>
+              <Text style={[styles.cardBlurb, { color: colors.text_muted }]}>{card.blurb}</Text>
+              <View style={styles.chipRow}>
+                {card.chips.map((chip) => (
+                  <View key={chip} style={[styles.chip, { borderColor: colors.border }]}>
+                    <Text style={[styles.chipText, { color: colors.text_muted }]}>{chip}</Text>
+                  </View>
+                ))}
+              </View>
+            </Pressable>
+          ))}
+
+          {/* GolfFather personal swing analysis — the premium, AI-read tier (routes to the
+              real honest tempo analysis, Smart Tempo). Gold-accented to read as premium. */}
+          <Pressable
+            onPress={() => router.push('/swinglab/smart-tempo' as never)}
+            style={({ pressed }) => [
+              styles.card,
+              { backgroundColor: colors.surface, borderColor: GOLD, opacity: pressed ? 0.9 : 1 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="GolfFather personal swing analysis"
+          >
+            <View style={styles.cardTop}>
+              <View style={[styles.cardIcon, { backgroundColor: 'rgba(232,178,58,0.14)' }]}>
+                <Ionicons name="ribbon" size={22} color={GOLD} />
+              </View>
+              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>GolfFather Personal Swing Analysis</Text>
+              <View style={[styles.ratioBadge, { backgroundColor: 'rgba(232,178,58,0.16)', borderColor: GOLD }]}>
+                <Text style={[styles.ratioBadgeText, { color: GOLD }]}>PREMIUM</Text>
+              </View>
+            </View>
+            <Text style={[styles.cardBlurb, { color: colors.text_muted }]}>
+              Record a swing and your caddie reads YOUR real tempo, positions, and the fault
+              that&apos;s costing you — no guessing, only what the swing actually shows.
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── TRAINER: the metronome for the chosen mode ───────────────────────────────
+  const modeTitle = mode === 'short' ? 'Short Game Tempo' : 'Full Swing Tempo';
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Back">
+        <Pressable onPress={backToMenu} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Back to training modes">
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Tempo Trainer</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{modeTitle}</Text>
         <View style={styles.headerIcon} />
       </View>
 
       <View style={styles.body}>
         <Text style={[styles.sub, { color: colors.text_muted }]}>
           Swing to the beat — <Text style={{ color: colors.text_primary, fontWeight: '800' }}>tick</Text> takeaway,
-          {' '}<Text style={{ color: colors.text_primary, fontWeight: '800' }}>tick</Text> top,
-          {' '}<Text style={{ color: colors.accent, fontWeight: '800' }}>tock</Text> strike. A pro tempo is {ratio}:1.
+          {' '}<Text style={{ color: colors.text_primary, fontWeight: '800' }}>tick</Text> {mode === 'short' ? 'hinge' : 'top'},
+          {' '}<Text style={{ color: colors.accent, fontWeight: '800' }}>tock</Text> strike. Target tempo {ratio}:1.
         </Text>
 
         {/* Ratio readout + pulse ring */}
@@ -187,7 +318,7 @@ export default function TempoTrainerScreen() {
         {/* Tempo presets */}
         <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>TEMPO</Text>
         <View style={styles.presetRow}>
-          {PRESETS.map((p) => {
+          {presets.map((p) => {
             const sel = p.key === presetKey;
             return (
               <Pressable
@@ -217,7 +348,7 @@ export default function TempoTrainerScreen() {
         </Pressable>
 
         <Text style={[styles.foot, { color: colors.text_muted }]}>
-          Tip: this plays through the speaker — use it as a standalone drill, or on headphones when recording in cage mode (so the strike mic will not hear the tones).
+          Tip: this plays through the speaker — use it standalone, or on headphones when recording in cage mode (so the strike mic won&apos;t hear the tones).
         </Text>
       </View>
     </SafeAreaView>
@@ -228,7 +359,24 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 8 },
   headerIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '900', letterSpacing: 0.2 },
+  title: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '900', letterSpacing: 0.2 },
+
+  // Menu
+  menuBody: { paddingHorizontal: 18, paddingBottom: 32 },
+  h1: { fontSize: 26, fontWeight: '900', letterSpacing: 0.2, marginTop: 6 },
+  h1sub: { fontSize: 14, lineHeight: 20, marginTop: 6, marginBottom: 18 },
+  card: { borderWidth: 1.5, borderRadius: 18, padding: 16, marginBottom: 14 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { flex: 1, fontSize: 16, fontWeight: '800', lineHeight: 21 },
+  ratioBadge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  ratioBadgeText: { fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  cardBlurb: { fontSize: 13, lineHeight: 19, marginTop: 12 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  chipText: { fontSize: 11, fontWeight: '700' },
+
+  // Trainer
   body: { flex: 1, paddingHorizontal: 24, alignItems: 'center' },
   sub: { fontSize: 14, lineHeight: 21, textAlign: 'center', marginTop: 8 },
   ratioWrap: { marginTop: 28, height: 150, width: 150, borderRadius: 75, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
