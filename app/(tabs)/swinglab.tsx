@@ -20,7 +20,7 @@
  * Card title/sub render from i18n (swinglab.card_<key>_title/sub).
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, Pressable, ScrollView, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
@@ -252,6 +252,22 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
   },
 ];
 
+// 2026-07-10 (Tim — "break the three sections into three cards, one primary drill each,
+// expand for the rest — cleaner look"). Each section collapses to its PRIMARY drill
+// (index 0, ordered most-important-first); "Show N more" reveals the rest. Turns a
+// 15-card scroll into hero + 3 tidy cards.
+interface HubSection {
+  key: keyof typeof SECTION_SEGMENTS;
+  headerKey: string;
+  headerDefault: string;
+  cards: LauncherCardSpec[];
+}
+const SECTIONS: HubSection[] = [
+  { key: 'practice', headerKey: 'swinglab.sec_practice', headerDefault: 'PRACTICE BETTER', cards: PRACTICE_SECTION },
+  { key: 'play',     headerKey: 'swinglab.sec_play',     headerDefault: 'PLAY SMARTER',    cards: PLAY_SECTION },
+  { key: 'prepare',  headerKey: 'swinglab.sec_prepare',  headerDefault: 'PREPARE BETTER',  cards: PREPARE_SECTION },
+];
+
 /** Fade a hex color to an rgba string (for tinted icon boxes + tag chips). */
 function hexFade(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -298,6 +314,9 @@ export default function SwingLab() {
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
   // unchanged.
   const { isWide } = useDeviceLayout();
+  // 2026-07-10 (Tim) — per-section expand state; sections start collapsed to their
+  // primary drill for a clean landing, expand to reveal the rest.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
   // swing commands" prompt. Active listening is Caddie-tab + round-only and was
@@ -329,47 +348,44 @@ export default function SwingLab() {
           onPress={() => router.push(HERO_CARD.route as never)}
         />
 
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
-          {t('swinglab.sec_practice', { defaultValue: 'PRACTICE BETTER' })}
-        </Text>
-        {/* PRACTICE → TEAL → CYAN, graduated top→bottom. */}
-        {PRACTICE_SECTION.map((card, i) => (
-          <LauncherCard
-            key={card.key}
-            spec={card}
-            accent={segmentColor(SECTION_SEGMENTS.practice[0], SECTION_SEGMENTS.practice[1], i, PRACTICE_SECTION.length)}
-            colors={colors}
-            onPress={() => router.push(card.route as never)}
-          />
-        ))}
-
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
-          {t('swinglab.sec_play', { defaultValue: 'PLAY SMARTER' })}
-        </Text>
-        {/* PLAY → CYAN → SKY, graduated top→bottom (continues from PRACTICE's cyan end). */}
-        {PLAY_SECTION.map((card, i) => (
-          <LauncherCard
-            key={card.key}
-            spec={card}
-            accent={segmentColor(SECTION_SEGMENTS.play[0], SECTION_SEGMENTS.play[1], i, PLAY_SECTION.length)}
-            colors={colors}
-            onPress={() => router.push(card.route as never)}
-          />
-        ))}
-
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
-          {t('swinglab.sec_prepare', { defaultValue: 'PREPARE BETTER' })}
-        </Text>
-        {/* PREPARE → SKY → INDIGO, graduated top→bottom (continues from PLAY's sky end → indigo). */}
-        {PREPARE_SECTION.map((card, i) => (
-          <LauncherCard
-            key={card.key}
-            spec={card}
-            accent={segmentColor(SECTION_SEGMENTS.prepare[0], SECTION_SEGMENTS.prepare[1], i, PREPARE_SECTION.length)}
-            colors={colors}
-            onPress={() => router.push(card.route as never)}
-          />
-        ))}
+        {/* 2026-07-10 (Tim) — each section collapses to its PRIMARY drill; "Show N more"
+            reveals the rest. The section spectrum still graduates by the card's index in
+            the FULL section list, so colors stay consistent whether collapsed or expanded. */}
+        {SECTIONS.map((section) => {
+          const seg = SECTION_SEGMENTS[section.key];
+          const isExpanded = !!expanded[section.key];
+          const rest = section.cards.slice(1);
+          const visible = isExpanded ? section.cards : section.cards.slice(0, 1);
+          return (
+            <View key={section.key}>
+              <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>
+                {t(section.headerKey, { defaultValue: section.headerDefault })}
+              </Text>
+              {visible.map((card, i) => (
+                <LauncherCard
+                  key={card.key}
+                  spec={card}
+                  accent={segmentColor(seg[0], seg[1], i, section.cards.length)}
+                  colors={colors}
+                  onPress={() => router.push(card.route as never)}
+                />
+              ))}
+              {rest.length > 0 && (
+                <Pressable
+                  onPress={() => setExpanded((e) => ({ ...e, [section.key]: !e[section.key] }))}
+                  accessibilityRole="button"
+                  accessibilityLabel={isExpanded ? 'Show fewer' : `Show ${rest.length} more`}
+                  style={({ pressed }) => [styles.expandRow, pressed && { opacity: 0.6 }]}
+                >
+                  <Text style={[styles.expandText, { color: colors.accent }]}>
+                    {isExpanded ? 'Show less' : `Show ${rest.length} more`}
+                  </Text>
+                  <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.accent} />
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
        </View>
       </ScrollView>
       <QuickTutorial
@@ -501,6 +517,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 10,
     marginBottom: 8,
+  },
+  // 2026-07-10 (Tim) — "Show N more" / "Show less" expander under a section's primary card.
+  expandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    marginHorizontal: 16,
+    marginTop: 2,
+  },
+  expandText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   // 2026-06-16 (Tim) — 2-up grid of compact, icon-led tiles (was big full-width
   // buttons). space-between gives a clean gutter without percentage+gap overflow,
