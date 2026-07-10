@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { prewarmVoice } from '../../services/voiceWarmup';
-import { clearScreenContext } from '../../services/screenContext';
+import { clearScreenContext, getScreenContext } from '../../services/screenContext';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
@@ -776,6 +776,42 @@ export default function CaddieTab() {
   useFocusEffect(
     useCallback(() => {
       return () => clearScreenContext('getting to know the golfer');
+    }, []),
+  );
+
+  // 2026-07-10 (Tim — "#5 interview loops back to the caddie tab / no indication it's an
+  // interview"; picker choice: "Kevin speaks first"). When the get-to-know context is
+  // active on entry, the caddie PROACTIVELY opens the conversation — greets + asks the
+  // first open question ALOUD, then hands the mic to the player so the answer is captured
+  // and (post-fix) ingested into the CNS profile. Fires once per entry; off-round + voice-
+  // on only. Turns a silent "you're just on the caddie tab" into an obvious interview.
+  const getToKnowOpenedRef = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (getToKnowOpenedRef.current) return;
+      if (getScreenContext()?.screen !== 'getting to know the golfer') return;
+      if (useRoundStore.getState().isRoundActive) return; // off-round only
+      getToKnowOpenedRef.current = true;
+      const opener =
+        "Alright — let's actually get to know your game. No wrong answers, just us talking. " +
+        "To start: how'd you get into golf, and how much time do you really have to play and practice these days?";
+      const t = setTimeout(() => {
+        setCaddieResponse(opener);
+        const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
+        if (voiceEnabled) {
+          setVoiceState('proactive');
+          speak(opener, vg, lang, apiUrl)
+            .catch(() => {})
+            .finally(() => {
+              setVoiceState('idle');
+              // Hand the mic to the player so the answer is heard without hunting for a
+              // button — hands-free is the product. Best-effort; a failure just means a tap.
+              try { handleMicPressRef.current(); } catch { /* best-effort */ }
+            });
+        }
+      }, 1400);
+      return () => { clearTimeout(t); getToKnowOpenedRef.current = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );
 
