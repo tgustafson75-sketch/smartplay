@@ -42,6 +42,7 @@ import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
+import { useConversationLog } from '../store/conversationLogStore';
 import { buildFullPracticeContext } from '../services/tutorialContext';
 import { screenContextForPrompt } from '../services/screenContext';
 import { useWatchStore } from '../store/watchStore';
@@ -1753,6 +1754,15 @@ export const useVoiceCaddie = ({
       // follow-up reply that flows out of this query has the prior turn
       // available in its context.
       recordUserTurn(transcript);
+      // 2026-07-10 (Tim — "#5 interview doesn't build a profile") — the MAIN caddie
+      // voice path never wrote turns to useConversationLog, the store narrativeIngest
+      // observes to distill the golfer's profile into the CNS. Only captureUtterance
+      // (follow-up loops) logged. So the get-to-know answers were transcribed, sent to
+      // the brain, and spoken back — but NEVER ingested, so the profile stayed empty.
+      // Mirror captureUtterance's log here (FREEZE-safe: additive, best-effort, does
+      // NOT touch transcription / VAD / the response flow). This is what makes every
+      // conversation — get-to-know or not — teach the caddie who you are.
+      try { useConversationLog.getState().logUser(transcript, Date.now()); } catch { /* non-fatal */ }
 
       const appContext: AppContext = {
         active_screen: pathnameToSurface(currentPathname),
