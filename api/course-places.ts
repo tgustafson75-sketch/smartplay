@@ -4,11 +4,19 @@ import { applyCors } from './_cors';
 /**
  * 2026-07-10 (audit S2) — SERVER proxy for the course website/phone lookup that used to run
  * client-side against Google Places with a key SHIPPED IN THE APP BUNDLE (extractable → billable
- * abuse). The key now lives ONLY here as a server env var (GOOGLE_MAPS_KEY), so it's never in
- * the client. Same contract the old services/coursePlaces.ts had: name + coords → { website, phone }.
+ * abuse). The key now lives ONLY here as a server env var, so it's never in the client. Same
+ * contract the old services/coursePlaces.ts had: name + coords → { website, phone }.
  * Best-effort: any failure / Places-not-enabled → { website: null, phone: null }.
+ *
+ * KEY RESOLUTION: Tim's Google key in Vercel is `GOOGLE_API_KEY` (one key, all APIs enabled) —
+ * the same key the AI provider uses. Prefer a dedicated GOOGLE_MAPS_KEY if one is ever set, but
+ * fall back to GOOGLE_API_KEY so this works with the key that's actually in the env today.
  */
-const KEY = process.env.GOOGLE_MAPS_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
+const KEY =
+  process.env.GOOGLE_MAPS_KEY ||
+  process.env.GOOGLE_API_KEY ||
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ||
+  '';
 const TIMEOUT_MS = 8_000;
 
 function isNum(v: unknown): v is number { return typeof v === 'number' && Number.isFinite(v); }
