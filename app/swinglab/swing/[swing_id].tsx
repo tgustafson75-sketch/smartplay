@@ -11,7 +11,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
-  Pressable, Easing,
+  Pressable, Easing, PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -32,6 +32,7 @@ import { useTrustLevelStore } from '../../../store/trustLevelStore';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
+import { detectClubPath } from '../../../services/swing/clubPath';
 // 2026-06-23 — Fix: the swing-detail DrillCard showed the "appear once analysis
 // is available" placeholder even when analysis SUCCEEDED with a detected fault,
 // because it read only the separately-stored session.drill_recommendation (null
@@ -383,6 +384,28 @@ export default function SwingDetail() {
   const poseFrames = session?.biomechanics?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
 
+  // 2026-07-10 (Tim — "swing arc not corrected") — the swing LIBRARY drew only the
+  // wrist-proxy trace; the REAL detected clubhead arc was wired in SmartMotion but
+  // never here. Run the same clubhead detector across THIS swing's window and feed
+  // the overlay, so the library shows the true clubhead path (falls back to the
+  // honest wrist trace when the head can't be seen). One server pass per swing.
+  const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  useEffect(() => {
+    if (!hasPose || !shot?.clipUri || !(showSkeleton || showTrace)) { setClubArcPoints(null); return; }
+    const startMs = (shot.clipStartSeconds ?? 0) * 1000;
+    const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
+    if (!(endMs > startMs)) { setClubArcPoints(null); return; }
+    let cancelled = false;
+    void detectClubPath({ videoUri: shot.clipUri, startMs, endMs })
+      .then((r) => {
+        if (cancelled) return;
+        setClubArcPoints(r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace]);
+
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
   // mount below), so "Grab Frame" and the coach report carry the skeleton + trace
@@ -540,6 +563,28 @@ export default function SwingDetail() {
     }
   }, [analysisStatus, voiceEnabled, trustLevel, apiUrl]);
 
+  // 2026-07-10 (Tim — "just analyze the video") — warm the swing-analysis Lambda +
+  // Gemini H2 pool THE MOMENT an unanalyzed upload opens, in parallel with the auto-
+  // analyze effect's coarse-frame extraction (~1-2s). The auto pass's first call is
+  // locate_swing (Gemini 2.5 Flash) — the SAME model warmup pings. Cold, that call
+  // was blowing the 25s client abort (telemetry: swing_locate_fallback "Aborted"),
+  // which smeared the fallback read. Warm, locate lands in ~2-3s. Fire-and-forget;
+  // once per mount; no-op if already analyzed.
+  const analysisWarmedRef = useRef(false);
+  useEffect(() => {
+    if (analysisWarmedRef.current) return;
+    if (analysisStatus !== 'pending') return;
+    if (session?.source !== 'uploaded_video') return;
+    if (!apiUrl) return;
+    analysisWarmedRef.current = true;
+    void fetch(`${apiUrl}/api/swing-analysis`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'warmup' }),
+      signal: AbortSignal.timeout(15_000),
+    }).catch(() => { /* best-effort warmup; locate falls back on its own */ });
+  }, [analysisStatus, session?.source, apiUrl]);
+
   // 2026-06-15 (Tim — manual analyze) — clear the in-flight guard once a manual
   // analyze leaves the brief 'pending' window (runPhaseK moves status to
   // analyzing_*). MUST live above the early returns (rules-of-hooks).
@@ -678,6 +723,53 @@ export default function SwingDetail() {
     setUserScrubbed(true);
     await videoRef.current?.setPositionAsync(sec * 1000);
     await videoRef.current?.pauseAsync();
+  };
+
+  // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
+  // library") — a real transport deck below the frame: jog ±2s, single-frame step
+  // (~1/30s), restart, and a DRAGGABLE scrubber. All seek helpers hold the frame
+  // (via scrubTo) so the deck is for studying a swing, not just playing it.
+  const FRAME_SEC = 1 / 30;
+  const seekBy = useCallback((deltaSec: number) => {
+    const d = durationRef.current;
+    if (!d || d <= 0) return;
+    const target = Math.max(0, Math.min(d, positionRef.current + deltaSec));
+    void scrubTo(target);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Live refs so the once-created PanResponder + the jog buttons read current
+  // position/duration without stale closures.
+  const positionRef = useRef(0);
+  const durationRef = useRef<number | null>(null);
+  useEffect(() => { positionRef.current = position; }, [position]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  const scrubTrackWRef = useRef(0);
+  const [scrubbing, setScrubbing] = useState(false);
+  const seekFromTouch = (locationX: number) => {
+    const w = scrubTrackWRef.current;
+    const d = durationRef.current;
+    if (!w || w <= 0 || !d || d <= 0) return;
+    const frac = Math.max(0, Math.min(1, locationX / w));
+    void scrubTo(frac * d);
+  };
+  const scrubPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        setScrubbing(true);
+        seekFromTouch(evt.nativeEvent.locationX);
+      },
+      onPanResponderMove: (evt) => seekFromTouch(evt.nativeEvent.locationX),
+      onPanResponderRelease: () => setScrubbing(false),
+      onPanResponderTerminate: () => setScrubbing(false),
+    }),
+  ).current;
+  const fmtClock = (sec: number) => {
+    if (!Number.isFinite(sec) || sec < 0) sec = 0;
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   // 2026-05-25 — Safety-net auto-fire for stuck-on-pending analysis.
@@ -1575,6 +1667,7 @@ export default function SwingDetail() {
                   // diagnosed fault's body region orange/red on the skeleton.
                   faultJoints={faultJointsFor(session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id)}
                   faultSevere={session?.primary_issue?.severity === 'significant'}
+                  clubArc={clubArcPoints}
                 />
               )}
               <CageTargetingOverlay
@@ -1666,6 +1759,76 @@ export default function SwingDetail() {
               </Pressable>
               </Animated.View>
             </View>
+            {/* 2026-07-10 (Tim) — TRANSPORT DECK: draggable scrubber + jog/step/play
+                controls below the frame. Replaces the "where are the controls?" gap
+                with a real film-study deck. */}
+            {!videoError && (
+              <View style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 14, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 8, marginBottom: 4, marginTop: -2 }}>
+                {/* Scrubber */}
+                <View
+                  {...scrubPanResponder.panHandlers}
+                  onLayout={(e) => { scrubTrackWRef.current = e.nativeEvent.layout.width; }}
+                  style={{ height: 28, justifyContent: 'center' }}
+                  accessibilityRole="adjustable"
+                  accessibilityLabel="Scrubber — drag to move through the swing"
+                >
+                  <View style={{ height: 5, borderRadius: 3, backgroundColor: 'rgba(148,163,184,0.28)', overflow: 'visible' }}>
+                    {(() => {
+                      const frac = duration && duration > 0 ? Math.max(0, Math.min(1, position / duration)) : 0;
+                      return (
+                        <>
+                          <View style={{ height: 5, borderRadius: 3, width: `${frac * 100}%`, backgroundColor: '#88F700' }} />
+                          <View
+                            style={{
+                              position: 'absolute', top: -5, left: `${frac * 100}%`, marginLeft: -8,
+                              width: 16, height: 16, borderRadius: 8, backgroundColor: '#88F700',
+                              borderWidth: 2, borderColor: '#0B1220',
+                              transform: [{ scale: scrubbing ? 1.25 : 1 }],
+                            }}
+                          />
+                        </>
+                      );
+                    })()}
+                  </View>
+                </View>
+                {/* Time + transport */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                  <Text style={{ color: colors.text_muted, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'], minWidth: 78 }}>
+                    {fmtClock(position)} / {fmtClock(duration ?? 0)}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <TouchableOpacity onPress={() => void scrubTo(0)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Restart">
+                      <Ionicons name="play-skip-back" size={19} color={colors.text_primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => seekBy(-2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Back 2 seconds">
+                      <Ionicons name="play-back" size={20} color={colors.text_primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => seekBy(-FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Previous frame">
+                      <Ionicons name="caret-back-outline" size={17} color={colors.text_muted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={togglePlayPause} style={{ width: 46, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.accent_muted, marginHorizontal: 2 }} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Play'}>
+                      <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={colors.accent} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => seekBy(FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Next frame">
+                      <Ionicons name="caret-forward-outline" size={17} color={colors.text_muted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => seekBy(2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Forward 2 seconds">
+                      <Ionicons name="play-forward" size={20} color={colors.text_primary} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    onPress={cycleSlowMo}
+                    style={{ minWidth: 40, height: 40, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: playbackRate < 1 ? colors.accent : colors.border }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Playback speed ${playbackRate} times; tap to change`}
+                  >
+                    <Text style={{ color: playbackRate < 1 ? colors.accent : colors.text_muted, fontSize: 12, fontWeight: '800' }}>
+                      {playbackRate === 1 ? '1×' : playbackRate === 0.5 ? '½×' : '¼×'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
             {hasPose && (
               <View style={[styles.toggleRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                 <TouchableOpacity
@@ -1723,38 +1886,26 @@ export default function SwingDetail() {
         )}
 
         {/* Phase V — analysis processing / failure / done.
-            2026-06-15 (Tim) — the library is MANUAL: a 'pending' upload is STATIC
-            (verified, not analyzed) and shows an ANALYZE CTA, not a spinner. Only the
-            analyzing_* in-flight states show the spinner. */}
+            2026-07-10 (Tim — "just analyze the video, don't make me find the swing;
+            it keeps reintroducing") — an uploaded clip AUTO-analyzes on open: the
+            auto-analyze effect above LOCATES the swing in the clip and windows the
+            read on it, no manual marking. So a 'pending' upload is NOT idle — it's
+            the auto pass in flight (locate can take a beat on a cold call). Show the
+            ANALYZING SPINNER, never a "point at your swing" CTA. Manual scrubbing
+            survives ONLY as the post-read "Swing-Point Analyzer" refine (below) and
+            the failed-state fallback — never as the first-analysis step. Live
+            captures (cage / Smart Motion) already carve their swings. */}
         <View style={{ marginTop: 16 }}>
           {analysisStatus === 'pending' && (
-            // 2026-06-15 (Tim — uploads never showed the skeleton/4-card read) — an
-            // uploaded clip is usually 30-60s with the swing buried somewhere inside.
-            // The default full-clip analyze smears the pose across the whole minute
-            // (no usable skeleton). So for UPLOADS the primary action is "point at
-            // your swing": scrub the static video to your swing, then analyze THAT
-            // moment — which windows BOTH the cloud read and the on-device pose on the
-            // real swing, so you get the cards AND the moving skeleton. Live captures
-            // (cage / Smart Motion) already carve their swings, so they keep the plain
-            // one-tap analyze.
             session.source === 'uploaded_video' ? (
-              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Point at your swing</Text>
-                <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                  Scrub the video to your swing (around impact), then analyze that moment — you&apos;ll get the full read and the moving skeleton.
-                </Text>
-                <TouchableOpacity
-                  onPress={onAnalyzeAtPosition}
-                  disabled={analyzeInFlightRef.current}
-                  style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
-                >
-                  <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>
-                    Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
+              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <ActivityIndicator color={colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Analyzing your swing…</Text>
+                  <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                    Finding your swing in the clip and reading it — about a minute. You can stay on this screen.
                   </Text>
-                </TouchableOpacity>
+                </View>
               </View>
             ) : (
               <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
