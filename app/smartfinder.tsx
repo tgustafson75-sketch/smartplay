@@ -586,10 +586,10 @@ function CameraSmartFinder({
   // returning from Settings unblocks the screen automatically.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') { void requestCameraPermission(); }
+      if (next === 'active' && cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) { void requestCameraPermission(); }
     });
     return () => sub.remove();
-  }, [requestCameraPermission]);
+  }, [requestCameraPermission, cameraPermission]);
 
   // 2026-06-17 — Scene read extracted so both the eye button and the
   // auto-read voice trigger can call the same code path.

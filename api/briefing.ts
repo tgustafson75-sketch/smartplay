@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
-import { completeText, providerFromHeader } from './_aiProvider';
+import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 const MODE_DESCRIPTIONS: Record<string, string> = {
   break_100: 'Break 100 — avoid doubles, bogey is success, lay up by default',
@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // so the Lambda + provider SDK + TLS are hot by the time the hole-1 handoff
   // actually generates the brief. Single 'ping', max_tokens:1 (~$0.0001 per warmup).
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     try {
       await completeText(warmProvider, 'quality', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
       console.log(`[briefing] warmup completed (${warmProvider} SDK hot)`);
@@ -153,7 +153,7 @@ ${recentReflectionBlock}
 
 Give the pre-round briefing now.`;
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const brief = await completeText(provider, 'quality', systemPrompt, [{ role: 'user', content: userMessage }], { maxTokens: 200 });
 
     if (!brief) {

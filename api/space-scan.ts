@@ -16,7 +16,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
-import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
+import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 const SPACE_ASSESSMENT_SCHEMA: StructuredSchema = {
   name: 'space_assessment',
@@ -227,7 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const personaInput: Persona | VoiceGender =
       (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
       'Read this practice space and tell me how to use it.',
       [{ b64: image_b64, mimeType: image_media_type }],

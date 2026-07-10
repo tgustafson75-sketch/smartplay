@@ -12,7 +12,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName } from '../lib/persona';
-import { completeVision, providerFromHeader, type AiImageInput, type StructuredSchema } from './_aiProvider';
+import { completeVision, providerFromHeaderSafe, type AiImageInput, type StructuredSchema } from './_aiProvider';
 
 const MAX_FRAMES = 6;
 
@@ -200,7 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(warmShell(body.member, body.age_band, caddieName, body.prior_swing ?? null));
     }
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const images: AiImageInput[] = frames.map(b64 => ({ b64, mimeType: 'image/jpeg' }));
     const ctx: string[] = [];
     ctx.push(`Golfer: ${body.member.first_name}${body.member.nickname ? ` ("${body.member.nickname}")` : ''}`);

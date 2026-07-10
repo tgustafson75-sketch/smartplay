@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-import { completeVision, providerFromHeader, type AiImageInput, type StructuredSchema } from './_aiProvider';
+import { completeVision, providerFromHeaderSafe, type AiImageInput, type StructuredSchema } from './_aiProvider';
 
 /**
  * Phase BR — Tutorial teaching-content extraction.
@@ -165,7 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? [{ b64: frame.b64, mimeType: frame.media_type ?? 'image/jpeg' }]
       : [];
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(provider, 'quality', buildSystemPrompt(personaInput),
       inputLines.join('\n'), images,
       { maxTokens: 600, temperature: 0.2, schema: tutorialSchema },

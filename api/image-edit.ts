@@ -105,11 +105,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Cost ladder: Gemini first, OpenAI fallback.
-    let b64 = await geminiImageEdit(imageBase64, prompt);
+    // 2026-07-10 (audit A4) — guard EACH provider call. openaiImageEdit had no internal
+    // try/catch, so an OpenAI error (billing hard-limit — the very reason for this ladder —
+    // moderation, rate limit) propagated to the outer catch → raw 500, instead of the tidy
+    // 502 "both providers returned no image" the exhausted-chain case intends.
+    let b64: string | null = null;
     let provider: 'gemini' | 'openai' = 'gemini';
+    try { b64 = await geminiImageEdit(imageBase64, prompt); } catch (e) { console.warn('[image-edit] gemini failed:', e instanceof Error ? e.message : e); }
     if (!b64) {
-      b64 = await openaiImageEdit(buffer, prompt);
       provider = 'openai';
+      try { b64 = await openaiImageEdit(buffer, prompt); } catch (e) { console.warn('[image-edit] openai failed:', e instanceof Error ? e.message : e); }
     }
     if (!b64) {
       return res.status(502).json({ error: 'Both image providers returned no image' });

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender } from '../lib/persona';
-import { completeText, completeJSON, providerFromHeader, type AiProvider } from './_aiProvider';
+import { completeText, completeJSON, providerFromHeaderSafe, type AiProvider } from './_aiProvider';
 
 // ─── Action: generate a caddie question for a shot ───────────────────────────
 
@@ -230,7 +230,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const body = req.body as Record<string, unknown>;
     const action = String(body.action ?? '');
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
 
     console.log(`[cage-review] action=${action}`);
 

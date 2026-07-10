@@ -19,7 +19,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeText, providerFromHeader } from './_aiProvider';
+import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You are Kevin, an elite AI golf caddie. Based on this player's recent round data, give a 2-3 sentence honest prevailing tendency assessment. Speak directly to the player in Kevin's voice — confident, direct, encouraging. Focus on patterns: what's working, what's costing strokes, one actionable tendency. No bullet points. Natural speech. Never quote the data verbatim; talk about it like a caddie noticing patterns walking next to the player.`;
 
@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Mirrors api/kevin warmup pattern so services/voiceWarmup could
   // optionally also warm this endpoint later. ~$0.00005 per warmup.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     await completeText(warmProvider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 }).catch(() => {});
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
@@ -149,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       summarizeShots(shots),
     ].join('\n');
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeText(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 200 });
 
     if (!text) {

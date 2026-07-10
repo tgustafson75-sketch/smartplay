@@ -54,7 +54,12 @@ export default function Index() {
   useEffect(() => {
     if (!hydrated) return;
     if (!(has_completed_onboarding || isSetupComplete)) return;
-    if (kevinGreetingEnabled && !greetingShownThisProcess) return;
+    // 2026-07-10 (audit L2) — the greeting screen records the launch itself AFTER reading
+    // launch context. It shows exactly when `greetingShownThisProcess` is true (set during
+    // this render's redirect just below). So SKIP here in that case; the previous
+    // `!greetingShownThisProcess` was inverted → index AND greeting both recorded → the
+    // greeting computed daysSinceLastLaunch=0 → wrong "welcome back" variant.
+    if (kevinGreetingEnabled && greetingShownThisProcess) return;
     void recordLaunch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);

@@ -413,13 +413,21 @@ export const openToolHandler: IntentHandler = {
       const feature =
         lookupFeature(toolName) ?? lookupFeature(intent.raw_text ?? '');
       if (feature) {
-        action = { type: 'navigate', path: feature.route };
+        // 2026-07-10 (audit N2) — a catalog match to a PAYWALLED tool must emit its gated
+        // action type (open_smartvision/open_smartfinder), which the dispatcher runs the
+        // canAccess/triggerPaywall check on. A bare `navigate` to the route skipped that gate
+        // (inert while SUBSCRIPTIONS_ENABLED is false, a real bypass the moment billing is on).
+        const GATED_ROUTE_ACTION: Record<string, ToolAction> = {
+          '/smartvision': { type: 'open_smartvision' },
+          '/smartfinder': { type: 'open_smartfinder' },
+        };
+        const act: ToolAction = GATED_ROUTE_ACTION[feature.route] ?? { type: 'navigate', path: feature.route };
         return {
           success: true,
           voice_response: 'Opening ' + feature.name + '.',
           side_effects: ['navigate:' + feature.route, 'catalog_match:' + feature.id],
           follow_up_needed: false,
-          tool_action: { type: 'navigate', path: feature.route },
+          tool_action: act,
         };
       }
     }

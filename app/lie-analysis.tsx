@@ -68,10 +68,10 @@ export default function LieAnalysisScreen() {
   // "Allow Camera" screen stale until next forced re-render.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') { void requestCameraPermission(); }
+      if (next === 'active' && cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) { void requestCameraPermission(); }
     });
     return () => sub.remove();
-  }, [requestCameraPermission]);
+  }, [requestCameraPermission, cameraPermission]);
 
   // 2026-06-15 (audit) — on unmount, stop any in-flight opener TTS + listening
   // capture so a spoken "what do you see?" can't play over the next screen and a

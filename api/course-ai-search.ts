@@ -24,7 +24,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
+import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 // 2026-06-30 — robust JSON extraction. Even with responseSchema, a provider can wrap the
 // object in ```json fences or add a stray preamble; strip those and pull the first {...}
@@ -96,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing search query (q=...)' });
   }
 
-  const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+  const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
   const userPrompt = region
     ? `Course search: "${q.trim()}". The user is near: ${region}. Identify the course.`
     : `Course search: "${q.trim()}". Identify the course.`;

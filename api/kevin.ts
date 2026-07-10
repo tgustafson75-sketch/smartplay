@@ -403,6 +403,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (typeof body.message !== 'string' || !body.message.trim()) {
       return res.status(400).json({ error: 'message (non-empty string) required' });
     }
+    // 2026-07-10 (audit S1) — hard cap on the text field so a huge payload can't be used to
+    // run up cost / stall the lambda. A real spoken turn is a few hundred chars; the prompt
+    // builder already slices to 4000. Vision images ride separate base64 fields (not this).
+    if (body.message.length > 8000) {
+      return res.status(413).json({ error: 'message too long' });
+    }
 
     if (body.message === '__ping__') {
       return res.status(200).json({ text: 'ok', audioBase64: null, toolAction: null });

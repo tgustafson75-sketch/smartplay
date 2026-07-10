@@ -22,7 +22,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender } from '../lib/persona';
-import { completeText, providerFromHeader } from './_aiProvider';
+import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 type SynthesisType = 'onboarding' | 'cage_session' | 'round' | 'patterns';
 
@@ -119,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { system, user } = PROMPT_BY_TYPE[type](payload, caddieName);
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const summary = await completeText(provider, 'quality', system, [{ role: 'user', content: user }], { maxTokens: 350, temperature: 0.4 });
     if (!summary) return res.status(502).json({ error: 'Empty model response' });
 

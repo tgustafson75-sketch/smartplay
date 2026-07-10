@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
+import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 /**
  * Phase BL — Club recognition endpoint.
@@ -142,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(413).json({ error: 'image too large; resize to ~1024px on long edge' });
     }
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const text = await completeVision(provider, 'quality', SYSTEM_PROMPT,
       'Read the number or letters stamped on the sole. Return JSON.',
       [{ b64, mimeType: mediaType }],

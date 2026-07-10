@@ -297,6 +297,19 @@ export default function GreetingScreen() {
     }, ms);
   }, [startTransition]);
 
+  // 2026-07-10 (audit L3) — HARD-TIMEOUT safety net (mirrors intro-video's). The normal
+  // auto-advance only fires from inside the audio-kickoff effect (gated on audioReady). If
+  // configureAudioForSpeech never resolves, or getLaunchContext/playLocalFile hangs, no
+  // advance ever runs and the user is stranded on the greeting until they tap. Force-exit
+  // after a ceiling so a stall can never strand boot. startTransition is idempotent, so this
+  // is a no-op once the real advance has run. Ref keeps it stable across phase changes.
+  const startTransitionRef = useRef(startTransition);
+  startTransitionRef.current = startTransition;
+  useEffect(() => {
+    const t = setTimeout(() => startTransitionRef.current(), 10_000);
+    return () => clearTimeout(t);
+  }, []);
+
   // 2026-06-01 — Fix GJ: structural fix for the splash audio cut-off.
   // The audio-kickoff effect's deps [greeting, settingsHydrated,
   // audioReady] cause it to re-fire each time a dep flips. EACH

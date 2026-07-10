@@ -885,3 +885,31 @@ export function providerFromHeader(headers: Record<string, string | string[] | u
   const val = Array.isArray(raw) ? raw[0] : raw;
   return val === 'openai' || val === 'gemini' || val === 'anthropic' ? val : 'openai';
 }
+
+/** True when the given provider's API key is actually configured in the environment. */
+export function isProviderConfigured(p: AiProvider): boolean {
+  if (p === 'openai') return !!process.env.OPENAI_API_KEY;
+  if (p === 'gemini') return !!process.env.GOOGLE_API_KEY;
+  return !!process.env.ANTHROPIC_API_KEY;
+}
+
+/**
+ * 2026-07-10 (audit A1) — resolve the REQUESTED provider to one whose key is actually
+ * configured. A client X-AI-Provider header (or a persisted default) could otherwise force
+ * a call to an unconfigured provider, whose factory threw → HTTP 500 across ~10 analysis
+ * routes on the OpenAI-only deploy. Prefers the request, then openai, then any configured
+ * provider; returns the request unchanged only when NOTHING is configured (the caller's own
+ * guard/catch then handles that genuinely-unconfigured case).
+ */
+export function availableProvider(requested: AiProvider): AiProvider {
+  if (isProviderConfigured(requested)) return requested;
+  for (const p of ['openai', 'gemini', 'anthropic'] as AiProvider[]) {
+    if (isProviderConfigured(p)) return p;
+  }
+  return requested;
+}
+
+/** Convenience: the configured provider for a request's X-AI-Provider header. */
+export function providerFromHeaderSafe(headers: Record<string, string | string[] | undefined>): AiProvider {
+  return availableProvider(providerFromHeader(headers));
+}

@@ -19,7 +19,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
-import { completeJSON, providerFromHeader, type AiProvider, type StructuredSchema } from './_aiProvider';
+import { completeJSON, providerFromHeaderSafe, type AiProvider, type StructuredSchema } from './_aiProvider';
 
 // ─── Schemas ────────────────────────────────────────────────────────────
 
@@ -446,7 +446,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(429).json({ error: 'rate_limited' });
   }
 
-  const state = StateSchema.parse(payload.state ?? {});
+  // 2026-07-10 (audit A3) — the clipboard-round-tripped `state` blob can arrive corrupted
+  // (wrong-typed known field). safeParse + reset to empty rather than throwing a ZodError →
+  // 500; a bad state should degrade to a fresh state, not fail the whole turn.
+  const stateParsed = StateSchema.safeParse(payload.state ?? {});
+  const state = stateParsed.success ? stateParsed.data : StateSchema.parse({});
   const intent = classifyIntent(payload.query, payload.spoken_context ?? '');
 
   // No GPS path — short-circuit fast.
@@ -476,7 +480,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ),
   );
 
-  const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+  const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
 
   const work = (async (): Promise<ResponsePayload> => {
     const course = await getCourseContext(payload.gps, state);

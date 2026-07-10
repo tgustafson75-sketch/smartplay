@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
+import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You parse a golfer's spoken description of a shot they just hit. Output a structured JSON record.
 
@@ -163,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
 
     if (isLieFollowup) {
       const lieRaw = await completeJSON(provider, 'fast', LIE_FOLLOWUP_SYSTEM, [{ role: 'user', content: `Player said: "${utterance}"` }], { maxTokens: 200, temperature: 0, schema: LIE_FOLLOWUP_SCHEMA });

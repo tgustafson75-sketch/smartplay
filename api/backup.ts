@@ -141,6 +141,25 @@ function storageKey(email: string, secret: string): string {
   return createHash('sha256').update(`${email.toLowerCase()}::${secret}`).digest('hex');
 }
 
+// 2026-07-10 (audit S3) — per-IP read throttle to stop passphrase brute-forcing. Counts
+// attempts per (ip, minute) in a `backup_rate_limit` table (migration 0005). Fail-OPEN:
+// any error (table absent / db hiccup) returns false so a real restore is never blocked.
+const RATE_LIMIT_PER_MIN = 30;
+async function isRateLimited(db: ReturnType<typeof getSmartPlaySupabase>, req: VercelRequest): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const fwd = req.headers['x-forwarded-for'];
+    const ip = (Array.isArray(fwd) ? fwd[0] : fwd || '').split(',')[0].trim() || 'unknown';
+    const k = `${ip}:${Math.floor(Date.now() / 60_000)}`;
+    const { data } = await db.from('backup_rate_limit').select('n').eq('k', k).maybeSingle();
+    const n = ((data as { n?: number } | null)?.n ?? 0) + 1;
+    await db.from('backup_rate_limit').upsert({ k, n, at: new Date().toISOString() }, { onConflict: 'k' });
+    return n > RATE_LIMIT_PER_MIN;
+  } catch {
+    return false; // table not migrated yet / transient error → don't block a legit restore
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const db = getSmartPlaySupabase();
   if (!db) return res.status(200).json({ ok: false, error: 'not_configured' });
@@ -151,6 +170,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const secret = norm(req.query.secret);
       if (!email) return res.status(400).json({ ok: false, error: 'no_key' });
       if (secret.length < MIN_SECRET_LEN) return res.status(400).json({ ok: false, error: 'no_secret' });
+      // 2026-07-10 (audit S3) — rate-limit the READ (brute-force) path per IP. The backup row
+      // is protected only by sha256(email::passphrase); a known email + no throttle let an
+      // attacker hammer passphrase guesses. Raising MIN_SECRET_LEN would lock out existing
+      // users, so we throttle instead. Fail-OPEN if the rate-limit table isn't present yet
+      // (migration 0005), so this can never break a legitimate restore.
+      if (await isRateLimited(db, req)) return res.status(429).json({ ok: false, error: 'rate_limited' });
       const { data, error } = await db
         .from(TABLE)
         .select('data, updated_at')

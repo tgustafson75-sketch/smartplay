@@ -134,12 +134,14 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // surfaces added for centralised gating. Each was reachable today
   // — /author/reference-assets via the Tools menu "Reference
   // Authoring" row (no row-level isOwnerEmail check), /landmark-curate
-  // only from cage-debug (transitively gated but defence-in-depth),
-  // /owner-logs from Settings → Owner Tools (section-gated but the
-  // central gate is the canonical place).
+  // only from cage-debug (transitively gated but defence-in-depth).
   '/author/reference-assets',
   '/landmark-curate',
-  '/owner-logs',
+  // 2026-07-10 (audit N1) — /owner-logs REMOVED from this gate. The Issue Log is an
+  // ALL-BETA-TESTER surface (openToolHandler maps "send the issue log" → /owner-logs for
+  // everyone, with ?send=1 auto-export). Gating it here redirected a non-owner tester who
+  // said "send the issue log" straight back to the Caddie tab, so they could never file a
+  // bug. The screen itself already owner-gates the only privileged control (per-entry AI triage).
   // 2026-05-23 — Voice coverage log. Lists transcripts of voice commands
   // that didn't match a wired handler. Owner-only.
   '/voice-misses',
@@ -221,7 +223,12 @@ function AppNavigator() {
   // 2026-06-30 (Tim) — start the Galaxy Watch swing-IMU bridge on boot when the user has
   // it enabled, so a persisted toggle survives app restarts. No-ops without the native
   // module (older binaries) — safe everywhere. Stop it on teardown.
+  // 2026-07-10 (audit L1) — was `[]` deps reading watchSwingEnabled at mount BEFORE the
+  // settings store rehydrated, so it always saw the default false and never started the
+  // bridge on restart (the same bug glassesMode's "Fix FS" gate fixed). Gate on hydration.
+  const settingsHydratedForBoot = useSettingsStore(s => s.hasHydrated);
   useEffect(() => {
+    if (!settingsHydratedForBoot) return;
     if (!useSettingsStore.getState().watchSwingEnabled) return;
     let active = true;
     void (async () => {
@@ -238,7 +245,7 @@ function AppNavigator() {
       void import('../services/watchSwingBridge').then(m => m.stopWatchSwingBridge()).catch(() => {});
       void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
     };
-  }, []);
+  }, [settingsHydratedForBoot]);
 
   // 2026-06-12 (CNS fix) — onboarding was removed, so synthesizeOnboardingProfile (which
   // builds the brain's "ABOUT THIS GOLFER" kevinContext block) lost its trigger and the

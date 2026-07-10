@@ -55,10 +55,10 @@ export default function SetupCheckScreen() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') { void requestCameraPermission(); }
+      if (next === 'active' && cameraPermission && !cameraPermission.granted && cameraPermission.canAskAgain) { void requestCameraPermission(); }
     });
     return () => sub.remove();
-  }, [requestCameraPermission]);
+  }, [requestCameraPermission, cameraPermission]);
 
   // 2026-06-15 (audit) — stop any in-flight setup readout when leaving the screen so
   // it can't play over the next screen's voice (sibling of the swing-detail fix).
