@@ -757,7 +757,7 @@ export const useVoiceCaddie = ({
   // server returns a graceful HTTP 200 with an `error`/`errorType` when the brain
   // is down, or we hit the local dead-end). The caller still SPEAKS it, but must
   // NOT log it as a real conversational turn or award engagement points for it.
-  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null; fallback: boolean }> => {
+  const sendToBrain = async (message: string): Promise<{ text: string; audioBase64: string | null; toolAction: ToolAction | null; toolActions?: ToolAction[]; fallback: boolean }> => {
     // 2026-06-29 (fix A) — read the LIVE host at call-time. The hook-level
     // apiUrl (~line 671) is captured per render, so a mid-session dual-host
     // failover (ensureBackendReachable → activeBase switch) never reached these
@@ -1126,7 +1126,7 @@ export const useVoiceCaddie = ({
         throw new Error(`brain_http_${res.status}`);
       }
       recordVoiceEndpointSuccess('kevin');
-      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; error?: string; errorType?: string };
+      const data = await res.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
 
       // 2026-07-06 (voice-parity F3) — the brain endpoint returns a graceful HTTP
       // 200 with an `error`/`errorType` when the real brain is down (canned "having
@@ -1167,6 +1167,8 @@ export const useVoiceCaddie = ({
         text:        data.text       ?? 'Got nothing back from the brain. Try again.',
         audioBase64: data.audioBase64 ?? null,
         toolAction:  data.toolAction  ?? null,
+        // 2026-07-10 (audit V3) — all actions from a multi-action turn (dispatched below).
+        toolActions: (data.toolActions ?? undefined) as ToolAction[] | undefined,
         fallback:    isFallback,
       };
 
@@ -1202,13 +1204,14 @@ export const useVoiceCaddie = ({
         }).finally(() => clearTimeout(rt));
         if (retryRes.ok) {
           recordVoiceEndpointSuccess('kevin');
-          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; error?: string; errorType?: string };
+          const d = await retryRes.json() as { text?: string; audioBase64?: string | null; toolAction?: ToolAction | null; toolActions?: ToolAction[] | null; error?: string; errorType?: string };
           // 2026-07-06 (voice-parity F3) — same graceful-200 masking applies on the
           // minimal retry; don't log/score a canned degrade line.
           return {
             text: d.text ?? 'Ready when you are.',
             audioBase64: d.audioBase64 ?? null,
             toolAction: d.toolAction ?? null,
+            toolActions: (d.toolActions ?? undefined) as ToolAction[] | undefined,
             fallback: Boolean(d.error || d.errorType),
           };
         }
@@ -1391,7 +1394,10 @@ export const useVoiceCaddie = ({
         } else {
           await speakResponse(checked.text);
         }
-        if (checked.toolAction) onToolAction?.(checked.toolAction);
+        // 2026-07-10 (audit V3) — dispatch EVERY action from a multi-action turn, not just
+        // the last. Falls back to the single toolAction when the server didn't send an array.
+        if (checked.toolActions?.length) checked.toolActions.forEach(a => onToolAction?.(a));
+        else if (checked.toolAction) onToolAction?.(checked.toolAction);
         // Recurse one level if Kevin asked yet another question.
         // 2026-05-26 — Fix AP Phase 2: when continuousConversationMode
         // is ON, ALSO recurse when the reply doesn't end with `?` — but
@@ -2144,7 +2150,9 @@ export const useVoiceCaddie = ({
       }
       // 2026-06-04 — Navigation fires AFTER speak completes (see brain
       // path comment above).
-      if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
+      // 2026-07-10 (audit V3) — dispatch every action from a multi-action turn.
+      if (kevinResponse.toolActions?.length) kevinResponse.toolActions.forEach(a => onToolAction?.(a));
+      else if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
 
       // 2026-05-25 — Fix B: auto-listen after Kevin asks a follow-up.
       // When Kevin's reply ends with a question, open the mic for

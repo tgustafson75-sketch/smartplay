@@ -14,7 +14,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import Constants from 'expo-constants';
 import { getPersistStorage } from '../ssrSafeStorage';
 import { getCloudClient, isCloudConfigured } from './cloudClient';
-import { gatherSnapshot, applySnapshot, snapshotFingerprint, SNAPSHOT_SCHEMA_VERSION, type Snapshot } from './snapshot';
+import { gatherSnapshot, applySnapshot, snapshotFingerprint, unionSnapshots, SNAPSHOT_SCHEMA_VERSION, type Snapshot } from './snapshot';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BACKUPS_TABLE = 'backups';
@@ -169,13 +169,22 @@ export async function backupNow(opts?: { force?: boolean }): Promise<CloudResult
     }
     useCloudBackupStore.getState().setStatus('backing_up');
     const deviceId = await getDeviceId();
+    // 2026-07-10 (audit D5) — was a destructive whole-blob upsert: a second/emptier device
+    // would overwrite the cloud's richer rounds + learned data (the server-mediated /api/backup
+    // path unions; this direct path did not). Fetch the existing row and UNION before writing.
+    let payload = snapshot;
+    try {
+      const { data: existing } = await client.from(BACKUPS_TABLE).select('payload').eq('user_id', userId).maybeSingle();
+      const prev = existing?.payload;
+      if (prev && typeof prev === 'object') payload = unionSnapshots(prev as Record<string, string>, snapshot);
+    } catch { /* no existing row / offline read — upload the local snapshot as-is */ }
     const { error } = await client.from(BACKUPS_TABLE).upsert({
       user_id: userId,
       email,
       schema_version: SNAPSHOT_SCHEMA_VERSION,
       app_version: appVersion(),
       device_id: deviceId,
-      payload: snapshot,
+      payload,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
     if (error) { useCloudBackupStore.getState().setStatus('error', error.message); return { ok: false, reason: error.message }; }

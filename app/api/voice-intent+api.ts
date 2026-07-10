@@ -60,7 +60,7 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "swinglab" | "scorecard" | "dashboard" | "settings" | "smartmotion" | "tightlie" | "acoustic" | "gps_test" | "coach_mode" | "cage_mode", player_name?: string }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
@@ -76,9 +76,10 @@ Available intents:
    - "putt cam" / "putt camera" / "capture this putt" -> { tool_name: "smartmotion", shot_type: "putt", auto_start: true }
    - "watching Chris swing" / "Chris is hitting" -> { tool_name: "smartmotion", subject: "Chris", auto_start: true } (extract capitalized first name into subject)
    - "watching Chris from down the line" -> { tool_name: "smartmotion", subject: "Chris", angle: "down_the_line", auto_start: true }
-   - "open TightLie" / "check my lie" / "analyze my lie" -> { tool_name: "tightlie" }
-   - "open acoustic test" / "acoustic test bench" / "test bench" / "test the mic" -> { tool_name: "acoustic" }
-   - "open GPS test" / "GPS test bench" / "test the GPS" -> { tool_name: "gps_test" }
+   - "check my lie" / "analyze my lie" / "read my lie" -> { tool_name: "lie_analysis" }
+   - "what am I looking at" / "read the scene" / "what's around me" -> { tool_name: "scene_read" }
+   - "register this club" / "add this club" / "scan my club" -> { tool_name: "register_club" }
+   - "log an issue" / "report a bug" / "note this problem" -> { tool_name: "issue_log" }
    - "mark the green" / "mark green" / "I'm at the green" / "open Mark Green" -> { tool_name: "mark_green" }
    - "mark the tee" / "mark tee" / "mark the tee box" / "I'm at the tee" / "this is the tee" / "this is the tee box" / "mark this tee" / "open Mark Tee" -> { tool_name: "mark_tee" }
    - "mark the green" / "mark green" / "mark the pin" / "mark the flag" / "mark this as the pin" / "this is the pin" / "I'm on the green" / "I'm at the pin" / "mark this spot" / "drop a pin here" / "open Mark Green" -> { tool_name: "mark_green" }
@@ -90,7 +91,7 @@ Available intents:
    - "open library" / "open swing library" / "swing library" / "show me my swings" / "open my swings" / "show my swing library" / "let me see my swings" -> { tool_name: "library" }
 
 2. query_status — User wants information about current state.
-   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "distance_to_green" | "what_did_meta_say", member_name?: string, notes?: string, lie_hint?: string, target_yards?: number, against?: "self_previous" | "tour_median" | "amateur_good", spoken_read?: string }
+   parameters: { query_topic: "score" | "hole" | "ghost_match" | "weather" | "pattern" | "shot_distance" | "hole_progress" | "distance_to_green" | "wind" | "conditions" | "plays_like" | "green_front" | "green_back" | "green_middle" | "end_session" | "next_focus" | "swing_observation" | "tell_me_more" | "hole_history" | "look_at_swing" | "carry_check" | "putt_analysis" | "family_progress" | "family_analysis" | "team_progress" | "shot_strategy" | "swing_compare" | "what_did_meta_say", target_yards?: number, swing_phrase?: string, hazard_phrase?: string, member_name?: string, notes?: string, lie_hint?: string, against?: "self_previous" | "tour_median" | "amateur_good", spoken_read?: string }
    Examples:
    - "what's my score" -> { query_topic: "score" }
    - "what hole am I on" -> { query_topic: "hole" }

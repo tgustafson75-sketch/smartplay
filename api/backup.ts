@@ -106,7 +106,13 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
       const p = prev[key], n = next[key];
       const pLen = typeof p === 'string' ? p.length : p != null ? JSON.stringify(p).length : 0;
       const nLen = typeof n === 'string' ? n.length : n != null ? JSON.stringify(n).length : 0;
-      if (pLen > nLen) merged[key] = p; // stored copy is richer — don't let the emptier device win
+      // 2026-07-10 (audit D4) — only guard against a NEAR-EMPTY incoming blob (a fresh/second
+      // device sitting at defaults). A modest shrink is a legitimate edit (removed a few clubs,
+      // cleared a profile field) and MUST propagate — the old `pLen > nLen` reverted every such
+      // deletion on the next backup + resurrected the removed data on restore. Keep the stored
+      // copy only when the incoming is dramatically smaller (<60% of it), which reads as a
+      // fresh device, not an edit.
+      if (pLen > 0 && nLen < pLen * 0.6) merged[key] = p;
     }
   } catch { /* keep the last-write-wins merge; better than throwing on backup */ }
   return merged;

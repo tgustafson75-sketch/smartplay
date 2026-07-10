@@ -1275,7 +1275,10 @@ ${onCourseContextBlock}${baseMessage}`
 
     let text = '';
     type ActionPayload = { type: string; [k: string]: unknown };
-    const capture: { action: ActionPayload | null; dataToolCalls: number } = { action: null, dataToolCalls: 0 };
+    // 2026-07-10 (audit V3) — `action` holds only the LAST tool action; `actions` accumulates
+    // ALL of them so a multi-action turn ("striped my 7-iron 150 and I'm feeling locked in" →
+    // log_shot + log_emotional_state) doesn't silently drop one. Returned as toolActions.
+    const capture: { action: ActionPayload | null; actions: ActionPayload[]; dataToolCalls: number } = { action: null, actions: [], dataToolCalls: 0 };
     const startedAt = Date.now();
 
     // 2026-07-08 (Tim — "single AI provider, only OpenAI, with a local brain backup,
@@ -1330,6 +1333,7 @@ ${onCourseContextBlock}${baseMessage}`
         }
       }
       // Action tools — capture and return dummy so loop can continue
+      const beforeAction = capture.action; // to detect an action set BY THIS call
       switch (name) {
         case 'open_smartvision': capture.action = { type: 'open_smartvision' }; break;
         case 'open_smartfinder': capture.action = { type: 'open_smartfinder' }; break;
@@ -1412,6 +1416,8 @@ ${onCourseContextBlock}${baseMessage}`
           break;
         }
       }
+      // Accumulate every distinct action (audit V3) — a new object means this call set one.
+      if (capture.action && capture.action !== beforeAction) capture.actions.push(capture.action);
       if (name === 'log_issue') return 'Logged it to the issue log.';
       return 'Action triggered.';
     };
@@ -1445,7 +1451,7 @@ ${onCourseContextBlock}${baseMessage}`
           break;
         } catch (err) {
           lastErr = err;
-          capture.action = null; capture.dataToolCalls = 0; // reset partial tool state
+          capture.action = null; capture.actions = []; capture.dataToolCalls = 0; // reset partial tool state
           const attemptMs = Date.now() - attemptStart;
           console.warn(`[kevin] openai attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
           // Ceiling is the client's 20s voice abort — only retry if attempt-2 can plausibly
@@ -1475,14 +1481,14 @@ ${onCourseContextBlock}${baseMessage}`
           const geminiStart = Date.now();
           try {
             console.log(`[kevin] openai exhausted; trying gemini fallback (${budgetLeft}ms left)`);
-            capture.action = null; capture.dataToolCalls = 0; // clean slate for the fallback
+            capture.action = null; capture.actions = []; capture.dataToolCalls = 0; // clean slate for the fallback
             loopResult = await runAgenticLoop(
               'gemini', aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch,
               { ...loopOpts, timeoutMs: Math.min(12_000, budgetLeft - 1_500) },
             );
             console.log(`[kevin] gemini fallback succeeded in ${Date.now() - geminiStart}ms`);
           } catch (gErr) {
-            capture.action = null; capture.dataToolCalls = 0;
+            capture.action = null; capture.actions = []; capture.dataToolCalls = 0;
             console.warn(`[kevin] gemini fallback failed in ${Date.now() - geminiStart}ms: ${gErr instanceof Error ? gErr.message : String(gErr)}`);
           }
         } else {
@@ -1558,6 +1564,10 @@ ${onCourseContextBlock}${baseMessage}`
       text,
       audioBase64,
       toolAction,
+      // 2026-07-10 (audit V3) — ALL actions from a multi-action turn (additive; existing
+      // clients that read only toolAction are unaffected). Only sent when >1 to keep the
+      // common single-action shape unchanged.
+      toolActions: capture.actions.length > 1 ? capture.actions : undefined,
       _debug: {
         provider: providerUsed,
         tier: aiTier,
