@@ -28,8 +28,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as {
-      name?: unknown; lat?: unknown; lng?: unknown;
+      name?: unknown; lat?: unknown; lng?: unknown; debug?: unknown;
     };
+    const debug = body.debug === true; // when true, surface Google's status/error_message for diagnosis
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : '';
     if (!name) return res.status(400).json({ error: 'name required' });
     const bias = isNum(body.lat) && isNum(body.lng) ? `&locationbias=point:${body.lat},${body.lng}` : '';
@@ -38,14 +39,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
       `?input=${encodeURIComponent(name)}&inputtype=textquery&fields=place_id${bias}&key=${KEY}`;
     const findRes = await fetch(findUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!findRes.ok) return res.status(200).json({ website: null, phone: null });
-    const findData = (await findRes.json()) as { status?: string; candidates?: { place_id?: string }[] };
-    if (findData.status === 'REQUEST_DENIED') {
-      console.log('[course-places] Places API not enabled on GOOGLE_MAPS_KEY — returning null.');
-      return res.status(200).json({ website: null, phone: null });
+    if (!findRes.ok) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: `find HTTP ${findRes.status}` } : {}) });
+    const findData = (await findRes.json()) as { status?: string; error_message?: string; candidates?: { place_id?: string }[] };
+    if (findData.status !== 'OK') {
+      console.log(`[course-places] Places findplace status=${findData.status} — ${findData.error_message || 'no candidates'}`);
+      return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: { status: findData.status, error_message: findData.error_message || null } } : {}) });
     }
     const placeId = findData.candidates?.[0]?.place_id;
-    if (!placeId) return res.status(200).json({ website: null, phone: null });
+    if (!placeId) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: 'OK but no candidates' } : {}) });
 
     const detUrl =
       `https://maps.googleapis.com/maps/api/place/details/json` +
