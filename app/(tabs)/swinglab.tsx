@@ -362,13 +362,23 @@ export default function SwingLab() {
                 {t(section.headerKey, { defaultValue: section.headerDefault })}
               </Text>
               {visible.map((card, i) => (
-                <LauncherCard
-                  key={card.key}
-                  spec={card}
-                  accent={segmentColor(seg[0], seg[1], i, section.cards.length)}
-                  colors={colors}
-                  onPress={() => router.push(card.route as never)}
-                />
+                i === 0 ? (
+                  <SectionHero
+                    key={card.key}
+                    spec={card}
+                    accent={segmentColor(seg[0], seg[1], 0, section.cards.length)}
+                    colors={colors}
+                    onPress={() => router.push(card.route as never)}
+                  />
+                ) : (
+                  <LauncherCard
+                    key={card.key}
+                    spec={card}
+                    accent={segmentColor(seg[0], seg[1], i, section.cards.length)}
+                    colors={colors}
+                    onPress={() => router.push(card.route as never)}
+                  />
+                )
               ))}
               {rest.length > 0 && (
                 <Pressable
@@ -440,6 +450,51 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+    </Pressable>
+  );
+}
+
+// 2026-07-10 (Tim — "make the three sections a little bigger, branded hero cards").
+// Each section's PRIMARY drill renders as a larger branded card: an accent-tinted
+// gradient (theme-safe, in the section's spectrum hue), a big icon medallion, and
+// hero-scale title. The expanded "more" drills stay as the compact LauncherCards so
+// the primary reads as the section's headline.
+function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
+  const { t } = useTranslation();
+  const title = t('swinglab.card_' + spec.key + '_title', { defaultValue: spec.title });
+  const sub = t('swinglab.card_' + spec.key + '_sub', { defaultValue: spec.sub });
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${sub}`}
+      style={({ pressed }) => [
+        styles.sectionHeroCard,
+        { backgroundColor: colors.surface_elevated, borderColor: pressed ? accent : colors.border, opacity: pressed ? 0.95 : 1 },
+      ]}
+    >
+      <View style={[styles.accentSpine, { backgroundColor: accent }]} />
+      <LinearGradient
+        colors={[hexFade(accent, 0.22), hexFade(accent, 0.03)]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.heroTopRow}>
+        <View style={[styles.sectionHeroMedia, { borderColor: hexFade(accent, 0.5), backgroundColor: hexFade(accent, 0.12) }]}>
+          <Ionicons name={spec.icon} size={34} color={accent} />
+        </View>
+        <View style={styles.heroText}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+            <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+              <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+            </View>
+          </View>
+          <Text style={[styles.heroSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.text_muted} />
+      </View>
     </Pressable>
   );
 }
@@ -568,6 +623,21 @@ const styles = StyleSheet.create({
   tag: { flexShrink: 0, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
+
+  // 2026-07-10 (Tim) — per-section branded hero (bigger than a LauncherCard, accent-tinted).
+  sectionHeroCard: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 18,
+    paddingLeft: 20,
+    overflow: 'hidden',
+  },
+  sectionHeroMedia: {
+    width: 60, height: 60, borderRadius: 14, borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // SMART MOTION hero.
   hero: {
