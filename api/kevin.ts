@@ -1448,7 +1448,38 @@ ${onCourseContextBlock}${baseMessage}`
             await new Promise((r) => setTimeout(r, 300));
             continue; // fast blip + time to spare → one real retry
           }
-          break; // slow failure or no budget → fall through to local responder
+          break; // slow failure or no budget → try Gemini, then local responder
+        }
+      }
+      // 2026-07-10 (Tim — "Gemini after 2x openai fail?" + "the right agents in the
+      // right order, lowest failure"). Both OpenAI attempts are spent. Before the turn
+      // drops to the on-device local brain, take ONE cross-provider shot at Gemini —
+      // but ONLY when enough of the client's ~20s voice window remains for it to
+      // plausibly land. This fires precisely in the case a second cloud brain helps
+      // most: OpenAI erroring FAST (an outage / 5xx), which leaves a full window. When
+      // OpenAI HANGS to its 14s cap instead, budgetLeft is too small — we skip Gemini
+      // and hand off to the instant local responder rather than stall the player. So
+      // the order is OpenAI → OpenAI-retry → Gemini → local, and Gemini can only ever
+      // rescue a turn, never delay the happy path. (Historic caution: Gemini as the
+      // PRIMARY once hung voice — as a budget-gated LAST cloud resort that risk is gone.)
+      if (!loopResult && process.env.GOOGLE_API_KEY) {
+        const budgetLeft = 19_000 - (Date.now() - startedLoop);
+        if (budgetLeft > 9_000) {
+          const geminiStart = Date.now();
+          try {
+            console.log(`[kevin] openai exhausted; trying gemini fallback (${budgetLeft}ms left)`);
+            capture.action = null; capture.dataToolCalls = 0; // clean slate for the fallback
+            loopResult = await runAgenticLoop(
+              'gemini', aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch,
+              { ...loopOpts, timeoutMs: Math.min(12_000, budgetLeft - 1_500) },
+            );
+            console.log(`[kevin] gemini fallback succeeded in ${Date.now() - geminiStart}ms`);
+          } catch (gErr) {
+            capture.action = null; capture.dataToolCalls = 0;
+            console.warn(`[kevin] gemini fallback failed in ${Date.now() - geminiStart}ms: ${gErr instanceof Error ? gErr.message : String(gErr)}`);
+          }
+        } else {
+          console.log(`[kevin] openai exhausted; skipping gemini (only ${budgetLeft}ms left) → local brain`);
         }
       }
       if (!loopResult) throw lastErr ?? new Error('brain failed after retries');

@@ -580,34 +580,49 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
         return 'Done.';
     };
 
-    // 2026-06-26 (Tim — "split: OpenAI brain, Gemini vision"; parity with kevin's
-    // OpenAI pin) — lead with OpenAI for the conversational brain (reliable + fast
-    // first token), then Anthropic, then Gemini. Vision stays Gemini on its own
-    // endpoints. A slow primary fails over fast via the per-provider cap below.
-    const PROVIDER_ORDER = ['openai', 'anthropic', 'gemini'] as const;
+    // 2026-07-10 (Tim — "Gemini after 2x openai fail"; "the right agents in the right
+    // order, lowest failure"). ORDER: OpenAI → OpenAI-retry → Gemini → warm-line floor.
+    // Matches the kevin fallback brain EXACTLY so both voice paths behave identically
+    // (no turn-to-turn provider drift — Tim's prior complaint). OpenAI leads (reliable +
+    // fast first token). A FAST OpenAI failure (cold-start blip) earns one retry; a SLOW
+    // failure (already hung the 9s cap) SKIPS the retry and jumps straight to Gemini, so
+    // a hang never burns the client window twice. Gemini is the single cross-provider
+    // cloud fallback; if it also misses, the warm re-prompt line below (+ the client's
+    // on-device responder) is the floor. Anthropic dropped from the middle — Tim's stated
+    // order is OpenAI→Gemini, and fewer providers keeps the voice consistent. 2×9s + 9s =
+    // 27s worst case, under the 30s client abort. Vision stays Gemini on its own endpoints.
+    const CAP_MS = 9_000;
+    const FAST_FAIL_MS = 5_000;
     const cap = <T,>(p: Promise<T>, ms: number): Promise<T> =>
       Promise.race([p, new Promise<never>((_, r) => setTimeout(() => r(new Error('provider timeout')), ms))]);
+    const runProvider = (provider: 'openai' | 'gemini') =>
+      cap(
+        // 2026-06-24 (Tim — latency pass) — 'fast' tier for the live conversational turn.
+        // Short, tool-driven, on-course cadence; plenty, and materially faster than 'quality'.
+        runAgenticLoop(provider, 'fast', system, text, [], KEVIN_TOOLS, toolDispatch,
+          { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
+        CAP_MS,
+      );
 
     let result: Awaited<ReturnType<typeof runAgenticLoop>> | null = null;
     let lastErr: unknown = null;
-    for (const provider of PROVIDER_ORDER) {
+    let lastAttemptSlow = false;
+    const plan: ('openai' | 'gemini')[] = ['openai', 'openai', 'gemini'];
+    for (let i = 0; i < plan.length; i++) {
+      const provider = plan[i];
+      // Skip the 2nd OpenAI attempt when the 1st was a SLOW failure (hung the cap) — a
+      // retry would just burn another window; go straight to Gemini.
+      if (i === 1 && lastAttemptSlow) continue;
+      const t0 = Date.now();
       try {
         toolActions.length = 0; // reset captured actions on a retry
-        // 2026-06-24 (Tim — latency pass) — 'fast' tier (Haiku-class) for the live
-        // conversational turn. The caddie cadence is short ("under 30 words"),
-        // tool-driven, and on-course — the fast tier is plenty for that and cuts
-        // generation time materially vs 'quality'. (Bump back to 'quality' if the
-        // mental-coaching nuance suffers on complex asks.)
-        result = await cap(
-          runAgenticLoop(provider, 'fast', system, text, [], KEVIN_TOOLS, toolDispatch,
-            { maxTokens: 256, temperature: 0.7, maxRounds: 4 }),
-          9_000,
-        );
-        if (provider !== 'openai') console.log(`[pipecat-turn] fell back to ${provider}`);
+        result = await runProvider(provider);
+        if (i > 0) console.log(`[pipecat-turn] succeeded on ${provider} (attempt ${i + 1})`);
         break;
       } catch (e) {
         lastErr = e;
-        console.warn(`[pipecat-turn] ${provider} failed: ${e instanceof Error ? e.message : String(e)}`);
+        lastAttemptSlow = Date.now() - t0 >= FAST_FAIL_MS;
+        console.warn(`[pipecat-turn] ${provider} attempt ${i + 1} failed in ${Date.now() - t0}ms: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
