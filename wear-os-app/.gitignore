@@ -1,0 +1,12 @@
+# Build output
+build/
+.gradle/
+local.properties
+
+# Signing — never commit the keystore or its passwords
+keystore.properties
+*.jks
+*.keystore
+
+# Gradle wrapper jar is committed; caches are not
+.gradle

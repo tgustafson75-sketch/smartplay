@@ -123,9 +123,15 @@ function greenForHole(
   const h = courseHoles.find(x => x.hole === holeNumber);
   if (!h) return null;
   if (h.middleLat !== 0 && h.middleLng !== 0) return { lat: h.middleLat, lng: h.middleLng };
-  if ((h.frontLat || h.backLat) && (h.frontLng || h.backLng)) {
+  // 2026-07-10 (audit OC3) — require BOTH front AND back before averaging. The old
+  // `(front||back)` let a front-only hole return front/2 — a bogus point near the equator
+  // — which then became the hole's green centroid and corrupted shot end-locations +
+  // recap distances. (Mirrors shotLocationService.getGreenCentroid, which does this right.)
+  if (h.frontLat && h.frontLng && h.backLat && h.backLng) {
     return { lat: (h.frontLat + h.backLat) / 2, lng: (h.frontLng + h.backLng) / 2 };
   }
+  if (h.frontLat && h.frontLng) return { lat: h.frontLat, lng: h.frontLng };
+  if (h.backLat && h.backLng) return { lat: h.backLat, lng: h.backLng };
   return null;
 }
 
@@ -2150,7 +2156,16 @@ export const useRoundStore = create<RoundState>()(
         if (pendingLieBefore != null) set({ pendingLieAnalysis: pendingLieBefore });
         // Bump scores[hole] by 1 so the scorecard reflects this penalty immediately.
         const currentScore = get().scores[hole] ?? 0;
-        get().logScore(hole, currentScore + 1);
+        if (currentScore > 0) {
+          // Editing an already-scored hole — logScore is safe (prevScore != 0, no auto-advance).
+          get().logScore(hole, currentScore + 1);
+        } else {
+          // 2026-07-10 (audit OC1) — a penalty on an UNscored hole must NOT go through logScore:
+          // it would see prevScore 0 → treat "1" as the hole's first score → auto-advance to the
+          // next hole AND stamp a bogus score of 1. Record the penalty stroke directly; the real
+          // total overwrites it when the player scores the hole.
+          set(s => ({ scores: { ...s.scores, [hole]: 1 } }));
+        }
         // Legacy penalties[] field intentionally NOT written — ShotResult is authoritative now.
       },
 

@@ -108,7 +108,13 @@ export const usePracticeStore = create<PracticeStats>()(
         // not the total swing count (which deflated every average in a mixed
         // session). Track per-club counts and divide by those.
         const driverSample = isDriver && carry > 0;
-        const woodSample = !isDriver && carry > 0;
+        // 2026-07-10 (audit FD1) — was `!isDriver && carry>0`, which pooled EVERY non-driver
+        // carry (irons, wedges) into the "3-wood" average. That value is consumed downstream
+        // (smartfinder carry ladder, GolfFather club calls) as the literal 3-wood distance +
+        // surfaced as high-confidence "measured" — so an iron swing dragged the ladder wrong.
+        // Only count actual fairway woods now.
+        const isWood = /wood|fairway/.test(String(club).toLowerCase()) || /^[3457]w$/.test(String(club).toLowerCase());
+        const woodSample = !isDriver && isWood && carry > 0;
         const newDriverCount = driverSample ? state.driverCarryCount + 1 : state.driverCarryCount;
         const newWoodCount = woodSample ? state.woodCarryCount + 1 : state.woodCarryCount;
 

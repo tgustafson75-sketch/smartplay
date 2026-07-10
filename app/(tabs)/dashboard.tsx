@@ -332,6 +332,13 @@ export default function Dashboard() {
     () => familyMembers.filter(m => !m.archived),
     [familyMembers],
   );
+  // 2026-07-10 (audit FD3) — the Coach-Mode "N golfers" card must not count COACHES as
+  // golfers-to-coach (they have a phone/email but no swings, and tapping one routed into a
+  // player library). Keep family + teammates (real golfers); drop coaches.
+  const coachableRoster = useMemo(
+    () => activeFamilyRoster.filter(m => m.relationship !== 'coach'),
+    [activeFamilyRoster],
+  );
   const activeFamilyMember = useMemo(
     () => activeFamilyRoster.find(m => m.id === activeFamilyMemberId) ?? null,
     [activeFamilyRoster, activeFamilyMemberId],
@@ -540,13 +547,13 @@ export default function Dashboard() {
           <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
 
-        {coachModeEnabled && activeFamilyRoster.length > 0 && (
+        {coachModeEnabled && coachableRoster.length > 0 && (
           <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
             <View style={styles.sharedHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>{t('dashboard.shared_group')}</Text>
                 <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
-                  {activeFamilyRoster.length} golfer{activeFamilyRoster.length === 1 ? '' : 's'}
+                  {coachableRoster.length} golfer{coachableRoster.length === 1 ? '' : 's'}
                 </Text>
                 <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
                   {activeFamilyMember ? `Active: ${activeFamilyMember.firstName}` : 'Tap a golfer to review swings'}
@@ -562,7 +569,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedChips}>
-              {activeFamilyRoster.map(member => {
+              {coachableRoster.map(member => {
                 const selected = member.id === activeFamilyMemberId;
                 return (
                   <TouchableOpacity

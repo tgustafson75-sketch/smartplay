@@ -238,7 +238,11 @@ export default function SwingBodyOverlay({
     const sy = aligned ? aligned.sy : 1;
     let P: { x: number; y: number; t: number }[];
     if (aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) {
-      P = clubArc.map(p => ({ x: p.x * sx, y: p.y * sy, t: p.tMs }));
+      // 2026-07-10 (audit SM2) — clubArc points are ALWAYS full-frame normalized (0..1),
+      // so scale by the frame dims (fw/fh), NOT the skeleton's sx/sy. When pose keypoints
+      // are pixel-absolute, sx/sy=1 and clubArc*1 collapsed the whole arc into a ~1px
+      // cluster at the frame's top-left corner.
+      P = clubArc.map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh, t: p.tMs }));
     } else {
       const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
       const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
@@ -283,11 +287,10 @@ export default function SwingBodyOverlay({
   // Real detected clubhead positions to dot on the arc (only when drawing the club
   // path) — these are the actual per-frame detections, so the user sees the truth.
   const clubDots = useMemo(() => {
-    if (!useClub || !clubArc) return [];
-    const sx = aligned ? aligned.sx : 1;
-    const sy = aligned ? aligned.sy : 1;
+    if (!useClub || !clubArc || !aligned) return [];
+    // 2026-07-10 (audit SM2) — clubArc is full-frame normalized → scale by frame dims.
     return clubArc
-      .map(p => ({ x: p.x * sx, y: p.y * sy }))
+      .map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh }))
       .filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)); // never emit a NaN <Circle> → white screen
   }, [useClub, clubArc, aligned]);
 

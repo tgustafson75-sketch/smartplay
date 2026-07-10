@@ -1136,6 +1136,24 @@ export const useVoiceCaddie = ({
       // scored/logged.
       const isFallback = Boolean(data.error || data.errorType);
 
+      // 2026-07-10 (audit V1) — the server cascade fully failed but returned a graceful HTTP
+      // 200 (not a throw), so this SUCCESS path never reached the catch's offline responder →
+      // the player heard "having trouble connecting" instead of the local round-state answer.
+      // Try the on-device local brain FIRST, honoring the "→ local brain backup" design.
+      if (isFallback) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
+          const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
+            ? (language as 'en' | 'es' | 'zh') : 'en';
+          const local = offline.answerOffline(message, langSafe);
+          if (local) {
+            logVoiceSilentFail('local_responder_hit', { source: local.source, detail: local.detail ?? null, language: langSafe, transcriptHead: message.slice(0, 60) });
+            return { text: local.text, audioBase64: null, toolAction: null, fallback: false };
+          }
+        } catch (e) { console.log('[voice] offlineCaddie (fallback path) threw:', e); }
+      }
+
       // Points — every REAL caddie response is a 3-pt interaction (Tim's spec).
       // A fallback canned line is not an interaction, so skip it.
       if (!isFallback) {

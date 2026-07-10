@@ -329,7 +329,13 @@ function processFix(raw: GpsFix): boolean {
   // many seconds after the last clean fix (slips through gate 2).
   // A golfer can't physically traverse OUTLIER_ABSOLUTE_JUMP_M between
   // watch ticks even at full cart speed (≈4 m/s ⇒ would need ~75s).
-  if (!userMarkBypassActive && lastFix) {
+  // 2026-07-10 (audit OC2) — but ONLY within a bounded window. Without it, a genuine
+  // signal GAP + real move (e.g. losing GPS finishing hole 9 and driving 400m to hole 10)
+  // means every resumed fix is >300m from the STALE lastFix and is rejected forever —
+  // lastFix never updates, position freezes, yardages go wrong for ~5min. Past the window
+  // the big jump is plausibly real travel across the gap, so accept it.
+  const ABSOLUTE_JUMP_MAX_AGE_MS = 90_000;
+  if (!userMarkBypassActive && lastFix && (raw.timestamp - lastFix.timestamp) < ABSOLUTE_JUMP_MAX_AGE_MS) {
     const absoluteJump = haversineMeters(lastFix, raw);
     if (absoluteJump > OUTLIER_ABSOLUTE_JUMP_M) {
       outliersDiscarded++;

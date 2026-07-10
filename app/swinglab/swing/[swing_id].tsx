@@ -396,12 +396,17 @@ export default function SwingDetail() {
     const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
     let cancelled = false;
-    void detectClubPath({ videoUri: shot.clipUri, startMs, endMs })
-      .then((r) => {
-        if (cancelled) return;
-        setClubArcPoints(r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
-      })
-      .catch(() => undefined);
+    void (async () => {
+      // 2026-07-10 (audit SM5) — heal the clip URI first (iOS rotates the container UUID on
+      // reinstall/native build; the raw stored path 404s). The main player self-heals via
+      // resolveClipUri; the arc detector was using the raw path and silently never drawing.
+      const uri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
+      if (cancelled) return;
+      try {
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs });
+        if (!cancelled) setClubArcPoints(r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+      } catch { /* best-effort — falls back to wrist trace */ }
+    })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace]);

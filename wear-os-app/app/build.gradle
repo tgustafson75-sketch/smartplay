@@ -18,10 +18,50 @@ android {
         versionName '1.0'
     }
 
+    // ── Signing ───────────────────────────────────────────────────────────────
+    // THE PAIRING GOTCHA (see README): the Wearable Data Layer only delivers
+    // messages between two apps that share the same applicationId AND are signed
+    // with the SAME key. The phone app is signed with the EAS-managed Android
+    // keystore, so a real yardage/mic tie-in test needs THIS app signed with that
+    // same keystore.
+    //
+    //   1. Export it from the phone project:  eas credentials -p android
+    //      (Keystore → "Download existing keystore") — you get an .jks + the store
+    //      password, key alias, and key password.
+    //   2. Drop those into wear-os-app/keystore.properties (gitignored):
+    //        storeFile=/absolute/path/to/eas.jks
+    //        storePassword=...
+    //        keyAlias=...
+    //        keyPassword=...
+    //   3. Build the paired APK:  ./gradlew :app:assembleRelease
+    //
+    // Without that file, `assembleRelease` falls back to the debug keystore so the
+    // build still succeeds — but it will NOT pair with the EAS-signed phone app.
+    // `assembleDebug` always works (auto debug keystore); use it only to verify the
+    // UI/toolchain, not the Data Layer tie-in.
+    signingConfigs {
+        release {
+            def kpf = rootProject.file('keystore.properties')
+            if (kpf.exists()) {
+                def kp = new Properties()
+                kpf.withInputStream { kp.load(it) }
+                storeFile file(kp['storeFile'])
+                storePassword kp['storePassword']
+                keyAlias kp['keyAlias']
+                keyPassword kp['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Use the EAS keystore when keystore.properties is present; otherwise
+            // fall back to the debug keystore so the build never hard-fails.
+            signingConfig rootProject.file('keystore.properties').exists()
+                ? signingConfigs.release
+                : signingConfigs.debug
         }
     }
 

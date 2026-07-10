@@ -1387,7 +1387,10 @@ export const useCageStore = create<CageState>()(
               ball_area_norm: {
                 x: clamp01(area.x),
                 y: clamp01(area.y),
-                r: Math.max(0.01, Math.min(0.5, area.r)),
+                // 2026-07-10 (audit SM1) — area.r is optional on the CV/auto shape; an
+                // undefined r made this NaN and crashed CageTargetingOverlay (white screen).
+                // Default to a sane radius when it's missing/non-finite.
+                r: Number.isFinite(area.r) ? Math.max(0.01, Math.min(0.5, area.r)) : 0.08,
               },
             };
           }),

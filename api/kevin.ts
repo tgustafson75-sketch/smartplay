@@ -1435,7 +1435,12 @@ ${onCourseContextBlock}${baseMessage}`
       for (let attempt = 1; attempt <= 2; attempt++) {
         const attemptStart = Date.now();
         try {
-          loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, loopOpts);
+          // 2026-07-10 (audit V5) — clamp the retry to the remaining client window. Attempt-2
+          // was using the fixed 14s cap even with little budget left, so worst case
+          // (~7s fail + 300ms + 14s) ran past the client's 20s abort = wasted lambda.
+          const remainMs = 19_000 - (Date.now() - startedLoop);
+          const attemptOpts = attempt === 1 ? loopOpts : { ...loopOpts, timeoutMs: Math.max(3_000, Math.min(loopOpts.timeoutMs, remainMs - 1_000)) };
+          loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, attemptOpts);
           if (attempt > 1) console.log('[kevin] openai succeeded on retry');
           break;
         } catch (err) {

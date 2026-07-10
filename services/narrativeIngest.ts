@@ -38,29 +38,36 @@ function roundActive(): boolean {
   } catch { return false; }
 }
 
-async function ingest(newUserTurns: ConversationTurn[]): Promise<void> {
-  if (inFlight) return;
+/** Returns true when the extract CALL completed (so the turns are processed and the
+ *  watermark may advance — even if no facts were found), false on a network/server
+ *  failure so those turns are retried on a later tick instead of being lost. */
+async function ingest(newUserTurns: ConversationTurn[]): Promise<boolean> {
+  if (inFlight) return false; // busy — don't advance the watermark; retry next tick
   inFlight = true;
   try {
     const text = newUserTurns.map((t) => t.text).join(' ').slice(0, 3500);
-    if (!text.trim()) return;
+    if (!text.trim()) return true; // nothing to send, but these turns are handled
     const res = await fetch(`${getApiBaseUrl().replace(/\/+$/, '')}/api/narrative-extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
+    if (!res.ok) return false; // server error → keep the watermark so we retry these turns
     const json = (await res.json().catch(() => ({}))) as { facts?: Record<string, unknown>; configured?: boolean };
-    if (!res.ok || json.configured === false || !json.facts) return;
+    if (json.configured === false || !json.facts) return true; // ran, nothing to store
     // Only write when something durable was actually extracted (empty is a valid, common result).
     const f = json.facts;
     const hasFact = ['experience', 'practiceFrequency', 'timeAvailable'].some((k) => typeof f[k] === 'string' && (f[k] as string).trim())
       || ['likes', 'dislikes', 'workAreas', 'strengths', 'goals', 'story'].some((k) => Array.isArray(f[k]) && (f[k] as unknown[]).length > 0);
-    if (!hasFact) return;
+    if (!hasFact) return true;
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
     type NarrativeInput = Parameters<ReturnType<typeof mem.useCaddieMemoryStore.getState>['recordNarrative']>[0];
     mem.useCaddieMemoryStore.getState().recordNarrative({ ...(f as Record<string, unknown>), nowMs: Date.now() } as NarrativeInput);
-  } catch { /* ingestion is additive — never surface */ } finally {
+    return true;
+  } catch {
+    return false; // network/throw → retry these turns on a later tick (don't lose them)
+  } finally {
     inFlight = false;
   }
 }
@@ -71,9 +78,13 @@ function maybeIngest(turns: ConversationTurn[]): void {
   if (now - lastIngestMs < THROTTLE_MS) return;
   const newUser = turns.filter((t) => t.role === 'user' && t.at > lastProcessedAt);
   if (newUser.length < MIN_NEW_USER_TURNS) return;
-  lastProcessedAt = newUser[newUser.length - 1].at;
   lastIngestMs = now;
-  void ingest(newUser);
+  // 2026-07-10 (audit V2) — advance the watermark ONLY after a successful extract. It used to
+  // advance synchronously before the fire-and-forget resolved, so a single transient
+  // /api/narrative-extract failure permanently dropped those get-to-know turns (never retried
+  // → the CNS profile silently stayed empty — the exact thing the #5 rework aims to fix).
+  const watermark = newUser[newUser.length - 1].at;
+  void ingest(newUser).then((ok) => { if (ok) lastProcessedAt = watermark; });
 }
 
 /** Start observing the conversation log. Idempotent; call once at app init. */

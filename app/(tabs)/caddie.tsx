@@ -793,6 +793,11 @@ export default function CaddieTab() {
       if (getScreenContext()?.screen !== 'getting to know the golfer') return;
       if (useRoundStore.getState().isRoundActive) return; // off-round only
       getToKnowOpenedRef.current = true;
+      // 2026-07-10 (audit V4) — claim the process-level opener slot so the persona mp3 opener
+      // (guarded by openerPlayedThisProcess) stands down. Without this, a cold launch into the
+      // get-to-know card fired BOTH → double-speak, or the persona opener barged in after the
+      // interview mic already opened, cutting off the player's captured answer.
+      openerPlayedThisProcess = true;
       const opener =
         "Alright — let's actually get to know your game. No wrong answers, just us talking. " +
         "To start: how'd you get into golf, and how much time do you really have to play and practice these days?";
@@ -1570,8 +1575,11 @@ export default function CaddieTab() {
           });
         } else {
           const sc = (action as { shot_count?: number }).shot_count;
+          const cl = (action as { club?: string }).club;
           const parts = ['autoRecord=1'];
           if (typeof sc === 'number' && sc > 0) parts.push(`drillShots=${Math.round(sc)}`);
+          // 2026-07-10 (audit V7) — carry the club on the closed-app launch too (was dropped).
+          if (cl) parts.push(`club=${encodeURIComponent(String(cl))}`);
           router.push(`/swinglab/smartmotion?${parts.join('&')}` as never);
         }
         break;

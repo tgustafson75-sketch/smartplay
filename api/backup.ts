@@ -61,7 +61,17 @@ function unionRoundHistory(prev: RoundRec[], next: RoundRec[]): RoundRec[] {
     const id = r?.id == null ? null : String(r.id);
     if (id == null) return; // real records always have an id; skip id-less noise
     const cur = byId.get(id);
-    if (!cur || Number(r.endedAt ?? 0) >= Number(cur.endedAt ?? 0)) byId.set(id, r);
+    if (!cur) { byId.set(id, r); return; }
+    const re = Number(r.endedAt ?? 0), ce = Number(cur.endedAt ?? 0);
+    if (re > ce) { byId.set(id, r); return; }
+    // 2026-07-10 (audit D6) — on EQUAL endedAt (the same round re-uploaded), keep the
+    // copy with more shot detail. compactHistoryForPersist strips shots from rounds >50,
+    // so a `>=` tie-break let a compacted blob overwrite the cloud's still-full copy.
+    if (re === ce) {
+      const rs = Array.isArray((r as { shots?: unknown[] }).shots) ? (r as { shots: unknown[] }).shots.length : 0;
+      const cs = Array.isArray((cur as { shots?: unknown[] }).shots) ? (cur as { shots: unknown[] }).shots.length : 0;
+      if (rs > cs) byId.set(id, r);
+    }
   };
   prev.forEach(add);
   next.forEach(add);
@@ -108,7 +118,15 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
 const GROW_MOSTLY_KEYS = [
   'caddie-memory-v1', 'club-stats-v1', 'club-bag-v1', 'player-profile-v2',
   'practice-points', 'points-store-v1', 'workout-store-v1', 'family-store-v1',
-  'vocabulary-profile-v1', 'practice-session-store-v1',
+  'vocabulary-profile-v1',
+  // 2026-07-10 (audit D1) — was the misspelled 'practice-session-store-v1'; the real
+  // persist key is 'practice-session-v1' (store/practiceSessionStore.ts), so the guard
+  // never ran and practice-session history was clobbered last-write-wins.
+  'practice-session-v1',
+  // 2026-07-10 (audit D3) — these are backed up but were NOT protected → an emptier 2nd
+  // device wiped them last-write-wins. Irreplaceable learned/authored data.
+  'custom-courses-v1', 'course-captures-v1', 'watch-store-v1', 'guest-profiles-v1',
+  'green-rolls-v1', 'tee-goals-v1', 'tournament-v1',
 ];
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email

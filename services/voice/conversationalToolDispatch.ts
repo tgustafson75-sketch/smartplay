@@ -148,6 +148,9 @@ function dispatchOne(a: AnyAction): void {
       } else {
         const parts = ['autoRecord=1'];
         if (typeof a.shot_count === 'number' && a.shot_count > 0) parts.push(`drillShots=${Math.round(a.shot_count)}`);
+        // 2026-07-10 (audit V7) — carry the club too; the closed-app launch was dropping it,
+        // so "set me up a 7-iron drill" opened with the right shot count but no club selected.
+        if (a.club) parts.push(`club=${encodeURIComponent(String(a.club))}`);
         router.push(`/swinglab/smartmotion?${parts.join('&')}` as never);
       }
       break;

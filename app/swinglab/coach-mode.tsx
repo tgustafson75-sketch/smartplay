@@ -101,9 +101,15 @@ export default function CoachMode() {
   const hasHydrated = useCageStore(s => s.hasHydrated);
   const playerSwings = useMemo(() => {
     if (!activeMember) return [];
+    // 2026-07-10 (audit FD2) — member swings recorded via SmartMotion are stored keyed by
+    // player_id (that's how family/[memberId] + player-library read them). Filtering only by
+    // upload.swinger name meant Coach Mode showed 0 swings for anything captured on device.
+    // Match by player_id first, fall back to the legacy name-match.
     const targetName = activeMember.firstName.trim().toLowerCase();
+    const targetId = activeMember.id;
     return sessionHistory
-      .filter(sess => (sess.upload?.swinger ?? '').trim().toLowerCase() === targetName)
+      .filter(sess => sess.player_id === targetId
+        || (sess.upload?.swinger ?? '').trim().toLowerCase() === targetName)
       .sort((a, b) => b.date - a.date);
   }, [sessionHistory, activeMember]);
 

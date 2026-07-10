@@ -373,6 +373,18 @@ export function CageTargetingOverlay({
     launchLine = { x1, y1, x2, y2, labelX: x2, labelY: y2 };
   }
 
+  // 2026-07-10 (audit SM1 — intermittent WHITE SCREEN) — a single non-finite coord (e.g.
+  // ball_area_norm.r is NaN when a ball area was placed without a radius) turns an SVG
+  // points/line string into "NaN,NaN…" and react-native-svg's NATIVE parser THROWS during
+  // render → blank/white screen (the sibling SwingBodyOverlay was hardened; this wasn't).
+  // Drop any geometry object carrying a non-finite value so it's simply omitted, never crashes.
+  const geomOk = (o: Record<string, unknown> | null): boolean =>
+    !!o && Object.values(o).every((v) => typeof v !== 'number' || Number.isFinite(v));
+  if (!geomOk(targetLine)) targetLine = null;
+  if (ballQuad && (!geomOk({ cx: ballQuad.cx, topY: ballQuad.topY }) || ballQuad.points.includes('NaN'))) ballQuad = null;
+  if (!geomOk(launchLine)) launchLine = null;
+  if (!geomOk(puttGeom)) puttGeom = null;
+
   return (
     <View
       style={StyleSheet.absoluteFill}

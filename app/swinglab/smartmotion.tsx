@@ -525,8 +525,8 @@ export default function SmartMotion() {
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
   const isNarrow = windowWidth < 400;
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, drillSwingPercents, captureMode, returnTo, autoRecord, autoScan } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; drillSwingPercents?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, drillSwingPercents, captureMode, returnTo, autoRecord, autoScan, club: clubParam } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; drillSwingPercents?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string; club?: string }>();
   // 2026-07-09 (audit — flagship TEMPO×SWING% drill) — the swing-% ladder (e.g. 50/75/100)
   // the player should cycle through. Parsed from the forwarded param; drives the drill cue.
   const drillSwingPct: number[] = React.useMemo(() => {
@@ -1785,7 +1785,10 @@ export default function SmartMotion() {
               // this segment's index → the matching session shot id.
               const sess = useCageStore.getState().sessionHistory.find((s) => s.id === sessionId);
               const shotIdx = Math.max(0, (segment?.index ?? 1) - 1);
-              const shotId = sess?.shots[shotIdx]?.id ?? sess?.shots[0]?.id ?? null;
+              // 2026-07-10 (audit SM4) — if the segment index doesn't map to a real shot, SKIP
+              // (null) rather than falling back to shots[0]: that fallback stamped THIS swing's
+              // read onto shot #1, mislabeling another swing's diagnosis.
+              const shotId = sess?.shots[shotIdx]?.id ?? null;
               if (shotId) {
                 useCageStore.getState().setShotAnalysis(sessionId, shotId, {
                   detected_issue: a.detected_issue,
@@ -1879,7 +1882,12 @@ export default function SmartMotion() {
         if (!cancelled && bio) {
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
-          if (sessionId) {
+          // 2026-07-10 (audit SM3) — only the PRIMARY swing (index 0) writes the SESSION-level
+          // biomech. Writing on every selectedSwing change let scrubbing a multi-swing clip
+          // overwrite session.biomechanics with whichever swing was viewed last → the library
+          // detail + coach report then rendered the wrong swing's skeleton/numbers. The live
+          // review UI still updates via setBiomech(bio) above.
+          if (sessionId && selectedSwing === 0) {
             try { useCageStore.getState().setSessionBiomechanics(sessionId, bio); } catch { /* non-fatal */ }
           }
         }
@@ -3034,6 +3042,10 @@ export default function SmartMotion() {
   // interface, camera ready, rolling. One-shot on mount; absent param = normal manual open.
   useEffect(() => {
     if (autoRecord === '1') pendingStartRef.current = true;
+    // 2026-07-10 (audit V7) — apply a club passed via ?club= (a voice "7-iron drill" launched
+    // while SmartMotion was CLOSED). The open-app path sets it via the record bus; this covers
+    // the closed-app launch that previously dropped the club.
+    if (clubParam) { try { setClub(clubParam as Parameters<typeof setClub>[0]); } catch { /* ignore bad club */ } }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
