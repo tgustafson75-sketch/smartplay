@@ -1322,6 +1322,10 @@ ${onCourseContextBlock}${baseMessage}`
           const feat = lookupFeature(String((input as { feature?: unknown }).feature ?? ''));
           if (feat) {
             capture.action = { type: 'navigate', path: feat.route };
+            // 2026-07-10 (audit regression) — navigate returns EARLY, before the switch's
+            // accumulation push below, so it was never added to capture.actions → in a
+            // multi-action turn the client dispatched the others and dropped the navigate.
+            capture.actions.push(capture.action);
             console.log(`[kevin] navigate → ${feat.name} (${feat.route})`);
             return `Opening ${feat.name}.`;
           }
@@ -1417,7 +1421,11 @@ ${onCourseContextBlock}${baseMessage}`
         }
       }
       // Accumulate every distinct action (audit V3) — a new object means this call set one.
-      if (capture.action && capture.action !== beforeAction) capture.actions.push(capture.action);
+      // Dedup by value so a model that emits the same tool twice doesn't double-dispatch.
+      if (capture.action && capture.action !== beforeAction) {
+        const j = JSON.stringify(capture.action);
+        if (!capture.actions.some(a => JSON.stringify(a) === j)) capture.actions.push(capture.action);
+      }
       if (name === 'log_issue') return 'Logged it to the issue log.';
       return 'Action triggered.';
     };
