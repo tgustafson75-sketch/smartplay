@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { applyCors } from './_cors';
 import * as formidable from 'formidable';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -48,6 +49,7 @@ interface DgResponse {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   // Warmup — Deepgram is always available, no Lambda warming needed

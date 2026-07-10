@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
+import { applyCors } from './_cors';
 // 2026-06-04 — ElevenLabs path removed. OpenAI gpt-4o-mini-tts is
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
@@ -361,6 +362,7 @@ async function executeLookupHole(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

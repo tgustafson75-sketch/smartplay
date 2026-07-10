@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { applyCors } from './_cors';
 // Phase 5 (2026-06-22) — Anthropic fully removed from swing-analysis.
 // Provider architecture: Gemini 2.5 Flash = speed primary,
 // OpenAI gpt-4o = quality escalation (full-tier only).
@@ -758,6 +759,7 @@ function meetsSpeedBar(parsed: SwingAnalysisResponse | null): boolean {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
