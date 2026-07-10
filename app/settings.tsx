@@ -948,7 +948,7 @@ export default function Settings() {
             <View style={styles.rowText}>
               <Text style={labelStyle}>Let {caddieName} get to know you</Text>
               <Text style={subStyle}>
-                A short open conversation — how you practice, the time you really have, what you enjoy, where the game needs work, what you&apos;re chasing. {caddieName} remembers all of it and coaches inside YOUR reality. Re-visit anytime; the caddie keeps learning from every conversation.
+                A short chat — how you practice, your real time, your goals. {caddieName} remembers it and coaches around it. Re-visit anytime.
               </Text>
             </View>
             <Ionicons name="chatbubbles-outline" size={20} color={colors.accent} />
@@ -1154,19 +1154,19 @@ export default function Settings() {
           />
           <ToggleRow
             label="Riding in a cart"
-            sub="Tunes shot detection for cart play — shorter at-ball pause, suppresses only while the cart is moving (not for ~12s after it stops). Walking default is more conservative."
+            sub="Tunes shot detection for cart play. Walking is the default."
             value={cartMode}
             onValueChange={confirmToggle('Cart Mode', setCartMode)}
           />
           <ToggleRow
             label="Auto Hole Advance"
-            sub="Advances to the next hole automatically as GPS moves you to the next tee. On by default — turn off to step through holes yourself."
+            sub="GPS moves you to the next hole automatically. Off = step through yourself."
             value={autoHoleAdvance}
             onValueChange={confirmToggle('Auto Hole Advance', setAutoHoleAdvance)}
           />
           <ToggleRow
             label="Auto Shot Detection"
-            sub="GPS auto-logs each shot's location during the round. Off by default — manual entry (stepper or voice) is the safe default; auto-detect can over-count strokes on cart rounds. Advanced."
+            sub="GPS auto-logs each shot's spot. Off by default — can over-count on cart rounds."
             value={autoShotDetection}
             onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
           />
@@ -1185,15 +1185,15 @@ export default function Settings() {
               Honest framing in the sub-line — not a warning. */}
           <ToggleRow
             label="Local Mode"
-            sub={`Conserves battery + handles weak signal cleanly. ${caddieName} only speaks when you ask. Tap-to-talk uses the fastest brain. GPS + yardages unchanged.`}
+            sub={`Battery saver for weak signal. ${caddieName} only speaks when asked; GPS + yardages unchanged.`}
             value={localMode}
             onValueChange={confirmToggle('Local Mode', setLocalMode)}
           />
           <ToggleRow
             label="Active Listening"
             sub={localMode
-              ? `Paused while Local Mode is on (tap-to-talk only). Turn off Local Mode to use always-listening.`
-              : `${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
+              ? `Paused in Local Mode (tap-to-talk only).`
+              : `${caddieName} listens automatically during rounds — just talk. Tap the pill to mute.`}
             value={autoListenEnabled}
             disabled={localMode}
             onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
@@ -1206,7 +1206,7 @@ export default function Settings() {
               members (Bea, Lily, Daniella) don't trip it. */}
           <ToggleRow
             label="Cecily Mode"
-            sub={`Kid-friendly free-topic chat for Cecily Rose. ${caddieName} answers any question in warm, simple language. Honors the active language setting.`}
+            sub={`Kid-friendly chat for Cecily — any topic, warm and simple.`}
             value={cecilyMode}
             onValueChange={confirmToggle('Cecily Mode', setCecilyMode)}
           />
@@ -1217,7 +1217,7 @@ export default function Settings() {
               ("teach me about lag") without re-tapping the mic. */}
           <ToggleRow
             label="Continuous Conversation"
-            sub={`${caddieName} keeps the mic open between turns so you can talk back without re-tapping. Caps at 6 turns or 2 minutes per session. Say "I'm good" any time to end.`}
+            sub={`Keeps the mic open between turns so you can talk back without re-tapping. Say "I'm good" to end.`}
             value={continuousConversationMode}
             onValueChange={confirmToggle('Continuous Conversation', setContinuousConversationMode)}
           />
@@ -1624,7 +1624,7 @@ export default function Settings() {
               it on. Helps Tim see which features get used. */}
           <ToggleRow
             label="Help improve SmartPlay"
-            sub="Share anonymous usage (which features you use — never your name, scores, or location). A random ID, not a device fingerprint. Off by default; turn off any time."
+            sub="Share anonymous usage — which features you use, never your name, scores, or location. Off by default."
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
           />
