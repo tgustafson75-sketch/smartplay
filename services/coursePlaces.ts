@@ -6,38 +6,19 @@
  * coords → the course's official website + phone, which we anchor into the
  * CNS course book ([[course-book-cns]]).
  *
- * Why client-side (direct to Google, not via our Vercel API): it's one fewer
- * hop (Tim's "go straight through" instinct), it's OTA-shippable with no
- * deploy, and the Google Maps key is already in the bundle for Static Maps.
- * Third-party host, so it does NOT go through getApiBaseUrl() — same pattern
- * as mapboxImagery hitting api.mapbox.com directly.
- *
- * Honest + graceful: if Places isn't enabled on the key's project (status
- * REQUEST_DENIED) or returns nothing, we return null and the caller falls
- * back to the existing Google-search tee-time flow — no regression. Once
- * anchored, the website/phone live in the persisted book, so "Book Tee Time"
- * deep-links the real site and the phone is available to call OFFLINE.
- *
- * ACTIVATION (one console toggle, no code): enable "Places API" on the
- * Google Cloud project that owns EXPO_PUBLIC_GOOGLE_MAPS_KEY. Until then this
- * no-ops cleanly.
+ * 2026-07-10 (audit S2) — now goes through OUR server (api/course-places) instead of
+ * calling Google Places directly with a key shipped in the app bundle. The Google Maps key
+ * lives ONLY server-side (GOOGLE_MAPS_KEY env var) and is never extractable from the client.
+ * Same graceful behavior: any miss / Places-not-enabled → null, caller falls back to the
+ * existing Google-search tee-time flow. Once anchored, website/phone live in the persisted
+ * book (offline-available).
  */
 
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 import { isValidGolfCoord } from '../utils/coordGuard';
+import { getApiBaseUrl } from './apiBase';
 
-// 2026-06-23 (Tim — "how do I fix coursePlaces") — EXPO_PUBLIC_* is inlined at
-// BUILD time, so eas-update OTA bundles get '' and Course Book website/phone go
-// dead on the preview channel (same trap as the Mapbox token). This key already
-// ships in the native build via eas.json, so a fallback constant doesn't change
-// the exposure and makes it work over OTA. REMAINING (Tim, Google Cloud Console):
-//   1. Enable the "Places API" on the project that owns this key (the one toggle
-//      that actually activates this — it 403s until then).
-//   2. Restrict the key (Android app restriction: package + SHA-1, and API
-//      restriction to Places + Maps) so the shipped key can't be abused.
-const GOOGLE_MAPS_PUBLIC_FALLBACK = 'AIzaSyCh6a4PaRpohas6kmh1KjrmdYDQkIZuth4';
-const KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || GOOGLE_MAPS_PUBLIC_FALLBACK;
-const PLACES_TIMEOUT_MS = 8_000;
+const PLACES_TIMEOUT_MS = 9_000;
 
 export interface CoursePlaces {
   website: string | null;
@@ -55,7 +36,7 @@ export async function lookupCoursePlaces(input: {
   lat?: number | null;
   lng?: number | null;
 }): Promise<CoursePlaces | null> {
-  if (!KEY || !input.courseId || !input.name?.trim()) return null;
+  if (!input.courseId || !input.name?.trim()) return null;
 
   // Already known → don't re-query (the book is the cache).
   const existing = useCaddieMemoryStore.getState().getCourseBook(input.courseId);
@@ -63,34 +44,24 @@ export async function lookupCoursePlaces(input: {
     return { website: existing.website, phone: existing.phone };
   }
 
-  try {
-    const bias = isValidGolfCoord(input.lat, input.lng)
-      ? `&locationbias=point:${input.lat},${input.lng}`
-      : '';
-    const findUrl =
-      `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
-      `?input=${encodeURIComponent(input.name.trim())}&inputtype=textquery&fields=place_id${bias}&key=${KEY}`;
-    const findRes = await fetch(findUrl, { signal: AbortSignal.timeout(PLACES_TIMEOUT_MS) });
-    if (!findRes.ok) return null;
-    const findData = (await findRes.json()) as { status?: string; candidates?: { place_id?: string }[] };
-    if (findData.status === 'REQUEST_DENIED') {
-      console.log('[coursePlaces] Places API not enabled on this key — skipping (booking falls back to search).');
-      return null;
-    }
-    const placeId = findData.candidates?.[0]?.place_id;
-    if (!placeId) return null;
+  const base = getApiBaseUrl();
+  if (!base) return null;
 
-    const detUrl =
-      `https://maps.googleapis.com/maps/api/place/details/json` +
-      `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number&key=${KEY}`;
-    const detRes = await fetch(detUrl, { signal: AbortSignal.timeout(PLACES_TIMEOUT_MS) });
-    if (!detRes.ok) return null;
-    const detData = (await detRes.json()) as {
-      status?: string;
-      result?: { website?: string; formatted_phone_number?: string };
-    };
-    const website = detData.result?.website?.trim() || null;
-    const phone = detData.result?.formatted_phone_number?.trim() || null;
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-places`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: input.name.trim(),
+        lat: isValidGolfCoord(input.lat, input.lng) ? input.lat : undefined,
+        lng: isValidGolfCoord(input.lat, input.lng) ? input.lng : undefined,
+      }),
+      signal: AbortSignal.timeout(PLACES_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { website?: string | null; phone?: string | null };
+    const website = data.website?.trim() || null;
+    const phone = data.phone?.trim() || null;
     if (!website && !phone) return null;
 
     // Anchor into the course book — persisted, offline-available.

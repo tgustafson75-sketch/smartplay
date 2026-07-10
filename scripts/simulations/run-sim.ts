@@ -3691,19 +3691,24 @@ check('Points: practice awards from every surface + feeds the visible tier',
 check('Course book: Places lookup anchors website/phone; booking prefers the real site',
   (() => {
     const cp = read('services/coursePlaces.ts');
+    const cph = read('api/course-places.ts');
     const tt = read('services/teeTimeLink.ts');
     const screen = read('app/course/[course_id].tsx');
     const lookupOk =
       /export async function lookupCoursePlaces\(/.test(cp) &&
-      /findplacefromtext\/json/.test(cp) &&
-      /place\/details\/json/.test(cp) &&
-      // honest degrade when Places isn't enabled
-      /findData\.status === 'REQUEST_DENIED'/.test(cp) &&
-      // anchors into the persisted book + caches (skips re-query when known)
+      // 2026-07-10 (audit S2) — the Google Places key is no longer shipped in the client:
+      // the lookup now proxies through OUR server endpoint, and the Google calls + key
+      // live server-side. anchoring + cache stay client-side.
+      /\/api\/course-places/.test(cp) &&
+      /getApiBaseUrl\(\)/.test(cp) &&
       /saveCourseBook\(\{/.test(cp) &&
       /if \(existing && \(existing\.website \|\| existing\.phone\)\)/.test(cp) &&
-      // direct third-party call (Google host), not our API spine
-      /https:\/\/maps\.googleapis\.com/.test(cp);
+      !/AIzaSy/.test(cp) &&                          // no hardcoded key in the client
+      // server proxy holds the key + makes the Google Places calls, degrading cleanly
+      /findplacefromtext\/json/.test(cph) &&
+      /place\/details\/json/.test(cph) &&
+      /REQUEST_DENIED/.test(cph) &&
+      /process\.env\.GOOGLE_MAPS_KEY/.test(cph);
     const bookingOk =
       /export async function openTeeTimeSearch\(courseName: string, locationHint\?: string \| null, courseId\?: string \| null\)/.test(tt) &&
       /const url = book\?\.bookingUrl \?\? book\?\.website \?\? null;/.test(tt);

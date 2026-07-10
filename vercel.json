@@ -2,105 +2,519 @@
   "version": 2,
   "outputDirectory": "dist",
   "builds": [
-    { "src": "api/kevin.ts",         "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/brain.ts",         "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/voice-intent.ts",  "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/swing-analysis.ts","use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/swing-question.ts","use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/round-import.ts",  "use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/workout-import.ts","use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/backup.ts",        "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/transcribe.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/owner-triage.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/meta-voice.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/lie-analysis.ts",    "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/image-edit.ts",      "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/putting-analysis.ts","use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/course-geometry.ts", "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/club-recognition.ts","use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/space-scan.ts",      "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/toptracer-parse.ts",       "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/course-intelligence.ts",   "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/ball-departure.ts",        "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/ball-path.ts",             "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/club-path.ts",             "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/course-content.ts",        "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/course-ai-search.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/messages.ts",              "use": "@vercel/node", "config": { "maxDuration": 15 } },
-    { "src": "api/junior-swing-analysis.ts", "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/course-import.ts",         "use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/acoustic-detect.ts",       "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/context-synthesis.ts",     "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/pose-analysis.ts",         "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/preround.ts",              "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/tutorial-analysis.ts",     "use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/voice.ts",                 "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/parse-shot.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/kevin-read.ts",      "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/pipecat-turn.ts",    "use": "@vercel/node", "config": { "maxDuration": 30 } },
-    { "src": "api/pipecat-tool.ts",    "use": "@vercel/node", "config": { "maxDuration": 15 } },
-    { "src": "api/recap.ts",           "use": "@vercel/node", "config": { "maxDuration": 60 } },
-    { "src": "api/briefing.ts",        "use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/cage-review.ts",     "use": "@vercel/node", "config": { "maxDuration": 45 } },
-    { "src": "api/usage.ts",           "use": "@vercel/node", "config": { "maxDuration": 10 } },
-    { "src": "api/*.ts",               "use": "@vercel/node" },
+    {
+      "src": "api/kevin.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/brain.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/voice-intent.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/swing-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/swing-question.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/round-import.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/workout-import.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/backup.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/transcribe.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/owner-triage.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/meta-voice.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/lie-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/image-edit.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/putting-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/course-geometry.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/club-recognition.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/space-scan.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/toptracer-parse.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/course-intelligence.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/ball-departure.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/ball-path.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/club-path.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/course-content.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/course-ai-search.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/messages.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
+      "src": "api/junior-swing-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/course-import.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/acoustic-detect.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/context-synthesis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/pose-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/preround.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/tutorial-analysis.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/voice.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/parse-shot.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/kevin-read.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/pipecat-turn.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/pipecat-tool.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
+      "src": "api/recap.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/briefing.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/cage-review.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
+      "src": "api/usage.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 10
+      }
+    },
+    {
+      "src": "api/*.ts",
+      "use": "@vercel/node"
+    },
     {
       "src": "package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/course-places.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
     }
   ],
   "routes": [
-    { "src": "/api/brain",      "dest": "/api/brain.ts" },
-    { "src": "/api/voice",      "dest": "/api/voice.ts" },
-    { "src": "/api/transcribe", "dest": "/api/transcribe.ts" },
-    { "src": "/api/preround",     "dest": "/api/preround.ts" },
-    { "src": "/api/kevin",        "dest": "/api/kevin.ts" },
-    { "src": "/api/youtube-search", "dest": "/api/youtube-search.ts" },
-    { "src": "/api/briefing",     "dest": "/api/briefing.ts" },
-    { "src": "/api/recap",        "dest": "/api/recap.ts" },
-    { "src": "/api/course-proxy", "dest": "/api/course-proxy.ts" },
-    { "src": "/api/cage-review",  "dest": "/api/cage-review.ts" },
-    { "src": "/api/voice-intent",   "dest": "/api/voice-intent.ts" },
-    { "src": "/api/pipecat-turn",   "dest": "/api/pipecat-turn.ts" },
-    { "src": "/api/pipecat-tool",   "dest": "/api/pipecat-tool.ts" },
-    { "src": "/api/parse-shot",   "dest": "/api/parse-shot.ts" },
-    { "src": "/api/backup",       "dest": "/api/backup.ts" },
-    { "src": "/api/health",          "dest": "/api/health.ts" },
-    { "src": "/api/course-geometry", "dest": "/api/course-geometry.ts" },
-    { "src": "/api/weather",         "dest": "/api/weather.ts" },
-    { "src": "/api/elevation",       "dest": "/api/elevation.ts" },
-    { "src": "/api/course-content",  "dest": "/api/course-content.ts" },
-    { "src": "/api/course-ai-search", "dest": "/api/course-ai-search.ts" },
-    { "src": "/api/messages", "dest": "/api/messages.ts" },
-    { "src": "/api/lie-analysis",    "dest": "/api/lie-analysis.ts" },
-    { "src": "/api/swing-analysis",  "dest": "/api/swing-analysis.ts" },
-    { "src": "/api/swing-question",  "dest": "/api/swing-question.ts" },
-    { "src": "/api/image-edit",      "dest": "/api/image-edit.ts" },
-    { "src": "/api/context-synthesis", "dest": "/api/context-synthesis.ts" },
-    { "src": "/api/club-recognition",  "dest": "/api/club-recognition.ts" },
-    { "src": "/api/space-scan",        "dest": "/api/space-scan.ts" },
-    { "src": "/api/tutorial-analysis", "dest": "/api/tutorial-analysis.ts" },
-    { "src": "/api/golfbert-proxy",    "dest": "/api/golfbert-proxy.ts" },
-    { "src": "/api/pose-analysis",     "dest": "/api/pose-analysis.ts" },
-    { "src": "/api/acoustic-detect",   "dest": "/api/acoustic-detect.ts" },
-    { "src": "/api/ball-departure",    "dest": "/api/ball-departure.ts" },
-    { "src": "/api/ball-path",         "dest": "/api/ball-path.ts" },
-    { "src": "/api/club-path",         "dest": "/api/club-path.ts" },
-    { "src": "/api/narrative-extract", "dest": "/api/narrative-extract.ts" },
-    { "src": "/api/putting-analysis",  "dest": "/api/putting-analysis.ts" },
-    { "src": "/api/junior-swing-analysis", "dest": "/api/junior-swing-analysis.ts" },
-    { "src": "/api/course-intelligence",   "dest": "/api/course-intelligence.ts" },
-    { "src": "/api/round-import",      "dest": "/api/round-import.ts" },
-    { "src": "/api/workout-import",    "dest": "/api/workout-import.ts" },
-    { "src": "/api/course-import",     "dest": "/api/course-import.ts" },
-    { "src": "/api/toptracer-parse",   "dest": "/api/toptracer-parse.ts" },
-    { "src": "/api/kevin-read",        "dest": "/api/kevin-read.ts" },
-    { "src": "/api/owner-triage",      "dest": "/api/owner-triage.ts" },
-    { "src": "/api/usage",             "dest": "/api/usage.ts" },
-    { "src": "/api/meta-voice/?",      "dest": "/api/meta-voice.ts" },
-    { "src": "/api/meta-voice/(.*)",   "dest": "/api/meta-voice.ts" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    {
+      "src": "/api/brain",
+      "dest": "/api/brain.ts"
+    },
+    {
+      "src": "/api/voice",
+      "dest": "/api/voice.ts"
+    },
+    {
+      "src": "/api/transcribe",
+      "dest": "/api/transcribe.ts"
+    },
+    {
+      "src": "/api/preround",
+      "dest": "/api/preround.ts"
+    },
+    {
+      "src": "/api/kevin",
+      "dest": "/api/kevin.ts"
+    },
+    {
+      "src": "/api/youtube-search",
+      "dest": "/api/youtube-search.ts"
+    },
+    {
+      "src": "/api/briefing",
+      "dest": "/api/briefing.ts"
+    },
+    {
+      "src": "/api/recap",
+      "dest": "/api/recap.ts"
+    },
+    {
+      "src": "/api/course-proxy",
+      "dest": "/api/course-proxy.ts"
+    },
+    {
+      "src": "/api/cage-review",
+      "dest": "/api/cage-review.ts"
+    },
+    {
+      "src": "/api/voice-intent",
+      "dest": "/api/voice-intent.ts"
+    },
+    {
+      "src": "/api/pipecat-turn",
+      "dest": "/api/pipecat-turn.ts"
+    },
+    {
+      "src": "/api/pipecat-tool",
+      "dest": "/api/pipecat-tool.ts"
+    },
+    {
+      "src": "/api/parse-shot",
+      "dest": "/api/parse-shot.ts"
+    },
+    {
+      "src": "/api/backup",
+      "dest": "/api/backup.ts"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/health.ts"
+    },
+    {
+      "src": "/api/course-geometry",
+      "dest": "/api/course-geometry.ts"
+    },
+    {
+      "src": "/api/weather",
+      "dest": "/api/weather.ts"
+    },
+    {
+      "src": "/api/elevation",
+      "dest": "/api/elevation.ts"
+    },
+    {
+      "src": "/api/course-content",
+      "dest": "/api/course-content.ts"
+    },
+    {
+      "src": "/api/course-ai-search",
+      "dest": "/api/course-ai-search.ts"
+    },
+    {
+      "src": "/api/messages",
+      "dest": "/api/messages.ts"
+    },
+    {
+      "src": "/api/lie-analysis",
+      "dest": "/api/lie-analysis.ts"
+    },
+    {
+      "src": "/api/swing-analysis",
+      "dest": "/api/swing-analysis.ts"
+    },
+    {
+      "src": "/api/swing-question",
+      "dest": "/api/swing-question.ts"
+    },
+    {
+      "src": "/api/image-edit",
+      "dest": "/api/image-edit.ts"
+    },
+    {
+      "src": "/api/context-synthesis",
+      "dest": "/api/context-synthesis.ts"
+    },
+    {
+      "src": "/api/club-recognition",
+      "dest": "/api/club-recognition.ts"
+    },
+    {
+      "src": "/api/space-scan",
+      "dest": "/api/space-scan.ts"
+    },
+    {
+      "src": "/api/tutorial-analysis",
+      "dest": "/api/tutorial-analysis.ts"
+    },
+    {
+      "src": "/api/golfbert-proxy",
+      "dest": "/api/golfbert-proxy.ts"
+    },
+    {
+      "src": "/api/pose-analysis",
+      "dest": "/api/pose-analysis.ts"
+    },
+    {
+      "src": "/api/acoustic-detect",
+      "dest": "/api/acoustic-detect.ts"
+    },
+    {
+      "src": "/api/ball-departure",
+      "dest": "/api/ball-departure.ts"
+    },
+    {
+      "src": "/api/ball-path",
+      "dest": "/api/ball-path.ts"
+    },
+    {
+      "src": "/api/club-path",
+      "dest": "/api/club-path.ts"
+    },
+    {
+      "src": "/api/narrative-extract",
+      "dest": "/api/narrative-extract.ts"
+    },
+    {
+      "src": "/api/putting-analysis",
+      "dest": "/api/putting-analysis.ts"
+    },
+    {
+      "src": "/api/junior-swing-analysis",
+      "dest": "/api/junior-swing-analysis.ts"
+    },
+    {
+      "src": "/api/course-intelligence",
+      "dest": "/api/course-intelligence.ts"
+    },
+    {
+      "src": "/api/round-import",
+      "dest": "/api/round-import.ts"
+    },
+    {
+      "src": "/api/workout-import",
+      "dest": "/api/workout-import.ts"
+    },
+    {
+      "src": "/api/course-import",
+      "dest": "/api/course-import.ts"
+    },
+    {
+      "src": "/api/toptracer-parse",
+      "dest": "/api/toptracer-parse.ts"
+    },
+    {
+      "src": "/api/kevin-read",
+      "dest": "/api/kevin-read.ts"
+    },
+    {
+      "src": "/api/owner-triage",
+      "dest": "/api/owner-triage.ts"
+    },
+    {
+      "src": "/api/usage",
+      "dest": "/api/usage.ts"
+    },
+    {
+      "src": "/api/meta-voice/?",
+      "dest": "/api/meta-voice.ts"
+    },
+    {
+      "src": "/api/meta-voice/(.*)",
+      "dest": "/api/meta-voice.ts"
+    },
+    {
+      "src": "/api/course-places",
+      "dest": "/api/course-places.ts"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }
