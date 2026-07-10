@@ -3707,8 +3707,11 @@ check('Course book: Places lookup anchors website/phone; booking prefers the rea
       // server proxy holds the key + makes the Google Places calls, degrading cleanly
       /findplacefromtext\/json/.test(cph) &&
       /place\/details\/json/.test(cph) &&
-      /REQUEST_DENIED/.test(cph) &&
-      /process\.env\.GOOGLE_MAPS_KEY/.test(cph);
+      // 2026-07-10 — degrade on ANY non-OK Places status (not just REQUEST_DENIED), and read the
+      // key that's ACTUALLY in Vercel (GOOGLE_API_KEY, all APIs enabled) — the handler used to
+      // read only GOOGLE_MAPS_KEY, which was never set, so every lookup returned not_configured.
+      /findData\.status !== 'OK'/.test(cph) &&
+      /process\.env\.GOOGLE_API_KEY/.test(cph);
     const bookingOk =
       /export async function openTeeTimeSearch\(courseName: string, locationHint\?: string \| null, courseId\?: string \| null\)/.test(tt) &&
       /const url = book\?\.bookingUrl \?\? book\?\.website \?\? null;/.test(tt);

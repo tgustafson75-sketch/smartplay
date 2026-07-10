@@ -1715,11 +1715,17 @@ export default function SmartVisionScreen() {
                 // distance (scorecard-sourced, same value the body's full-hole default uses) so
                 // the header can NEVER contradict the numbers right below it. Fall back to geometry
                 // only when the round-store value is missing. Par agrees across both; guard 0/null.
+                // 2026-07-10 (Tim) — plausibility gate on BOTH sources: a hole is ~30–700y, a
+                // course TOTAL is 5,000–7,500y. If either field ever carries a course-total-sized
+                // number, reject it (show '—') rather than print the whole-course yardage in the
+                // per-hole header. Same ceiling the yardage resolver now enforces.
+                const holeYds = (v: unknown): number | null =>
+                  typeof v === 'number' && v > 30 && v <= 700 ? v : null;
                 const hMeta = courseHoles.find(h => h.hole === holeIndex);
-                const hMetaDist = hMeta && typeof hMeta.distance === 'number' && hMeta.distance > 0 ? hMeta.distance : null;
+                const hMetaDist = holeYds(hMeta?.distance);
                 const hMetaPar = hMeta && typeof hMeta.par === 'number' && hMeta.par > 0 ? hMeta.par : null;
                 const par = hMetaPar ?? geometry?.par ?? null;
-                const yardage = hMetaDist ?? geometry?.yardage ?? null;
+                const yardage = hMetaDist ?? holeYds(geometry?.yardage) ?? null;
                 return par != null && yardage != null ? `PAR ${par} · ${yardage}y` : '—';
               })()}
             </Text>

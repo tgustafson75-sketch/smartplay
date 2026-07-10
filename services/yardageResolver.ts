@@ -142,8 +142,14 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
 
   // Tier 2 — static card fallback. Bundled tee→green from courseHoles.
   // Honest about being stale once the player walks away from the tee.
+  // 2026-07-10 (Tim) — plausibility ceiling. A single hole is ~30–700y; a course TOTAL is
+  // 5,000–7,500y. Every GPS path already clamps (smartfinder >600, refreshGps 10–600); this
+  // static-card tier only checked `> 0`, so a mis-populated per-hole `distance` carrying a
+  // course-total-sized number would render straight into the per-hole "top" cards. This is the
+  // mechanism behind the recurring "header showed the whole-course yardage" bug — gate it here
+  // so a course-total-magnitude value is rejected (falls through to `none`) instead of shown.
   const hData = round.courseHoles.find(h => h.hole === hole);
-  if (hData && hData.distance > 0) {
+  if (hData && hData.distance > 30 && hData.distance <= 700) {
     const gpsState =
       fix == null ? 'GPS not ready' :
       fixAge >= 10_000 ? 'GPS stale' :
