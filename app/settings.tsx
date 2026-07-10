@@ -1145,8 +1145,11 @@ export default function Settings() {
           />
           <ToggleRow
             label={`Proactive ${caddieName}`}
-            sub={`${caddieName} speaks up between holes — streaks, patterns, ghost updates`}
+            sub={localMode
+              ? `Paused while Local Mode is on (${caddieName} only speaks when asked). Turn off Local Mode to re-enable.`
+              : `${caddieName} speaks up between holes — streaks, patterns, ghost updates`}
             value={proactive_kevin_enabled}
+            disabled={localMode}
             onValueChange={confirmToggle(`Proactive ${caddieName}`, setProactiveKevinEnabled)}
           />
           <ToggleRow
@@ -1188,8 +1191,11 @@ export default function Settings() {
           />
           <ToggleRow
             label="Active Listening"
-            sub={`${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
+            sub={localMode
+              ? `Paused while Local Mode is on (tap-to-talk only). Turn off Local Mode to use always-listening.`
+              : `${caddieName} listens automatically during rounds. Just talk. Tap the pill on the Caddie tab to mute, or say "${caddieName}, turn off active listening".`}
             value={autoListenEnabled}
+            disabled={localMode}
             onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
           />
           {/* 2026-05-26 — Fix BE: Cecily Mode toggle. When on, the

@@ -721,6 +721,7 @@ export default function CaddieTab() {
       const settingsNow = useSettingsStore.getState();
       if (
         settingsNow.proactive_kevin_enabled &&
+        !settingsNow.localMode && // Local Mode = conservation: no proactive speech (#10 conflict fix)
         storeNow.isRoundActive &&
         storeNow.currentHole === 1 &&
         Object.keys(storeNow.scores).length === 0
@@ -1060,7 +1061,7 @@ export default function CaddieTab() {
   // Must use _scores (the subscribed reactive value) as the dep so the effect fires
   // on every score write, not just on hole transitions.
   useEffect(() => {
-    if (!isRoundActive || !_proactive_kevin_enabled) return;
+    if (!isRoundActive || !_proactive_kevin_enabled || localMode) return; // Local Mode = no proactive (#10)
     const storeNow = useRoundStore.getState();
     const holesPlayed = Object.keys(storeNow.scores).length;
     if (holesPlayed < 3) return; // streaks require at least 3 holes
@@ -1097,13 +1098,13 @@ export default function CaddieTab() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [_scores, isRoundActive, _proactive_kevin_enabled, apiUrl]);
+  }, [_scores, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
 
   // FIX M9 — proactive Kevin: hole-transition triggers (front_9_summary at hole 10,
   // hole_transition_pattern_aware on every hole change). Augments the existing
   // focus-effect which only fires the round_start_handoff on hole 1.
   useEffect(() => {
-    if (!isRoundActive || !_proactive_kevin_enabled) return;
+    if (!isRoundActive || !_proactive_kevin_enabled || localMode) return; // Local Mode = no proactive (#10)
     const storeNow = useRoundStore.getState();
     const holesPlayed = Object.keys(storeNow.scores).length;
     const scoreEntries = Object.entries(storeNow.scores)
@@ -1150,7 +1151,7 @@ export default function CaddieTab() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentHole, isRoundActive, _proactive_kevin_enabled, apiUrl]);
+  }, [currentHole, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
 
   // FIX M6 — GPS stop-detection proactive: subscribe to movementMode and fire a
   // proactive shot_strategy when the player stops walking mid-round.
@@ -1158,7 +1159,7 @@ export default function CaddieTab() {
   //        walking     → clear debounce + reset gate so the next stop can re-fire.
   const movementMode = useMovementModeStore(s => s.mode);
   useEffect(() => {
-    if (!isRoundActive || !_proactive_kevin_enabled || currentHole < 1) return;
+    if (!isRoundActive || !_proactive_kevin_enabled || localMode || currentHole < 1) return; // Local Mode = no proactive (#10)
 
     if (movementMode === 'walking') {
       // Clear any pending debounce and reset gate so the NEXT stop can fire.
@@ -1203,7 +1204,7 @@ export default function CaddieTab() {
       }, 5000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, apiUrl]);
+  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, localMode, apiUrl]);
 
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every
@@ -1232,7 +1233,13 @@ export default function CaddieTab() {
   // racing). The MANUAL mic handler already guards this (useVoiceCaddie
   // isSmartMotionActive → return); the VAD path had no equivalent. Gate here at
   // the single chokepoint so VAD pauses under SmartMotion and resumes on exit.
-  const vadEnabled = autoListenEnabled && isRoundActive && appActive && voiceState === 'idle'
+  // 2026-07-10 (Tim — "#10 check for conflicting settings"). Local Mode's own copy
+  // promises "tap-to-talk / only speaks when you ask", but at runtime it ONLY changed
+  // the brain tier — Active Listening kept auto-opening the mic, contradicting the
+  // toggle the user flipped. Local Mode is the master conservation switch: it now truly
+  // suppresses always-listening (and Proactive, below). Settings greys these out under
+  // Local Mode so the conflict is visible, not silent.
+  const vadEnabled = autoListenEnabled && !localMode && isRoundActive && appActive && voiceState === 'idle'
     && !isSmartMotionActive() && !isSmartMotionRecording();
 
   // ── Keep Vercel warm ────────────────────
