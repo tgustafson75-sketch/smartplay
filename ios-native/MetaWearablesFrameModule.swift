@@ -38,12 +38,13 @@ import Foundation
 import UIKit
 import React
 
-// IMPORTANT: These imports resolve against the DAT pod that the
-// withMetaWearablesDAT config plugin adds to the Podfile. Until the
-// first iOS EAS build with the plugin enabled runs, Xcode will mark
+// IMPORTANT: These imports resolve against the DAT Swift Package (XCFrameworks)
+// that the withMetaWearablesDAT config plugin adds to the Xcode project. v0.8
+// renamed the modules from Wearables/WearablesCamera → MWDATCore/MWDATCamera.
+// Until the first iOS EAS build with MWDAT_IOS_ENABLED=1 runs, Xcode marks
 // these as unresolved — expected.
-import Wearables
-import WearablesCamera
+import MWDATCore
+import MWDATCamera
 
 @objc(MetaWearablesFrame)
 class MetaWearablesFrame: RCTEventEmitter {

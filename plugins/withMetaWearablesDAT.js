@@ -41,6 +41,7 @@ const {
   withMainApplication,
   withInfoPlist,
   withDangerousMod,
+  withXcodeProject,
   AndroidConfig,
 } = require('expo/config-plugins');
 const fs = require('fs');
@@ -165,11 +166,11 @@ function withAppGradle(config, { appId, clientToken }) {
     // profileinstaller transitively in case the Wearables SDK pulls
     // them in. Mirrors the MediaPipe plugin's same defense.
     const deps = `
-    implementation("com.meta.wearable:mwdat-core:0.7.0") {
+    implementation("com.meta.wearable:mwdat-core:0.8.0") {
         exclude group: 'androidx.startup'
         exclude group: 'androidx.profileinstaller'
     }
-    implementation("com.meta.wearable:mwdat-camera:0.7.0") {
+    implementation("com.meta.wearable:mwdat-camera:0.8.0") {
         exclude group: 'androidx.startup'
         exclude group: 'androidx.profileinstaller'
     }`;
@@ -405,43 +406,115 @@ function withIOSInfoPlist(config, { appId, clientToken }) {
         'Smart Play Caddie reads frames from your Ray-Ban Meta glasses to coach your swing and read greens.';
     }
 
-    // DAT attestation. These keys are read by the iOS SDK at session
-    // init time — same role as the AndroidManifest meta-data entries.
-    plist['MetaWearablesAppId'] = appId;
-    plist['MetaWearablesClientToken'] = clientToken;
+    // v0.8 DAT attestation — a nested MWDAT dictionary (replaces the old flat
+    // MetaWearablesAppId/ClientToken keys). Read by the iOS SDK at session init.
+    //   MetaAppID / ClientToken — from the Wearables Developer Center.
+    //   TeamID — the Xcode build setting so it tracks the active signing config.
+    //   AppLinkURLScheme — the app's custom scheme the Meta AI app calls back into.
+    //   DAMEnabled — opt into the Device Access Toolkit App Model.
+    //   Analytics.OptOut — per Tim, no analytics.
+    plist['MWDAT'] = {
+      MetaAppID: appId,
+      ClientToken: clientToken,
+      TeamID: '$(DEVELOPMENT_TEAM)',
+      AppLinkURLScheme: 'smartplay',
+      DAMEnabled: true,
+      Analytics: { OptOut: true },
+    };
+    // Strip the old flat v0.7 keys if a prior prebuild wrote them.
+    delete plist['MetaWearablesAppId'];
+    delete plist['MetaWearablesClientToken'];
 
     return infoConfig;
   });
 }
 
-// ─── 5. iOS Podfile — add the Wearables pod via withDangerousMod ──
-// @expo/config-plugins does not expose a typed `withPodfile`; the
-// canonical pattern is a dangerous-mod that edits the Podfile text in
-// place. This is exactly how expo-build-properties' iOS branch
-// touches the Podfile when its `extraPods` option is in play.
-function withIOSPodfile(config) {
-  return withDangerousMod(config, [
-    'ios',
-    async (modConfig) => {
-      const podfilePath = path.join(modConfig.modRequest.platformProjectRoot, 'Podfile');
-      if (!fs.existsSync(podfilePath)) return modConfig;
-      let contents = fs.readFileSync(podfilePath, 'utf-8');
-      const marker = "pod 'Wearables'";
-      if (contents.includes(marker)) return modConfig;
-      const insertion = `
-  # Meta Wearables DAT v0.7 — Ray-Ban Meta glasses live frames + audio.
-  pod 'Wearables', :git => 'https://github.com/facebook/meta-wearables-dat-ios.git', :tag => '0.7.0'
-  pod 'WearablesCamera', :git => 'https://github.com/facebook/meta-wearables-dat-ios.git', :tag => '0.7.0'
-`;
-      if (contents.includes('use_react_native!')) {
-        contents = contents.replace('use_react_native!', insertion + '  use_react_native!');
-      } else {
-        contents += '\n' + insertion;
+// ─── 5. iOS Swift Package — add the meta-wearables-dat-ios SPM package ──
+//
+// v0.8 ships as XCFrameworks distributed via Swift Package Manager (products
+// MWDATCore / MWDATCamera / MWDATDisplay) — there is NO CocoaPods podspec, so
+// the old `pod 'Wearables'` path can never resolve. We add the remote SPM
+// package to the generated Xcode project by editing the pbxproj object graph:
+//   - XCRemoteSwiftPackageReference (repo + exact version 0.8.0)
+//   - XCSwiftPackageProductDependency for each product we link
+//   - attach the package ref to the PBXProject and the product deps + build
+//     files to the app's Frameworks build phase.
+// Idempotent: a second prebuild detects the existing reference and no-ops.
+const MWDAT_IOS_REPO = 'https://github.com/facebook/meta-wearables-dat-ios';
+const MWDAT_IOS_VERSION = '0.8.0';
+const MWDAT_IOS_PRODUCTS = ['MWDATCore', 'MWDATCamera'];
+
+function withIOSSwiftPackage(config) {
+  return withXcodeProject(config, (cfg) => {
+    const proj = cfg.modResults;
+    const objects = proj.hash.project.objects;
+
+    const remoteRefs = (objects.XCRemoteSwiftPackageReference =
+      objects.XCRemoteSwiftPackageReference || {});
+    const already = Object.keys(remoteRefs).some((k) => {
+      const v = remoteRefs[k];
+      return v && typeof v === 'object' && String(v.repositoryURL || '').includes('meta-wearables-dat-ios');
+    });
+    if (already) {
+      console.log('[withMetaWearablesDAT] iOS SPM package already present — skipping.');
+      return cfg;
+    }
+
+    // 1) remote package reference
+    const pkgRefUuid = proj.generateUuid();
+    remoteRefs[pkgRefUuid] = {
+      isa: 'XCRemoteSwiftPackageReference',
+      repositoryURL: `"${MWDAT_IOS_REPO}"`,
+      requirement: { kind: 'exactVersion', version: MWDAT_IOS_VERSION },
+    };
+    remoteRefs[`${pkgRefUuid}_comment`] = 'XCRemoteSwiftPackageReference "meta-wearables-dat-ios"';
+
+    // 2) product dependencies
+    const prodDeps = (objects.XCSwiftPackageProductDependency =
+      objects.XCSwiftPackageProductDependency || {});
+    const buildFiles = (objects.PBXBuildFile = objects.PBXBuildFile || {});
+    const productUuids = [];
+    for (const name of MWDAT_IOS_PRODUCTS) {
+      const depUuid = proj.generateUuid();
+      prodDeps[depUuid] = { isa: 'XCSwiftPackageProductDependency', package: pkgRefUuid, productName: name };
+      prodDeps[`${depUuid}_comment`] = name;
+      const bfUuid = proj.generateUuid();
+      buildFiles[bfUuid] = { isa: 'PBXBuildFile', productRef: depUuid, productRef_comment: name };
+      buildFiles[`${bfUuid}_comment`] = `${name} in Frameworks`;
+      productUuids.push({ depUuid, bfUuid, name });
+    }
+
+    // 3) attach package reference to the PBXProject
+    const projectUuid = proj.getFirstProject().uuid;
+    const pbxProject = objects.PBXProject[projectUuid];
+    pbxProject.packageReferences = pbxProject.packageReferences || [];
+    pbxProject.packageReferences.push({
+      value: pkgRefUuid,
+      comment: 'XCRemoteSwiftPackageReference "meta-wearables-dat-ios"',
+    });
+
+    // 4) attach product deps to the app target + build files to its Frameworks phase
+    const firstTarget = proj.getFirstTarget().firstTarget;
+    firstTarget.packageProductDependencies = firstTarget.packageProductDependencies || [];
+    // locate the app target's Frameworks build phase
+    const frameworksPhases = objects.PBXFrameworksBuildPhase || {};
+    const targetPhaseUuids = new Set((firstTarget.buildPhases || []).map((p) => p.value));
+    let frameworksPhase = null;
+    for (const uuid of Object.keys(frameworksPhases)) {
+      if (uuid.endsWith('_comment')) continue;
+      if (targetPhaseUuids.has(uuid)) { frameworksPhase = frameworksPhases[uuid]; break; }
+    }
+    for (const { depUuid, bfUuid, name } of productUuids) {
+      firstTarget.packageProductDependencies.push({ value: depUuid, comment: name });
+      if (frameworksPhase) {
+        frameworksPhase.files = frameworksPhase.files || [];
+        frameworksPhase.files.push({ value: bfUuid, comment: `${name} in Frameworks` });
       }
-      fs.writeFileSync(podfilePath, contents, 'utf-8');
-      return modConfig;
-    },
-  ]);
+    }
+
+    console.log(`[withMetaWearablesDAT] added iOS SPM package ${MWDAT_IOS_REPO}@${MWDAT_IOS_VERSION} (${MWDAT_IOS_PRODUCTS.join(', ')})`);
+    return cfg;
+  });
 }
 
 // ─── 6. Drop Swift + Obj-C source files into the iOS project ───────
@@ -493,31 +566,35 @@ function withMetaWearablesDAT(config) {
   // absent. So when there's no token we skip ALL native DAT wiring: the build succeeds,
   // MediaPipe (separate, public Google Maven) is unaffected, and the plugin auto-re-enables
   // the instant a GITHUB_TOKEN is set + the live SDK is wanted.
-  const { token } = resolveGitHubToken(config);
-  if (!token) {
-    console.warn(
-      '\n[withMetaWearablesDAT] GITHUB_TOKEN not set — SKIPPING Meta Wearables DAT native wiring.\n' +
-      '  Live Ray-Ban Meta streaming stays dormant (gallery import + glasses-POV analysis are\n' +
-      '  unaffected). Set GITHUB_TOKEN (GitHub PAT, read:packages) in EAS env to enable it.\n',
-    );
-    return config;
-  }
   let next = config;
-  // Android
-  next = withMavenRepo(next);
-  next = withAppGradle(next, ENV_FALLBACK);
-  next = withManifest(next);
-  next = withMainApplicationInjection(next);
-  // iOS — Wearables pod is from a private Meta GitHub repo (facebook/meta-wearables-dat-ios)
-  // that EAS Build cannot access. Guard behind a separate MWDAT_IOS_ENABLED flag so the
-  // Android wiring can be toggled on (via GITHUB_TOKEN) without breaking iOS pod install.
-  if (process.env.MWDAT_IOS_ENABLED === '1') {
-    next = withIOSInfoPlist(next, ENV_FALLBACK);
-    next = withIOSPodfile(next);
-    next = withSwiftSourceCopy(next);
+
+  // ── Android ── The Android SDK lives in GitHub Packages
+  // (maven.pkg.github.com/facebook/…), which needs a read:packages PAT. Without
+  // GITHUB_TOKEN, injecting the maven repo + mwdat deps makes gradle 401 and FAILS
+  // the whole Android build, so skip ALL Android DAT wiring when the token is absent.
+  const { token } = resolveGitHubToken(config);
+  if (token) {
+    next = withMavenRepo(next);
+    next = withAppGradle(next, ENV_FALLBACK);
+    next = withManifest(next);
+    next = withMainApplicationInjection(next);
   } else {
-    // Still apply Info.plist permissions (no pod dep) so camera + BT strings are present.
-    next = withIOSInfoPlist(next, ENV_FALLBACK);
+    console.warn(
+      '\n[withMetaWearablesDAT] GITHUB_TOKEN not set — SKIPPING the ANDROID Meta Wearables DAT\n' +
+      '  wiring (its SDK is in GitHub Packages). iOS is unaffected (public SPM repo). Set\n' +
+      '  GITHUB_TOKEN (GitHub PAT, read:packages) in EAS env to enable Android live streaming.\n',
+    );
+  }
+
+  // ── iOS ── The iOS SDK (facebook/meta-wearables-dat-ios) is a PUBLIC Swift Package
+  // of XCFrameworks — no token needed. Always apply the Info.plist (BT/camera strings +
+  // the MWDAT attestation dict). Add the SPM package + Swift sources only when
+  // MWDAT_IOS_ENABLED=1, so a normal iOS build (no glasses) still builds without the
+  // SPM dependency and CANNOT be affected by this wiring.
+  next = withIOSInfoPlist(next, ENV_FALLBACK);
+  if (process.env.MWDAT_IOS_ENABLED === '1') {
+    next = withIOSSwiftPackage(next);
+    next = withSwiftSourceCopy(next);
   }
   return next;
 }
