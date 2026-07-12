@@ -61,7 +61,7 @@
       "channel": "production"
     },
     "glasses": {
-      "extends": "preview",
+      "extends": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.smartplaycaddie.com",
         "EXPO_PUBLIC_MAPBOX_TOKEN": "pk.eyJ1Ijoic21hcnRwbGF5Y2FkZGllIiwiYSI6ImNtb28yZm9wNzE2YXYyb3B4aTZpdzVxd2sifQ.-8O0hpwyO5XRNPz5cc541w",
