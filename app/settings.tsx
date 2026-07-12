@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  isMetaWearablesAvailable,
+  startMetaWearablesStreaming,
+  stopMetaWearablesStreaming,
+  onGlassesStatusChange,
+  getGlassesStatusSync,
+  type GlassesStatus,
+} from '../services/metaWearablesBridge';
+import {
   View,
   Text,
   ScrollView,
@@ -208,6 +216,20 @@ export default function Settings() {
   const [editHandicap, setEditHandicap] = useState(String(handicap));
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
+
+  // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
+  // bridge status; the toggle starts/stops the POV camera stream into the caddie.
+  const [glasses, setGlasses] = useState<GlassesStatus>(getGlassesStatusSync());
+  useEffect(() => onGlassesStatusChange(setGlasses), []);
+  const onToggleGlasses = useCallback((v: boolean) => {
+    if (v) {
+      startMetaWearablesStreaming('medium', 24).catch(() => {
+        useToastStore.getState().show('Couldn’t reach your glasses — pair them in the Meta AI app first.');
+      });
+    } else {
+      stopMetaWearablesStreaming().catch(() => {});
+    }
+  }, []);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
   const [editIndex, setEditIndex] = useState(handicapIndex != null ? String(handicapIndex) : '');
@@ -1475,6 +1497,22 @@ export default function Settings() {
               </Text>
             </View>
           </View>
+          {/* 2026-07-11 — Ray-Ban Meta glasses LIVE stream (DAT v0.8). Android only
+              (the DAT SDK is Android here) + only when the native module is present.
+              Pair the glasses in the Meta AI app, then toggle on to stream your POV
+              into the caddie brain (SmartVision / green reads / Kevin multimodal). */}
+          {Platform.OS === 'android' && isMetaWearablesAvailable() ? (
+            <ToggleRow
+              label="Connect Ray-Ban Glasses"
+              sub={
+                glasses.streaming
+                  ? `Streaming from ${glasses.device || 'your glasses'} — ${caddieName} sees your point of view.`
+                  : 'Pair your Ray-Ban Meta glasses in the Meta AI app, then turn this on to stream your point of view to the caddie for swing and green reads.'
+              }
+              value={glasses.streaming}
+              onValueChange={onToggleGlasses}
+            />
+          ) : null}
           {/* 2026-06-16 — v1 entry point for the Meta glasses voice-log
               ingest (services/metaGlassesIngest.ts). Picks an exported
               Meta View JSON, attributes each in-window exchange to a hole

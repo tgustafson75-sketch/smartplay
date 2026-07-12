@@ -125,10 +125,15 @@ export async function getMetaWearablesStatus(): Promise<{
   streaming: boolean;
   device: string;
 }> {
-  // 2026-05-25 — Hardcoded available=false to match currentStatus until
-  // the real DAT SDK is wired. See note above currentStatus init.
-  void NativeMod;
-  return { available: false, connected: false, streaming: false, device: '' };
+  // 2026-07-11 — real DAT module landed (Android v0.8). Report actual state:
+  // available = the native module is present; connected/streaming from getStatus().
+  if (!NativeMod) return { available: false, connected: false, streaming: false, device: '' };
+  try {
+    const s = await NativeMod.getStatus();
+    return { available: true, connected: !!s.connected, streaming: !!s.streaming, device: s.device || '' };
+  } catch {
+    return { available: true, connected: false, streaming: false, device: '' };
+  }
 }
 
 /**
@@ -227,17 +232,13 @@ export interface GlassesStatus {
   effectiveFps: number;
 }
 
-// 2026-05-25 — Beta-blocker fix: Android MetaWearablesFrameModule is
-// currently stubbed (NOT_IMPLEMENTED reject on startStreaming) until
-// the real DAT SDK symbols are confirmed post-beta. The stub registers
-// fine, so `NativeMod !== null` returns true on Android, which lit up
-// the "GLASSES OFF / PAIRED" badge in SmartVision / SmartMotion /
-// PuttingLab even though every glasses operation would reject. Force
-// available=false until real DAT lands; flip back to `NativeMod !==
-// null` (or a richer probe) when MetaWearablesFrameModule.kt is
-// re-implemented against the real SDK.
+// 2026-07-11 — the real Android DAT module (v0.8) is now compiled in, so
+// `available` reflects actual native-module presence again (NativeMod !== null).
+// The stub that forced this false is gone. `connected`/`streaming` still start
+// false and only flip once a session/first-frame lands. On a build WITHOUT the
+// module (e.g. web, or an old build), NativeMod is null → available stays false.
 let currentStatus: GlassesStatus = {
-  available: false,
+  available: NativeMod !== null,
   connected: false,
   streaming: false,
   device: '',
