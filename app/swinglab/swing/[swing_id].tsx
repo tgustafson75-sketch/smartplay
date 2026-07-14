@@ -21,6 +21,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
 import { useCageStore, OTHER_PLAYER_ID, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
@@ -1903,14 +1904,12 @@ export default function SwingDetail() {
         <View style={{ marginTop: 16 }}>
           {analysisStatus === 'pending' && (
             session.source === 'uploaded_video' ? (
-              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <ActivityIndicator color={colors.accent} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Analyzing your swing…</Text>
-                  <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                    Finding your swing in the clip and reading it — about a minute. You can stay on this screen.
-                  </Text>
-                </View>
+              <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 12 }]}>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Analyzing your swing</Text>
+                <SwingAnalysisSteps />
+                <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
+                  About a minute — you can stay on this screen.
+                </Text>
               </View>
             ) : (
               <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>

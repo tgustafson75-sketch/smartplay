@@ -49,6 +49,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
+import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
 import { defaultDtlRig } from '../../services/cage/targetRig';
 import { prewarmSwingAnalysis } from '../../services/swingAnalysisWarmup';
@@ -3937,8 +3938,7 @@ export default function SmartMotion() {
         {/* ANALYZING */}
         {phase === 'analyzing' ? (
           <View style={[styles.analyzeOverlay, { backgroundColor: colors.overlay }]} pointerEvents="none">
-            <ActivityIndicator color={colors.accent} />
-            <Text style={styles.analyzeText}>Analyzing swing…</Text>
+            <SwingAnalysisSteps />
           </View>
         ) : null}
 
