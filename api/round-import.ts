@@ -238,10 +238,17 @@ interface ImportedRound {
   warnings: string[];
 }
 
+// Extract a JSON object from model output that may carry code fences or stray prose
+// around it — parse the substring from the first "{" to the last "}".
+function extractJsonObject(text: string): string {
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
+  return s >= 0 && e > s ? cleaned.slice(s, e + 1) : cleaned;
+}
+
 function safeParse(text: string): ImportedRound | null {
   try {
-    const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-    return JSON.parse(cleaned) as ImportedRound;
+    return JSON.parse(extractJsonObject(text)) as ImportedRound;
   } catch {
     return null;
   }
@@ -262,8 +269,7 @@ interface RoundListResult {
 
 function safeParseList(text: string): RoundListResult | null {
   try {
-    const cleaned = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```\s*$/, '').trim();
-    const obj = JSON.parse(cleaned) as RoundListResult;
+    const obj = JSON.parse(extractJsonObject(text)) as RoundListResult;
     if (!Array.isArray(obj.rounds)) return null;
     return obj;
   } catch {

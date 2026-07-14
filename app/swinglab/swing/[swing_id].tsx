@@ -307,8 +307,10 @@ export default function SwingDetail() {
   const videoRef = useRef<Video>(null);
   // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
   // for swing review. The `rate` prop survives native play/pause; the corner
-  // button cycles 1× → ½× → ¼× → 1×.
-  const [playbackRate, setPlaybackRate] = useState(1);
+  // button cycles ½× → ¼× → 1× → ½×.
+  // 2026-07-14 (Tim) — DEFAULT to slow-mo (½×) on first view: the first pass reads easier and
+  // helps analysis; the player still cycles up to full speed.
+  const [playbackRate, setPlaybackRate] = useState(0.5);
   const cycleSlowMo = () => setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
   const leftCompareVideoRef = useRef<Video>(null);
   const rightCompareVideoRef = useRef<Video>(null);

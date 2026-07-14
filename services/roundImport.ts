@@ -119,12 +119,30 @@ export async function parseRoundScreenshot(uri: string): Promise<ParseResult> {
     });
 
     if (res.status === 413) return { kind: 'too_large' };
+
+    // 2026-07-14 (Tim — "json error" on scorecard upload) — read the body as TEXT and parse
+    // defensively. A non-JSON body (model output the server couldn't parse → 502, an HTML
+    // proxy page, a truncated response) must NEVER surface to the user as a raw "JSON error".
+    const bodyText = await res.text().catch(() => '');
+    let parsed: unknown = null;
+    try { parsed = bodyText ? JSON.parse(bodyText) : null; } catch { parsed = null; }
+    const obj = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+
+    const CANT_READ = 'Couldn’t read that scorecard clearly — try a flat, well-lit photo of the whole card (or a Golfshot / GHIN screenshot).';
+
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      return { kind: 'error', message: typeof errBody.error === 'string' ? errBody.error : `HTTP ${res.status}` };
+      const apiErr = obj && typeof obj.error === 'string' ? obj.error : '';
+      // Model-parse / provider misses → a friendly, actionable message, not server jargon.
+      if (!obj || /non-json|providers failed|parse|json/i.test(apiErr)) {
+        return { kind: 'error', message: CANT_READ };
+      }
+      return { kind: 'error', message: apiErr || `HTTP ${res.status}` };
     }
 
-    const data = (await res.json()) as RoundImportResult;
+    if (!obj || !Array.isArray((obj as { holes?: unknown }).holes)) {
+      return { kind: 'error', message: CANT_READ };
+    }
+    const data = obj as unknown as RoundImportResult;
 
     // The endpoint returns the same shape with empty holes[] +
     // "this doesn't look like a scorecard" warning when the image
