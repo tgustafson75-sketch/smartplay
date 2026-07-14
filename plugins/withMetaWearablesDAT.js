@@ -413,14 +413,22 @@ function withIOSInfoPlist(config, { appId, clientToken }) {
     //   AppLinkURLScheme — the app's custom scheme the Meta AI app calls back into.
     //   DAMEnabled — opt into the Device Access Toolkit App Model.
     //   Analytics.OptOut — per Tim, no analytics.
-    plist['MWDAT'] = {
-      MetaAppID: appId,
-      ClientToken: clientToken,
-      TeamID: '$(DEVELOPMENT_TEAM)',
-      AppLinkURLScheme: 'smartplay',
-      DAMEnabled: true,
-      Analytics: { OptOut: true },
-    };
+    // 2026-07-14 (iOS audit F4) — ONLY write this dict when the glasses SDK is actually linked
+    // (MWDAT_IOS_ENABLED). Otherwise a production/TestFlight build shipped the Meta ClientToken
+    // secret + a dead MWDAT dict in its Info.plist even though the SDK isn't in the binary.
+    // The Bluetooth/camera usage strings above stay unconditional (harmless, may be reused).
+    if (process.env.MWDAT_IOS_ENABLED === '1') {
+      plist['MWDAT'] = {
+        MetaAppID: appId,
+        ClientToken: clientToken,
+        TeamID: '$(DEVELOPMENT_TEAM)',
+        AppLinkURLScheme: 'smartplay',
+        DAMEnabled: true,
+        Analytics: { OptOut: true },
+      };
+    } else {
+      delete plist['MWDAT'];
+    }
     // Strip the old flat v0.7 keys if a prior prebuild wrote them.
     delete plist['MetaWearablesAppId'];
     delete plist['MetaWearablesClientToken'];

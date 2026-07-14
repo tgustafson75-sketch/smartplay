@@ -156,25 +156,26 @@ export default function HoleShotMap({
               >
                 GREEN
               </SvgText>
-              {/* Shot path */}
-              {projected.points.length > 1 && (
-                <Path
-                  d={
-                    'M ' +
-                    `${projected.teeXY.sx} ${projected.teeXY.sy} ` +
-                    projected.points
-                      .map(p => `L ${p.sx} ${p.sy}`)
-                      .join(' ') +
-                    ` L ${projected.greenXY.sx} ${projected.greenXY.sy}`
-                  }
-                  stroke="#F5A623"
-                  strokeWidth={2}
-                  fill="none"
-                  opacity={0.6}
-                />
-              )}
+              {/* Shot path — guard every coord: a non-finite value in the `d` string makes
+                  react-native-svg's native parser throw → white-screen the recap map. */}
+              {(() => {
+                const fin = (n: number) => Number.isFinite(n);
+                const seg = projected.points.filter(p => fin(p.sx) && fin(p.sy));
+                if (
+                  seg.length < 2 ||
+                  !fin(projected.teeXY.sx) || !fin(projected.teeXY.sy) ||
+                  !fin(projected.greenXY.sx) || !fin(projected.greenXY.sy)
+                ) return null;
+                const d =
+                  `M ${projected.teeXY.sx} ${projected.teeXY.sy} ` +
+                  seg.map(p => `L ${p.sx} ${p.sy}`).join(' ') +
+                  ` L ${projected.greenXY.sx} ${projected.greenXY.sy}`;
+                return <Path d={d} stroke="#F5A623" strokeWidth={2} fill="none" opacity={0.6} />;
+              })()}
               {/* Shot markers */}
               {projected.points.map((p, i) => {
+                // Skip (but keep the index so selectedIdx still lines up) any non-finite point.
+                if (!Number.isFinite(p.sx) || !Number.isFinite(p.sy)) return null;
                 const active = selectedIdx === i;
                 return (
                   <React.Fragment key={i}>

@@ -20,6 +20,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useClubStatsStore } from '../../store/clubStatsStore';
 import { useCageStore } from '../../store/cageStore';
+import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
@@ -74,6 +75,9 @@ export default function Scorecard() {
   const logShot = useRoundStore(s => s.logShot);
   const clearQuickScorePlaceholders = useRoundStore(s => s.clearQuickScorePlaceholders);
   const heroMoments = useRelationshipStore(s => s.heroMoments);
+  // 2026-07-14 (Tim — "the scorecard had space for partners") — restore the partner display by
+  // reading the guest store the round flow already writes to (voice: "start a round with Mike").
+  const guests = useGuestProfileStore(s => s.guests);
 
   // 2026-06-30 (Tim — Greenhill: "when you end the round you can't see your scorecard, it
   // auto-goes to dashboard") — REVERSED the 2026-06-13 no-linger behavior. When there's no
@@ -667,6 +671,25 @@ export default function Scorecard() {
           <Text style={[styles.courseName, { color: c.text_secondary }]}>{viewCourseName}</Text>
         )}
 
+        {/* PLAYING WITH — the partners captured by voice ("start a round with Mike and John").
+            Restores the partner space on the scorecard; reads the guest store the round flow was
+            already writing to (previously write-only). Shows nothing when playing solo. */}
+        {guests.length > 0 && (
+          <View style={styles.partnersRow}>
+            <Text style={[styles.partnersLabel, { color: c.text_muted }]}>PLAYING WITH</Text>
+            <View style={styles.partnersChips}>
+              {guests.map(g => (
+                <View key={g.id} style={[styles.partnerChip, { backgroundColor: c.surface, borderColor: c.border }]}>
+                  <Text style={[styles.partnerName, { color: c.text_primary }]}>{g.displayName}</Text>
+                  {typeof g.handicap === 'number' ? (
+                    <Text style={[styles.partnerHcp, { color: c.text_muted }]}>{g.handicap}</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* SUMMARY */}
         {hasAnythingToShow && (
           <View style={[styles.summary, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: summaryPadV }]}>
@@ -980,6 +1003,12 @@ const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   chipText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   courseName: { fontSize: 14, fontWeight: '500', paddingHorizontal: 20, marginBottom: 12 },
+  partnersRow: { paddingHorizontal: 20, marginBottom: 14 },
+  partnersLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 7 },
+  partnersChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  partnerChip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 6, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1 },
+  partnerName: { fontSize: 13, fontWeight: '600' },
+  partnerHcp: { fontSize: 11, fontWeight: '700', opacity: 0.8 },
   emptyRound: {
     marginHorizontal: 20, marginTop: 24, alignItems: 'center',
     borderWidth: 1, borderRadius: 16, paddingHorizontal: 22, paddingVertical: 28, gap: 10,

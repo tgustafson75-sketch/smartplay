@@ -17,13 +17,14 @@
         "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses and track your round.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket.",
         "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
+        "NSPhotoLibraryAddUsageDescription": "SmartPlay Caddie saves your swing videos and hero moments to your photo library.",
         "UIBackgroundModes": [
           "audio",
           "location"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "8"
+      "buildNumber": "9"
     },
     "android": {
       "package": "com.smartplaycaddie.app",
@@ -113,7 +114,12 @@
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
       "./plugins/withWearSwingBridge.js",
-      ["./plugins/withAsyncStorageSize.js", { "sizeMB": 50 }],
+      [
+        "./plugins/withAsyncStorageSize.js",
+        {
+          "sizeMB": 50
+        }
+      ],
       "./plugins/withPrebuildSafetyCheck.js",
       "expo-asset",
       "expo-localization",
@@ -122,7 +128,9 @@
         {
           "microphonePermission": "SmartPlay Caddie uses the microphone so your caddie can hear you on the course.",
           "speechRecognitionPermission": "SmartPlay Caddie uses on-device speech recognition so your caddie still understands you when there's no signal.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ]
     ],

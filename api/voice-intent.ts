@@ -9,7 +9,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
-import { completeJSON, providerFromHeader, type StructuredSchema } from './_aiProvider';
+import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 // ─── Structured output schema ─────────────────────────────────────────────────
 
@@ -581,7 +581,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // are hot when the first real classification lands. Single 'ping'
   // message, max_tokens:1 — minimal cost. Mirrors api/voice.ts pre-warm.
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
-    const warmProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     try {
       await completeJSON(warmProvider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
       console.log(`[voice-intent] warmup completed (${warmProvider} SDK hot)`);
@@ -618,7 +618,7 @@ ${JSON.stringify(context, null, 2)}
 
 Parse the intent. Return JSON only.`;
 
-    const provider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
+    const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const raw = await completeJSON(provider, 'fast', buildSystemPrompt(personaInput), [{ role: 'user', content: userPrompt }], { maxTokens: 400, temperature: 0, schema: VOICE_INTENT_SCHEMA });
 
     let parsed: Record<string, unknown>;
