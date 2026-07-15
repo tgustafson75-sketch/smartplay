@@ -67,7 +67,8 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 // haversine yardages instead of the pixel-axis interpolation fallback.
 import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
-import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
@@ -630,6 +631,48 @@ export default function SmartVisionScreen() {
           }
         }
       }
+
+      // 2026-07-14 (Tim — "pull up ANY course → AI assembles geometry, cheat the paid DB"):
+      // When the Golf Course API / OSM gave us NO usable green for this hole, DERIVE it from a
+      // satellite tile via our own vision brain (api/hole-scan). FALLBACK ONLY — real geometry
+      // above always wins, so this can never regress a course we already know. Offline-first: a
+      // previously-derived hole hydrates instantly; otherwise we derive once (during an active
+      // round, seeded by the player's live GPS or the course centroid) and cache it. Result is
+      // badged ESTIMATED in the UI and never overrides curated/API data.
+      if (courseId && (!geo || !geo.green)) {
+        let derivedGeo: HoleGeometry | null =
+          getDerivedHoleGeometry(courseId, holeIndex) ??
+          (await loadDerivedGeometry(courseId))[holeIndex] ??
+          null;
+        if (cancelled) return;
+        if (!derivedGeo?.green && isRoundActive) {
+          const okc2 = (c: { lat: number; lng: number } | null | undefined) =>
+            !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
+          const slug2 = getLocalCourseSlug(courseName);
+          const centroid2 = slug2 ? LOCAL_COURSE_CENTROIDS[slug2] : null;
+          const fix2 = getLastFix();
+          const playerPt2 = fix2 && okc2(fix2.location) ? { lat: fix2.location.lat, lng: fix2.location.lng } : null;
+          // Player GPS first — they're standing on THIS hole, so the tile contains its green.
+          const seed = playerPt2 ?? (okc2(centroid2) ? centroid2! : null);
+          if (seed) {
+            try {
+              derivedGeo = await deriveHoleGeometry({
+                seed,
+                holeNumber: holeIndex,
+                par: geo?.par ?? null,
+                yardage: geo?.yardage ?? null,
+                courseId,
+              });
+            } catch (e) {
+              console.log('[smartvision] hole-scan derive failed (non-fatal)', e);
+              derivedGeo = null;
+            }
+          }
+        }
+        if (cancelled) return;
+        if (derivedGeo?.green) geo = derivedGeo;
+      }
+
       if (cancelled) return;
       setGeometry(geo);
 
@@ -1748,6 +1791,15 @@ export default function SmartVisionScreen() {
                 SmartVision will get multimodal grounding from the
                 glasses POV. Renders nothing on non-DAT builds. */}
             <GlassesStatusBadge />
+            {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
+                DERIVED by AI vision from satellite (no curated/API geometry existed), say so.
+                Honesty tenet: the player must know these coords are AI-estimated, not surveyed. */}
+            {geometry?.estimated ? (
+              <View style={styles.estimatedBadge}>
+                <Ionicons name="sparkles" size={9} color="#0a0a0a" />
+                <Text style={styles.estimatedBadgeText}>AI ESTIMATE</Text>
+              </View>
+            ) : null}
           </View>
           <TouchableOpacity onPress={goNext} disabled={holeIndex >= (totalHoles)} style={styles.iconBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
@@ -2253,6 +2305,11 @@ const styles = StyleSheet.create({
   },
   holeBadgeNum: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
   holeBadgePar: { color: '#9ca3af', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginTop: -2 },
+  estimatedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3,
+    backgroundColor: '#88F700', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1,
+  },
+  estimatedBadgeText: { color: '#0a0a0a', fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
   canvasFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   premiumBadge: {
     position: 'absolute', top: 8, right: 8, zIndex: 10,

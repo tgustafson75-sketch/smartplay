@@ -205,6 +205,12 @@ export type HoleGeometry = {
   fairway_polygons?: Polygon[];
   bunkers?: LandmarkFeature[];
   water_hazards?: LandmarkFeature[];
+  // 2026-07-14 (Tim — "cheat the paid geometry DB") — set true when this hole's coords were
+  // DERIVED by AI vision from satellite imagery (services/holeGeometryDerivation), not from a
+  // curated/API source. Consumers badge it as ESTIMATED and use it ONLY as a fallback. Absent
+  // on all real geometry, so existing reads are unchanged.
+  estimated?: boolean;
+  estimated_confidence?: 'high' | 'medium' | 'low';
 };
 
 export type CourseGeometry = {
@@ -232,6 +238,61 @@ export function getCachedGeometry(courseId: string): CourseGeometry | null {
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
   const c = memCache.get(courseId);
   return c?.holes.find(h => h.hole_number === holeNumber) ?? null;
+}
+
+// ─── Derived (AI-estimated) geometry — kept SEPARATE from the real cache ──────
+// 2026-07-14 (Tim — "cheat the paid geometry DB. Pull up ANY course → AI assembles geometry").
+// Estimated per-hole geometry lives in its own keyed cache so it can NEVER be returned by
+// getHoleGeometry()/getCachedGeometry() to consumers that assume curated/API truth. SmartVision
+// (and the CNS) opt IN explicitly via getDerivedHoleGeometry() and always badge it ESTIMATED.
+// Offline: persisted to AsyncStorage; hydrated lazily into memory on first read.
+const DERIVED_KEY_PREFIX = 'course-geometry-derived-v1::';
+const derivedMemCache: Map<string, Record<number, HoleGeometry>> = new Map();
+
+function derivedKey(courseId: string): string {
+  return DERIVED_KEY_PREFIX + courseId;
+}
+
+/** Synchronous read of a single AI-derived hole (null until loadDerivedGeometry has hydrated). */
+export function getDerivedHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
+  if (!courseId) return null;
+  return derivedMemCache.get(courseId)?.[holeNumber] ?? null;
+}
+
+/** Hydrate the derived cache for a course from disk (offline-first). Best-effort. */
+export async function loadDerivedGeometry(courseId: string): Promise<Record<number, HoleGeometry>> {
+  if (!courseId) return {};
+  const mem = derivedMemCache.get(courseId);
+  if (mem) return mem;
+  try {
+    const raw = await AsyncStorage.getItem(derivedKey(courseId));
+    const parsed = raw ? (JSON.parse(raw) as Record<number, HoleGeometry>) : {};
+    derivedMemCache.set(courseId, parsed);
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Anchor an AI-derived hole into the derived cache (mem + disk). Additive: overwrites only the
+ * one hole, never touches real geometry. Marks estimated=true defensively. Returns the hole.
+ */
+export async function saveDerivedHoleGeometry(
+  courseId: string,
+  hole: HoleGeometry,
+): Promise<HoleGeometry | null> {
+  if (!courseId || typeof hole.hole_number !== 'number') return null;
+  const existing = await loadDerivedGeometry(courseId);
+  const marked: HoleGeometry = { ...hole, estimated: true };
+  const next = { ...existing, [hole.hole_number]: marked };
+  derivedMemCache.set(courseId, next);
+  try {
+    await AsyncStorage.setItem(derivedKey(courseId), JSON.stringify(next));
+  } catch (e) {
+    console.warn('[courseGeometry] derived cache write failed:', e);
+  }
+  return marked;
 }
 
 async function readPersistedCache(courseId: string): Promise<CourseGeometry | null> {

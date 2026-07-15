@@ -230,3 +230,40 @@ export function projectToTilePixels(
     y: imgHeight / 2 + y_rot,
   };
 }
+
+/**
+ * 2026-07-14 (Tim — "cheat the paid geometry DB") — EXACT inverse of
+ * projectToTilePixels: given a pixel on a rendered static tile (center, zoom,
+ * bearing, size), return its [lat, lng]. Used by holeGeometryDerivation to
+ * convert the AI hole-scan's normalized green/tee pixels back into real
+ * coordinates. Kept co-located with the forward projection so the two never
+ * drift — same metersPerPixel, same local-tangent-plane, same rotation.
+ */
+export function unprojectTilePixel(
+  px: number,
+  py: number,
+  center: LatLng,
+  zoom: number,
+  bearingDeg: number,
+  imgWidth: number,
+  imgHeight: number,
+): LatLng {
+  const metersPerPixel = (156543.03392 * Math.cos(center.lat * Math.PI / 180)) / Math.pow(2, zoom);
+
+  const x_rot = px - imgWidth / 2;
+  const y_rot = py - imgHeight / 2;
+
+  // Undo the bearing rotation (forward used θ = -bearing; inverse rotates by +θ back).
+  const θ = -bearingDeg * Math.PI / 180;
+  const cosθ = Math.cos(θ);
+  const sinθ = Math.sin(θ);
+  const dx_px = x_rot * cosθ + y_rot * sinθ;
+  const dy_px = -x_rot * sinθ + y_rot * cosθ;
+
+  const dx_m = dx_px * metersPerPixel;
+  const dy_m = -dy_px * metersPerPixel; // image y points down; lat increases northward
+
+  const lng = center.lng + dx_m / ((Math.PI / 180) * R_METERS * Math.cos(center.lat * Math.PI / 180));
+  const lat = center.lat + dy_m / ((Math.PI / 180) * R_METERS);
+  return { lat, lng };
+}
