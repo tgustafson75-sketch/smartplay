@@ -742,9 +742,21 @@ export default function SmartVisionScreen() {
         // only for courses with no curated image.
         const hasCurated = getLocalHoleImage(courseName, holeIndex) != null;
         if (!hasCurated) {
+          // 2026-07-14 (Tim — "if we haven't screenshotted the holes, satellite doesn't work"):
+          // center a Mapbox satellite tile on the best point we have, so ANY course from the Golf
+          // Course API gets real aerial imagery — no paid geometry database. Priority:
+          //   1. a known local-course centroid (wide course view), else
+          //   2. the player's LIVE GPS — they're standing on this hole this round, so the tile
+          //      shows exactly where they are (tight zoom). Combined with the F/M/B GPS yardages,
+          //      this makes the tool useful on a course we never pre-loaded.
+          const okc = (c: { lat: number; lng: number } | null | undefined) =>
+            !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
           const slug = getLocalCourseSlug(courseName);
           const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
-          if (centroid) {
+          const fix = getLastFix();
+          const playerPt = fix && okc(fix.location) ? { lat: fix.location.lat, lng: fix.location.lng } : null;
+          const center = okc(centroid) ? centroid! : playerPt;
+          if (center) {
             const MAX = 1280;
             let reqW = imageW;
             let reqH = imageH;
@@ -753,10 +765,12 @@ export default function SmartVisionScreen() {
               reqW = Math.floor(reqW * scale);
               reqH = Math.floor(reqH * scale);
             }
+            // Player-GPS is a precise standing spot → tighter zoom; a whole-course centroid → wider.
+            const zoom = playerPt && !okc(centroid) ? 17 : 15;
             const uri = getCenteredImageryUrl({
-              lat: centroid.lat,
-              lng: centroid.lng,
-              zoom: 15,
+              lat: center.lat,
+              lng: center.lng,
+              zoom,
               width: reqW,
               height: reqH,
             });
