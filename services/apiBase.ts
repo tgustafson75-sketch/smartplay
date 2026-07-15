@@ -117,3 +117,45 @@ export async function ensureBackendReachable(opts?: { force?: boolean }): Promis
   })();
   return healInFlight;
 }
+
+let connectionWarmed = false;
+let warmInFlight: Promise<void> | null = null;
+
+/**
+ * 2026-07-14 (Tim — "the first attempt to talk to the caddie errors every time") — the boot
+ * voice warmup AND the single ensureBackendReachable ping both fire at ~86ms after launch, when
+ * the OS network stack is coldest. On a slow/cold network that FIRST ping can fail (DNS + TLS to
+ * the custom domain not yet established); the one-shot probe then never retries, so nothing warms
+ * the connection before the user taps the mic. Their first real transcribe then pays the full
+ * cold DNS/TLS cost and hits the 12s timeout → the recurring "first attempt failed" symptom.
+ *
+ * This retries the warm ping with backoff until the host actually answers (bounded ~20s budget),
+ * so a real connection is pooled + DNS is cached BEFORE the first user turn — the retries the
+ * user's first tap used to eat happen silently in the background instead. It also records
+ * reachability (healedThisSession) for ensureBackendReachable's other callers.
+ *
+ * WARMING ONLY: it pings /api/kevin '__ping__' (server short-circuits it — cheap), NEVER switches
+ * hosts (single custom domain, per ensureBackendReachable's root-cause note), and touches nothing
+ * in the voice capture / STT / TTS pipeline. Idempotent + deduped; stops the instant it connects.
+ */
+export function warmBackendConnection(): Promise<void> {
+  if (isExplicitOverride() || connectionWarmed) return Promise.resolve();
+  if (warmInFlight) return warmInFlight;
+  warmInFlight = (async () => {
+    // Backoff schedule (ms before each attempt) — ~20s total, covering the gap between
+    // cold launch and the user reaching the Caddie tab + tapping the mic.
+    const delays = [0, 1500, 3000, 4000, 5500, 6000];
+    for (const d of delays) {
+      if (connectionWarmed) return;
+      if (d) await new Promise((r) => setTimeout(r, d));
+      try {
+        if (await pingHost(activeBase, 5000)) {
+          connectionWarmed = true;
+          healedThisSession = true;
+          return;
+        }
+      } catch { /* keep retrying */ }
+    }
+  })().finally(() => { warmInFlight = null; });
+  return warmInFlight;
+}

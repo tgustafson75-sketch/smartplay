@@ -550,10 +550,12 @@ function AppNavigator() {
     // start as ready-to-go as possible.
     bootMark('voice_warmup_fired');
     void import('../services/voiceWarmup').then(m => { bootMark('voice_warmup_imported'); m.prewarmVoice(); });
-    // SELF-HEAL the backend host in PARALLEL (restored dual-host failover, 7d44a9f).
-    // Switches activeBase for the user's actual calls; warmup re-runs on caddie focus
-    // (30s dedupe) so it isn't wasted if the heal fails over after this first warm.
-    void import('../services/apiBase').then(m => m.ensureBackendReachable()).catch(() => undefined);
+    // 2026-07-14 (Tim — "first attempt to the caddie errors every time") — RETRY the backend
+    // connection warm with backoff until the host answers, instead of the old one-shot ping that
+    // silently gave up if the very first probe (fired at cold-launch ~86ms) failed. This warms
+    // DNS/TLS + pools a connection BEFORE the first mic tap so the first transcribe doesn't eat
+    // the cold-connection timeout. Warming only — never switches hosts, never touches the pipeline.
+    void import('../services/apiBase').then(m => m.warmBackendConnection()).catch(() => undefined);
     // 2026-05-24 — Native BT media-button bridge. Funnels through
     // notifyEarbudTap() so it shares the existing earbudControl
     // pattern (no orchestrator change). Native BluetoothMediaButton
