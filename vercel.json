@@ -122,6 +122,13 @@
       }
     },
     {
+      "src": "api/hole-scan.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
       "src": "api/toptracer-parse.ts",
       "use": "@vercel/node",
       "config": {
@@ -424,6 +431,10 @@
     {
       "src": "/api/space-scan",
       "dest": "/api/space-scan.ts"
+    },
+    {
+      "src": "/api/hole-scan",
+      "dest": "/api/hole-scan.ts"
     },
     {
       "src": "/api/tutorial-analysis",
