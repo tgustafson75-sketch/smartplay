@@ -32,6 +32,7 @@ import {
   fetchCourseGeometry,
   getCachedGeometry,
   getHoleGeometry,
+  getDerivedHoleGeometry,
   type HoleGeometry,
   type LandmarkFeature,
   type Polygon,
@@ -257,7 +258,11 @@ export function getHoleView(
 ): CourseHoleView | null {
   if (!courseId || holeNumber < 1) return null;
 
-  const geom = getHoleGeometry(courseId, holeNumber);
+  // 2026-07-15 (Tim — "everything ties into everything") — prefer real geometry; fall back to
+  // the AI-DERIVED (Tier 1) geometry SmartVision already cached for this hole, so the whole CNS
+  // shot-read pipeline (SmartFinder, brain) benefits on courses we never pre-loaded. Estimated
+  // geometry carries `estimated:true`, which the confidence scorer below down-weights.
+  const geom = getHoleGeometry(courseId, holeNumber) ?? getDerivedHoleGeometry(courseId, holeNumber);
   const cached = getCachedGeometry(courseId);
 
   // ─── Geometry section ───────────────────────────────────────────────
@@ -319,6 +324,7 @@ export function getHoleView(
       (geom?.bunkers?.length ?? 0) + (geom?.water_hazards?.length ?? 0),
     imagerySource: imagery_source,
     hasVision: !!vision_context,
+    estimated: geom?.estimated === true,
   });
 
   return {
@@ -346,7 +352,7 @@ export function getHoleView(
     sustained_heading_deg,
     vision_context,
     confidence,
-    confidence_label: buildConfidenceLabel(confidence, imagery_source, !!cached),
+    confidence_label: buildConfidenceLabel(confidence, imagery_source, !!cached, geom?.estimated === true),
   };
 }
 
@@ -377,6 +383,7 @@ function scoreConfidence(input: {
   landmarkCount: number;
   imagerySource: CourseHoleView['imagery_source'];
   hasVision: boolean;
+  estimated?: boolean;
 }): DataConfidence {
   // Geometry: tee + green is the baseline (60). Add 20 for front/back, +20
   // when both come from the same source (we assume so today).
@@ -385,6 +392,9 @@ function scoreConfidence(input: {
   if (input.hasGreenFrontBack) geometry += 20;
   if (input.hasTee && input.hasGreen) geometry += 20;
   geometry = Math.min(100, geometry);
+  // 2026-07-15 — AI-DERIVED geometry (Tier 1) is a real signal but NOT surveyed truth; cap its
+  // geometry sub-score so a hole running on estimated coords never reads "High confidence".
+  if (input.estimated) geometry = Math.min(geometry, 45);
 
   // Polygons: 0 polygons = 0; 1-2 = 40; 3-4 = 70; 5+ = 95. Bluegolf/Golfshot
   // parity requires fairway + green + tee + a bunker or two.
@@ -419,6 +429,7 @@ function buildConfidenceLabel(
   c: DataConfidence,
   imagery: CourseHoleView['imagery_source'],
   cached: boolean,
+  estimated = false,
 ): string {
   const tier =
     c.overall >= 80 ? 'High confidence' :
@@ -428,7 +439,9 @@ function buildConfidenceLabel(
   if (imagery === 'mapbox') sourceParts.push('Mapbox tile');
   if (imagery === 'centroid_fallback') sourceParts.push('Course-wide tile');
   if (imagery === 'bundled_screenshot') sourceParts.push('Bundled image');
-  if (c.geometry >= 80) sourceParts.push('Tee/Green coords');
+  // Honesty: name AI-estimated geometry explicitly so it's never read as surveyed tee/green data.
+  if (estimated) sourceParts.push('AI-estimated green');
+  else if (c.geometry >= 80) sourceParts.push('Tee/Green coords');
   if (c.polygons >= 70) sourceParts.push('Polygons');
   if (c.vision >= 60) sourceParts.push('Live vision');
   const sources = sourceParts.join(' + ');

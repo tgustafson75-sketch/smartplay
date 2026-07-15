@@ -148,6 +148,12 @@ export interface StaticHoleKnowledge {
   description: string | null;
   /** Hazard labels ("water left", "fairway bunker"), from geometry/content. */
   hazards: string[];
+  // 2026-07-15 (Tim — "look up the public data for the scorecards, cheat the paid DB") — the
+  // PUBLIC SCORECARD (Golf Course API) par + yardage, anchored here at round start so the range
+  // book is complete OFFLINE and the brain can cite real per-hole numbers without a re-fetch.
+  // Optional + additive: absent on older entries, plausibility-gated on write.
+  par?: number | null;
+  yardage?: number | null;
 }
 
 export interface CourseBookEntry {
@@ -218,7 +224,7 @@ interface CaddieMemoryState {
   saveCourseBook: (input: {
     course_id: string;
     name?: string | null;
-    holes?: { hole: number; note?: string | null; description?: string | null; hazards?: string[] }[];
+    holes?: { hole: number; note?: string | null; description?: string | null; hazards?: string[]; par?: number | null; yardage?: number | null }[];
     tips?: string[];
     about?: string | null;
     website?: string | null;
@@ -289,12 +295,18 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
           for (const h of holes ?? []) {
             if (typeof h.hole !== 'number') continue;
             const ph = holesMap[h.hole] ?? { note: null, description: null, hazards: [] };
+            // Plausibility gate (same bounds the yardage resolver + header enforce): a hole is
+            // par 3-6 and ~30-700y. Reject a course-total-sized number so we never anchor garbage.
+            const okPar = typeof h.par === 'number' && h.par >= 3 && h.par <= 6 ? h.par : (ph.par ?? null);
+            const okYds = typeof h.yardage === 'number' && h.yardage > 30 && h.yardage <= 700 ? Math.round(h.yardage) : (ph.yardage ?? null);
             holesMap[h.hole] = {
               note: (h.note && h.note.trim()) ? h.note.trim() : ph.note,
               description: (h.description && h.description.trim()) ? h.description.trim() : ph.description,
               hazards: (h.hazards && h.hazards.length > 0)
                 ? Array.from(new Set(h.hazards.filter((x) => typeof x === 'string' && x.trim()))).slice(0, MAX_HOLE_HAZARDS)
                 : ph.hazards,
+              par: okPar,
+              yardage: okYds,
             };
           }
           const next: CourseBookEntry = {

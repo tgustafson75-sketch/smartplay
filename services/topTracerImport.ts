@@ -89,12 +89,20 @@ export async function parseTopTracerScreenshot(uri: string): Promise<TopTracerPa
     });
 
     if (res.status === 413) return { kind: 'too_large' };
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({})) as { error?: string };
-      return { kind: 'error', message: typeof errBody.error === 'string' ? errBody.error : `HTTP ${res.status}` };
+    // 2026-07-15 (audit) — read as TEXT + parse defensively so a non-JSON 200/HTML page never
+    // surfaces as a raw "JSON Parse error".
+    const CANT_READ_TT = 'Couldn’t read that Toptracer screenshot clearly — try a full, well-lit capture of the stats screen.';
+    const bodyText = await res.text().catch(() => '');
+    let parsedBody: unknown = null;
+    try { parsedBody = bodyText ? JSON.parse(bodyText) : null; } catch { parsedBody = null; }
+    const obj = parsedBody && typeof parsedBody === 'object' ? (parsedBody as Record<string, unknown>) : null;
+    if (!res.ok || !obj) {
+      const apiErr = obj && typeof obj.error === 'string' ? obj.error : '';
+      if (!obj || /non-json|providers failed|parse|json/i.test(apiErr)) return { kind: 'error', message: CANT_READ_TT };
+      return { kind: 'error', message: apiErr || `HTTP ${res.status}` };
     }
 
-    const data = await res.json() as TopTracerParseResult;
+    const data = obj as unknown as TopTracerParseResult;
 
     if (data.view_type === 'unknown') return { kind: 'not_toptracer' };
 

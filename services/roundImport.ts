@@ -210,11 +210,20 @@ export async function parseRoundListScreenshot(uri: string): Promise<ParseListRe
     });
 
     if (res.status === 413) return { kind: 'too_large' };
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      return { kind: 'error', message: typeof errBody.error === 'string' ? errBody.error : `HTTP ${res.status}` };
+    // 2026-07-15 (audit) — read body as TEXT and parse defensively (same hardening as
+    // parseRoundScreenshot above). A non-JSON 200/HTML page must never surface as a raw
+    // "JSON Parse error" to the user.
+    const CANT_READ_LIST = 'Couldn’t read that round list clearly — try a flat, well-lit screenshot of the history.';
+    const bodyText = await res.text().catch(() => '');
+    let parsed: unknown = null;
+    try { parsed = bodyText ? JSON.parse(bodyText) : null; } catch { parsed = null; }
+    const obj = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    if (!res.ok || !obj) {
+      const apiErr = obj && typeof obj.error === 'string' ? obj.error : '';
+      if (!obj || /non-json|providers failed|parse|json/i.test(apiErr)) return { kind: 'error', message: CANT_READ_LIST };
+      return { kind: 'error', message: apiErr || `HTTP ${res.status}` };
     }
-    const data = (await res.json()) as RoundListImportResult;
+    const data = obj as unknown as RoundListImportResult;
     const notAList = (data.rounds ?? []).length === 0 &&
       (data.warnings ?? []).some(w => /doesn't look like a round-history list|not a round/i.test(w));
     if (notAList) return { kind: 'not_a_list' };

@@ -351,9 +351,13 @@ export default function Settings() {
           if (result.reason === 'canceled') return;
           const msg = result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
             ? 'Couldn’t find any dated workouts in that file.'
-            : result.reason.startsWith('http_') || /pdf/i.test(result.reason)
-              ? 'Couldn’t read that export. Try an image or a JSON/CSV export.'
-              : 'That file couldn’t be read as a SmartPump export.';
+            : result.reason === 'no_network'
+              ? 'Couldn’t reach the server — check your connection and try again.'
+              : result.reason === 'too_large'
+                ? 'That file is too large — try a single-page export or a JSON/CSV.'
+                : result.reason.startsWith('http_') || /pdf/i.test(result.reason)
+                  ? 'Couldn’t read that export. Try an image or a JSON/CSV export.'
+                  : 'That file couldn’t be read as a SmartPump export.';
           useToastStore.getState().show(msg);
           return;
         }

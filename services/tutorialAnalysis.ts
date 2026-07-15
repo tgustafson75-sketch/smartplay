@@ -104,7 +104,9 @@ export async function analyzeTutorial(
         latency_ms,
         body_preview: text.slice(0, 200),
       });
-      return { kind: 'error', message: `HTTP ${res.status}: ${text.slice(0, 200)}`, latency_ms };
+      // 2026-07-15 (audit) — the raw body (HTML proxy page / provider JSON) must not reach the
+      // user; keep the preview in telemetry only, show friendly copy.
+      return { kind: 'error', message: 'Couldn’t analyze that tutorial right now — try again in a moment.', latency_ms };
     }
 
     const data = await res.json() as Partial<TutorialAnalysisResult>;

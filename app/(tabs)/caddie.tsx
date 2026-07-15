@@ -49,6 +49,7 @@ import { useCageStore } from '../../store/cageStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse, getCourseHoleCount, getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
+import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
@@ -2308,6 +2309,27 @@ export default function CaddieTab() {
     // pre-round mental check-in survives into Kevin's first-hole context.
     if (opts.mentalState) {
       useRoundStore.getState().setMentalState(opts.mentalState);
+    }
+
+    // 2026-07-15 (Tim — "look up the public data for the scorecards, cheat the paid DB"):
+    // anchor the auto-looked-up PUBLIC SCORECARD (par + yardage per hole, from the Golf Course
+    // API above) into the offline CNS course book so the range book is complete without a
+    // network round-trip and the brain can cite real per-hole numbers. Best-effort, additive
+    // (saveCourseBook plausibility-gates + merges — never wipes existing tips/about/geometry).
+    if (courseId && holes.length > 0) {
+      try {
+        const scorecardHoles = holes
+          .filter(h => typeof h.hole === 'number')
+          .map(h => ({ hole: h.hole, par: h.par ?? null, yardage: h.distance ?? null }));
+        useCaddieMemoryStore.getState().saveCourseBook({
+          course_id: courseId,
+          name: courseName,
+          holes: scorecardHoles,
+          nowMs: Date.now(),
+        });
+      } catch (e) {
+        console.log('[startRound] scorecard→CNS anchor failed (non-fatal):', e);
+      }
     }
 
     if (courseId) {

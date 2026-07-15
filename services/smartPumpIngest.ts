@@ -151,10 +151,17 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
       fileB64 = await FS.readAsStringAsync(uri, { encoding: FS.EncodingType.Base64 });
     }
 
+    // 2026-07-15 (audit) — client-side size guard. Vercel's gateway rejects bodies >~4.5MB before
+    // the function runs, so a multi-page SmartPump PDF would fail opaquely. Fail friendly first.
+    if (fileB64.length > 5_000_000) return { ok: false, reason: 'too_large' };
+
+    // 2026-07-15 (audit) — this was the only import path with no timeout: a hung connection left
+    // the spinner spinning forever. Bound it and map the abort to a connectivity reason.
     const res = await fetch(`${getApiBaseUrl().replace(/\/+$/, '')}/api/workout-import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file_b64: fileB64, file_media_type: media }),
+      signal: AbortSignal.timeout(60_000),
     });
     const json = (await res.json().catch(() => ({}))) as { workouts?: ParsedWorkoutRow[]; error?: string; confidence?: string; warnings?: string[] };
     if (!res.ok) return { ok: false, reason: json.error ?? `http_${res.status}` };
@@ -163,6 +170,9 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
     const imported = useWorkoutStore.getState().addWorkouts(rowsToRecords(rows));
     return { ok: true, imported, parsed: rows.length, confidence: json.confidence, warnings: json.warnings };
   } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : 'read_failed' };
+    const msg = e instanceof Error ? e.message : 'read_failed';
+    // Map network/timeout aborts to an honest connectivity reason (not a "bad file" message).
+    if (/network|abort|timeout|fetch/i.test(msg)) return { ok: false, reason: 'no_network' };
+    return { ok: false, reason: msg };
   }
 }

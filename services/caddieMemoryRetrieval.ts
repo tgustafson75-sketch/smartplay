@@ -146,6 +146,12 @@ export function getCaddieContext(input: {
         const sh = useCaddieMemoryStore.getState().getStaticHole(input.courseId, input.hole);
         if (sh) {
           const sParts: string[] = [];
+          // 2026-07-15 — the anchored PUBLIC SCORECARD (par + yardage). Available on hole 1 of a
+          // never-played course and offline, before any learned HoleMemory exists.
+          const card: string[] = [];
+          if (typeof sh.par === 'number') card.push(`par ${sh.par}`);
+          if (typeof sh.yardage === 'number') card.push(`${sh.yardage}y`);
+          if (card.length > 0) sParts.push(card.join(', '));
           if (sh.note) sParts.push(sh.note);
           if (sh.hazards && sh.hazards.length > 0) sParts.push(`watch: ${sh.hazards.slice(0, 3).join(', ')}`);
           if (sParts.length > 0) lines.push(`Hole notes (course book) — ${sParts.join('; ')}.`);

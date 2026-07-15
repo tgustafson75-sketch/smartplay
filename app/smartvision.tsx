@@ -299,6 +299,12 @@ function Marker({ kind, x, y, draggable, onDragLive, onDragEnd }: {
 
 // ─── Screen ──────────────────────────────────────────────────────
 
+// 2026-07-15 (audit) — session-scoped guard for the AI hole-geometry derive. Keyed by
+// `courseId:hole`, it suppresses a repeat/overlapping 30s vision call for a hole we already
+// tried this session (success is cached in the derived store; failures otherwise had no cache),
+// and closes the in-flight race where a rotation/split re-runs the effect mid-derive.
+const svDeriveAttempts = new Set<string>();
+
 export default function SmartVisionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -645,19 +651,26 @@ export default function SmartVisionScreen() {
           (await loadDerivedGeometry(courseId))[holeIndex] ??
           null;
         if (cancelled) return;
-        if (!derivedGeo?.green && isRoundActive) {
+        // Live derive ONLY for the hole the player is STANDING on (holeIndex === currentHole) with a
+        // real GPS fix. The seed tile is centered on the player, so deriving for a hole they've
+        // chevron-previewed (but aren't on) would read the WRONG hole's green from their current
+        // position and cache it — a confidently-wrong green. Correctness over coverage. (audit #1)
+        const attemptKey = `${courseId}:${holeIndex}`;
+        if (
+          !derivedGeo?.green &&
+          isRoundActive &&
+          holeIndex === currentHole &&
+          !svDeriveAttempts.has(attemptKey)
+        ) {
           const okc2 = (c: { lat: number; lng: number } | null | undefined) =>
             !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
-          const slug2 = getLocalCourseSlug(courseName);
-          const centroid2 = slug2 ? LOCAL_COURSE_CENTROIDS[slug2] : null;
           const fix2 = getLastFix();
           const playerPt2 = fix2 && okc2(fix2.location) ? { lat: fix2.location.lat, lng: fix2.location.lng } : null;
-          // Player GPS first — they're standing on THIS hole, so the tile contains its green.
-          const seed = playerPt2 ?? (okc2(centroid2) ? centroid2! : null);
-          if (seed) {
+          if (playerPt2) {
+            svDeriveAttempts.add(attemptKey); // mark BEFORE await → suppresses the in-flight re-run race
             try {
               derivedGeo = await deriveHoleGeometry({
-                seed,
+                seed: playerPt2,
                 holeNumber: holeIndex,
                 par: geo?.par ?? null,
                 yardage: geo?.yardage ?? null,
@@ -670,7 +683,25 @@ export default function SmartVisionScreen() {
           }
         }
         if (cancelled) return;
-        if (derivedGeo?.green) geo = derivedGeo;
+        // MERGE, don't replace: keep any real surveyed tee / hazards / polygons we already had and
+        // only fill the missing green (front/center/back) from the estimate. On municipal courses
+        // the API gives a real tee but a null green — replacing wholesale would throw the tee away
+        // and the model's tee is often null. (audit #2)
+        if (derivedGeo?.green) {
+          const effTee = geo?.tee ?? derivedGeo.tee ?? null;
+          geo = {
+            ...(geo ?? derivedGeo),
+            green: derivedGeo.green,
+            green_front: derivedGeo.green_front ?? geo?.green_front ?? null,
+            green_back: derivedGeo.green_back ?? geo?.green_back ?? null,
+            tee: effTee,
+            // Recompute bearing from the EFFECTIVE tee to the new green (the old bearing, if any,
+            // was for the previously-null green and is now wrong).
+            bearing_deg: effTee ? bearingDegrees(effTee, derivedGeo.green) : (derivedGeo.bearing_deg ?? null),
+            estimated: true,
+            estimated_confidence: derivedGeo.estimated_confidence,
+          };
+        }
       }
 
       if (cancelled) return;
@@ -1794,7 +1825,7 @@ export default function SmartVisionScreen() {
             {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
                 DERIVED by AI vision from satellite (no curated/API geometry existed), say so.
                 Honesty tenet: the player must know these coords are AI-estimated, not surveyed. */}
-            {geometry?.estimated ? (
+            {geometry?.estimated && !(curatedImage && imageryMode !== 'gps') ? (
               <View style={styles.estimatedBadge}>
                 <Ionicons name="sparkles" size={9} color="#0a0a0a" />
                 <Text style={styles.estimatedBadgeText}>AI ESTIMATE</Text>
@@ -1805,29 +1836,29 @@ export default function SmartVisionScreen() {
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
           </TouchableOpacity>
         </View>
-        {/* Imagery mode toggle — cycles auto → curated → gps. Icon +
-            label so the current mode is readable without guessing. Lets
-            the user switch between live satellite (when geometry is
-            available) and bundled screenshots. */}
-        <TouchableOpacity
-          onPress={() => {
-            const next = imageryMode === 'auto' ? 'curated' : imageryMode === 'curated' ? 'gps' : 'auto';
-            setImageryMode(next);
-          }}
-          style={styles.modeBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          accessibilityRole="button"
-          accessibilityLabel={`Imagery mode: ${imageryMode === 'gps' ? 'Satellite' : imageryMode === 'curated' ? 'Photo' : 'Auto'} (tap to cycle)`}
-        >
-          <Ionicons
-            name={imageryMode === 'gps' ? 'globe' : imageryMode === 'curated' ? 'image' : 'sparkles'}
-            size={20}
-            color="#ffffff"
-          />
-          <Text style={styles.modeBtnText}>
-            {imageryMode === 'gps' ? 'Satellite' : imageryMode === 'curated' ? 'Photo' : 'Auto'}
-          </Text>
-        </TouchableOpacity>
+        {/* 2026-07-15 (Tim — "it's just satellite and static, drop the 3D pretense") — a clean
+            TWO-way toggle: Satellite (live aerial — now works on ANY course via Tier 1 AI geometry)
+            vs Static (hand-curated hole photo). 'auto' persists only as the invisible pre-round
+            default that picks best-available, and it always RESOLVES to one of the two visually —
+            so the surface only ever shows the two real choices. Tapping switches to the other. */}
+        {(() => {
+          // What is the canvas actually showing right now? gps → satellite; curated + a bundled
+          // photo → static; auto → static when a curated photo exists for this hole, else satellite.
+          const showingStatic =
+            imageryMode === 'curated' || (imageryMode === 'auto' && !!curatedImage);
+          return (
+            <TouchableOpacity
+              onPress={() => setImageryMode(showingStatic ? 'gps' : 'curated')}
+              style={styles.modeBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Imagery: ${showingStatic ? 'Static hole photo' : 'Satellite'} (tap to switch)`}
+            >
+              <Ionicons name={showingStatic ? 'image' : 'globe'} size={20} color="#ffffff" />
+              <Text style={styles.modeBtnText}>{showingStatic ? 'Static' : 'Satellite'}</Text>
+            </TouchableOpacity>
+          );
+        })()}
       </View>
 
       {/* 2026-05-23 — Live Strategy card. Auto-renders when the
@@ -1886,7 +1917,7 @@ export default function SmartVisionScreen() {
             <Text style={styles.canvasFallbackTitle}>{courseName ?? 'No course'}</Text>
             <Text style={styles.canvasFallbackSub}>
               {imageryMode === 'gps'
-                ? 'GPS imagery requires hole geometry (tee + green coords).'
+                ? 'Satellite needs your location or a course fix — start a round to place the aerial.'
                 : geometry ? 'Hole imagery unavailable' : 'No geometry for this hole'}
             </Text>
           </View>

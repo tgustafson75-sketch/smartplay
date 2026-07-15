@@ -567,7 +567,11 @@ function estimatedFromTee(
   hole: number,
   fix: LastFix,
 ): GreenYardages | null {
-  const total = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance : null;
+  // 2026-07-15 (audit) — plausibility gate at the SOURCE: a hole is ~30-700y. If a course-TOTAL
+  // (5,000-7,500y) ever leaks into hData.distance, this 'estimated' tier is higher priority than
+  // the static_card tier's gate, so without this clamp it would surface the whole-course yardage as
+  // a confident gps_live number to the brain/voice. Reject implausible totals here.
+  const total = typeof hData.distance === 'number' && hData.distance > 30 && hData.distance <= 700 ? hData.distance : null;
   const teeValid = typeof hData.teeLat === 'number' && typeof hData.teeLng === 'number'
     && Number.isFinite(hData.teeLat) && Number.isFinite(hData.teeLng)
     && Math.abs(hData.teeLat) <= 90 && Math.abs(hData.teeLng) <= 180
