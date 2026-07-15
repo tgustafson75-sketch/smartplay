@@ -1348,15 +1348,21 @@ function TargetCameraOverlay({
     const target = { lat: result.target_lat, lng: result.target_lng };
     const geodesicYards = Math.max(1, Math.round(haversineYards(fix.location, target)));
     const gpsMiddleYards = yards.reason === 'ok' ? yards.middle : null;
-    const plausible =
-      gpsMiddleYards != null && Math.abs(geodesicYards - gpsMiddleYards) < 60;
-    if (!plausible) {
-      // Tilt off by >60yd of the GPS baseline (or no GPS middle to compare):
-      // keep the GPS distance shown, mark confidence Low, don't overwrite.
-      setReticleConfidence('low');
-      return;
+    if (gpsMiddleYards != null) {
+      // ON-COURSE: gate the camera-tilt read against the honest GPS green-middle baseline (SF-1).
+      // A tilt read >60yd off the baseline is horizon-noise → keep the GPS distance, drop to Low.
+      if (Math.abs(geodesicYards - gpsMiddleYards) >= 60) {
+        setReticleConfidence('low');
+        return;
+      }
+      setReticleConfidence(result.confidence);
+    } else {
+      // 2026-07-14 (Tim — range / off-course POINT-FINDER) — not in a round, so there's no GPS
+      // green to gate against; the camera-tilt read is the only signal. Accept it as the measured
+      // distance so SmartFinder works as a standalone range-measuring tool (point → yards). Cap
+      // confidence at Med — the tilt method is approximate, never truth-grade (esp. near horizon).
+      setReticleConfidence(result.confidence === 'high' ? 'medium' : result.confidence);
     }
-    setReticleConfidence(result.confidence);
     if (lastYardsRef.current !== geodesicYards) {
       lastYardsRef.current = geodesicYards;
       setTargetYards(geodesicYards);
