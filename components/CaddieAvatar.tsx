@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   Animated,
   Easing,
@@ -18,6 +19,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // hardcoded — they're brand-intentional and changing them risks dark-
 // mode regressions we'd need to verify visually.
 import { useTheme } from '../contexts/ThemeContext';
+
+// 2026-07-18 (Tim) — brand voice-state icons (neon #88F700), shown off to the caddie's RIGHT
+// (user's LEFT) so the state cue never covers the caddie's face.
+const STATE_ICONS = {
+  listening: require('../assets/icons/caddie/listening.png'),
+  speaking: require('../assets/icons/caddie/speaking.png'),
+  thinking: require('../assets/icons/caddie/thinking.png'),
+} as const;
 
 // ─── AVATAR MAP ───────────────────────────
 
@@ -805,10 +814,16 @@ export default function CaddieAvatar({
   const proactiveLabel = customPortraitB64
     ? '◆ Your Caddie'
     : '◆ ' + personaDisplayName(persona);
-  const stateText =
-    voiceState === 'listening'             ? '● Listening' :
-    (voiceState === 'thinking' || isThinking) ? '◌ Thinking'  :
-    voiceState === 'speaking'              ? '▶ Speaking'  :
+  // 2026-07-18 (Tim) — brand icon + label for the voice state, placed on the user's LEFT so it
+  // never covers the caddie's face. Proactive stays a text badge (persona name), no icon.
+  const stateIconSrc =
+    voiceState === 'listening'             ? STATE_ICONS.listening :
+    (voiceState === 'thinking' || isThinking) ? STATE_ICONS.thinking :
+    voiceState === 'speaking'              ? STATE_ICONS.speaking : null;
+  const stateLabel =
+    voiceState === 'listening'             ? 'Listening' :
+    (voiceState === 'thinking' || isThinking) ? 'Thinking'  :
+    voiceState === 'speaking'              ? 'Speaking'  :
     voiceState === 'proactive'             ? proactiveLabel : '';
 
   const hudItems = [
@@ -961,14 +976,18 @@ export default function CaddieAvatar({
           ]}
         />
 
-        {/* Layer 6 — State label */}
-        {(voiceState !== 'idle' || isThinking) && (
-          <View style={[styles.stateTag, { top: insets.top + 60 }]}>
-            <Text style={[styles.stateTagText, { color: ringColor }]}>
-              {stateText}
-            </Text>
+        {/* Layer 6 — State cue: brand icon + label on the user's LEFT (caddie's right), off the
+            face. Icon for listening/thinking/speaking; proactive is a text-only persona badge. */}
+        {(voiceState !== 'idle' || isThinking) && (stateIconSrc || stateLabel) ? (
+          <View style={styles.stateTag}>
+            {stateIconSrc ? (
+              <Image source={stateIconSrc} style={styles.stateIcon} resizeMode="contain" />
+            ) : null}
+            {stateLabel ? (
+              <Text style={[styles.stateTagText, { color: ringColor }]}>{stateLabel}</Text>
+            ) : null}
           </View>
-        )}
+        ) : null}
 
       </TouchableOpacity>
 
@@ -1078,18 +1097,26 @@ const styles = StyleSheet.create({
     // push the badge down accordingly instead of colliding. Z Fold
     // (insets.top ≈ 24) still renders at top ≈ 84 — visual no-op on
     // the reference device.
+    // 2026-07-18 (Tim) — moved from centered-over-the-face to the user's LEFT (caddie's right),
+    // vertically beside the face and clear of the top wordmark. Icon + label stacked.
     position: 'absolute',
-    left: 0,
-    right: 0,
+    left: 14,
+    top: '36%',
     alignItems: 'center',
+    gap: 5,
+  },
+  stateIcon: {
+    width: 52,
+    height: 52,
   },
   stateTagText: {
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 14,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderRadius: 20,
     overflow: 'hidden',
   },
