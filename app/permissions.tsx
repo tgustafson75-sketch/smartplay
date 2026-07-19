@@ -43,16 +43,13 @@ const PERMISSIONS = [
     why: 'For GPS yardages, hole detection, SmartFinder, and shot tracking. Required for almost everything during a round.',
   },
   {
-    icon: 'walk-outline' as const,
-    label: 'Background Location',
-    why: 'Tap "Allow all the time" so yardages keep updating when your phone is in the cart. If you pick "While Using Only", GPS stops when your screen turns off.',
-  },
-  {
     icon: 'images-outline' as const,
     label: 'Photo Library',
     why: 'For Space Scan and Tutorial Upload when you pick a photo or video instead of capturing one fresh.',
   },
 ];
+// 2026-07-18 — background ("Allow all the time") location is NOT requested here anymore; it's
+// asked just-in-time when a round starts (store-compliant). See services/permissionsManager.ts.
 
 export default function PermissionsScreen() {
   const router = useRouter();
@@ -127,7 +124,6 @@ export default function PermissionsScreen() {
               ? (i === 0 ? result.camera.granted
                 : i === 1 ? result.microphone.granted
                 : i === 2 ? result.location.granted
-                : i === 3 ? result.backgroundLocation.granted
                 : result.mediaLibrary.granted)
               : undefined;
             return (
@@ -145,16 +141,9 @@ export default function PermissionsScreen() {
           })}
         </View>
 
-        {Platform.OS === 'ios' && (
-          <Text style={styles.warningText}>
-            iOS will ask twice. First tap &quot;Allow While Using&quot;, then &quot;Change to Always Allow&quot; on the next screen.
-          </Text>
-        )}
-        {Platform.OS === 'android' && (
-          <Text style={styles.warningText}>
-            Tap &quot;Allow all the time&quot; so yardages keep updating when your phone is in the cart.
-          </Text>
-        )}
+        <Text style={styles.foot}>
+          When you start a round, we&apos;ll ask once more to keep GPS running with your screen off — so yardages update in the cart.
+        </Text>
 
         <TouchableOpacity
           style={[styles.allowBtn, busy && styles.allowBtnBusy]}

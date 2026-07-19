@@ -118,18 +118,14 @@ export async function requestCorePermissions(): Promise<CorePermissionsResult> {
   try {
     location = normalize(await Location.requestForegroundPermissionsAsync());
   } catch (e) { console.log('[perm] location request failed', e); location = normalize(null); }
-  // Background location prompt only fires when foreground is granted —
-  // Android skips the dialog (or auto-denies) otherwise, and iOS
-  // requires the foreground grant first by design. Failure here is
-  // non-fatal: foreground service on Android still keeps GPS warm.
-  if (location.granted) {
-    try {
-      backgroundLocation = normalize(await Location.requestBackgroundPermissionsAsync());
-    } catch (e) { console.log('[perm] background-location request failed', e); backgroundLocation = normalize(null); }
-  } else {
-    // Re-check anyway in case OS state changed since the foreground prompt.
-    try { backgroundLocation = normalize(await Location.getBackgroundPermissionsAsync()); } catch {}
-  }
+  // 2026-07-18 (Tim — "set permissions correctly") — do NOT prompt for background ("Allow all
+  // the time") location at first-run pre-flight. Requesting always-on background location with no
+  // earned context is a common App/Play Store rejection reason. We only READ the current state
+  // here; the background prompt is requested JUST-IN-TIME when a round actually starts
+  // (store/roundStore.ts startRound → requestBackgroundPermissionsAsync), which is the correct,
+  // store-compliant pattern. Foreground location + the Android foreground service still keep GPS
+  // warm without it.
+  try { backgroundLocation = normalize(await Location.getBackgroundPermissionsAsync()); } catch {}
   try {
     mediaLibrary = normalize(await ImagePicker.requestMediaLibraryPermissionsAsync());
   } catch (e) { console.log('[perm] media-library request failed', e); mediaLibrary = normalize(null); }

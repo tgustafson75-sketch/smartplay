@@ -1670,6 +1670,15 @@ export default function Settings() {
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
           />
+          {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
+          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
+            <View style={styles.rowText}><Text style={labelStyle}>Privacy Policy</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=terms' as never)} accessibilityRole="button">
+            <View style={styles.rowText}><Text style={labelStyle}>Terms of Service</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
         </CollapsibleSection>
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}

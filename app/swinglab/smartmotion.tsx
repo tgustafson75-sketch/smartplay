@@ -1226,9 +1226,16 @@ export default function SmartMotion() {
     const dir = smartTrace.badge;
     const bs = metrics.ball_speed;
     const bsEst = bs.value != null && !isTruthGrade(bs.source);
+    // 2026-07-18 (Tim — "make ball speed and smash estimated so we can show something, medium
+    // honesty") — surface SMASH on the rail as an ESTIMATE (~), same treatment as ball speed. It's
+    // synthesized from club-speed × typical-smash so it's directional, not measured; the "~" makes
+    // that clear. Only shown when we have a value.
+    const sm = metrics.smash_factor;
+    const smEst = sm.value != null && !isTruthGrade(sm.source);
     return [
       { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
       { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${bsEst ? '~' : ''}${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
+      { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null ? `${smEst ? '~' : ''}${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
   }, [isPutt, tempo, metrics, smartTrace]);
@@ -4433,13 +4440,9 @@ export default function SmartMotion() {
               <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
               <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>FACE ANGLE</Text>
             </View>
-            <View style={styles.comingItem}>
-              <Image source={ICON_METRIC.smash} style={styles.comingImg} resizeMode="contain" />
-              <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>SMASH FACTOR</Text>
-            </View>
           </View>
           <Text style={[styles.comingNote, { color: colors.text_muted }]}>
-            Unlocks with higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) — on the roadmap.
+            Face angle needs higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) to measure reliably — on the roadmap. (Smash factor now shows as an estimate above.)
           </Text>
         </View>
       ) : null}

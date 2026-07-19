@@ -98,22 +98,9 @@ export default function WelcomeScreen() {
     }).start();
   }, [termsAccepted, ctaOpacity]);
 
-  // Placeholder handlers for "View Full Terms" + "Privacy Policy".
-  // Real legal text gets drafted + reviewed before store submission
-  // (see SPRINT-LOG launch-prep section). These open a polite Alert
-  // explaining the placeholder state until the docs are ready.
-  const showTermsPlaceholder = () => {
-    Alert.alert(
-      'Full Terms — coming soon',
-      'The complete Terms of Service document is in legal review before App Store / Play Store submission. The summary above covers the substantive commitments. Reach out to support@smartplaycaddie.com with questions.',
-    );
-  };
-  const showPrivacyPlaceholder = () => {
-    Alert.alert(
-      'Privacy Policy — coming soon',
-      'The full Privacy Policy is in legal review before App Store / Play Store submission. SmartPlay Caddie collects location, voice, camera, and gameplay data as outlined in the summary above. Reach out to support@smartplaycaddie.com with questions.',
-    );
-  };
+  // 2026-07-18 — real in-app legal documents (constants/legalText.ts, rendered by app/legal.tsx).
+  const showTermsPlaceholder = () => router.push('/legal?doc=terms' as never);
+  const showPrivacyPlaceholder = () => router.push('/legal?doc=privacy' as never);
 
   const handleGetStarted = () => {
     // 2026-05-22 — T&C gate. CTA is visually disabled when terms not
