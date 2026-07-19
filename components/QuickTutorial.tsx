@@ -116,7 +116,7 @@ export function QuickTutorial({
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.iconWrap}>
-            <Ionicons name={iconName} size={32} color="#00C896" />
+            <Ionicons name={iconName} size={32} color="#88F700" />
           </View>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{title}</Text>
@@ -128,7 +128,7 @@ export function QuickTutorial({
                 accessibilityLabel="Read these instructions aloud"
                 style={styles.speakerBtn}
               >
-                <Ionicons name="volume-high" size={20} color="#00C896" />
+                <Ionicons name="volume-high" size={20} color="#88F700" />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 6 },
   speakerBtn: {
     width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(0,200,150,0.5)', backgroundColor: 'rgba(0,200,150,0.12)',
+    borderWidth: 1, borderColor: 'rgba(136,247,0,0.5)', backgroundColor: 'rgba(136,247,0,0.12)',
   },
   title: {
     color: '#ffffff',
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   },
   line: { color: '#e5e7eb', fontSize: 14, lineHeight: 20, marginVertical: 2 },
   gotItBtn: {
-    backgroundColor: '#00C896',
+    backgroundColor: '#88F700',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

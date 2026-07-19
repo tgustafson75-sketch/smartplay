@@ -314,8 +314,10 @@ export default function SwingLab() {
   // surfaces (fold-open, tablet, landscape). Narrow form factors render
   // unchanged.
   const { isWide } = useDeviceLayout();
-  // 2026-07-10 (Tim) — per-section expand state; sections start collapsed to their
-  // primary drill for a clean landing, expand to reveal the rest.
+  // 2026-07-18 (Tim — "default the SwingLab section cards to EXPANDED so new users see all the
+  // cards; they can show less if they want"). Sections default to EXPANDED (unset === expanded);
+  // the "Show less" toggle sets a key to false. Was collapsed-by-default (a discoverability gap
+  // the beta audit flagged — Swing Library, Open Range, Tempo, etc. were hidden behind a tap).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // 2026-06-11 — Removed the spoken "turn on Active Listening for hands-free
@@ -353,7 +355,7 @@ export default function SwingLab() {
             the FULL section list, so colors stay consistent whether collapsed or expanded. */}
         {SECTIONS.map((section) => {
           const seg = SECTION_SEGMENTS[section.key];
-          const isExpanded = !!expanded[section.key];
+          const isExpanded = expanded[section.key] !== false; // default EXPANDED; "Show less" sets false
           const rest = section.cards.slice(1);
           const visible = isExpanded ? section.cards : section.cards.slice(0, 1);
           return (
