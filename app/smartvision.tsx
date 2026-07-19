@@ -1971,63 +1971,51 @@ export default function SmartVisionScreen() {
               land in the wrong spots, so suppress them when preferCurated. They
               return for Golfbert/Mapbox tiles where the projection matches. */}
           {!preferCurated && projection && geometry && (() => {
-            const polyToPoints = (poly: { lat: number; lng: number }[]): string => {
-              return poly
-                .map(p => {
-                  const off = projectToPixels(p, projection.center, projection.zoom, projection.bearing);
-                  return `${(imageW / 2 + off.x).toFixed(1)},${(imageH / 2 - off.y).toFixed(1)}`;
-                })
-                .join(' ');
+            // 2026-07-18 (audit) — finite-guard every projected vertex. A single non-finite
+            // polygon point (bad AI/Golfbert geometry, null lat/lng) would emit "NaN,NaN" into the
+            // SVG `points` string → react-native-svg native parser THROWS → white-screen/crash on
+            // Android. Return null for any polygon with a bad vertex (or <3 points) → skip it.
+            const polyToPoints = (poly: { lat: number; lng: number }[]): string | null => {
+              const parts: string[] = [];
+              for (const p of poly) {
+                const off = projectToPixels(p, projection.center, projection.zoom, projection.bearing);
+                const x = imageW / 2 + off.x;
+                const y = imageH / 2 - off.y;
+                if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+                parts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+              }
+              return parts.length >= 3 ? parts.join(' ') : null;
             };
             const fairways = geometry.fairway_polygons ?? [];
             const bunkers = geometry.bunkers ?? [];
             const water = geometry.water_hazards ?? [];
-            const greenPoly = geometry.green_polygon ?? null;
-            const teePoly = geometry.tee_polygon ?? null;
+            const greenPts = geometry.green_polygon ? polyToPoints(geometry.green_polygon) : null;
+            const teePts = geometry.tee_polygon ? polyToPoints(geometry.tee_polygon) : null;
             return (
               <SvgG>
-                {fairways.map((poly, i) => (
-                  <SvgPolygon
-                    key={'fw-' + i}
-                    points={polyToPoints(poly)}
-                    fill="rgba(78,163,106,0.35)"
-                    stroke="rgba(78,163,106,0.85)"
-                    strokeWidth={1}
-                  />
-                ))}
-                {water.map((w, i) => (
-                  <SvgPolygon
-                    key={'wh-' + i}
-                    points={polyToPoints(w.polygon)}
-                    fill="rgba(56,189,248,0.55)"
-                    stroke="rgba(14,116,144,0.95)"
-                    strokeWidth={1.5}
-                  />
-                ))}
-                {bunkers.map((b, i) => (
-                  <SvgPolygon
-                    key={'bk-' + i}
-                    points={polyToPoints(b.polygon)}
-                    fill="rgba(252,211,77,0.7)"
-                    stroke="rgba(180,140,40,0.95)"
-                    strokeWidth={1.5}
-                  />
-                ))}
-                {teePoly && (
-                  <SvgPolygon
-                    points={polyToPoints(teePoly)}
-                    fill="rgba(251,191,36,0.45)"
-                    stroke="rgba(180,140,40,0.95)"
-                    strokeWidth={1.5}
-                  />
+                {fairways.map((poly, i) => {
+                  const pts = polyToPoints(poly);
+                  return pts ? (
+                    <SvgPolygon key={'fw-' + i} points={pts} fill="rgba(78,163,106,0.35)" stroke="rgba(78,163,106,0.85)" strokeWidth={1} />
+                  ) : null;
+                })}
+                {water.map((w, i) => {
+                  const pts = polyToPoints(w.polygon);
+                  return pts ? (
+                    <SvgPolygon key={'wh-' + i} points={pts} fill="rgba(56,189,248,0.55)" stroke="rgba(14,116,144,0.95)" strokeWidth={1.5} />
+                  ) : null;
+                })}
+                {bunkers.map((b, i) => {
+                  const pts = polyToPoints(b.polygon);
+                  return pts ? (
+                    <SvgPolygon key={'bk-' + i} points={pts} fill="rgba(252,211,77,0.7)" stroke="rgba(180,140,40,0.95)" strokeWidth={1.5} />
+                  ) : null;
+                })}
+                {teePts && (
+                  <SvgPolygon points={teePts} fill="rgba(251,191,36,0.45)" stroke="rgba(180,140,40,0.95)" strokeWidth={1.5} />
                 )}
-                {greenPoly && (
-                  <SvgPolygon
-                    points={polyToPoints(greenPoly)}
-                    fill="rgba(126,211,163,0.7)"
-                    stroke="rgba(255,255,255,0.95)"
-                    strokeWidth={2}
-                  />
+                {greenPts && (
+                  <SvgPolygon points={greenPts} fill="rgba(126,211,163,0.7)" stroke="rgba(255,255,255,0.95)" strokeWidth={2} />
                 )}
               </SvgG>
             );

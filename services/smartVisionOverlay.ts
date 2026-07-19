@@ -99,6 +99,7 @@ export function computeLayupSuggestion(
   // Lay-up target: a point on the tee→green axis, at a distance from the
   // green that leaves a comfortable wedge (typically 100-110 yards).
   const totalDist = haversineYards(geometry.tee, geometry.green);
+  if (!(totalDist > 0)) return null; // 2026-07-18 (audit) — degenerate tee≈green → NaN position
   const targetDistFromTee = Math.max(hazardInRange.distance_yards - 30, totalDist - 110);
   const t = targetDistFromTee / totalDist;
 
@@ -127,6 +128,7 @@ export function computeLandingZone(
   if (geometry.par < 4) return null;
   const distance = playerDriverYards ?? 230;
   const totalDist = haversineYards(geometry.tee, geometry.green);
+  if (!(totalDist > 0)) return null; // 2026-07-18 (audit) — degenerate tee≈green → NaN position
   const t = Math.min(distance / totalDist, 0.85);
 
   return {

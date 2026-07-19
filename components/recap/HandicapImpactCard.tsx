@@ -91,11 +91,14 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     const parForHole = (hole: number): number =>
       round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? courseHoles.find(c => c.hole === hole)?.par ?? 4;
     const tee = (courseHoles[0] ?? bundled[0]) as ({ course_rating?: number; slope_rating?: number } | undefined);
+    // 2026-07-18 (audit) — resolve par from REAL sources only; do NOT fall back to a fabricated 72.
+    // A differential computed off par-72/slope-113 neutrals would be wrong on a par-70/71 course, so
+    // if no real par is available we return null (the card renders its honest "no impact" state).
     const par =
       (round.holePars ? Object.values(round.holePars).reduce((a, b) => a + b, 0) : 0) ||
       (bundled.length ? bundled.reduce((a, h) => a + h.par, 0) : 0) ||
-      courseHoles.reduce((a, h) => a + h.par, 0) ||
-      72;
+      courseHoles.reduce((a, h) => a + h.par, 0);
+    if (!(par > 0)) return null;
     const rating = tee?.course_rating ?? par;
     const slope = tee?.slope_rating ?? 113;
 

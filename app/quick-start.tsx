@@ -69,9 +69,9 @@ const CARDS: Card[] = [
     icon: 'flag-outline',
     title: 'Getting Started',
     bullets: [
-      '1. Open the app',
-      '2. Complete onboarding (takes about 90 seconds)',
-      '3. Connect Bluetooth earbuds if you want voice interaction',
+      '1. Open the app — your caddie is ready, no setup required',
+      '2. Tap the Caddie tab and just talk to it',
+      '3. Connect Bluetooth earbuds if you want hands-free voice',
       '4. Tap Play tab → select a course → start a round',
     ],
     footer: 'For practice: SwingLab tab → Cage Mode → set up phone → record swings.',

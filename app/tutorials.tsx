@@ -68,7 +68,7 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => [
       'On L1 / L2 the SmartVision card sits above SmartFinder showing the current hole.',
       'Tap the card to open the full SmartVision tool for that hole.',
       'Course geometry shows tee, green, your position, and shot path when available.',
-      'Falls back to a course image (Palms today) when GPS geometry isn\'t loaded.',
+      'Falls back to a satellite or curated hole image when live geometry isn\'t loaded.',
     ],
   },
   {

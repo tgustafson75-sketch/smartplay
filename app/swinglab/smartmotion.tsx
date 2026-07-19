@@ -46,6 +46,8 @@ import { Video, ResizeMode } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
+import { QuickTutorial } from '../../components/QuickTutorial';
+import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
@@ -4517,6 +4519,20 @@ export default function SmartMotion() {
         selected={club}
         onPick={(c) => { setClub(c); setLastClub(c); setPuttMode(c === 'PT'); setClubMenuOpen(false); }}
       />
+
+      {/* 2026-07-18 (beta audit) — first-run help for SmartMotion. SCREEN_HELP.smartmotion was
+          authored but never mounted (orphan content; Settings' "Reset Tutorials" claimed it
+          existed). QuickTutorial self-shows once, silent by default. Gated to the SETUP phase so
+          it can never appear mid-record/review. */}
+      {phase === 'setup' && !clipUri ? (
+        <QuickTutorial
+          slug="smartmotion_intro"
+          title={SCREEN_HELP.smartmotion.title}
+          iconName={SCREEN_HELP.smartmotion.icon as never}
+          lines={SCREEN_HELP.smartmotion.lines}
+          spokenText={SCREEN_HELP.smartmotion.spoken}
+        />
+      ) : null}
     </View>
   );
 }

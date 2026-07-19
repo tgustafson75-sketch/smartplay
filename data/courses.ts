@@ -121,7 +121,10 @@ const PALMS_HOLES: CourseHole[] = [
     frontLat: 33.6949593, frontLng: -117.1500649,
     backLat: 33.6952167, backLng: -117.1501826,
     note: '', estimated: false },
-  { hole:  3, par: 4, distance: 356, front: 318, back: 350,
+  // 2026-07-18 (beta audit) — static F/B were inverted (back 350 < center 356). Corrected to the
+  // ±14y green-depth convention used across Palms. The live GPS front/back coords below are fine;
+  // this only affects the fallback (no-fix/indoor) read.
+  { hole:  3, par: 4, distance: 356, front: 342, back: 370,
     teeLat: 33.6953922, teeLng: -117.1504551,
     middleLat: 33.6944984, middleLng: -117.1535805,
     frontLat: 33.6945105, frontLng: -117.1534179,
@@ -172,7 +175,8 @@ const PALMS_HOLES: CourseHole[] = [
     frontLat: 33.6897242, frontLng: -117.1535928,
     backLat: 33.6897854, backLng: -117.1539220,
     note: '', estimated: false },
-  { hole: 10, par: 4, distance: 364, front: 371, back: 397,
+  // 2026-07-18 (beta audit) — static F/B were wrong (front 371 > center 364). Corrected to ±14y.
+  { hole: 10, par: 4, distance: 364, front: 350, back: 378,
     teeLat: 33.6895579, teeLng: -117.1547524,
     middleLat: 33.6889745, middleLng: -117.1584892,
     frontLat: 33.6890602, frontLng: -117.1583718,

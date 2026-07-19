@@ -65,7 +65,11 @@ export function DistanceCard({
   // can tell card-total from live read. Effective gpsAccuracy
   // downgrades to 'weak' so the GPS dot dims. Same no-fake-
   // precision principle as the Phase 418 validation gate.
-  const isScorecardFallback = fmb?.reason === 'no_geometry';
+  // 2026-07-18 (beta audit) — 'no_fix' (GPS hasn't landed yet, e.g. the first tee before the
+  // first fix) returns the static scorecard number. It was rendering as a BARE, confident live
+  // read with a solid green GPS dot — fake precision on the exact first-impression beat. Treat it
+  // like the other scorecard fallbacks: "~" prefix, SCORECARD pill, dimmed dot.
+  const isScorecardFallback = fmb?.reason === 'no_geometry' || fmb?.reason === 'no_fix';
   // 2026-07-06 (elite audit) — `reason === 'estimated'` (tee-relative GPS
   // estimate from yardageResolver, tagged low/med confidence upstream) was
   // rendered as a bare measured number. Same honesty treatment: "~" prefix,

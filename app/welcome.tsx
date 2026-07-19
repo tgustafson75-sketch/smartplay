@@ -35,6 +35,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
+import { signalGreetingComplete } from './greeting';
 
 type CaddiePick = {
   id: Persona;
@@ -147,6 +148,13 @@ export default function WelcomeScreen() {
     if (!profile.first_opened_at) {
       usePlayerProfileStore.setState({ first_opened_at: Date.now() });
     }
+
+    // 2026-07-18 (beta audit) — welcome routes STRAIGHT to the caddie, bypassing the greeting
+    // screen. The caddie's spoken opener awaits awaitGreetingComplete() (10s safety timeout);
+    // without this signal, on the very first launch the greeting never mounts AND the signal never
+    // fires, so the caddie sat silent for the full 10s — the worst possible first impression.
+    // Signal completion here so the caddie greets immediately on arrival.
+    signalGreetingComplete();
 
     router.replace('/(tabs)/caddie' as never);
   };

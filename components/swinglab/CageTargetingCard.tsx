@@ -483,6 +483,9 @@ export function BallTraceOverlay({
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!trace) return null;
+  // 2026-07-18 (audit) — finite-guard the endpoints for parity with ShotTraceOverlay; a NaN in an
+  // SVG Line/Circle coord can hard-crash react-native-svg on Android.
+  if (![trace.from.x, trace.from.y, trace.to.x, trace.to.y].every(Number.isFinite)) return null;
   const { w, h } = size;
   const label = trace.side === 'straight' ? 'ON LINE' : `${trace.divergenceDeg}° ${trace.side.toUpperCase()}`;
   return (
@@ -574,12 +577,25 @@ export function MultiPointTraceOverlay({
     return d;
   })();
   const measuredStr = measuredPts.map(pt).join(' '); // straight fallback for <3 points
-  // The dashed projection starts at the last MEASURED point so the segments meet
-  // visually, but it's drawn as its own (dashed/faded) polyline — never merged.
-  const projPts = (trace.projected ?? []).filter(fin);
-  const projStr = projPts.length > 0
-    ? [measuredPts[measuredPts.length - 1], ...projPts].map(pt).join(' ')
-    : null;
+  // The projection starts at the last MEASURED point so the segments meet visually, but it's
+  // drawn as its own (dashed) line — never merged with measured. Rendered as a SMOOTH curved
+  // arc (the projected flight is a gentle parabola) so it reads like a real shot tracer.
+  const projPtsRaw = [measuredPts[measuredPts.length - 1], ...((trace.projected ?? []).filter(fin))];
+  const projPath = (() => {
+    if (projPtsRaw.length < 3) return null;
+    const px = projPtsRaw.map(p => ({ x: p.x * w, y: p.y * h, t: 0 }));
+    let d = `M ${px[0].x} ${px[0].y}`;
+    for (let i = 0; i < px.length - 1; i++) {
+      const p0 = px[i - 1] ?? px[i];
+      const p1 = px[i];
+      const p2 = px[i + 1];
+      const p3 = px[i + 2] ?? px[i + 1];
+      const { cp1x, cp1y, cp2x, cp2y } = catmullRomBezier(p0, p1, p2, p3);
+      d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
+    }
+    return d;
+  })();
+  const projStr = projPtsRaw.length >= 2 ? projPtsRaw.map(pt).join(' ') : null; // fallback polyline
   const origin = measuredPts[0];
   return (
     <View
@@ -589,19 +605,31 @@ export function MultiPointTraceOverlay({
     >
       {w > 0 && (
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-          {/* PROJECTED — dashed + faded, drawn UNDER the measured line. */}
-          {projStr && (
+          {/* PROJECTED — the flight arc: dashed (still distinct from measured) but more present
+              now (Tim — "such a visual catch"), drawn UNDER the measured line. Smooth curve. */}
+          {projPath ? (
+            <SvgPath
+              d={projPath}
+              fill="none"
+              stroke={color}
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray="10,8"
+              opacity={0.62}
+            />
+          ) : projStr ? (
             <SvgPolyline
               points={projStr}
               fill="none"
               stroke={color}
-              strokeWidth={3}
+              strokeWidth={3.5}
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeDasharray="7,7"
-              opacity={0.45}
+              strokeDasharray="10,8"
+              opacity={0.62}
             />
-          )}
+          ) : null}
           {/* MEASURED — solid, full opacity. Smooth clean arc through the real detected
               positions (centripetal spline); straight polyline fallback for <3 points. */}
           {measuredPath ? (

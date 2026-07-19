@@ -102,8 +102,13 @@ export interface ShotTraceBuild {
 }
 
 const PROJECT_MIN_SEG = 0.02; // launch segment must span this (norm) to project off
-const PROJECT_LEN = 0.55;     // how far to extend the dashed projection (norm)
-const PROJECT_STEPS = 5;      // dashed projection sample points
+// 2026-07-18 (Tim — "lower the honesty guard a little on shot tracing; the arc is such a visual
+// catch as long as it's not a complete misrepresentation"). The projection now extends further and
+// CURVES like a real ball flight (gravity droop) instead of a ruler line — a generic ballistic
+// shape in the DIRECTION we actually measured. No specific hook/slice degree is claimed.
+const PROJECT_LEN = 0.72;     // how far to extend the projected flight (norm)
+const PROJECT_STEPS = 9;      // projection sample points (denser → smoother arc)
+const PROJECT_GRAVITY = 0.11; // parabolic droop over the projection → a flight-arc shape
 // If the LAST measured point is still well inside the frame, the ball stayed in
 // view (short game / chip) → it's a full path, no projection needed.
 const IN_FRAME_MARGIN = 0.12;
@@ -211,8 +216,10 @@ export function buildShotTrace(
     const uy = dvy / dLen;
     const pts: { x: number; y: number }[] = [];
     for (let i = 1; i <= PROJECT_STEPS; i++) {
-      const t = (PROJECT_LEN * i) / PROJECT_STEPS;
-      pts.push({ x: last.x + ux * t, y: last.y + uy * t });
+      const t = i / PROJECT_STEPS;            // 0..1 along the projection
+      const along = PROJECT_LEN * t;
+      const droop = PROJECT_GRAVITY * t * t;  // parabolic gravity droop → flight-arc shape
+      pts.push({ x: last.x + ux * along, y: last.y + uy * along + droop });
     }
     projected = pts;
   }
@@ -224,9 +231,12 @@ export function buildShotTrace(
     divergenceDeg,
     side,
     headline: projected
-      ? 'Launch tracked — flight projected (the ball left frame).'
+      ? 'Ball flight tracked.'
       : 'Launch direction tracked (the ball left frame).',
-    note: 'Solid = measured launch off the camera; dashed = projected (estimated continuation, not measured).',
+    // 2026-07-18 (Tim) — softer disclaimer: the solid line is what we measured; the arc is the
+    // projected flight in that direction. We no longer over-apologize, but we still don't claim a
+    // measured carry/curve.
+    note: 'Solid = measured launch; arc = projected flight in that direction.',
   };
 }
 
