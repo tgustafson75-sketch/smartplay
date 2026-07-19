@@ -34,7 +34,7 @@
  *     extractKeyFrames signature).
  */
 
-import * as VT from 'expo-video-thumbnails';
+import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 import { devLog } from './devLog';

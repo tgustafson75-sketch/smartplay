@@ -16,7 +16,7 @@
  * failure. The caller still stores the feel and shows a graceful fallback.
  */
 
-import * as VideoThumbnails from 'expo-video-thumbnails';
+import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';
 

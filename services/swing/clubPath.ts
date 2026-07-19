@@ -14,7 +14,7 @@
  * partial/estimated read. Never a fabricated smooth club path.
  */
 
-import * as VideoThumbnails from 'expo-video-thumbnails';
+import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';

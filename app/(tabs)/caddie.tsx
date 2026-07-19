@@ -927,18 +927,15 @@ export default function CaddieTab() {
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (!ve) return;
       if (event.type === 'entered') {
-        // 2026-06-29 (Tim) — DON'T auto-ask "what are we working on?" and then leave a
-        // cold mic: the camera owns the mic in SmartMotion, so the greeting's
-        // auto-listen never actually engaged — a dead question. Generic open now says
-        // NOTHING; the caddie mic badge is right there to TAP if the user wants to
-        // talk. A drill open still gets a drill-aware heads-up — but as a STATEMENT,
-        // not a question, and with NO auto-listen.
-        if (event.drillName) {
-          const greeting = `${event.drillName}${event.drillFocus ? ` — ${event.drillFocus}` : ''}. Hit one when you're ready and I'll watch it.`;
-          configureAudioForSpeech()
-            .then(() => speak(greeting, vg, lang, apiUrl, { userInitiated: true }))
-            .catch(() => {});
-        }
+        // 2026-07-18 (Tim — "when you go to a drill it auto-prompts and breaks the pipeline")
+        // — SmartMotion/drill entry now says NOTHING. The old drill heads-up fired speak() on
+        // navigation, which (one-voice invariant) CANCELLED any in-progress caddie conversation
+        // and injected an unsolicited prompt — an interruption, not a help. The drill name is
+        // already on-screen, and the caddie mic badge is right there to TAP ("what's up?") when
+        // the user actually wants to engage. Generic entry was already silent (2026-06-29); this
+        // extends the same rule to drill entry so the unified voice pipeline is never interrupted
+        // just by moving to a screen. (Drill CONFIG still applies via subscribeDrillConfig.)
+        void event; // no-op: entry is intentionally silent
       } else if (event.type === 'session_complete') {
         // 2026-07-07 (Tim — "prompt for another round so I never go back to the phone")
         // — after the per-swing reads, offer the NEXT ROUND explicitly. A "yes / run it

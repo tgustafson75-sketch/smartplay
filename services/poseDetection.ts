@@ -185,7 +185,7 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
  * capture length). Returns empty array on any failure — consumer treats
  * as `no_frames`.
  */
-import * as VT from 'expo-video-thumbnails';
+import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity

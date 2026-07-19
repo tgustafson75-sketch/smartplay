@@ -151,6 +151,36 @@ export class VoiceCommandRouter {
       };
     }
 
+    // 2026-07-18 (Tim — "TightLie is way too trigger-happy; a lot of things open that tool") —
+    // opening the TightLie CAMERA is the most disruptive open (it seizes the camera + audio
+    // session). A MEDIUM-confidence classification of an ambiguous "lie"/"the play" mention was
+    // enough to launch it. Require HIGH confidence for this one tool; on anything less, route to
+    // the conversational brain (same as `conversational` above) so strategy talk and situation
+    // descriptions get a spoken answer instead of the camera. Explicit "analyze/check/open my
+    // lie" still classifies HIGH and opens normally.
+    const gateToolName = String(
+      intent.intent_type === 'open_tool' ? (intent.parameters?.tool_name ?? '') : intent.intent_type,
+    ).toLowerCase();
+    if (gateToolName === 'lie_analysis' || gateToolName === 'tightlie') {
+      // Gate 1 (Tim 2026-07-18) — TightLie only makes sense DURING A ROUND. A lie read off the
+      // course (mid-conversation, at home) is nonsensical, so never open the camera then.
+      let inRound = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        inRound = require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
+      } catch { inRound = false; }
+      // Gate 2 — opening the camera is the most disruptive action; require HIGH confidence so an
+      // ambiguous "lie"/"the play" mention can't seize the camera.
+      if (!inRound || intent.confidence !== 'high') {
+        return {
+          success: false,
+          voice_response: null,
+          side_effects: [`route_to_brain:lie_analysis_gated:${inRound ? 'conf' : 'no_round'}`],
+          follow_up_needed: false,
+        };
+      }
+    }
+
     let handler = this.handlers.get(intent.intent_type);
     // Alias a tool-name intent_type to the open_tool handler (see note above).
     if (!handler && OPEN_TOOL_ALIAS_INTENTS.has(intent.intent_type)) {

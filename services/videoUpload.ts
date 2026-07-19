@@ -1223,7 +1223,7 @@ export async function ensureSwingThumbnail(
 ): Promise<void> {
   try {
     if (!sessionId || !clipUri) return;
-    const VT = await import('expo-video-thumbnails');
+    const VT = await import('../utils/videoThumbnail'); // serialized wrapper (native retriever crash fix)
     // Prefer the impact frame; fall back to a small offset (skip a black frame 0), then 0.
     const candidates = [...(atMs && atMs > 0 ? [Math.round(atMs)] : []), 500, 0];
     let tmp: string | null = null;
