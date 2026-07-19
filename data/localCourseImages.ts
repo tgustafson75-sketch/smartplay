@@ -280,7 +280,11 @@ export type LocalCourseSlug =
   // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL (Tim's Florida trip).
   | 'spessard-holland'
   // 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-views.
-  | 'webster-dudley';
+  | 'webster-dudley'
+  // 2026-07-18 — Trump National Doral (Gold course), Miami FL + Pembroke Lakes CC,
+  // Pembroke Pines FL. 18 holes each, cropped from Tim's Golf Pad hole-view captures.
+  | 'doral-gold'
+  | 'pembroke-pines';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -326,8 +330,55 @@ export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   15: WD[6], 16: WD[7], 17: WD[8], 18: WD[9],
 };
 
+// 2026-07-18 — Trump National Doral, GOLD course (Miami FL). 18 holes, cropped from Tim's
+// Golf Pad hole-view captures (aerial + flight line + green distance).
+export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/doral-gold/hole-01.jpg'),
+  2:  require('../assets/courses/doral-gold/hole-02.jpg'),
+  3:  require('../assets/courses/doral-gold/hole-03.jpg'),
+  4:  require('../assets/courses/doral-gold/hole-04.jpg'),
+  5:  require('../assets/courses/doral-gold/hole-05.jpg'),
+  6:  require('../assets/courses/doral-gold/hole-06.jpg'),
+  7:  require('../assets/courses/doral-gold/hole-07.jpg'),
+  8:  require('../assets/courses/doral-gold/hole-08.jpg'),
+  9:  require('../assets/courses/doral-gold/hole-09.jpg'),
+  10: require('../assets/courses/doral-gold/hole-10.jpg'),
+  11: require('../assets/courses/doral-gold/hole-11.jpg'),
+  12: require('../assets/courses/doral-gold/hole-12.jpg'),
+  13: require('../assets/courses/doral-gold/hole-13.jpg'),
+  14: require('../assets/courses/doral-gold/hole-14.jpg'),
+  15: require('../assets/courses/doral-gold/hole-15.jpg'),
+  16: require('../assets/courses/doral-gold/hole-16.jpg'),
+  17: require('../assets/courses/doral-gold/hole-17.jpg'),
+  18: require('../assets/courses/doral-gold/hole-18.jpg'),
+};
+
+// 2026-07-18 — Pembroke Lakes Country Club (Pembroke Pines FL). 18 holes, same capture source.
+export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1:  require('../assets/courses/pembroke-pines/hole-01.jpg'),
+  2:  require('../assets/courses/pembroke-pines/hole-02.jpg'),
+  3:  require('../assets/courses/pembroke-pines/hole-03.jpg'),
+  4:  require('../assets/courses/pembroke-pines/hole-04.jpg'),
+  5:  require('../assets/courses/pembroke-pines/hole-05.jpg'),
+  6:  require('../assets/courses/pembroke-pines/hole-06.jpg'),
+  7:  require('../assets/courses/pembroke-pines/hole-07.jpg'),
+  8:  require('../assets/courses/pembroke-pines/hole-08.jpg'),
+  9:  require('../assets/courses/pembroke-pines/hole-09.jpg'),
+  10: require('../assets/courses/pembroke-pines/hole-10.jpg'),
+  11: require('../assets/courses/pembroke-pines/hole-11.jpg'),
+  12: require('../assets/courses/pembroke-pines/hole-12.jpg'),
+  13: require('../assets/courses/pembroke-pines/hole-13.jpg'),
+  14: require('../assets/courses/pembroke-pines/hole-14.jpg'),
+  15: require('../assets/courses/pembroke-pines/hole-15.jpg'),
+  16: require('../assets/courses/pembroke-pines/hole-16.jpg'),
+  17: require('../assets/courses/pembroke-pines/hole-17.jpg'),
+  18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'webster-dudley': WEBSTER_DUDLEY_HOLE_IMAGES,
+  'doral-gold': DORAL_GOLD_HOLE_IMAGES,
+  'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
   'palms': PALMS_HOLE_IMAGES,
   'lakes': LAKES_HOLE_IMAGES,
   'rancho-california': RANCHO_CALIFORNIA_HOLE_IMAGES,
@@ -394,6 +445,10 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   'westlake-cc-nj':   { lat: 40.0828,    lng: -74.3196 },
   // 2026-06-21 — Greenhill Golf Course, Worcester MA.
   'greenhill':        { lat: 42.2677,    lng: -71.8562 },
+  // 2026-07-18 — Trump National Doral (Gold), Miami FL (golfcourseapi id 29427).
+  'doral-gold':       { lat: 25.812008,  lng: -80.3377 },
+  // 2026-07-18 — Pembroke Lakes CC, Pembroke Pines FL (golfcourseapi id 29669).
+  'pembroke-pines':   { lat: 26.019337,  lng: -80.2868 },
 };
 
 /**
@@ -406,6 +461,10 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   const c = courseName.toLowerCase();
   if (c.includes('crystal') && c.includes('spring')) return 'crystal-springs';
   if (c.includes('mariner')) return 'mariners-point';
+  // 2026-07-18 — Doral + Pembroke. Pembroke MUST precede the generic 'lakes' match below,
+  // since the course is "Pembroke LAKES" and would otherwise resolve to the Menifee 'lakes'.
+  if (c.includes('doral')) return 'doral-gold';
+  if (c.includes('pembroke')) return 'pembroke-pines';
   if (c.includes('palms')) return 'palms';
   if (c.includes('lakes') && !c.includes('palms')) return 'lakes';
   if (c.includes('rancho')) return 'rancho-california';
@@ -454,6 +513,9 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   const c = courseName.toLowerCase();
   if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-18 — Doral + Pembroke. Pembroke precedes the 'lakes' match (course is "Pembroke Lakes").
+  if (c.includes('doral')) return DORAL_GOLD_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
   // "palms" check must follow "lakes" handling — Tim's home-course label
   // is often "Menifee Lakes — Palms" which contains both words. Without
   // anchoring on "palms" appearing in the suffix, a Crystal Springs round

@@ -653,7 +653,77 @@ export const WEBSTER_DUDLEY_HOLES: CourseHole[] = [
   ...WEBSTER_DUDLEY_FRONT.map((h) => ({ ...h, hole: h.hole + 9 })),
 ];
 
+// 2026-07-18 — Trump National Doral, GOLD course ("Golden Palm"), Miami FL. Par + yardage from
+// golfcourseapi id 29574 (BLACK tees, par 71 / 6807y). F/B are ±14y green-depth estimates; hole
+// GPS coords 0 (the Golf Pad captures don't carry per-hole tee/green coords) so on-course play
+// uses live GPS + the tee-estimate path + Mark Green, like Spessard/Webster. 18 cropped aerials
+// in assets/courses/doral-gold/.
+export const DORAL_GOLD_HOLES: CourseHole[] = [
+  { hole: 1, par: 4, distance: 484, front: 470, back: 498, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2, par: 5, distance: 565, front: 551, back: 579, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3, par: 4, distance: 428, front: 414, back: 442, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4, par: 5, distance: 506, front: 492, back: 520, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5, par: 4, distance: 387, front: 373, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6, par: 4, distance: 413, front: 399, back: 427, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7, par: 3, distance: 216, front: 202, back: 230, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8, par: 4, distance: 423, front: 409, back: 437, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9, par: 3, distance: 237, front: 223, back: 251, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 323, front: 309, back: 337, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 5, distance: 569, front: 555, back: 583, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 3, distance: 147, front: 133, back: 161, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 340, front: 326, back: 354, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 4, distance: 411, front: 397, back: 425, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 209, front: 195, back: 223, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 5, distance: 512, front: 498, back: 526, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 3, distance: 199, front: 185, back: 213, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 438, front: 424, back: 452, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
+// 2026-07-18 — Pembroke Lakes Country Club, Pembroke Pines FL. Par + yardage from golfcourseapi
+// id 29669 (CHAMPIONSHIP tees, par 72 / 6799y). Same estimate/coord notes as Doral above. 18
+// cropped aerials in assets/courses/pembroke-pines/.
+export const PEMBROKE_PINES_HOLES: CourseHole[] = [
+  { hole: 1, par: 4, distance: 379, front: 365, back: 393, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2, par: 4, distance: 370, front: 356, back: 384, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3, par: 5, distance: 532, front: 518, back: 546, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4, par: 3, distance: 183, front: 169, back: 197, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5, par: 4, distance: 397, front: 383, back: 411, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6, par: 5, distance: 522, front: 508, back: 536, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7, par: 3, distance: 153, front: 139, back: 167, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8, par: 4, distance: 373, front: 359, back: 387, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9, par: 4, distance: 397, front: 383, back: 411, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 5, distance: 511, front: 497, back: 525, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 4, distance: 380, front: 366, back: 394, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 4, distance: 373, front: 359, back: 387, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 3, distance: 223, front: 209, back: 237, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 5, distance: 528, front: 514, back: 542, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 217, front: 203, back: 231, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 4, distance: 428, front: 414, back: 442, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 4, distance: 429, front: 415, back: 443, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 404, front: 390, back: 418, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
+  {
+    id: 'doral-gold',
+    name: 'Doral Gold',
+    fullName: 'Trump National Doral — Golden Palm (Gold)',
+    rating: '74.2',
+    slope: '139',
+    par: 71,
+    totalYards: 6807,
+    holes: DORAL_GOLD_HOLES,
+  },
+  {
+    id: 'pembroke-pines',
+    name: 'Pembroke Lakes',
+    fullName: 'Pembroke Lakes Country Club — Pembroke Pines FL',
+    rating: '72.9',
+    slope: '139',
+    par: 72,
+    totalYards: 6799,
+    holes: PEMBROKE_PINES_HOLES,
+  },
   {
     id: 'webster-dudley',
     name: 'Webster Dudley',

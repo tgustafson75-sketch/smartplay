@@ -60,6 +60,8 @@ import {
   GREENHILL_HOLE_IMAGES,
   SPESSARD_HOLLAND_HOLE_IMAGES,
   WEBSTER_DUDLEY_HOLE_IMAGES,
+  DORAL_GOLD_HOLE_IMAGES,
+  PEMBROKE_PINES_HOLE_IMAGES,
   getLocalHoleImageById,
 } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
@@ -266,6 +268,32 @@ const LOCAL_COURSES: CourseSummary[] = [
     thumbnail: (WEBSTER_DUDLEY_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
     lat: 42.0479,
     lng: -71.9048,
+  },
+  // 2026-07-18 — Trump National Doral (Gold/"Golden Palm"), Miami FL. 18 cropped aerials +
+  // real par/yardage (golfcourseapi id 29574). Coords = resort center; refine on-site.
+  {
+    id: 'local:doral-gold',
+    club_name: 'Trump National Doral — Gold',
+    location: 'Miami, FL',
+    rating: 74.2,
+    slope: 139,
+    isLocal: true,
+    thumbnail: (DORAL_GOLD_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 25.812008,
+    lng: -80.3377,
+  },
+  // 2026-07-18 — Pembroke Lakes CC, Pembroke Pines FL. 18 cropped aerials + real par/yardage
+  // (golfcourseapi id 29669).
+  {
+    id: 'local:pembroke-pines',
+    club_name: 'Pembroke Lakes CC',
+    location: 'Pembroke Pines, FL',
+    rating: 72.9,
+    slope: 139,
+    isLocal: true,
+    thumbnail: (PEMBROKE_PINES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    lat: 26.019337,
+    lng: -80.2868,
   },
 ];
 
