@@ -2225,6 +2225,14 @@ export const useVoiceCaddie = ({
     // prewarmVoice is idempotent + 30s-deduped, so a rapid re-tap is free.
     try { prewarmVoice(true); } catch { /* non-fatal */ }
 
+    // 2026-07-18 (Tim — haptic feedback so you feel the caddie mic register your tap). Best-effort,
+    // wrapped — never blocks or affects the voice flow.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const H = require('expo-haptics');
+      void H.impactAsync(H.ImpactFeedbackStyle.Medium).catch(() => {});
+    } catch { /* haptics optional */ }
+
     // 2026-06-04 — Belt-and-suspenders guard: floating KevinBadge
     // routes through this handler instead of listeningSession.toggle,
     // so the toggle-level sessionInFlight check doesn't apply here.

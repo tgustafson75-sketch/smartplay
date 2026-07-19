@@ -155,9 +155,38 @@ function armDormancyTimer(forState: SessionState): void {
 // report ms-since-capture across every response branch.
 let lastCaptureEndMs: number | null = null;
 
+// 2026-07-18 (Tim — "vary it so it's natural, not a robot repeating one line") — a rotating set of
+// short, natural acknowledgments spoken the moment we finish capturing your voice, so you know it
+// heard you before it processes. Kept to clear words that read well in device TTS (no "mm-hmm").
+const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
+  en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
+  es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],
+  zh: ['好的，明白了。', '明白了。', '好的。', '收到。', '让我看看。', '稍等。'],
+};
+let lastAckIdx = -1;
+function pickAck(lang: 'en' | 'es' | 'zh'): string {
+  const arr = ACK_PHRASES[lang] ?? ACK_PHRASES.en;
+  if (arr.length <= 1) return arr[0] ?? 'Got it.';
+  let i = Math.floor(Math.random() * arr.length);
+  if (i === lastAckIdx) i = (i + 1) % arr.length; // never immediately repeat the same phrase
+  lastAckIdx = i;
+  return arr[i];
+}
+
 function setSessionStateMirror(next: SessionState): void {
   const prev = state;
   state = next;
+  // 2026-07-18 (Tim — "add a haptic when you tap the caddie/earbud/glasses so you FEEL it's on").
+  // Every trigger source (earbud/glasses tap, global mic badge) flows through this chokepoint, so
+  // one place covers them all. Best-effort + wrapped — a haptics failure can NEVER affect the
+  // voice flow. The "done listening" cue is a spoken "Okay, got it." (see the capture-end block).
+  if (next === 'listening' && prev !== 'listening') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const H = require('expo-haptics');
+      void H.impactAsync(H.ImpactFeedbackStyle.Medium).catch(() => {});
+    } catch { /* haptics optional */ }
+  }
   // [path4:voice] response phase boundaries. Centralised here (not at the
   // ~5 scattered speak() sites) so every branch — diagnostic, small-talk,
   // handler, abort — emits exactly one start/end pair and the markers can't
@@ -402,6 +431,19 @@ async function openSession() {
   }
   const t_capture_end = Date.now();
   lastCaptureEndMs = t_capture_end;
+
+  // 2026-07-18 (Tim — spoken "got it" ack on capture end, VARIED so it feels natural). Immediate
+  // device-TTS confirmation that we heard you, THEN it processes. Best-effort + gated on
+  // voiceEnabled; the real response (persona voice) supersedes it via the one-voice invariant, so
+  // a fast answer simply cuts the short ack — never talks over it in a stacked way.
+  try {
+    const settingsAck = useSettingsStore.getState();
+    if (settingsAck.voiceEnabled) {
+      const lang = (['en', 'es', 'zh'] as const).includes(settingsAck.language as never) ? (settingsAck.language as 'en' | 'es' | 'zh') : 'en';
+      const { speakDeviceNotice } = await import('./voiceService');
+      void speakDeviceNotice(pickAck(lang), lang, settingsAck.voiceGender).catch(() => {});
+    }
+  } catch { /* ack is best-effort — never blocks the turn */ }
 
   // Phase 3 — classify + respond
   setSessionStateMirror('thinking');
