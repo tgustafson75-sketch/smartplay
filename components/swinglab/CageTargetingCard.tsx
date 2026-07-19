@@ -25,7 +25,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Modal, Image, useWindowDimensions, PanResponder } from 'react-native';
-import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon, Polyline as SvgPolyline } from 'react-native-svg';
+import Svg, { Circle as SvgCircle, Line as SvgLine, Ellipse as SvgEllipse, Polygon as SvgPolygon, Polyline as SvgPolyline, Path as SvgPath } from 'react-native-svg';
+import { cleanArc, catmullRomBezier } from '../../services/swing/smoothArc';
 import { translateRig } from '../../services/cage/targetRig';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
@@ -553,7 +554,26 @@ export function MultiPointTraceOverlay({
   const pt = (p: { x: number; y: number }) => `${p.x * w},${p.y * h}`;
   const measuredPts = trace.measured.filter(fin);
   if (measuredPts.length < 2) return null;
-  const measuredStr = measuredPts.map(pt).join(' ');
+  // 2026-07-18 (Tim — shot tracing) — a ball flight is a SMOOTH ballistic arc, so draw the
+  // measured line as a cleaned (de-spiked + averaged) CENTRIPETAL Catmull-Rom curve in pixel
+  // space, not a jagged straight polyline through raw CV detections. Still measured-only — we
+  // reject/average REAL points, never invent a continuation (the dashed PROJECTED line stays a
+  // separate straight extrapolation). Falls back to a polyline for <3 points.
+  const measuredPx = cleanArc(measuredPts.map((p, i) => ({ x: p.x * w, y: p.y * h, t: i })));
+  const measuredPath = (() => {
+    if (measuredPx.length < 3) return null;
+    let d = `M ${measuredPx[0].x} ${measuredPx[0].y}`;
+    for (let i = 0; i < measuredPx.length - 1; i++) {
+      const p0 = measuredPx[i - 1] ?? measuredPx[i];
+      const p1 = measuredPx[i];
+      const p2 = measuredPx[i + 1];
+      const p3 = measuredPx[i + 2] ?? measuredPx[i + 1];
+      const { cp1x, cp1y, cp2x, cp2y } = catmullRomBezier(p0, p1, p2, p3);
+      d += ` C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
+    }
+    return d;
+  })();
+  const measuredStr = measuredPts.map(pt).join(' '); // straight fallback for <3 points
   // The dashed projection starts at the last MEASURED point so the segments meet
   // visually, but it's drawn as its own (dashed/faded) polyline — never merged.
   const projPts = (trace.projected ?? []).filter(fin);
@@ -582,16 +602,29 @@ export function MultiPointTraceOverlay({
               opacity={0.45}
             />
           )}
-          {/* MEASURED — solid, full opacity. The real detected positions only. */}
-          <SvgPolyline
-            points={measuredStr}
-            fill="none"
-            stroke={color}
-            strokeWidth={3.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.97}
-          />
+          {/* MEASURED — solid, full opacity. Smooth clean arc through the real detected
+              positions (centripetal spline); straight polyline fallback for <3 points. */}
+          {measuredPath ? (
+            <SvgPath
+              d={measuredPath}
+              fill="none"
+              stroke={color}
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.97}
+            />
+          ) : (
+            <SvgPolyline
+              points={measuredStr}
+              fill="none"
+              stroke={color}
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.97}
+            />
+          )}
           {/* origin dot at the ball */}
           <SvgCircle cx={origin.x * w} cy={origin.y * h} r={5} fill={color} />
         </Svg>
