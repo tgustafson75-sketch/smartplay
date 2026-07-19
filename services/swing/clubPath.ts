@@ -22,8 +22,9 @@ import { getApiBaseUrl } from '../apiBase';
 const apiUrl = (): string => getApiBaseUrl();
 
 /** How many frames to sample across the swing window (<= server MAX_FRAMES). More
- *  than the ball path: the clubhead arc is a longer, richer curve. */
-const SAMPLE_COUNT = 12;
+ *  than the ball path: the clubhead arc is a longer, richer curve. 2026-07-18 — 12 → 14 for a
+ *  denser, smoother arc (the extra points land in the clearer backswing/follow-through). */
+const SAMPLE_COUNT = 14;
 /** Downscale long-edge for the full-frame sends — small enough for cost/latency,
  *  large enough that the model can still pick out the head. */
 const DOWNSCALE_W = 640;

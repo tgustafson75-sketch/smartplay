@@ -29,6 +29,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G } from 'react-native-svg';
 import type { PoseFrame, Keypoint } from '../../services/poseAnalysisApi';
+import { cleanArc, catmullRomBezier, type ArcPoint } from '../../services/swing/smoothArc';
 
 const SKELETON_EDGES: [string, string][] = [
   ['left_shoulder', 'right_shoulder'],
@@ -233,36 +234,42 @@ export default function SwingBodyOverlay({
   // in the legacy bbox-fallback space (no frameW/frameH) they can't be placed honestly —
   // keep the wrist trace there instead of drawing a misregistered club arc.
   const useClub = !!(aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS);
-  const traceSegments = useMemo(() => {
+
+  // 2026-07-18 (Tim — "swing tracing needs to be a SMOOTH arc that follows the clubhead, not a
+  // glitchy bouncing line; average it out") — build the trace points ONCE, then CLEAN them
+  // (drop mis-detection spikes + moving-average the jitter) so both the line and the dots draw
+  // from the same smoothed, de-spiked path. The raw detections are untouched upstream (the
+  // "seen in N of M" honesty count still reflects reality); this is a faithful render of a
+  // continuous clubhead sweep, not a fabricated curve.
+  const tracePts = useMemo<{ pts: ArcPoint[]; isClub: boolean }>(() => {
     const sx = aligned ? aligned.sx : 1;
     const sy = aligned ? aligned.sy : 1;
-    let P: { x: number; y: number; t: number }[];
+    let raw: ArcPoint[];
     if (aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) {
-      // 2026-07-10 (audit SM2) — clubArc points are ALWAYS full-frame normalized (0..1),
-      // so scale by the frame dims (fw/fh), NOT the skeleton's sx/sy. When pose keypoints
-      // are pixel-absolute, sx/sy=1 and clubArc*1 collapsed the whole arc into a ~1px
-      // cluster at the frame's top-left corner.
-      P = clubArc.map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh, t: p.tMs }));
+      // clubArc points are full-frame normalized (0..1) → scale by frame dims (audit SM2).
+      raw = clubArc.map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh, t: p.tMs }));
     } else {
       const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
       const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
-      const raw = sorted
+      const wr = sorted
         .map(f => ({ k: getKp(f, traceName), t: f.timestampMs }))
         .filter((r): r is { k: Keypoint; t: number } => r.k != null);
-      if (raw.length < 2) return [];
-      P = raw.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
+      raw = wr.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
     }
-    // 2026-07-08 (Tim — white screen in swing replay) — a single non-finite coord in the
-    // path `d` string makes react-native-svg's native parser THROW → white screen. Drop any
-    // non-finite point before we build the spline so a bad frame can never crash the replay.
-    P = P.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.t));
+    // cleanArc guards non-finite (a NaN in the `d` string throws in native SVG → white screen),
+    // rejects spikes, and averages the jitter.
+    return { pts: cleanArc(raw), isClub: !!(aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) };
+  }, [frames, aligned, clubArc]);
+
+  const traceSegments = useMemo(() => {
+    const P = tracePts.pts;
     if (P.length < 2) return [];
     // Per-segment speed (px/ms), normalized min→max across the swing → heat color.
     const speeds: number[] = [];
     for (let i = 0; i < P.length - 1; i++) {
-      const dist = Math.hypot(P[i + 1].x - P[i].x, P[i + 1].y - P[i].y);
+      const d = Math.hypot(P[i + 1].x - P[i].x, P[i + 1].y - P[i].y);
       const dt = Math.max(1, P[i + 1].t - P[i].t);
-      speeds.push(dist / dt);
+      speeds.push(d / dt);
     }
     const maxS = Math.max(...speeds);
     const minS = Math.min(...speeds);
@@ -273,26 +280,21 @@ export default function SwingBodyOverlay({
       const p1 = P[i];
       const p2 = P[i + 1];
       const p3 = P[i + 2] ?? P[i + 1];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      // CENTRIPETAL Catmull-Rom control points — no overshoot / loops / cusps (the glitch).
+      const { cp1x, cp1y, cp2x, cp2y } = catmullRomBezier(p0, p1, p2, p3);
       const d = `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${p2.x} ${p2.y}`;
       const norm = span > 1e-6 ? (speeds[i] - minS) / span : 0.5;
       segs.push({ d, color: speedHeatColor(norm) });
     }
     return segs;
-  }, [frames, aligned, clubArc]);
+  }, [tracePts]);
 
-  // Real detected clubhead positions to dot on the arc (only when drawing the club
-  // path) — these are the actual per-frame detections, so the user sees the truth.
+  // Dots at the CLEANED clubhead points (spikes removed) so the measured markers sit ON the
+  // smoothed arc instead of scattering off it — reads as "measured, then followed smoothly".
   const clubDots = useMemo(() => {
-    if (!useClub || !clubArc || !aligned) return [];
-    // 2026-07-10 (audit SM2) — clubArc is full-frame normalized → scale by frame dims.
-    return clubArc
-      .map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh }))
-      .filter(d => Number.isFinite(d.x) && Number.isFinite(d.y)); // never emit a NaN <Circle> → white screen
-  }, [useClub, clubArc, aligned]);
+    if (!useClub || !tracePts.isClub) return [];
+    return tracePts.pts.filter(d => Number.isFinite(d.x) && Number.isFinite(d.y));
+  }, [useClub, tracePts]);
 
   if (!live) return null;
   // Aligned mode draws in true frame space and matches the video resizeMode;

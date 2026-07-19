@@ -36,11 +36,15 @@ The CLUBHEAD is the weighted head at the FAR end of the shaft from the hands —
 
 For EACH frame, report whether you can CLEARLY identify the clubhead, and if so, its position as fractions of that frame (x=0 left edge, x=1 right edge, y=0 top, y=1 bottom).
 
+The clubhead is LARGE and clearest at address, at the top of the backswing, and through the follow-through (it moves slowest there); it is smallest/most blurred through the downswing and impact.
+
+The clubhead traces ONE SMOOTH CONTINUOUS ARC across the frames — it cannot jump to an unrelated spot in one frame and back in the next. Use the positions you find in the neighboring frames to stay consistent: a correct detection sits ON the arc formed by the clear detections around it.
+
 Rules:
 - Report ONLY what you can actually, clearly see. Through the downswing and impact the clubhead moves extremely fast and is usually a motion-blur streak or gone — returning null for those frames is CORRECT and expected. Do not force a position.
 - If the clubhead is blurred beyond clear identification, ambiguous, off-frame, or hidden behind the body, return null for that frame. Do NOT guess, do NOT carry a previous frame's position forward, do NOT interpolate.
 - When the head is a motion-blur streak, only report it if you can confidently pick the head end of the streak; otherwise null.
-- Do NOT report the hands/grip/ball as the clubhead. If you can only see the hands but not the head, that frame is null.
+- Do NOT report the hands/grip/ball/shaft as the clubhead. If a candidate would sit FAR OFF the smooth arc formed by your other clear detections, it is almost certainly the hands, the shaft, or a background object — return null for that frame instead of a point off the arc.
 - Return exactly one entry per frame, in the same order as the frames were given.`;
 
 const CLUB_PATH_TOOL: Anthropic.Tool = {
