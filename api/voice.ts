@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS, KEVIN_TTS_SPEED } from './_kevinVoice';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
@@ -105,6 +105,7 @@ export default async function handler(
       voice,
       input: String(text),
       instructions: KEVIN_TTS_INSTRUCTIONS,
+      speed: KEVIN_TTS_SPEED,
     });
 
     const audioBuffer = await mp3.arrayBuffer();

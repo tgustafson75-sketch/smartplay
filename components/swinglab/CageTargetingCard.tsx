@@ -545,14 +545,22 @@ export function MultiPointTraceOverlay({
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!trace || trace.tier === 'none' || trace.measured.length < 2) return null;
   const { w, h } = size;
+  // 2026-07-18 (audit) — finite-guard every point BEFORE building the SVG `points` string. A
+  // "NaN,NaN" in a react-native-svg polyline can hard-crash natively; this closes the last
+  // instance of that bug class (siblings SwingBodyOverlay/HoleShotMap already guard the same way).
+  const fin = (p: { x: number; y: number } | undefined | null): p is { x: number; y: number } =>
+    !!p && Number.isFinite(p.x) && Number.isFinite(p.y);
   const pt = (p: { x: number; y: number }) => `${p.x * w},${p.y * h}`;
-  const measuredStr = trace.measured.map(pt).join(' ');
+  const measuredPts = trace.measured.filter(fin);
+  if (measuredPts.length < 2) return null;
+  const measuredStr = measuredPts.map(pt).join(' ');
   // The dashed projection starts at the last MEASURED point so the segments meet
   // visually, but it's drawn as its own (dashed/faded) polyline — never merged.
-  const projStr = trace.projected && trace.projected.length > 0
-    ? [trace.measured[trace.measured.length - 1], ...trace.projected].map(pt).join(' ')
+  const projPts = (trace.projected ?? []).filter(fin);
+  const projStr = projPts.length > 0
+    ? [measuredPts[measuredPts.length - 1], ...projPts].map(pt).join(' ')
     : null;
-  const origin = trace.measured[0];
+  const origin = measuredPts[0];
   return (
     <View
       style={StyleSheet.absoluteFill}

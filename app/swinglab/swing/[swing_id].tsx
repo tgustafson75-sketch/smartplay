@@ -393,11 +393,21 @@ export default function SwingDetail() {
   // the overlay, so the library shows the true clubhead path (falls back to the
   // honest wrist trace when the head can't be seen). One server pass per swing.
   const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  // 2026-07-18 (Tim — crash mp4) — run the clubhead extraction AT MOST ONCE per unique clip
+  // window. The effect re-fires when `duration` settles and when the skeleton/trace toggles flip
+  // mid-playback; without this guard each re-fire could launch another native frame-extraction
+  // pass that overlaps the running one (two retriever loops on the live file → the native crash).
+  const clubArcRunKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hasPose || !shot?.clipUri || !(showSkeleton || showTrace)) { setClubArcPoints(null); return; }
     const startMs = (shot.clipStartSeconds ?? 0) * 1000;
     const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
+    // Dedupe: a stable window (uri+start+end) runs once. Display toggles and duration re-settling
+    // won't re-trigger extraction; changing swing/window will (new key).
+    const runKey = `${shot.clipUri}|${Math.round(startMs)}|${Math.round(endMs)}`;
+    if (clubArcRunKeyRef.current === runKey) return;
+    clubArcRunKeyRef.current = runKey;
     let cancelled = false;
     void (async () => {
       // 2026-07-10 (audit SM5) — heal the clip URI first (iOS rotates the container UUID on

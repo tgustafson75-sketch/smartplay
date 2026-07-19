@@ -138,6 +138,23 @@ let warmInFlight: Promise<void> | null = null;
  * hosts (single custom domain, per ensureBackendReachable's root-cause note), and touches nothing
  * in the voice capture / STT / TTS pipeline. Idempotent + deduped; stops the instant it connects.
  */
+/**
+ * 2026-07-18 (Tim — "first couple of responses error, then it's good") — is the backend
+ * connection confirmed warm this session? The first cold-boot turn races the warmup above; the
+ * voice path reads this to decide whether to be PATIENT (cold: wait longer for a good cloud
+ * transcript) or FAIL FAST to the offline caddie (warmed: a genuine mid-round dead zone).
+ */
+export function isConnectionWarmed(): boolean {
+  return connectionWarmed;
+}
+
+/** Flip the warmed flag after any successful cloud round-trip (transcribe/brain), so subsequent
+ *  turns take the fast path even if the background warm ping hadn't landed yet. */
+export function markConnectionWarmed(): void {
+  connectionWarmed = true;
+  healedThisSession = true;
+}
+
 export function warmBackendConnection(): Promise<void> {
   if (isExplicitOverride() || connectionWarmed) return Promise.resolve();
   if (warmInFlight) return warmInFlight;

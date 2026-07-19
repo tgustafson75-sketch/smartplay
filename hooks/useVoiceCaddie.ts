@@ -52,7 +52,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed } from '../services/apiBase';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
@@ -91,6 +91,13 @@ const MAX_RECORD_MS = 8_000;
 // isn't getting through, and waiting 45s (then RETRYING for another 45s = 90s of
 // dead "thinking") helps nobody. Fail fast, speak a fallback, reset to idle.
 const TRANSCRIBE_TIMEOUT_MS = 12000;
+// 2026-07-18 (Tim — "a minute of warming up, first couple responses error, then good") — the FIRST
+// turn after a cold launch races the background connection warm; DNS+TLS to the custom domain +
+// a cold Deepgram/Lambda can genuinely take >12s on the first hit. When the connection is not yet
+// confirmed warm, give that first transcribe a longer budget so it lands a REAL cloud transcript
+// instead of aborting at 12s and dropping to a garbage on-device STT result (the "error reply,
+// then it's fine" symptom). Once warmed, the 12s fast-fail (below) resumes for genuine dead zones.
+const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
 // realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
 // The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
@@ -1690,8 +1697,11 @@ export const useVoiceCaddie = ({
         isProcessingRef.current = false;
       };
 
+      // Cold-boot patience: a longer budget on the first unwarmed turn so it lands a real cloud
+      // transcript rather than racing the warmup and failing to on-device STT.
+      const coldFirstTurn = !isConnectionWarmed();
       try {
-        transcribeRes = await doTranscribeFetch(TRANSCRIBE_TIMEOUT_MS);
+        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS);
       } catch {
         // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
         // 27643) showed the old blind retry was a dead 15s wait on top of the
@@ -1752,6 +1762,9 @@ export const useVoiceCaddie = ({
         return;
       }
       recordVoiceEndpointSuccess('transcribe');
+      // A successful cloud transcribe proves the connection is warm — flip the flag so the NEXT
+      // turn takes the 12s fast path even if the background warm ping hadn't landed yet.
+      markConnectionWarmed();
 
       devLog('[voice] transcript:', transcript);
 

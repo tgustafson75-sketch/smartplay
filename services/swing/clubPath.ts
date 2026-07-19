@@ -103,8 +103,19 @@ export async function detectClubPath(args: {
     offsets.push(Math.round(startMs + ((endMs - startMs) * i) / (SAMPLE_COUNT - 1)));
   }
 
-  const frames = await Promise.all(offsets.map((o) => frameAt(videoUri, o)));
-  const b64s = await Promise.all(frames.map((f) => (f ? downscaled(f) : Promise.resolve(null))));
+  // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
+  // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent
+  // VideoThumbnails.getThumbnailAsync calls spins up 12 native Android MediaMetadataRetriever
+  // instances against the SAME file ExoPlayer is actively decoding for playback — a known
+  // native OOM/SIGSEGV vector that crashes the whole app to the launcher (uncatchable from JS).
+  // One retriever at a time is slow-but-safe; this is a background analysis, not a latency path.
+  const frames: (Frame | null)[] = [];
+  const b64s: (string | null)[] = [];
+  for (const o of offsets) {
+    const f = await frameAt(videoUri, o);
+    frames.push(f);
+    b64s.push(f ? await downscaled(f) : null);
+  }
 
   const usable: { idx: number; base64: string; tMs: number }[] = [];
   b64s.forEach((b, i) => {
