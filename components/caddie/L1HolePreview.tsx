@@ -344,7 +344,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       axisYards = bundledDist;
     }
   }
-  if (axisYards <= 0) {
+  // 2026-07-20 (white-screen guard) — `<= 0` misses NaN (NaN <= 0 is false); a non-finite
+  // tee/green coordinate would flow into the <Circle>/<Line> below and crash react-native-svg
+  // (white-screen the live-round home surface). `!(axisYards > 0)` rejects NaN/Infinity too.
+  if (!(axisYards > 0)) {
     return (
       <View style={[styles.wrap, styles.placeholder]}>
         <Text style={styles.placeholderText}>HOLE {currentHole}</Text>

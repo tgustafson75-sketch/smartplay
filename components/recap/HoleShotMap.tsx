@@ -67,7 +67,10 @@ export default function HoleShotMap({
   const projected = useMemo(() => {
     if (!origin || !destination) return [];
     const axisYards = haversineYards(origin, destination);
-    if (axisYards <= 0) return [];
+    // 2026-07-20 (white-screen guard) — `<= 0` does NOT reject NaN (NaN <= 0 is false), so a
+    // non-finite hole/shot coordinate flowed into the tee/green <Circle>/<Line> below and crashed
+    // react-native-svg's native parser (white-screen the recap). `!(axisYards > 0)` rejects NaN too.
+    if (!(axisYards > 0)) return [];
 
     const points: { x: number; y: number; label: number; loc: ShotLocation }[] = [];
     shots.forEach((s, i) => {

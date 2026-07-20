@@ -743,6 +743,25 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     /videoLocated[\s\S]{0,200}r\.departed && r\.confidence !== 'low' && r\.ball_present_before/.test(smSrc),
   'default reference box + verifier runs under Motion (fast default), per-swing; video-located swings degrade to a not-low-confidence trace instead of going dark');
 
+// ─── White-screen guard: geometry-driven top-down maps must reject a NON-FINITE hole
+//     axis before it reaches react-native-svg. `axisYards <= 0` does NOT catch NaN
+//     (NaN <= 0 === false), so a malformed tee/green coordinate used to flow into
+//     <Circle cy={NaN}>/<Line> and crash the native SVG parser (white-screen the recap,
+//     the live-round home surface, and the SmartFinder target tool). The guard must be
+//     the NaN-rejecting `!(axisYards > 0)` form, and smartvision's clampMarker must
+//     sanitize non-finite coords (Math.max/min pass NaN through). ────────────────────
+check('White-screen guard: SVG hole maps reject a non-finite axis (NaN-safe), clampMarker sanitizes',
+  /if \(!\(axisYards > 0\)\) return \[\];/.test(read('components/recap/HoleShotMap.tsx')) &&
+    /if \(!\(axisYards > 0\)\) \{/.test(read('components/caddie/L1HolePreview.tsx')) &&
+    /if \(!\(axisYards > 0\)\) return <View/.test(read('app/smartfinder.tsx')) &&
+    // the fragile `<= 0` NaN-passthrough must be gone from all three
+    !/if \(axisYards <= 0\)/.test(read('components/recap/HoleShotMap.tsx')) &&
+    !/if \(axisYards <= 0\)/.test(read('components/caddie/L1HolePreview.tsx')) &&
+    // smartvision clampMarker coerces a non-finite input to a finite fallback before clamping
+    /const px = Number\.isFinite\(p\.x\) \? p\.x : imageW \/ 2;/.test(read('app/smartvision.tsx')) &&
+    /const py = Number\.isFinite\(p\.y\) \? p\.y : imageH \/ 2;/.test(read('app/smartvision.tsx')),
+  'HoleShotMap / L1HolePreview / SmartFinder reject a NaN hole axis before rendering SVG anchors, and SmartVision clampMarker sanitizes non-finite coords — no malformed-geometry white-screen');
+
 // ─── Deploy guard: every /api/* the client calls must be ROUTED in
 //     vercel.json. Root cause of the ball-departure 404: the function built
 //     (api/*.ts glob) but had no route, so it fell through to the SPA. This

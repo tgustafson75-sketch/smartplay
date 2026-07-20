@@ -1007,15 +1007,23 @@ export default function SmartVisionScreen() {
   // symmetric ~20px inset so markers sit where calibration says; satellite keeps
   // the exact original 22/22/46/58 values (do not change satellite behavior).
   const clampMarker = useCallback((p: { x: number; y: number }, isCurated: boolean) => {
+    // 2026-07-20 (white-screen guard) — Math.max/Math.min do NOT sanitize NaN
+    // (Math.max(22, Math.min(w, NaN)) === NaN), so a non-finite geometry coordinate
+    // (projectToPixels of a malformed tee/green) would reach the aim-line <SvgLine>/
+    // <SvgCircle> as NaN and crash react-native-svg (white-screen the hole view). Fall
+    // back a non-finite input to the canvas center so a marker degrades to a safe spot
+    // instead of taking the screen down.
+    const px = Number.isFinite(p.x) ? p.x : imageW / 2;
+    const py = Number.isFinite(p.y) ? p.y : imageH / 2;
     if (isCurated) {
       return {
-        x: Math.max(20, Math.min(imageW - 20, p.x)),
-        y: Math.max(20, Math.min(imageH - 20, p.y)),
+        x: Math.max(20, Math.min(imageW - 20, px)),
+        y: Math.max(20, Math.min(imageH - 20, py)),
       };
     }
     return {
-      x: Math.max(22, Math.min(imageW - 22, p.x)),
-      y: Math.max(46, Math.min(imageH - 58, p.y)),
+      x: Math.max(22, Math.min(imageW - 22, px)),
+      y: Math.max(46, Math.min(imageH - 58, py)),
     };
   }, [imageW, imageH]);
   const teeCanvas = useMemo(() => {

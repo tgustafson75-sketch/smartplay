@@ -1906,7 +1906,10 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
     return <View style={styles.canvasWrap}><Text style={styles.empty}>Waiting for GPS — make sure location permission is granted.</Text></View>;
   }
   const axisYards = haversineYards(tee, green);
-  if (axisYards <= 0) return <View style={styles.canvasWrap}><Text style={styles.empty}>Hole geometry invalid.</Text></View>;
+  // 2026-07-20 (white-screen guard) — `<= 0` misses NaN (NaN <= 0 is false); a non-finite
+  // tee/green coordinate would flow into the target-canvas <Circle>/<Line> and crash
+  // react-native-svg. `!(axisYards > 0)` rejects NaN/Infinity too.
+  if (!(axisYards > 0)) return <View style={styles.canvasWrap}><Text style={styles.empty}>Hole geometry invalid.</Text></View>;
 
   const playerProj = projectToAxis(fix.location, geometry.tee, geometry.green);
   const halfPad = 30;
