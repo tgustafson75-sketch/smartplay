@@ -842,7 +842,12 @@ export interface SwingTempo {
    *  read — see header note: NOT the fixed-fraction sequencingScore that
    *  computeBiomechanics() produces. */
   sequencingScore: number | null;
-  source: 'acoustic_pose' | 'none';
+  // 'acoustic_pose' = impact anchored by the acoustic strike (cage/range acoustic swings).
+  // 'video_pose'    = impact anchored by the video segmenter's frame-accurate strike (video /
+  //                   range / uploaded swings — no acoustic strike). Same pose-derived tempo
+  //                   shape; the only difference is where the impact instant came from. Both
+  //                   display identically (Tim, 2026-07-19 — "tempo on all swings", clean number).
+  source: 'acoustic_pose' | 'video_pose' | 'none';
   confidence: 'med' | 'low';
 }
 
@@ -899,7 +904,7 @@ function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null 
 export async function deriveSwingTempo(
   videoUri: string,
   impactMs: number,
-  opts?: { leadMs?: number; tailMs?: number; samples?: number },
+  opts?: { leadMs?: number; tailMs?: number; samples?: number; impactSource?: 'acoustic' | 'video' },
 ): Promise<SwingTempo> {
   // Backswing-focused window: from ~address up to just before impact. We
   // don't sample the downswing — impact is the acoustic anchor and the
@@ -984,7 +989,7 @@ export async function deriveSwingTempo(
     downswingMs,
     topMs,
     sequencingScore,
-    source: 'acoustic_pose',
+    source: opts?.impactSource === 'video' ? 'video_pose' : 'acoustic_pose',
     confidence: clean ? 'med' : 'low',
   };
 }

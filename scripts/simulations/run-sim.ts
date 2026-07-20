@@ -4948,13 +4948,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /if \(result\.kind === 'ok'\)/.test(smA),
     'one awaited analysis call with a 130s hang guard; the server-side tier retry handles cold-start, so the client no longer double-waits');
 
-  check('Swing analysis: tempo only from an acoustic impact anchor (sign-agnostic gate)',
-    /\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
-      // 2026-06-12 HEADLINE BUG FIX: the gate was `<= 0`, which ALSO matched a negative
-      // dBFS acoustic peakDb and silently suppressed Tempo on every cage swing. The honest
-      // distinction is video-located === 0 vs acoustic !== 0 (correct whatever the sign).
-      !/\(seg\.peakDb \?\? 0\) <= 0\) \{ setTempo/.test(smA),
-    'tempo shows for acoustic strikes (peakDb !== 0) and is suppressed ONLY for video-located segments (exactly 0) whose impact time is too coarse — never silently killed by a sign-inverted gate');
+  check('Swing analysis: tempo derives for ALL swings (acoustic + video), honest impact source, degrades not fabricates',
+    // 2026-07-19 (Tim — "we should be able to get tempo on ALL swings"). The old gate that
+    // suppressed tempo for video-located segments (peakDb === 0) is GONE — tempo now computes
+    // for every swing that has a strikeMs. deriveSwingTempo is pose-based, so it only needs an
+    // accurate impact instant: acoustic swings anchor on the strike detector, video/range/upload
+    // swings anchor on the segmenter's frame-accurate strikeMs. Impact source is tagged honestly.
+    /const impactSource: 'acoustic' \| 'video' = \(seg\?\.peakDb \?\? 0\) === 0 \? 'video' : 'acoustic';/.test(smA) &&
+      /if \(!clipUri \|\| isPutt \|\| !seg \|\| seg\.strikeMs == null\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      // the old peakDb===0 suppression must be gone (no "=== 0 ... setTempo(null)" gate).
+      !/\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      /deriveSwingTempo\(clipUri, seg\.strikeMs, \{ impactSource \}\)/.test(smA) &&
+      // deriveSwingTempo still degrades honestly: sanity gates return NO_TEMPO ("—") for an
+      // unreadable swing, and the source is tagged video_pose vs acoustic_pose (no fabrication).
+      /source: opts\?\.impactSource === 'video' \? 'video_pose' : 'acoustic_pose'/.test(read('services/poseAnalysisApi.ts')),
+    'tempo computes for every swing with a valid strikeMs (acoustic + video/range/upload), the impact source is tagged honestly (acoustic_pose vs video_pose), and an unreadable swing still degrades to "—" rather than a fabricated number');
 
   check('Swing analysis: club path not manufactured as a green NEUTRAL',
     !/else \{ value = 'NEUTRAL'; statusTone = 'good'; \}/.test(smA),

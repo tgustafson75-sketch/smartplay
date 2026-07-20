@@ -1908,24 +1908,24 @@ export default function SmartMotion() {
     return () => { cancelled = true; };
   }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing, swingerHandedness]);
 
-  // Acoustic-anchored tempo + transition for the selected swing. Impact
-  // comes from the acoustic strike detector (segment.strikeMs);
-  // top-of-backswing is read from pose. Cached per (clip, strike) so
+  // Pose-anchored tempo + transition for the selected swing. Impact time comes from the
+  // segment's strikeMs; top-of-backswing is read from pose. Cached per (clip, strike) so
   // re-selecting a swing is instant and we never re-pay the pose calls.
   useEffect(() => {
     const seg = segments[selectedSwing];
     // Tempo is the headline swing metric — compute it in review by default (it
     // surfaces in the left tempo pill). Skipped for putts (no swing tempo).
     // Heavier pose/body still wait for the Motion overlay.
-    // 2026-06-11 (audit) — only derive tempo from an ACOUSTIC impact anchor (cage).
-    // A video-located segment (range/upload) has an impact time that's only frame-
-    // spacing-accurate, and deriveSwingTempo trusts the passed impact directly
-    // (downswing = impact − top), so a number there would be dishonest. swingSegmentation
-    // marks video-located segments with peakDb EXACTLY 0; an acoustic strike carries the
-    // real (non-zero) metering reading — so test `=== 0`, correct whatever the metering
-    // sign. [2026-06-12 bug fix: was `<= 0`, which ALSO matched negative acoustic peakDb
-    // and silently killed Tempo — the headline metric — on every cage swing.]
-    if (!clipUri || isPutt || !seg || seg.strikeMs == null || (seg.peakDb ?? 0) === 0) { setTempo(null); return; }
+    // 2026-07-19 (Tim — "we should be able to get tempo on ALL swings") — tempo now
+    // derives for EVERY swing, not just acoustic/cage ones. deriveSwingTempo is
+    // pose-based (it reads top-of-backswing from the video and measures the ratio
+    // against the impact instant); the impact just needs to be accurate. Acoustic
+    // swings (peakDb ≠ 0) anchor impact on the strike detector; video/range/upload
+    // swings anchor it on the segmenter's frame-accurate strikeMs. Both feed the same
+    // pose read and display identically. deriveSwingTempo's sanity gates still return
+    // no-tempo ("—") for a genuinely unreadable swing, so it degrades honestly.
+    const impactSource: 'acoustic' | 'video' = (seg?.peakDb ?? 0) === 0 ? 'video' : 'acoustic';
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -1933,7 +1933,7 @@ export default function SmartMotion() {
     setTempo(null);
     void (async () => {
       try {
-        const t = await deriveSwingTempo(clipUri, seg.strikeMs);
+        const t = await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
         if (cancelled) return;
         tempoCacheRef.current[cacheKey] = t;
         setTempo(t);
