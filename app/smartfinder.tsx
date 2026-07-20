@@ -1697,8 +1697,22 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   // off vertical. Honest: this is an ESTIMATE that depends on a steady hold
   // — not a surveyed green map. Surfaced live so the player can "read" the
   // incline before committing.
-  const liveSlopePct = Math.round(Math.tan((Math.abs(tilt.pitch) - 90) * Math.PI / 180) * 100);
-  const liveLevel = Math.abs(liveSlopePct) < 1 && Math.abs(tilt.roll) < 2;
+  //
+  // 2026-07-20 (pre-ship fix) — slope = tan(pitch − 90°) EXPLODES to a 15+ digit
+  // number whenever the phone isn't held near-upright (at rest pitch≈0 → tan(−90°)→∞),
+  // which used to print e.g. "DOWNHILL ~1633123935319537000%". Gate the read to a
+  // sane upright hold and clamp to realistic green grades; return null (→ "hold
+  // upright" hint / "—") when the phone isn't in a readable position.
+  const slopePctFromPitch = (p: number | null): number | null => {
+    if (p == null || !Number.isFinite(p)) return null;
+    const deviation = Math.abs(p) - 90; // degrees off vertical; upright hold ≈ 0
+    if (Math.abs(deviation) > 30) return null; // not a putting-read hold — tan() is noise here
+    const pct = Math.tan((deviation * Math.PI) / 180) * 100;
+    if (!Number.isFinite(pct)) return null;
+    return Math.round(Math.max(-25, Math.min(25, pct))); // real greens don't exceed ~a dozen %
+  };
+  const liveSlopePct = slopePctFromPitch(tilt.pitch);
+  const liveLevel = liveSlopePct != null && Math.abs(liveSlopePct) < 1 && Math.abs(tilt.roll) < 2;
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -1730,9 +1744,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
 
   // Slope hint from device pitch — a putter face perpendicular to the green
   // surface reads pitch ≈ -90°. Deviation from level is the rough slope read.
-  const slopePct = pitchAtMeasure != null
-    ? Math.round(Math.tan((Math.abs(pitchAtMeasure) - 90) * Math.PI / 180) * 100)
-    : null;
+  const slopePct = slopePctFromPitch(pitchAtMeasure);
 
   // Putt READ — turn the captured metrics into actual advice: pace from
   // the incline, break direction from the side tilt. Qualitative on
@@ -1764,11 +1776,13 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
       <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, alignItems: 'center' }} pointerEvents="none">
         <View style={{ backgroundColor: 'rgba(0,0,0,0.72)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', minWidth: 190 }}>
           <Text style={{ color: liveLevel ? '#00C896' : '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1 }}>
-            {liveLevel ? 'LEVEL ✓' : `${liveSlopePct > 0 ? 'UPHILL' : 'DOWNHILL'} ~${Math.abs(liveSlopePct)}%`}
+            {liveSlopePct == null
+              ? 'HOLD PHONE UPRIGHT'
+              : liveLevel ? 'LEVEL ✓' : `${liveSlopePct > 0 ? 'UPHILL' : 'DOWNHILL'} ~${Math.abs(liveSlopePct)}%`}
           </Text>
           <View style={{ marginTop: 8, width: 170, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center' }}>
             <View style={{ position: 'absolute', left: '50%', width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.55)', top: -4, marginLeft: -0.75 }} />
-            <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, liveSlopePct * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
+            <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, (liveSlopePct ?? 0) * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
           </View>
           <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
         </View>

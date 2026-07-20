@@ -1250,8 +1250,14 @@ export default function SmartVisionScreen() {
       const totalSpan = pinPx.y - teePx.y; // image-y +up, pin > tee
       const targetSpan = targetPx.y - teePx.y;
       const progress = totalSpan === 0 ? 0.5 : Math.max(0, Math.min(1, totalSpan === 0 ? 0.5 : targetSpan / totalSpan));
+      // 2026-07-20 (pre-ship guard) — coerce a non-finite bundled distance to null so a
+      // bad row renders "—" instead of a literal NaN yardage (sibling branches already
+      // use `?? null`; this one was missing the guard).
       const total = h.distance;
-      const middleYd = Math.round((1 - progress) * total);
+      const middleYd = Number.isFinite(total) ? Math.round((1 - progress) * total) : null;
+      if (middleYd == null) {
+        return withDefaultMiddle({ front: null as number | null, middle: null as number | null, back: null as number | null });
+      }
       // 2026-06-01 — Fix GH: don't fake F/B when bundled hole data
       // has no real front/back spread. Prior code computed
       // `greenDepth = (h.back - h.front) / 2` then returned

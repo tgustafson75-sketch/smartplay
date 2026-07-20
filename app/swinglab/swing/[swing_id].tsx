@@ -553,7 +553,11 @@ export default function SwingDetail() {
     void (async () => {
       try {
         const poseMod = await import('../../../services/poseAnalysisApi');
-        const biomech = await poseMod.analyzeSwingFromVideo(shot.clipUri!, durationMs);
+        // 2026-07-20 — re-anchor the persisted path (iOS rotates the container UUID on
+        // reinstall) so post-reinstall biomech backfill reads the real file, matching every
+        // other read site here; falls back to the raw path if resolution can't improve it.
+        const analyzeUri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
+        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs);
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
