@@ -46,7 +46,11 @@ export type PipecatSessionState = 'idle' | 'connecting' | 'connected' | 'error' 
 
 // 2026-06-23 (audit) — was 20s but the server turn budget is 30s, so a
 // healthy-but-slow turn got aborted client-side on good signal. Match 30s.
-const TURN_TIMEOUT_MS = 30_000;
+// 2026-07-20 (pre-ship audit) — 30s → 35s. The server's provider cascade worst case is
+// ~27s (3×9s); at exactly 30s a cold Lambda + network could tip a HEALTHY turn past the
+// client abort before the server's graceful reply lands. 35s keeps the client budget
+// strictly above the server cascade so we never cancel a turn that's about to answer.
+const TURN_TIMEOUT_MS = 35_000;
 // History cap now lives in services/voice/pipecatHistory.ts (the shared history).
 
 interface UsePipecatVoiceOpts {
