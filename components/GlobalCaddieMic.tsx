@@ -17,11 +17,21 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Image, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useSegments } from 'expo-router';
 import { CaddieMicBadge } from './caddie/CaddieMicBadge';
 import { setRouteLabel } from '../services/screenContext';
+import { useListeningSessionStore } from '../store/listeningSessionStore';
+
+// 2026-07-19 (Tim — "when the mic activates on any screen the main caddie should VISIBLY wake up").
+// The brand voice-state icon shown beside the universal badge so tapping the mic anywhere reads as
+// the SAME caddie coming alive (matches the Caddie-tab avatar). Same neon brand art.
+const STATE_ICONS = {
+  listening: require('../assets/icons/caddie/listening.png'),
+  speaking: require('../assets/icons/caddie/speaking.png'),
+  thinking: require('../assets/icons/caddie/thinking.png'),
+} as const;
 
 // Route prefix → human label for the caddie's "where am I" baseline. Longest/most-specific first.
 const ROUTE_LABELS: { prefix: string; label: string }[] = [
@@ -74,15 +84,41 @@ export function GlobalCaddieMic() {
   const onTab = segments[0] === '(tabs)';
   const suppressed = onTab || SUPPRESS_PATH_PREFIXES.some((p) => path.startsWith(p));
   const hidden = HIDE_PATH_PREFIXES.some((p) => path.startsWith(p));
-  if (suppressed || hidden) return null;
 
   return (
     // 2026-07-01 (whole-app audit) — sits BELOW the header row, not at the very top-left corner,
     // so the 44px badge never overlaps / intercepts a screen's back/close button (which owns the
     // top-left on settings, smartvision, smartfinder, recap, mark-*, messages, etc.). Still the
     // upper-left region Tim asked for, just clear of the back chevron.
-    <View style={[styles.wrap, { top: insets.top + 52 }]} pointerEvents="box-none">
-      <CaddieMicBadge size={40} />
+    // NOTE: hooks above must run every render (route-label sync), so we gate the RENDER here, not
+    // with an early return before the hooks.
+    (suppressed || hidden) ? null : (
+      <View style={[styles.wrap, { top: insets.top + 52 }]} pointerEvents="box-none">
+        <CaddieMicBadge size={40} />
+        <CaddieStateCue />
+      </View>
+    )
+  );
+}
+
+// The brand voice-state cue (icon + label) shown under the universal badge when a listening
+// session is active anywhere — so the caddie visibly "wakes up" on any screen. pointerEvents none.
+function CaddieStateCue() {
+  const state = useListeningSessionStore((s) => s.state);
+  const icon =
+    state === 'listening' ? STATE_ICONS.listening :
+    (state === 'thinking' || state === 'responding') ? STATE_ICONS.thinking :
+    state === 'opening' ? STATE_ICONS.listening : null;
+  const label =
+    state === 'listening' ? 'Listening' :
+    state === 'thinking' ? 'Thinking' :
+    state === 'responding' ? 'Speaking' :
+    state === 'opening' ? 'Listening' : '';
+  if (!icon) return null;
+  return (
+    <View style={styles.cue} pointerEvents="none">
+      <Image source={icon} style={styles.cueIcon} resizeMode="contain" />
+      <Text style={styles.cueLabel}>{label}</Text>
     </View>
   );
 }
@@ -93,6 +129,21 @@ const styles = StyleSheet.create({
     left: 10,
     zIndex: 9000,
     elevation: 9000,
+    alignItems: 'center',
+  },
+  cue: { alignItems: 'center', marginTop: 6, gap: 2 },
+  cueIcon: { width: 40, height: 40 },
+  cueLabel: {
+    color: '#88F700',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });
 

@@ -458,10 +458,12 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     let kbAddendum = confirmRule + parseRule;
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
+      const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
+        + `\n\n${howToForPrompt()}`
         + confirmRule
         + parseRule
         + (kbBlock

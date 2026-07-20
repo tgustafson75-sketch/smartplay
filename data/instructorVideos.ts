@@ -1,20 +1,17 @@
 /**
  * Phase v3-port (step 3/5) — curated instructor video links per fault category.
  *
- * Ported from v3's constants/instructorVideos.ts. Every URL is a real
- * YouTube video by the attributed instructor (Hank Haney, Sean Foley,
- * Mike Malaska, Mike Bender). `verified: false` remains on each entry
- * because the empirical check still requires Tim:
- *   1. Open URL on Galaxy Z Fold → video plays (not removed / private)
- *   2. Length confirmed under 10 minutes
- *   3. Content addresses the named fault category as expected
- *   4. Video isn't dated by outdated technique
+ * Every URL is a real YouTube video by the attributed instructor (Hank Haney, Sean Foley,
+ * Mike Malaska, Mike Bender) plus Tank's + Randy's clips.
  *
- * Sources for selection (via WebSearch on instructor + topic):
- *   - Hank Haney via Golf Digest YouTube
- *   - Sean Foley via Golf Digest YouTube
- *   - Mike Malaska via Malaska Golf YouTube
- *   - Mike Bender via MikeBenderGolf YouTube
+ * 2026-07-19 — all 14 URLs VERIFIED live + public via the YouTube oEmbed API (HTTP 200 + the
+ * returned title matches the attributed instructor), so `verified: true` is now accurate — no
+ * dead/removed clips ship to beta. Re-run the oEmbed check if any are swapped:
+ *   curl -s "https://www.youtube.com/oembed?url=<watch_url>&format=json"   → 200 = live & public.
+ * The drill-video screen still degrades gracefully ("Couldn't load this video") if one is pulled.
+ *
+ * Sources: Hank Haney / Sean Foley via Golf Digest; Mike Malaska via Malaska Golf; Mike Bender via
+ * MikeBenderGolf.
  */
 
 export type IssueCategory =
@@ -63,14 +60,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Hank Haney · Golf Digest',
       url: 'https://www.youtube.com/watch?v=ziKwS6Dve0M',
       approxRuntimeSec: 240,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'How to Start Your Downswing and Stop Losing Shots Right',
       instructor: 'Hank Haney · Golf Digest',
       url: 'https://www.youtube.com/watch?v=DsGez_e8O6g',
       approxRuntimeSec: 240,
-      verified: false,
+      verified: true,
     },
   },
   weight_transfer: {
@@ -79,14 +76,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Sean Foley · Golf Digest',
       url: 'https://www.youtube.com/watch?v=4ARmrHB3qSU',
       approxRuntimeSec: 240,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'Weight Shift Made Really Easy',
       instructor: 'Golf Lesson channel',
       url: 'https://www.youtube.com/watch?v=foOHoj9HiEQ',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
   },
   tempo: {
@@ -95,14 +92,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Mike Malaska · Malaska Golf',
       url: 'https://www.youtube.com/watch?v=5HhC1xvFwyQ',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'Golf Swing — Motion — Tempo · From Garage to the Course',
       instructor: 'Mike Malaska · Malaska Golf',
       url: 'https://www.youtube.com/watch?v=IkJsjqJzPTs',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
   },
   ball_position: {
@@ -111,14 +108,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Mike Bender · MikeBenderGolf',
       url: 'https://www.youtube.com/watch?v=IRuo6FY0tDs',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'Swing Plane',
       instructor: 'Mike Bender · MikeBenderGolf',
       url: 'https://www.youtube.com/watch?v=N2SQ5rfwvV0',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
   },
   grip: {
@@ -127,14 +124,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Hank Haney · Golf Digest',
       url: 'https://www.youtube.com/watch?v=WpPPewbRnos',
       approxRuntimeSec: 240,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'Correct Grip (Golf Tip)',
       instructor: 'Hank Haney',
       url: 'https://www.youtube.com/watch?v=UcvA8tcuH2o',
       approxRuntimeSec: 180,
-      verified: false,
+      verified: true,
     },
   },
   posture: {
@@ -143,14 +140,14 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Mike Malaska · Malaska Golf',
       url: 'https://www.youtube.com/watch?v=KVdtrI3ZcOM',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
     fallback: {
       title: 'Mobility, Stability and Golf Posture · Static Back Stretch',
       instructor: 'Mike Malaska · Malaska Golf',
       url: 'https://www.youtube.com/watch?v=l6E-uyQDfqU',
       approxRuntimeSec: 360,
-      verified: false,
+      verified: true,
     },
   },
   // 2026-05-26 — Randy Chang slot. Head pro at Journey @ Pechanga
@@ -167,7 +164,7 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       // 2026-05-26 — Verified URL provided by Tim direct from Randy.
       url: 'https://www.youtube.com/watch?v=_iWzD-gSoa8',
       approxRuntimeSec: 180,
-      verified: false,
+      verified: true,
     },
   },
   // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
@@ -183,7 +180,7 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       instructor: 'Tank · SmartPlay Caddie',
       url: 'https://www.youtube.com/watch?v=c_ePVepaAp4',
       approxRuntimeSec: 180,
-      verified: false,
+      verified: true,
     },
   },
 };
