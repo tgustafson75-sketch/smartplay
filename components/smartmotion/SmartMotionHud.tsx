@@ -211,13 +211,18 @@ export function SpeedStat({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
+  // 2026-07-20 (Tim — "clean numbers everywhere, no extra labels; beta is implied") — the
+  // `estimate` flag no longer paints an ` · est` label or a `~` on the value. Honesty is kept
+  // by only showing a value when one exists ("—" otherwise) and never fabricating one; the beta
+  // context implies these tighten over time. Prop retained for API stability.
+  void estimate;
   return (
     <View style={[styles.speedStat, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
       <Text style={[styles.speedLabel, { color: colors.text_muted }]} numberOfLines={1}>
-        {label}{estimate ? ' · est' : ''}
+        {label}
       </Text>
       <Text style={[styles.speedValue, { color: tone === 'neutral' ? colors.text_primary : toneColor(tone, colors) }]}>
-        {value != null ? `${estimate ? '~' : ''}${value}` : '—'}
+        {value != null ? value : '—'}
       </Text>
       {value != null && unit ? <Text style={[styles.speedUnit, { color: colors.text_muted }]}>{unit}</Text> : null}
     </View>

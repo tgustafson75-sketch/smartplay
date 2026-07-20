@@ -1225,17 +1225,15 @@ export default function SmartMotion() {
     if (isPutt) return [];
     const dir = smartTrace.badge;
     const bs = metrics.ball_speed;
-    const bsEst = bs.value != null && !isTruthGrade(bs.source);
-    // 2026-07-18 (Tim — "make ball speed and smash estimated so we can show something, medium
-    // honesty") — surface SMASH on the rail as an ESTIMATE (~), same treatment as ball speed. It's
-    // synthesized from club-speed × typical-smash so it's directional, not measured; the "~" makes
-    // that clear. Only shown when we have a value.
+    // 2026-07-20 (Tim — "no extra labels, beta is implied") — the rail shows CLEAN numbers
+    // across the board (tempo, ball speed, smash) with no "~" estimate marker. The beta
+    // context itself implies these tighten over time; the honesty is preserved by only
+    // showing a value when we have one (still "—" otherwise) and never fabricating.
     const sm = metrics.smash_factor;
-    const smEst = sm.value != null && !isTruthGrade(sm.source);
     return [
       { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
-      { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${bsEst ? '~' : ''}${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
-      { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null ? `${smEst ? '~' : ''}${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
+      { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
+      { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null ? `${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
   }, [isPutt, tempo, metrics, smartTrace]);

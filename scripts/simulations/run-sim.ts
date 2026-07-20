@@ -4683,12 +4683,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /thumbnail_uri: primaryThumb \?\? perShotThumb \?\? session\.fault_frame_uri \?\? session\.thumbnailUri \?\? null/.test(read('services/swingLibrary.ts')) &&
       /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/cageStore.ts')) &&
       /await VT\.getThumbnailAsync\(playableUri/.test(read('app/swinglab/library.tsx')) && // refreshed: re-anchored playableUri (was clipUri)
-      // BALL SPEED badge is honest: driven by the SwingMetric, "~" prefix when it's an estimate.
-      /const bsEst = bs\.value != null && !isTruthGrade\(bs\.source\)/.test(smSrc2) &&
-      /\$\{bsEst \? '~' : ''\}\$\{Math\.round\(bs\.value\)\}/.test(smSrc2) &&
+      // BALL SPEED badge is honest: driven by the SwingMetric, shown only when we have a value.
+      // 2026-07-20 (Tim — "no extra labels, beta implied") — the rail shows a CLEAN number (no "~"
+      // estimate marker); honesty is preserved by only rendering a value when one exists ("—" else).
+      /value: bs\.value != null \? `\$\{Math\.round\(bs\.value\)\}` : null/.test(smSrc2) &&
+      !/\$\{bsEst \? '~' : ''\}/.test(smSrc2) &&
       // typed/dictated FEEL persists on Save (not just via the caddie-submit button).
       /if \(sid && feelText\.trim\(\)\) \{[\s\S]*?setSessionFeel\(sid, feelText\.trim\(\)\)/.test(smSrc2),
-    'library thumbnails backfill + persist; ball-speed badge shows ~est from the SwingMetric (no raw mph); feel saved on Save');
+    'library thumbnails backfill + persist; ball-speed badge shows a clean number from the SwingMetric (no raw-mph fabrication, no est marker); feel saved on Save');
 
   check('Scorecard + round-end fixes from Tim\'s round (2026-06-12)',
     // (a) scoring chips open INLINE under the tapped hole (any hole, incl. a missed one),
