@@ -4746,6 +4746,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Fault→workout map: curated golf exercises per fault, aliases normalized, honest-empty otherwise', (() => {
+    // 2026-07-21 — curated (not AI-generated) fault→exercise table; keys match the analysis fault
+    // vocabulary so the read drives the training suggestion. Unknown fault → [] (never fabricated).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { exercisesForFault, hasWorkoutsForFault } = require('../../services/swing/faultWorkouts');
+    const ee = exercisesForFault('early_extension');
+    const alias = exercisesForFault('spine_angle_loss'); // normalizes to early_extension
+    const sway = exercisesForFault('sway');
+    const unknown = exercisesForFault('totally_made_up_fault');
+    const shaped = ee.every((e: { name: string; why: string; category: string }) => !!e.name && !!e.why && !!e.category);
+    return ee.length >= 2 && alias.length === ee.length && shaped && sway.length >= 2 &&
+      unknown.length === 0 && hasWorkoutsForFault('over_the_top') === true && hasWorkoutsForFault(null) === false;
+  })(),
+  'exercisesForFault returns 2-3 curated, honestly-rationaled golf exercises for each real fault (aliases like spine_angle_loss → early_extension), and [] for an unknown fault — no fabricated recommendations');
+
   check('Learned bag: club-carry EWMA accumulates from shot 1 (raw accumulator, not the nulled display)',
     // 2026-07-21 BETA data-integrity fix — the caddie's learned per-club yardages used the DISPLAY
     // fields (null for shots 1-4) as the EWMA accumulator, so the average collapsed to just the 5th
