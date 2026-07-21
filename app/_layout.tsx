@@ -22,6 +22,7 @@ import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
 import { runLibraryDataMigration } from '../services/libraryDataMigration';
+import { initCrashCapture } from '../services/crashCapture';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/voiceTriggers';
@@ -362,6 +363,11 @@ function AppNavigator() {
     initAudioLifecycle();
     initBatteryMonitor();
   }, []);
+
+  // 2026-07-21 (BETA — Tim: "crashes still don't show up in the error log") — install the global
+  // uncaught-JS-error handler ASAP so async / event-handler crashes (which React error boundaries
+  // can't catch) funnel into the Issue Log. Idempotent; runs before the heavier boot effects below.
+  useEffect(() => { initCrashCapture(); }, []);
 
   // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen
   // in the background; the bundle applies on the *next* cold launch (we

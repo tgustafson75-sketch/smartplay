@@ -34,6 +34,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.log('[ErrorBoundary] caught:', error.message);
     console.log('[ErrorBoundary] component stack:', info.componentStack);
+    // 2026-07-21 (BETA — Tim: "crashes still don't show up in the error log") — a caught render
+    // crash (white-screen) used to leave NO trace in the Issue Log. Record it so a tester's
+    // white-screen is diagnosable + exportable. Lazy require avoids an import cycle; best-effort.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../services/crashCapture').logCrash('render_crash', error, {
+        componentStack: (info?.componentStack ?? '').slice(0, 1500),
+      });
+    } catch { /* logging must never throw from the boundary */ }
     this.setState({ info });
   }
 

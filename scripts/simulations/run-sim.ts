@@ -4746,6 +4746,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Crash capture: render crashes + uncaught JS errors funnel into the Issue Log',
+    // 2026-07-21 (Tim: "crashes still don't show up in the error log"). The ErrorBoundary must
+    // log a caught render crash, and a global ErrorUtils handler must catch async/handler errors
+    // the boundary can't — both via addAppEvent 'app_error' so they appear in the tester's log.
+    /require\('\.\.\/services\/crashCapture'\)\.logCrash\('render_crash'/.test(read('components/ErrorBoundary.tsx')) &&
+      /initCrashCapture\(\)/.test(read('app/_layout.tsx')) &&
+      /ErrorUtils/.test(read('services/crashCapture.ts')) &&
+      /setGlobalHandler/.test(read('services/crashCapture.ts')) &&
+      /addAppEvent\(/.test(read('services/crashCapture.ts')) &&
+      /'app_error'/.test(read('services/crashCapture.ts')) &&
+      // must chain to the previous handler so dev red-box / prod fatal still happen
+      /prev\?\.\(error, isFatal\)/.test(read('services/crashCapture.ts')),
+    'a render crash (white-screen) AND any uncaught async/handler JS error are recorded to the Issue Log as app_error entries, so tester crashes are finally visible + exportable (global handler chains to the platform default)');
+
   check('Issue Log is tester-accessible while owner tools stay gated (audit N1 lock)',
     // the Issue Log screen renders for everyone (no wholesale owner-gate); only the Claude
     // triage button + result are owner-gated (they burn API credit).
