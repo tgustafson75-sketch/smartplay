@@ -73,6 +73,7 @@ import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
 import { evaluateSwingValidity } from '../../services/swingValidity';
+import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
 import {
   synthesizeSwingMetrics,
   isTruthGrade,
@@ -1427,6 +1428,12 @@ export default function SmartMotion() {
   }, [shotTrace, segments, selectedSwing]);
 
   const bodyItems = useMemo(() => deriveBodyItems(analysis, biomech), [analysis, biomech]);
+  // 2026-07-21 (pose-first re-architecture P2) — the MEASURED multi-dimensional swing read, built
+  // from the pose kinematics (hip/shoulder turn, weight shift, spine, sway, sequencing) + tempo.
+  // Faults here are thresholds on real numbers, not a vision guess; unmeasurable dimensions are
+  // omitted, never faked. Surfaced as the "Swing Breakdown" in review (additive to the vision read,
+  // which stays for contact/clubface narrative). [[pose-first-analysis-rearchitecture]]
+  const poseRead = useMemo(() => buildPoseSwingRead(biomech, tempo), [biomech, tempo]);
 
   // 2026-07-07 (Tim — chunk-shot honesty) — the CONTACT signals the motion read
   // can't see: the camera strike check (did the ball actually leave?) and the
@@ -3998,6 +4005,29 @@ export default function SmartMotion() {
                 </View>
               ) : null}
               {skeletonRow}
+              {/* 2026-07-21 (pose-first re-architecture P2) — the MEASURED swing breakdown: each
+                  dimension (tempo, hip/shoulder turn, weight shift, posture, sway, sequence) with an
+                  honest verdict + the number it's based on. This is the primary, always-honest read
+                  (thresholds on real kinematics); the vision read below adds contact/clubface. */}
+              {poseRead.usable ? (
+                <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, gap: 8 }]}>
+                  <Text style={[styles.insightLabel, { color: colors.text_muted }]}>SWING BREAKDOWN</Text>
+                  {poseRead.dimensions.map((d) => {
+                    const vc = d.verdict === 'strength' ? '#88F700' : d.verdict === 'solid' ? '#7ED3A3' : d.verdict === 'watch' ? '#f59e0b' : '#ef4444';
+                    return (
+                      <View key={d.key} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: vc, marginTop: 5 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '800' }}>
+                            {d.label}{d.display ? `  ${d.display}` : ''}
+                          </Text>
+                          <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 16 }}>{d.note}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
               {/* MOTION DATA (step 2) — speed / tempo / body only render when the
                   Motion overlay is on, so the default review keeps a clean video
                   with just Kevin's read. Translucent cards, fewer at a glance. */}
