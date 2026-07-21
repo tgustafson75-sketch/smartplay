@@ -4740,6 +4740,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Issue Log is tester-accessible while owner tools stay gated (audit N1 lock)',
+    // the Issue Log screen renders for everyone (no wholesale owner-gate); only the Claude
+    // triage button + result are owner-gated (they burn API credit).
+    /\{isOwner && \(/.test(read('app/owner-logs.tsx')) &&
+      !/if \(!isOwner\)\s*(?:\{\s*)?return/.test(read('app/owner-logs.tsx')) &&
+      // testers can SEND issues — export targets support@smartplaycaddie.com
+      /support@smartplaycaddie\.com/.test(read('app/owner-logs.tsx')) &&
+      // the Owner Tools SETTINGS section is fully gated so no owner tool leaks to testers
+      /const showOwner = isOwnerEmail\(profile\.email\);\s*if \(!showOwner\) return null;/.test(read('app/settings.tsx')),
+    'testers can open + export the Issue Log to support@smartplaycaddie.com; ONLY the Claude-triage button and the Owner Tools settings section are owner-gated (no owner tool leaks, no wholesale re-gate of the log)');
+
   check('Scorecard + round-end fixes from Tim\'s round (2026-06-12)',
     // (a) scoring chips open INLINE under the tapped hole (any hole, incl. a missed one),
     // not in one bottom panel you had to scroll to; the row tap doesn't move the hole.

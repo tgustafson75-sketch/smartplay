@@ -1,5 +1,5 @@
 /**
- * 2026-05-17 — Owner-only issue log viewer.
+ * 2026-05-17 — Issue Log viewer.
  *
  * Lists every IssueLogEntry saved via the `log_issue` voice intent OR
  * future surfaces (manual text entry, automatic crash hooks, etc).
@@ -7,10 +7,13 @@
  * context strip (timestamp, route/persona/round). Long-press to delete
  * an entry; "Clear all" button at the bottom for a full wipe.
  *
- * The route is gated behind the same isOwnerEmail() check as the
- * Settings entry that links here. Non-owners visiting the URL directly
- * get a polite "this surface is owner-only" placeholder rather than
- * an empty list.
+ * 2026-07-20 — VISIBILITY (do NOT re-gate this screen): the Issue Log is an
+ * ALL-BETA-TESTER surface so testers can capture ("log this: …") and EXPORT
+ * issues to support@smartplaycaddie.com. It is intentionally NOT in the _layout
+ * DEBUG_ROUTES owner-gate, and the public Settings → Help & About "Issue Log" row
+ * links here for everyone. ONLY the per-entry "Triage with Claude" button + its
+ * result are owner-gated (isOwner) because they hit /api/owner-triage and burn API
+ * credit. Regenerating a wholesale owner-gate here reintroduces audit bug N1.
  */
 
 import React, { useMemo, useState } from 'react';
