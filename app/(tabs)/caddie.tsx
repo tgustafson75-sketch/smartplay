@@ -3455,6 +3455,10 @@ export default function CaddieTab() {
         <CaddieDataStrip
           yardage={displayYardage}
           playsLike={playsLikeYardage}
+          // 2026-07-21 (Tim — plays-like must read as real/useful) — the yards the adjustment moved
+          // it (uphill/into-wind +, downhill/downwind −). Shown as "(+3)" beside PLAYS so it's clear
+          // the number is ADJUSTED, not the raw distance (the portrait strip dropped the yards cell).
+          playsLikeDelta={playsLikeYardage != null && displayYardage != null ? playsLikeYardage - displayYardage : null}
           hole={{ current: currentHole, total: totalHoles }}
           targetDirection={targetDirection}
           stroke={currentStroke}

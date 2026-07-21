@@ -26,6 +26,10 @@ import { useGhostStore } from '../store/ghostStore';
 export interface CaddieDataStripProps {
   yardage: number | null;
   playsLike: number | null;
+  /** Yards the plays-like adjustment added/removed vs the raw distance (plays − raw). Shown as a
+   *  small "(+3)" beside PLAYS so the adjustment is VISIBLE — otherwise PLAYS looks like the raw
+   *  number (the portrait strip dropped the separate yards cell). null/0 = no adjustment shown. */
+  playsLikeDelta?: number | null;
   hole: { current: number; total: number };
   targetDirection: string;
   stroke: number;
@@ -49,6 +53,7 @@ export interface CaddieDataStripProps {
 export default function CaddieDataStrip({
   yardage,
   playsLike,
+  playsLikeDelta = null,
   hole,
   targetDirection,
   stroke,
@@ -281,6 +286,9 @@ export default function CaddieDataStrip({
               <Text style={styles.cellLabel}>PLAYS</Text>
               <Text style={[styles.cellValue, { fontSize: 22 }]}>
                 {playsLike != null ? String(playsLike) : '—'}
+                {playsLike != null && playsLikeDelta ? (
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#88F700' }}> ({playsLikeDelta > 0 ? '+' : ''}{playsLikeDelta})</Text>
+                ) : null}
               </Text>
             </View>
             <Animated.View style={[styles.dot, { opacity: dotAnims[1] }]} />
@@ -326,7 +334,7 @@ export default function CaddieDataStrip({
   // its own ◀/▶ stepper arrows for manual hole nav) instead of via the
   // generic cell template. The remaining 3 cells use the cell array.
   const cells = [
-    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', fontSize: 20 },
+    { label: 'PLAYS',  value: playsLike != null ? `${playsLike}${playsLikeDelta ? ` (${playsLikeDelta > 0 ? '+' : ''}${playsLikeDelta})` : ''}` : '—', fontSize: 20 },
     { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
     { label: lastCellLabel, value: lastCellValue,                          fontSize: 20 },
   ];

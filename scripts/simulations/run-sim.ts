@@ -4827,6 +4827,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /pendingSlow && \(/.test(read('app/swinglab/swing/[swing_id].tsx')),
     'a stuck-pending upload analysis recovers: an early "tap to retry" surfaces at 30s and the watchdog flips it to failed→Re-analyze — the "Analyzing your swing" spinner can no longer run forever');
 
+  check('Plays-like: the adjustment is VISIBLE on the live strip (delta shown, honest)',
+    // 2026-07-21 (Tim — plays-like must read as real + useful in live rounds). The portrait strip
+    // dropped the raw-yards cell, so PLAYS looked like the raw distance. Now it shows the adjustment
+    // delta "(+3)" (uphill/into-wind) / "(−2)" (downhill/downwind) so the user SEES it's adjusted —
+    // and nothing when there's genuinely no adjustment (honest, never a fake plays-like).
+    /playsLikeDelta\?: number \| null/.test(read('components/CaddieDataStrip.tsx')) &&
+      /playsLike != null && playsLikeDelta \?/.test(read('components/CaddieDataStrip.tsx')) &&
+      /playsLikeDelta=\{playsLikeYardage != null && displayYardage != null \? playsLikeYardage - displayYardage : null\}/.test(read('app/(tabs)/caddie.tsx')),
+    'the live data strip shows the plays-like adjustment delta beside PLAYS, so the number reads as an ADJUSTED "plays like" (wind + slope), not the raw distance — and shows no delta when there is no real adjustment');
+
   check('Auto-listen is OFF by default and reset each launch (deliberate per-session opt-in)',
     // 2026-07-21 (Tim) — hands-free auto-listen is off by default and the user turns it on each
     // session; onRehydrateStorage forces it false every launch (reverses the old v18 force-on and
