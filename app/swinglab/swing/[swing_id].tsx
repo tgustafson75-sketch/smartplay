@@ -855,20 +855,38 @@ export default function SwingDetail() {
     return () => clearTimeout(timer);
   }, [swing_id, shouldAutoplayThenAnalyze, analysisStatus]);
 
+  // 2026-07-21 (BETA — analysis P0) — surface an EARLY manual escape on a slow upload analysis:
+  // after 30s of 'pending' show a subtle "taking longer than usual — tap to retry" so the tester
+  // isn't forced to watch a spinner for the full watchdog window. Reset on any status change.
+  const [pendingSlow, setPendingSlow] = useState(false);
+  useEffect(() => {
+    setPendingSlow(false);
+    if (analysisStatus !== 'pending') return;
+    const t = setTimeout(() => setPendingSlow(true), 30_000);
+    return () => clearTimeout(t);
+  }, [analysisStatus]);
+
   // P1-D — analysis timeout for manual-analyze path (LIBRARY_AUTO_PROCESS = false
   // disables the auto-fire watchdog above, so stuck-on-analyzing has no recovery).
-  // If status stays in any analyzing_* state for 2 minutes, surface 'failed' so the
-  // user gets the Re-analyze button instead of being stranded forever.
+  // If status stays in a NON-TERMINAL state too long, surface 'failed' so the user
+  // gets the Re-analyze button instead of being stranded forever.
+  // 2026-07-21 (BETA — analysis P0: stuck-pending infinite spinner) — this watchdog covered
+  // analyzing_* but NOT 'pending'. An uploaded clip whose auto-analyze never fired (e.g. the
+  // <Video> never reported a duration, so the duration>0-gated effect no-op'd) sat at 'pending'
+  // FOREVER behind an honest-looking "Analyzing your swing" spinner with no escape. Include
+  // 'pending' so that case also recovers to failed→Re-analyze. 150s clears the worst-case real
+  // run (locate + 130s analyze budget) so a slow-but-working read is never cut short.
   useEffect(() => {
     if (!swing_id) return;
-    const stuck = analysisStatus === 'analyzing_frames' || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern';
-    if (!stuck) return;
+    const nonTerminal = (st: string | undefined) =>
+      st === 'pending' || st === 'analyzing_frames' || st === 'analyzing_pose' || st === 'analyzing_pattern';
+    if (!nonTerminal(analysisStatus)) return;
     const timer = setTimeout(() => {
       const cur = useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status;
-      if (cur === 'analyzing_frames' || cur === 'analyzing_pose' || cur === 'analyzing_pattern') {
-        useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', 'Analysis is taking too long — tap Re-analyze to try again.');
+      if (nonTerminal(cur)) {
+        useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis didn't finish — tap Re-analyze to try again.");
       }
-    }, 120_000);
+    }, 150_000);
     return () => clearTimeout(timer);
   }, [swing_id, analysisStatus]);
 
@@ -1961,6 +1979,20 @@ export default function SwingDetail() {
                 <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
                   About a minute — you can stay on this screen.
                 </Text>
+                {/* 2026-07-21 (BETA — analysis P0) — early manual escape so a slow/stuck upload
+                    analysis is never a spinner with no way out. */}
+                {pendingSlow && (
+                  <TouchableOpacity
+                    onPress={onReanalyze}
+                    disabled={analyzeInFlightRef.current}
+                    style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry analysis"
+                  >
+                    <Ionicons name="refresh" size={16} color={colors.accent} style={{ marginRight: 6 }} />
+                    <Text style={[styles.failedBtnText, { color: colors.accent }]}>Taking a while? Tap to retry</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>

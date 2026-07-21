@@ -4746,6 +4746,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Analysis: a stuck upload never spins forever — pending is watchdog-recovered + early retry',
+    // 2026-07-21 (BETA analysis P0). An uploaded clip whose auto-analyze never fired (no <Video>
+    // duration) sat at 'pending' behind a lying spinner with no escape (the watchdog covered
+    // analyzing_* but NOT 'pending'). Fix: the non-terminal watchdog now includes 'pending' and
+    // flips to failed→Re-analyze; plus an early manual retry appears after 30s of pending.
+    /const nonTerminal = \(st: string \| undefined\) =>\s*st === 'pending'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /if \(nonTerminal\(cur\)\) \{[\s\S]{0,140}setSessionAnalysisStatus\(swing_id, 'failed'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /const \[pendingSlow, setPendingSlow\] = useState\(false\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /pendingSlow && \(/.test(read('app/swinglab/swing/[swing_id].tsx')),
+    'a stuck-pending upload analysis recovers: an early "tap to retry" surfaces at 30s and the watchdog flips it to failed→Re-analyze — the "Analyzing your swing" spinner can no longer run forever');
+
   check('Voice: a swing COMPLAINT/mention does not yank the user into SwingLab (confirm, not auto-nav)',
     // 2026-07-21 (Tim: "every time I said we have an issue with the swing, caddie took me to
     // swinglab — make it a prompt"). The classifier must treat a swing complaint/feedback request
