@@ -75,8 +75,13 @@ export default function HoleShotMap({
     const points: { x: number; y: number; label: number; loc: ShotLocation }[] = [];
     shots.forEach((s, i) => {
       const loc = s.start_location ?? s.gps_location;
-      if (!loc) return;
+      // 2026-07-21 (BETA — recap white-screen, ROOT CAUSE) — reject a shot whose coord is
+      // non-finite (was only null-checked). A NaN lat/lng flows through projectToAxis into
+      // minX/maxX → scale → the tee/green anchor coords, NaN-ing the whole map. Drop it here
+      // so it never contaminates the projection.
+      if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return;
       const p = projectToAxis(loc, origin, destination);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
       points.push({ x: p.x, y: p.y, label: i + 1, loc });
     });
 
@@ -127,38 +132,48 @@ export default function HoleShotMap({
 
           {projected && 'teeXY' in projected && (
             <>
-              {/* Centerline */}
-              <Line
-                x1={projected.teeXY.sx}
-                y1={projected.teeXY.sy}
-                x2={projected.greenXY.sx}
-                y2={projected.greenXY.sy}
-                stroke="#1e3a28"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-              {/* Tee */}
-              <Circle cx={projected.teeXY.sx} cy={projected.teeXY.sy} r={6} fill="#6b7280" />
-              <SvgText
-                x={projected.teeXY.sx}
-                y={projected.teeXY.sy + 18}
-                fill="#9ca3af"
-                fontSize={10}
-                textAnchor="middle"
-              >
-                TEE
-              </SvgText>
-              {/* Green */}
-              <Circle cx={projected.greenXY.sx} cy={projected.greenXY.sy} r={10} fill="#003d20" stroke="#00C896" strokeWidth={1.5} />
-              <SvgText
-                x={projected.greenXY.sx}
-                y={projected.greenXY.sy - 14}
-                fill="#00C896"
-                fontSize={10}
-                textAnchor="middle"
-              >
-                GREEN
-              </SvgText>
+              {/* 2026-07-21 (BETA — recap white-screen) — the axisYards guard rejects a non-finite
+                  TEE↔GREEN axis, but teeXY/greenXY also fold in every shot's projected position via
+                  the scale, so a shot with a NaN lat/lng makes these anchor coords NaN. The tee/
+                  green Line+Circles rendered them UNGUARDED → react-native-svg native crash. Gate
+                  the anchor elements on finiteness (the shot-path block below has its own guards). */}
+              {Number.isFinite(projected.teeXY.sx) && Number.isFinite(projected.teeXY.sy) &&
+               Number.isFinite(projected.greenXY.sx) && Number.isFinite(projected.greenXY.sy) && (
+                <>
+                  {/* Centerline */}
+                  <Line
+                    x1={projected.teeXY.sx}
+                    y1={projected.teeXY.sy}
+                    x2={projected.greenXY.sx}
+                    y2={projected.greenXY.sy}
+                    stroke="#1e3a28"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+                  {/* Tee */}
+                  <Circle cx={projected.teeXY.sx} cy={projected.teeXY.sy} r={6} fill="#6b7280" />
+                  <SvgText
+                    x={projected.teeXY.sx}
+                    y={projected.teeXY.sy + 18}
+                    fill="#9ca3af"
+                    fontSize={10}
+                    textAnchor="middle"
+                  >
+                    TEE
+                  </SvgText>
+                  {/* Green */}
+                  <Circle cx={projected.greenXY.sx} cy={projected.greenXY.sy} r={10} fill="#003d20" stroke="#00C896" strokeWidth={1.5} />
+                  <SvgText
+                    x={projected.greenXY.sx}
+                    y={projected.greenXY.sy - 14}
+                    fill="#00C896"
+                    fontSize={10}
+                    textAnchor="middle"
+                  >
+                    GREEN
+                  </SvgText>
+                </>
+              )}
               {/* Shot path — guard every coord: a non-finite value in the `d` string makes
                   react-native-svg's native parser throw → white-screen the recap map. */}
               {(() => {

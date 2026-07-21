@@ -4746,6 +4746,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Voice: a swing COMPLAINT/mention does not yank the user into SwingLab (confirm, not auto-nav)',
+    // 2026-07-21 (Tim: "every time I said we have an issue with the swing, caddie took me to
+    // swinglab — make it a prompt"). The classifier must treat a swing complaint/feedback request
+    // as coaching talk (query_status swing_observation), NOT an open_tool, and prefer low
+    // confidence when unsure so the DISRUPTIVE_OPEN gate OFFERS instead of navigating.
+    /MENTION vs COMMAND/.test(read('api/voice-intent.ts')) &&
+      /is NOT an open_tool and must NOT navigate to SwingLab/.test(read('api/voice-intent.ts')) &&
+      /query_topic: "swing_observation"/.test(read('api/voice-intent.ts')) &&
+      // the client gate that turns a non-high-confidence open into an offer must still exist
+      /DISRUPTIVE_OPEN_INTENTS\.has\(intent\.intent_type\) && intent\.confidence !== 'high'/.test(read('services/listeningSession.ts')),
+    'a swing complaint ("we have an issue with my swing") is coaching talk, not a navigate — the classifier keeps it out of open_tool and the disruptive-open gate offers "want me to open that?" instead of auto-jumping to SwingLab');
+
   check('Swing-replay crash: clubhead extraction never runs concurrent with video playback',
     // 2026-07-21 (Tim: crash after replaying an uploaded swing). ROOT CAUSE: a native
     // MediaMetadataRetriever (detectClubPath) decoding the file while ExoPlayer decodes it for
