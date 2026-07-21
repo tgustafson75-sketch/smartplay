@@ -4746,6 +4746,29 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Pose motion anchors: derive top + impact from the hand-velocity signal (synthetic swing)', (() => {
+    // 2026-07-21 — pose-first foundation. deriveSwingAnchors finds the swing structure from motion:
+    // IMPACT = hand-speed peak (accelerating downswing), TOP = hands-highest (min y) before it.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { deriveSwingAnchors } = require('../../services/swing/poseMotion');
+    const samples: { tMs: number; x: number; y: number }[] = [];
+    for (let t = 0; t <= 1600; t += 50) {
+      let x: number; let y: number;
+      if (t <= 400) { y = 0.60; x = 0.50; }                                             // address (still)
+      else if (t <= 900) { const f = (t - 400) / 500; y = 0.60 - 0.25 * f; x = 0.50 - 0.08 * f; } // backswing → top
+      else if (t <= 1150) { const f = (t - 900) / 250; y = 0.35 + 0.27 * f * f; x = 0.42 + 0.08 * f; } // ACCELERATING downswing → impact
+      else { const f = (t - 1150) / 450; y = 0.62 - 0.22 * f; x = 0.50 + 0.10 * f; }     // follow-through
+      samples.push({ tMs: t, x, y });
+    }
+    const a = deriveSwingAnchors(samples);
+    // top ≈ 900 (min y), impact ≈ 1150 (accelerating peak), start before top, end after impact.
+    const ok = !!a && a.topMs >= 850 && a.topMs <= 950 && a.impactMs >= 1100 && a.impactMs <= 1200 && a.startMs < a.topMs && a.endMs > a.impactMs;
+    // Degenerate signal (too few / monotonic) → null (caller keeps coarse anchors), never a crash.
+    const degenerate = deriveSwingAnchors([{ tMs: 0, x: 0.5, y: 0.5 }, { tMs: 50, x: 0.5, y: 0.5 }]);
+    return ok && degenerate === null;
+  })(),
+  'deriveSwingAnchors recovers TOP (hands-highest) + IMPACT (velocity peak) from the hand-motion signal alone — no audio/segmentation dependence; degenerate input returns null so the caller keeps its coarse anchors');
+
   check('Pose-first read: measured kinematics → honest multi-dimensional read + threshold faults', (() => {
     // 2026-07-21 — the pose-first re-architecture engine. Faults are thresholds on REAL measured
     // kinematics (not a vision guess); a dimension we couldn't measure is OMITTED, never faked;
