@@ -47,7 +47,7 @@ import { useClubStatsStore, CLUB_ORDER, clubIdToClubName } from '../../store/clu
 import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
-import { useCageStore } from '../../store/cageStore';
+import { useCageStore, resolvePlayerName } from '../../store/cageStore';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import TrendChart from '../../components/charts/TrendChart';
@@ -157,9 +157,13 @@ export default function Dashboard() {
     if (times.length === 0) return 0;
     const days = Array.from(new Set(times.map((tm) => { const d = new Date(tm); d.setHours(0, 0, 0, 0); return d.getTime(); }))).sort((a, b) => b - a);
     const today = new Date(); today.setHours(0, 0, 0, 0); const t0 = today.getTime();
-    if (days[0] !== t0 && days[0] !== t0 - DAY) return 0;
+    // 2026-07-20 (bug-hunt fix) — compare by ROUNDED day-count, not a fixed 86.4M ms gap.
+    // Across a DST transition adjacent LOCAL midnights are 23h or 25h apart, so the old exact
+    // `=== prev - DAY` equality failed for genuinely-consecutive days and reset the streak.
+    const daysApart = (laterMs: number, earlierMs: number) => Math.round((laterMs - earlierMs) / DAY);
+    if (days[0] !== t0 && daysApart(t0, days[0]) !== 1) return 0;
     let streak = 1;
-    for (let i = 1; i < days.length; i++) { if (days[i] === days[i - 1] - DAY) streak++; else break; }
+    for (let i = 1; i < days.length; i++) { if (daysApart(days[i - 1], days[i]) === 1) streak++; else break; }
     return streak;
   }, [realRounds, practiceHistory]);
   const clubStats = useClubStatsStore((s) => s.stats);
@@ -205,6 +209,14 @@ export default function Dashboard() {
     () => computePointsPerformance({
       sessions: (libraryHistory ?? [])
         .filter((s) => (s.shots?.length ?? 0) > 0)
+        // 2026-07-20 (bug-hunt fix) — count ONLY the account holder's own swings. In
+        // Family/Coach mode a kid's/student's recorded swings land in the same shared
+        // sessionHistory stamped with their player_id; without this filter they were
+        // counted as the account holder's practice points against the account holder's
+        // rounds (cross-golfer contamination). resolvePlayerName returns the sentinel
+        // only for self (null / 'account_holder' / the profile email), a member firstName
+        // otherwise, so this keeps just the self-owned sessions.
+        .filter((s) => resolvePlayerName(s.player_id, '__self__') === '__self__')
         .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
       rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
       nowMs: Date.now(),
@@ -423,8 +435,11 @@ export default function Dashboard() {
   }, [realRounds, longestDrive]);
 
   const bestRound = useMemo(() => {
+    // 2026-07-20 (bug-hunt fix) — Best Round must compare like-for-like: only FULL 18-hole
+    // rounds. The old `>= 9` gate let a 9-hole total (~43) beat a real 18-hole round (~85)
+    // under Math.min and render "Best Round 43" — a half-round total shown as an all-time best.
     const completed = realRounds
-      .filter(r => r.totalScore > 0 && r.holesPlayed >= 9)
+      .filter(r => r.totalScore > 0 && r.holesPlayed >= 18)
       .map(r => r.totalScore);
     const fromHistory = completed.length > 0 ? Math.min(...completed) : null;
     if (fromHistory != null && personalBest != null) return Math.min(fromHistory, personalBest);

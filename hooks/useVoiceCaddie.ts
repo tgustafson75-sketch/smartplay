@@ -249,10 +249,14 @@ const YARDAGE_PHRASES = [
 const HERO_PHRASES = [
   "did you get that",
   "save that",
+  "save that shot",
+  "save that one",
   "hero reel",
   "that's a keeper",
-  "got that",
-  "save it",
+  // 2026-07-20 (bug-hunt fix) — removed bare "got that" / "save it": too colloquial,
+  // they fired the hero-reel on ordinary speech ("you got that right", "save it for
+  // the back nine") and dropped the user's real question. The specific phrases above
+  // still catch a genuine "save that shot".
 ];
 
 const HERO_VIEW_PHRASES = [
@@ -268,15 +272,18 @@ const HERO_VIEW_PHRASES = [
 const PENALTY_PHRASES = [
   "penalty",
   "penalty stroke",
-  "water",
+  // 2026-07-20 (bug-hunt fix) — removed bare "water" and "drop": as loose substrings
+  // (and even as bare words) they fired a penalty on ordinary speech ("I need some
+  // water", "should I drop back a club"). The specific penalty phrases below still
+  // catch a real "in the water" / "take a drop".
   "in the water",
   "hit it in the water",
   "ob",
   "out of bounds",
   "lost ball",
   "lost it",
-  "drop",
   "take a drop",
+  "penalty drop",
   "add a penalty",
 ];
 
@@ -285,7 +292,8 @@ const MUTE_PHRASES = [
   "be quiet",
   "stop talking",
   "silence",
-  "quiet",
+  // 2026-07-20 (bug-hunt fix) — removed bare "quiet": it muted on ordinary speech
+  // ("the greens are quiet today"). "be quiet" / "mute" / "stop talking" still work.
   "silenciar",
 ];
 
@@ -297,6 +305,33 @@ const VISION_PHRASES = [
   "what do you see",
   "hole analysis",
 ];
+
+// 2026-07-20 (bug-hunt fix) — the caddie voice bypasses (penalty / hero / mute / vision /
+// yardage shortcuts) used raw `transcript.includes(phrase)` substring matching, so:
+//   • a 2-char token like "ob" matched INSIDE ordinary words ("problem", "probably", "job"),
+//     silently adding a penalty stroke and dropping the user's real question;
+//   • single words ("water", "drop", "quiet") matched anywhere in a long conversational
+//     sentence and fired the wrong action.
+// matchesCommand fixes both: a bypass only fires when the utterance is SHORT (a command,
+// not a question) AND the phrase appears as WHOLE WORDS — never as a substring inside a
+// longer word, and never buried in a long sentence (those route to the brain instead).
+const normalizeUtterance = (s: string): string =>
+  s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const matchesCommand = (raw: string, phrases: string[], maxWords = 6): boolean => {
+  const t = normalizeUtterance(raw);
+  if (!t) return false;
+  // A real question ("what's the problem with my swing") is longer than a command
+  // ("penalty", "be quiet", "hit it in the water" = 5) — cap the command length.
+  if (t.split(' ').length > maxWords) return false;
+  return phrases.some((p) => {
+    const np = normalizeUtterance(p);
+    if (!np) return false;
+    // whole-word / whole-phrase match, tolerant of extra spacing between words
+    const re = new RegExp(`(^|\\s)${np.replace(/\s+/g, '\\s+')}(\\s|$)`);
+    return re.test(t);
+  });
+};
 
 // ─── HOOK ─────────────────────────────────
 
@@ -713,14 +748,12 @@ export const useVoiceCaddie = ({
     triggerHeroReelView?: boolean;
     triggerMute?: boolean;
   } => {
-    const t = transcript.toLowerCase();
-
-    if (isRoundActive && PENALTY_PHRASES.some(p => t.includes(p))) {
+    if (isRoundActive && matchesCommand(transcript, PENALTY_PHRASES)) {
       useRoundStore.getState().addPenalty(currentHole);
       return { handled: true, response: 'Got it — penalty stroke added.' };
     }
 
-    if (HERO_PHRASES.some(p => t.includes(p))) {
+    if (matchesCommand(transcript, HERO_PHRASES)) {
       const kevinSaid = addHeroMoment({
         clipUri: null,
         hole: currentHole,
@@ -735,7 +768,7 @@ export const useVoiceCaddie = ({
     // Non-English yardage queries skip the bypass so Kevin answers in the
     // player's language via the full voice-intent pipeline (which sends
     // language='es'/'zh' to Kevin). Only English gets the hardcoded shortcut.
-    if (language === 'en' && YARDAGE_PHRASES.some(p => t.includes(p))) {
+    if (language === 'en' && matchesCommand(transcript, YARDAGE_PHRASES)) {
       const response = currentYardage
         ? "You're " + currentYardage + ' yards to the center.' +
           (club ? ' ' + club + ' in hand.' : '')
@@ -743,15 +776,15 @@ export const useVoiceCaddie = ({
       return { handled: true, response };
     }
 
-    if (VISION_PHRASES.some(p => t.includes(p))) {
+    if (matchesCommand(transcript, VISION_PHRASES)) {
       return { handled: true, triggerVision: true, response: 'Taking a look at the hole.' };
     }
 
-    if (HERO_VIEW_PHRASES.some(p => t.includes(p))) {
+    if (matchesCommand(transcript, HERO_VIEW_PHRASES)) {
       return { handled: true, triggerHeroReelView: true, response: 'Here are your best moments.' };
     }
 
-    if (MUTE_PHRASES.some(p => t.includes(p))) {
+    if (matchesCommand(transcript, MUTE_PHRASES)) {
       return { handled: true, triggerMute: true, response: '' };
     }
 

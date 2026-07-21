@@ -126,10 +126,18 @@ export default function Index() {
   // users skip it. Owner-email override already mirrors email into
   // the profile during _layout.tsx's lifetime grant, so the welcome
   // doesn't pester admins.
+  // 2026-07-20 (bug-hunt fix) — anchor this gate on termsAcceptedAt (consent), NOT
+  // first_opened_at. On a cold TestFlight install the boot trial-lifecycle in _layout.tsx
+  // (SUBSCRIPTIONS_ENABLED=false → grantLifetime) stamps first_opened_at during hydration,
+  // BEFORE this gate runs — so the old `!first_opened_at` test was already false and the
+  // welcome screen (the ONLY place the required Terms/Privacy consent checkbox + name/caddie
+  // capture live) was silently skipped on real installs. termsAcceptedAt is set ONLY by
+  // welcome.tsx's acceptTerms, so consent is now the source of truth. Returning users with a
+  // captured name still skip it; welcome sets termsAcceptedAt before it navigates on, so no loop.
   const profileSnap = usePlayerProfileStore.getState();
-  const hasOpenedBefore = profileSnap.first_opened_at != null;
+  const hasAcceptedTerms = profileSnap.termsAcceptedAt != null;
   const hasName = (profileSnap.name ?? '').trim().length > 0;
-  if (!hasOpenedBefore && !hasName) {
+  if (!hasAcceptedTerms && !hasName) {
     return <Redirect href={'/welcome' as never} />;
   }
 

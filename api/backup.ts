@@ -133,6 +133,10 @@ const GROW_MOSTLY_KEYS = [
   // device wiped them last-write-wins. Irreplaceable learned/authored data.
   'custom-courses-v1', 'course-captures-v1', 'watch-store-v1', 'guest-profiles-v1',
   'green-rolls-v1', 'tee-goals-v1', 'tournament-v1',
+  // 2026-07-20 (bug-hunt fix) — same class as D3: these four accumulate irreplaceable
+  // learned data (coaching knowledge, relationship history, team-intelligence handoffs,
+  // practice counters) but were left out, so an emptier device clobbered the cloud copy.
+  'coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store',
 ];
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email

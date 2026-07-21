@@ -1232,8 +1232,13 @@ export default function SmartMotion() {
     const sm = metrics.smash_factor;
     return [
       { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
-      { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null ? `${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
-      { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null ? `${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
+      // 2026-07-20 (bug-hunt fix) — gate BALL SPEED on isSwingDerived, matching the page-2
+      // tile. Without it, a range/upload/video swing with no acoustic strike + no usable pose
+      // falls back to a handicap-table constant (club_speed × typical smash) and printed it as
+      // a clean measured "141 mph" — the SAME number for every swing of that club, zero rep
+      // signal. Now shows "—" unless the value is actually swing-derived (honesty invariant).
+      { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null && isSwingDerived(bs.source) ? `${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
+      { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null && isSwingDerived(sm.source) ? `${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
   }, [isPutt, tempo, metrics, smartTrace]);
@@ -2387,13 +2392,20 @@ export default function SmartMotion() {
       if (cached) { setAnalysis(cached); setSwingAnalyzing(false); return; }
       if (!clipUri) return;
       // Per-swing analysis on demand — windowed to this segment.
+      // 2026-07-20 (bug-hunt fix) — clear the PREVIOUS swing's analysis before the read so
+      // the newly-selected swing (whose video/pose/ball-trace already switched) never shows
+      // the prior swing's fault verdict while (or after) analyzing.
+      setAnalysis(null);
       setSwingAnalyzing(true);
       const a = await analyzeSwingForIndex(idx);
       // Only apply to the display if THIS swing is still selected — a fast reel
       // scrub could have moved on, and a late-resolving older read would
       // otherwise overwrite the current swing's view. (audit)
       if (selectedSwingRef.current === idx) {
-        if (a) setAnalysis(a);
+        // 2026-07-20 (bug-hunt fix) — apply `a ?? null` (was `if (a)`): a failed re-analysis
+        // (timeout / server error → null) must read as "no read", not silently leave the
+        // prior swing's verdict standing on this swing.
+        setAnalysis(a ?? null);
         setSwingAnalyzing(false);
       }
     },

@@ -421,7 +421,10 @@ async function openSession() {
     try {
       const settingsNow = useSettingsStore.getState();
       const lang = (['en', 'es', 'zh'] as const).includes(settingsNow.language as never) ? (settingsNow.language as 'en' | 'es' | 'zh') : 'en';
-      if (settingsNow.voiceEnabled) {
+      // 2026-07-20 (bug-hunt fix) — respect the phone-speaker mute: the opener + every real
+      // reply are suppressed on the phone speaker when voiceOnPhoneSpeaker is off, but this
+      // device-TTS notice bypassed that gate and spoke aloud on a route the user muted.
+      if (settingsNow.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
         const { speakDeviceNotice } = await import('./voiceService');
         await speakDeviceNotice("Didn't catch that.", lang, settingsNow.voiceGender).catch(() => {});
       }
@@ -438,7 +441,9 @@ async function openSession() {
   // a fast answer simply cuts the short ack — never talks over it in a stacked way.
   try {
     const settingsAck = useSettingsStore.getState();
-    if (settingsAck.voiceEnabled) {
+    // 2026-07-20 (bug-hunt fix) — same phone-speaker mute respect as the opener/replies:
+    // don't speak the "got it" ack aloud on the phone speaker when the user muted it.
+    if (settingsAck.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
       const lang = (['en', 'es', 'zh'] as const).includes(settingsAck.language as never) ? (settingsAck.language as 'en' | 'es' | 'zh') : 'en';
       const { speakDeviceNotice } = await import('./voiceService');
       void speakDeviceNotice(pickAck(lang), lang, settingsAck.voiceGender).catch(() => {});
@@ -597,6 +602,10 @@ async function openSession() {
     // three are truly held until the user re-confirms.
     const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
     if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
+      // 2026-07-20 (bug-hunt fix) — this gate returns without consuming the speculative
+      // brain call, so abort it (matches the handler + small-talk exit paths) instead of
+      // leaking an in-flight billed /api/kevin fetch whose result is discarded.
+      speculativeController?.abort();
       await stopSpeaking().catch(() => {});
       if (ttsAllowed && getSessionState() === 'responding') {
         await speak(
@@ -650,6 +659,10 @@ async function openSession() {
     // register='coach' override + inRoundDiagnostic flag. The Coach
     // prompt sub-branch returns ~30-45s of pattern reasoning.
     if (intent.intent_type === 'in_round_diagnostic' && round.isRoundActive) {
+      // 2026-07-20 (bug-hunt fix) — this branch fires its OWN /api/kevin diagnostic call and
+      // returns without consuming the speculative one; abort the speculative fetch up front so
+      // we don't run two concurrent billed /api/kevin calls for a single utterance.
+      speculativeController?.abort();
       const patternText = (intent.parameters?.pattern_text as string | undefined) ?? utterance;
       const wantsCard = intent.parameters?.wants_card === true;
       try {

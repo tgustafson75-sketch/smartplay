@@ -359,8 +359,15 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
         const id = pid(playerId);
         set((s) => {
           const p = s.players[id] ?? emptyPlayer(id);
-          const recentFaults = [fault, ...p.tendencies.recentFaults.filter((f) => f !== fault)].slice(0, MAX_RECENT_FAULTS);
-          // Dominant miss = most frequent recent fault.
+          // 2026-07-20 (bug-hunt fix) — keep a rolling fault LOG *with repeats* (do NOT dedupe).
+          // The old `.filter(f => f !== fault)` made each fault appear at most once, so every
+          // count was 1 and "most frequent" collapsed to "most recent" (contradicting the
+          // comment) — a player who slices 12× then hooks once got dominantMiss='hook'. With
+          // repeats retained, the counts below are real frequencies. recentFaults is internal
+          // (only feeds dominantMiss), so keeping duplicates changes no external consumer.
+          const recentFaults = [fault, ...p.tendencies.recentFaults].slice(0, MAX_RECENT_FAULTS);
+          // Dominant miss = most frequent fault in the window; ties fall to the more recent
+          // (its first occurrence is earlier in the list, and the sort is stable).
           const counts: Record<string, number> = {};
           for (const f of recentFaults) counts[f] = (counts[f] ?? 0) + 1;
           const dominantMiss = recentFaults.length > 0

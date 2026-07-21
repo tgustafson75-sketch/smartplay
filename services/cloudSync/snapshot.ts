@@ -122,6 +122,11 @@ const GROW_MOSTLY_KEYS = [
   'points-store-v1', 'workout-store-v1', 'family-store-v1', 'vocabulary-profile-v1',
   'practice-session-v1', 'custom-courses-v1', 'course-captures-v1', 'watch-store-v1',
   'guest-profiles-v1', 'green-rolls-v1', 'tee-goals-v1', 'tournament-v1',
+  // 2026-07-20 (bug-hunt fix) — these four accumulate irreplaceable learned data
+  // (coaching knowledge FIFO, relationship observations/hero-moments, team-intelligence
+  // handoffs, practice counters) but were missing here, so an emptier second device
+  // clobbered the cloud's rich copy last-write-wins. Same class as the D1/D3/D4 fixes.
+  'coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store',
 ];
 
 /**

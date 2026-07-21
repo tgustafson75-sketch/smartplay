@@ -4702,14 +4702,43 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /thumbnail_uri: primaryThumb \?\? perShotThumb \?\? session\.fault_frame_uri \?\? session\.thumbnailUri \?\? null/.test(read('services/swingLibrary.ts')) &&
       /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/cageStore.ts')) &&
       /await VT\.getThumbnailAsync\(playableUri/.test(read('app/swinglab/library.tsx')) && // refreshed: re-anchored playableUri (was clipUri)
-      // BALL SPEED badge is honest: driven by the SwingMetric, shown only when we have a value.
-      // 2026-07-20 (Tim — "no extra labels, beta implied") — the rail shows a CLEAN number (no "~"
-      // estimate marker); honesty is preserved by only rendering a value when one exists ("—" else).
-      /value: bs\.value != null \? `\$\{Math\.round\(bs\.value\)\}` : null/.test(smSrc2) &&
+      // BALL SPEED badge is honest: a CLEAN number (no "~" marker) AND gated on isSwingDerived.
+      // 2026-07-20 (bug-hunt fix) — the badge must ONLY show a value that is actually
+      // swing-derived; a handicap-table 'profile'/'placeholder' fallback (a constant, identical
+      // for every swing of a club) must read "—", matching the page-2 tile. No raw-mph fabrication.
+      /value: bs\.value != null && isSwingDerived\(bs\.source\) \? `\$\{Math\.round\(bs\.value\)\}` : null/.test(smSrc2) &&
       !/\$\{bsEst \? '~' : ''\}/.test(smSrc2) &&
       // typed/dictated FEEL persists on Save (not just via the caddie-submit button).
       /if \(sid && feelText\.trim\(\)\) \{[\s\S]*?setSessionFeel\(sid, feelText\.trim\(\)\)/.test(smSrc2),
-    'library thumbnails backfill + persist; ball-speed badge shows a clean number from the SwingMetric (no raw-mph fabrication, no est marker); feel saved on Save');
+    'library thumbnails backfill + persist; ball-speed badge shows a clean swing-derived number only (isSwingDerived-gated, no fabricated handicap-table constant, no est marker); feel saved on Save');
+
+  // ─── Bug-hunt closeout (2026-07-20) — lock the highest-value fixes so they can't regress ───
+  check('Bug-hunt: voice bypasses match whole-word commands, not raw substrings',
+    // matchesCommand (word-boundary + short-utterance) replaces the naive t.includes(p) that let
+    // "ob" inside "problem"/"probably" add a penalty stroke and drop the user's question.
+    /const matchesCommand = \(raw: string, phrases: string\[\], maxWords = 6\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      /matchesCommand\(transcript, PENALTY_PHRASES\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      /matchesCommand\(transcript, MUTE_PHRASES\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      // the raw-substring bypass matching must be gone
+      !/PENALTY_PHRASES\.some\(p => t\.includes\(p\)\)/.test(read('hooks/useVoiceCaddie.ts')) &&
+      // the ambiguous bare tokens that fired on ordinary speech were removed
+      !/^\s*"water",\s*$/m.test(read('hooks/useVoiceCaddie.ts')) &&
+      !/^\s*"quiet",\s*$/m.test(read('hooks/useVoiceCaddie.ts')),
+    'penalty/hero/mute/vision voice bypasses only fire on short whole-word commands — ordinary conversational speech ("problem", "probably", "I need some water") no longer corrupts the scorecard or drops the question');
+
+  check('Bug-hunt: first-launch consent gate is anchored on termsAcceptedAt, not first_opened_at',
+    // the boot trial-lifecycle stamps first_opened_at during hydration, so the welcome/consent
+    // screen was silently skipped on cold installs — the gate now keys on the consent field.
+    /const hasAcceptedTerms = profileSnap\.termsAcceptedAt != null;/.test(read('app/index.tsx')) &&
+      /if \(!hasAcceptedTerms && !hasName\)/.test(read('app/index.tsx')),
+    'cold-install users always see the Terms/Privacy consent + profile-capture welcome screen (gate keys on termsAcceptedAt, which only welcome.tsx sets)');
+
+  check('Bug-hunt: backup grow-mostly guards the four accumulating learned stores',
+    // an emptier device must not clobber these last-write-wins in the cloud (client + server lists).
+    ['coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store'].every(k =>
+      new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('services/cloudSync/snapshot.ts')) &&
+      new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
+    'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
   check('Scorecard + round-end fixes from Tim\'s round (2026-06-12)',
     // (a) scoring chips open INLINE under the tapped hole (any hole, incl. a missed one),

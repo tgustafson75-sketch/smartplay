@@ -1184,8 +1184,16 @@ export const useRoundStore = create<RoundState>()(
             // Differential from total score against the neutral course
             // baseline. Skip per-hole AGS cap since imported rounds
             // don't carry per-hole pars (just totals).
-            const adjustedScore = input.holesPlayed === 9 ? input.totalScore * 2 : input.totalScore;
-            const diff = calcMod.computeScoreDifferential(adjustedScore, 72.0, 113);
+            // 2026-07-20 (bug-hunt fix) — use the WHS 9-hole method (played-9 differential +
+            // the player's EXPECTED second nine), matching rebuildDifferentialsFromHistory.
+            // The old score-doubling (total×2 vs 72.0) is the method the codebase ITSELF
+            // declares wrong (handicapCalculator.ts:247) — it understates the differential and
+            // biases the Index DOWN, and it made the single-scorecard import path disagree with
+            // the bulk import + Settings→Recalculate for the same round.
+            const currentIndex = typeof profile.handicap_index === 'number' ? profile.handicap_index : 14;
+            const diff = input.holesPlayed === 9
+              ? Math.round((calcMod.computeScoreDifferential(input.totalScore, 36.0, 113) + calcMod.expectedNineDifferential(currentIndex)) * 10) / 10
+              : calcMod.computeScoreDifferential(input.totalScore, 72.0, 113);
             profile.pushDifferential(diff);
             // 2026-06-11 (audit) — always (re)estimate, even with no prior index,
             // so single-scorecard imports (import-round.tsx, updateHandicap
