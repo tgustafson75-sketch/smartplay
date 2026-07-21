@@ -4746,6 +4746,27 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Pose-first read: measured kinematics → honest multi-dimensional read + threshold faults', (() => {
+    // 2026-07-21 — the pose-first re-architecture engine. Faults are thresholds on REAL measured
+    // kinematics (not a vision guess); a dimension we couldn't measure is OMITTED, never faked;
+    // it never returns "no swing".
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { buildPoseSwingRead } = require('../../services/swing/poseSwingRead');
+    const mkTempo = (ratio: number) => ({ ratio, backswingMs: 900, downswingMs: 300, topMs: 900, sequencingScore: null, source: 'video_pose', confidence: 'med' });
+    // Clean swing: strong numbers → strengths, no faults, usable.
+    const clean = buildPoseSwingRead({ hipTurnDeg: 46, shoulderTurnDeg: 92, weightShiftPct: 20, spineAngleDeltaDeg: 4, hipSlideRatio: 1.0, sequencingScore: 72, frames: [], verdicts: {} }, mkTempo(3.0));
+    const cleanOk = clean.usable && clean.faults.length === 0 && clean.strengths.length > 0 && clean.dimensions.length >= 6;
+    // Faulty swing: early extension + sway + hanging back + over the top → all detected from thresholds.
+    const faulty = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {} }, mkTempo(3.0));
+    const fk = faulty.faults.map((f: { key: string }) => f.key);
+    const faultyOk = fk.includes('early_extension') && fk.includes('sway') && fk.includes('reverse_pivot') && fk.includes('over_the_top') && faulty.faults[0].severity === 'significant';
+    // Unmeasurable (e.g. bad angle): every dimension null → omitted, NO fabricated fault, not usable — never "no swing" as a fault.
+    const empty = buildPoseSwingRead({ hipTurnDeg: null, shoulderTurnDeg: null, weightShiftPct: null, spineAngleDeltaDeg: null, hipSlideRatio: null, sequencingScore: null, frames: [], verdicts: {} }, null);
+    const emptyOk = empty.dimensions.length === 0 && empty.faults.length === 0 && empty.usable === false;
+    return cleanOk && faultyOk && emptyOk;
+  })(),
+  'pose-first engine: measured kinematics → per-dimension honest verdicts + threshold-detected faults (early-extension/sway/reverse-pivot/over-the-top from real numbers), and unmeasurable dimensions are omitted not fabricated');
+
   check('Analysis: a stuck upload never spins forever — pending is watchdog-recovered + early retry',
     // 2026-07-21 (BETA analysis P0). An uploaded clip whose auto-analyze never fired (no <Video>
     // duration) sat at 'pending' behind a lying spinner with no escape (the watchdog covered
