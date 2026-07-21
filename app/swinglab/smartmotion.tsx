@@ -812,7 +812,11 @@ export default function SmartMotion() {
   // the positions (top, transition, impact) are actually readable on a phone and the
   // skeleton/arc overlays track visibly, so the FIRST replay defaults to ½. The speed
   // badge still cycles (½ → ¼ → 1×) — one tap back to real-time for tempo feel.
-  const [playbackRate, setPlaybackRate] = useState(0.5); // review slow-mo (1 / .5 / .25)
+  // 2026-07-20 (BETA — Tim: "playing half time to start isn't helping anything") — start at
+  // REAL-TIME (1×) so the swing plays at natural speed and you read tempo/flow honestly on open.
+  // Slowing down to study the overlays is now a DELIBERATE tap on the speed badge (1×→½→¼→1×),
+  // not forced on every open. (Superseded the 2026-07-07 "default to ½" experiment above.)
+  const [playbackRate, setPlaybackRate] = useState(1); // review speed (1 / .5 / .25); starts real-time
   const [rootSize, setRootSize] = useState({ w: 0, h: 0 });
   // Status-perimeter pulse — a thin border around the video that ties to the
   // analysis phase (green active/done, amber while thinking), like the caddie

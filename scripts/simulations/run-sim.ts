@@ -2082,7 +2082,10 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
   // 2026-06-16 (Tim — "first try always longer" + "listens too long" + "why go cold
   // at all") — Vercel functions idle out after ~5 min. A 240s heartbeat keeps the
   // chain hot while foregrounded so no session goes fully cold; the caddie tab warms
-  // on focus (not just tap); silence endpoint snaps at 900ms.
+  // on focus (not just tap).
+  // 2026-07-20 (BETA — Tim: "Caddie is cutting me off") — the silence endpoint is now
+  // ADAPTIVE: a quick command still snaps (SHORT 900ms), but once the user is mid-sentence
+  // it waits out a natural pause (LONG 1800ms) so it never clips a real thought.
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
     const caddie = read('app/(tabs)/caddie.tsx');
@@ -2092,10 +2095,13 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
       /else stopHeartbeat\(\)/.test(vc) &&
       /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(caddie) &&
-      /const SILENCE_TIMEOUT_MS = 900;/.test(vs)
+      /const SILENCE_TIMEOUT_SHORT_MS = 900;/.test(vs) &&
+      /const SILENCE_TIMEOUT_LONG_MS = 1800;/.test(vs) &&
+      // adaptive selection: long window once speech has run past SPEECH_LONG_MS
+      /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs)
     );
   })(),
-  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; 900ms silence snap');
+  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; ADAPTIVE silence endpoint (900ms quick command / 1800ms mid-sentence) so it never cuts the user off');
 
 check('Voice: one-voice-at-a-time across cloud + device subsystems (no racing)',
   // 2026-06-16 (Tim — "two voices racing" + robotic backup at the same time) — the

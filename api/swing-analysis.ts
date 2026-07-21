@@ -891,10 +891,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (locFrames.length > 16) {
         return res.status(400).json({ error: 'maximum 16 locate frames' });
       }
+      // 2026-07-20 (BETA — Tim: "how can you not find a swing… BE AI, be intelligent. Point of
+      // the AI"). ROOT CAUSE of "swing analysis not working": this locator used to return
+      // { found: false } whenever it couldn't PINPOINT the swing, and the client then smeared
+      // analysis frames across the whole clip (reading setup/walk-up, not the swing). But the
+      // golfer INTENTIONALLY pressed record to capture a swing — a swing IS present. The AI's
+      // job is to find WHERE it is, never to decide IF one exists. So locate NEVER returns
+      // "no swing": it always returns its best-estimate impact timestamp. If the model somehow
+      // can't answer, we fall back to a knowledge-based default (past walk-in/setup, on the
+      // swing) instead of giving up. found:false is gone from every return path here.
+      const locTimes = locFrames
+        .map((f, i) => (typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i))
+        .sort((a, b) => a - b);
+      const firstT = locTimes[0] ?? 0;
+      const lastT = locTimes[locTimes.length - 1] ?? firstT;
+      // A self-recorded swing lands AFTER the walk-in + address, so ~62% through the clip is a
+      // far better default than a uniform spread when we must guess.
+      const heuristicT = firstT + 0.62 * (lastT - firstT);
+      // 2026-07-20 (BETA — Tim: "everything is everything… ball detection area is the anchor of
+      // where setup + action happen"). When SmartMotion knows the ball position, tell the locator:
+      // impact is the frame where the clubhead reaches the ball, so it's a strong spatial anchor.
+      const ballAnchor = body.ball_area_norm as { x?: number; y?: number } | null | undefined;
+      const ballHint = ballAnchor && typeof ballAnchor.x === 'number' && typeof ballAnchor.y === 'number'
+        ? ` ANCHOR: the ball sits at normalized position (x=${ballAnchor.x.toFixed(2)}, y=${ballAnchor.y.toFixed(2)}) — 0-1 from the top-left of the frame. IMPACT is the frame where the clubhead reaches the ball at that spot; use this as your primary spatial anchor for the swing moment.`
+        : '';
       try {
-        if (!gemini) return res.status(200).json({ found: false, error: 'GOOGLE_API_KEY not configured' });
+        if (!gemini) {
+          return res.status(200).json({ found: true, swing_time_sec: Math.max(0, heuristicT), confidence: 'low' });
+        }
         const locParts = [
-          { text: 'You are a precise golf-swing temporal locator. Identify WHEN the actual swing happens (downswing through impact/follow-through, body rotated, club in motion). NOT address, waggles, walk-ups, or post-shot. Return ONLY JSON: { "found": true, "swing_time_sec": <number>, "confidence": "high"|"low" }. No swing visible → { "found": false }.' },
+          { text: 'You are an expert golf-swing temporal locator. The golfer INTENTIONALLY pressed record to capture their golf swing, so a swing IS present in these frames — your ONLY job is to identify WHEN it happens, never whether it exists. Using golf-swing knowledge (the motion runs address → takeaway → backswing → top → downswing → impact → follow-through), return the timestamp of IMPACT / the downswing: body rotated toward the target, hips open, arms extended, weight forward, club released — NOT address, waggles, walk-ups, or the settled post-shot pose. You MUST ALWAYS return your best estimate; if you are unsure, choose the frame that most resembles the downswing / impact / immediate follow-through.' + ballHint + ' Return ONLY JSON: { "swing_time_sec": <number>, "confidence": "high"|"low" }.' },
           ...locFrames.flatMap((f, i) => {
             const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
             return [
@@ -902,7 +928,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               { inlineData: { mimeType: f.media_type ?? 'image/jpeg', data: f.b64 } },
             ];
           }),
-          { text: 'At which timestamp is the actual golf swing happening? Return JSON only.' },
+          { text: 'At which timestamp is the swing (impact/downswing) happening? Always give your best estimate. Return JSON only.' },
         ];
         const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -914,33 +940,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             responseSchema: {
               type: Type.OBJECT,
               properties: {
-                found: { type: Type.BOOLEAN },
-                swing_time_sec: { type: Type.NUMBER, nullable: true },
+                swing_time_sec: { type: Type.NUMBER },
                 confidence: { type: Type.STRING, enum: ['high', 'low'], nullable: true },
               },
-              required: ['found'],
+              required: ['swing_time_sec'],
             },
           },
         }), 20_000);
         const raw = (gem.text ?? '').trim();
-        let parsed: { found?: boolean; swing_time_sec?: number; confidence?: string } = {};
+        let parsed: { swing_time_sec?: number; confidence?: string } = {};
         try {
           const m = raw.match(/\{[\s\S]*\}/);
           if (m) parsed = JSON.parse(m[0]);
-        } catch { /* fallthrough → found:false */ }
-        if (!parsed.found || typeof parsed.swing_time_sec !== 'number' || !Number.isFinite(parsed.swing_time_sec)) {
-          return res.status(200).json({ found: false });
-        }
+        } catch { /* fall through to the knowledge-based default below */ }
+        const t = typeof parsed.swing_time_sec === 'number' && Number.isFinite(parsed.swing_time_sec)
+          ? parsed.swing_time_sec
+          : heuristicT; // model didn't return a usable time → best-guess, never "no swing"
         return res.status(200).json({
           found: true,
-          swing_time_sec: Math.max(0, parsed.swing_time_sec),
+          swing_time_sec: Math.max(0, t),
           confidence: parsed.confidence === 'high' ? 'high' : 'low',
         });
       } catch (e) {
         console.error('[swing-analysis] locate_swing failed', e);
-        // 502 (not 200) so the client knows this was an error, not "model found
-        // no swing" — client falls back to wide-spread sampling on any !res.ok.
-        return res.status(502).json({ found: false, error: e instanceof Error ? e.message : 'locate failed' });
+        // Even on a model/network error we return a best-guess window (200, never a hard
+        // "no swing") so the analysis still lands ON the swing region, not across setup.
+        return res.status(200).json({ found: true, swing_time_sec: Math.max(0, heuristicT), confidence: 'low' });
       }
     }
     // 2026-06-10 — Range mode: find EVERY swing in a multi-swing clip (acoustics

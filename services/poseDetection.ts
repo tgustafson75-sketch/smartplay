@@ -539,8 +539,13 @@ export async function extractKeyFrames(
 // frames and ask the model WHEN the swing happens; (2) re-extract DENSE frames
 // in a tight window around it and run the normal analysis on just that. So the
 // AI both finds AND reads the swing, with no manual marking and no acoustics.
-const LOCATE_FRAME_WIDTH = 320;
-const LOCATE_FRAME_COMPRESS = 0.5;
+// 2026-07-20 (BETA — Tim: swing analysis must never fail to find the swing) — bumped the
+// locate frames from 320px/0.5 to 512px/0.65. At 320px a golfer at range/DTL distance is a
+// handful of pixels — the model literally couldn't SEE the swing to place it. Bigger, clearer
+// frames give the locator real signal to be intelligent with (still small on the wire: a 512px
+// JPEG q0.65 is ~20-30KB, so even 18 frames stay well under any body limit).
+const LOCATE_FRAME_WIDTH = 512;
+const LOCATE_FRAME_COMPRESS = 0.65;
 // 2026-06-29 (Tim) — lowered 12s→6s so SmartMotion/range clips around 8-10s (a real
 // swing buried in a short clip) still get the swing LOCALIZED before pose extraction,
 // instead of being skipped and smearing frames across the whole clip = empty biomech.
@@ -599,14 +604,20 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
 export async function locateSwingWindow(
   clipUri: string,
   durationMs: number,
+  // 2026-07-20 (BETA — Tim: "everything is everything… the ball detection area is the anchor of
+  // where setup and action happen"). SmartMotion already knows WHERE the ball sits (placed at
+  // setup or auto-detected). Impact is the clubhead reaching the ball, so passing the ball's
+  // normalized position gives the temporal locator a strong spatial anchor to find the swing.
+  ballAreaNorm?: { x: number; y: number; r: number } | null,
 ): Promise<{ startSec: number; endSec: number } | null> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
     logLocate('swing_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_under_12s' : 'no_api_url', dur_ms: durationMs });
     return null;
   }
-  // ~1 coarse frame per 4s, clamped 8-14.
-  const count = Math.max(8, Math.min(14, Math.round(durationMs / 1000 / 4)));
+  // 2026-07-20 (BETA) — denser sampling (~1 frame / 3s, clamped 10-16) so a fast swing in a
+  // long clip is more likely to land IN a frame for the locator to catch. Server cap is 16.
+  const count = Math.max(10, Math.min(16, Math.round(durationMs / 1000 / 3)));
   const frames = await extractCoarseFrames(clipUri, durationMs, count);
   if (frames.length < 3) {
     logLocate('swing_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
@@ -619,6 +630,8 @@ export async function locateSwingWindow(
       body: JSON.stringify({
         mode: 'locate_swing',
         frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+        // Spatial anchor: where the ball sits (impact = clubhead reaching it). null when unknown.
+        ball_area_norm: ballAreaNorm ?? null,
       }),
       signal: AbortSignal.timeout(LOCATE_TIMEOUT_MS),
     });
@@ -627,9 +640,12 @@ export async function locateSwingWindow(
       return null;
     }
     const data = (await res.json()) as { found?: boolean; swing_time_sec?: number; confidence?: string };
-    if (!data.found || typeof data.swing_time_sec !== 'number' || !Number.isFinite(data.swing_time_sec)) {
-      V6('LOCATE — no swing located (fallback to wide spread)', { coarse_frames: frames.length });
-      logLocate('swing_locate_fallback', { reason: 'model_found_no_swing', coarse_frames: frames.length });
+    // 2026-07-20 (BETA) — the locator now ALWAYS returns a best-estimate swing_time_sec (server
+    // no longer emits "no swing"), so trust any finite timestamp regardless of the found flag.
+    // This branch now only guards a genuinely malformed response.
+    if (typeof data.swing_time_sec !== 'number' || !Number.isFinite(data.swing_time_sec)) {
+      V6('LOCATE — no usable timestamp in response (fallback to wide spread)', { coarse_frames: frames.length });
+      logLocate('swing_locate_fallback', { reason: 'no_timestamp', coarse_frames: frames.length });
       return null;
     }
     const durSec = durationMs / 1000;
@@ -873,7 +889,7 @@ export async function analyzeSwing(
   if (!effectiveBoundaries) {
     probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
     if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
-      const located = await locateSwingWindow(clipUri, probedDurMs);
+      const located = await locateSwingWindow(clipUri, probedDurMs, context.ball_area_norm ?? null);
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);

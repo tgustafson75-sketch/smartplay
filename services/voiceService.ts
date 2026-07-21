@@ -140,11 +140,19 @@ const SILENCE_DB_THRESHOLD = -40;
 // inter-word gap, so it doesn't cut a brief word-search pause. This is the single
 // snap knob: lower (~900) = snappier/risk cutting slow pausers; higher (~1800) =
 // safer/laggier. All captureUtterance callers inherit.
-// 2026-06-16 (Tim — "listens too long, as fast a flow as possible") — 1200 → 900.
-// Still ~2.5–3x a normal inter-word gap (typical word-search pauses are 300–600ms),
-// so it snaps right after you stop without clipping a brief mid-thought pause. The
-// adaptive noise floor keeps background sound from holding the window open.
-const SILENCE_TIMEOUT_MS = 900;
+// 2026-07-20 (BETA FIELD REPORT — Tim: "Caddie is cutting me off"; his own issue-log
+// dictation chopped into fragments "we have an issue with" / "we need to fix the").
+// ROOT CAUSE: a SINGLE fixed silence window can't tell a mid-sentence pause from an
+// end-of-turn. 900ms (tuned in June for terse commands) guillotines natural dictation —
+// a word-search / breath pause mid-sentence is routinely 0.8–1.5s. But bumping the single
+// value back up re-breaks the "fast flow" ask for quick commands. Fix = ADAPTIVE endpoint:
+//   • SHORT window while the utterance is still brief (a 1–2 word command) → snappy, as before.
+//   • LONG window once the user is clearly mid-sentence (has been speaking > SPEECH_LONG_MS)
+//     → patient, so a conversational pause never clips a real thought.
+// This resolves BOTH asks (fast commands + no cut-off on sentences) instead of trading them.
+const SILENCE_TIMEOUT_SHORT_MS = 900;   // quick command: end promptly after a short pause
+const SILENCE_TIMEOUT_LONG_MS = 1800;   // mid-sentence: wait out a natural word-search pause
+const SPEECH_LONG_MS = 1400;            // once speech has run this long, treat it as a sentence
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 // 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive
@@ -259,6 +267,7 @@ export const captureUtterance = async (
     // 2026-06-16 — thresholds are now lifted relative to a live ambient floor
     // (noiseFloorDb) so background noise can't masquerade as "still talking".
     let hasSpoken = false;
+    let speechStartAt = 0; // when the user first crossed the speech threshold (for adaptive endpoint)
     let lastLoudAt = Date.now();
     let noiseFloorDb = NOISE_FLOOR_INIT_DB;
 
@@ -279,7 +288,10 @@ export const captureUtterance = async (
         // the original fixed floors (so a quiet room is byte-for-byte prior behavior).
         const effSpeechDb = Math.max(SPEECH_DETECT_DB, noiseFloorDb + SPEECH_MARGIN_DB);
         const effSilenceDb = Math.max(SILENCE_DB_THRESHOLD, noiseFloorDb + SILENCE_MARGIN_DB);
-        if (metering > effSpeechDb) hasSpoken = true;
+        if (metering > effSpeechDb) {
+          if (!hasSpoken) speechStartAt = Date.now(); // first real speech — start the sentence clock
+          hasSpoken = true;
+        }
         if (metering > effSilenceDb) lastLoudAt = Date.now();
       },
       100, // 100ms update interval — cheap and responsive
@@ -304,10 +316,13 @@ export const captureUtterance = async (
     let lastSizeProbeAt = 0;
     while (Date.now() - start < timeoutMs && !captureCancelled && !captureEarlyStop) {
       await new Promise(resolve => setTimeout(resolve, 100));
-      // Silence-VAD early stop: only after user has actually spoken
-      // (avoid auto-stop on dead silence before they start) AND
-      // sustained quiet for ≥ SILENCE_TIMEOUT_MS.
-      if (hasSpoken && Date.now() - lastLoudAt >= SILENCE_TIMEOUT_MS) {
+      // Silence-VAD early stop: only after the user has actually spoken (avoid auto-stop on
+      // dead silence before they start) AND sustained quiet for ≥ the ADAPTIVE window. A brief
+      // command ends promptly (SHORT); once they've been talking past SPEECH_LONG_MS it's a
+      // sentence, so we wait out a natural mid-thought pause (LONG) and never clip them.
+      const speakingForMs = hasSpoken ? Date.now() - speechStartAt : 0;
+      const silenceWindow = speakingForMs >= SPEECH_LONG_MS ? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS;
+      if (hasSpoken && Date.now() - lastLoudAt >= silenceWindow) {
         break;
       }
       // 2026-06-23 — real-time SIZE CEILING. Some Android OEMs (Samsung Z
