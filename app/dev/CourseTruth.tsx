@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   coordRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dot: { width: 12, height: 12, borderRadius: 6 },
   coordLabel: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  coordValue: { color: '#9ca3af', fontSize: 12, fontFamily: 'Courier', marginTop: 2 },
+  coordValue: { color: '#9ca3af', fontSize: 12, fontFamily: 'monospace', marginTop: 2 },
   coordExtra: { color: '#F5A623', fontSize: 11, fontWeight: '800' },
   diff: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 4 },
   manualRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontSize: 12,
-    fontFamily: 'Courier',
+    fontFamily: 'monospace',
   },
   applyBtn: {
     backgroundColor: '#3498DB',

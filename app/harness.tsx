@@ -151,7 +151,7 @@ export default function HarnessScreen() {
             Scenarios module failed to load. Force-quit + reopen if you just received an OTA. If this
             persists, the error below points at the import that crashed.
           </Text>
-          <Text selectable style={{ color: '#9ca3af', fontSize: 11, marginTop: 16, fontFamily: 'Courier' }}>
+          <Text selectable style={{ color: '#9ca3af', fontSize: 11, marginTop: 16, fontFamily: 'monospace' }}>
             {_scenariosLoadError}
           </Text>
         </ScrollView>

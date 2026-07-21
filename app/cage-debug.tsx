@@ -683,7 +683,7 @@ const styles = StyleSheet.create({
   storageDumpText: {
     color: '#9ca3af',
     fontSize: 10,
-    fontFamily: 'Courier',
+    fontFamily: 'monospace',
   },
 
   // Video player

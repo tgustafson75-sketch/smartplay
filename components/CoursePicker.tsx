@@ -316,11 +316,11 @@ const styles = StyleSheet.create({
     borderLeftColor: '#1e3a28',
   },
   infoBtnText: {
+    // 2026-07-21 (Tim — brand consistency) — was italic serif, the one off-brand typeface in a
+    // user-facing surface (the app is sans-serif throughout). Aligned to the brand sans.
     color: '#00C896',
     fontSize: 14,
     fontWeight: '800',
-    fontStyle: 'italic',
-    fontFamily: 'serif',
   },
   resultRow: {
     paddingHorizontal: 14,
