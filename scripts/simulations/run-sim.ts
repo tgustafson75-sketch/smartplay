@@ -4812,6 +4812,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /pendingSlow && \(/.test(read('app/swinglab/swing/[swing_id].tsx')),
     'a stuck-pending upload analysis recovers: an early "tap to retry" surfaces at 30s and the watchdog flips it to failed→Re-analyze — the "Analyzing your swing" spinner can no longer run forever');
 
+  check('Auto-listen is OFF by default and reset each launch (deliberate per-session opt-in)',
+    // 2026-07-21 (Tim) — hands-free auto-listen is off by default and the user turns it on each
+    // session; onRehydrateStorage forces it false every launch (reverses the old v18 force-on and
+    // keeps testers off the auto-listen VAD path unless they explicitly enable it).
+    /autoListenEnabled: false,/.test(read('store/settingsStore.ts')) &&
+      /useSettingsStore\.setState\(\{ hasHydrated: true, autoListenEnabled: false \}\)/.test(read('store/settingsStore.ts')),
+    'auto-listen defaults OFF and is force-reset to OFF on every launch, so hands-free is an explicit per-session choice');
+
   check('Voice: a swing COMPLAINT/mention does not yank the user into SwingLab (confirm, not auto-nav)',
     // 2026-07-21 (Tim: "every time I said we have an issue with the swing, caddie took me to
     // swinglab — make it a prompt"). The classifier must treat a swing complaint/feedback request

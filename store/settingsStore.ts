@@ -439,7 +439,10 @@ export const useSettingsStore = create<SettingsState>()(
       // "start a round → just talk" works without digging into Settings. The
       // ActiveListeningPill shows it's live; the Settings toggle mutes it. Still scoped
       // to in-round + Caddie tab + idle by the vadEnabled gate.
-      autoListenEnabled: true,
+      // 2026-07-21 (Tim) — auto-listen is OFF by default and the user turns it on each session
+      // (see the boot reset in _layout.tsx). Hands-free is opt-in, not always-on — this also keeps
+      // testers off the auto-listen VAD path unless they deliberately enable it.
+      autoListenEnabled: false,
       // 2026-05-22 — Cart-is-default product principle: ~95% of golfers
       // ride. Default cartMode TRUE so new installs get cart-aware shot
       // thresholds + Fix L's cart-mode hole-detection bonus without
@@ -970,7 +973,11 @@ export const useSettingsStore = create<SettingsState>()(
         if (error) {
           console.log('[settingsStore] rehydrate error:', error);
         }
-        useSettingsStore.setState({ hasHydrated: true });
+        // 2026-07-21 (Tim — "auto listen off by default, user turns on each time") — force
+        // auto-listen OFF on EVERY launch, overriding any persisted value, so hands-free is a
+        // deliberate per-session opt-in (and reverses the old v18 force-on for existing installs).
+        // Also keeps testers off the auto-listen VAD path unless they explicitly enable it.
+        useSettingsStore.setState({ hasHydrated: true, autoListenEnabled: false });
       },
     },
   ),
