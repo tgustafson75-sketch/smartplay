@@ -442,12 +442,36 @@ export default function CourseDetailScreen() {
     void openTeeTimeSearch(displayClubName || course.club_name, loc, course.id);
   };
 
-  if (loading || !course) {
+  if (loading) {
     return (
       <View style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.loadingState}>
           <ActivityIndicator color="#00C896" />
+        </View>
+      </View>
+    );
+  }
+  // 2026-07-21 (BETA — tester dead-end) — the load FINISHED but the course is null (getCourse
+  // returned null or threw — reachable on a flaky/cold API or the *.vercel.app filter). The old
+  // `loading || !course` render then span an ActivityIndicator FOREVER, and CourseDetailBanner has
+  // no back button, so the only escape was the OS gesture. Show an honest error WITH a back button.
+  if (!course) {
+    return (
+      <View style={styles.container}>
+        <CourseDetailBanner />
+        <View style={styles.loadingState}>
+          <Text style={{ color: '#e5e7eb', fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 14, paddingHorizontal: 28, lineHeight: 21 }}>
+            Couldn&apos;t load this course — check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ paddingHorizontal: 22, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: '#00C896' }}
+            accessibilityRole="button"
+            accessibilityLabel="Back to courses"
+          >
+            <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800' }}>Back to courses</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
