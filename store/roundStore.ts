@@ -1195,6 +1195,11 @@ export const useRoundStore = create<RoundState>()(
               ? Math.round((calcMod.computeScoreDifferential(input.totalScore, 36.0, 113) + calcMod.expectedNineDifferential(currentIndex)) * 10) / 10
               : calcMod.computeScoreDifferential(input.totalScore, 72.0, 113);
             profile.pushDifferential(diff);
+            // 2026-07-21 (BETA data-integrity) — the differential is now posted, so mark this
+            // imported round handicap-posted (exactly like endRound does at record time).
+            // Without it, HandicapImpactCard's "Post to Index" button (gated on !handicapPosted)
+            // offers to post the SAME round again → the differential double-counts the Index.
+            get().markHandicapPosted(id);
             // 2026-06-11 (audit) — always (re)estimate, even with no prior index,
             // so single-scorecard imports (import-round.tsx, updateHandicap
             // defaults true) produce a FIRST index once ≥3 differentials exist.
