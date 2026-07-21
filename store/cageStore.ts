@@ -716,6 +716,14 @@ interface CageState {
  */
 // 2026-06-10 — exported so the Caddie Memory store derives the SAME player id
 // (one source of truth: family active member → profile email → guest).
+// 2026-07-21 (BETA data-integrity) — collision-safe id. Date.now() ALONE collides when two
+// sessions/shots are created in the SAME millisecond (rapid ingest, multi-swing detect); every
+// mutator keys by id, so an edit / delete / analysis-attach on one would then silently hit the
+// OTHER record too. A short random suffix makes each id unique.
+function uid(kind: string): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${kind}`;
+}
+
 export function derivePlayerId(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -820,7 +828,7 @@ export const useCageStore = create<CageState>()(
       setHasHydrated: (b) => set({ hasHydrated: b }),
 
       startSession: (club) => {
-        const id = `${Date.now()}_cage`;
+        const id = uid('cage');
         cageLog('zustand-session-start', 'ok', { session_id: id, club });
         set({
           activeSession: {
@@ -918,7 +926,7 @@ export const useCageStore = create<CageState>()(
           const newShot: CageShot = {
             ...shot,
             club: inferredClub,
-            id: `${Date.now()}_shot`,
+            id: uid('shot'),
             timestamp: Date.now(),
           };
 
@@ -1030,15 +1038,14 @@ export const useCageStore = create<CageState>()(
           });
           return existing.id;
         }
-        const idSuffix = resolvedSource === 'live_cage' ? '_cage' : '_upload';
-        const sessionId = `${Date.now()}${idSuffix}`;
+        const sessionId = uid(resolvedSource === 'live_cage' ? 'cage' : 'upload');
         cageLog('ingest-uploaded-swing', 'ok', {
           session_id: sessionId,
           source: resolvedSource,
           club,
           clipUri_length: clipUri.length,
         });
-        const shotId = `${Date.now()}_${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`;
+        const shotId = uid(`${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`);
         const session: CageSession = {
           id: sessionId,
           date: upload.taken_at ?? upload.uploaded_at,
@@ -1089,7 +1096,7 @@ export const useCageStore = create<CageState>()(
           });
           return existing.id;
         }
-        const sessionId = `${Date.now()}_cage`;
+        const sessionId = uid('cage');
         cageLog('ingest-live-cage-session', 'ok', {
           session_id: sessionId,
           club,
