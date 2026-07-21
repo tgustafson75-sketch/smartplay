@@ -1810,6 +1810,12 @@ export const useVoiceCaddie = ({
         // "empty recording" from "too-small file" and "transcribe error" in the log.
         logVoiceSilentFail('empty_transcript', { source: 'processAudioUri', sourceKind: source });
         onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
+        // 2026-07-21 (BETA — voice-first testers, #1 cold-first-tap hit) — SPEAK it too, like the
+        // transcribe-error sibling above. An empty transcript is the most common cold-mic outcome;
+        // without this the caddie went totally SILENT (text bubble only), which reads as "it ignored
+        // me / is broken" to a hands-free/driving user who isn't looking at the screen. Device TTS
+        // so it works with no signal.
+        if (voiceEnabled) void speakDeviceNotice("Didn't catch that — try once more, a bit closer to the mic.", language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
