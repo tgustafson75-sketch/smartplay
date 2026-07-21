@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  Share,
   useWindowDimensions,
 } from 'react-native';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
@@ -48,6 +49,7 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
 import { useCageStore, resolvePlayerName } from '../../store/cageStore';
+import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import TrendChart from '../../components/charts/TrendChart';
@@ -231,6 +233,21 @@ export default function Dashboard() {
     const n = s.getPlayer().narrative;
     return !!n && (n.experience != null || n.practiceFrequency != null || n.workAreas.length > 0 || n.goals.length > 0);
   });
+
+  // 2026-07-21 (Tim — fault→workout) — the golfer's dominant swing fault (most-frequent, from the
+  // analysis primary_fault via caddieMemoryStore) → curated golf exercises that help it. Honest:
+  // only shows when we have a real fault AND a vetted exercise set for it. [[fault-to-workout-export]]
+  const swingFault = useCaddieMemoryStore((s) => s.getPlayer().tendencies.dominantMiss);
+  const faultWorkouts = useMemo(() => exercisesForFault(swingFault), [swingFault]);
+  const faultLabel = useMemo(() => (swingFault ? swingFault.replace(/_/g, ' ') : ''), [swingFault]);
+  const onExportWorkouts = useCallback(() => {
+    if (!swingFault || faultWorkouts.length === 0) return;
+    // Structured payload — shareable to the user's AI-trainer app OR for their own review (both
+    // targets via the share sheet; the user picks the destination).
+    const lines = faultWorkouts.map((e) => `• ${e.name} (${e.category}) — ${e.why}`).join('\n');
+    const body = `SmartPlay Caddie — training for your swing\nFocus: ${faultLabel}\n\n${lines}\n\n— Generated from your swing analysis`;
+    void Share.share({ message: body, title: `Training for: ${faultLabel}` }).catch(() => {});
+  }, [swingFault, faultWorkouts, faultLabel]);
 
   // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
   // vs. score-vs-par per round. Third correlation rail alongside practice + points.
@@ -907,6 +924,30 @@ export default function Dashboard() {
                 />
               </>
             )}
+          </View>
+        )}
+
+        {/* ─── TRAIN YOUR SWING (Tim, 2026-07-21) — curated golf exercises for the golfer's
+            dominant swing fault, with an export icon (share to an AI-trainer app or for review). */}
+        {faultWorkouts.length > 0 && (
+          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>TRAIN YOUR SWING</Text>
+              <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Export these exercises">
+                <Ionicons name="share-outline" size={18} color={colors.accent} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.impactHeadline, { color: colors.text_primary, textTransform: 'capitalize' }]}>{faultLabel}</Text>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 2, marginBottom: 8 }]}>Exercises that help this fault</Text>
+            {faultWorkouts.map((e, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 6 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '800' }}>{e.name}</Text>
+                  <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 16 }}>{e.why}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
