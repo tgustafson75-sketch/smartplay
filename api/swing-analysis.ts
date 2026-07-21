@@ -908,19 +908,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // A self-recorded swing lands AFTER the walk-in + address, so ~62% through the clip is a
       // far better default than a uniform spread when we must guess.
       const heuristicT = firstT + 0.62 * (lastT - firstT);
-      // 2026-07-20 (BETA — Tim: "everything is everything… ball detection area is the anchor of
-      // where setup + action happen"). When SmartMotion knows the ball position, tell the locator:
-      // impact is the frame where the clubhead reaches the ball, so it's a strong spatial anchor.
-      const ballAnchor = body.ball_area_norm as { x?: number; y?: number } | null | undefined;
-      const ballHint = ballAnchor && typeof ballAnchor.x === 'number' && typeof ballAnchor.y === 'number'
-        ? ` ANCHOR: the ball sits at normalized position (x=${ballAnchor.x.toFixed(2)}, y=${ballAnchor.y.toFixed(2)}) — 0-1 from the top-left of the frame. IMPACT is the frame where the clubhead reaches the ball at that spot; use this as your primary spatial anchor for the swing moment.`
-        : '';
       try {
         if (!gemini) {
           return res.status(200).json({ found: true, swing_time_sec: Math.max(0, heuristicT), confidence: 'low' });
         }
         const locParts = [
-          { text: 'You are an expert golf-swing temporal locator. The golfer INTENTIONALLY pressed record to capture their golf swing, so a swing IS present in these frames — your ONLY job is to identify WHEN it happens, never whether it exists. Using golf-swing knowledge (the motion runs address → takeaway → backswing → top → downswing → impact → follow-through), return the timestamp of IMPACT / the downswing: body rotated toward the target, hips open, arms extended, weight forward, club released — NOT address, waggles, walk-ups, or the settled post-shot pose. You MUST ALWAYS return your best estimate; if you are unsure, choose the frame that most resembles the downswing / impact / immediate follow-through.' + ballHint + ' Return ONLY JSON: { "swing_time_sec": <number>, "confidence": "high"|"low" }.' },
+          { text: 'You are an expert golf-swing temporal locator. The golfer INTENTIONALLY pressed record to capture their golf swing, so a swing IS present in these frames — your ONLY job is to identify WHEN it happens, never whether it exists. Using golf-swing knowledge (the motion runs address → takeaway → backswing → top → downswing → impact → follow-through), return the timestamp of IMPACT / the downswing: body rotated toward the target, hips open, arms extended, weight forward, club released — NOT address, waggles, walk-ups, or the settled post-shot pose. You MUST ALWAYS return your best estimate; if you are unsure, choose the frame that most resembles the downswing / impact / immediate follow-through. Return ONLY JSON: { "swing_time_sec": <number>, "confidence": "high"|"low" }.' },
           ...locFrames.flatMap((f, i) => {
             const t = typeof f.time_sec === 'number' && Number.isFinite(f.time_sec) ? f.time_sec : i;
             return [

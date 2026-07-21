@@ -604,11 +604,6 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
 export async function locateSwingWindow(
   clipUri: string,
   durationMs: number,
-  // 2026-07-20 (BETA — Tim: "everything is everything… the ball detection area is the anchor of
-  // where setup and action happen"). SmartMotion already knows WHERE the ball sits (placed at
-  // setup or auto-detected). Impact is the clubhead reaching the ball, so passing the ball's
-  // normalized position gives the temporal locator a strong spatial anchor to find the swing.
-  ballAreaNorm?: { x: number; y: number; r: number } | null,
 ): Promise<{ startSec: number; endSec: number } | null> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
@@ -630,8 +625,6 @@ export async function locateSwingWindow(
       body: JSON.stringify({
         mode: 'locate_swing',
         frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
-        // Spatial anchor: where the ball sits (impact = clubhead reaching it). null when unknown.
-        ball_area_norm: ballAreaNorm ?? null,
       }),
       signal: AbortSignal.timeout(LOCATE_TIMEOUT_MS),
     });
@@ -889,7 +882,7 @@ export async function analyzeSwing(
   if (!effectiveBoundaries) {
     probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
     if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
-      const located = await locateSwingWindow(clipUri, probedDurMs, context.ball_area_norm ?? null);
+      const located = await locateSwingWindow(clipUri, probedDurMs);
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);
