@@ -395,6 +395,22 @@ export default function SwingDetail() {
 
   const poseFrames = session?.biomechanics?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
+  // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
+  // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
+  // has jump-to-stage chips but the library detail didn't. Surface them here too, reusing scrubTo.
+  // Additive — no change to the analysis; the chips just seek the video to the labeled frame.
+  const swingStageChips = useMemo(() => {
+    const STAGES: { pos: string; label: string }[] = [
+      { pos: 'P1_address', label: 'Address' }, { pos: 'P4_top', label: 'Top' },
+      { pos: 'P6_impact', label: 'Impact' }, { pos: 'P10_finish', label: 'Finish' },
+    ];
+    return STAGES
+      .map((s) => {
+        const f = poseFrames.find((p) => p.position === s.pos);
+        return f && Number.isFinite(f.timestampMs) ? { label: s.label, ms: f.timestampMs } : null;
+      })
+      .filter((c): c is { label: string; ms: number } => c != null);
+  }, [poseFrames]);
 
   // 2026-07-10 (Tim — "swing arc not corrected") — the swing LIBRARY drew only the
   // wrist-proxy trace; the REAL detected clubhead arc was wired in SmartMotion but
@@ -1866,6 +1882,23 @@ export default function SwingDetail() {
                     })()}
                   </View>
                 </View>
+                {/* 2026-07-21 (Tim) — jump-to-stage chips: seek straight to address / top / impact /
+                    finish (the pose-labeled key positions), reusing scrubTo (pauses + holds the frame). */}
+                {hasPose && swingStageChips.length > 0 ? (
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {swingStageChips.map((c) => (
+                      <TouchableOpacity
+                        key={c.label}
+                        onPress={() => void scrubTo(c.ms / 1000)}
+                        style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accent_muted }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Jump to ${c.label}`}
+                      >
+                        <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800' }}>{c.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
                 {/* Time + transport */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
                   <Text style={{ color: colors.text_muted, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'], minWidth: 78 }}>
