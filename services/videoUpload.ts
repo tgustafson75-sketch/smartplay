@@ -221,7 +221,21 @@ export async function persistClipToDocuments(uri: string, keyHint?: string): Pro
 export async function probeVideo(uri: string): Promise<{ has_audio: boolean; duration_sec: number | null }> {
   uploadLog('preprocess-start', { uri_tail: uri.slice(-40) });
   try {
-    const { sound, status } = await Audio.Sound.createAsync({ uri }, { shouldPlay: false });
+    // 2026-07-21 (BETA — upload dead-end) — race Audio.Sound.createAsync against a 12s timeout.
+    // On a pathological audio track it can hang with no resolve, and the upload picker awaits this,
+    // so the screen sat unchanged (no metadata form, no error) — a silent no-op. Timing out returns
+    // a null-duration probe; the ingest handles a null duration (and the stuck-pending watchdog
+    // covers the downstream), so the user is never stranded on "Pick Video".
+    type SoundResult = Awaited<ReturnType<typeof Audio.Sound.createAsync>>;
+    const loaded = await Promise.race<SoundResult | null>([
+      Audio.Sound.createAsync({ uri }, { shouldPlay: false }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
+    ]);
+    if (!loaded) {
+      uploadLog('preprocess-complete', { status: 'timeout' });
+      return { has_audio: false, duration_sec: null };
+    }
+    const { sound, status } = loaded;
     let duration_sec: number | null = null;
     let has_audio = false;
     if (status.isLoaded) {

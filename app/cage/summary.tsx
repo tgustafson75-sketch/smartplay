@@ -115,13 +115,22 @@ export default function CageSummary() {
         if (cancelled) return;
         const priorIssues = results.slice(-3).map(x => x.analysis.detected_issue).filter(x => x !== 'none');
         const chunk = swingsWithClips.slice(chunkStart, chunkStart + CHUNK);
-        const chunkResults = await Promise.all(chunk.map((swing, j) =>
-          analyzeSwing(swing.clipUri!, {
-            club: session.club,
-            swing_number: chunkStart + j + 1,
-            prior_issues: priorIssues,
-          }).then(r => ({ swing, r })),
-        ));
+        const chunkResults = await Promise.all(chunk.map((swing, j) => {
+          // 2026-07-21 (BETA — analysis dead-end) — guard each analyzeSwing with a 130s hang race
+          // (the same bound SmartMotion uses). Without it, a stalled native thumbnail extraction on
+          // one bad clip made this Promise.all never resolve → setAnalyzing(false) never ran →
+          // "Analyzing swings…" spun forever. A timeout degrades that one swing, loop still finishes.
+          type AnalyzeResult = Awaited<ReturnType<typeof analyzeSwing>>;
+          const guarded = Promise.race<AnalyzeResult>([
+            analyzeSwing(swing.clipUri!, {
+              club: session.club,
+              swing_number: chunkStart + j + 1,
+              prior_issues: priorIssues,
+            }),
+            new Promise<AnalyzeResult>((resolve) => setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' } as AnalyzeResult), 130_000)),
+          ]);
+          return guarded.then(r => ({ swing, r }));
+        }));
         for (const { swing, r } of chunkResults) {
           if (r.kind === 'ok') {
             results.push({ swing_id: swing.id, analysis: r.analysis });
