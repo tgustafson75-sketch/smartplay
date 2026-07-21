@@ -125,7 +125,18 @@ export default function Scorecard() {
     : (lastCompletedRound?.nineHoleMode ?? false);
 
   const viewCourseHoles = isRoundActive
-    ? courseHoles
+    // 2026-07-21 (BETA — can't-score dead-end) — a live round on a data-less course (empty
+    // courseHoles, e.g. an API layout fetch that failed) rendered ZERO hole rows, so the player
+    // couldn't enter a score from the Scorecard at all. Synthesize scoreable par-4 rows as a
+    // fallback (mirrors the completed-round branch below) so scoring always works.
+    ? (courseHoles.length > 0
+        ? courseHoles
+        : Array.from({ length: effectiveNineHoleMode ? 9 : 18 }, (_, i) => ({
+            hole: i + 1, par: 4, distance: 0, front: 0, back: 0,
+            teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
+            frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
+            note: '', estimated: false,
+          })))
     : (() => {
         if (!lastCompletedRound) return [];
         const total = effectiveNineHoleMode ? 9 : 18;

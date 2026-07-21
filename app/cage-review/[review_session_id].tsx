@@ -96,6 +96,13 @@ export default function CageReviewInterview() {
       }
       setCurrentShot(next);
       loadQuestion(r, shots, next);
+    }).catch((e) => {
+      // 2026-07-21 (BETA — dead-end) — a rejected AsyncStorage read (or a throw in the handler)
+      // used to leave screenState at 'loading' forever (permanent spinner, no escape). Surface an
+      // honest error instead.
+      console.log('[cage-review] load failed', e);
+      setErrorMsg("Couldn't load this review. Head back and try again.");
+      setScreenState('done');
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review_session_id]);
