@@ -4746,6 +4746,17 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Learned bag: club-carry EWMA accumulates from shot 1 (raw accumulator, not the nulled display)',
+    // 2026-07-21 BETA data-integrity fix — the caddie's learned per-club yardages used the DISPLAY
+    // fields (null for shots 1-4) as the EWMA accumulator, so the average collapsed to just the 5th
+    // shot and dispersion seeded at 0. The accumulator must run on a raw never-nulled state.
+    /const baseAvg = prev\.avgAccum \?\? prev\.avgCarryYds \?\? carryYds;/.test(read('store/caddieMemoryStore.ts')) &&
+      /const baseDisp = prev\.dispAccum \?\? prev\.dispersionYds \?\? dev;/.test(read('store/caddieMemoryStore.ts')) &&
+      /avgAccum: avg,/.test(read('store/caddieMemoryStore.ts')) &&
+      // the broken accumulator (using the nulled display field as the base) must be gone
+      !/const base = prev\.avgCarryYds \?\? carryYds;/.test(read('store/caddieMemoryStore.ts')),
+    'the learned bag EWMA accumulates every shot from #1 on a raw never-nulled accumulator (avgAccum/dispAccum); the display stays null until MIN_SAMPLES — so the caddie no longer cites a yardage that is just the 5th shot with 0 dispersion');
+
   check('Pose motion anchors: derive top + impact from the hand-velocity signal (synthetic swing)', (() => {
     // 2026-07-21 — pose-first foundation. deriveSwingAnchors finds the swing structure from motion:
     // IMPACT = hand-speed peak (accelerating downswing), TOP = hands-highest (min y) before it.

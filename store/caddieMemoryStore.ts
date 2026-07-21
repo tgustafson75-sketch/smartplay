@@ -35,6 +35,12 @@ export interface ClubModel {
   /** Rough 80th-percentile dispersion (yards) once enough samples exist. */
   dispersionYds: number | null;
   lastUpdated: number;
+  /** 2026-07-21 — RAW running accumulators, never nulled. The display fields above are gated to
+   *  null until MIN_SAMPLES (honesty), but the EWMA must accumulate from shot 1 — using the nulled
+   *  display fields as the accumulator discarded shots 1-4 and seeded dispersion at 0. Optional so
+   *  legacy persisted models seed these from avgCarryYds/dispersionYds on the next shot. */
+  avgAccum?: number;
+  dispAccum?: number;
 }
 
 export interface HoleMemory {
@@ -336,16 +342,23 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
           // Exponential rolling average (recent shots weighted heavier than a
           // flat mean, so the bag tracks current form, not ancient outliers).
           const w = Math.min(1, 1 / Math.min(samples, SAMPLE_HALF_LIFE));
-          const base = prev.avgCarryYds ?? carryYds;
-          const avg = base + (carryYds - base) * w;
+          // 2026-07-21 (BETA data-integrity fix) — accumulate on the RAW numeric state, which is
+          // never nulled. (The old code used avgCarryYds/dispersionYds as the accumulator, but those
+          // are null for shots 1-4 → `?? carryYds` reset the average to the latest shot every time,
+          // so the learned avg was just the 5th shot and dispersion seeded at 0.) Legacy models with
+          // no accumulator seed it from the last displayed value so nothing already learned is lost.
+          const baseAvg = prev.avgAccum ?? prev.avgCarryYds ?? carryYds;
+          const avg = baseAvg + (carryYds - baseAvg) * w;
           // Dispersion proxy: rolling abs deviation from the running avg.
           const dev = Math.abs(carryYds - avg);
-          const prevDisp = prev.dispersionYds ?? dev;
-          const disp = prevDisp + (dev - prevDisp) * w;
+          const baseDisp = prev.dispAccum ?? prev.dispersionYds ?? dev;
+          const disp = baseDisp + (dev - baseDisp) * w;
           const next: ClubModel = {
             club,
             samples,
-            // Honesty: don't surface a number until we've truly learned it.
+            avgAccum: avg,
+            dispAccum: disp,
+            // Honesty: don't SURFACE a number until we've truly learned it (accumulator runs from shot 1).
             avgCarryYds: samples >= MIN_SAMPLES ? Math.round(avg) : null,
             dispersionYds: samples >= MIN_SAMPLES ? Math.round(disp) : null,
             lastUpdated: nowMs,
