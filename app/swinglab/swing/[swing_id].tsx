@@ -18,7 +18,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-07-21 (BETA — swing-replay crash class) — route frame extraction through the single-flight
+// queue wrapper (a drop-in re-export of expo-video-thumbnails) instead of the raw module, so this
+// screen's grab-frame can never spin up a retriever concurrent with another extraction.
+import * as VideoThumbnails from '../../../utils/videoThumbnail';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
@@ -331,8 +334,13 @@ export default function SwingDetail() {
     try {
       const st = await v.getStatusAsync();
       if (st.isLoaded && st.isPlaying) {
+        isPlayingRef.current = false;
         await v.pauseAsync();
       } else if (st.isLoaded) {
+        // 2026-07-21 (BETA — swing-replay crash) — set the playing ref BEFORE ExoPlayer starts so
+        // any in-flight clubhead-frame extraction aborts before the two native media pipelines can
+        // touch the file at once. (The isPlaying state update from the status callback lands later.)
+        isPlayingRef.current = true;
         // 2026-06-15 (Tim) — if we're at (or a hair from) the end, restart from
         // the top so a tap ALWAYS plays. expo-av's playAsync() at end-of-clip is
         // a no-op — that's why the controls felt dead after the video finished.
@@ -341,6 +349,7 @@ export default function SwingDetail() {
         if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(0);
         await v.playAsync();
       } else {
+        isPlayingRef.current = true;
         await v.loadAsync({ uri: playbackUri ?? shot?.clipUri ?? '' }, {}, false);
         await v.playAsync();
       }
@@ -400,29 +409,42 @@ export default function SwingDetail() {
   const clubArcRunKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hasPose || !shot?.clipUri || !(showSkeleton || showTrace)) { setClubArcPoints(null); return; }
+    // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
+    // clip is playing. detectClubPath opens a native MediaMetadataRetriever on the file, and a
+    // retriever decoding the SAME mp4 that ExoPlayer is decoding for playback SIGSEGVs the app to
+    // the launcher (uncatchable from JS = the crash-after-replay with no error-log entry). The clip
+    // opens STATIC, so extraction runs then; isPlaying is in the deps so a pause/finish re-runs it.
+    if (isPlaying) return;
     const startMs = (shot.clipStartSeconds ?? 0) * 1000;
     const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
-    // Dedupe: a stable window (uri+start+end) runs once. Display toggles and duration re-settling
-    // won't re-trigger extraction; changing swing/window will (new key).
+    // Dedupe: a stable window (uri+start+end) that SUCCEEDED runs once. The key is set only after a
+    // real result below, so an extraction aborted by playback retries the next time we're paused.
     const runKey = `${shot.clipUri}|${Math.round(startMs)}|${Math.round(endMs)}`;
     if (clubArcRunKeyRef.current === runKey) return;
-    clubArcRunKeyRef.current = runKey;
     let cancelled = false;
     void (async () => {
       // 2026-07-10 (audit SM5) — heal the clip URI first (iOS rotates the container UUID on
       // reinstall/native build; the raw stored path 404s). The main player self-heals via
       // resolveClipUri; the arc detector was using the raw path and silently never drawing.
       const uri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
-      if (cancelled) return;
+      if (cancelled || isPlayingRef.current) return;
       try {
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs });
-        if (!cancelled) setClubArcPoints(r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null);
+        // shouldAbort bails between frames the instant playback starts (isPlayingRef is set
+        // eagerly in togglePlayPause, before ExoPlayer spins up).
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled || isPlayingRef.current });
+        if (cancelled) return;
+        if (r && r.points.length >= 1) {
+          clubArcRunKeyRef.current = runKey; // mark THIS window done only on a real result
+          setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })));
+        }
+        // null = aborted (playback started) OR genuinely no arc; leave the key unset so a later
+        // paused pass can retry, and keep any prior points rather than blanking mid-study.
       } catch { /* best-effort — falls back to wrist trace */ }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -765,6 +787,12 @@ export default function SwingDetail() {
   const durationRef = useRef<number | null>(null);
   useEffect(() => { positionRef.current = position; }, [position]);
   useEffect(() => { durationRef.current = duration; }, [duration]);
+  // 2026-07-21 (BETA — swing-replay crash) — live isPlaying ref so the background clubhead-arc
+  // frame extraction can bail the INSTANT playback starts (a native retriever must never decode
+  // the file while ExoPlayer does). Set eagerly in togglePlayPause too, so the ref is true before
+  // ExoPlayer even spins up (no race window against the status-callback state update).
+  const isPlayingRef = useRef(false);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   const scrubTrackWRef = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const seekFromTouch = (locationX: number) => {
@@ -959,6 +987,13 @@ export default function SwingDetail() {
       const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
       const st = await videoRef.current?.getStatusAsync();
       const timeMs = (st && st.isLoaded ? st.positionMillis : 0) ?? 0;
+      // 2026-07-21 (BETA — swing-replay crash class) — PAUSE before extracting a frame so a native
+      // retriever never decodes the file while ExoPlayer is actively decoding it (SIGSEGV). Grabbing
+      // "the frame on screen" implies a held frame anyway, so this is also the correct behavior.
+      if (st?.isLoaded && st.isPlaying) {
+        isPlayingRef.current = false;
+        try { await videoRef.current?.pauseAsync(); } catch { /* best-effort */ }
+      }
       const overlayOn = hasPose && (showSkeleton || showTrace || motionOnly);
       let outUri: string | null = null;
       if (overlayOn) {

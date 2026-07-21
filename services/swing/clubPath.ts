@@ -92,11 +92,17 @@ export async function detectClubPath(args: {
   videoUri: string;
   startMs: number | null;
   endMs: number | null;
+  // 2026-07-21 (BETA — swing-replay crash) — abort check consulted BEFORE each native frame
+  // extraction. The caller passes `() => isPlaying`, so the instant playback starts we stop
+  // pulling frames: a MediaMetadataRetriever must never run concurrently with ExoPlayer decoding
+  // the SAME file (native SIGSEGV to the launcher, uncatchable from JS = the "crash after replay").
+  shouldAbort?: () => boolean;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
-  const { videoUri, startMs, endMs } = args;
+  const { videoUri, startMs, endMs, shouldAbort } = args;
   if (startMs == null || endMs == null || !(endMs > startMs)) return null;
+  if (shouldAbort?.()) return null; // don't even start if already playing
 
   // Sample evenly across the swing window.
   const offsets: number[] = [];
@@ -113,6 +119,10 @@ export async function detectClubPath(args: {
   const frames: (Frame | null)[] = [];
   const b64s: (string | null)[] = [];
   for (const o of offsets) {
+    // 2026-07-21 — bail BETWEEN frames the moment playback (re)starts, so a retriever is never
+    // decoding the file while ExoPlayer does. Clean up what we grabbed and abort — the arc is
+    // best-effort (falls back to the wrist trace); a crash-to-launcher is not acceptable.
+    if (shouldAbort?.()) { await cleanup(frames); return null; }
     const f = await frameAt(videoUri, o);
     frames.push(f);
     b64s.push(f ? await downscaled(f) : null);

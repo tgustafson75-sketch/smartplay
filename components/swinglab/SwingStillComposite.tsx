@@ -25,7 +25,9 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-07-21 (BETA — swing-replay crash class) — route through the single-flight queue wrapper so
+// this composite's frame extraction is serialized with every other retriever (never concurrent).
+import * as VideoThumbnails from '../../utils/videoThumbnail';
 import SwingBodyOverlay from './SwingBodyOverlay';
 import type { PoseFrame } from '../../services/poseAnalysisApi';
 

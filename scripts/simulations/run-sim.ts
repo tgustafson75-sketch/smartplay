@@ -4746,6 +4746,22 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
     'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
 
+  check('Swing-replay crash: clubhead extraction never runs concurrent with video playback',
+    // 2026-07-21 (Tim: crash after replaying an uploaded swing). ROOT CAUSE: a native
+    // MediaMetadataRetriever (detectClubPath) decoding the file while ExoPlayer decodes it for
+    // playback → SIGSEGV to the launcher. Fix: extraction is gated OFF during playback and aborts
+    // between frames the instant play starts; grab-frame pauses first; all extraction routed
+    // through the single-flight queue.
+    /shouldAbort\?: \(\) => boolean/.test(read('services/swing/clubPath.ts')) &&
+      /if \(shouldAbort\?\.\(\)\) \{ await cleanup\(frames\); return null; \}/.test(read('services/swing/clubPath.ts')) &&
+      /if \(isPlaying\) return;/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /shouldAbort: \(\) => cancelled \|\| isPlayingRef\.current/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // grab-frame pauses before extracting; extraction routed through the queue wrapper
+      /await videoRef\.current\?\.pauseAsync\(\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /from '\.\.\/\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /from '\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('components/swinglab/SwingStillComposite.tsx')),
+    'clubhead-arc frame extraction is gated off during playback + aborts between frames when play starts, grab-frame pauses first, and every retriever routes through the single-flight queue — closes the native SIGSEGV-on-replay');
+
   check('Crash capture: render crashes + uncaught JS errors funnel into the Issue Log',
     // 2026-07-21 (Tim: "crashes still don't show up in the error log"). The ErrorBoundary must
     // log a caught render crash, and a global ErrorUtils handler must catch async/handler errors
