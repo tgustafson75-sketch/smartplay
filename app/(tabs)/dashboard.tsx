@@ -36,6 +36,7 @@ import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { useRouter } from 'expo-router';
+import { MESSAGING_ENABLED } from '../../constants/featureFlags';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -561,6 +562,8 @@ export default function Dashboard() {
         {/* 2026-06-30 (Tim) — Messages card = the future home of the social layer (foursome
             feed, share, message). Opens the minimal Tank↔Tim thread today. Simple nav card,
             no store subscription. */}
+        {/* 2026-07-21 — Messages is a RELEASE feature, hidden in beta behind MESSAGING_ENABLED. */}
+        {MESSAGING_ENABLED && (
         <TouchableOpacity
           style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
           onPress={() => router.push('/messages' as never)}
@@ -578,6 +581,7 @@ export default function Dashboard() {
           </View>
           <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
+        )}
 
         {coachModeEnabled && coachableRoster.length > 0 && (
           <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>

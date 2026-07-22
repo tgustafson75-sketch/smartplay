@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { MESSAGING_ENABLED } from '../constants/featureFlags';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
@@ -1726,7 +1727,9 @@ export default function Settings() {
               Roster + Swing Library →
             </Text>
           </TouchableOpacity>
-          {/* 2026-06-30 (Tim) — minimal in-app messaging (Tim ↔ Tank to start). */}
+          {/* 2026-06-30 (Tim) — minimal in-app messaging (Tim ↔ Tank to start).
+              2026-07-21 — RELEASE feature, hidden in beta behind MESSAGING_ENABLED. */}
+          {MESSAGING_ENABLED && (
           <TouchableOpacity
             style={styles.aboutRow}
             onPress={() => router.push('/messages' as never)}
@@ -1738,6 +1741,7 @@ export default function Settings() {
               Message a golfer →
             </Text>
           </TouchableOpacity>
+          )}
           {/* 2026-05-22 — Captain extension. Surfaces Team Captain mode
               for high-school golfers (e.g. Heritage HS Romoland CA)
               managing teammates + coach contacts. Same store, distinct

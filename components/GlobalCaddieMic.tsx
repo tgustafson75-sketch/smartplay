@@ -23,6 +23,7 @@ import { usePathname, useSegments } from 'expo-router';
 import { CaddieMicBadge } from './caddie/CaddieMicBadge';
 import { setRouteLabel } from '../services/screenContext';
 import { useListeningSessionStore } from '../store/listeningSessionStore';
+import { MESSAGING_ENABLED } from '../constants/featureFlags';
 
 // 2026-07-19 (Tim — "when the mic activates on any screen the main caddie should VISIBLY wake up").
 // The brand voice-state icon shown beside the universal badge so tapping the mic anywhere reads as
@@ -45,7 +46,9 @@ const ROUTE_LABELS: { prefix: string; label: string }[] = [
   { prefix: '/lie-analysis', label: 'TightLie (the camera lie analysis)' },
   { prefix: '/recap', label: 'the round recap' },
   { prefix: '/settings', label: 'Settings' },
-  { prefix: '/messages', label: 'Messages' },
+  // 2026-07-21 — messaging is a RELEASE feature; drop it from voice-nav targets in beta so the
+  // caddie won't offer to open a hidden, route-guarded screen.
+  ...(MESSAGING_ENABLED ? [{ prefix: '/messages', label: 'Messages' }] : []),
   { prefix: '/mark-green', label: 'Mark Green' },
   { prefix: '/mark-tee', label: 'Mark Tee' },
   { prefix: '/caddie', label: 'the Caddie screen' },

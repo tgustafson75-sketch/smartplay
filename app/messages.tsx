@@ -11,15 +11,25 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { sendMessage, fetchThread, type ChatMessage } from '../services/messaging';
+import { MESSAGING_ENABLED } from '../constants/featureFlags';
 
 const RECIP_KEY = 'msg_recipient_v1';
 
+// 2026-07-21 (Tim) — messaging is a RELEASE feature, off in beta. This hook-less outer gate
+// guards the route so a deep-link / stale nav can't reach it when disabled, even though its
+// entry points are hidden. Keeping it hook-free (delegating to the inner component) avoids a
+// hooks-after-conditional-return violation.
 export default function MessagesScreen() {
+  if (!MESSAGING_ENABLED) return <Redirect href={'/(tabs)/caddie' as never} />;
+  return <MessagesScreenInner />;
+}
+
+function MessagesScreenInner() {
   const router = useRouter();
   const { colors } = useTheme();
   const myEmail = (usePlayerProfileStore(s => s.email) ?? '').trim().toLowerCase();
