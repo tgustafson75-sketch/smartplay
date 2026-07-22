@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "updated": "2026-07-21",
+  "resolved": [
+    {
+      "id": "H1",
+      "title": "Restore blind-overwrites every learned store except round history — offline-accumulated CNS/club-stats/practice/family data is silently lost",
+      "severity": "high",
+      "category": "data-loss-restore-overwrite",
+      "file": "services/cloudSync/snapshot.ts",
+      "line": 114,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "H3",
+      "title": "Unauthenticated SSRF via user-supplied imageUrl in /api/pose-analysis",
+      "severity": "high",
+      "category": "ssrf",
+      "file": "api/pose-analysis.ts",
+      "line": 127,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "M1",
+      "title": "swing-question.ts: primary Gemini vision call has no request timeout — a hung Gemini stalls the lambda to Vercel's maxDuration and defeats the OpenAI fallback",
+      "severity": "medium",
+      "category": "upstream-timeout",
+      "file": "api/swing-question.ts",
+      "line": 125,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "M2",
+      "title": "lie-analysis.ts: Gemini vision call has no request timeout — a hung Gemini blocks the lambda when a client requests a non-openai provider",
+      "severity": "medium",
+      "category": "upstream-timeout",
+      "file": "api/lie-analysis.ts",
+      "line": 253,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "L1",
+      "title": "CageTargetingCard placement modal renders existingBall/existingTarget/draft into SVG without the finiteness guard used by its sibling display overlay",
+      "severity": "low",
+      "category": "client-crash-svg-nan",
+      "file": "components/swinglab/CageTargetingCard.tsx",
+      "line": 250,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "L2",
+      "title": "CaddieAvatar transition effect has no unmount cleanup — leaked timer + setState after unmount",
+      "severity": "low",
+      "category": "react-leak",
+      "file": "components/CaddieAvatar.tsx",
+      "line": 481,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "H5",
+      "title": "Rules-of-Hooks violation in swing detail: two hooks declared after conditional early returns → red-screen crash on cold/deep-link open",
+      "severity": "high",
+      "category": "correctness",
+      "file": "app/swinglab/swing/[swing_id].tsx",
+      "line": 1301,
+      "run": "2026-07-21",
+      "status": "fixed"
+    },
+    {
+      "id": "H4",
+      "title": "Message IDOR: read/send any user's messages",
+      "severity": "high",
+      "category": "broken-access-control",
+      "file": "api/messages.ts",
+      "line": 50,
+      "run": "2026-07-21",
+      "status": "fixed",
+      "fix": "shared app-key gate (x-app-key/keysMatch) + optional participant allow-list; client sends key",
+      "followup": "real per-user auth (bind to backup passphrase / email-verified tokens)"
+    },
+    {
+      "id": "H6",
+      "title": "Backup brute-force: 4-char passphrase + fail-open rate limit",
+      "severity": "high",
+      "category": "brute-force",
+      "file": "api/backup.ts",
+      "line": 24,
+      "run": "2026-07-21",
+      "status": "fixed",
+      "fix": "in-memory per-email (spoof-proof, migration-independent) + per-IP throttle alongside DB per-IP; passphrase length unchanged to avoid lockout",
+      "followup": "apply migration 0005 for cross-instance DB limiter"
+    }
+  ]
+}

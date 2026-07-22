@@ -1,0 +1,1 @@
+{ "schema": 1, "note": "Static-analysis proxies only. This environment cannot measure live CPU/battery/FPS.", "runs": [] }

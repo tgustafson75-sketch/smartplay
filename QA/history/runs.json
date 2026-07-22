@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "runs": [
+    {
+      "run": "2026-07-21",
+      "agents": 23,
+      "confirmed": 10,
+      "refuted": 2,
+      "fixed": 7,
+      "parked": 3,
+      "newTests": 28,
+      "voicePathChanges": 0,
+      "notes": "Pass #1. Built model + infra. Device-only phases deferred."
+    },
+    {
+      "run": "2026-07-21-followup",
+      "fixed": [
+        "H4",
+        "H6"
+      ],
+      "parked": [
+        "H2"
+      ],
+      "reason": "H2 union reverted — unsafe without tombstones (resurrects deletions)",
+      "newTests": 38,
+      "voicePathChanges": 0
+    }
+  ]
+}

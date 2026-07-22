@@ -4,6 +4,7 @@
  * degrades to false/[] on any error so the UI never throws.
  */
 import { getApiBaseUrl } from './apiBase';
+import { getMessagingKey } from './appAuth';
 
 export interface ChatMessage {
   id: number;
@@ -18,7 +19,7 @@ export async function sendMessage(from: string, to: string, body: string): Promi
   try {
     const res = await fetch(`${getApiBaseUrl()}/api/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-app-key': getMessagingKey() },
       body: JSON.stringify({ from, to, body }),
       signal: AbortSignal.timeout(12_000),
     });
@@ -33,7 +34,10 @@ export async function sendMessage(from: string, to: string, body: string): Promi
 export async function fetchThread(user: string, withUser?: string): Promise<ChatMessage[]> {
   try {
     const qs = `user=${encodeURIComponent(user)}${withUser ? `&with=${encodeURIComponent(withUser)}` : ''}`;
-    const res = await fetch(`${getApiBaseUrl()}/api/messages?${qs}`, { signal: AbortSignal.timeout(12_000) });
+    const res = await fetch(`${getApiBaseUrl()}/api/messages?${qs}`, {
+      headers: { 'x-app-key': getMessagingKey() },
+      signal: AbortSignal.timeout(12_000),
+    });
     const j = await res.json().catch(() => ({ messages: [] })) as { messages?: ChatMessage[] };
     return Array.isArray(j.messages) ? j.messages : [];
   } catch {

@@ -2,6 +2,21 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
 import OpenAI from 'openai';
 
+// 2026-07-21 (QA audit, finding #7) — the @google/genai SDK has NO per-request timeout, so
+// a Gemini stall (connection open, no body) would never reject, the OpenAI fallback below
+// would never run, and the lambda would block to Vercel's maxDuration → 504. Every sibling
+// route (swing-analysis, lie-analysis, _aiProvider, image-edit) already wraps generateContent
+// in this race; this one was the lone bare call. A timeout throws into the existing catch and
+// lets the OpenAI fallback take over.
+function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 /**
  * 2026-05-26 — Fix AT: Ask Your Swing.
  *
@@ -122,11 +137,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           })),
         ];
-        const gem = await gemini.models.generateContent({
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts }],
           config: { temperature: 0.4, maxOutputTokens: 300 },
-        });
+        }), 15_000);
         answer = (gem.text ?? '').trim();
         if (!answer) geminiError = 'empty_response';
       } catch (e) {

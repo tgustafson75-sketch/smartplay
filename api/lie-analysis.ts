@@ -4,6 +4,19 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 import { providerFromHeader } from './_aiProvider';
 
+// 2026-07-21 (QA audit, finding #8) — @google/genai has no request timeout; a Gemini stall
+// on the X-AI-Provider: gemini path would block the lambda to maxDuration → 504 instead of
+// failing over to the OpenAI Stage-2 below. Wrap the call in the same race the sibling
+// routes use so a hang throws into the catch and advances the provider chain.
+function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Gemini timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -250,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Stage 1: Gemini 2.5 Flash (speed path) ───────────────────
     if (!skipGemini && gemini) {
       try {
-        const gem = await gemini.models.generateContent({
+        const gem = await geminiWithTimeout(gemini.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: [{
             role: 'user',
@@ -265,7 +278,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             responseMimeType: 'application/json',
             responseSchema: LIE_ANALYSIS_GEMINI_SCHEMA,
           },
-        });
+        }), 15_000);
         const rawText = (gem.text ?? '').trim();
         parsed = normalizeLieAnalysis(rawText);
         if (parsed) {

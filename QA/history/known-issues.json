@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "updated": "2026-07-21",
+  "open": [
+    {
+      "id": "H2",
+      "title": "Grow-mostly merge is a length heuristic, not a structural union",
+      "severity": "high",
+      "category": "multi-device-data-loss",
+      "file": "api/backup.ts",
+      "status": "parked",
+      "reason": "Evaluated a structural id-union and reverted it: grow-mostly stores are editable (removeClub/removeMember/FIFO/clear), so without per-record tombstones a union resurrects user-deleted records (worse UX than the rare loss). Needs tombstone/versioned sync — a real design change, not a safe one-pass edit."
+    }
+  ],
+  "refuted": [
+    {
+      "title": "L1HolePreview SVG player-dot uses unguarded projectToAxis(fix.location) coords — NaN GPS fix crashes react-native-svg on the live-round home surface",
+      "file": "components/caddie/L1HolePreview.tsx",
+      "reason": "The described code exists exactly as claimed: L1HolePreview.tsx:359 computes playerProj = projectToAxis(fix.location, geometry.tee, geometry.green), and playerPos (line 373) flows unguarded into <Path d> (395) and <Circle cx/cy> (398). projectToAxis (utils/geoDistance.ts:106-113) does propagate NaN for a non-finite loc, and this SVG branch lacks the Number.isFinite guard the sibling image paths carry (lines 233/294). However, the failure scenario is unreachable because getLastFix() cannot return a non-finite fix. getLastFix -> getLastFixInternal (smartFinderService.ts:101-109) reads gpsManager.lastFix directly and adds no coords. EVERY write path to gpsManager.lastFix is gated by isValidGolfCoord, which rejects non-finite lat/lng (coordGuard.ts:37): processFix live GPS (296), ingestExternalFix (delegates to processFix), setSimulatedFix (455), setMarkedFix (507), foreground one-shot (739), refreshFix one-shot (1045), recalibrate (1125). The other lastFix assignments (172,193,486,914,1097) copy an existing valid fix or null it. Thus a corrupted/injected NaN fix is rejected upstream and can never reach lastFix. Separately, the tee/green geometry is covered by the !(axisYards > 0) early return (line 350), so both inputs to projectToAxis are always finite and playerPos can never be NaN. The missing Number.isFinite in the SVG branch is redundant defense, not a triggerable white-screen crash."
+    },
+    {
+      "title": "Consent gate uses AND so a set name bypasses Terms/Privacy acceptance",
+      "file": "app/index.tsx",
+      "reason": "Line 140 literally uses AND (`if (!hasAcceptedTerms && !hasName)`), but the described defect is not reachable. (1) The Settings -> Edit Profile -> /welcome entry vector claimed in the scenario does NOT exist: settings.tsx:1632-1636 documents that route was removed, and a repo-wide grep finds NO navigation to /welcome anywhere except index.tsx's own gate. So there is no post-onboarding way to reach welcome and hit clearTermsAcceptance/swipe-back. (2) Name is never persisted to the store until handleGetStarted (welcome.tsx:122 setName), which is guarded both by a disabled button (line 342) and a hard early-return `if (!termsAccepted) return` (line 111); acceptTerms sets termsAcceptedAt. Thus at the only moment a name is written, termsAcceptedAt is already non-null — the state 'name set + terms null' cannot be produced. (3) clearTermsAcceptance is only callable from welcome.tsx:307, and welcome is only reachable on fresh installs with no name; unchecking there leaves both name and terms null, so the gate still redirects. In every reachable state hasName implies hasAcceptedTerms, so the AND is not exploitable and no cold launch proceeds into the app with a name but null consent. The gestureEnabled:false observation is accurate but inert given no name is persisted pre-consent."
+    }
+  ]
+}

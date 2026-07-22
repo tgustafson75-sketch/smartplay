@@ -1137,6 +1137,65 @@ export default function SwingDetail() {
     }
   };
 
+  // 2026-06-29 (Tim) — AUTO-ANALYZE uploads at a smart default. Tim expected an
+  // uploaded clip to play → analyze, not sit on a manual CTA. So the FIRST time an
+  // uploaded swing opens unanalyzed, window + analyze the MIDDLE of the clip (the
+  // swing is most often mid-clip, not in the walk-up) — windowed pose, not the old
+  // smeared full-clip pass. The "Point at your swing" card stays as a one-tap
+  // REFINE: scrub to the real swing + re-analyze. Fires once per mount, only when
+  // never analyzed and the duration is known.
+  //
+  // 2026-07-21 (QA audit, finding #5) — this useRef + useEffect were declared AFTER the
+  // `!hasHydrated`/`!session`/`!shot?.clipUri` early returns below, so on a pre-hydration
+  // render they were skipped and on the next (hydrated) render they ran — "Rendered more
+  // hooks than during the previous render" crash on cold/deep-link open. Hooks must be
+  // unconditional, so this block lives ABOVE those returns. Its internal guards
+  // (analysisStatus/session/shot/duration) make it a safe no-op when data isn't ready.
+  const autoAnalyzeFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoAnalyzeFiredRef.current) return;
+    if (analysisStatus !== 'pending') return;
+    if (session?.source !== 'uploaded_video') return;
+    if (!swing_id || !shot || !duration || duration <= 0) return;
+    if (analyzeInFlightRef.current) return;
+    autoAnalyzeFiredRef.current = true;
+    void (async () => {
+      // 2026-07-01 (audit M2 + C1 root) — the old path blindly windowed the geometric
+      // MIDDLE of the clip. For a practice-heavy upload the real swing usually isn't
+      // mid-clip, so we analyzed walk-up/setup and then FEATURED a pavement/setup frame
+      // (the "pretty bad report" garbage frame). Instead, LOCATE the real swing first
+      // and window that; only fall back to the middle when the locator can't find it
+      // (short clips where the whole clip is the swing, or a locate miss/timeout).
+      let startSec: number;
+      let endSec: number;
+      let located = false;
+      try {
+        const { locateSwingWindow } = await import('../../../services/poseDetection');
+        const win = await locateSwingWindow(shot.clipUri!, duration * 1000);
+        if (win && win.endSec > win.startSec) {
+          // Pad the located window a touch so P1/P10 aren't clipped.
+          startSec = Math.max(0, win.startSec - 0.5);
+          endSec = Math.min(duration, win.endSec + 0.5);
+          located = true;
+        } else {
+          const center = duration / 2;
+          startSec = Math.max(0, center - 2.5);
+          endSec = Math.min(duration, center + 3);
+        }
+      } catch {
+        const center = duration / 2;
+        startSec = Math.max(0, center - 2.5);
+        endSec = Math.min(duration, center + 3);
+      }
+      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+      useToastStore.getState().show(
+        located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
+      );
+      onReanalyze();
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatus, session?.source, duration, swing_id, shot]);
+
   if (!hasHydrated) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1290,58 +1349,6 @@ export default function SwingDetail() {
       spokenForRef.current = null; // cleared after analysis commits, not before
     })();
   };
-
-  // 2026-06-29 (Tim) — AUTO-ANALYZE uploads at a smart default. Tim expected an
-  // uploaded clip to play → analyze, not sit on a manual CTA. So the FIRST time an
-  // uploaded swing opens unanalyzed, window + analyze the MIDDLE of the clip (the
-  // swing is most often mid-clip, not in the walk-up) — windowed pose, not the old
-  // smeared full-clip pass. The "Point at your swing" card stays as a one-tap
-  // REFINE: scrub to the real swing + re-analyze. Fires once per mount, only when
-  // never analyzed and the duration is known.
-  const autoAnalyzeFiredRef = useRef(false);
-  useEffect(() => {
-    if (autoAnalyzeFiredRef.current) return;
-    if (analysisStatus !== 'pending') return;
-    if (session?.source !== 'uploaded_video') return;
-    if (!swing_id || !shot || !duration || duration <= 0) return;
-    if (analyzeInFlightRef.current) return;
-    autoAnalyzeFiredRef.current = true;
-    void (async () => {
-      // 2026-07-01 (audit M2 + C1 root) — the old path blindly windowed the geometric
-      // MIDDLE of the clip. For a practice-heavy upload the real swing usually isn't
-      // mid-clip, so we analyzed walk-up/setup and then FEATURED a pavement/setup frame
-      // (the "pretty bad report" garbage frame). Instead, LOCATE the real swing first
-      // and window that; only fall back to the middle when the locator can't find it
-      // (short clips where the whole clip is the swing, or a locate miss/timeout).
-      let startSec: number;
-      let endSec: number;
-      let located = false;
-      try {
-        const { locateSwingWindow } = await import('../../../services/poseDetection');
-        const win = await locateSwingWindow(shot.clipUri!, duration * 1000);
-        if (win && win.endSec > win.startSec) {
-          // Pad the located window a touch so P1/P10 aren't clipped.
-          startSec = Math.max(0, win.startSec - 0.5);
-          endSec = Math.min(duration, win.endSec + 0.5);
-          located = true;
-        } else {
-          const center = duration / 2;
-          startSec = Math.max(0, center - 2.5);
-          endSec = Math.min(duration, center + 3);
-        }
-      } catch {
-        const center = duration / 2;
-        startSec = Math.max(0, center - 2.5);
-        endSec = Math.min(duration, center + 3);
-      }
-      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
-      useToastStore.getState().show(
-        located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
-      );
-      onReanalyze();
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisStatus, session?.source, duration, swing_id, shot]);
 
   // 2026-05-22 — Phase 2 "Compare to..." action. Opens the bottom-sheet
   // picker (CompareReferencePickerSheet); the sheet calls onCompareToSelect

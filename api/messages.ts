@@ -12,14 +12,35 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSmartPlaySupabase } from './_supabase';
+import { getMessagingServerKey, keysMatch } from '../services/appAuth';
 
 // Reject anything that isn't a plain email — also blocks the PostgREST .or() filter
 // delimiters (comma/parens) so an interpolated `user` can't tunnel the filter.
 const EMAIL_RE = /^[^,()\s@]+@[^,()\s@]+\.[^,()\s@]+$/;
 
+// 2026-07-21 (QA audit, H4) — optional participant allow-list. When MESSAGING_ALLOWED_EMAILS
+// is set (comma-separated), only those addresses may appear as user/from/to, bounding the
+// feature to its intended participants (Tim ↔ Tank) even if the shared app-key leaks. Unset =
+// no allow-list restriction (any valid email), so this never breaks an unconfigured deploy.
+const ALLOWED_EMAILS = new Set(
+  (process.env.MESSAGING_ALLOWED_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+const emailAllowed = (e: string): boolean => ALLOWED_EMAILS.size === 0 || ALLOWED_EMAILS.has(e);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sb = getSmartPlaySupabase();
   if (!sb) return res.status(200).json({ ok: false, reason: 'messaging_unconfigured', messages: [] });
+
+  // 2026-07-21 (QA audit, H4) — require the shared app-key so this is no longer an open,
+  // unauthenticated read/forge API for anyone who knows an email. The client sends it as
+  // x-app-key (services/appAuth.ts); the server accepts MESSAGING_APP_SECRET or the shared
+  // default. Rejecting here closes the IDOR at the door before any DB access.
+  if (!keysMatch(req.headers['x-app-key'], getMessagingServerKey())) {
+    return res.status(401).json({ ok: false, reason: 'unauthorized', messages: [] });
+  }
 
   try {
     if (req.method === 'POST') {
@@ -28,6 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const t = (to ?? '').trim().toLowerCase();
       const text = (body ?? '').trim();
       if (!EMAIL_RE.test(f) || !EMAIL_RE.test(t)) return res.status(400).json({ ok: false, reason: 'bad_email' });
+      if (!emailAllowed(f) || !emailAllowed(t)) return res.status(403).json({ ok: false, reason: 'not_a_participant' });
       if (!text) return res.status(400).json({ ok: false, reason: 'empty' });
       if (text.length > 2000) return res.status(400).json({ ok: false, reason: 'too_long' });
       const { data, error } = await sb
@@ -44,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const withUser = String(req.query.with ?? '').trim().toLowerCase();
       const since = String(req.query.since ?? '').trim();
       if (!EMAIL_RE.test(user)) return res.status(400).json({ ok: false, reason: 'bad_user' });
+      if (!emailAllowed(user)) return res.status(403).json({ ok: false, reason: 'not_a_participant' });
       let q = sb
         .from('messages')
         .select('*')

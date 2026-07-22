@@ -38,6 +38,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { assertPublicHttpUrl } from './_ssrfGuard';
 
 const TIMEOUT_MS = 25_000;
 
@@ -61,20 +62,33 @@ function buildAuth(): AuthConfig | { error: string } {
   };
 }
 
-/** Fetch an image URL into a Buffer for forwarding as multipart. */
+/** Fetch an image URL into a Buffer for forwarding as multipart.
+ *  2026-07-21 (QA audit, finding #3) — validate the user-supplied URL against the SSRF
+ *  allowlist BEFORE fetching (https + non-internal IP), refuse redirects (which could 30x
+ *  into an internal target), and return a GENERIC error so the response can't be used as an
+ *  internal-network reachability/port oracle. Detailed reasons are logged server-side only. */
 async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; contentType: string } | { error: string }> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(imageUrl, { signal: controller.signal });
-    if (!r.ok) return { error: `Image fetch failed: ${r.status}` };
+    await assertPublicHttpUrl(imageUrl); // throws SsrfBlockedError on scheme/IP violation
+    const r = await fetch(imageUrl, { signal: controller.signal, redirect: 'manual' });
+    if (r.status >= 300 && r.status < 400) {
+      console.warn('[pose-analysis] refused redirect for image URL');
+      return { error: 'Image could not be loaded' };
+    }
+    if (!r.ok) {
+      console.warn(`[pose-analysis] image fetch non-ok: ${r.status}`);
+      return { error: 'Image could not be loaded' };
+    }
     const arr = await r.arrayBuffer();
     return {
       buffer: Buffer.from(arr),
       contentType: r.headers.get('content-type') ?? 'image/jpeg',
     };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Image fetch exception' };
+    console.warn('[pose-analysis] image fetch blocked/failed:', e instanceof Error ? e.message : e);
+    return { error: 'Image could not be loaded' };
   } finally {
     clearTimeout(t);
   }

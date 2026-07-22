@@ -103,13 +103,35 @@ export async function applySnapshot(snapshot: Snapshot): Promise<number> {
   // device, never blind-overwrite it. A round played offline (not yet backed up) would
   // otherwise be permanently replaced by the older cloud copy. Merge by id; the newer /
   // shot-fuller record wins, and local-only rounds are preserved.
+  //
+  // 2026-07-21 (QA audit) — the SAME data-loss protection the UPLOAD path already applies
+  // to every grow-mostly learned store (unionSnapshots, GROW_MOSTLY_KEYS) was missing on
+  // the RESTORE side, so a Restore blind-overwrote offline-accumulated CNS / club-stats /
+  // practice / family data with an older, emptier cloud copy. Bring restore to parity:
+  // for each grow-mostly key, if the on-device blob is meaningfully richer (longer) than
+  // the incoming cloud blob, keep the local copy rather than clobbering it.
   for (let i = 0; i < entries.length; i++) {
-    if (entries[i][0] !== 'round-store-v1') continue;
-    try {
-      const local = await AsyncStorage.getItem('round-store-v1');
-      const merged = mergeRoundBlobs(local, entries[i][1]);
-      if (merged) entries[i] = ['round-store-v1', merged];
-    } catch { /* fall back to the incoming blob as-is */ }
+    const key = entries[i][0];
+    if (key === 'round-store-v1') {
+      try {
+        const local = await AsyncStorage.getItem('round-store-v1');
+        const merged = mergeRoundBlobs(local, entries[i][1]);
+        if (merged) entries[i] = ['round-store-v1', merged];
+      } catch { /* fall back to the incoming blob as-is */ }
+      continue;
+    }
+    if (GROW_MOSTLY_KEYS.includes(key)) {
+      try {
+        const local = await AsyncStorage.getItem(key);
+        const localLen = typeof local === 'string' ? local.length : 0;
+        const incomingLen = entries[i][1].length;
+        // Incoming cloud copy is near-empty relative to the richer local copy → keep local.
+        // Mirrors unionSnapshots' upload-side guard (nl < pl * 0.6).
+        if (localLen > 0 && incomingLen < localLen * 0.6) {
+          entries[i] = [key, local as string];
+        }
+      } catch { /* fall back to the incoming blob as-is */ }
+    }
   }
   await AsyncStorage.multiSet(entries as [string, string][]);
   return entries.length;

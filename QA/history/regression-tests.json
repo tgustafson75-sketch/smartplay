@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "updated": "2026-07-21",
+  "note": "Each entry links a fixed bug to the permanent guard that prevents its return.",
+  "tests": [
+    {
+      "bug": "H1",
+      "guard": "__tests__/regression/snapshot-restore-dataloss.test.ts",
+      "type": "unit",
+      "cases": 4
+    },
+    {
+      "bug": "H3",
+      "guard": "__tests__/regression/ssrf-guard.test.ts",
+      "type": "unit",
+      "cases": 19
+    },
+    {
+      "bug": "H5",
+      "guard": "react-hooks/rules-of-hooks (npm run lint)",
+      "type": "lint",
+      "note": "verified the rule flags hook-after-early-return as error"
+    },
+    {
+      "bug": "M1",
+      "guard": "geminiWithTimeout wrapper in api/swing-question.ts",
+      "type": "pattern"
+    },
+    {
+      "bug": "M2",
+      "guard": "geminiWithTimeout wrapper in api/lie-analysis.ts",
+      "type": "pattern"
+    },
+    {
+      "bug": "L1",
+      "guard": "Number.isFinite gates in CageTargetingCard PlacementModal",
+      "type": "pattern"
+    },
+    {
+      "bug": "L2",
+      "guard": "cleanup return in CaddieAvatar transition effect",
+      "type": "pattern"
+    },
+    {
+      "bug": "H4",
+      "guard": "__tests__/regression/messages-auth.test.ts",
+      "type": "unit",
+      "cases": 6
+    },
+    {
+      "bug": "H6",
+      "guard": "__tests__/regression/backup-ratelimit.test.ts",
+      "type": "unit",
+      "cases": 4
+    }
+  ]
+}

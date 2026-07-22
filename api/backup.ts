@@ -19,6 +19,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHash } from 'crypto';
 import { getSmartPlaySupabase } from './_supabase';
+import { hitInMemory } from './_rateLimit';
 
 const TABLE = 'device_backups';
 const MIN_SECRET_LEN = 4;
@@ -102,6 +103,13 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
     // WIPE the cloud's richer copies. For these grow-mostly stores, keep whichever blob has MORE
     // data (longer serialized JSON ≈ more learned) so an emptier device can't clobber them.
     // Non-learned/config stores (settings, ui state) stay last-write-wins — most recent wins.
+    // 2026-07-21 (QA audit, H2) — a true structural id-union across these stores was evaluated
+    // and deliberately NOT shipped: most grow-mostly stores are editable, not append-only
+    // (clubBag.removeClub, family.removeMember hard-delete, coachKnowledge FIFO+remove,
+    // workout/practice caps). Without per-record tombstones, unioning to preserve one device's
+    // divergent adds also RESURRECTS records the user deleted on the other device — a new bug.
+    // The length heuristic below stays as the safe approximation; the correct multi-device fix
+    // (tombstone/versioned sync) is tracked in QA_REPORT.md.
     for (const key of GROW_MOSTLY_KEYS) {
       const p = prev[key], n = next[key];
       const pLen = typeof p === 'string' ? p.length : p != null ? JSON.stringify(p).length : 0;
@@ -149,12 +157,33 @@ function storageKey(email: string, secret: string): string {
 // attempts per (ip, minute) in a `backup_rate_limit` table (migration 0005). Fail-OPEN:
 // any error (table absent / db hiccup) returns false so a real restore is never blocked.
 const RATE_LIMIT_PER_MIN = 30;
-async function isRateLimited(db: ReturnType<typeof getSmartPlaySupabase>, req: VercelRequest): Promise<boolean> {
+// 2026-07-21 (QA audit, H6) — process-local limits that DON'T depend on migration 0005 and
+// are keyed partly on the requested EMAIL, which a brute-forcer targeting one victim cannot
+// rotate the way they can rotate IP / X-Forwarded-For. Generous enough that a real restore
+// (a handful of GETs) is never blocked; a passphrase-guessing flood trips fast.
+const EMAIL_LIMIT_PER_MIN = 12; // guesses against ONE backup identity / minute / instance
+const IP_LIMIT_PER_MIN = 40;    // requests from one IP / minute / instance
+
+/** True if the request should be throttled. Combines a spoof-resistant in-memory per-email
+ *  + per-IP layer (always on) with the cross-instance DB per-IP counter (fail-open). */
+async function isRateLimited(
+  db: ReturnType<typeof getSmartPlaySupabase>,
+  req: VercelRequest,
+  email: string,
+): Promise<boolean> {
+  const fwd = req.headers['x-forwarded-for'];
+  const ip = (Array.isArray(fwd) ? fwd[0] : fwd || '').split(',')[0].trim() || 'unknown';
+  const minute = Math.floor(Date.now() / 60_000);
+
+  // Layer 1 — in-memory, migration-independent, per-email (spoof-proof) + per-IP.
+  const emailHash = createHash('sha256').update(email.toLowerCase()).digest('hex').slice(0, 16);
+  if (hitInMemory(`email:${emailHash}:${minute}`, EMAIL_LIMIT_PER_MIN)) return true;
+  if (hitInMemory(`ip:${ip}:${minute}`, IP_LIMIT_PER_MIN)) return true;
+
+  // Layer 2 — DB per-IP across instances. Fail-OPEN so a DB blip never blocks a legit restore.
   if (!db) return false;
   try {
-    const fwd = req.headers['x-forwarded-for'];
-    const ip = (Array.isArray(fwd) ? fwd[0] : fwd || '').split(',')[0].trim() || 'unknown';
-    const k = `${ip}:${Math.floor(Date.now() / 60_000)}`;
+    const k = `${ip}:${minute}`;
     const { data } = await db.from('backup_rate_limit').select('n').eq('k', k).maybeSingle();
     const n = ((data as { n?: number } | null)?.n ?? 0) + 1;
     await db.from('backup_rate_limit').upsert({ k, n, at: new Date().toISOString() }, { onConflict: 'k' });
@@ -179,7 +208,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // attacker hammer passphrase guesses. Raising MIN_SECRET_LEN would lock out existing
       // users, so we throttle instead. Fail-OPEN if the rate-limit table isn't present yet
       // (migration 0005), so this can never break a legitimate restore.
-      if (await isRateLimited(db, req)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+      if (await isRateLimited(db, req, email)) return res.status(429).json({ ok: false, error: 'rate_limited' });
       const { data, error } = await db
         .from(TABLE)
         .select('data, updated_at')

@@ -216,6 +216,13 @@ function PlacementModal({
   const title = mode === 'ball' ? 'Tap where the ball is' : 'Tap your target';
   const tint = mode === 'ball' ? '#00C896' : '#88F700';
 
+  // 2026-07-21 (QA audit, finding #9) — the read-only CageTargetingOverlay guards its SVG
+  // geometry with geomOk, but this interactive placement modal fed existingBall/existingTarget/
+  // draft coords straight into react-native-svg. A NaN coord from a corrupted persisted
+  // placement or an auto-detect miss crashes the native SVG parser (white screen). Gate every
+  // marker on finite coords, mirroring the overlay.
+  const fin = (n: number | undefined | null): n is number => typeof n === 'number' && Number.isFinite(n);
+
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
       <View style={modalStyles.backdrop}>
@@ -245,7 +252,7 @@ function PlacementModal({
           >
             {/* Existing OTHER marker shown dimmed so user has spatial
                 context (e.g. when placing target, ball is dim). */}
-            {mode === 'target' && existingBall && (
+            {mode === 'target' && existingBall && fin(existingBall.x) && fin(existingBall.y) && fin(existingBall.r) && (
               <SvgCircle
                 cx={existingBall.x * frameW}
                 cy={existingBall.y * frameH}
@@ -254,7 +261,7 @@ function PlacementModal({
                 fill="#00C896" fillOpacity={0.08}
               />
             )}
-            {mode === 'ball' && existingTarget && (
+            {mode === 'ball' && existingTarget && fin(existingTarget.x) && fin(existingTarget.y) && (
               <>
                 <SvgCircle cx={existingTarget.x * frameW} cy={existingTarget.y * frameH} r={10} stroke="#88F700" strokeWidth={2} strokeOpacity={0.45} fill="none" />
                 <SvgLine x1={existingTarget.x * frameW - 8} y1={existingTarget.y * frameH} x2={existingTarget.x * frameW + 8} y2={existingTarget.y * frameH} stroke="#88F700" strokeWidth={1.5} strokeOpacity={0.45} />
@@ -263,7 +270,7 @@ function PlacementModal({
             )}
 
             {/* Live draft marker — what the user is about to commit. */}
-            {draft && mode === 'ball' && (
+            {draft && mode === 'ball' && fin(draft.x) && fin(draft.y) && fin(existingBall?.r ?? DEFAULT_BALL_RADIUS) && (
               <SvgCircle
                 cx={draft.x * frameW}
                 cy={draft.y * frameH}
@@ -272,7 +279,7 @@ function PlacementModal({
                 fill={tint} fillOpacity={0.18}
               />
             )}
-            {draft && mode === 'target' && (
+            {draft && mode === 'target' && fin(draft.x) && fin(draft.y) && (
               <>
                 <SvgCircle cx={draft.x * frameW} cy={draft.y * frameH} r={12} stroke={tint} strokeWidth={2.5} fill="none" />
                 <SvgLine x1={draft.x * frameW - 10} y1={draft.y * frameH} x2={draft.x * frameW + 10} y2={draft.y * frameH} stroke={tint} strokeWidth={2} />

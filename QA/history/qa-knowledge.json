@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "updated": "2026-07-21",
+  "fragileSubsystems": [
+    {
+      "area": "cloud backup / restore + merge",
+      "files": [
+        "services/cloudSync/snapshot.ts",
+        "api/backup.ts"
+      ],
+      "why": "repeated data-loss history; length-heuristic merges, restore parity gaps"
+    },
+    {
+      "area": "unauthenticated server routes",
+      "files": [
+        "api/pose-analysis.ts",
+        "api/messages.ts",
+        "api/backup.ts"
+      ],
+      "why": "no auth + user-controlled input -> SSRF/IDOR/brute-force"
+    },
+    {
+      "area": "giant screens with conditional hooks",
+      "files": [
+        "app/swinglab/swing/[swing_id].tsx",
+        "app/swinglab/smartmotion.tsx",
+        "app/(tabs)/caddie.tsx"
+      ],
+      "why": "4-5k LOC; hooks after early returns risk render-order crashes"
+    },
+    {
+      "area": "SVG coordinate rendering",
+      "files": [
+        "components/swinglab/CageTargetingCard.tsx"
+      ],
+      "why": "NaN coords crash react-native-svg; guard coverage uneven"
+    },
+    {
+      "area": "Gemini SDK calls",
+      "files": [
+        "api/swing-question.ts",
+        "api/lie-analysis.ts"
+      ],
+      "why": "SDK has no request timeout; bare calls defeat provider fallback"
+    }
+  ],
+  "priorityNextRun": [
+    "H2 tombstone/versioned sync (the only correct multi-device fix)",
+    "apply migration 0005",
+    "upgrade messages to real per-user auth",
+    "SSRF guard sweep of other proxies",
+    "on-device perf/a11y harness"
+  ],
+  "rules": [
+    "NaN into SVG = crash; use Number.isFinite not <=0",
+    "client timeout must exceed server cascade",
+    "every Gemini call needs geminiWithTimeout",
+    "hooks before early returns always",
+    "restore must never let emptier blob clobber richer local",
+    "grow-mostly stores are EDITABLE not append-only — never id-union without tombstones (resurrects deletions)"
+  ]
+}

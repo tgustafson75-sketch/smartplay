@@ -569,6 +569,21 @@ export default function CaddieAvatar({
       currentAnimRef.current = anim;
       anim.start(() => { currentAnimRef.current = null; });
     }
+    // 2026-07-21 (QA audit, finding #10) — this transition effect only cancelled its prior
+    // run at the TOP of the next run (a targetSource change), so on UNMOUNT the pending
+    // breath timeout still fired and the native stage1/stage3 animations kept running,
+    // writing state onto a dead component (leaked timer + setState-after-unmount). Return a
+    // cleanup so unmount — like a re-run — stops the animation and clears the timeout.
+    return () => {
+      if (currentAnimRef.current) {
+        currentAnimRef.current.stop();
+        currentAnimRef.current = null;
+      }
+      if (breathTimeoutRef.current) {
+        clearTimeout(breathTimeoutRef.current);
+        breathTimeoutRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetSource]);
 
