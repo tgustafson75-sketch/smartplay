@@ -11,8 +11,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
+import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, type ClubName } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
+import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
+import { useClubBagStore } from '../../store/clubBagStore';
 import { recommendBall } from '../../services/ballFitting';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
@@ -64,6 +66,29 @@ export default function FitProfileScreen() {
     // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats, manual]);
+
+  // 2026-07-23 (Tim — Bag Vision Phase 2) — Fit Gap: cross-reference the OWNED bag (clubBagStore,
+  // populated by the video scan) against the distance gaps so advice is honest about ownership
+  // (dial-in vs buy, fillable vs unfilled, redundant). Recomputes when the bag or stats change.
+  const bagClubs = useClubBagStore((s) => s.clubs);
+  const fitGap = useMemo(() => {
+    const st = useClubStatsStore.getState();
+    const owned: OwnedClub[] = Object.values(bagClubs).map((c) => ({
+      club_id: c.club_id,
+      name: clubIdToClubName(c.club_id),
+      brand: c.brand,
+      model: c.model,
+      loft: c.loft,
+    }));
+    return composeFitGap({
+      owned,
+      gaps: profile.gaps,
+      overlaps: profile.overlaps,
+      hasDistance: (name) => st.hasDistance(name as ClubName),
+      clubOrder: CLUB_ORDER,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bagClubs, profile, stats, manual]);
 
   // FLEX (honest: only off a MEASURED driver carry) + the honest, DIRECTIONAL
   // Ball Fit (recommendBall — speed tier from carry, handicap tier, short-game/
@@ -133,6 +158,36 @@ export default function FitProfileScreen() {
           <Ionicons name="videocam-outline" size={18} color={colors.accent} />
           <Text style={[styles.scanBagText, { color: colors.accent }]}>Scan my bag with video</Text>
         </TouchableOpacity>
+
+        {/* 2026-07-23 (Tim — Bag Vision Phase 2) — FIT GAP: your owned bag vs your data. */}
+        {fitGap.ownedCount > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
+            <Text style={[styles.cardLabel, { color: colors.accent }]}>FIT GAP · YOUR BAG vs YOUR DATA</Text>
+            <Text style={[styles.confText, { color: colors.text_muted, marginBottom: 8 }]}>
+              {fitGap.ownedCount} clubs in your bag · {fitGap.dialedCount} with a carry set
+            </Text>
+            {fitGap.findings.length === 0 ? (
+              <Text style={[styles.gapText, { color: colors.text_primary }]}>Your bag matches your distances — no gaps or redundancies to flag.</Text>
+            ) : (
+              fitGap.findings.map((f, i) => {
+                const icon = f.kind === 'undialed' ? 'create-outline'
+                  : f.kind === 'fillable_gap' ? 'checkmark-circle-outline'
+                  : f.kind === 'unfilled_gap' ? 'alert-circle-outline'
+                  : 'swap-horizontal-outline';
+                const tint = f.kind === 'fillable_gap' ? colors.accent : f.kind === 'unfilled_gap' ? '#f5a623' : colors.text_muted;
+                return (
+                  <View key={`${f.kind}-${i}`} style={styles.fitGapRow}>
+                    <Ionicons name={icon} size={16} color={tint} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fitGapTitle, { color: colors.text_primary }]}>{f.title}</Text>
+                      <Text style={[styles.fitGapDetail, { color: colors.text_muted }]}>{f.detail}</Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
 
         {/* GAPS */}
         {profile.gaps.length > 0 && (
@@ -326,6 +381,9 @@ const styles = StyleSheet.create({
   confRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 },
   scanBagBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 12, marginBottom: 14 },
   scanBagText: { fontSize: 15, fontWeight: '800' },
+  fitGapRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  fitGapTitle: { fontSize: 14, fontWeight: '700' },
+  fitGapDetail: { fontSize: 12.5, lineHeight: 18, marginTop: 2 },
   confDot: { width: 8, height: 8, borderRadius: 4 },
   confText: { fontSize: 12 },
   card: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
