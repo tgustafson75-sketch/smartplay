@@ -265,6 +265,17 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
   const langLine = lang === 'es' ? '\nResponde SIEMPRE en español.'
     : lang === 'zh' ? '\n始终用中文回答。'
     : '';
+  // 2026-07-23 (Tim — settings must be mapped) — Response Style + Cecily (kids mode) now reach the
+  // active brain. 'neutral' keeps the existing "under 30 words" default (no behavior change).
+  const responseMode = String(settings.responseMode ?? 'neutral');
+  const brevityLine = responseMode === 'short'
+    ? 'Keep every spoken response to about 15 words — one crisp sentence. No markdown, no bullet lists.'
+    : responseMode === 'detailed'
+      ? 'You may give a bit more detail when it genuinely helps — up to 3–4 conversational sentences. No markdown, no bullet lists.'
+      : 'Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.';
+  const cecilyBlock = settings.cecilyMode === true
+    ? `\nKIDS MODE: You're chatting with a child who loves to talk. Answer ANY question — golf or not — warmly, playfully, and age-appropriately, like a kind grandparent. Keep it simple, encouraging, and always clean/safe. It's great to chat about non-golf topics, share a fun fact, or play along. Never refuse an innocent question or say "you can't say that."\n`
+    : '';
 
   const hcp = player.handicap != null ? `Handicap: ${player.handicap}.` : '';
   const miss = player.dominantMiss ? `Dominant miss: ${player.dominantMiss}.` : '';
@@ -351,7 +362,7 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
 
 You are ${caddieName}, an expert AI golf caddie and mental performance coach in SmartPlay Caddie.
 You are talking to ${name} through their earbuds. Be direct and concise — on-course caddie cadence, not a manual.
-${hcp} ${miss}
+${cecilyBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
 
@@ -362,7 +373,7 @@ ${historySection}
 Trust level: ${trustLevel}/4. ${trustLevel >= 3 ? 'Be proactive.' : 'Help when asked.'}${langLine}${round.simRound ? `
 SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.` : ''}
 
-Keep every spoken response under 30 words unless they ask for detail. No markdown, no bullet lists.
+${brevityLine}
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
 Use tools when the player describes a shot to log, names a score, or asks to open a tool.
 

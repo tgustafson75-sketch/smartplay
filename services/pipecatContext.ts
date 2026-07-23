@@ -95,6 +95,12 @@ export function buildPipecatContext() {
       language: settings.language ?? 'en',
       aiProvider: 'anthropic',
       continuousConversationMode: settings.continuousConversationMode ?? false,
+      // 2026-07-23 (Tim — "Cecily is kids mode and should work, also response style; nothing in
+      // settings is arbitrary") — forward both to the ACTIVE pipecat brain. They were only ever
+      // read by the short-circuited legacy /api/kevin builder, so both toggles were dead. Defaults
+      // (neutral / false) preserve today's behavior exactly.
+      responseMode: settings.responseMode ?? 'neutral',
+      cecilyMode: settings.cecilyMode ?? false,
     },
     gps: {
       lat: getLastFix()?.lat ?? undefined,
