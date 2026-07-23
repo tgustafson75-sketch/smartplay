@@ -129,6 +129,34 @@
       }
     },
     {
+      "src": "api/measure-scan.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
+      "src": "api/bag-scan.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
+    },
+    {
+      "src": "api/course-geometry-share.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
+      "src": "api/issue-report.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
       "src": "api/toptracer-parse.ts",
       "use": "@vercel/node",
       "config": {
@@ -435,6 +463,22 @@
     {
       "src": "/api/hole-scan",
       "dest": "/api/hole-scan.ts"
+    },
+    {
+      "src": "/api/measure-scan",
+      "dest": "/api/measure-scan.ts"
+    },
+    {
+      "src": "/api/bag-scan",
+      "dest": "/api/bag-scan.ts"
+    },
+    {
+      "src": "/api/course-geometry-share",
+      "dest": "/api/course-geometry-share.ts"
+    },
+    {
+      "src": "/api/issue-report",
+      "dest": "/api/issue-report.ts"
     },
     {
       "src": "/api/tutorial-analysis",
