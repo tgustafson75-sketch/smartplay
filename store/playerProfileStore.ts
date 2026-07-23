@@ -61,6 +61,9 @@ interface PlayerProfileState {
   goal: string | null;
   personalBest: number | null;
   homeCourse: string | null;
+  /** 2026-07-23 (Tim — Bag Vision 2b) — the ball the player currently games, free text
+   *  (e.g. "Titleist Pro V1"). Compared against the data-driven ball recommendation. */
+  currentBall: string | null;
   preferredTee: 'front' | 'middle' | 'back';
   isSetupComplete: boolean;
   has_completed_onboarding: boolean;
@@ -185,6 +188,7 @@ interface PlayerProfileState {
   setGoal: (goal: string | null) => void;
   setPersonalBest: (score: number | null) => void;
   setHomeCourse: (course: string | null) => void;
+  setCurrentBall: (ball: string | null) => void;
   setPreferredTee: (tee: 'front' | 'middle' | 'back') => void;
   completeSetup: () => void;
   completeOnboarding: () => void;
@@ -246,6 +250,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       goal: null,
       personalBest: null,
       homeCourse: null,
+      currentBall: null,
       preferredTee: 'middle',
       // 2026-05-14 — Tim: "Get rid of that whole stupid onboarding
       // nonsense. User does all that in profile and settings." Default
@@ -310,6 +315,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setGoal: (goal) => set({ goal }),
       setPersonalBest: (score) => set({ personalBest: score }),
       setHomeCourse: (course) => set({ homeCourse: course }),
+      setCurrentBall: (ball) => set({ currentBall: ball }),
       setPreferredTee: (tee) => set({ preferredTee: tee }),
       completeSetup: () => set({ isSetupComplete: true }),
       completeOnboarding: () => set({ has_completed_onboarding: true }),

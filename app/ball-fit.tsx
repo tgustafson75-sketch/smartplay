@@ -12,15 +12,15 @@
  * See memory: ball-fitting-recommendation, caddie-brain-lens, simplified-sophistication.
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useClubStatsStore } from '../store/clubStatsStore';
-import { composeBallFit, type BallProfile } from '../services/cnsBallFitting';
+import { composeBallFit, ballFitVerdict, type BallProfile } from '../services/cnsBallFitting';
 
 const PROFILE_LABEL: Record<BallProfile, string> = {
   tour: 'Tour',
@@ -62,6 +62,13 @@ export default function BallFitScreen() {
   const confColor =
     fit.confidence === 'high' ? colors.accent : fit.confidence === 'medium' ? colors.text_secondary : colors.text_muted;
 
+  // Bag Vision 2b — current ball vs recommendation. Seeded from the persisted profile; edits
+  // write straight back so the caddie brain + Fit Gap can read the player's gamer.
+  const storedBall = usePlayerProfileStore((s) => s.currentBall);
+  const setCurrentBallStore = usePlayerProfileStore((s) => s.setCurrentBall);
+  const [currentBall, setCurrentBall] = useState(storedBall ?? '');
+  const ballVerdict = useMemo(() => ballFitVerdict(currentBall, fit.profile), [currentBall, fit.profile]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
@@ -100,6 +107,20 @@ export default function BallFitScreen() {
           <Text style={[styles.tradeoff, { color: colors.text_secondary }]}>{fit.tradeoff}</Text>
         </View>
 
+        {/* 2026-07-23 (Tim — Bag Vision 2b) — YOUR BALL vs your data. Record the ball you game
+            and get an honest owned-vs-recommended read (aligned / worth trialing / unknown). */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: ballVerdict.aligned === false ? '#f5a623' : colors.border }]}>
+          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>YOUR BALL</Text>
+          <TextInput
+            style={[styles.ballInput, { color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.background }]}
+            value={currentBall}
+            onChangeText={(v) => { setCurrentBall(v); setCurrentBallStore(v.trim() ? v.trim() : null); }}
+            placeholder="The ball you play (e.g. Titleist Pro V1)"
+            placeholderTextColor={colors.text_muted}
+          />
+          <Text style={[styles.why, { color: colors.text_primary }]}>{ballVerdict.line}</Text>
+        </View>
+
         <Text style={[styles.caveat, { color: colors.text_muted }]}>{fit.caveat}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -122,6 +143,7 @@ const styles = StyleSheet.create({
   why: { flex: 1, fontSize: 13, lineHeight: 18 },
   sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
   example: { fontSize: 14, fontWeight: '600' },
+  ballInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, marginVertical: 4 },
   tradeoff: { fontSize: 12, lineHeight: 17, marginTop: 4, fontStyle: 'italic' },
   caveat: { fontSize: 11, lineHeight: 16 },
 });

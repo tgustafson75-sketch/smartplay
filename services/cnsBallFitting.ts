@@ -182,3 +182,47 @@ function num(v: unknown): number | null {
 function fmtHcp(h: number): string {
   return h <= 0 ? 'scratch' : `${Math.round(h)}`;
 }
+
+// ─── 2026-07-23 (Tim — Bag Vision 2b: ball fit gap) ──────────────────────────
+// Classify the player's CURRENT ball (from the bag) into the same 4 profiles the
+// recommender uses, so we can say honestly whether their gamer matches their data.
+// A small, common-ball map; unknown balls return null (we never assert a mismatch we
+// can't justify). Order matters — most specific match first.
+const BALL_CLASSIFY: { match: string; profile: BallProfile }[] = [
+  { match: 'pro v1x', profile: 'tour' }, { match: 'pro v1', profile: 'tour' },
+  { match: 'chrome soft x', profile: 'tour' }, { match: 'tp5x', profile: 'tour' }, { match: 'tp5', profile: 'tour' },
+  { match: 'avx', profile: 'tour' }, { match: 'z-star', profile: 'tour' }, { match: 'zstar', profile: 'tour' },
+  { match: 'tour b', profile: 'tour' }, { match: 'q-star tour', profile: 'tour' }, { match: 'mtb', profile: 'tour' },
+  { match: 'maxfli tour', profile: 'tour' }, { match: 'prov1', profile: 'tour' },
+  { match: 'chrome soft', profile: 'soft-feel' }, { match: 'supersoft', profile: 'soft-feel' },
+  { match: 'soft feel', profile: 'soft-feel' }, { match: 'tour soft', profile: 'soft-feel' },
+  { match: 'duo', profile: 'soft-feel' }, { match: 'e12', profile: 'soft-feel' }, { match: 'q-star', profile: 'soft-feel' },
+  { match: 'velocity', profile: 'distance' }, { match: 'distance', profile: 'distance' },
+  { match: 'warbird', profile: 'distance' }, { match: 'noodle', profile: 'distance' }, { match: 'e6', profile: 'distance' },
+  { match: 'nitro', profile: 'value' }, { match: 'top flite', profile: 'value' }, { match: 'topflite', profile: 'value' },
+  { match: 'dxl', profile: 'value' }, { match: 'kirkland', profile: 'value' },
+];
+
+/** Map a free-text ball name to a profile, or null when we don't recognize it. */
+export function classifyBall(name: string | null | undefined): BallProfile | null {
+  const n = (name ?? '').trim().toLowerCase();
+  if (!n) return null;
+  for (const e of BALL_CLASSIFY) if (n.includes(e.match)) return e.profile;
+  return null;
+}
+
+export interface BallFitVerdict {
+  /** null when the current ball is unknown/unclassified. */
+  aligned: boolean | null;
+  line: string;
+}
+
+/** Compare the player's current ball to what their data recommends. Honest when unsure. */
+export function ballFitVerdict(currentBall: string | null | undefined, recommended: BallProfile): BallFitVerdict {
+  const owned = classifyBall(currentBall);
+  const name = (currentBall ?? '').trim();
+  if (!name) return { aligned: null, line: 'Add the ball you play and I’ll tell you if it matches your game.' };
+  if (!owned) return { aligned: null, line: `I don’t have specs for the ${name}, but your data points to a ${recommended.replace('-', ' ')} ball — worth comparing.` };
+  if (owned === recommended) return { aligned: true, line: `Your ${name} is a ${owned.replace('-', ' ')} ball — that matches what your game wants. Good fit.` };
+  return { aligned: false, line: `You play the ${name} (a ${owned.replace('-', ' ')} ball), but your data leans ${recommended.replace('-', ' ')}. Worth trialing a ${recommended.replace('-', ' ')} ball to compare.` };
+}
