@@ -2138,6 +2138,15 @@ export const useVoiceCaddie = ({
         return;
       }
 
+      // ⚠️ DEAD LEGACY BRAIN PATH — everything from here through recordKevinTurn is UNREACHABLE in
+      // production. processTranscriptOverride (the pipecat brain) is always supplied by the sole mount
+      // (app/(tabs)/caddie.tsx) whenever voiceOrchestrator==='pipecat', which is the DEFAULT and is
+      // force-set by the v15 migration — and setVoiceOrchestrator has ZERO callers, so it can never
+      // flip. The pipecat branch above ALWAYS returns first. Kept only as a legacy-fallback shell.
+      // DO NOT wire new settings/features here — they will silently do nothing on the live path (that
+      // was the cecily/response/intensity bug). New brain-bound settings go through
+      // services/voice/brainSettings.ts (buildPipecatContext → api/pipecat-turn). Physical removal of
+      // this block + sendToBrain is a device-tested follow-up (harmless while dead).
       // 2026-06-10 — Pre-response conversational filler REMOVED. It fired at
       // 400ms, but the warm brain now answers in 4-6s, so the short filler
       // ("Let me see...") finished ~2s in and left 2-4s of dead air before the
