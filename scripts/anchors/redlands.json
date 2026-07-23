@@ -1,0 +1,23 @@
+{
+  "name": "Redlands", "query": "Redlands Country Club", "greensPerLoop": 18,
+  "holes": [
+    { "hole": 1,  "back": 378, "center": 365, "front": 352, "par": 4 },
+    { "hole": 2,  "back": 413, "center": 400, "front": 386, "par": 4 },
+    { "hole": 3,  "back": 356, "center": 340, "front": 324, "par": 4 },
+    { "hole": 4,  "back": 209, "center": 193, "front": 177, "par": 3 },
+    { "hole": 5,  "back": 338, "center": 326, "front": 314, "par": 4 },
+    { "hole": 6,  "back": 369, "center": 351, "front": 332, "par": 4 },
+    { "hole": 7,  "back": 515, "center": 503, "front": 491, "par": 5 },
+    { "hole": 8,  "back": 139, "center": 126, "front": 112, "par": 3 },
+    { "hole": 9,  "back": 472, "center": 461, "front": 450, "par": 5 },
+    { "hole": 10, "back": 446, "center": 435, "front": 424, "par": 4 },
+    { "hole": 11, "back": 166, "center": 155, "front": 144, "par": 3 },
+    { "hole": 12, "back": 354, "center": 345, "front": 336, "par": 4 },
+    { "hole": 13, "back": 399, "center": 386, "front": 374, "par": 4 },
+    { "hole": 14, "back": 500, "center": 489, "front": 478, "par": 5 },
+    { "hole": 15, "back": 370, "center": 359, "front": 348, "par": 4 },
+    { "hole": 16, "back": 186, "center": 177, "front": 168, "par": 3 },
+    { "hole": 17, "back": 365, "center": 356, "front": 346, "par": 4 },
+    { "hole": 18, "back": 369, "center": 357, "front": 346, "par": 4 }
+  ]
+}

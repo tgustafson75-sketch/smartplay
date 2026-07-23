@@ -1,0 +1,25 @@
+{
+  "name": "Miccosukee",
+  "query": "Miccosukee Country Club",
+  "greensPerLoop": 18,
+  "holes": [
+    { "hole": 1,  "back": 499, "center": 487, "front": 474, "par": 5 },
+    { "hole": 2,  "back": 175, "center": 160, "front": 145, "par": 3 },
+    { "hole": 3,  "back": 399, "center": 388, "front": 376, "par": 4 },
+    { "hole": 4,  "back": 351, "center": 334, "front": 317, "par": 4 },
+    { "hole": 5,  "back": 349, "center": 335, "front": 321, "par": 4 },
+    { "hole": 6,  "back": 407, "center": 391, "front": 375, "par": 4 },
+    { "hole": 7,  "back": 568, "center": 554, "front": 539, "par": 5 },
+    { "hole": 8,  "back": 192, "center": 178, "front": 164, "par": 3 },
+    { "hole": 9,  "back": 378, "center": 365, "front": 352, "par": 4 },
+    { "hole": 10, "back": 293, "center": 283, "front": 274, "par": 4 },
+    { "hole": 11, "back": 345, "center": 334, "front": 322, "par": 4 },
+    { "hole": 12, "back": 131, "center": 123, "front": 114, "par": 3 },
+    { "hole": 13, "back": 583, "center": 569, "front": 556, "par": 5 },
+    { "hole": 14, "back": 314, "center": 301, "front": 289, "par": 4 },
+    { "hole": 15, "back": 177, "center": 162, "front": 148, "par": 3 },
+    { "hole": 16, "back": 577, "center": 567, "front": 558, "par": 5 },
+    { "hole": 17, "back": 299, "center": 286, "front": 273, "par": 4 },
+    { "hole": 18, "back": 353, "center": 339, "front": 324, "par": 4 }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Killian Greens", "query": "Killian Greens", "greensPerLoop": 18,
+  "holes": [
+    { "hole": 1,  "back": 358, "center": 346, "front": 334, "par": 4 },
+    { "hole": 2,  "back": 502, "center": 490, "front": 478, "par": 5 },
+    { "hole": 3,  "back": 386, "center": 373, "front": 360, "par": 4 },
+    { "hole": 4,  "back": 397, "center": 386, "front": 375, "par": 4 },
+    { "hole": 5,  "back": 502, "center": 488, "front": 474, "par": 5 },
+    { "hole": 6,  "back": 196, "center": 184, "front": 171, "par": 3 },
+    { "hole": 7,  "back": 334, "center": 321, "front": 307, "par": 4 },
+    { "hole": 8,  "back": 154, "center": 142, "front": 131, "par": 3 },
+    { "hole": 9,  "back": 330, "center": 318, "front": 307, "par": 4 },
+    { "hole": 10, "back": 331, "center": 310, "front": 290, "par": 4 },
+    { "hole": 11, "back": 333, "center": 324, "front": 315, "par": 4 },
+    { "hole": 12, "back": 170, "center": 156, "front": 143, "par": 3 },
+    { "hole": 13, "back": 299, "center": 287, "front": 275, "par": 4 },
+    { "hole": 14, "back": 336, "center": 322, "front": 308, "par": 4 },
+    { "hole": 15, "back": 325, "center": 308, "front": 291, "par": 4 },
+    { "hole": 16, "back": 416, "center": 404, "front": 392, "par": 4 },
+    { "hole": 17, "back": 196, "center": 184, "front": 172, "par": 3 },
+    { "hole": 18, "back": 445, "center": 429, "front": 414, "par": 4 }
+  ]
+}

@@ -65,15 +65,24 @@ async function nominatim(q) {
   return { S: b[0] - padLat, N: b[1] + padLat, W: b[2] - padLng, E: b[3] + padLng, display: j[0].display_name };
 }
 
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+];
 async function overpass(bb) {
   const q = `[out:json][timeout:25];(way["golf"="green"](${bb.S},${bb.W},${bb.N},${bb.E});way["golf"="tee"](${bb.S},${bb.W},${bb.N},${bb.E}););out geom;`;
-  const r = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain', 'User-Agent': 'smartplay-course-build' },
-    body: q,
-  });
-  if (!r.ok) throw new Error(`Overpass ${r.status}`);
-  const j = await r.json();
+  let j = null, lastErr = '';
+  for (let attempt = 0; attempt < OVERPASS_MIRRORS.length * 2 && !j; attempt++) {
+    const url = OVERPASS_MIRRORS[attempt % OVERPASS_MIRRORS.length];
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain', 'User-Agent': 'smartplay-course-build' }, body: q });
+      if (r.ok) { j = await r.json(); break; }
+      lastErr = `${url} → ${r.status}`;
+    } catch (e) { lastErr = `${url} → ${e.message}`; }
+    await new Promise((res) => setTimeout(res, 1500)); // polite backoff before the next mirror
+  }
+  if (!j) throw new Error(`Overpass failed: ${lastErr}`);
   const greens = [], tees = [];
   for (const e of j.elements ?? []) {
     if (e.type !== 'way' || !e.geometry) continue;
