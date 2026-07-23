@@ -1,0 +1,25 @@
+{
+  "name": "Highland Links",
+  "query": "Highland Links Truro",
+  "greensPerLoop": 9,
+  "holes": [
+    { "hole": 1,  "back": 260, "center": 249, "front": 238, "par": 4 },
+    { "hole": 2,  "back": 445, "center": 434, "front": 424, "par": 4 },
+    { "hole": 3,  "back": 174, "center": 160, "front": 146, "par": 3 },
+    { "hole": 4,  "back": 355, "center": 342, "front": 330, "par": 4 },
+    { "hole": 5,  "back": 390, "center": 380, "front": 369, "par": 4 },
+    { "hole": 6,  "back": 472, "center": 461, "front": 449, "par": 4 },
+    { "hole": 7,  "back": 179, "center": 171, "front": 162, "par": 3 },
+    { "hole": 8,  "back": 361, "center": 351, "front": 341, "par": 4 },
+    { "hole": 9,  "back": 146, "center": 136, "front": 125, "par": 3 },
+    { "hole": 10, "back": 252, "center": 242, "front": 231, "par": 4 },
+    { "hole": 11, "back": 388, "center": 377, "front": 365, "par": 4 },
+    { "hole": 12, "back": 129, "center": 118, "front": 107, "par": 3 },
+    { "hole": 13, "back": 421, "center": 411, "front": 401, "par": 4 },
+    { "hole": 14, "back": 372, "center": 361, "front": 349, "par": 4 },
+    { "hole": 15, "back": 460, "center": 450, "front": 439, "par": 4 },
+    { "hole": 16, "back": 167, "center": 159, "front": 150, "par": 3 },
+    { "hole": 17, "back": 359, "center": 348, "front": 337, "par": 4 },
+    { "hole": 18, "back": 117, "center": 105, "front": 93,  "par": 3 }
+  ]
+}
