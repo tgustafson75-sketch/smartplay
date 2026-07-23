@@ -188,6 +188,8 @@ export default function Settings() {
   // 2026-05-17 — Phase 413 health-data settings hooks.
   const healthDataEnabled = useSettingsStore(s => s.healthDataEnabled);
   const setHealthDataEnabled = useSettingsStore(s => s.setHealthDataEnabled);
+  const shareCommunityData = useSettingsStore(s => s.shareCommunityData);
+  const setShareCommunityData = useSettingsStore(s => s.setShareCommunityData);
   const setHasAskedHealthPermission = useSettingsStore(s => s.setHasAskedHealthPermission);
 
   const {
@@ -1670,6 +1672,16 @@ export default function Settings() {
             sub="Share anonymous usage — which features you use, never your name, scores, or location. Off by default."
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
+          />
+          {/* 2026-07-23 — Course Cloud: ONE consent toggle for community course maps +
+              auto-sending issue reports. Coords/diagnostics only — no scores, no personal
+              data beyond the email you already set to reach you about a bug. Default ON for
+              beta so the shared course database + issue triage fill quickly; opt out anytime. */}
+          <ToggleRow
+            label="Share course maps & issue reports"
+            sub="Contribute the hole layouts your phone maps so other golfers get them instantly, and auto-send your issue reports to the team. Coordinates and diagnostics only — never your scores. On for beta; turn off anytime."
+            value={shareCommunityData}
+            onValueChange={confirmToggle('Community data sharing', setShareCommunityData)}
           />
           {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">

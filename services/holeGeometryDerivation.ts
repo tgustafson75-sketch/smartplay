@@ -159,6 +159,14 @@ export async function deriveHoleGeometry(input: {
     // we know the course. Best-effort; a persistence failure never fails the derivation.
     if (input.courseId) {
       await saveDerivedHoleGeometry(input.courseId, derived).catch(() => null);
+      // 2026-07-23 — Course Cloud: share this AI-derived hole (consent-gated inside) so the
+      // next player of this course reads it back with no AI pass. Fire-and-forget; require
+      // lazily so this module has no hard dependency on the sharing path.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const cc = require('./courseCloud') as typeof import('./courseCloud');
+        void cc.shareCourseGeometry(input.courseId, [derived]);
+      } catch { /* sharing is optional */ }
     }
 
     return derived;

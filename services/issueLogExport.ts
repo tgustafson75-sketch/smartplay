@@ -11,6 +11,14 @@
 import { Linking, Platform, Share } from 'react-native';
 import { useIssueLogStore, type IssueLogEntry } from '../store/issueLogStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { getApiBaseUrl } from './apiBase';
+
+// Same public app key the other consented endpoints use (course-geometry-share / issue-report).
+const ISSUE_APP_KEY = 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
+const AUTOSEND_DEBOUNCE_MS = 4000;
+const sentIds = new Set<string>();
+let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
 
 function fmtTs(ms: number): string {
   const d = new Date(ms);
@@ -36,6 +44,59 @@ export function buildIssueLogBody(): { subject: string; body: string; count: num
   const subject = `SmartPlay Caddie issue log — ${reporter}`;
   const body = `Reporter: ${reporter}\nEntries: ${entries.length}\nDevice: ${Platform.OS}\n\n${text}\n\n— Sent from SmartPlay Caddie Issue Log`;
   return { subject, body, count: entries.length };
+}
+
+/**
+ * 2026-07-23 — Consented auto-send: when the community-data toggle is ON, push unsent
+ * issue entries to /api/issue-report so the team sees them centrally without the tester
+ * having to tap "Send". Debounced + deduped by entry id. Best-effort; never throws, never
+ * blocks. The mailto export below stays as the explicit manual action. Call schedule* from
+ * the store's user-reported add path (NOT the high-volume diagnostic traces).
+ */
+export function scheduleIssueAutoSend(): void {
+  if (useSettingsStore.getState().shareCommunityData === false) return;
+  if (autoSendTimer) clearTimeout(autoSendTimer);
+  autoSendTimer = setTimeout(() => { void autoSendIssues(); }, AUTOSEND_DEBOUNCE_MS);
+}
+
+export async function autoSendIssues(): Promise<boolean> {
+  if (useSettingsStore.getState().shareCommunityData === false) return false;
+  const base = getApiBaseUrl();
+  if (!base) return false;
+  const reporter = usePlayerProfileStore.getState().email || 'beta tester';
+  const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id));
+  if (unsent.length === 0) return false;
+  const payload = {
+    entries: unsent.map(e => ({
+      id: e.id,
+      text: e.text,
+      reporter,
+      platform: Platform.OS,
+      context: e.context,
+      details: e.details ?? null,
+      timestamp: e.timestamp,
+    })),
+  };
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-key': ISSUE_APP_KEY },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      for (const e of unsent) sentIds.add(e.id);
+      console.log('[issueLogExport] auto-sent', unsent.length, 'issues');
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.log('[issueLogExport] auto-send failed (non-fatal):', e instanceof Error ? e.message : String(e));
+    return false;
+  }
 }
 
 /**

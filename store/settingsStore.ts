@@ -196,6 +196,11 @@ interface SettingsState {
    *  voice ("I made a 5"). STROKE count then reflects the player's
    *  manual score, not derived from auto-detected shots. */
   autoShotDetection: boolean;
+  /** 2026-07-23 (Tim — Course Cloud) — ONE consent toggle: share derived course
+   *  maps (coords only, no PII) to the community DB AND auto-send issue logs to
+   *  the team. Default ON for beta; opt out anytime. Gates courseCloud upload +
+   *  issueLogExport's auto-POST. */
+  shareCommunityData: boolean;
   // 2026-05-17 — Phase 413 — Health Connect just-in-time permission
   // marker. Set to true the first time we ask (whether granted or
   // declined or Health Connect unavailable). Prevents re-asking on
@@ -343,6 +348,7 @@ interface SettingsState {
   // 2026-05-22 — Fix T.
   setAutoHoleAdvance: (v: boolean) => void;
   setAutoShotDetection: (v: boolean) => void;
+  setShareCommunityData: (v: boolean) => void;
   setHasAskedHealthPermission: (v: boolean) => void;
   setHealthDataEnabled: (v: boolean) => void;
   setWatchSwingEnabled: (v: boolean) => void;
@@ -462,6 +468,7 @@ export const useSettingsStore = create<SettingsState>()(
       // for the few users who actually want them.
       autoHoleAdvance: true, // FIX M5 — default true; GPS auto-advance is the expected behavior for new installs
       autoShotDetection: false,
+      shareCommunityData: true, // default ON for beta — helps build the shared course DB + issue triage
       hasAskedHealthPermission: false,
       healthDataEnabled: true,
       watchSwingEnabled: false,
@@ -653,6 +660,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 2026-05-22 — Fix T setters.
       setAutoHoleAdvance: (v) => set({ autoHoleAdvance: v }),
       setAutoShotDetection: (v) => set({ autoShotDetection: v }),
+      setShareCommunityData: (v) => set({ shareCommunityData: v }),
       setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
       setHealthDataEnabled: (v) => set({ healthDataEnabled: v }),
       setWatchSwingEnabled: (v) => set({ watchSwingEnabled: v }),
@@ -921,6 +929,7 @@ export const useSettingsStore = create<SettingsState>()(
         cartMode: s.cartMode,
         autoHoleAdvance: s.autoHoleAdvance,
         autoShotDetection: s.autoShotDetection,
+        shareCommunityData: s.shareCommunityData,
         // 2026-05-17 — audit B P0: both health-permission flags were
         // missing from partialize, so every cold launch re-asked for
         // Health Connect access on the first round-start. Persisted

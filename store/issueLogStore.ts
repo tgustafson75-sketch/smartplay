@@ -178,6 +178,13 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] new entry:', trimmed.slice(0, 80));
+        // 2026-07-23 — consented auto-send of USER-reported issues (not diagnostic traces).
+        // Lazy require avoids a circular import (issueLogExport imports this store). No-op
+        // when the community-data toggle is off.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../services/issueLogExport') as typeof import('../services/issueLogExport')).scheduleIssueAutoSend();
+        } catch { /* auto-send is optional */ }
       },
       addVoiceEvent: (kind, stage, context, details) => {
         const errorMessage =
