@@ -38,7 +38,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { assertPublicHttpUrl } from './_ssrfGuard';
+import { safeFetchPinned } from './_ssrfGuard';
 
 const TIMEOUT_MS = 25_000;
 
@@ -70,9 +70,13 @@ function buildAuth(): AuthConfig | { error: string } {
 async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; contentType: string } | { error: string }> {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let release: (() => void) | null = null;
   try {
-    await assertPublicHttpUrl(imageUrl); // throws SsrfBlockedError on scheme/IP violation
-    const r = await fetch(imageUrl, { signal: controller.signal, redirect: 'manual' });
+    // IP-pinned fetch: validates scheme/host AND pins the connection to the resolved IP so a
+    // DNS-rebind can't swap in an internal target between validation and fetch (throws on violation).
+    const pinned = await safeFetchPinned(imageUrl, { signal: controller.signal });
+    release = pinned.release;
+    const r = pinned.res;
     if (r.status >= 300 && r.status < 400) {
       console.warn('[pose-analysis] refused redirect for image URL');
       return { error: 'Image could not be loaded' };
@@ -91,6 +95,7 @@ async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; con
     return { error: 'Image could not be loaded' };
   } finally {
     clearTimeout(t);
+    release?.();
   }
 }
 

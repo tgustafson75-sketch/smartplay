@@ -95,3 +95,48 @@ export async function assertPublicHttpUrl(
   }
   return { url, ip: results[0].address };
 }
+
+/**
+ * Validate a user URL, then fetch it with the TCP connection PINNED to the IP we just validated —
+ * closing the DNS-rebind TOCTOU (assertPublicHttpUrl checks one resolution; a naive fetch re-resolves
+ * and a hostile short-TTL DNS server could hand the fetch a DIFFERENT, internal IP). TLS SNI + the
+ * Host header stay the original hostname, so certificate validation is unaffected. Always
+ * redirect:'manual' — a public URL can 30x into an internal one; the caller must treat any 3xx as a
+ * refusal (a followed redirect re-resolves and would reopen the hole).
+ *
+ * Returns the Response plus a `release()` the caller MUST invoke after reading the body (frees the
+ * per-call pinned agent). Pinning uses undici's dispatcher; if undici can't be loaded for any reason
+ * we FALL BACK to a normal (still fully-validated) fetch by hostname — the feature never breaks, we
+ * just lose the TOCTOU hardening on that one call.
+ */
+export async function safeFetchPinned(
+  raw: string,
+  init: RequestInit = {},
+  opts: { allowHttp?: boolean } = {},
+): Promise<{ res: Response; release: () => void }> {
+  const { url, ip } = await assertPublicHttpUrl(raw, opts);
+  const family = net.isIP(ip); // 4 | 6
+  let dispatcher: { close: () => Promise<void> } | undefined;
+  try {
+    const undici = await import('undici');
+    dispatcher = new undici.Agent({
+      connect: {
+        // undici resolves the host through this; force it to the pre-validated IP.
+        lookup: (
+          _hostname: string,
+          _options: unknown,
+          cb: (err: Error | null, address: string, family: number) => void,
+        ) => cb(null, ip, family === 6 ? 6 : 4),
+      },
+    }) as unknown as { close: () => Promise<void> };
+  } catch {
+    dispatcher = undefined; // fall back to validated-hostname fetch (still safe against the direct attack)
+  }
+  const res = await fetch(url, {
+    ...init,
+    redirect: 'manual',
+    // `dispatcher` is an undici extension to RequestInit not present in the DOM lib types.
+    ...(dispatcher ? ({ dispatcher } as Record<string, unknown>) : {}),
+  } as RequestInit);
+  return { res, release: () => { void dispatcher?.close().catch(() => {}); } };
+}

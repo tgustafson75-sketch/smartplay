@@ -6,7 +6,7 @@
  * Guard: assertPublicHttpUrl() rejects non-https schemes and any host that resolves to a
  * private / loopback / link-local / cloud-metadata address; isBlockedIp() is the core.
  */
-import { isBlockedIp, assertPublicHttpUrl, SsrfBlockedError } from '../../api/_ssrfGuard';
+import { isBlockedIp, assertPublicHttpUrl, safeFetchPinned, SsrfBlockedError } from '../../api/_ssrfGuard';
 
 describe('isBlockedIp — internal ranges are blocked (finding #3)', () => {
   const blocked = [
@@ -40,5 +40,20 @@ describe('assertPublicHttpUrl — scheme + host validation', () => {
   });
   it('allows a public https IP literal', async () => {
     await expect(assertPublicHttpUrl('https://8.8.8.8/image.jpg')).resolves.toMatchObject({ ip: '8.8.8.8' });
+  });
+});
+
+describe('safeFetchPinned — validates BEFORE fetching (DNS-rebind TOCTOU close)', () => {
+  // These throw at the validation step, before any undici import or network call — so they prove the
+  // pinned-fetch path can't be tricked into reaching an internal target regardless of DNS behavior.
+  it('rejects the cloud-metadata IP without fetching', async () => {
+    await expect(safeFetchPinned('http://169.254.169.254/latest/', {}, { allowHttp: true }))
+      .rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+  it('rejects localhost by name without fetching', async () => {
+    await expect(safeFetchPinned('https://localhost/x')).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+  it('rejects a non-http(s) scheme without fetching', async () => {
+    await expect(safeFetchPinned('file:///etc/passwd')).rejects.toBeInstanceOf(SsrfBlockedError);
   });
 });
