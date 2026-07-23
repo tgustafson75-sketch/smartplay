@@ -47,7 +47,7 @@ import { getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
-import { getCourseImageryUrl } from '../../services/mapboxImagery';
+import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
@@ -99,6 +99,16 @@ type CourseSummary = {
 // spec (2026-07-22): closest 5 by default, everything else one tap away.
 const NEARBY_COLLAPSED = 5;
 
+// 2026-07-23 (Tim) — bundled courses built from screenshots have no bundled photo, but
+// a blank placeholder is off-brand next to the courses that do. Generate a real Mapbox
+// satellite thumbnail centered on the course (H1 tee) so every card carries live imagery.
+// Pure URL builder (hardcoded public token fallback → always renders over OTA); zoom 15
+// frames the course nicely at 56px. Returns null only if the token is ever empty.
+const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
+  const uri = getCenteredImageryUrl({ lat, lng, zoom: 15, width: 160, height: 160 });
+  return uri ? { uri } : null;
+};
+
 const LOCAL_COURSES: CourseSummary[] = [
   // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
   // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
@@ -106,28 +116,28 @@ const LOCAL_COURSES: CourseSummary[] = [
     id: 'local:highland-links',
     club_name: 'Highland Links',
     location: 'Truro, MA',
-    rating: null, slope: null, isLocal: true, thumbnail: null,
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(42.0366308, -70.0589550),
     lat: 42.0366308, lng: -70.0589550,
   },
   {
     id: 'local:miccosukee',
     club_name: 'Miccosukee G&CC',
     location: 'Miami, FL',
-    rating: null, slope: null, isLocal: true, thumbnail: null,
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(25.7113237, -80.4219701),
     lat: 25.7113237, lng: -80.4219701,
   },
   {
     id: 'local:killian-greens',
     club_name: 'Killian Greens',
     location: 'Miami, FL',
-    rating: null, slope: null, isLocal: true, thumbnail: null,
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(25.6747540, -80.3600897),
     lat: 25.6747540, lng: -80.3600897,
   },
   {
     id: 'local:redlands-cc',
     club_name: 'Redlands Country Club',
     location: 'Redlands, CA',
-    rating: null, slope: null, isLocal: true, thumbnail: null,
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(34.0250333, -117.1514339),
     lat: 34.0250333, lng: -117.1514339,
   },
   {
