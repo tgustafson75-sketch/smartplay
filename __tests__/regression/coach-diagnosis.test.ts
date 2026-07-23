@@ -5,7 +5,7 @@
  * coaching quality, so they're pinned.
  */
 import { diagnose, topPriority, COACH_FAULTS } from '../../services/coachKnowledge';
-import { evaluateRep, diagnoseBaseline } from '../../services/coachSession';
+import { evaluateRep, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
 
 const swing = (over: Partial<SwingBiomechanics>): SwingBiomechanics => ({
@@ -74,6 +74,29 @@ describe('evaluateRep', () => {
     const r = evaluateRep(earlyExt, swing({ spineAngleDeltaDeg: null }), 18);
     expect(r.value).toBeNull();
     expect(r.fixed).toBe(false);
+  });
+});
+
+describe('personalization', () => {
+  it('connects the fault to the player’s known miss when it matches', () => {
+    // over-the-top sequence causes slice/pull
+    expect(missConnectionLine('sequence', 'slice')).toContain('slice');
+    // pressure_shift causes thin/fat/slice
+    expect(missConnectionLine('pressure_shift', 'fat')).toContain('fat');
+  });
+  it('does NOT force a connection when the miss does not match (no false link)', () => {
+    expect(missConnectionLine('sequence', 'hook')).toBeNull();   // over-the-top doesn't cause hooks
+    expect(missConnectionLine('coil', 'slice')).toBeNull();      // coil causes no directional miss
+  });
+  it('is silent when the miss is unknown or "varies"', () => {
+    expect(missConnectionLine('sequence', null)).toBeNull();
+    expect(missConnectionLine('sequence', 'varies')).toBeNull();
+  });
+
+  it('memoryLine acknowledges a prior lesson, and is null on first-ever', () => {
+    expect(memoryLine('Hold your posture', null)).toBeNull();
+    expect(memoryLine('Hold your posture', 1)).toBeTruthy();
+    expect(memoryLine('Hold your posture', 30)).toMatch(/last time/i);
   });
 });
 

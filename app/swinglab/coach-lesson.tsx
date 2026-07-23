@@ -21,9 +21,11 @@ import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
 import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
 import { diagnose, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
-import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline } from '../../services/coachSession';
+import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import { speak } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useCoachLessonStore } from '../../store/coachLessonStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 // Best-effort spoken line. Uses the standalone one-voice-safe speak(); never throws / blocks.
@@ -100,14 +102,20 @@ export default function CoachLessonScreen() {
   }, []);
 
   const beginPriority = useCallback((dx: Diagnosis, m: SwingBiomechanics) => {
+    // Personalize: continuity from the last lesson on this fault + a tie to the player's known miss.
+    const prior = useCoachLessonStore.getState().lastFor(dx.fault.id);
+    const days = prior ? Math.floor((Date.now() - prior.at) / 86_400_000) : null;
+    const mem = memoryLine(dx.fault.name, days);
+    const miss = missConnectionLine(dx.fault.id, usePlayerProfileStore.getState().missType);
     const reveal = diagnosisReveal(dx, m);
     const rx = prescriptionLine(dx.fault);
+    const blocks = [mem, reveal, miss, rx].filter(Boolean) as string[];
     setPriority(dx);
     setLastValue(dx.value);
     setGoodReps(0);
     setDxStage('reps');
-    setDxText(`${reveal}\n\n${rx}`);
-    say(`${reveal} ${rx}`);
+    setDxText(blocks.join('\n\n'));
+    say(blocks.join(' '));
   }, []);
 
   const recordDiagnostic = useCallback(async () => {
@@ -155,21 +163,29 @@ export default function CoachLessonScreen() {
     }
   }, [captureSwing, dxStage, priority, lastValue, goodReps, addressedIds, beginPriority]);
 
+  const recordLesson = useCallback((fault: CoachFault) => {
+    try {
+      useCoachLessonStore.getState().record({ faultId: fault.id, faultName: fault.name, hitCheckpoint: goodReps >= 2 }, Date.now());
+    } catch { /* history is best-effort */ }
+  }, [goodReps]);
+
   const takeNextPriority = useCallback(() => {
+    if (priority) recordLesson(priority.fault); // bank the one we just finished
     if (!lastMetrics) { setDxStage('homework'); return; }
     const next = diagnose(lastMetrics).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
     if (!next) { setDxStage('homework'); const hw = priority ? homeworkLine(priority.fault) : ''; setDxText(hw); say(hw); return; }
     setAddressedIds((ids) => [...ids, next.fault.id]);
     beginPriority(next, lastMetrics);
-  }, [lastMetrics, addressedIds, priority, beginPriority]);
+  }, [lastMetrics, addressedIds, priority, beginPriority, recordLesson]);
 
   const finishToHomework = useCallback(() => {
     if (!priority) { setKind('menu'); return; }
+    recordLesson(priority.fault);
     const hw = homeworkLine(priority.fault);
     setDxStage('homework');
     setDxText(hw);
     say(hw);
-  }, [priority]);
+  }, [priority, recordLesson]);
 
   // ── focus / guided-plan mode (unchanged behavior) ─────────────────────────
   const startFocus = (f: LessonFocus, spoken: string) => {

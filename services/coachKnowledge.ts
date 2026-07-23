@@ -159,6 +159,17 @@ export const COACH_FAULTS: CoachFault[] = [
   },
 ];
 
+// Which on-course misses each fault tends to produce — lets the lesson connect the swing read to
+// the player's KNOWN miss (playerProfile.missType), so it feels like their coach, not a generic app.
+export const FAULT_CAUSES_MISS: Record<string, string[]> = {
+  early_extension: ['hook', 'thin', 'push'],
+  pressure_shift: ['thin', 'fat', 'slice'],
+  sequence: ['slice', 'pull'],
+  coil: [],
+  sway: ['thin', 'fat', 'varies'],
+  hip_load: [],
+};
+
 export interface Diagnosis {
   fault: CoachFault;
   severity: number;   // 0..1, how bad

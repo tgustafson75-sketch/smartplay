@@ -8,7 +8,7 @@
  * FEEL the player can chase — never a robotic metric dump.
  */
 import type { SwingBiomechanics } from './poseAnalysisApi';
-import { type CoachFault, type Diagnosis, topPriority, strengthLine } from './coachKnowledge';
+import { type CoachFault, type Diagnosis, topPriority, strengthLine, FAULT_CAUSES_MISS } from './coachKnowledge';
 
 export type SessionStage = 'intro' | 'baseline' | 'diagnosis' | 'drill' | 'reps' | 'progress' | 'homework';
 
@@ -31,6 +31,28 @@ export function diagnosisReveal(priority: Diagnosis | null, m: SwingBiomechanics
   }
   const f = priority.fault;
   return `Here's what I see. Your biggest opportunity is ${f.name.toLowerCase()} — what a coach would call ${f.coachName}. ${f.why} That's likely behind your ${f.ballFlight} So that's our one thing today. Get this and a lot cleans up on its own.`;
+}
+
+/**
+ * If the diagnosed fault is a known cause of the player's actual on-course miss, say so — this is
+ * what makes it feel like THEIR coach. Returns null when we don't know their miss or it doesn't
+ * connect (no forced/false link).
+ */
+export function missConnectionLine(faultId: string, missType: string | null | undefined): string | null {
+  if (!missType || missType === 'varies') return null;
+  const causes = FAULT_CAUSES_MISS[faultId] ?? [];
+  if (!causes.includes(missType)) return null;
+  return `And here's the kicker — I know your miss tends to be a ${missType}. This is exactly where that comes from. Fix this and that miss largely takes care of itself.`;
+}
+
+/**
+ * If we've coached this same fault before, open with continuity — a coach who remembers you. Pass
+ * the days since the last lesson on this fault (null = never). Returns null on first-ever.
+ */
+export function memoryLine(faultName: string, daysSinceLast: number | null): string | null {
+  if (daysSinceLast == null) return null;
+  if (daysSinceLast <= 3) return `We were on ${faultName.toLowerCase()} just recently — let's see if it's sticking.`;
+  return `Last time we worked together it was ${faultName.toLowerCase()} too — it's still your one thing, so let's really lock it in today.`;
 }
 
 /** The prescription — one feel and one named drill. */
