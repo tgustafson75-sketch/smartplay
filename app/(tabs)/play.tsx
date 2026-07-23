@@ -419,6 +419,11 @@ export default function PlayTab() {
   const setSetupTransport = useRoundStore(s => s.setTransportMode);
 
   const [query, setQuery] = useState('');
+  // 2026-07-23 (Tim) — golfcourseapi has no city/state fields; a location hint appended to the
+  // query markedly improves match quality (e.g. two "Highland" clubs in different states). Kept
+  // in a ref too so runSearch can read it without re-creating the callback on every keystroke.
+  const [locationQuery, setLocationQuery] = useState('');
+  const locationQueryRef = useRef('');
   // 2026-07-22 (Tim) — nearby list shows the 5 CLOSEST by default; the rest
   // (incl. beta-tester courses far from the player, e.g. Highland in MA) are
   // one tap away via "Show all". Collapsible back down so the screen stays clean.
@@ -663,11 +668,14 @@ export default function PlayTab() {
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (trimmed.length < 3) return;
+    // Append the optional City/State hint to sharpen the golfcourseapi match.
+    const loc = locationQueryRef.current.trim();
+    const effective = loc ? `${trimmed} ${loc}` : trimmed;
     // Skip the network call if this exact query is already in flight or
     // was the last completed search — prevents the debounce from re-firing
     // for trailing whitespace / cursor moves.
-    if (lastQueryRef.current === trimmed && searching) return;
-    lastQueryRef.current = trimmed;
+    if (lastQueryRef.current === effective && searching) return;
+    lastQueryRef.current = effective;
     const mySeq = ++searchSeqRef.current;
     setSearching(true);
     setSearchError(null);
@@ -675,7 +683,7 @@ export default function PlayTab() {
     setAiResult(null);
     setHasSearched(true);
     try {
-      const found = await searchCourses(trimmed);
+      const found = await searchCourses(effective);
       // Audit — drop response if a newer request superseded us.
       if (mySeq !== searchSeqRef.current) return;
       const mapped: CourseSummary[] = found
@@ -694,7 +702,7 @@ export default function PlayTab() {
       // to the AI identifier so a real course off the DB still resolves. Keeps the main
       // spinner up while it runs (~2-4s) so there's no empty-state flicker.
       else if (mapped.length === 0) {
-        const ai = await aiSearchCourse(trimmed);
+        const ai = await aiSearchCourse(effective);
         if (mySeq === searchSeqRef.current) setAiResult(ai);
       }
     } catch (e) {
@@ -1155,6 +1163,18 @@ export default function PlayTab() {
             <Text style={styles.searchBtnText}>{searching ? '…' : 'Search'}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 2026-07-23 (Tim) — optional City/State to sharpen the match (golfcourseapi has no
+            location fields, so we fold this into the query). */}
+        <TextInput
+          style={[styles.searchInput, { marginTop: 8 }]}
+          value={locationQuery}
+          onChangeText={(v) => { setLocationQuery(v); locationQueryRef.current = v; }}
+          placeholder="City, State (optional) — narrows the search"
+          placeholderTextColor="#3a5a40"
+          onSubmitEditing={onSearch}
+          returnKeyType="search"
+        />
 
         {/* 2026-07-01 (Tim) — add a course that isn't in the database from a scorecard photo. */}
         <TouchableOpacity
