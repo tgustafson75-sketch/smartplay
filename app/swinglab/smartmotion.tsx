@@ -1441,9 +1441,14 @@ export default function SmartMotion() {
   // can't see: the camera strike check (did the ball actually leave?) and the
   // player's own feel note ("I chunked it"). These override a "no fault" motion
   // read so a fat/thin/topped strike is never shown as a good swing.
+  // 2026-07-23 (analysis-honesty reanalyze) — fold the PERSISTED player feel
+  // (cageSession.feel_note) in as a fallback when the live input is empty. A
+  // saved swing the player tagged "chunked it" must reopen from the library
+  // reading HEAVY / FAT CONTACT, not downgrade to MOTION LOOKS CLEAN because
+  // the transient feelText state reset to '' on mount. Live edits still win.
   const swingContact = useMemo<SmContact>(
-    () => deriveContact(analysis, { ballDeparture, feelText }),
-    [ballDeparture, feelText, analysis],
+    () => deriveContact(analysis, { ballDeparture, feelText: feelText.trim() || (cageSession?.feel_note ?? '') }),
+    [ballDeparture, feelText, analysis, cageSession?.feel_note],
   );
   // 2026-07-22 (Tim — "the hand/clubhead trace shows even on a practice swing; apply it once the
   // shot arc + full shot points are identified") — the trace/club arc is a CONFIRMED-shot overlay.

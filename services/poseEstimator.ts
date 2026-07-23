@@ -69,6 +69,12 @@ export interface PoseEstimateRequest {
     /** Caller-supplied club (e.g. '7i') — informs biomechanics
      *  expectations downstream. */
     club?: string | null;
+    /** 2026-07-23 — camera angle, threaded into computeBiomechanics so the
+     *  width-foreshortening turn metrics + lateral-x weight shift get NULLED
+     *  when the geometry can't honestly measure them (DTL/glasses). Without
+     *  this seam the estimatePose path silently assumed face-on and printed
+     *  wrong numbers as measured. Omit → unknown → prior behavior. */
+    angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null;
   };
 }
 
@@ -169,7 +175,7 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
 
   // ── 1. Video URI → biomechanics + full keypoint stream ─────────────
   if (input.videoUri && input.durationMs) {
-    const bio = await analyzeSwingFromVideo(input.videoUri, input.durationMs).catch((e) => {
+    const bio = await analyzeSwingFromVideo(input.videoUri, input.durationMs, input.context?.angle ?? null).catch((e) => {
       devLog('[poseEstimator] swing video failed: ' + String(e));
       return null;
     });
