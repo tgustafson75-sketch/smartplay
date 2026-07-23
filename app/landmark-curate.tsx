@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,20 @@ export default function LandmarkCurateScreen() {
   const [selectedHole, setSelectedHole] = useState(1);
   const [landmarks, setLandmarks] = useState<Landmark[]>([]);
   const [pendingPos, setPendingPos] = useState<{ x: number; y: number } | null>(null);
+
+  // 2026-07-23 (QA) — the draft was WRITTEN to AsyncStorage on add/remove but never READ back, so
+  // curation work was silently lost on restart. Hydrate it on mount (best-effort).
+  useEffect(() => {
+    let live = true;
+    void AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (!live || !raw) return;
+      try {
+        const saved = JSON.parse(raw) as Landmark[];
+        if (Array.isArray(saved)) setLandmarks(saved);
+      } catch { /* ignore corrupt draft */ }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
 
   // Form state for new landmark
   const [form, setForm] = useState({

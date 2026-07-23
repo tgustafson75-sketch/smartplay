@@ -561,6 +561,11 @@ export default function RecapScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        {/* 2026-07-23 (QA) — back affordance so a nonexistent/deleted round_id (mergeRecap null →
+            up to 30s poll) isn't an escape-only spinner. */}
+        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel="Back">
+          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>‹ Back</Text>
+        </TouchableOpacity>
         <ActivityIndicator color="#00C896" style={{ marginTop: 80 }} />
       </SafeAreaView>
     );
@@ -863,7 +868,7 @@ export default function RecapScreen() {
         renderItem={({ item, index }) => (
           <AnimatedHoleCard
             hc={item}
-            ghostResult={ghost?.hole_results[item.hole_number]}
+            ghostResult={ghost?.hole_results?.[item.hole_number]}
             index={index}
             highlightedHole={highlightedHole}
             onViewHole={(h) => router.push(`/recap/hole/${round_id}/${h}` as never)}
