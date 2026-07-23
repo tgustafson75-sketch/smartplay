@@ -170,6 +170,17 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
 // 2026-06-17 (Tim) — Play Smarter: Coach Mode + Focus Session + Shot Shapes.
 // On-Course Caddie removed (it just circled back to the Play tab).
 const PLAY_SECTION: LauncherCardSpec[] = [
+  // 2026-07-23 (Tim) — Coach Caddie leads the coaching section as its HERO (index 0). A guided AI
+  // lesson: the caddie names a focus, watches your swing (SmartMotion), and coaches that one thing,
+  // rep by rep. Compartmentalized — see services/coachLesson.ts + app/swinglab/coach-lesson.tsx.
+  {
+    key: 'coach-caddie',
+    icon: 'sparkles-outline',
+    title: 'Coach Caddie',
+    sub: 'A guided AI lesson — the caddie coaches one focus at a time as you swing',
+    route: '/swinglab/coach-lesson',
+    tag: 'LESSON',
+  },
   {
     key: 'coach-mode',
     icon: 'school-outline',
@@ -199,6 +210,17 @@ const PLAY_SECTION: LauncherCardSpec[] = [
 // 2026-06-17 (Tim) — "Prepare Better": Fit Profile, Setup Check, SmartPlan, Pre-Round Warm Up.
 // Setup Check is feature-flagged. All full-width LauncherCards.
 const PREPARE_SECTION: LauncherCardSpec[] = [
+  // 2026-07-23 (Tim — "each section needs a hero for its top tool") — Setup Check leads PREPARE as
+  // its hero when enabled (it's the flagship pre-round tool); the section falls back to Import Range
+  // as hero when the flag is off, so it always has a valid index-0 hero.
+  ...(SETUP_CHECK_ENABLED ? [{
+    key: 'setup-check',
+    icon: 'body-outline' as const,
+    title: 'Setup Check',
+    sub: 'Address, alignment, and grip fundamentals before you play',
+    route: '/swinglab/setup-check',
+    tag: 'PREP',
+  }] : []),
   {
     key: 'range-import',
     icon: 'stats-chart-outline',
@@ -226,14 +248,6 @@ const PREPARE_SECTION: LauncherCardSpec[] = [
     route: '/ball-fit',
     tag: 'FITTING',
   },
-  ...(SETUP_CHECK_ENABLED ? [{
-    key: 'setup-check',
-    icon: 'body-outline' as const,
-    title: 'Setup Check',
-    sub: 'Address, alignment, and grip fundamentals before you play',
-    route: '/swinglab/setup-check',
-    tag: 'PREP',
-  }] : []),
   {
     key: 'smartplan',
     icon: 'calendar-outline',
