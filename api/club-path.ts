@@ -30,6 +30,35 @@ type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 
 const MAX_FRAMES = 16;
 
+/** Minimum clearly-detected points before the set can be a real arc. */
+const MIN_ARC_POINTS = 4;
+
+/**
+ * 2026-07-22 (Tim — "the club is consistently off; trace it correctly") — validate that the
+ * detected positions form a plausible clubhead SWEEP before returning them. A real swing arc
+ * spans a meaningful fraction of the frame; a cluster is a mis-detection (the ball, the grip, or
+ * a background object read as the head — the "off" club at address). Enforced SERVER-side so
+ * EVERY client (native app + the SmartPlay Light web app, which share this endpoint) gets honest
+ * data — an implausible set is returned as all-null so the client keeps its honest hand/tempo
+ * trace instead of drawing a wrong club.
+ */
+function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
+  if (pts.length < MIN_ARC_POINTS) return false;
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = maxX - minX, spanY = maxY - minY;
+  // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
+  // chunk of the frame in at least one axis, and not collapse to near a single point.
+  if (Math.max(spanX, spanY) < 0.15) return false;
+  if (spanX + spanY < 0.2) return false;
+  return true;
+}
+
 const PROMPT = `You are tracking the CLUBHEAD of a golf club across an ordered sequence of video frames from a single golf swing (frame 1 is earliest — near address; later frames move through the backswing, downswing, impact, and follow-through).
 
 The CLUBHEAD is the weighted head at the FAR end of the shaft from the hands — the part that strikes the ball (driver head, iron blade, wedge, etc.). It is NOT the grip, the hands, or the shaft; report the HEAD only.
@@ -124,6 +153,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return null;
       return { x, y };
     });
+    // Gate the WHOLE set on arc plausibility: if the clearly-detected points don't form a real
+    // sweep, they're a mis-detection — return all-null so no client draws a wrong "club" (Tim).
+    const detected = positions.filter((p): p is { x: number; y: number } => p != null);
+    if (!looksLikeClubArc(detected)) {
+      return res.status(200).json({ positions: frames.map(() => null) });
+    }
     return res.status(200).json({ positions });
   } catch (e) {
     return res.status(502).json({ error: e instanceof Error ? e.message : 'vision call failed' });

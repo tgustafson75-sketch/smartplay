@@ -1399,7 +1399,9 @@ export default function SmartMotion() {
     void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs })
       .then((r) => {
         if (cancelled) return;
-        const pts = r && r.points.length >= 1 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null;
+        // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
+        // clustered mis-detection) so we never draw a wrong "club". Below that → honest hand trace.
+        const pts = r && r.points.length >= 4 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null;
         clubPathCacheRef.current[selectedSwing] = pts;
         setClubArcPoints(pts);
       })
@@ -1443,6 +1445,16 @@ export default function SmartMotion() {
     () => deriveContact(analysis, { ballDeparture, feelText }),
     [ballDeparture, feelText, analysis],
   );
+  // 2026-07-22 (Tim — "the hand/clubhead trace shows even on a practice swing; apply it once the
+  // shot arc + full shot points are identified") — the trace/club arc is a CONFIRMED-shot overlay.
+  // A shot is confirmed when the camera saw the ball actually leave (ballDeparture.departed) or the
+  // model's honest contact read is a known strike. Practice swings (ball never left / unknown) draw
+  // the clean skeleton only — no speculative trace.
+  const shotConfirmed = useMemo(() => {
+    if (ballDeparture?.departed === true) return true;
+    const cr = analysis?.contact_read;
+    return cr === 'clean' || cr === 'fat' || cr === 'thin' || cr === 'topped';
+  }, [ballDeparture, analysis]);
   // "analyzing" = a read is genuinely in flight (no result yet AND no error).
   // Putt mode has its own verdict (the swing `analysis` stays null for putts,
   // so deriveVerdict would wrongly say ANALYZING/NO READ).
@@ -3614,7 +3626,7 @@ export default function SmartMotion() {
               frames={poseFrames}
               currentTimeMs={playbackMs}
               showSkeleton
-              showTrace={showSkeleton}
+              showTrace={showSkeleton && shotConfirmed}
               resizeMode="cover"
               // 2026-07-06 (range audit RANK 3) — light the diagnosed fault's body
               // region orange/red in the LIVE review too (was only on the saved-swing

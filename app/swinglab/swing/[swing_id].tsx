@@ -311,9 +311,10 @@ export default function SwingDetail() {
   // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
   // for swing review. The `rate` prop survives native play/pause; the corner
   // button cycles ½× → ¼× → 1× → ½×.
-  // 2026-07-14 (Tim) — DEFAULT to slow-mo (½×) on first view: the first pass reads easier and
-  // helps analysis; the player still cycles up to full speed.
-  const [playbackRate, setPlaybackRate] = useState(0.5);
+  // 2026-07-14 (Tim) — first view used to DEFAULT to ½× slow-mo.
+  // 2026-07-22 (Tim) — default to FULL speed (1×) on first view: a normal-speed replay reads
+  // as responsive; slow-mo is one tap away (cycles 1× → ½× → ¼×). Slow-mo is opt-in, not forced.
+  const [playbackRate, setPlaybackRate] = useState(1);
   const cycleSlowMo = () => setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
   const leftCompareVideoRef = useRef<Video>(null);
   const rightCompareVideoRef = useRef<Video>(null);
@@ -377,7 +378,23 @@ export default function SwingDetail() {
     controlsOpacity.setValue(1);
   }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
-  const [showTrace, setShowTrace] = useState(true);
+  // 2026-07-22 (Tim — "the hand/clubhead trace shows even on a practice swing; it should only
+  // be applied once the shot arc + full shot points are identified"). The trace/club arc is a
+  // SHOT overlay, not a practice overlay. Default it OFF and auto-enable it only for a CONFIRMED
+  // shot (see shotConfirmed below); the manual toggle is the escape hatch either way.
+  const [showTrace, setShowTrace] = useState(false);
+  // CONFIRMED-SHOT signal (drives the trace/club gate below + the club-arc detection effect).
+  // Only draw a shot overlay once a real ball strike is identified, never on a practice swing:
+  //   • live_cage shots are created FROM a detected acoustic strike → confirmed by construction.
+  //   • perShotAnalysis.contact_read is the vision model's honest strike read; a known value
+  //     (clean/fat/thin/topped) means a ball was there and struck. 'unknown'/absent = not
+  //     confirmed (a practice swing, or a shot we couldn't verify) → no shot overlay.
+  const shotConfirmed = useMemo(() => {
+    if (!shot) return false;
+    if (session?.source === 'live_cage') return true;
+    const cr = shot.perShotAnalysis?.contact_read;
+    return cr === 'clean' || cr === 'fat' || cr === 'thin' || cr === 'topped';
+  }, [shot, shot?.perShotAnalysis?.contact_read, session?.source]);
   // 2026-07-06 (Tim: "remove the golfer and just move the overlay in a
   // separate view") — MOTION ONLY: video keeps playing (it drives the
   // clock) but renders invisible under a dark backdrop, leaving skeleton +
@@ -424,7 +441,10 @@ export default function SwingDetail() {
   // pass that overlaps the running one (two retriever loops on the live file → the native crash).
   const clubArcRunKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!hasPose || !shot?.clipUri || !(showSkeleton || showTrace)) { setClubArcPoints(null); return; }
+    // 2026-07-22 (Tim) — the club arc feeds the swing TRACE only, and the trace is a confirmed-
+    // shot overlay. Only run the (expensive, native) clubhead-frame extraction when we'll actually
+    // draw it: the trace is on AND this is a confirmed shot. Practice/unconfirmed swings skip it.
+    if (!hasPose || !shot?.clipUri || !showTrace || !shotConfirmed) { setClubArcPoints(null); return; }
     // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
     // clip is playing. detectClubPath opens a native MediaMetadataRetriever on the file, and a
     // retriever decoding the SAME mp4 that ExoPlayer is decoding for playback SIGSEGVs the app to
@@ -450,7 +470,10 @@ export default function SwingDetail() {
         // eagerly in togglePlayPause, before ExoPlayer spins up).
         const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled || isPlayingRef.current });
         if (cancelled) return;
-        if (r && r.points.length >= 1) {
+        // 2026-07-22 (Tim) — require a real arc (>= 4 validated points from detectClubPath, which
+        // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
+        // set falls through to the honest hand trace instead of a wrong "club".
+        if (r && r.points.length >= 4) {
           clubArcRunKeyRef.current = runKey; // mark THIS window done only on a real result
           setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })));
         }
@@ -460,7 +483,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, shotConfirmed, isPlaying]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -533,6 +556,18 @@ export default function SwingDetail() {
       } catch { /* telemetry never throws */ }
     }
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
+
+  // Auto-default the trace ONCE per swing, after the analysis resolves: on for a confirmed shot,
+  // off for a practice/unconfirmed swing. The ref makes it a one-time default so a later manual
+  // toggle (the escape hatch) is never overwritten when shotConfirmed recomputes.
+  const autoTraceAppliedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!swing_id || autoTraceAppliedForRef.current === swing_id) return;
+    if (analysisStatus === 'pending' || analysisStatus === 'analyzing_frames'
+      || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') return; // wait for the read
+    autoTraceAppliedForRef.current = swing_id;
+    setShowTrace(shotConfirmed);
+  }, [swing_id, shotConfirmed, analysisStatus]);
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
   // completes and biomechanics is present. Idempotent per swing_id;

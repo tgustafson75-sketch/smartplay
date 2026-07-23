@@ -49,6 +49,33 @@ export interface ClubPathResult {
   frameH?: number | null;
 }
 
+/** Minimum detected points that must survive before we'll call it a real arc. */
+const MIN_ARC_POINTS = 4;
+
+/**
+ * 2026-07-22 (Tim — "the club is consistently off; trace it correctly or not at all") — validate
+ * the detections form a plausible clubhead SWEEP before returning them. A real swing arc spans a
+ * meaningful fraction of the frame; a cluster is a mis-detection (the ball, the grip, or a
+ * background object read as the head — the "off" club at address). If it doesn't look like a
+ * sweep, the caller keeps the honest hand/tempo trace instead of drawing a wrong club.
+ */
+function looksLikeClubArc(pts: ClubPathPoint[]): boolean {
+  if (pts.length < MIN_ARC_POINTS) return false;
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = maxX - minX, spanY = maxY - minY;
+  // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
+  // chunk of the frame in at least one axis, and not collapse to near a single point.
+  if (Math.max(spanX, spanY) < 0.15) return false;
+  if (spanX + spanY < 0.2) return false;
+  return true;
+}
+
 interface Frame { uri: string; width: number; height: number }
 
 async function frameAt(videoUri: string, timeMs: number): Promise<Frame | null> {
@@ -161,6 +188,12 @@ export async function detectClubPath(args: {
     // Already in time order. Drop exact-duplicate positions (a static repeat read).
     const deduped = points.filter((p, i) =>
       i === 0 || Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) > 0.004);
+    // Only surface the detections as a club arc if they actually form a plausible sweep; a
+    // clustered/degenerate set is a mis-detection → return empty so the renderer keeps the
+    // honest hand/tempo trace rather than drawing a wrong "club" (Tim: trace it correctly).
+    if (!looksLikeClubArc(deduped)) {
+      return { points: [], framesSampled: usable.length, frameW, frameH };
+    }
     return { points: deduped, framesSampled: usable.length, frameW, frameH };
   } catch {
     return null;
