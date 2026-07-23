@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { requireAppKey } from './_appKey';
+import { allowInference } from './_inferLimit';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60_000, maxRetries: 1 });
 
@@ -91,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // App-key gate (constant-time). Both callers (golferAvatar, custom-caddie) send x-app-key.
   if (!requireAppKey(req, res)) return;
+  if (!allowInference(req, res, 'image-edit', 10)) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No image provider configured (need GOOGLE_API_KEY or OPENAI_API_KEY)' });
   }

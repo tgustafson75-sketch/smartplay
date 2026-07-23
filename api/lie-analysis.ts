@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { GoogleGenAI, Type } from '@google/genai';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 import { providerFromHeader } from './_aiProvider';
+import { allowInference } from './_inferLimit';
 
 // 2026-07-21 (QA audit, finding #8) — @google/genai has no request timeout; a Gemini stall
 // on the X-AI-Provider: gemini path would block the lambda to maxDuration → 504 instead of
@@ -157,6 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'lie-analysis')) return;
   // 2026-06-21 — Only block when NO provider key is available. The original
   // Anthropic-only guard killed Gemini+OpenAI fallback chain (HIGH-3 audit).
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {

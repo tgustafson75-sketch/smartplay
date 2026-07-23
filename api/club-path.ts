@@ -23,6 +23,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { allowInference } from './_inferLimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
 
@@ -108,6 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }
+  if (!allowInference(req, res, 'club-path')) return;
   if (!process.env.ANTHROPIC_API_KEY) {
     // Honest "not configured" — client collapses to null and keeps the honest
     // hand/tempo trace rather than drawing a fabricated club arc.

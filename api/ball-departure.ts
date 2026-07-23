@@ -25,6 +25,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
+import { allowInference } from './_inferLimit';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 13_000, maxRetries: 1 });
 
@@ -104,6 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'POST only' });
   }
+  if (!allowInference(req, res, 'ball-departure')) return;
   if (!process.env.ANTHROPIC_API_KEY) {
     // Mirror pose-analysis: honest "not configured" rather than a 500 so the
     // client collapses to null and simply hides the verification.

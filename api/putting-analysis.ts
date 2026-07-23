@@ -13,6 +13,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, type Schema } from '@google/genai';
 import OpenAI from 'openai';
 import { getCaddieName } from '../lib/persona';
+import { allowInference } from './_inferLimit';
 
 // ── Structured output contract ────────────────────────────────────────────────
 
@@ -247,6 +248,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'putting-analysis')) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }

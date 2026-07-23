@@ -17,6 +17,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
+import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 const POINT_OAI = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'], additionalProperties: false };
@@ -71,6 +72,7 @@ Rules:
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'measure-scan')) return;
 
   const body = (req.body ?? {}) as { image_b64?: string; image_media_type?: string };
   const image_b64 = String(body.image_b64 ?? '').trim();

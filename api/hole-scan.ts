@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
+import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 /**
@@ -87,6 +88,7 @@ function safeParse(text: string): Record<string, unknown> | null {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'hole-scan')) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }
