@@ -34,7 +34,9 @@ export interface RegisteredClub {
 const CLUB_ORDER: ClubId[] = [
   'DR', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
   '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'AW', 'GW', 'SW', 'LW', 'PT',
+  // 2026-07-23 (QA) — GW before AW to match clubBagReconcile / api/bag-scan / the ClubId union
+  // (gap wedge ~50-52°, approach wedge ~50-54° overlap, but keep one canonical order everywhere).
+  'PW', 'GW', 'AW', 'SW', 'LW', 'PT',
 ];
 
 interface ClubBagState {

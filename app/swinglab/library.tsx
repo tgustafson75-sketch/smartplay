@@ -73,9 +73,12 @@ export default function SwingLibrary() {
   const [swingerFilter, setSwingerFilter] = useState<string>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-  // Reading via getLibrary so the helper is the single source of sort/filter logic
-  const _ = sessionHistory; void _; // re-render trigger when sessions change
-  const sourceFilteredEntries = getLibrary(filter);
+  // Reading via getLibrary so the helper is the single source of sort/filter logic.
+  // 2026-07-23 (QA) — MEMOIZE: getLibrary(filter) returns a fresh array every call, so calling it
+  // unmemoized made `entries` a new reference each render → the file-existence probe effect re-ran
+  // after every render → setFileStatus → re-render → loop (perpetual FS re-probe, battery/heat).
+  // sessionHistory is the store dep that should trigger recompute; filter is a primitive.
+  const sourceFilteredEntries = useMemo(() => getLibrary(filter), [filter, sessionHistory]);
 
   const availableClubs = useMemo(() => {
     const set = new Set<string>();

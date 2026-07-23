@@ -74,6 +74,12 @@ interface TriageRequestBody {
   bundleInfo?: { updateId?: string | null; createdAt?: string | null };
 }
 
+/** Stringify a value, truncating to `max` chars so a single field can't bloat the model payload. */
+function capJson(v: unknown, max: number): string {
+  const s = JSON.stringify(v ?? {}, null, 2);
+  return s.length > max ? s.slice(0, max) + '\n… (truncated)' : s;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed.' });
@@ -83,7 +89,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const body = (req.body ?? {}) as TriageRequestBody;
     const entry = body.entry ?? {};
-    const reportText = String(entry.text ?? '').trim();
+    // 2026-07-23 (QA) — bound every user-controlled field before it goes into the Sonnet call.
+    // This route is unauthenticated (owner-triggered), and context/settings/build blobs were
+    // stringified with no cap → a single request could push hundreds of KB into the model.
+    const reportText = String(entry.text ?? '').trim().slice(0, 8000);
     if (!reportText) {
       res.status(400).json({ error: 'No report text provided.' });
       return;
@@ -105,12 +114,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       '',
       '## Capture context',
       '```json',
-      JSON.stringify(entry.context ?? {}, null, 2),
+      capJson(entry.context, 6000),
       '```',
       '',
       '## Settings snapshot',
       '```json',
-      JSON.stringify(body.settingsSnapshot ?? {}, null, 2),
+      capJson(body.settingsSnapshot, 6000),
       '```',
       '',
       '## Recent app events (last 50)',
@@ -125,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       '',
       '## Build info',
       '```json',
-      JSON.stringify(body.bundleInfo ?? {}, null, 2),
+      capJson(body.bundleInfo, 2000),
       '```',
     ].join('\n');
 

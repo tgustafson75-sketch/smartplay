@@ -1400,7 +1400,11 @@ export const useRoundStore = create<RoundState>()(
         const scoredEntries = Object.entries(s.scores).filter(([, score]) => score > 0);
         let scoreVsPar = 0;
         for (const [holeNum, score] of scoredEntries) {
-          const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;
+          // 2026-07-23 (QA) — par-4 fallback (was ?? 0). On a data-less course (layout fetch failed →
+          // courseHoles=[]) a ?? 0 made every par 0, so scoreVsPar equalled TOTAL STROKES (e.g. "+90"),
+          // poisoning the dashboard vs-par trend AND disagreeing with the scorecard, which already
+          // falls back to par 4. Match it so the saved stat is sane and consistent.
+          const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 4;
           scoreVsPar += score - par;
         }
         const record: RoundRecord = {
@@ -2439,7 +2443,9 @@ export const useRoundStore = create<RoundState>()(
         for (const [holeNum, score] of Object.entries(scores)) {
           if (score > 0) {
             total += score;
-            par += courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 0;
+            // par-4 fallback (was ?? 0) — see endRound: a data-less course must not report
+            // scoreVsPar == total strokes. Consistent with the scorecard's par-4 default.
+            par += courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 4;
           }
         }
         return total - par;

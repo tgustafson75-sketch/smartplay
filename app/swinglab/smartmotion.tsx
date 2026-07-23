@@ -3185,7 +3185,13 @@ export default function SmartMotion() {
         // session is active — which still covers plain dock-it-say-go SmartMotion (the
         // 2026-06-29 "points disappeared" fix) and the drill flow (no session lifecycle).
         const sessionActive = usePracticeSessionStore.getState().active != null;
-        if (!sessionActive) {
+        // 2026-07-23 (QA — double-award fix) — awardPracticePoints has no idempotency, and this save
+        // path can fire twice for the SAME session (fast double-tap SAVE, or SAVE then NEW SET which
+        // calls persistReviewRef). The session already carries a creditedPractice flag (set at the end
+        // of this block) but it was never READ, so the same swings were counted twice — inflating
+        // total points + session count. Skip the award if this session was already credited.
+        const alreadyCredited = useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
+        if (!sessionActive && !alreadyCredited) {
           if (isDrill && drillId) {
             // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
             const drillLabel = typeof drillName === 'string' && drillName.trim() ? drillName.trim() : null;

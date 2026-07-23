@@ -356,7 +356,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   }
 
   const fix = getLastFix();
-  const playerProj = fix ? projectToAxis(fix.location, geometry.tee, geometry.green) : null;
+  const rawProj = fix ? projectToAxis(fix.location, geometry.tee, geometry.green) : null;
+  // 2026-07-23 (QA — white-screen guard) — a leaked/simulator/bad GPS fix makes projectToAxis
+  // return NaN, which flows through xRange → xScale → the tee/green <Circle>/<Line> coords and
+  // crashes react-native-svg (white-screens the live-round home). The `!(axisYards>0)` guard above
+  // only covers the tee↔green axis, not this player projection. Drop a non-finite fix (render the
+  // hole without the you-are-here dot) — mirrors the finite guard on the photo path.
+  const playerProj = rawProj && Number.isFinite(rawProj.x) && Number.isFinite(rawProj.y) ? rawProj : null;
 
   // Fit-to-canvas projection
   const pad = 18;

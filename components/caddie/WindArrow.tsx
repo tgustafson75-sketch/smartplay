@@ -60,16 +60,18 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
   // Loading state — weather hasn't resolved yet. Render a small dim
   // compass needle so the badge isn't an empty blue circle while the
   // weather fetch / cache lookup races.
-  if (!weather || weather.wind_direction_deg == null) {
+  // 2026-07-23 (QA) — `== null` / `< 3` both miss NaN (NaN==null is false, NaN<3 is false), so a NaN
+  // wind value from a corrupted cache/alt source would reach rotate(NaN)/Path "M cx NaN". Require finite.
+  if (!weather || !Number.isFinite(weather.wind_direction_deg as number)) {
     return (
       <View style={styles.container}>
         <Text style={[styles.placeholder, { color: COLORS.neutral }]}>—</Text>
       </View>
     );
   }
-  const speedMph = weather.wind_speed_mph ?? 0;
+  const speedMph = Number.isFinite(weather.wind_speed_mph as number) ? weather.wind_speed_mph : 0;
   // Calm — show "calm" mph='0' chip so the badge has a clean readable state.
-  if (speedMph < 3) {
+  if (!(speedMph >= 3)) {
     return (
       <View style={styles.container}>
         <Text style={[styles.calmText, { color: COLORS.neutral }]}>calm</Text>
@@ -77,7 +79,7 @@ export default function WindArrow({ weather, shotBearingDeg, compact }: Props) {
     );
   }
 
-  const windToDeg = (weather.wind_direction_deg + 180) % 360;
+  const windToDeg = ((weather.wind_direction_deg as number) + 180) % 360; // finite-guarded above
   let arrowAngle: number;
   let category: 'tail' | 'head' | 'cross' | 'neutral' = 'neutral';
 

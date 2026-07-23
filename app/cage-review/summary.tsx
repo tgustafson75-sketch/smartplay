@@ -32,14 +32,22 @@ export default function CageReviewSummary() {
 
   useEffect(() => {
     const load = async () => {
-      if (!review_session_id) return;
-      const [r, p] = await Promise.all([
-        getReviewSession(review_session_id),
-        getCurrentProfile(),
-      ]);
-      setReview(r);
-      setProfile(p);
-      setLoading(false);
+      if (!review_session_id) { setLoading(false); return; }
+      let p: VocabularyProfile | null = null;
+      try {
+        const [r, prof] = await Promise.all([
+          getReviewSession(review_session_id),
+          getCurrentProfile(),
+        ]);
+        p = prof;
+        setReview(r);
+        setProfile(prof);
+      } catch {
+        // 2026-07-23 (QA) — a rejected AsyncStorage read must not strand the user on a
+        // back-button-less spinner; fall through to the loaded (empty) state below.
+      } finally {
+        setLoading(false);
+      }
 
       if (voiceEnabled && p?.kevin_summary) {
         setTimeout(async () => {
@@ -90,6 +98,10 @@ export default function CageReviewSummary() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        {/* 2026-07-23 (QA) — a back affordance so a slow/hung load is never an inescapable spinner. */}
+        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel="Back">
+          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>‹ Back</Text>
+        </TouchableOpacity>
         <ActivityIndicator color="#00C896" style={{ marginTop: 80 }} />
       </SafeAreaView>
     );

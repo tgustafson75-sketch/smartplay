@@ -88,7 +88,28 @@ export async function scanSpace(
     if (res.status === 413) return { kind: 'too_large' };
     if (!res.ok) return { kind: 'error', message: `Server returned ${res.status}` };
 
-    const data = (await res.json()) as SpaceAssessment;
+    const raw = (await res.json()) as Partial<SpaceAssessment> | null;
+    // 2026-07-23 (QA) — the result screen derefs recommended_setup.*, camera_position.*, and .length
+    // on the four arrays unguarded. A partial/omitted-field model response would throw → white-screen
+    // the result branch with no retake path. Normalize every field to a safe default here so the
+    // render can never crash on a missing key.
+    const VALID_TYPES: SpaceType[] = ['cage', 'range_bay', 'backyard', 'basement', 'garage', 'other'];
+    const data: SpaceAssessment = {
+      space_type: VALID_TYPES.includes(raw?.space_type as SpaceType) ? (raw!.space_type as SpaceType) : 'other',
+      summary: typeof raw?.summary === 'string' ? raw.summary : '',
+      recommended_setup: {
+        mat_position: raw?.recommended_setup?.mat_position ?? '—',
+        aim_direction: raw?.recommended_setup?.aim_direction ?? '—',
+      },
+      camera_position: {
+        dtl_placement: raw?.camera_position?.dtl_placement ?? null,
+        face_on_placement: raw?.camera_position?.face_on_placement ?? null,
+      },
+      recommended_drills: Array.isArray(raw?.recommended_drills) ? raw!.recommended_drills : [],
+      avoid_drills: Array.isArray(raw?.avoid_drills) ? raw!.avoid_drills : [],
+      safety_notes: Array.isArray(raw?.safety_notes) ? raw!.safety_notes : [],
+      limitations: Array.isArray(raw?.limitations) ? raw!.limitations : [],
+    };
     return { kind: 'ok', assessment: data };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -40,10 +40,13 @@ function sanitizeEvent(
   const name = e.event.trim();
   if (!name || name.length > MAX_EVENT_NAME) return null;
 
-  const props =
+  const propsRaw =
     e.props && typeof e.props === 'object' && !Array.isArray(e.props)
       ? (e.props as Record<string, unknown>)
       : {};
+  // 2026-07-23 (QA) — this endpoint is unauthenticated; bound props so a caller can't write
+  // arbitrarily large JSON blobs into smartplay.usage_events (storage/cost abuse).
+  const props = JSON.stringify(propsRaw).length > 4000 ? { _truncated: true } : propsRaw;
 
   // ts: client-supplied epoch ms → ISO; fall back to now. Guard against junk.
   const ms = typeof e.ts === 'number' && Number.isFinite(e.ts) && e.ts > 0 ? e.ts : Date.now();

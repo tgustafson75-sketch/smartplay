@@ -181,7 +181,13 @@ export default function CageSummary() {
       }
     })();
     return () => { cancelled = true; };
-  }, [session, analysisStatus]);
+    // 2026-07-23 (QA) — depend on the STABLE session id, not the session object. Mid-loop
+    // setShotIssueTimestamps() rewrites sessionHistory → a new `session` identity → this effect
+    // used to re-fire while analysisStatus was still 'pending', cancelling its own in-flight run
+    // before it reached setAnalysisStatus('done') → "Analyzing swings…" spun forever on any
+    // multi-chunk (3+ shot) session. The id only changes on a genuinely different session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, analysisStatus]);
 
   // Phase O.5 — earbud tap targets SmartPlay while user reviews session
   useEffect(() => {

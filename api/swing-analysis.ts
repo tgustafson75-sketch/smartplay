@@ -685,6 +685,17 @@ function normalizeAnalysis(
     parsed.severity = 'none';
     parsed.layman_explanation = '';
   }
+  // 2026-07-23 (QA honesty) — reconcile detected_issue with the evidence-gated primary_fault. When
+  // primary_fault was downgraded to 'inconclusive' above (the model couldn't back ANY fault with
+  // evidence), a still-populated detected_issue — including body faults not in HARD_TO_SEE_2D like
+  // over_the_top / early_extension / chicken_wing — would be voiced by the client (swingIssueClassifier)
+  // as a confident fault the server just rejected. Drop it so an inconclusive read is inconclusive
+  // everywhere, not "inconclusive on the card, confident in the caddie's voice."
+  if (parsed.primary_fault === 'inconclusive' && parsed.detected_issue !== 'none') {
+    parsed.detected_issue = 'none';
+    parsed.severity = 'none';
+    parsed.layman_explanation = '';
+  }
   return parsed;
 }
 

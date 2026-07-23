@@ -1095,9 +1095,11 @@ export default function SmartVisionScreen() {
   }, [projection, imageW, imageH, markBumpTick, onCuratedPhoto, teeCoord, greenCoord]);
 
   // Bounds clamper used in drag handlers — keep markers visible.
+  // 2026-07-23 (QA) — finite-guard like the sibling clampMarker: bare Math.max/min let a NaN pass
+  // straight through to <SvgLine x2=…/> (NaN→react-native-svg white-screen). Center a non-finite input.
   const clampToCanvas = useCallback((p: { x: number; y: number }) => ({
-    x: Math.max(8, Math.min(imageW - 8, p.x)),
-    y: Math.max(8, Math.min(imageH - 8, p.y)),
+    x: Number.isFinite(p.x) ? Math.max(8, Math.min(imageW - 8, p.x)) : imageW / 2,
+    y: Number.isFinite(p.y) ? Math.max(8, Math.min(imageH - 8, p.y)) : imageH / 2,
   }), [imageW, imageH]);
 
   // Phase 401 — re-enabled. When projection is computed from real
