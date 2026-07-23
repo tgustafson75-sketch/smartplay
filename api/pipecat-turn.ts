@@ -276,6 +276,19 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
   const cecilyBlock = settings.cecilyMode === true
     ? `\nKIDS MODE: You're chatting with a child who loves to talk. Answer ANY question — golf or not — warmly, playfully, and age-appropriately, like a kind grandparent. Keep it simple, encouraging, and always clean/safe. It's great to chat about non-golf topics, share a fun fact, or play along. Never refuse an innocent question or say "you can't say that."\n`
     : '';
+  // 2026-07-23 (Tim — settings must be mapped) — Persona Intensity dial + Tank Soft-Intro now reach
+  // the live brain (were kevin.ts-only). 100 = "normal cadence" so the default is a no-op (no
+  // regression); lower values dial the persona down, matching api/kevin.ts's language.
+  const personaIntensity = Number(settings.personaIntensity ?? 100);
+  const intensityBlock = `\nINTENSITY DIAL: your intensity is set to ${Number.isFinite(personaIntensity) ? personaIntensity : 100}/100. ${
+    personaIntensity >= 85 ? 'Default cadence — your persona applies normally.' :
+    personaIntensity >= 50 ? 'Dial back: shorter sentences, fewer signature phrases, half the imperative verbs. Stay in character but turn the volume down.' :
+    'Lowest register: drop signature phrases entirely. No commands, no exclamations. One calm observation per turn — same character at its lowest floor.'
+  }${
+    caddieName === 'Tank' && settings.tankSoftIntro === true
+      ? ' SOFT-INTRO ACTIVE: one of your first turns with this player — drop "Roger that" / "Send it" / "Ooh-rah" and imperative verbs; introduce yourself as "I\'m Tank. I work direct and I keep it short."'
+      : ''
+  }\n`;
 
   const hcp = player.handicap != null ? `Handicap: ${player.handicap}.` : '';
   const miss = player.dominantMiss ? `Dominant miss: ${player.dominantMiss}.` : '';
@@ -362,7 +375,7 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
 
 You are ${caddieName}, an expert AI golf caddie and mental performance coach in SmartPlay Caddie.
 You are talking to ${name} through their earbuds. Be direct and concise — on-course caddie cadence, not a manual.
-${cecilyBlock}${hcp} ${miss}
+${cecilyBlock}${intensityBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
 

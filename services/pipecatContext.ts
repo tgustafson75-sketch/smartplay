@@ -8,6 +8,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { brainSettings } from './voice/brainSettings';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { useRelationshipStore } from '../store/relationshipStore';
@@ -90,17 +91,11 @@ export function buildPipecatContext() {
         } catch { return []; }
       })(),
     },
+    // Every brain-bound setting flows through the pure brainSettings() map (tested). trustLevel is
+    // computed from its own store so it stays separate.
     settings: {
       trustLevel,
-      language: settings.language ?? 'en',
-      aiProvider: 'anthropic',
-      continuousConversationMode: settings.continuousConversationMode ?? false,
-      // 2026-07-23 (Tim — "Cecily is kids mode and should work, also response style; nothing in
-      // settings is arbitrary") — forward both to the ACTIVE pipecat brain. They were only ever
-      // read by the short-circuited legacy /api/kevin builder, so both toggles were dead. Defaults
-      // (neutral / false) preserve today's behavior exactly.
-      responseMode: settings.responseMode ?? 'neutral',
-      cecilyMode: settings.cecilyMode ?? false,
+      ...brainSettings(settings),
     },
     gps: {
       lat: getLastFix()?.lat ?? undefined,
