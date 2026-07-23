@@ -630,7 +630,11 @@ export default function SwingDetail() {
         // reinstall) so post-reinstall biomech backfill reads the real file, matching every
         // other read site here; falls back to the raw path if resolution can't improve it.
         const analyzeUri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
-        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs);
+        // 2026-07-23 (QA honesty) — thread the upload's camera angle (default down_the_line) so the
+        // width-foreshortening metrics (hip/shoulder turn, weight shift) are NULLED for DTL rather
+        // than shown as "Measured" — they're geometrically invalid from behind. Matches the primary
+        // path (services/videoUpload.ts) which already passes angleOverride; this backfill dropped it.
+        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null);
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
