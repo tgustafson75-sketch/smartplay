@@ -14,7 +14,6 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
-import { HoleImageTreatment } from '../HoleImageTreatment';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 
@@ -158,7 +157,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       return (
         <SmartVisionTap onPress={onOpenSmartVision}>
           <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
-            <HoleImageTreatment />
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
               <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
@@ -251,8 +249,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     return (
       <SmartVisionTap onPress={onOpenSmartVision}>
         <ImageBackground source={heroImageSource} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
-          {/* Treat only bundled screenshots, not the player's own captured swing photo. */}
-          {!capturedUri && <HoleImageTreatment />}
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
           </View>
@@ -303,7 +299,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       return (
         <SmartVisionTap onPress={onOpenSmartVision}>
           <ImageBackground source={localImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
-            <HoleImageTreatment />
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
             </View>
