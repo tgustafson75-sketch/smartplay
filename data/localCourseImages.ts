@@ -284,7 +284,15 @@ export type LocalCourseSlug =
   // 2026-07-18 — Trump National Doral (Gold course), Miami FL + Pembroke Lakes CC,
   // Pembroke Pines FL. 18 holes each, cropped from Tim's Golf Pad hole-view captures.
   | 'doral-gold'
-  | 'pembroke-pines';
+  | 'pembroke-pines'
+  // 2026-07-23 — Highland Links (Truro MA, Dad's course), Miccosukee G&CC + Killian Greens
+  // (Miami FL), Redlands CC (CA). 18 aerials each, cropped from the GPS-app hole-view
+  // screenshots that anchored these courses — the SEAMLESS BACKUP when the Mapbox satellite
+  // tile doesn't render (so SmartVision never shows a blank green screen).
+  | 'highland-links'
+  | 'miccosukee'
+  | 'killian-greens'
+  | 'redlands-cc';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -375,7 +383,95 @@ export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
 };
 
+// 2026-07-23 — Highland / Miccosukee / Killian / Redlands: 18 cropped aerials each (chrome-free,
+// from the GPS-app hole-view screenshots). Bundled as the seamless backup so SmartVision always
+// has an image even when the Mapbox satellite tile fails.
+export const HIGHLAND_LINKS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/highland-links/hole-01.jpg'),
+  2: require('../assets/courses/highland-links/hole-02.jpg'),
+  3: require('../assets/courses/highland-links/hole-03.jpg'),
+  4: require('../assets/courses/highland-links/hole-04.jpg'),
+  5: require('../assets/courses/highland-links/hole-05.jpg'),
+  6: require('../assets/courses/highland-links/hole-06.jpg'),
+  7: require('../assets/courses/highland-links/hole-07.jpg'),
+  8: require('../assets/courses/highland-links/hole-08.jpg'),
+  9: require('../assets/courses/highland-links/hole-09.jpg'),
+  10: require('../assets/courses/highland-links/hole-10.jpg'),
+  11: require('../assets/courses/highland-links/hole-11.jpg'),
+  12: require('../assets/courses/highland-links/hole-12.jpg'),
+  13: require('../assets/courses/highland-links/hole-13.jpg'),
+  14: require('../assets/courses/highland-links/hole-14.jpg'),
+  15: require('../assets/courses/highland-links/hole-15.jpg'),
+  16: require('../assets/courses/highland-links/hole-16.jpg'),
+  17: require('../assets/courses/highland-links/hole-17.jpg'),
+  18: require('../assets/courses/highland-links/hole-18.jpg'),
+};
+export const MICCOSUKEE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/miccosukee/hole-01.jpg'),
+  2: require('../assets/courses/miccosukee/hole-02.jpg'),
+  3: require('../assets/courses/miccosukee/hole-03.jpg'),
+  4: require('../assets/courses/miccosukee/hole-04.jpg'),
+  5: require('../assets/courses/miccosukee/hole-05.jpg'),
+  6: require('../assets/courses/miccosukee/hole-06.jpg'),
+  7: require('../assets/courses/miccosukee/hole-07.jpg'),
+  8: require('../assets/courses/miccosukee/hole-08.jpg'),
+  9: require('../assets/courses/miccosukee/hole-09.jpg'),
+  10: require('../assets/courses/miccosukee/hole-10.jpg'),
+  11: require('../assets/courses/miccosukee/hole-11.jpg'),
+  12: require('../assets/courses/miccosukee/hole-12.jpg'),
+  13: require('../assets/courses/miccosukee/hole-13.jpg'),
+  14: require('../assets/courses/miccosukee/hole-14.jpg'),
+  15: require('../assets/courses/miccosukee/hole-15.jpg'),
+  16: require('../assets/courses/miccosukee/hole-16.jpg'),
+  17: require('../assets/courses/miccosukee/hole-17.jpg'),
+  18: require('../assets/courses/miccosukee/hole-18.jpg'),
+};
+export const KILLIAN_GREENS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/killian-greens/hole-01.jpg'),
+  2: require('../assets/courses/killian-greens/hole-02.jpg'),
+  3: require('../assets/courses/killian-greens/hole-03.jpg'),
+  4: require('../assets/courses/killian-greens/hole-04.jpg'),
+  5: require('../assets/courses/killian-greens/hole-05.jpg'),
+  6: require('../assets/courses/killian-greens/hole-06.jpg'),
+  7: require('../assets/courses/killian-greens/hole-07.jpg'),
+  8: require('../assets/courses/killian-greens/hole-08.jpg'),
+  9: require('../assets/courses/killian-greens/hole-09.jpg'),
+  10: require('../assets/courses/killian-greens/hole-10.jpg'),
+  11: require('../assets/courses/killian-greens/hole-11.jpg'),
+  12: require('../assets/courses/killian-greens/hole-12.jpg'),
+  13: require('../assets/courses/killian-greens/hole-13.jpg'),
+  14: require('../assets/courses/killian-greens/hole-14.jpg'),
+  15: require('../assets/courses/killian-greens/hole-15.jpg'),
+  16: require('../assets/courses/killian-greens/hole-16.jpg'),
+  17: require('../assets/courses/killian-greens/hole-17.jpg'),
+  18: require('../assets/courses/killian-greens/hole-18.jpg'),
+};
+export const REDLANDS_CC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/redlands-cc/hole-01.jpg'),
+  2: require('../assets/courses/redlands-cc/hole-02.jpg'),
+  3: require('../assets/courses/redlands-cc/hole-03.jpg'),
+  4: require('../assets/courses/redlands-cc/hole-04.jpg'),
+  5: require('../assets/courses/redlands-cc/hole-05.jpg'),
+  6: require('../assets/courses/redlands-cc/hole-06.jpg'),
+  7: require('../assets/courses/redlands-cc/hole-07.jpg'),
+  8: require('../assets/courses/redlands-cc/hole-08.jpg'),
+  9: require('../assets/courses/redlands-cc/hole-09.jpg'),
+  10: require('../assets/courses/redlands-cc/hole-10.jpg'),
+  11: require('../assets/courses/redlands-cc/hole-11.jpg'),
+  12: require('../assets/courses/redlands-cc/hole-12.jpg'),
+  13: require('../assets/courses/redlands-cc/hole-13.jpg'),
+  14: require('../assets/courses/redlands-cc/hole-14.jpg'),
+  15: require('../assets/courses/redlands-cc/hole-15.jpg'),
+  16: require('../assets/courses/redlands-cc/hole-16.jpg'),
+  17: require('../assets/courses/redlands-cc/hole-17.jpg'),
+  18: require('../assets/courses/redlands-cc/hole-18.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
+  'highland-links': HIGHLAND_LINKS_HOLE_IMAGES,
+  'miccosukee': MICCOSUKEE_HOLE_IMAGES,
+  'killian-greens': KILLIAN_GREENS_HOLE_IMAGES,
+  'redlands-cc': REDLANDS_CC_HOLE_IMAGES,
   'webster-dudley': WEBSTER_DUDLEY_HOLE_IMAGES,
   'doral-gold': DORAL_GOLD_HOLE_IMAGES,
   'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
@@ -416,6 +512,10 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 //   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
 // Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  'highland-links':   { lat: 42.0366308, lng: -70.0589550 },
+  'miccosukee':       { lat: 25.7113237, lng: -80.4219701 },
+  'killian-greens':   { lat: 25.6747540, lng: -80.3600897 },
+  'redlands-cc':      { lat: 34.0250333, lng: -117.1514339 },
   'palms':            { lat: 33.6953922, lng: -117.1504551 },
   'lakes':            { lat: 33.6913348, lng: -117.1573364 },
   'rancho-california':{ lat: 33.4910,    lng: -117.1390 },
