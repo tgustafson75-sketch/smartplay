@@ -11,7 +11,7 @@
  * Two lighter modes remain for quick work: Guided Sessions (multi-focus plans) and Single Focus.
  * The coaching brain is services/coachKnowledge + services/coachSession (both pure + unit-tested).
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
 import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
-import { diagnose, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
+import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import { speak } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -62,6 +62,14 @@ export default function CoachLessonScreen() {
   const [goodReps, setGoodReps] = useState(0);
   const [lastMetrics, setLastMetrics] = useState<SwingBiomechanics | null>(null);
   const [addressedIds, setAddressedIds] = useState<string[]>([]);
+  const [pendingProgress, setPendingProgress] = useState(false);
+  const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearProgressTimer = useCallback(() => {
+    if (progressTimer.current) { clearTimeout(progressTimer.current); progressTimer.current = null; }
+    setPendingProgress(false);
+  }, []);
+  // Cancel any pending progress transition if the screen unmounts (no state-set / speech after leave).
+  useEffect(() => () => { if (progressTimer.current) clearTimeout(progressTimer.current); }, []);
 
   // ── shared capture ────────────────────────────────────────────────────────
   const captureSwing = useCallback(async (): Promise<SwingBiomechanics | null> => {
@@ -128,9 +136,17 @@ export default function CoachLessonScreen() {
     setLastMetrics(m);
 
     if (dxStage === 'intro') {
+      // Honesty gate: a down-the-line video (or a poor read) nulls most metrics — that's "couldn't
+      // see it", NOT a clean swing. Never praise a swing we couldn't actually read.
+      if (!isDiagnosable(m)) {
+        const line = "I couldn't read enough of that swing to coach it — film face-on with your whole swing in frame, good light, and give me another.";
+        setError(line);
+        say(line);
+        return;
+      }
       const dx = diagnoseBaseline(m);
       if (!dx) {
-        // Clean swing — reinforce + hand to a sharpening focus.
+        // Genuinely sound swing (readable + no fault crossed a threshold) — reinforce.
         const line = diagnosisReveal(null, m);
         setDxText(line);
         setDxStage('homework');
@@ -152,10 +168,19 @@ export default function CoachLessonScreen() {
         const nextGood = goodReps + 1;
         setGoodReps(nextGood);
         if (nextGood >= 2) {
-          // Lock it in — offer to progress.
+          // Lock it in. Hide the Swing button now (pendingProgress) so a second tap can't double-fire,
+          // and delay the spoken progress line so it doesn't cut off the win line. Timer is cancelable.
           const next = diagnose(m).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
           const line = progressLine(priority.fault, next);
-          setTimeout(() => { setDxStage('progress'); setDxText(line); say(line); }, 2200);
+          setPendingProgress(true);
+          if (progressTimer.current) clearTimeout(progressTimer.current);
+          progressTimer.current = setTimeout(() => {
+            progressTimer.current = null;
+            setPendingProgress(false);
+            setDxStage('progress');
+            setDxText(line);
+            say(line);
+          }, 2200);
         }
       } else {
         setGoodReps(0);
@@ -189,7 +214,7 @@ export default function CoachLessonScreen() {
 
   // ── focus / guided-plan mode (unchanged behavior) ─────────────────────────
   const startFocus = (f: LessonFocus, spoken: string) => {
-    setKind('focus'); setFocus(f); setFeedback(null); setError(null); setRepsOnFocus(0);
+    setKind('focus'); setFocus(f); setFeedback(null); setError(null); setRepsOnFocus(0); setRep(0);
     say(spoken);
   };
   const pickFocus = useCallback((f: LessonFocus) => { setPlan(null); setPlanStep(0); startFocus(f, f.instruction); }, []);
@@ -219,7 +244,7 @@ export default function CoachLessonScreen() {
 
   const s = makeStyles(colors);
   const verdictTint = (v: FocusFeedback['verdict']) => (v === 'good' ? colors.accent : v === 'refine' ? '#f5a623' : colors.text_muted);
-  const backToMenu = () => { setKind('menu'); setFocus(null); setFeedback(null); setPlan(null); setPriority(null); setError(null); };
+  const backToMenu = () => { clearProgressTimer(); setKind('menu'); setFocus(null); setFeedback(null); setPlan(null); setPriority(null); setError(null); };
 
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
@@ -299,7 +324,7 @@ export default function CoachLessonScreen() {
           {cap !== 'analyzing' && dxStage === 'intro' && (
             <TouchableOpacity style={s.primaryBtn} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Record a baseline swing</Text></TouchableOpacity>
           )}
-          {cap !== 'analyzing' && dxStage === 'reps' && (
+          {cap !== 'analyzing' && dxStage === 'reps' && !pendingProgress && (
             <TouchableOpacity style={s.primaryBtn} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Swing</Text></TouchableOpacity>
           )}
           {dxStage === 'progress' && (

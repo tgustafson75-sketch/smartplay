@@ -56,6 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const id = norm(e.id);
       if (!text || !id) return null;
       const ts = Number(e.timestamp);
+      // Guard the range: new Date(1e16).toISOString() throws RangeError, and this map runs OUTSIDE
+      // the try below. Accept only a plausible epoch-ms (1970 … year 2100).
+      const validTs = Number.isFinite(ts) && ts > 0 && ts < 4_102_444_800_000;
       return {
         id,
         reporter: norm(e.reporter) || null,
@@ -63,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         text,
         context: e.context && typeof e.context === 'object' ? e.context : null,
         details: e.details && typeof e.details === 'object' ? e.details : null,
-        reported_at: Number.isFinite(ts) ? new Date(ts).toISOString() : null,
+        reported_at: validTs ? new Date(ts).toISOString() : null,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r != null);

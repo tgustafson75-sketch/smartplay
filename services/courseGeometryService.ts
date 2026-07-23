@@ -466,15 +466,15 @@ export async function fetchCourseGeometry(
     const real = await resolveLocalCourseId(slug);
     if (real) {
       upstreamId = real;
-    } else if (!centroid) {
-      // No upstream and no centroid — but a bundled course carries its own coords. Use them.
+    } else {
+      // No upstream API mapping. Our OWN screenshot-anchored bundled coords are ground truth and
+      // MUST win over OSM synthesis — OSM has no hole numbers, so it scrambles the routing (attaches
+      // greens to the wrong hole, ghost-holes a 9-green course into 18). Prefer bundled here, both
+      // online and offline. Only when we have NO bundled coords do we fall to the OSM-only request.
       const bundled = buildBundledGeometry(courseId);
       if (bundled) { memCache.set(courseId, bundled); void writePersistedCache(bundled).catch(() => undefined); return bundled; }
-      return persisted ?? buildBundledGeometry(courseId) ?? null;
-    } else {
-      // No upstream mapping but we know where the course is. Fall
-      // through to an OSM-only request below (the server endpoint
-      // synthesizes holes from OSM greens/tees when osmOnly=1).
+      if (!centroid) return persisted ?? null;
+      // No bundled coords but we know where it is — synthesize from OSM greens/tees (osmOnly=1).
       upstreamId = '__osm_only__';
     }
   } else if (!centroid) {
@@ -515,6 +515,12 @@ export async function fetchCourseGeometry(
   }
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
+    // Course Cloud read-first: OSM-only means the proxy is WEAK for this course (no golfcourseapi
+    // data), so let crowd-sourced geometry serve if it exists. origId is the DISPLAY id the share
+    // path stores under (courseId here has been rewritten to '__osm_only__'). For proxy-strong
+    // (golfcourseapi) courses we send neither, so the cloud never shadows their richer geometry.
+    params.set('cloudFirst', '1');
+    params.set('origId', courseId);
   }
   // 2026-05-17 — Polygon enrichment requires a centroid (server-side
   // gate at api/course-geometry.ts checks `withPolygons && centroid`).

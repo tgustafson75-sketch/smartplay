@@ -89,8 +89,13 @@ export async function recordContribution(
     const hole = Math.trunc(Number(h.hole));
     if (!Number.isFinite(hole) || hole < 1 || hole > 36) continue;
     if (!hasUsableCoords(h)) continue;
-    const source = typeof h.source === 'string' && SOURCE_RANK[h.source] ? h.source : 'ai_vision';
-    const confidence = Math.min(1, Math.max(0, num(h.confidence) ?? 0.5));
+    // SECURITY: never trust the client's claimed source/confidence. The public share endpoint only
+    // ever receives client-derived (AI-vision) observations, so we FORCE source='ai_vision' (the
+    // lowest rank) — otherwise an attacker could POST source:'bundled' (rank 4) to outrank and
+    // overwrite legitimate geometry for every player. Confidence is capped so a single caller can't
+    // claim certainty; corroboration across contributors (contributor_count) is what earns trust.
+    const source = 'ai_vision';
+    const confidence = Math.min(0.7, Math.max(0, num(h.confidence) ?? 0.5));
     const row = {
       course_id: courseId,
       hole,

@@ -594,6 +594,13 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // resolve to bundled imagery/centroid, not just the `local:` id path.
   if (c.includes('spessard') || c.includes('holland')) return 'spessard-holland';
   if (c.includes('webster') || c.includes('dudley')) return 'webster-dudley';
+  // 2026-07-23 — the 4 screenshot-anchored beta courses. Name parity so voice / homeCourse /
+  // name-keyed imagery (app/course/[course_id].tsx grid) resolve the bundled aerials, not just
+  // the `local:` id path.
+  if (c.includes('highland')) return 'highland-links';
+  if (c.includes('miccosukee')) return 'miccosukee';
+  if (c.includes('killian')) return 'killian-greens';
+  if (c.includes('redlands')) return 'redlands-cc';
   return null;
 }
 
@@ -633,6 +640,11 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   // Revisit if a sibling Westlake course gets bundled.
   if (c.includes('westlake')) return WESTLAKE_CC_NJ_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('greenhill')) return GREENHILL_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-23 — the 4 screenshot-anchored beta courses (name-keyed parity with the id path).
+  if (c.includes('highland')) return HIGHLAND_LINKS_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('miccosukee')) return MICCOSUKEE_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('killian')) return KILLIAN_GREENS_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('redlands')) return REDLANDS_CC_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 

@@ -199,6 +199,20 @@ export function topPriority(m: SwingBiomechanics): Diagnosis | null {
 }
 
 /**
+ * Was the swing READABLE enough to diagnose? A down-the-line video (or a low-confidence read) nulls
+ * most fault metrics — in that case an empty diagnose() means "couldn't see it", NOT "clean swing".
+ * This gate keeps us honest: we require at least 3 of the 6 fault metrics to have real values before
+ * we'll either praise a sound swing or claim a priority. Below that, ask for a better angle.
+ */
+export function isDiagnosable(m: SwingBiomechanics): boolean {
+  const metrics: (number | null | undefined)[] = [
+    m.spineAngleDeltaDeg, m.weightShiftPct, m.sequencingScore,
+    m.shoulderTurnDeg, m.headDriftPxNorm, m.hipTurnDeg,
+  ];
+  return metrics.filter((v) => typeof v === 'number' && Number.isFinite(v)).length >= 3;
+}
+
+/**
  * When no fault crosses a threshold, name the swing's biggest STRENGTH so the caddie can reinforce
  * it (real coaches praise what's working before sharpening). Returns a spoken line.
  */

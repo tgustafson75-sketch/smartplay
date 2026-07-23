@@ -226,9 +226,12 @@ export async function prefetchCourseImagery(args: {
 
   try {
     await fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null }).catch(() => null);
-    if (!isMapboxConfigured()) return;
+    if (!isMapboxConfigured()) { imageryWarmed.delete(courseId); return; }
     const tileInputs = buildTileInputs(courseId, holes);
     if (tileInputs.length === 0) {
+      // No coords yet (e.g. offline/geometry miss) — un-warm so a later selection can retry once
+      // connectivity/geometry lands, instead of being stuck warmed for the whole session.
+      imageryWarmed.delete(courseId);
       console.log('[roundPrefetch] imagery warm skipped — no holes have tee+green coords yet:', courseId);
       return;
     }

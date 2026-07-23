@@ -2,12 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSmartPlaySupabase } from './_supabase';
 import { readSharedGeometry } from './_courseCloud';
 
-// Course Cloud only SERVES a course once it's substantially mapped — this many holes with
-// usable tee+green coords — so partial crowd data never shadows the richer golfcourseapi/OSM
-// proxy for a course the proxy already knows. Below this, cloud data accrues silently and the
-// proxy answers as before (no regression). A fully crowd-mapped course the proxy can't map
-// then serves instantly + offline with zero API cost.
-const CLOUD_COMPLETE_MIN = 12;
+// Course Cloud only SERVES a course once it's substantially mapped — this many holes with usable
+// tee+green coords. 8 lets a fully-crowd-mapped 9-hole course qualify (12 never could) while still
+// requiring a real map, not a stray hole or two. Only applies to cloudFirst (weak-proxy) courses.
+const CLOUD_COMPLETE_MIN = 8;
 
 /**
  * Phase B — Server-side course geometry endpoint.
@@ -493,20 +491,23 @@ function extractRawHoles(course: Record<string, unknown>): Record<string, unknow
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ── Course Cloud read-first ──────────────────────────────────────────────
-  // Serve crowd-sourced geometry BEFORE the golfcourseapi/OSM proxy so a course the
-  // community has already mapped costs zero upstream calls. Gated on completeness
-  // (CLOUD_COMPLETE_MIN) so partial data never shadows the proxy. `noCloud=1` forces a
-  // fresh proxy read (e.g. to re-derive). Wrapped so a cloud hiccup never blocks the proxy.
-  const cloudCourseId = (req.query.courseId ?? req.query.id) as string | undefined;
-  if (cloudCourseId && String(req.query.noCloud ?? '') !== '1') {
+  // Serve crowd-sourced geometry only when the client signals the proxy is WEAK for this course
+  // (cloudFirst=1 — sent for OSM-only local courses with no golfcourseapi id). This prevents the
+  // cloud from shadowing the richer golfcourseapi/OSM proxy (polygons, hazards, real par/yardage)
+  // on courses the proxy maps well. Keyed on `origId` — the DISPLAY course id the SHARE path stores
+  // under — because the proxy path rewrites courseId to the upstream id. `noCloud=1` forces a fresh
+  // proxy read. Wrapped so a cloud hiccup never blocks the proxy.
+  const cloudKey = (req.query.origId ?? req.query.courseId ?? req.query.id) as string | undefined;
+  const cloudFirst = String(req.query.cloudFirst ?? '') === '1';
+  if (cloudKey && cloudFirst && String(req.query.noCloud ?? '') !== '1') {
     try {
       const db = getSmartPlaySupabase();
       if (db) {
-        const shared = await readSharedGeometry(db, cloudCourseId);
+        const shared = await readSharedGeometry(db, cloudKey);
         const mapped = shared?.filter(h => h.tee && h.green).length ?? 0;
         if (shared && mapped >= CLOUD_COMPLETE_MIN) {
-          console.log('[course-geometry] served from Course Cloud —', cloudCourseId, `(${shared.length} holes, ${mapped} mapped)`);
-          return res.status(200).json({ course_id: cloudCourseId, course_name: 'Course Cloud', fetched_at: Date.now(), holes: shared });
+          console.log('[course-geometry] served from Course Cloud —', cloudKey, `(${shared.length} holes, ${mapped} mapped)`);
+          return res.status(200).json({ course_id: cloudKey, course_name: 'Course Cloud', fetched_at: Date.now(), holes: shared });
         }
       }
     } catch (e) {

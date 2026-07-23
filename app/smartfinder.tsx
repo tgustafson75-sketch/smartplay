@@ -433,6 +433,13 @@ function CameraSmartFinder({
   // second tap stops it cleanly.
   const [captureMode, setCaptureMode] = useState<'picture' | 'video'>('picture');
   const [recording, setRecording] = useState(false);
+  // 2026-07-23 (QA) — Measure mode's Auto-detect uses takePictureAsync, which fails when the
+  // CameraView is left in mode='video' (e.g. after recording a target-mode pano). Force picture
+  // mode whenever Measure is active; runs on mode change, so the mode prop has re-rendered to
+  // 'picture' well before the user taps Auto-detect (unlike an in-tap setState, which is too late).
+  useEffect(() => {
+    if (mode === 'measure' && captureMode !== 'picture' && !recording) setCaptureMode('picture');
+  }, [mode, captureMode, recording]);
   // 2026-06-13 — Scene Read (Tim's "mind-blown" moment): snap the view, the
   // multimodal brain reads the meta scene (water/trees/sky/leaves) grounded in the
   // MEASURED wind/temp/distance, and ties it to how to play + think. OTA-safe (reuses

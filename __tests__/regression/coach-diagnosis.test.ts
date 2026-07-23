@@ -4,7 +4,7 @@
  * recognize a fixed rep, an improving rep, and a stalled rep. These are the guardrails on the
  * coaching quality, so they're pinned.
  */
-import { diagnose, topPriority, COACH_FAULTS } from '../../services/coachKnowledge';
+import { diagnose, topPriority, isDiagnosable, COACH_FAULTS } from '../../services/coachKnowledge';
 import { evaluateRep, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
 
@@ -43,9 +43,28 @@ describe('diagnose', () => {
   });
 });
 
+describe('isDiagnosable (honesty gate — do not praise a swing we could not read)', () => {
+  it('is false when fewer than 3 fault metrics are readable', () => {
+    // down-the-line: turn/weight/sequence/hip-slide nulled; only 2 left → not diagnosable
+    expect(isDiagnosable(swing({ weightShiftPct: null, sequencingScore: null, shoulderTurnDeg: null, hipTurnDeg: null }))).toBe(false);
+    expect(isDiagnosable(swing({ spineAngleDeltaDeg: null, weightShiftPct: null, sequencingScore: null, shoulderTurnDeg: null, headDriftPxNorm: null, hipTurnDeg: null }))).toBe(false);
+  });
+  it('is true for a normal face-on read', () => {
+    expect(isDiagnosable(swing({}))).toBe(true);
+  });
+});
+
 describe('evaluateRep', () => {
   const earlyExt = COACH_FAULTS.find((f) => f.id === 'early_extension')!;
   const pressure = COACH_FAULTS.find((f) => f.id === 'pressure_shift')!;
+  const sway = COACH_FAULTS.find((f) => f.id === 'sway')!;
+
+  it('detects sway improvement on the sub-unity head-drift scale (epsilon bug fix)', () => {
+    // 0.14 → 0.10 is real progress (lower is better); a 0.5 epsilon would have missed it entirely.
+    const r = evaluateRep(sway, swing({ headDriftPxNorm: 0.10 }), 0.14);
+    expect(r.improved).toBe(true);
+    expect(r.line.toLowerCase()).toContain('better');
+  });
 
   it('calls a fixed rep a win (metric reached target)', () => {
     const r = evaluateRep(earlyExt, swing({ spineAngleDeltaDeg: 7 }), 18);

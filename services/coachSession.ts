@@ -86,6 +86,13 @@ function higherIsBetter(f: CoachFault): boolean {
   return f.metric !== 'spineAngleDeltaDeg' && f.metric !== 'headDriftPxNorm' && f.metric !== 'hipSlideRatio';
 }
 
+// Minimum change (in the metric's own units) that counts as real improvement. Degree/score metrics
+// move in whole numbers; the normalized head-drift / hip-slide metrics live in ~0..0.3, so a 0.5
+// epsilon would make improvement impossible to detect for them.
+function improvementEpsilon(f: CoachFault): number {
+  return f.metric === 'headDriftPxNorm' || f.metric === 'hipSlideRatio' ? 0.01 : 0.5;
+}
+
 /**
  * Evaluate one rep against the priority fault. `prevValue` is the last rep's metric (null on the
  * first rep). Produces the coach's spoken feedback: a win when the checkpoint is hit, encouragement
@@ -103,7 +110,8 @@ export function evaluateRep(f: CoachFault, m: SwingBiomechanics, prevValue: numb
     return { value, fixed: true, improved: true, line: `${f.win} ${f.checkpoint}` };
   }
   let improved = false;
-  if (prevValue != null) improved = higherIsBetter(f) ? value > prevValue + 0.5 : value < prevValue - 0.5;
+  const eps = improvementEpsilon(f);
+  if (prevValue != null) improved = higherIsBetter(f) ? value > prevValue + eps : value < prevValue - eps;
 
   if (improved) {
     return { value, fixed: false, improved: true,
@@ -118,7 +126,7 @@ export function progressLine(f: CoachFault, nextPriority: Diagnosis | null): str
   if (nextPriority && nextPriority.fault.id !== f.id) {
     return `That's locked in — great work on ${f.name.toLowerCase()}. Now that it's better, the next thing to sharpen is ${nextPriority.fault.name.toLowerCase()}. Want to keep going, or bank this and finish?`;
   }
-  return `That's the checkpoint, three good ones in a row — you've genuinely changed it. Let's not overcook it. Ready to wrap with your takeaway?`;
+  return `That's the checkpoint hit cleanly, back to back — you've genuinely changed it. Let's not overcook it. Ready to wrap with your takeaway?`;
 }
 
 /** The homework — the ONE thing to leave with, the way a good lesson ends. */
