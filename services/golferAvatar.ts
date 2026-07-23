@@ -77,7 +77,7 @@ export async function stylizeGolferSelfie(selfieUri: string, style: 'caddie' | '
     const b64 = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
     const res = await fetch(apiUrl() + '/api/image-edit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-app-key': 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29' },
       body: JSON.stringify({ imageBase64: b64, prompt: STYLE_PROMPTS[style] }),
       signal: AbortSignal.timeout(45_000),
     });
