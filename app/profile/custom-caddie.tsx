@@ -48,7 +48,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // screen — so the user records their own greetings right where they
 // took the selfie + generated the caddie image.
 import { phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
-import { getApiBaseUrl } from '../../services/apiBase';
+import { getApiBaseUrl, appKeyHeaders } from '../../services/apiBase';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
@@ -211,7 +211,7 @@ export default function CustomCaddieScreen() {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const res = await fetch(apiUrl() + '/api/image-edit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-app-key': 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29' },
+        headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
         body: JSON.stringify({ imageBase64: selfieB64, prompt }),
         // 2026-07-06 (audit) — bound the wait (~1.5× the route's 60s maxDuration)
         // so a dead connection surfaces as an error instead of hanging forever.

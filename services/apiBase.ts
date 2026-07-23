@@ -60,6 +60,20 @@ export function getApiBaseUrl(): string {
 /** @deprecated initial snapshot only — use getApiBaseUrl() for the live value. */
 export const API_BASE_URL: string = activeBase;
 
+/**
+ * 2026-07-23 — the shared PUBLIC app key, single client-side source of truth (was copy-pasted as a
+ * bare literal in golferAvatar / courseCloud / issueLogExport / custom-caddie). Mirrors the server
+ * gate in api/_appKey.ts — keep the two in lockstep. Public by nature (ships in the bundle); it stops
+ * drive-by abuse of paid inference endpoints, not a determined attacker.
+ */
+export const APP_KEY = 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
+
+/** Header carrying the app-key gate for a request to a gated endpoint. Spread into fetch headers:
+ *  `headers: { 'Content-Type': 'application/json', ...appKeyHeaders() }`. */
+export function appKeyHeaders(): Record<string, string> {
+  return { 'x-app-key': APP_KEY };
+}
+
 function isExplicitOverride(): boolean {
   return /^https?:\/\/.+/i.test((process.env.EXPO_PUBLIC_API_URL ?? '').trim());
 }

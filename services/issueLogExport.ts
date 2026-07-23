@@ -12,10 +12,9 @@ import { Linking, Platform, Share } from 'react-native';
 import { useIssueLogStore, type IssueLogEntry } from '../store/issueLogStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { getApiBaseUrl } from './apiBase';
+import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 
-// Same public app key the other consented endpoints use (course-geometry-share / issue-report).
-const ISSUE_APP_KEY = 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
+// App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 const AUTOSEND_DEBOUNCE_MS = 4000;
 const sentIds = new Set<string>();
 let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
@@ -82,7 +81,7 @@ export async function autoSendIssues(): Promise<boolean> {
     const timer = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-key': ISSUE_APP_KEY },
+      headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
       body: JSON.stringify(payload),
       signal: ctrl.signal,
     });

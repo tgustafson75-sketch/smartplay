@@ -1,16 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createHash } from 'crypto';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
+import { requireAppKey } from './_appKey';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60_000, maxRetries: 1 });
 
 // 2026-07-23 (QA — cost control) — this route invokes IMAGE GENERATION (gpt-image-1 fallback), the
 // highest per-call cost in the app, and was fully unauthenticated. Gate on the shared public app key
-// (same class as messaging/course-share) so a curl loop can't bill image-gen indefinitely. It's a
-// low bar (the key ships in the bundle) but stops drive-by abuse; real auth is a broader decision.
-const APP_KEY = process.env.SPC_APP_KEY || 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
-const APP_KEY_HASH = createHash('sha256').update(APP_KEY).digest('hex');
+// (requireAppKey / _appKey.ts) so a curl loop can't bill image-gen indefinitely. It's a low bar (the
+// key ships in the bundle) but stops drive-by abuse; real auth is a broader decision.
 
 /**
  * Image-edit endpoint — selfie / custom-caddie edits + course-image watermark
@@ -92,10 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   // App-key gate (constant-time). Both callers (golferAvatar, custom-caddie) send x-app-key.
-  const provided = String(req.headers['x-app-key'] ?? '').trim();
-  const authed = provided.length === APP_KEY.length &&
-    createHash('sha256').update(provided).digest('hex') === APP_KEY_HASH;
-  if (!authed) return res.status(401).json({ error: 'unauthorized' });
+  if (!requireAppKey(req, res)) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No image provider configured (need GOOGLE_API_KEY or OPENAI_API_KEY)' });
   }

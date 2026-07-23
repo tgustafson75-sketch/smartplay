@@ -10,12 +10,11 @@
  * beta). Off → we never upload. Best-effort + fire-and-forget: a failure never affects the round.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getApiBaseUrl } from './apiBase';
+import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { useSettingsStore } from '../store/settingsStore';
 import type { HoleGeometry } from './courseGeometryService';
 
-// Must match api/course-geometry-share.ts APP_KEY (public app key, same class as the messaging key).
-const SHARE_APP_KEY = 'spc_share_k1_2f8d61b4c07a49e3a1d5e9f60b3c7a29';
+// App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 const CONTRIB_ID_KEY = 'course-cloud-contributor-id-v1';
 const SHARE_TIMEOUT_MS = 8000;
 
@@ -103,7 +102,7 @@ export async function shareCourseGeometry(courseId: string, holes: HoleGeometry[
     const timer = setTimeout(() => ctrl.abort(), SHARE_TIMEOUT_MS);
     const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-geometry-share`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-key': SHARE_APP_KEY },
+      headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
       body: JSON.stringify({ course_id: courseId, contributor, holes: fresh.map(toShareHole) }),
       signal: ctrl.signal,
     });
