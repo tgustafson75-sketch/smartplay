@@ -3,7 +3,7 @@
  * grades it honestly (good / refine / unclear when the metric is missing). Pinned so the coaching
  * verdicts don't drift and the honesty rule (no grade without data) holds.
  */
-import { composeFocusFeedback, focusById, LESSON_FOCUSES } from '../../services/coachLesson';
+import { composeFocusFeedback, focusById, LESSON_FOCUSES, LESSON_PLANS, planById, transitionLine } from '../../services/coachLesson';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
 
 // Minimal analysis object — only the fields under test matter; rest null.
@@ -59,5 +59,25 @@ describe('lesson content', () => {
       expect(f.cue.length).toBeGreaterThan(0);
       expect(focusById(f.id)).toEqual(f);
     }
+  });
+});
+
+describe('guided lesson plans', () => {
+  it('every plan resolves by id and references only real focuses', () => {
+    for (const p of LESSON_PLANS) {
+      expect(planById(p.id)).toEqual(p);
+      expect(p.focusIds.length).toBeGreaterThan(0);
+      expect(p.intro.length).toBeGreaterThan(0);
+      for (const fid of p.focusIds) {
+        expect(focusById(fid)).not.toBeNull();
+      }
+    }
+  });
+
+  it('transitionLine names the next focus and includes its instruction', () => {
+    const f = LESSON_FOCUSES[0];
+    const line = transitionLine(f);
+    expect(line.toLowerCase()).toContain(f.label.toLowerCase());
+    expect(line).toContain(f.instruction);
   });
 });

@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo } from '../../services/poseAnalysisApi';
-import { LESSON_FOCUSES, composeFocusFeedback, focusById, type LessonFocus, type FocusFeedback } from '../../services/coachLesson';
+import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
 import { speak } from '../../services/voiceService';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -37,14 +37,58 @@ export default function CoachLessonScreen() {
   const [rep, setRep] = useState(0);
   const [feedback, setFeedback] = useState<FocusFeedback | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Guided-session state. plan null = single-focus mode. planStep = index into plan.focusIds;
+  // repsOnFocus gates auto-advance (advance after a 'good' rep or 2 reps so nobody gets stuck).
+  const [plan, setPlan] = useState<LessonPlan | null>(null);
+  const [planStep, setPlanStep] = useState(0);
+  const [repsOnFocus, setRepsOnFocus] = useState(0);
 
-  const pickFocus = useCallback((f: LessonFocus) => {
+  const startFocus = (f: LessonFocus, spoken: string) => {
     setFocus(f);
     setFeedback(null);
     setError(null);
+    setRepsOnFocus(0);
     setPhase('ready');
-    say(f.instruction);
+    say(spoken);
+  };
+
+  const pickFocus = useCallback((f: LessonFocus) => {
+    setPlan(null);
+    setPlanStep(0);
+    startFocus(f, f.instruction);
   }, []);
+
+  const startPlan = useCallback((p: LessonPlan) => {
+    const first = focusById(p.focusIds[0]);
+    if (!first) return;
+    setPlan(p);
+    setPlanStep(0);
+    setRep(0);
+    startFocus(first, `${p.intro} ${first.instruction}`);
+  }, []);
+
+  // Whether the current focus is "complete" and the session should offer the next one.
+  const readyToAdvance = plan != null && feedback != null && (feedback.verdict === 'good' || repsOnFocus >= 2);
+  const isLastFocusInPlan = plan != null && planStep >= plan.focusIds.length - 1;
+
+  const advanceFocus = useCallback(() => {
+    if (!plan) return;
+    const nextStep = planStep + 1;
+    if (nextStep >= plan.focusIds.length) {
+      // Session done.
+      say(sessionSummaryLine(plan.label));
+      setPlan(null);
+      setPlanStep(0);
+      setPhase('picker');
+      setFocus(null);
+      setFeedback(null);
+      return;
+    }
+    const next = focusById(plan.focusIds[nextStep]);
+    if (!next) return;
+    setPlanStep(nextStep);
+    startFocus(next, transitionLine(next));
+  }, [plan, planStep]);
 
   const recordSwing = useCallback(async () => {
     if (!focus) return;
@@ -72,6 +116,7 @@ export default function CoachLessonScreen() {
     }
     setFeedback(fb);
     setRep((n) => n + 1);
+    setRepsOnFocus((n) => n + 1);
     setPhase('feedback');
     say(fb.line);
   }, [focus]);
@@ -92,7 +137,20 @@ export default function CoachLessonScreen() {
       {phase === 'picker' ? (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={s.lead}>What do you want to work on?</Text>
-          <Text style={s.dim}>Pick one focus. Your caddie coaches just that — one swing at a time.</Text>
+          <Text style={[s.dim, { textAlign: 'left' }]}>Run a guided session, or pick a single focus. Your caddie coaches one thing at a time as you swing.</Text>
+
+          <Text style={s.sectionLabel}>GUIDED SESSIONS</Text>
+          {LESSON_PLANS.map((p) => (
+            <TouchableOpacity key={p.id} style={s.planRow} onPress={() => startPlan(p)} accessibilityRole="button">
+              <View style={{ flex: 1 }}>
+                <Text style={s.focusLabel}>{p.label}</Text>
+                <Text style={s.planBlurb}>{p.blurb}</Text>
+              </View>
+              <Ionicons name="play-circle" size={22} color={colors.accent} />
+            </TouchableOpacity>
+          ))}
+
+          <Text style={s.sectionLabel}>SINGLE FOCUS</Text>
           {LESSON_FOCUSES.map((f) => (
             <TouchableOpacity key={f.id} style={s.focusRow} onPress={() => pickFocus(f)} accessibilityRole="button">
               <Text style={s.focusLabel}>{f.label}</Text>
@@ -104,7 +162,8 @@ export default function CoachLessonScreen() {
         <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }}>
           <View style={s.focusPill}>
             <Text style={s.focusPillText}>{focus?.label}</Text>
-            {rep > 0 && <Text style={s.repText}>rep {rep}</Text>}
+            {plan && <Text style={s.repText}>step {planStep + 1} of {plan.focusIds.length}</Text>}
+            {rep > 0 && <Text style={s.repText}>· rep {rep}</Text>}
           </View>
 
           {phase === 'analyzing' ? (
@@ -139,13 +198,29 @@ export default function CoachLessonScreen() {
           <View style={{ flex: 1 }} />
 
           {phase !== 'analyzing' && (
-            <TouchableOpacity style={s.primaryBtn} onPress={recordSwing} accessibilityRole="button">
-              <Ionicons name="videocam" size={18} color="#0d1a0d" />
-              <Text style={s.primaryText}>{phase === 'feedback' ? 'Swing again' : 'Record my swing'}</Text>
+            readyToAdvance ? (
+              // In a guided session and this focus is nailed / had its reps — move on.
+              <TouchableOpacity style={s.primaryBtn} onPress={advanceFocus} accessibilityRole="button">
+                <Ionicons name={isLastFocusInPlan ? 'flag' : 'arrow-forward-circle'} size={18} color="#0d1a0d" />
+                <Text style={s.primaryText}>
+                  {isLastFocusInPlan ? 'Finish session' : `Next: ${focusById(plan!.focusIds[planStep + 1])?.label ?? 'continue'}`}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.primaryBtn} onPress={recordSwing} accessibilityRole="button">
+                <Ionicons name="videocam" size={18} color="#0d1a0d" />
+                <Text style={s.primaryText}>{phase === 'feedback' ? 'Swing again' : 'Record my swing'}</Text>
+              </TouchableOpacity>
+            )
+          )}
+          {/* In a session, still allow re-swinging the current focus even when advance is offered. */}
+          {readyToAdvance && phase === 'feedback' && (
+            <TouchableOpacity style={s.secondaryBtn} onPress={recordSwing} accessibilityRole="button">
+              <Text style={s.secondaryText}>One more on this</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={s.secondaryBtn} onPress={() => { setPhase('picker'); setFocus(null); setFeedback(null); }} accessibilityRole="button">
-            <Text style={s.secondaryText}>Change focus</Text>
+          <TouchableOpacity style={s.secondaryBtn} onPress={() => { setPlan(null); setPhase('picker'); setFocus(null); setFeedback(null); }} accessibilityRole="button">
+            <Text style={s.secondaryText}>{plan ? 'End session' : 'Change focus'}</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -163,6 +238,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     dim: { color: colors.text_muted, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
     focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 16, marginTop: 12 },
     focusLabel: { color: colors.text_primary, fontSize: 16, fontWeight: '700' },
+    sectionLabel: { color: colors.text_muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
+    planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: 16, marginTop: 12 },
+    planBlurb: { color: colors.text_muted, fontSize: 13, marginTop: 3 },
     focusPill: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', backgroundColor: colors.surface, borderColor: colors.accent, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 16 },
     focusPillText: { color: colors.accent, fontSize: 14, fontWeight: '800' },
     repText: { color: colors.text_muted, fontSize: 12, fontWeight: '600' },

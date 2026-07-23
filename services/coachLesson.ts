@@ -37,6 +37,45 @@ export function focusById(id: string): LessonFocus | null {
   return LESSON_FOCUSES.find((f) => f.id === id) ?? null;
 }
 
+/**
+ * A guided lesson — an ordered sequence of focuses the caddie works through, a few reps each,
+ * auto-advancing so it plays like a coached session instead of one-off swings. The capture per
+ * rep is unchanged (still turn-based); the PLAN adds the session structure + spoken transitions.
+ */
+export interface LessonPlan {
+  id: string;
+  label: string;
+  /** One-line description shown on the card. */
+  blurb: string;
+  /** Focus ids, in teaching order. */
+  focusIds: string[];
+  /** What the caddie says to open the session. */
+  intro: string;
+}
+
+export const LESSON_PLANS: LessonPlan[] = [
+  { id: 'full-tuneup', label: 'Full swing tune-up', blurb: 'Weight shift → transition → posture', focusIds: ['weight_shift', 'sequencing', 'posture'],
+    intro: "Let's run a full tune-up. We'll work through your weight shift, then your transition, then your posture — a few swings on each. Ready when you are." },
+  { id: 'more-power', label: 'More power', blurb: 'Fuller turn → free hips → shift', focusIds: ['shoulder_turn', 'hip_turn', 'weight_shift'],
+    intro: "This session's about power — a fuller shoulder turn, freer hips, and shifting hard into the ball. Let's build it in that order." },
+  { id: 'better-contact', label: 'Better contact', blurb: 'Posture → steady head → sequence', focusIds: ['posture', 'steady_head', 'sequencing'],
+    intro: "We'll clean up your strike — hold your posture, keep your head quiet, and smooth out the sequence. First up, posture." },
+];
+
+export function planById(id: string): LessonPlan | null {
+  return LESSON_PLANS.find((p) => p.id === id) ?? null;
+}
+
+/** Spoken transition when the session moves to the next focus. */
+export function transitionLine(nextFocus: LessonFocus): string {
+  return `Good work. Now let's shift to ${nextFocus.label.toLowerCase()}. ${nextFocus.instruction}`;
+}
+
+/** Spoken wrap-up when the session's focuses are done. */
+export function sessionSummaryLine(planLabel: string): string {
+  return `That's the ${planLabel.toLowerCase()} done. Nice session — take those feels to the course. Tap to run it again or pick something new.`;
+}
+
 export type FocusVerdict = 'good' | 'refine' | 'unclear';
 export interface FocusFeedback {
   verdict: FocusVerdict;
