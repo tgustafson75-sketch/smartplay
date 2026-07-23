@@ -94,7 +94,41 @@ type CourseSummary = {
 // section even when the API hasn't been called yet. Rating/slope mirror
 // data/courses.ts COURSES — the simulator's source of truth for these
 // courses' geometry + walks.
+// How many nearby courses to show before the "Show all" toggle. 5 per Tim's
+// spec (2026-07-22): closest 5 by default, everything else one tap away.
+const NEARBY_COLLAPSED = 5;
+
 const LOCAL_COURSES: CourseSummary[] = [
+  // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
+  // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
+  {
+    id: 'local:highland-links',
+    club_name: 'Highland Links',
+    location: 'Truro, MA',
+    rating: null, slope: null, isLocal: true, thumbnail: null,
+    lat: 42.0366308, lng: -70.0589550,
+  },
+  {
+    id: 'local:miccosukee',
+    club_name: 'Miccosukee G&CC',
+    location: 'Miami, FL',
+    rating: null, slope: null, isLocal: true, thumbnail: null,
+    lat: 25.7113237, lng: -80.4219701,
+  },
+  {
+    id: 'local:killian-greens',
+    club_name: 'Killian Greens',
+    location: 'Miami, FL',
+    rating: null, slope: null, isLocal: true, thumbnail: null,
+    lat: 25.6747540, lng: -80.3600897,
+  },
+  {
+    id: 'local:redlands-cc',
+    club_name: 'Redlands Country Club',
+    location: 'Redlands, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: null,
+    lat: 34.0250333, lng: -117.1514339,
+  },
   {
     id: 'local:palms',
     club_name: 'Menifee Lakes — Palms',
@@ -373,6 +407,10 @@ export default function PlayTab() {
   const setSetupTransport = useRoundStore(s => s.setTransportMode);
 
   const [query, setQuery] = useState('');
+  // 2026-07-22 (Tim) — nearby list shows the 5 CLOSEST by default; the rest
+  // (incl. beta-tester courses far from the player, e.g. Highland in MA) are
+  // one tap away via "Show all". Collapsible back down so the screen stays clean.
+  const [showAllCourses, setShowAllCourses] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<CourseSummary[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -994,7 +1032,7 @@ export default function PlayTab() {
           </TouchableOpacity>
         )}
         <View style={styles.localList}>
-          {closestLocal.map(c => {
+          {(showAllCourses ? closestLocal : closestLocal.slice(0, NEARBY_COLLAPSED)).map(c => {
             const isActive = selected?.id === c.id || activeCourseId === c.id;
             return (
               <TouchableOpacity
@@ -1039,6 +1077,22 @@ export default function PlayTab() {
               </TouchableOpacity>
             );
           })}
+          {/* Show-all / minimize toggle — only when there's more than the
+              collapsed count. Lets the owner see every beta-tester course
+              (some far away) without cluttering the default view. */}
+          {closestLocal.length > NEARBY_COLLAPSED && (
+            <TouchableOpacity
+              style={styles.showAllRow}
+              onPress={() => setShowAllCourses(v => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showAllCourses ? 'Show fewer courses' : `Show all ${closestLocal.length} courses`}
+            >
+              <Text style={styles.showAllText}>
+                {showAllCourses ? 'Show less' : `Show all ${closestLocal.length} courses`}
+              </Text>
+              <AppIcon name={showAllCourses ? 'chevron-up' : 'chevron-down'} size={16} color="#00C896" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Course search — golfcourseapi-backed lookup for non-local courses. */}
@@ -1517,6 +1571,11 @@ return StyleSheet.create({
     paddingVertical: 14, borderRadius: 12,
   },
   localList: { paddingHorizontal: 16, gap: 6 },
+  showAllRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, marginTop: 2,
+  },
+  showAllText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
   localRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: c.surface, borderRadius: 12,
