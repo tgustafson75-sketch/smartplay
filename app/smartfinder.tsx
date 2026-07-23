@@ -50,6 +50,7 @@ import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../serv
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeDistance, computeHeightRangedDistance, REFERENCE_HEIGHTS } from '../services/rangefinder';
+import { detectMeasureReference } from '../services/measureScan';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -731,7 +732,7 @@ function CameraSmartFinder({
               onHeadingUpdate={onHeadingUpdate}
             />
           ) : mode === 'measure' ? (
-            <MeasureCameraOverlay />
+            <MeasureCameraOverlay cameraRef={cameraRef} />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
           )}
@@ -1693,13 +1694,16 @@ function TargetCameraOverlay({
 // and the angular height it fills gives the distance — no GPS, no course data, any distance.
 // The camera-TILT rangefinder (target mode) caps at ~50 yds; this doesn't. Model mirrors
 // PuttCameraOverlay's two-tap capture; the math is services/rangefinder.computeHeightRangedDistance.
-function MeasureCameraOverlay() {
+function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<CameraView | null> }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [viewH, setViewH] = useState(0);
+  const [viewW, setViewW] = useState(0);
   const [topPt, setTopPt] = useState<{ x: number; y: number } | null>(null);
   const [basePt, setBasePt] = useState<{ x: number; y: number } | null>(null);
   const [refId, setRefId] = useState(REFERENCE_HEIGHTS[0].id);
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
   const ref = REFERENCE_HEIGHTS.find((r) => r.id === refId) ?? REFERENCE_HEIGHTS[0];
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
@@ -1707,8 +1711,41 @@ function MeasureCameraOverlay() {
     if (!topPt) setTopPt({ x: locationX, y: locationY });
     else if (!basePt) setBasePt({ x: locationX, y: locationY });
     else { setTopPt({ x: locationX, y: locationY }); setBasePt(null); } // third tap restarts
+    setAutoMsg(null);
   }, [topPt, basePt]);
-  const reset = () => { setTopPt(null); setBasePt(null); };
+  const reset = () => { setTopPt(null); setBasePt(null); setAutoMsg(null); };
+
+  // 2026-07-23 — Auto-detect: capture a frame, let the vision brain find the flag/person's
+  // top + base, and drop the two markers automatically. The model returns NORMALIZED image
+  // coords; setting the markers as normalized×view means the existing `result` (which divides
+  // y by viewH) recovers the exact image-normalized y the ranging math needs. HONEST fallback:
+  // found=false → keep the manual two-tap and tell the user what to do.
+  const runAutoDetect = useCallback(async () => {
+    if (autoBusy || !cameraRef.current || viewH === 0) return;
+    setAutoBusy(true);
+    setAutoMsg(null);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5, base64: true, skipProcessing: true });
+      const b64 = photo?.base64;
+      if (!b64) { setAutoMsg('Could not capture a frame — try again or tap manually.'); return; }
+      const det = await detectMeasureReference(b64);
+      if (!det.found || !det.top || !det.base) {
+        setAutoMsg('No flag or person clearly in view — tap the top and base yourself.');
+        return;
+      }
+      // Match the reference chip to what was detected so ref.meters reflects the real height.
+      const matchedId = det.kind === 'flagstick' ? 'flagstick' : det.kind === 'person' ? 'person' : refId;
+      setRefId(matchedId);
+      const w = viewW || 1;
+      setTopPt({ x: det.top.x * w, y: det.top.y * viewH });
+      setBasePt({ x: det.base.x * w, y: det.base.y * viewH });
+      setAutoMsg(null);
+    } catch {
+      setAutoMsg('Auto-detect failed — tap the top and base yourself.');
+    } finally {
+      setAutoBusy(false);
+    }
+  }, [autoBusy, cameraRef, viewH, viewW, refId]);
 
   // TOP = the smaller y (higher on screen); order-independent so tapping base first still works.
   const result = topPt && basePt && viewH > 0
@@ -1726,7 +1763,7 @@ function MeasureCameraOverlay() {
         activeOpacity={1}
         style={StyleSheet.absoluteFill}
         onPress={handleTap}
-        onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
+        onLayout={(e) => { setViewH(e.nativeEvent.layout.height); setViewW(e.nativeEvent.layout.width); }}
       />
 
       {/* Reference-target chips — what are we ranging off? */}
@@ -1763,8 +1800,24 @@ function MeasureCameraOverlay() {
 
       {/* Bottom panel — instruction while capturing, distance once both taps land */}
       <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+        {/* Auto-detect — hands-free capture of a flagstick / person. Shown until a read lands. */}
+        {!(topPt && basePt && result && !result.unmeasurable) && (
+          <TouchableOpacity
+            onPress={runAutoDetect}
+            disabled={autoBusy}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'center', marginBottom: 10, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 22, backgroundColor: '#003d20', borderWidth: 1, borderColor: '#00C896', opacity: autoBusy ? 0.6 : 1 }}
+            accessibilityRole="button"
+            accessibilityLabel="Auto-detect a flag or person to measure"
+          >
+            {autoBusy ? <ActivityIndicator size="small" color="#00C896" /> : <Ionicons name="scan-outline" size={18} color="#00C896" />}
+            <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800' }}>{autoBusy ? 'Scanning…' : 'Auto-detect'}</Text>
+          </TouchableOpacity>
+        )}
+        {autoMsg && (
+          <Text style={{ color: '#F0C030', fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>{autoMsg}</Text>
+        )}
         {!topPt ? (
-          <Text style={styles.instructionText}>Tap the TOP of the {ref.label.replace(/\s*\(.*\)$/, '')}</Text>
+          <Text style={styles.instructionText}>Auto-detect, or tap the TOP of the {ref.label.replace(/\s*\(.*\)$/, '')}</Text>
         ) : !basePt ? (
           <Text style={styles.instructionText}>Now tap its BASE (the ground)</Text>
         ) : result && !result.unmeasurable ? (
