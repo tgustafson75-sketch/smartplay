@@ -645,10 +645,14 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       // All providers missed — graceful 200 so the client speaks a warm line and
       // re-prompts, instead of tripping the voice circuit breaker on a 502.
       console.error('[pipecat-turn] all providers failed:', lastErr instanceof Error ? lastErr.message : String(lastErr));
+      // 2026-07-23 (V1 fix) — self-identify the degrade so the client can fall back to the local
+      // brain instead of treating this canned dead-air as a real answer (scoring/logging it).
       return res.status(200).json({
         response_text: 'Give me one sec and ask me again.',
         tool_actions: [],
         updated_history: history,
+        degraded: true,
+        error: lastErr instanceof Error ? lastErr.message : 'all_providers_failed',
       });
     }
 
@@ -675,6 +679,7 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       response_text: 'Give me one sec and ask me again.',
       tool_actions: [],
       updated_history: (req.body as { history?: unknown })?.history ?? [],
+      degraded: true,
       error: msg,
     });
   }

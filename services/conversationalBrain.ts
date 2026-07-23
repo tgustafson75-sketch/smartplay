@@ -49,7 +49,11 @@ async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainRe
       }),
     }).finally(() => clearTimeout(t));
     if (!resp.ok) return null;
-    const j = (await resp.json()) as { response_text?: string; tool_actions?: unknown[]; updated_history?: { role: string; content: string }[] };
+    const j = (await resp.json()) as { response_text?: string; tool_actions?: unknown[]; updated_history?: { role: string; content: string }[]; degraded?: boolean };
+    // 2026-07-23 (V1 fix) — the server returns 200 with degraded:true when all providers failed /
+    // it threw. Treat it as a miss so this path falls through to tryKevin instead of returning the
+    // canned "ask me again" as a legitimate source:'pipecat' answer.
+    if (j.degraded === true) return null;
     let text = typeof j.response_text === 'string' && j.response_text.trim() ? j.response_text : null;
     const hasTools = Array.isArray(j.tool_actions) && j.tool_actions.length > 0;
     // 2026-07-06 (voice-lifecycle audit #11) — a TOOL-ONLY reply (empty text, real

@@ -255,6 +255,40 @@ export function usePipecatVoice({
     // NOT trigger the consumer's sendToBrain fallback — that would double-answer.
     let spokeResponse = false;
 
+    // 2026-07-23 (V1 root-cause fix) — ONE degrade handler for BOTH a non-ok response AND a
+    // graceful-200 degrade (the server returns 200 with `degraded:true` on all-providers-failed /
+    // exception to avoid tripping the voice circuit breaker). Without honoring the flag, the client
+    // spoke + SCORED + LOGGED the canned "ask me again" as a real answer. Fall to the offline caddie
+    // (round state + golf KB, device-TTS) or capture the utterance for later — never score a degrade.
+    const speakOfflineOrCapture = async () => {
+      const settings = useSettingsStore.getState();
+      const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+      onVoiceStateChange?.('speaking');
+      let spokeOffline = false;
+      try {
+        const off = answerOffline(transcript, lang);
+        if (off?.text) {
+          onKevinSpoke?.(off.text);
+          await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
+          spokeOffline = true;
+        }
+      } catch { /* offline best-effort */ }
+      if (!spokeOffline) {
+        let captured = false;
+        try {
+          const { captureOfflineStatement } = await import('../services/voiceLogService');
+          captured = captureOfflineStatement(transcript);
+        } catch { /* best-effort */ }
+        const { speakDeviceNotice } = await import('../services/voiceService');
+        if (captured) {
+          await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
+        } else {
+          await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
+        }
+      }
+      onVoiceStateChange?.('idle');
+    };
+
     try {
       const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
         method: 'POST',
@@ -287,38 +321,7 @@ export function usePipecatVoice({
         // but NOT this default pipecat failure branch, so a dead-network turn got a
         // useless "ask me again" even though a real offline answer existed.
         devLog('[pipecat] /turn error:', resp.status);
-        const settings = useSettingsStore.getState();
-        const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-        onVoiceStateChange?.('speaking');
-        let spokeOffline = false;
-        try {
-          const off = answerOffline(transcript, lang);
-          if (off?.text) {
-            onKevinSpoke?.(off.text);
-            await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
-            spokeOffline = true;
-          }
-        } catch { /* offline best-effort */ }
-        if (!spokeOffline) {
-          // 2026-07-04 (Tim — "when all else fails, log statements stored for the round,
-          // ingested later if no signal") — the brain is unreachable AND the local
-          // caddie had no answer, so this is a STATEMENT to save, not a status query.
-          // Capture it against the round so nothing is lost, and confirm via the DEVICE
-          // voice (expo-speech, works with zero signal). When we reconnect the note is
-          // handed back to the caddie + shown in recap.
-          let captured = false;
-          try {
-            const { captureOfflineStatement } = await import('../services/voiceLogService');
-            captured = captureOfflineStatement(transcript);
-          } catch { /* best-effort */ }
-          const { speakDeviceNotice } = await import('../services/voiceService');
-          if (captured) {
-            await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
-          } else {
-            await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
-          }
-        }
-        onVoiceStateChange?.('idle');
+        await speakOfflineOrCapture();
         return;
       }
 
@@ -326,7 +329,18 @@ export function usePipecatVoice({
         response_text: string;
         tool_actions: Array<Record<string, unknown>>;
         updated_history: ConversationMessage[];
+        degraded?: boolean;
+        error?: string;
       };
+
+      // 2026-07-23 (V1 fix) — a graceful-200 degrade (all providers failed / server threw). Treat it
+      // exactly like a non-ok: fall to the offline caddie and DO NOT update history / score / log it
+      // as a real turn. Return before setPipecatHistory so the canned line never enters the history.
+      if (data.degraded === true) {
+        devLog('[pipecat] degraded 200:', data.error);
+        await speakOfflineOrCapture();
+        return;
+      }
 
       // Update the shared history, capped to avoid unbounded growth
       setPipecatHistory(data.updated_history ?? []);
