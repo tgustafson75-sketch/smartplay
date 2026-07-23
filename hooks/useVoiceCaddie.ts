@@ -22,7 +22,6 @@ import { initFillerLibrary } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
 import { checkContent } from '../services/contentGuardrail';
-import { resolveAckClip } from '../services/quickAckClips';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
@@ -2117,17 +2116,22 @@ export const useVoiceCaddie = ({
         // Fall through to brain on routing errors — never get stuck.
       }
 
-      // ── Conversational fallback to the BRAIN ──────────────────────────────
+      // ── Conversational turn → the pipecat BRAIN ───────────────────────────
       // Only a CONVERSATIONAL / unknown turn reaches here (the router above already
-      // handled + returned for any deterministic command, on BOTH orchestrators).
-      // In pipecat mode the live brain owns the turn; otherwise the kevin path.
+      // handled + returned for any deterministic command). The pipecat brain owns it:
+      // processTranscriptOverride is always supplied by the sole mount (app/(tabs)/
+      // caddie.tsx) while voiceOrchestrator==='pipecat' — the forced default that
+      // setVoiceOrchestrator (zero callers) cannot flip. The old legacy /api/kevin
+      // fallthrough that used to live here is DELETED (2026-07-23); sendToBrain now
+      // survives only for the follow-up listen loop (processFollowUp). New brain-bound
+      // settings go through services/voice/brainSettings.ts (buildPipecatContext →
+      // api/pipecat-turn), NOT here.
       if (processTranscriptOverride) {
         wrappedOnVoiceStateChange('thinking');
         // Pipecat owns the turn (its own re-entrancy + end state). Release
         // isProcessingRef BEFORE the await so a follow-up re-listen isn't blocked
         // (the "asks but doesn't listen" regression), and do NOT force 'idle' after
-        // — processTurn sets the final state. Don't fall through to kevin on error
-        // (single-path; avoids double-processing a flaky turn).
+        // — processTurn sets the final state.
         isProcessingRef.current = false;
         try {
           await processTranscriptOverride(transcript);
@@ -2137,98 +2141,9 @@ export const useVoiceCaddie = ({
         }
         return;
       }
-
-      // ⚠️ DEAD LEGACY BRAIN PATH — everything from here through recordKevinTurn is UNREACHABLE in
-      // production. processTranscriptOverride (the pipecat brain) is always supplied by the sole mount
-      // (app/(tabs)/caddie.tsx) whenever voiceOrchestrator==='pipecat', which is the DEFAULT and is
-      // force-set by the v15 migration — and setVoiceOrchestrator has ZERO callers, so it can never
-      // flip. The pipecat branch above ALWAYS returns first. Kept only as a legacy-fallback shell.
-      // DO NOT wire new settings/features here — they will silently do nothing on the live path (that
-      // was the cecily/response/intensity bug). New brain-bound settings go through
-      // services/voice/brainSettings.ts (buildPipecatContext → api/pipecat-turn). Physical removal of
-      // this block + sendToBrain is a device-tested follow-up (harmless while dead).
-      // 2026-06-10 — Pre-response conversational filler REMOVED. It fired at
-      // 400ms, but the warm brain now answers in 4-6s, so the short filler
-      // ("Let me see...") finished ~2s in and left 2-4s of dead air before the
-      // real reply — or got chopped mid-word on fast turns. Worse, the brain
-      // already opens conversationally ("I hear you...", "Yeah, so..."), so the
-      // filler double-acknowledged. Cleaner: ask -> brief visual thinking state
-      // -> Kevin's natural answer. (Tool-action ack clips below are unaffected —
-      // those confirm an action and are still valuable.)
-      const rawResponse = await sendToBrain(transcript);
-      const kevinResponse = {
-        ...rawResponse,
-        ...checkContent(rawResponse.text, rawResponse.audioBase64),
-      };
-      // 2026-06-04 — Speak BEFORE navigating; see the intent-router branch
-      // for the rationale. onToolAction moved BELOW the speak await.
-      onResponseReceived(kevinResponse.text);
-      // Phase AR — record Kevin's reply so the next user follow-up has it
-      // available as conversational antecedent.
-      // 2026-07-06 (voice-parity F3) — but NOT when it's a fallback degrade line:
-      // logging a canned "having trouble connecting" as a real turn poisons the
-      // conversational antecedent (the next turn thinks the caddie "said" that).
-      if (!kevinResponse.fallback) recordKevinTurn(kevinResponse.text);
-      wrappedOnVoiceStateChange('speaking');
-      // Defensive: clear any lingering audio (e.g. an interrupted prior reply)
-      // before the answer. stopSpeaking() bumps the speak-queue generation, so
-      // any currently-playing clip stops and queued-but-not-running bodies skip.
-      await stopSpeaking();
-      // 2026-06-06 — Pre-rendered ack-clip shortcut. The brain's
-      // defaults map (api/kevin.ts) emits 8 fixed strings for tool
-      // actions ("Got it.", "On it.", etc.) that don't need a fresh
-      // OpenAI TTS round-trip each time. If a matching pre-rendered
-      // mp3 is bundled for the current persona, play that locally;
-      // saves ~$0.001 + 400ms per tool fire. Falls back to the
-      // standard audioBase64 / speak() path when no clip is bundled
-      // (today: all null until scripts/render-ack-clips.ts runs).
-      const ackPersona = (useSettingsStore.getState().caddiePersonality ?? 'kevin') as string;
-      const ackClip = resolveAckClip(kevinResponse.text, ackPersona);
-      if (ackClip != null && voiceEnabled) {
-        // playLocalFile expects a uri string; require()'d module ids
-        // are passed through Audio.Sound.createAsync which accepts
-        // both string and number sources. Cast through unknown.
-        try {
-          await playLocalFile(ackClip, undefined, { userInitiated: true });
-        } catch (e) {
-          console.log('[voice] ack clip play failed, falling back to speak:', e);
-          if (kevinResponse.audioBase64) {
-            await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
-          } else {
-            await speakResponse(kevinResponse.text);
-          }
-        }
-      } else if (kevinResponse.audioBase64 && voiceEnabled) {
-        // Phase V.7+ — user-initiated reply, plays at L1 too.
-        await speakFromBase64(kevinResponse.audioBase64, { userInitiated: true });
-      } else if (voiceEnabled) {
-        // 2026-06-21 — audioBase64 is null: Kevin either failed (catch block
-        // returned error text) or TTS failed inside kevin.ts. DON'T call
-        // speakResponse() → /api/voice here — that's another cold Lambda that
-        // takes 20s to fail and produce robot voice. Speak via device TTS
-        // immediately (<1s). Error messages don't need ElevenLabs quality.
-        void speakDeviceNotice(kevinResponse.text, language, voiceGender).catch(() => {});
-      }
-      // 2026-06-04 — Navigation fires AFTER speak completes (see brain
-      // path comment above).
-      // 2026-07-10 (audit V3) — dispatch every action from a multi-action turn.
-      if (kevinResponse.toolActions?.length) kevinResponse.toolActions.forEach(a => onToolAction?.(a));
-      else if (kevinResponse.toolAction) onToolAction?.(kevinResponse.toolAction);
-
-      // 2026-05-25 — Fix B: auto-listen after Kevin asks a follow-up.
-      // When Kevin's reply ends with a question, open the mic for
-      // ~6s automatically. If user replies → process via the brain
-      // (skipping intent classifier — Kevin's question framed the
-      // response). If silence → gentle nudge → 6s more. If silence
-      // again → quietly idle. Eliminates the "Kevin asks but isn't
-      // listening" gap Tim flagged tonight.
-      const kevinText = (kevinResponse.text ?? '').trim();
-      const endsWithQuestion = endsAsQuestion(kevinText);
-      if (endsWithQuestion && voiceEnabled && !userInterruptedRef.current) {
-        await runFollowUpListenLoop();
-      }
-
-      wrappedOnVoiceStateChange('idle');
+      // processTranscriptOverride is always supplied in production (see above). If it
+      // were ever absent, the turn falls through to the catch/finally below as a safe
+      // no-op — NOT the deleted legacy brain path.
 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? '');

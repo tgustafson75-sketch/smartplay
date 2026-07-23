@@ -4193,8 +4193,8 @@ check('Voice warmup fires on voice-surface mount + app foreground (not just gree
 check('Pre-response conversational filler removed from the main voice path',
   !/FILLER_DELAY_MS/.test(vcWarmSrc) &&
     !/getClipForCategory\(classifyQuery/.test(vcWarmSrc) &&
-    /const rawResponse = await sendToBrain\(transcript\)/.test(vcWarmSrc),
-  "the 'Let me see...' bridge no longer fires before Kevin's reply (it conflicted with the now-fast brain that already opens conversationally); the brain response is awaited directly and tool-action ack clips are untouched");
+    /await processTranscriptOverride\(transcript\)/.test(vcWarmSrc),
+  "the 'Let me see...' bridge no longer fires before the reply (it conflicted with the now-fast brain that already opens conversationally); the conversational turn is handed straight to the pipecat brain (processTranscriptOverride) — the legacy /api/kevin fallthrough was deleted 2026-07-23");
 
 // 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
 // the metered track (acoustic candidates the video confirms). Course stays off.
