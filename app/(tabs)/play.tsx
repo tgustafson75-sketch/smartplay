@@ -46,6 +46,7 @@ import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '.
 import { getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
+import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
@@ -776,6 +777,12 @@ export default function PlayTab() {
             !(Math.abs(c.location.latitude) < 0.001 && Math.abs(c.location.longitude) < 0.001)
               ? { lat: c.location.latitude, lng: c.location.longitude }
               : null;
+          // 2026-07-22 (Tim) — booking coverage for ANY searched/opened course: anchor its
+          // REAL website + booking URL from Google Places so the tee-time button opens the
+          // course's own booking widget (teeTimeLink tier 1) instead of only a Google search.
+          // Idempotent (skips if already anchored) + best-effort; fire-and-forget so it never
+          // blocks the geometry/hero warm.
+          void lookupCoursePlaces({ courseId: c.id, name: c.club_name, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null });
           await fetchCourseGeometry(c.id, { courseLocation });
           const tee = c.tees[0];
           if (tee) {
