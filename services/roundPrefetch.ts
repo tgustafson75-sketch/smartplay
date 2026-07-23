@@ -138,24 +138,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
     // satellite canvas offline mid-round.
     tileP = geometryP
       .then(() => {
-        const tileInputs: HoleImageryInput[] = holes
-          .map((h) => {
-            const geo = getHoleGeometry(courseId, h.hole);
-            const tee = geo?.tee
-              ?? (typeof h.teeLat === 'number' && typeof h.teeLng === 'number' ? { lat: h.teeLat, lng: h.teeLng } : null);
-            const green = geo?.green
-              ?? (typeof h.middleLat === 'number' && typeof h.middleLng === 'number' ? { lat: h.middleLat, lng: h.middleLng } : null);
-            if (!tee || !green) return null;
-            return {
-              courseId,
-              holeNumber: h.hole,
-              par: h.par,
-              yardage: typeof h.distance === 'number' ? h.distance : 350,
-              tee,
-              green,
-            } as HoleImageryInput;
-          })
-          .filter((x): x is HoleImageryInput => x != null);
+        const tileInputs = buildTileInputs(courseId, holes);
         if (tileInputs.length === 0) {
           console.log('[roundPrefetch] mapbox skipped — no holes have full tee+green coords');
           return;
@@ -171,4 +154,89 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
 
   await Promise.allSettled([geometryP, contentP, intelP, tileP]);
   console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms');
+}
+
+// Courses whose SmartVision imagery we've already warmed this session, so
+// tapping through the course list doesn't re-fire geometry + 18 tiles every
+// time. Cleared on app restart (module lifetime).
+const imageryWarmed = new Set<string>();
+
+// Minimal hole shape the tile builder needs. CourseHole satisfies it; API/searched
+// courses can pass just {hole,par,distance} and rely on getHoleGeometry for coords.
+type TileHole = {
+  hole: number;
+  par: number;
+  distance: number;
+  teeLat?: number;
+  teeLng?: number;
+  middleLat?: number;
+  middleLng?: number;
+};
+
+/** Build Mapbox tile inputs for every hole that has (or can fall back to) tee+green coords. */
+function buildTileInputs(courseId: string, holes: TileHole[]): HoleImageryInput[] {
+  return holes
+    .map((h) => {
+      const geo = getHoleGeometry(courseId, h.hole);
+      const tee = geo?.tee
+        ?? (typeof h.teeLat === 'number' && typeof h.teeLng === 'number' ? { lat: h.teeLat, lng: h.teeLng } : null);
+      const green = geo?.green
+        ?? (typeof h.middleLat === 'number' && typeof h.middleLng === 'number' ? { lat: h.middleLat, lng: h.middleLng } : null);
+      if (!tee || !green) return null;
+      return {
+        courseId,
+        holeNumber: h.hole,
+        par: h.par,
+        yardage: typeof h.distance === 'number' ? h.distance : 350,
+        tee,
+        green,
+      } as HoleImageryInput;
+    })
+    .filter((x): x is HoleImageryInput => x != null);
+}
+
+/**
+ * 2026-07-23 (Tim — "build hole images on demand as the user selects a course").
+ *
+ * Lighter sibling of prefetchRoundData: when a course is SELECTED (not yet
+ * started), warm just the SmartVision visual layer — course geometry + the
+ * per-hole satellite tiles — and persist it so the hole maps are instantly
+ * ready (and offline) before the round even begins. Skips the heavier
+ * brain-context fetches (content/intelligence); those stay at round start.
+ *
+ * Idempotent per session (imageryWarmed guard) so scrolling/tapping through
+ * the course list doesn't re-fire. Fire-and-forget; never throws.
+ *
+ * Note on AI-vision derivation: holes with NO coords (a fully-unknown searched
+ * course) are skipped here — deriving a distinct green per hole needs a rough
+ * per-hole seed, which we don't have from a single centroid. That fill lands
+ * with the Course Cloud crowd-source step (per-hole seeds + shared DB).
+ */
+export async function prefetchCourseImagery(args: {
+  courseId: string;
+  courseName: string;
+  courseLocation?: { lat: number; lng: number } | null;
+  holes: TileHole[];
+}): Promise<void> {
+  const { courseId, courseName, courseLocation, holes } = args;
+  if (!courseId || !Array.isArray(holes) || holes.length === 0) return;
+  if (imageryWarmed.has(courseId)) return;
+  imageryWarmed.add(courseId);
+  console.log('[roundPrefetch] imagery warm on select for', courseId, '— holes:', holes.length);
+
+  try {
+    await fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null }).catch(() => null);
+    if (!isMapboxConfigured()) return;
+    const tileInputs = buildTileInputs(courseId, holes);
+    if (tileInputs.length === 0) {
+      console.log('[roundPrefetch] imagery warm skipped — no holes have tee+green coords yet:', courseId);
+      return;
+    }
+    await prefetchHoles(tileInputs);
+    console.log('[roundPrefetch] imagery warm done for', courseId, '— tiles:', tileInputs.length);
+  } catch (e) {
+    // Un-warm so a later selection can retry after a transient failure.
+    imageryWarmed.delete(courseId);
+    console.log('[roundPrefetch] imagery warm failed (non-fatal):', e instanceof Error ? e.message : String(e), courseName);
+  }
 }

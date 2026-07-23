@@ -47,6 +47,7 @@ import { getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
+import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
@@ -768,6 +769,17 @@ export default function PlayTab() {
       // pendingStartCourseId — which triggers an auto-launch round when
       // the Caddie tab sees it. previewCourseId is a render-only hint.
       useRoundStore.getState().setPreviewCourse(s.id);
+      // 2026-07-23 (Tim) — build SmartVision hole imagery on selection: warm course
+      // geometry + per-hole satellite tiles now so the maps are instant (and offline)
+      // before the round starts. Fire-and-forget, once-per-session per course.
+      if (bundledHoles.length > 0) {
+        void prefetchCourseImagery({
+          courseId: s.id,
+          courseName: s.club_name,
+          courseLocation: s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
+          holes: bundledHoles,
+        });
+      }
       return;
     }
     setSelectedLoading(true);
@@ -794,6 +806,17 @@ export default function PlayTab() {
           // blocks the geometry/hero warm.
           void lookupCoursePlaces({ courseId: c.id, name: c.club_name, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null });
           await fetchCourseGeometry(c.id, { courseLocation });
+          // Build SmartVision hole imagery on selection for searched/API courses too —
+          // geometry (just fetched) + per-hole satellite tiles, persisted for offline.
+          const teeHoles = c.tees[0]?.holes ?? [];
+          if (teeHoles.length > 0) {
+            void prefetchCourseImagery({
+              courseId: c.id,
+              courseName: c.club_name,
+              courseLocation,
+              holes: teeHoles.map((h, i) => ({ hole: h.hole_number ?? i + 1, par: h.par ?? 4, distance: h.yardage ?? 0 })),
+            });
+          }
           const tee = c.tees[0];
           if (tee) {
             const url = getCourseImageryUrl({
