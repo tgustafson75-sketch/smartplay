@@ -230,13 +230,59 @@ function cacheKey(courseId: string): string {
 }
 
 /** Synchronous cache read — returns the in-memory copy if present, else null. */
-export function getCachedGeometry(courseId: string): CourseGeometry | null {
-  return memCache.get(courseId) ?? null;
+// 2026-07-23 (Tim — "the new courses show no geometry / green screen") — bundled-course geometry.
+// Courses authored in data/courses.ts (Highland Links, Miccosukee, Killian, Redlands) have full
+// screenshot-anchored per-hole tee/green coords but NO golfcourseapi id or LOCAL_COURSE_CENTROIDS
+// entry, so fetchCourseGeometry's API/OSM path returns null → every consumer read "no geometry" and
+// no satellite tile rendered. Their bundled coords ARE curated ground truth, so hydrate geometry
+// straight from them. This is a SYNC fallback for the cache readers (renders instantly, offline),
+// and the async fetch prefers it too. Real API geometry, once loaded into memCache, still wins.
+const bundledGeomCache = new Map<string, CourseGeometry | null>();
+function isGeoCoord(lat?: number, lng?: number): lat is number {
+  return typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
+    && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001);
+}
+function buildBundledGeometry(courseId: string): CourseGeometry | null {
+  if (!courseId) return null;
+  if (bundledGeomCache.has(courseId)) return bundledGeomCache.get(courseId) ?? null;
+  let result: CourseGeometry | null = null;
+  try {
+    // Dynamic require avoids any import cycle with data/courses (same pattern as roundStore below).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+    const holes = getBundledHoles(courseId);
+    const geoHoles: HoleGeometry[] = holes
+      .filter(h => isGeoCoord(h.teeLat, h.teeLng) || isGeoCoord(h.middleLat, h.middleLng))
+      .map(h => ({
+        hole_number: h.hole,
+        par: h.par,
+        yardage: h.distance,
+        tee: isGeoCoord(h.teeLat, h.teeLng) ? { lat: h.teeLat, lng: h.teeLng } : null,
+        green: isGeoCoord(h.middleLat, h.middleLng) ? { lat: h.middleLat, lng: h.middleLng } : null,
+        green_front: isGeoCoord(h.frontLat, h.frontLng) ? { lat: h.frontLat, lng: h.frontLng } : null,
+        green_back: isGeoCoord(h.backLat, h.backLng) ? { lat: h.backLat, lng: h.backLng } : null,
+        bearing_deg: null,
+        hazards: [],
+        fairway_centerline: [],
+        green_outline: [],
+      }));
+    if (geoHoles.length > 0) {
+      result = { course_id: courseId, course_name: courseId, fetched_at: Date.now(), holes: geoHoles };
+    }
+  } catch (e) {
+    console.warn('[courseGeometry] bundled hydrate failed for', courseId, e);
+  }
+  bundledGeomCache.set(courseId, result);
+  return result;
 }
 
-/** Returns a single hole's geometry from cache, or null if not loaded. */
+export function getCachedGeometry(courseId: string): CourseGeometry | null {
+  return memCache.get(courseId) ?? buildBundledGeometry(courseId);
+}
+
+/** Returns a single hole's geometry from cache (or bundled coords), or null if none exists. */
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
-  const c = memCache.get(courseId);
+  const c = memCache.get(courseId) ?? buildBundledGeometry(courseId);
   return c?.holes.find(h => h.hole_number === holeNumber) ?? null;
 }
 
@@ -421,8 +467,10 @@ export async function fetchCourseGeometry(
     if (real) {
       upstreamId = real;
     } else if (!centroid) {
-      // No upstream and no centroid — nothing we can do.
-      return persisted ?? null;
+      // No upstream and no centroid — but a bundled course carries its own coords. Use them.
+      const bundled = buildBundledGeometry(courseId);
+      if (bundled) { memCache.set(courseId, bundled); void writePersistedCache(bundled).catch(() => undefined); return bundled; }
+      return persisted ?? buildBundledGeometry(courseId) ?? null;
     } else {
       // No upstream mapping but we know where the course is. Fall
       // through to an OSM-only request below (the server endpoint
@@ -482,7 +530,7 @@ export async function fetchCourseGeometry(
     const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] fetch failed:', res.status);
-      return persisted ?? null;
+      return persisted ?? buildBundledGeometry(courseId) ?? null;
     }
     const geo = (await res.json()) as CourseGeometry;
     geo.fetched_at = Date.now();
@@ -497,7 +545,7 @@ export async function fetchCourseGeometry(
     return geo;
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
-    return persisted ?? null;
+    return persisted ?? buildBundledGeometry(courseId) ?? null;
   }
 }
 
