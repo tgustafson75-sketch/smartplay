@@ -3,7 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { RangefinderLock } from '../types/smartfinder';
 
-export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt';
+// 'measure' (2026-07-22, Tim) — GPS-free known-height rangefinder: point at any target of
+// known height (flag, person, marker), tap its top + base, get the distance. Works anywhere —
+// yard, cage, range, on-course — not gated to being in a round.
+export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt' | 'measure';
 
 interface SmartFinderState {
   // Transient — not persisted. AR lock from the legacy camera mode.

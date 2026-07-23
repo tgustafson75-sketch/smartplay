@@ -49,7 +49,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
-import { computeDistance } from '../services/rangefinder';
+import { computeDistance, computeHeightRangedDistance, REFERENCE_HEIGHTS } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -228,7 +228,7 @@ export default function SmartFinder() {
   // The old flat-canvas TargetView is retained below the route for
   // surfaces that explicitly ask for top-down, but the default TARGET
   // path is now camera + overlay.
-  const isCameraMode = displayMode === 'putt' || displayMode === 'target';
+  const isCameraMode = displayMode === 'putt' || displayMode === 'target' || displayMode === 'measure';
 
   if (isCameraMode) {
     return (
@@ -295,6 +295,16 @@ export default function SmartFinder() {
         >
           <Ionicons name="golf-outline" size={16} color="#9ca3af" />
           <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Putt</Text>
+        </TouchableOpacity>
+        {/* 2026-07-22 (Tim) — Measure: point-and-tap rangefinder for anywhere (yard/cage/range). */}
+        <TouchableOpacity
+          onPress={() => setMode('measure')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#0a1e12', borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28' }}
+          accessibilityRole="button"
+          accessibilityLabel="Measure a distance anywhere"
+        >
+          <Ionicons name="resize-outline" size={16} color="#9ca3af" />
+          <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Measure</Text>
         </TouchableOpacity>
       </View>
 
@@ -720,6 +730,8 @@ function CameraSmartFinder({
               onTargetYardsChange={setSceneTargetYards}
               onHeadingUpdate={onHeadingUpdate}
             />
+          ) : mode === 'measure' ? (
+            <MeasureCameraOverlay />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
           )}
@@ -874,8 +886,17 @@ function CameraSmartFinder({
             <GPSQuality reading={gps} showText />
           </View>
         </View>
-        {/* Right side: map + putt quick-access icons — replaces the 4-mode toggle bar */}
+        {/* Right side: measure + map + putt quick-access icons — replaces the 4-mode toggle bar */}
         <View style={[styles.cameraIconBtn, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          {/* 2026-07-22 (Tim) — Measure: GPS-free known-height rangefinder, usable anywhere. */}
+          <TouchableOpacity
+            onPress={() => onModeChange(mode === 'measure' ? 'target' : 'measure')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={mode === 'measure' ? 'Back to camera' : 'Measure a distance'}
+          >
+            <Ionicons name={mode === 'measure' ? 'camera-outline' : 'resize-outline'} size={20} color={mode === 'measure' ? '#F0C030' : '#00C896'} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => onModeChange(mode === 'putt' ? 'target' : 'putt')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1663,6 +1684,107 @@ function TargetCameraOverlay({
         </View>
       </View>
     </View>
+  );
+}
+
+// ─── Measure mode (GPS-free known-height rangefinder — usable anywhere) ──────
+// 2026-07-22 (Tim — "use SmartFinder anytime to measure distance in my yard or cage").
+// Point at any target of known height (flag, person, marker), tap its TOP then its BASE,
+// and the angular height it fills gives the distance — no GPS, no course data, any distance.
+// The camera-TILT rangefinder (target mode) caps at ~50 yds; this doesn't. Model mirrors
+// PuttCameraOverlay's two-tap capture; the math is services/rangefinder.computeHeightRangedDistance.
+function MeasureCameraOverlay() {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  const [viewH, setViewH] = useState(0);
+  const [topPt, setTopPt] = useState<{ x: number; y: number } | null>(null);
+  const [basePt, setBasePt] = useState<{ x: number; y: number } | null>(null);
+  const [refId, setRefId] = useState(REFERENCE_HEIGHTS[0].id);
+  const ref = REFERENCE_HEIGHTS.find((r) => r.id === refId) ?? REFERENCE_HEIGHTS[0];
+
+  const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
+    const { locationX, locationY } = event.nativeEvent;
+    if (!topPt) setTopPt({ x: locationX, y: locationY });
+    else if (!basePt) setBasePt({ x: locationX, y: locationY });
+    else { setTopPt({ x: locationX, y: locationY }); setBasePt(null); } // third tap restarts
+  }, [topPt, basePt]);
+  const reset = () => { setTopPt(null); setBasePt(null); };
+
+  // TOP = the smaller y (higher on screen); order-independent so tapping base first still works.
+  const result = topPt && basePt && viewH > 0
+    ? computeHeightRangedDistance({
+        top_y_normalized: Math.min(topPt.y, basePt.y) / viewH,
+        base_y_normalized: Math.max(topPt.y, basePt.y) / viewH,
+        real_height_m: ref.meters,
+        vfov_deg: 60, // base camera VFOV (measure at 1×; zoom-corrected VFOV is a follow-up)
+      })
+    : null;
+
+  return (
+    <>
+      <TouchableOpacity
+        activeOpacity={1}
+        style={StyleSheet.absoluteFill}
+        onPress={handleTap}
+        onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
+      />
+
+      {/* Reference-target chips — what are we ranging off? */}
+      <View style={{ position: 'absolute', top: insets.top + 12, left: 0, right: 0 }} pointerEvents="box-none">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+          {REFERENCE_HEIGHTS.map((r) => (
+            <TouchableOpacity
+              key={r.id}
+              onPress={() => { setRefId(r.id); reset(); }}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1, backgroundColor: r.id === refId ? '#003d20' : 'rgba(0,0,0,0.55)', borderColor: r.id === refId ? '#00C896' : 'rgba(255,255,255,0.25)' }}
+              accessibilityRole="button"
+              accessibilityLabel={`Range off ${r.label}`}
+            >
+              <Text style={{ color: r.id === refId ? '#00C896' : '#e5e7eb', fontSize: 12, fontWeight: '700' }}>{r.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Tap markers + the measured vertical span */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Svg width="100%" height="100%">
+          {topPt && (
+            <Circle cx={topPt.x} cy={topPt.y} r={10} fill="rgba(0,200,150,0.35)" stroke="#00C896" strokeWidth={2} />
+          )}
+          {basePt && (
+            <Circle cx={basePt.x} cy={basePt.y} r={10} fill="rgba(245,166,35,0.35)" stroke="#F5A623" strokeWidth={2} />
+          )}
+          {topPt && basePt && (
+            <Line x1={topPt.x} y1={topPt.y} x2={basePt.x} y2={basePt.y} stroke="#ffffff" strokeWidth={2} strokeDasharray="6 4" />
+          )}
+        </Svg>
+      </View>
+
+      {/* Bottom panel — instruction while capturing, distance once both taps land */}
+      <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+        {!topPt ? (
+          <Text style={styles.instructionText}>Tap the TOP of the {ref.label.replace(/\s*\(.*\)$/, '')}</Text>
+        ) : !basePt ? (
+          <Text style={styles.instructionText}>Now tap its BASE (the ground)</Text>
+        ) : result && !result.unmeasurable ? (
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 40, fontWeight: '900' }}>{result.distance_yards}<Text style={{ fontSize: 18, fontWeight: '700' }}> yds</Text></Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginTop: 2 }}>
+              off {ref.label} · {result.confidence} confidence
+            </Text>
+            {result.confidence === 'low' && (
+              <Text style={{ color: '#F0C030', fontSize: 11, fontWeight: '700', marginTop: 4 }}>Zoom in on the target for a tighter read</Text>
+            )}
+            <TouchableOpacity onPress={reset} style={{ marginTop: 10, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: '#00C896' }} accessibilityRole="button" accessibilityLabel="Measure again">
+              <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '800' }}>Measure again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={styles.instructionText}>Line up the top and base and tap again</Text>
+        )}
+      </View>
+    </>
   );
 }
 

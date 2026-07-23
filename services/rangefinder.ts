@@ -116,6 +116,88 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
   };
 }
 
+// ─── Known-height ranging (2026-07-22, Tim) ─────────────────────────────────
+// The tilt-based computeDistance() above physically caps at ~50 yds (a target
+// farther than that sits at a <2° down-angle from eye height and reads as
+// `unmeasurable`). To measure ANY distance — a 180-yd range flag, a cage target,
+// a chip in the backyard — with no GPS and no course data, range off an object of
+// KNOWN real-world height: the vertical angle it subtends in the frame gives the
+// distance directly. distance = H / (2·tan(θ/2)), where θ is the object's angular
+// height. Works at any distance; the only cost is tap precision at long range
+// (zoom in to enlarge the target's frame span and tighten the read).
+
+/** Common reference heights (metres) so the user picks a target instead of typing a number. */
+export const REFERENCE_HEIGHTS: { id: string; label: string; meters: number }[] = [
+  { id: 'flagstick', label: 'Flagstick (7 ft)', meters: 2.134 },
+  { id: 'person', label: 'Person (5’10″)', meters: 1.778 },
+  { id: 'range_flag', label: 'Range marker flag (6 ft)', meters: 1.829 },
+  { id: 'golf_bag', label: 'Stand bag (3 ft)', meters: 0.914 },
+  { id: 'cart', label: 'Golf cart (6 ft)', meters: 1.829 },
+];
+
+export interface HeightRangeInput {
+  /** Normalized y of the target's TOP in the frame (0 = top edge, 1 = bottom edge). */
+  top_y_normalized: number;
+  /** Normalized y of the target's BASE in the frame. */
+  base_y_normalized: number;
+  /** The target's real-world height in metres. */
+  real_height_m: number;
+  /** Vertical field of view of the CURRENT view in degrees. Pass the zoom-adjusted
+   *  FOV (base VFOV / zoom factor) so a 2× zoom doubles the angular resolution. */
+  vfov_deg?: number;
+}
+
+export interface HeightRangeOutput {
+  distance_yards: number;
+  distance_meters: number;
+  /** The object's measured angular height (degrees) — drives confidence + a "zoom in" hint. */
+  angular_height_deg: number;
+  confidence: 'high' | 'medium' | 'low';
+  /** True when the taps coincide / height is non-positive → nothing to measure. */
+  unmeasurable: boolean;
+}
+
+/** Angle (radians, positive = above frame centre) of a normalized vertical position
+ *  under a rectilinear projection — the accurate mapping, not a linear FOV split. */
+function angleForY(yNorm: number, vfovDeg: number): number {
+  const halfTan = Math.tan(degToRad(vfovDeg) / 2);
+  return Math.atan((0.5 - yNorm) * 2 * halfTan);
+}
+
+/**
+ * Range off a known-height target. Deterministic, GPS-free, works at any distance.
+ * Returns unmeasurable when the two taps coincide or the height is non-positive.
+ */
+export function computeHeightRangedDistance(input: HeightRangeInput): HeightRangeOutput {
+  const vfov = input.vfov_deg && input.vfov_deg > 0 ? input.vfov_deg : CAMERA_VFOV_DEG;
+  const theta = Math.abs(angleForY(input.top_y_normalized, vfov) - angleForY(input.base_y_normalized, vfov));
+  const angularHeightDeg = (theta * 180) / Math.PI;
+
+  if (!(theta > 1e-5) || !(input.real_height_m > 0)) {
+    return { distance_yards: 0, distance_meters: 0, angular_height_deg: angularHeightDeg, confidence: 'low', unmeasurable: true };
+  }
+
+  const distanceM = input.real_height_m / (2 * Math.tan(theta / 2));
+  const clampedM = Math.max(MIN_YARDS * 0.9144, Math.min(MAX_YARDS * 0.9144, distanceM));
+  const distYards = clampedM / 0.9144;
+
+  // Confidence scales with the target's angular size: a bigger span in the frame means
+  // tap error is a smaller fraction of the measurement. Below ~0.8° the read is tap-noise
+  // sensitive (zoom in) → low; above ~2.5° it's tight → high.
+  let confidence: 'high' | 'medium' | 'low';
+  if (angularHeightDeg >= 2.5) confidence = 'high';
+  else if (angularHeightDeg >= 0.8) confidence = 'medium';
+  else confidence = 'low';
+
+  return {
+    distance_yards: Math.round(distYards),
+    distance_meters: Math.round(clampedM),
+    angular_height_deg: angularHeightDeg,
+    confidence,
+    unmeasurable: false,
+  };
+}
+
 export function buildLock(
   input: DistanceComputeInput,
   result: DistanceComputeOutput,
