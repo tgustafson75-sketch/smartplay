@@ -38,6 +38,10 @@ export type ClubId =
 
 export type ClubType = 'iron' | 'wedge' | 'hybrid' | 'wood' | 'driver' | 'putter' | 'unknown';
 
+// The pure bag-reconcile logic lives in its own dependency-free module (testable in node).
+import { reconcileClubWithBag } from './clubBagReconcile';
+export { reconcileClubWithBag } from './clubBagReconcile';
+
 export interface ClubRecognitionResult {
   kind: 'ok';
   club_id: ClubId;
@@ -116,11 +120,23 @@ export async function recognizeClubFromBase64(
       reasoning?: string;
     };
 
+    const rawClubId = data.club_id ?? 'unknown';
+    const confidence = data.confidence ?? 'low';
+    // Turn the known bag around onto this read: snap an ambiguous read to an owned neighbor.
+    // Lazy require avoids any import cycle with the store; empty bag → reconcile is a no-op.
+    let club_id = rawClubId;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const owned = (require('../store/clubBagStore') as typeof import('../store/clubBagStore'))
+        .useClubBagStore.getState().bagList().map((c) => c.club_id);
+      club_id = reconcileClubWithBag(rawClubId, confidence, owned) as ClubId;
+    } catch { /* no bag / store unavailable → keep the raw read */ }
+
     const result: ClubRecognitionResult = {
       kind: 'ok',
-      club_id: data.club_id ?? 'unknown',
+      club_id,
       club_type: data.club_type ?? 'unknown',
-      confidence: data.confidence ?? 'low',
+      confidence,
       reasoning: data.reasoning ?? '',
       latency_ms,
     };

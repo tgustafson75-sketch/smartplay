@@ -16,9 +16,11 @@ import { composeFitProfile, recommendFlex, type FitClubInput } from '../../servi
 import { recommendBall } from '../../services/ballFitting';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
+import { useRouter } from 'expo-router';
 
 export default function FitProfileScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const stats = useClubStatsStore((s) => s.stats);
   const handicap = usePlayerProfileStore((s) => s.handicap);
   // 2026-06-24 — extra readable signals for the honest Ball Fit (directional).
@@ -120,6 +122,17 @@ export default function FitProfileScreen() {
             {profile.measuredCount} tracked · {profile.statedCount} you set · of {profile.totalCount} clubs · {profile.confidence} confidence
           </Text>
         </View>
+
+        {/* 2026-07-23 (Tim — Bag Vision) — populate the bag by video instead of typing each club. */}
+        <TouchableOpacity
+          onPress={() => router.push('/bag-scan' as never)}
+          style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent }]}
+          accessibilityRole="button"
+          accessibilityLabel="Scan my bag with video to populate clubs"
+        >
+          <Ionicons name="videocam-outline" size={18} color={colors.accent} />
+          <Text style={[styles.scanBagText, { color: colors.accent }]}>Scan my bag with video</Text>
+        </TouchableOpacity>
 
         {/* GAPS */}
         {profile.gaps.length > 0 && (
@@ -311,6 +324,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '800' },
   headline: { fontSize: 16, fontWeight: '800', lineHeight: 22, marginTop: 4 },
   confRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 },
+  scanBagBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 12, marginBottom: 14 },
+  scanBagText: { fontSize: 15, fontWeight: '800' },
   confDot: { width: 8, height: 8, borderRadius: 4 },
   confText: { fontSize: 12 },
   card: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },

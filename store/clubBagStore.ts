@@ -23,6 +23,11 @@ export interface RegisteredClub {
   source: ClubRegisterSource;
   /** Optional loft/label captured with the club, e.g. "52°". */
   note?: string;
+  // 2026-07-23 (Tim — Bag Vision) — product-specific specs read from a bag scan (or typed in).
+  // All optional; a club registered by voice/manual simply has none. Editable by the user.
+  brand?: string;
+  model?: string;
+  loft?: string;
 }
 
 // Canonical bag order (driver → putter) for display + brain context.
@@ -35,7 +40,9 @@ const CLUB_ORDER: ClubId[] = [
 interface ClubBagState {
   /** Registered clubs keyed by club_id. */
   clubs: Record<string, RegisteredClub>;
-  registerClub: (club_id: ClubId, meta?: { source?: ClubRegisterSource; note?: string; at?: number }) => void;
+  registerClub: (club_id: ClubId, meta?: { source?: ClubRegisterSource; note?: string; at?: number; brand?: string; model?: string; loft?: string }) => void;
+  /** Update the editable product specs on an already-registered club (from the scan-review edit). */
+  setClubSpecs: (club_id: ClubId, specs: { brand?: string; model?: string; loft?: string; note?: string }) => void;
   removeClub: (club_id: ClubId) => void;
   clearBag: () => void;
   /** Bag as a driver→putter-sorted array (for display + brain context). */
@@ -55,12 +62,32 @@ export const useClubBagStore = create<ClubBagState>()(
               club_id,
               registered_at: meta?.at ?? Date.now(),
               source: meta?.source ?? 'camera',
-              // Preserve an existing note if the new registration doesn't carry one.
+              // Preserve existing values if the new registration doesn't carry them.
               note: meta?.note ?? s.clubs[club_id]?.note,
+              brand: meta?.brand ?? s.clubs[club_id]?.brand,
+              model: meta?.model ?? s.clubs[club_id]?.model,
+              loft: meta?.loft ?? s.clubs[club_id]?.loft,
             },
           },
         }));
       },
+      setClubSpecs: (club_id, specs) =>
+        set((s) => {
+          const existing = s.clubs[club_id];
+          if (!existing) return s;
+          return {
+            clubs: {
+              ...s.clubs,
+              [club_id]: {
+                ...existing,
+                brand: specs.brand ?? existing.brand,
+                model: specs.model ?? existing.model,
+                loft: specs.loft ?? existing.loft,
+                note: specs.note ?? existing.note,
+              },
+            },
+          };
+        }),
       removeClub: (club_id) =>
         set((s) => {
           const next = { ...s.clubs };
