@@ -189,6 +189,10 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           persona: useSettingsStore.getState().caddiePersonality,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
+          // 2026-07-24 (full-app audit) — typed Caddie chat was dropping Response Style + Kids Mode, so
+          // a child using typed chat (or anyone who set Brief/Detailed) silently got default cadence.
+          responseMode: useSettingsStore.getState().responseMode ?? 'neutral',
+          cecilyMode: useSettingsStore.getState().cecilyMode ?? false,
           // Phase 409 — TightLie pending lie analysis. Read straight
           // from roundStore (NOT a destructured prop) so the latest
           // value is sent on each request without forcing a re-render

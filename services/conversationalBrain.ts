@@ -105,6 +105,14 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         isRoundActive: round.isRoundActive,
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
+        // 2026-07-24 (full-app audit) — the earbud→kevin FALLBACK was dropping the brain-steering
+        // toggles, so Kids Mode / Response Style / intensity / Tank soft-intro silently defaulted the
+        // moment pipecat degraded. Send them so the fallback caddie honors the SAME settings the
+        // primary brain does (matches services/voice/brainSettings + pipecat-turn).
+        responseMode: settings.responseMode ?? 'neutral',
+        cecilyMode: settings.cecilyMode ?? false,
+        personaIntensity: settings.personaIntensity?.[settings.caddiePersonality] ?? 100,
+        tankSoftIntro: settings.tankSoftIntro ?? false,
         // Personalization parity with the main kevin path.
         playerName: profile.name ?? '',
         firstName: profile.firstName ?? '',
