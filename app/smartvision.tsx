@@ -108,6 +108,13 @@ import { bagDistances } from '../services/shotStrategy';
 function isValidWgs84(lat: number, lng: number): boolean {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+  // 2026-07-23 (Tim — "Courses for SmartVision MUST work") — EXACTLY (0,0) is the "no coords"
+  // placeholder the bundled course builder writes for holes it couldn't geo-locate yet (see
+  // data/courses.ts estimated holes). It passes the range check but points at Null Island (Gulf of
+  // Guinea), so SmartVision rendered a broken ocean tile for those holes instead of degrading to the
+  // green-canvas hint. Reject the sentinel. Only BOTH-zero is rejected, so a real equator (lat 0) or
+  // Greenwich-meridian (lng 0) course still validates.
+  if (lat === 0 && lng === 0) return false;
   return true;
 }
 
