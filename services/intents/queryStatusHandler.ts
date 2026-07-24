@@ -179,6 +179,48 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      // 2026-07-24 (final QA) — "what's my 7 iron" / "how far do I hit my driver". Before, this
+      // hit clubQueryHandler ("you're not in a cage session") or fell through to a re-prompt.
+      // Reads the player's real bag distance (offline). HONEST: says "goes about" (a tracked
+      // tee-to-rest distance, not a claimed carry), and when the club isn't tracked yet it says so
+      // rather than asserting the generic chart value as the player's own number.
+      case 'club_distance': {
+        const phrase = String(intent.parameters.club_phrase ?? intent.raw_text ?? '');
+        let clubName: string | null = null;
+        let label = 'that club';
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const rec = require('../clubRecognition') as typeof import('../clubRecognition');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cs = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+          const parsed = rec.parseSpokenClub(phrase);
+          if (parsed) {
+            clubName = cs.clubIdToClubName(parsed.club_id);
+            label = rec.clubLabel(parsed.club_id);
+          }
+        } catch { /* parse is best-effort */ }
+        if (!clubName) {
+          return {
+            success: false,
+            voice_response: 'Which club — say something like "how far do I hit my seven iron"?',
+            side_effects: ['query:club_distance:unparsed'],
+            follow_up_needed: true,
+          };
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const store = (require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore')).useClubStatsStore.getState();
+        const dist = store.distanceFor(clubName as never);
+        const tracked = store.hasDistance(clubName as never);
+        return {
+          success: true,
+          voice_response: tracked && dist > 0
+            ? `Your ${label} goes about ${dist} yards.`
+            : `I don't have your ${label} dialed in yet — a typical one is around ${dist}. Log a few and I'll learn yours.`,
+          side_effects: ['query:club_distance:' + (tracked ? clubName : 'fallback')],
+          follow_up_needed: false,
+        };
+      }
+
       case 'ghost_match': {
         const ghostText = useGhostStore.getState().getSummaryText();
         return {

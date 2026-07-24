@@ -46,9 +46,15 @@ export function clubIdToClubName(id: string | null | undefined): ClubName | null
 
 /** Standard amateur carry chart (yds) — inference fallback before the
  *  player has logged enough real shots. Mid-handicap baseline. */
+// 2026-07-24 (final QA) — recalibrated to be INTERNALLY CONSISTENT for a mid-handicapper.
+// The irons (7I 148, ~14y gaps) are the honest anchor; the old top-of-bag was set at scratch/tour
+// levels (Driver 275 CARRY, 3W 255) and inconsistent with them, and the compressed hybrid ladder put
+// 5H (206) one yard from 3I (205) → inferClub coin-flipped between a 5-hybrid and a 3-iron. Driver/
+// woods/hybrids lowered to sit in sensible gaps above the irons; irons + wedges unchanged. Real logged
+// shots + My Bag entries still override this fallback the moment they exist.
 const STANDARD_YARDS: Record<ClubName, number> = {
-  Driver: 275, '3W': 255, '5W': 240, '7W': 228,
-  '2H': 222, '3H': 216, '4H': 211, '5H': 206,
+  Driver: 245, '3W': 233, '5W': 223, '7W': 213,
+  '2H': 215, '3H': 210, '4H': 197, '5H': 183,
   '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
   PW: 110, AW: 104, GW: 98, SW: 86, LW: 74, Putter: 0,
 };

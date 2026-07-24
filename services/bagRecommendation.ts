@@ -34,9 +34,11 @@ import type { ShotResult } from '../store/roundStore';
 
 /** Standard amateur carry chart — mirrors clubStatsStore's private table so the
  *  recommendation has a distance for every club even before it's been logged. */
+// 2026-07-24 (final QA) — mirrors clubStatsStore's recalibrated mid-am chart (Driver/woods/hybrids
+// lowered to be consistent with the iron anchor; 5H no longer collides with 3I). Keep in sync.
 const STANDARD_YARDS: Record<ClubName, number> = {
-  Driver: 275, '3W': 255, '5W': 240, '7W': 228,
-  '2H': 222, '3H': 216, '4H': 211, '5H': 206,
+  Driver: 245, '3W': 233, '5W': 223, '7W': 213,
+  '2H': 215, '3H': 210, '4H': 197, '5H': 183,
   '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
   PW: 110, AW: 104, GW: 98, SW: 86, LW: 74, Putter: 0,
 };

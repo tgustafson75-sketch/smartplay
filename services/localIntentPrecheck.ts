@@ -122,6 +122,30 @@ const PATTERNS: Pattern[] = [
       new_value: /left|lefty|southpaw/i.test(m[1]) ? 'left' : 'right',
     }),
   },
+  // 2026-07-24 (final QA — offline settings, local-first). Deterministic setting flips that used to
+  // require the cloud classifier (dead-ended offline). Tight patterns only, so they can't misfire on
+  // ordinary talk. changeSettingHandler already applies each of these.
+  {
+    // Caddie persona — anchored on a switch verb + one of the 4 KNOWN names, so a guest named e.g.
+    // "Kevin" is never mistaken for a persona switch.
+    rx: /\b(?:switch|change)(?:\s+(?:my\s+)?caddie)?\s+to\s+(kevin|tank|serena|harry)\b|\bput\s+(kevin|tank|serena|harry)\s+in\s+charge\b/i,
+    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'caddie_persona', new_value: (m[1] ?? m[2]).toLowerCase() }),
+  },
+  {
+    // Theme — "mode" anchors it (never "turn on the lights").
+    rx: /\b(?:switch to |turn on |use |go )?(dark|light)\s+mode\b/i,
+    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'theme', new_value: m[1].toLowerCase() }),
+  },
+  {
+    // Cart mode on/off.
+    rx: /\bcart mode\s+(?:on|off)\b|\b(?:turn\s+(?:on|off)|enable|disable)\s+cart mode\b/i,
+    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'cart_mode', new_value: /\boff\b|disable/i.test(m[0]) ? 'off' : 'on' }),
+  },
+  {
+    // Ghost round on/off.
+    rx: /\bghost(?: mode)?\s+(?:on|off)\b|\b(?:turn\s+(?:on|off)|enable|disable)\s+ghost(?: mode)?\b/i,
+    build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'ghost', new_value: /\boff\b|disable/i.test(m[0]) ? 'off' : 'on' }),
+  },
 
   // ── CLOSE / EXIT A TOOL → HOME (deterministic) ────────────
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — closing a tool routes
@@ -224,6 +248,20 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
       const resolved = resolveSpokenCourse(cm[1]);
       if (resolved) {
         return intent(t, 'open_course', { course_id: resolved.previewId, course_label: resolved.label, raw_utterance: t });
+      }
+    }
+  }
+
+  // 2026-07-24 (final QA — "what's my 7 iron", OFFLINE). "how far do I hit my <club>" / "what's my
+  // <club>" / "how far does my <club> go". We only CLAIM it when the phrase names a club-ish token,
+  // so "what's my score / handicap / plan" fall through to their own patterns / the brain. The handler
+  // (queryStatusHandler:club_distance) does the precise club parse + honest bag read.
+  {
+    const cdm = t.match(/\b(?:how far(?:\s+do\s+i\s+(?:hit|carry))?(?:\s+does)?(?:\s+is)?|what(?:'s|s|\s+is))\s+my\s+(.+?)(?:\s+(?:go|going|carry|carrying))?\??$/i);
+    if (cdm) {
+      const clubPhrase = cdm[1].trim();
+      if (/\b(driver|wood|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
+        return intent(t, 'query_status', { query_topic: 'club_distance', club_phrase: clubPhrase });
       }
     }
   }

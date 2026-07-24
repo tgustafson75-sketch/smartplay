@@ -1176,6 +1176,29 @@ check('Final QA: start-a-round + tool-open + course-imagery + scoring-math corre
   })(),
   'start-a-round resolves every bundled course offline; Coach Caddie/Hotel Mode/SwingSim open by voice with no "Opening undefined"; Spessard/Webster/Green Hill name-path imagery works; and avg vs-par no longer blends 9- and 18-hole totals');
 
+// 2026-07-24 (final QA — "everything cleaned up"). Club-distance ask + offline settings + chart calibration.
+check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fallback chart is consistent',
+  (() => {
+    // (a) "what's my 7 iron" routes to a real handler (was cage-only / re-prompt), and doesn't
+    //     hijack score/handicap; offline persona/theme/cart/ghost flip locally.
+    const seven = precheckLocalIntent('how far do I hit my 7 iron');
+    const persona = precheckLocalIntent('switch to Tank');
+    const okRouting =
+      seven?.intent_type === 'query_status' && seven?.parameters?.query_topic === 'club_distance' &&
+      precheckLocalIntent("what's my score")?.parameters?.query_topic === 'score' &&
+      persona?.intent_type === 'change_setting' && persona?.parameters?.new_value === 'tank' &&
+      /case 'club_distance':/.test(read('services/intents/queryStatusHandler.ts'));
+    // (b) chart calibration: Driver is no longer the scratch-level 275, and 5H no longer collides
+    //     with 3I (was 206 vs 205). Both copies (store + recommendation) match.
+    const cs = read('store/clubStatsStore.ts');
+    const br = read('services/bagRecommendation.ts');
+    const okChart =
+      /Driver: 245,/.test(cs) && /'5H': 183,/.test(cs) && !/Driver: 275/.test(cs) &&
+      /Driver: 245,/.test(br) && /'5H': 183,/.test(br);
+    return okRouting && okChart;
+  })(),
+  'a mid-handicapper can ask "how far do I hit my 7 iron" (offline), flip persona/theme/cart/ghost offline, and the pre-data bag chart is internally consistent (no Driver=275, no 5H≈3I collision)');
+
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
   // distance + wind/elevation (plays-like) + the player's real bag + tendency +
