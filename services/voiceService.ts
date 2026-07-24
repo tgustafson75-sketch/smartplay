@@ -914,8 +914,34 @@ export async function speakDeviceNotice(
   gender: 'male' | 'female' = 'male',
 ): Promise<void> {
   if (!text) return;
+  // [[feels-like-a-real-caddie]] — if this fixed offline line was cached in the persona's REAL voice
+  // (warmed while online, see prewarmOfflineVoiceClips), play THAT instead of the robotic device TTS.
+  // Purely additive: a miss or any playback error falls straight through to device TTS (prior behavior).
+  try {
+    const cache = await import('./offlineVoiceCache');
+    const uri = cache.resolveCachedOfflineClipUri(text, gender);
+    if (uri) {
+      try { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
+      catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }
+    }
+  } catch { /* cache is additive — fall through to device TTS */ }
   currentSpeechId++;
   await deviceSpeakFallback(text, language, currentSpeechId, gender);
+}
+
+/**
+ * Warm the offline-line persona-voice cache while we're online (the offline path itself fires when
+ * we're ALREADY offline, so it can't populate the cache — this must run proactively). Best-effort,
+ * de-duped, never throws. Called from voice warmup + on persona/voice change.
+ */
+export async function prewarmOfflineVoiceClips(): Promise<void> {
+  try {
+    const s = require('../store/settingsStore').useSettingsStore.getState();
+    const gender: 'male' | 'female' = s.voiceGender === 'female' ? 'female' : 'male';
+    const persona = (s.caddiePersonality ?? 'kevin') as string;
+    const cache = await import('./offlineVoiceCache');
+    await cache.ensureOfflineClipsCached(gender, persona);
+  } catch { /* additive — a cold cache just means device TTS until the next warm */ }
 }
 
 // ─── PLAY LOCAL FILE (filler clips) ──────

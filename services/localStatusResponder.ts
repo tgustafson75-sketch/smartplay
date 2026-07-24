@@ -564,7 +564,9 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
 // locally: the shot in front of you (composed distance + club), or — off the
 // course — the practice tools. True by construction; never a guess, never a banner.
 // See [[self-growing-agent-architecture]].
-const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
+// Exported so the offline VOICE cache (services/offlineVoiceCache.ts) pre-renders the SAME fixed
+// off-course line in the persona voice — single source of truth, no drift.
+export const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
   en: "We're off the course right now — good time to sharpen your tempo or short game whenever you're ready.",
   es: 'Ahora mismo estamos fuera del campo: buen momento para pulir tu tempo o tu juego corto cuando quieras.',
   zh: '我们现在不在球场上——准备好的时候，正适合练习你的节奏或短杆。',

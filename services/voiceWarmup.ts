@@ -70,6 +70,11 @@ export function prewarmVoice(force = false): void {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl) return;
 
+  // [[feels-like-a-real-caddie]] — while we're online, cache the fixed offline lines in the persona's
+  // real voice so the offline path never falls to the robotic device TTS. Idempotent + self-adapting to
+  // persona/voice changes; a no-op once all clips are cached. Dynamic import avoids an import cycle.
+  void import('./voiceService').then((m) => m.prewarmOfflineVoiceClips()).catch(() => {});
+
   // Wait for hydration so we read the user's actual persisted provider,
   // not the in-memory default that exists before AsyncStorage loads.
   void getProvider().then((aiProvider) => {
