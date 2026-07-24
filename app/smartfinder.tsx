@@ -100,6 +100,14 @@ export default function SmartFinder() {
   const setCurrentHole = useRoundStore(s => s.setCurrentHole);
   const courseHoles = useRoundStore(s => s.courseHoles);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
+  // 2026-07-24 (full-app audit) — the geometry/map overlay keyed on activeCourseId ONLY, while this
+  // screen's yardages resolve via the full cascade (resolveGreenCoords reads active ?? pending ??
+  // preview). So PRE-ROUND (a course picked on Play sets previewCourseId, no active round) the
+  // rangefinder showed F/M/B distances but a BLANK map. Resolve the geometry course from the same
+  // cascade SmartVision + the yardage path use.
+  const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
+  const previewCourseId = useRoundStore(s => s.previewCourseId);
+  const geoCourseId = activeCourseId ?? pendingStartCourseId ?? previewCourseId;
 
   const mode = useSmartFinderStore(s => s.mode);
   const setMode = useSmartFinderStore(s => s.setMode);
@@ -144,13 +152,13 @@ export default function SmartFinder() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!activeCourseId) {
+    if (!geoCourseId) {
       setGeometry(null);
       return;
     }
-    const cached = getHoleGeometry(activeCourseId, currentHole);
+    const cached = getHoleGeometry(geoCourseId, currentHole);
     if (cached && !cancelled) setGeometry(cached);
-    fetchCourseGeometry(activeCourseId).then(full => {
+    fetchCourseGeometry(geoCourseId).then(full => {
       if (cancelled) return;
       setGeometry(full?.holes.find(h => h.hole_number === currentHole) ?? null);
     }).catch(err => {
@@ -159,7 +167,7 @@ export default function SmartFinder() {
       console.log('[smartfinder] geometry fetch failed (non-fatal)', err);
     });
     return () => { cancelled = true; };
-  }, [activeCourseId, currentHole]);
+  }, [geoCourseId, currentHole]);
 
   const playedHoles = useMemo(() => courseHoles.map(h => h.hole).sort((a, b) => a - b), [courseHoles]);
   const idx = playedHoles.indexOf(currentHole);

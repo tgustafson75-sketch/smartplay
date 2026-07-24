@@ -115,6 +115,7 @@ export default function CockpitCaddieScreen({
     putts,
     shots,
     currentYardage,
+    nineHoleMode,
   } = useRoundStore(
     useShallow((s) => ({
       isRoundActive: s.isRoundActive,
@@ -125,8 +126,13 @@ export default function CockpitCaddieScreen({
       putts: s.putts,
       shots: s.shots,
       currentYardage: s.currentYardage,
+      nineHoleMode: s.nineHoleMode,
     })),
   );
+  // 2026-07-24 (full-app audit) — 9-hole-aware total, matching roundStore + caddie.tsx. courseHoles.length
+  // is the PHYSICAL count (18 when playing the front-9 of an 18-hole course), so use nineHoleMode instead
+  // — else the Cockpit showed "Hole X/18" and an un-capped stepper on a 9-hole round.
+  const totalHolesCockpit = nineHoleMode ? 9 : (courseHoles.length || 18);
   // Action refs — stable; pulled separately.
   // 2026-05-21 — Fix O: replaced `setScore` / `setPutts` (non-existent on
   // the Pro store; the prior code's `?.` optional chaining was silently
@@ -352,7 +358,7 @@ export default function CockpitCaddieScreen({
         {isRoundActive && (
           <View style={[styles.subRow, { borderBottomColor: colors.border }]}>
             <Text style={[styles.holeLabel, { color: colors.accent }]}>
-              Hole {currentHole}/{courseHoles.length || 18}
+              Hole {currentHole}/{totalHolesCockpit}
             </Text>
             <Text style={[styles.courseName, { color: colors.text_muted }]} numberOfLines={1}>
               {activeCourse ?? ''}
@@ -365,7 +371,7 @@ export default function CockpitCaddieScreen({
           par={par}
           shots={holeShots}
           putts={holePutts}
-          totalHoles={courseHoles.length || 18}
+          totalHoles={totalHolesCockpit}
           onChangeHole={handleStepperHole}
           onChangeShots={handleStepperShots}
           onChangePutts={handleStepperPutts}

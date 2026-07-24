@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+// 2026-07-24 (full-app audit) — session ids whose summary has already credited points/relationship,
+// so a remount (e.g. re-triggered by the voice end_session intent) can't double-award.
+const creditedCageSummaries = new Set<string>();
 import {
   View,
   Text,
@@ -200,10 +203,17 @@ export default function CageSummary() {
       router.replace('/cage' as never);
       return;
     }
-    incrementSessions();
     clearWatchSession();
-    const pts = Math.min(session.shots.length * 2, 50);
-    addPoints(pts, 'Cage session');
+    // 2026-07-24 (full-app audit) — the crediting (relationship session count + points) re-fired on
+    // EVERY remount of this summary (reachable via the voice end_session intent), re-awarding up to
+    // +50 each time. Credit each session's summary ONCE. (Module-level set survives remounts within
+    // the app process — the actual re-award vector.)
+    if (!creditedCageSummaries.has(session.id)) {
+      creditedCageSummaries.add(session.id);
+      incrementSessions();
+      const pts = Math.min(session.shots.length * 2, 50);
+      addPoints(pts, 'Cage session');
+    }
 
     // Phase V.7 — chain the two utterances so the second can't start while
     // the first is still speaking (the prior 800ms / 3000ms timer pair raced

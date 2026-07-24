@@ -51,7 +51,10 @@ export const navigateHandler: IntentHandler = {
       case 'next_hole': {
         const round = useRoundStore.getState();
         if (!round.isRoundActive) return notInRound();
-        const next = Math.min(round.currentHole + 1, round.courseHoles.length || 18);
+        // 2026-07-24 (full-app audit) — cap at the 9-hole-aware total, not the physical courseHoles.length
+        // (18 for a front-9 round), so voice "next hole" doesn't walk past hole 9 on a 9-hole round.
+        const maxHole = round.nineHoleMode ? 9 : (round.courseHoles.length || 18);
+        const next = Math.min(round.currentHole + 1, maxHole);
         if (next === round.currentHole) {
           return ok(`You're already on the last hole.`, ['navigate:next_hole:noop']);
         }
