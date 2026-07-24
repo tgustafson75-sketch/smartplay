@@ -110,7 +110,57 @@ function subscribeOnce(): void {
   subscribed = true;
   ensureStaleProbe();
   ensureAppStateListener();
+  ensureVoiceCoordination();
   devLog('[mwdat-bridge] subscribed to MetaWearableFrame events');
+}
+
+// ─── Voice ↔ glasses audio-session coordination (DAT one-session-per-device) ──
+//
+// 2026-07-23 (Tim — "tapping the meta glasses just freezes the mic") — the glasses camera stream and
+// the phone's caddie audio (mic capture + TTS) contend for the SINGLE Bluetooth audio session; that
+// collision is what froze the mic. Implements the long-standing TODO below: when the caddie is
+// SPEAKING (and, via the resume delay, through the user's likely spoken reply), PAUSE the camera
+// stream so the phone owns the audio cleanly, then resume shortly after it goes quiet. This ONLY ever
+// pauses/resumes the camera stream — it never touches the mic/recording path — so worst case is a
+// brief stream gap during conversation, never a worse freeze. Debounced so back-to-back utterances
+// don't thrash the (expensive) DAT session.
+let pausedByVoice = false;
+let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+let voiceCoordSub: (() => void) | null = null;
+const VOICE_RESUME_DELAY_MS = 6000;
+
+function ensureVoiceCoordination(): void {
+  if (voiceCoordSub || !NativeMod) return;
+  void import('./voiceService')
+    .then((vs) => {
+      voiceCoordSub = vs.subscribeToSpeaking((speaking: boolean) => {
+        const mod = NativeMod;
+        if (!mod) return;
+        if (speaking) {
+          if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = null; }
+          // Only pause a stream that's actually running, and only once.
+          if (currentStatus.streaming && !pausedByVoice) {
+            pausedByVoice = true;
+            void mod.stopStreaming().catch(() => {});
+            devLog('[mwdat-bridge] paused camera stream for caddie audio (one-session handoff)');
+          }
+        } else {
+          if (!pausedByVoice) return;
+          if (resumeTimer) clearTimeout(resumeTimer);
+          resumeTimer = setTimeout(() => {
+            resumeTimer = null;
+            if (!pausedByVoice) return;
+            pausedByVoice = false;
+            const cfg = effectiveStreamConfig();
+            void mod.startStreaming(cfg.quality, cfg.fps)
+              .then(() => { lastFrameAt = Date.now(); ensureStaleProbe(); })
+              .catch(() => {});
+            devLog('[mwdat-bridge] resumed camera stream after caddie audio');
+          }, VOICE_RESUME_DELAY_MS);
+        }
+      });
+    })
+    .catch(() => { /* voiceService unavailable in some envs — coordination is best-effort */ });
 }
 
 // ─── Public API ─────────────────────────────────────────────────────
@@ -260,6 +310,9 @@ function ensureStaleProbe(): void {
   if (staleProbe || !NativeMod) return;
   staleProbe = setInterval(() => {
     if (!currentStatus.streaming) return;
+    // 2026-07-23 — don't flag "stale" while we've intentionally paused the stream for caddie audio
+    // (no frames arrive during the pause by design); the resume re-arms fresh frames.
+    if (pausedByVoice) return;
     const age = Date.now() - lastFrameAt;
     if (age > STALE_MS) {
       devLog(`[mwdat-bridge] stream went stale (${age}ms since last frame) — flipping streaming=false`);
