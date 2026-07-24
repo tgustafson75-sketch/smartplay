@@ -177,7 +177,7 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 // 2026-06-04 — Maplewood + Pembroke Pines bundles removed. Both had
 // raw Golfshot/18Birdies UI chrome that needs an IP-clean replacement
 // pass before re-bundling. Until then they fall through to Mapbox
-// satellite (same path as journey-at-pechanga).
+// satellite (the dynamic-tile fallback).
 
 // 2026-06-04 — Echo Hills Golf Course, Hemet CA (9-hole executive
 // par 35). Tim's local rotation. Bundled from raw Golfshot Android
@@ -261,12 +261,11 @@ export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 export type LocalCourseSlug =
   | 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs'
   | 'mariners-point' | 'san-jose-muni' | 'sunnyvale'
-  // 2026-05-26 — Journey at Pechanga (Temecula CA). Randy Chang's home
-  // course; testing opportunity if Tim or Randy plays it. Hole geometry
-  // is available via golfcourseapi + Mapbox satellite imagery so we
-  // skip bundled hole-* images for now (the Partial<Record<>> on
-  // LOCAL_COURSE_IMAGES lets a slug exist as a centroid-only entry).
-  | 'journey-at-pechanga'
+  // 2026-07-24 (final QA) — 'journey-at-pechanga' REMOVED. It was a phantom: a name hook +
+  // centroid + voice aliases but NO bundled imagery, NO COURSES entry, and NO Play-list card,
+  // so it was neither searchable, voice-openable, nor playable — it only half-responded. Removed
+  // the leftovers (Tim's call). Re-add as a full course (COURSES + Play list + hole data) if it
+  // becomes a priority.
   // 2026-05-28 — Westlake Country Club, Jackson NJ. First East Coast
   // course Tim has personally captured. All 18 holes bundled from
   // Green Maps screenshots; geometry comes from golfcourseapi at
@@ -486,10 +485,6 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'echo-hills': ECHO_HILLS_HOLE_IMAGES,
   'greenhill': GREENHILL_HOLE_IMAGES,
   'spessard-holland': SPESSARD_HOLLAND_HOLE_IMAGES,
-  // 'journey-at-pechanga' intentionally omitted — hole imagery comes
-  // from Mapbox satellite live; getLocalHoleImage() returns null which
-  // the SmartVision render path already handles (falls through to the
-  // dynamic Mapbox tile).
 };
 
 /**
@@ -532,12 +527,6 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // 2026-07-06 — Webster/Dudley (MA) 9-hole. Approx town-center; refine on-site
   // via Mark Location (hole GPS wasn't in the screenshots).
   'webster-dudley':   { lat: 42.0479,    lng: -71.9048 },
-  // 2026-05-26 — Journey at Pechanga Resort, Temecula CA.
-  // Approximate centroid from Pechanga Resort & Casino landmark
-  // (45100 Pechanga Pkwy). Refine on-site via Mark Location once
-  // Tim or Randy visits — the 800m detect radius is generous enough
-  // to catch a parking-lot arrival even with this rough lat/lng.
-  'journey-at-pechanga': { lat: 33.4691, lng: -117.0744 },
   // 2026-05-28 — Westlake Country Club, 1 Westlake Blvd, Jackson NJ
   // 08527. Approximate centroid from the property landmark; refine
   // on-site via Mark Location when Tim plays there. The 800m detect
@@ -578,10 +567,6 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // 2026-06-04 — Echo Hills, Hemet CA. Short substring "echo" is
   // distinctive enough for the local courses we bundle.
   if (c.includes('echo')) return 'echo-hills';
-  // 2026-05-26 — Journey at Pechanga matches "pechanga", "journey",
-  // or "journey at pechanga" so voice ("I'm at Pechanga", "open
-  // Journey") and golfcourseapi search results both resolve.
-  if (c.includes('pechanga') || (c.includes('journey') && c.includes('pechanga'))) return 'journey-at-pechanga';
   // 2026-05-28 — Westlake CC (Jackson NJ). Substring match on
   // "westlake" alone is too broad — there are multiple Westlake
   // country clubs / golf courses across the US. Disambiguate by
