@@ -2198,6 +2198,12 @@ export const useRoundStore = create<RoundState>()(
           const shotInRoundIndex = shot.shot_in_round_index ?? s.shots.length + 1;
           const enriched: ShotResult = {
             ...shot,
+            // 2026-07-24 (full-app audit) — guarantee every shot has a stable id at the single logShot
+            // choke point. The conversational-brain log_shot path built a ShotResult WITHOUT an id (unlike
+            // manual tap / penalty / the voice orchestrator), so a brain-logged shot couldn't be edited/
+            // deleted (editShot/deleteShot match by id) and future by-id dedup/backup-merge couldn't
+            // address it. Salted so two shots in the same ms don't collide.
+            id: shot.id ?? `shot-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
             start_location: incomingStart,
             gps_location: shot.gps_location ?? incomingStart,
             hole_number: shot.hole_number ?? shot.hole,
