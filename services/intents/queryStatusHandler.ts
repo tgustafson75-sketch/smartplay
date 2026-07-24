@@ -134,6 +134,44 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      // 2026-07-24 (audit — voice dead-end) — the local precheck emits these three deterministic,
+      // OFFLINE-answerable topics ("how many holes left", "what's the par", "what course is this") but
+      // this handler had no case for them → they fell to the generic "what about it?" re-prompt. These
+      // are exactly the answers that should shine with no signal.
+      case 'par': {
+        const par = round.getCurrentPar();
+        return {
+          success: true,
+          voice_response: par ? `This hole plays a par ${par}.` : `I don't have the par for this hole yet.`,
+          side_effects: ['query:par'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'holes_left': {
+        const total = round.courseHoles.length > 0 ? round.courseHoles.length : 18;
+        const cur = round.currentHole ?? 1;
+        const left = Math.max(0, total - cur);
+        return {
+          success: true,
+          voice_response: left <= 0
+            ? `You're on the last hole — ${cur} of ${total}.`
+            : `You're on ${cur} of ${total} — ${left} to go.`,
+          side_effects: ['query:holes_left'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'course': {
+        const name = (round.activeCourse ?? '').trim();
+        return {
+          success: true,
+          voice_response: name ? `You're playing ${name}.` : `No course set for this round yet.`,
+          side_effects: ['query:course'],
+          follow_up_needed: false,
+        };
+      }
+
       case 'ghost_match': {
         const ghostText = useGhostStore.getState().getSummaryText();
         return {
