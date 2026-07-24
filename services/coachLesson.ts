@@ -71,6 +71,15 @@ export function transitionLine(nextFocus: LessonFocus): string {
   return `Good work. Now let's shift to ${nextFocus.label.toLowerCase()}. ${nextFocus.instruction}`;
 }
 
+/**
+ * 2026-07-24 (camera-first Coach Caddie) — a SHORT spoken opener for a focus. The full `instruction`
+ * paragraph was the "wall of text" that made the lesson feel like a form; camera-first flow opens with
+ * one short line and starts watching. The cue is surfaced separately as the on-camera "go" prompt.
+ */
+export function openerLine(f: LessonFocus): string {
+  return `Let's work your ${f.label.toLowerCase()}. Make a swing when you're ready.`;
+}
+
 /** Spoken wrap-up when the session's focuses are done. */
 export function sessionSummaryLine(planLabel: string): string {
   return `That's the ${planLabel.toLowerCase()} done. Nice session — take those feels to the course. Tap to run it again or pick something new.`;

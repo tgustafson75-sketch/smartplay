@@ -2042,8 +2042,10 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       /maxRatio > 0\.60\) return 'face_on'/.test(infer) &&
       // the ONE service-safe handedness source mirrors SmartMotion's derivation.
       /active\?\.handedness === 'left' \|\| active\?\.handedness === 'right'/.test(resolver) &&
-      // the Coach lesson (both capture + picker paths) threads handedness.
-      /analyzeSwingFromVideo\(uri, RECORD_WINDOW_SEC \* 1000, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
+      // the Coach lesson (both live-camera + picker paths) threads handedness. 2026-07-24: the
+      // camera-first rebuild renamed the window const RECORD_WINDOW_SEC → WINDOW_SEC; honesty (angle
+      // null → inferred, handedness threaded) is unchanged.
+      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
       /analyzeSwingFromVideo\(asset\.uri, durationMs, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
       // the raw-frame poseEstimator path threads lefty; the MIRROR path must NOT
       // (adjustFrames already flips lefty→righty — double-correcting would re-invert).
@@ -2054,6 +2056,35 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
     );
   })(),
   'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');
+
+// 2026-07-24 (Tim — "doesn't flow like a real lesson"). Coach Caddie REBUILT camera-first + auto-loop:
+// the camera is the persistent lesson surface (no text-wall, no per-rep mount flip, no black spinner),
+// coaching is captions over the live camera, and the guided/focus flow AUTO-LOOPS reps (no "Record my
+// swing" per rep) and auto-advances the plan on the checkpoint.
+check('Coach Caddie flows like a real lesson: camera-first, captioned, auto-looping',
+  (() => {
+    const coach = read('app/swinglab/coach-lesson.tsx');
+    const svc = read('services/coachLesson.ts');
+    return (
+      // Persistent camera whenever a session is live (not only during a capture window).
+      /\{sessionLive && <CoachSwingCamera ref=\{coachCamRef\} facing="back" style=\{StyleSheet\.absoluteFill\} \/>\}/.test(coach) &&
+      // Hands-free auto-loop: record window → read → feedback caption → re-arm, driven by a cancelable timer.
+      /const focusRep = useCallback/.test(coach) &&
+      /const scheduleRearm = useCallback/.test(coach) &&
+      /const applyFocusResult = useCallback/.test(coach) &&
+      // Feedback is a caption over the camera with a "Reading that one…" chip — NOT a black spinner page.
+      /Reading that one…/.test(coach) &&
+      /captionText/.test(coach) &&
+      // Focus/plan control bar is just Pause/End (no per-rep tap in the auto-loop).
+      /onPress=\{togglePause\}/.test(coach) &&
+      // Auto-advance the plan on the checkpoint (no "Next" tap).
+      /setPlanStep\(nextStep\); setFocus\(next\)/.test(coach) &&
+      // Short spoken opener (the long instruction paragraph was the "wall of text").
+      /export function openerLine/.test(svc) &&
+      /Make a swing when you're ready/.test(svc)
+    );
+  })(),
+  'starting a lesson drops straight onto the live camera with a short spoken opener; the guided flow watches → reads (caption, not spinner) → speaks feedback → re-arms and auto-advances hands-free — no wall of text, no per-rep Record/Done taps');
 
 check('Smart Motion record by tap-to-talk is deterministic + local (no brain loop)',
   // 2026-06-15 (Tim — "active listening doesn't work; I tap the earbud/glasses and

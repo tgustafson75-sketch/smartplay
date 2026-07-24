@@ -1,15 +1,22 @@
 /**
  * 2026-07-23 (Tim — "make Coach Caddie an elite, unique lesson experience, drawn from real coaches").
+ * 2026-07-24 REBUILD (Tim — "doesn't flow like a real lesson"): CAMERA-FIRST + AUTO-LOOP. The old flow
+ * was a form — a wall of intro text, a manual "Record my swing" tap to open the camera as a SEPARATE
+ * step, a black analyzing spinner, then a tap to bracket every rep. A real lesson is continuous: the
+ * coach is already watching, talks you through in short lines, and reacts to each swing automatically.
  *
- * Coach Caddie runs a real diagnostic lesson: it WATCHES a baseline swing, DIAGNOSES the one priority
- * (root cause over symptom), explains the why, prescribes a single FEEL + a named DRILL, then coaches
- * reps with honest, encouraging feedback until you hit the checkpoint — then progresses or sends you
- * home with one thing. Turn-based capture (tap to record) keeps it compartmentalized: it composes ONLY
- * standalone primitives (SmartMotion swing analysis + voiceService.speak) and imports NONE of the
- * frozen live-voice hooks, so it can't touch any other flow.
+ * Now: starting a session drops you STRAIGHT onto the live camera. The coach speaks a SHORT opener,
+ * then auto-captures a swing window, reads it, speaks feedback as a caption over the still-live camera,
+ * and re-arms for the next swing — a hands-free rhythm the coach paces ("go again"), no per-rep taps.
+ * Guided plans auto-advance on the checkpoint. A Pause/End bar is always available, and the honest
+ * "couldn't read that one — reframe" stays IN the loop (never dumps to the menu).
  *
- * Two lighter modes remain for quick work: Guided Sessions (multi-focus plans) and Single Focus.
- * The coaching brain is services/coachKnowledge + services/coachSession (both pure + unit-tested).
+ * Compartmentalized: composes ONLY standalone primitives (SmartMotion swing analysis + voiceService)
+ * and imports NONE of the frozen live-voice hooks. Coaching brain is services/coachKnowledge +
+ * coachSession + coachLesson (all pure + unit-tested); this file is the flow shell around them.
+ *
+ * Strike AUTO-DETECT (react to the exact moment of impact vs a rolling window) + the diagnostic mode
+ * sharing the same auto-loop are the next increment — device-tune (see memory: realtime-virtual-caddie-lesson).
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
@@ -20,10 +27,10 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
 import { resolveSwingerHandedness } from '../../services/swingerHandedness';
-import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
+import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, openerLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
 import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
-import { speak } from '../../services/voiceService';
+import { speak, stopSpeaking } from '../../services/voiceService';
 import { prewarmVoice } from '../../services/voiceWarmup';
 import { CoachSwingCamera, type CoachCameraHandle } from '../../components/coach/CoachSwingCamera';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -40,14 +47,32 @@ function say(text: string) {
 }
 
 type Kind = 'menu' | 'focus' | 'diagnostic';
-type Cap = 'idle' | 'analyzing';
 type DxStage = 'intro' | 'reps' | 'progress' | 'homework';
+// Camera-first phase — drives the caption + control bar while a session is live.
+type Phase = 'watching' | 'reading' | 'feedback';
+
+const WINDOW_SEC = 10;       // rolling swing window (the coach paces you to swing within it)
+const REARM_MS = 900;        // beat after feedback before re-arming the next window
+const OPENER_LEAD_MS = 2600; // let the short spoken opener land before the first window opens
 
 export default function CoachLessonScreen() {
   const { colors } = useTheme();
   const [kind, setKind] = useState<Kind>('menu');
-  const [cap, setCap] = useState<Cap>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  // Camera-first session shell.
+  const [sessionLive, setSessionLive] = useState(false); // camera mounted + coaching overlays shown
+  const [paused, setPaused] = useState(false);
+  const [phase, setPhase] = useState<Phase>('watching');
+  const [caption, setCaption] = useState('');            // the line shown over the live camera
+  const sessionLiveRef = useRef(false);
+  const pausedRef = useRef(false);
+  const preparedRef = useRef(false);
+  const promptRef = useRef('Make a swing when you\'re ready.'); // current "go" line for the window
+  const loopGenRef = useRef(0);                          // invalidates stale in-flight loop steps
+  const rearmRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { sessionLiveRef.current = sessionLive; }, [sessionLive]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
 
   // Focus / guided-plan mode.
   const [focus, setFocus] = useState<LessonFocus | null>(null);
@@ -56,127 +81,235 @@ export default function CoachLessonScreen() {
   const [plan, setPlan] = useState<LessonPlan | null>(null);
   const [planStep, setPlanStep] = useState(0);
   const [repsOnFocus, setRepsOnFocus] = useState(0);
+  // Mirror the fast-changing plan state into refs so the async loop reads current values (no stale closures).
+  const focusRef = useRef<LessonFocus | null>(null);
+  const planRef = useRef<LessonPlan | null>(null);
+  const planStepRef = useRef(0);
+  const repsOnFocusRef = useRef(0);
+  useEffect(() => { focusRef.current = focus; }, [focus]);
+  useEffect(() => { planRef.current = plan; }, [plan]);
+  useEffect(() => { planStepRef.current = planStep; }, [planStep]);
+  useEffect(() => { repsOnFocusRef.current = repsOnFocus; }, [repsOnFocus]);
 
-  // Diagnostic lesson mode.
+  // Diagnostic lesson mode (tap-to-swing on the live camera; per-swing diagnosis is a bigger moment).
   const [dxStage, setDxStage] = useState<DxStage>('intro');
   const [priority, setPriority] = useState<Diagnosis | null>(null);
-  const [dxText, setDxText] = useState('');           // current spoken/shown coaching line
+  const [dxText, setDxText] = useState('');
   const [lastValue, setLastValue] = useState<number | null>(null);
   const [goodReps, setGoodReps] = useState(0);
   const [lastMetrics, setLastMetrics] = useState<SwingBiomechanics | null>(null);
   const [addressedIds, setAddressedIds] = useState<string[]>([]);
   const [pendingProgress, setPendingProgress] = useState(false);
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const captureInFlightRef = useRef(false);
+  const coachCamRef = useRef<CoachCameraHandle>(null);
+
+  const clearRearm = useCallback(() => { if (rearmRef.current) { clearTimeout(rearmRef.current); rearmRef.current = null; } }, []);
   const clearProgressTimer = useCallback(() => {
     if (progressTimer.current) { clearTimeout(progressTimer.current); progressTimer.current = null; }
     setPendingProgress(false);
   }, []);
-  // Cancel any pending progress transition if the screen unmounts (no state-set / speech after leave).
-  useEffect(() => () => { if (progressTimer.current) clearTimeout(progressTimer.current); }, []);
 
-  // 2026-07-23 (Tim — "delay in hearing caddie") — warm the TTS pipeline the moment the lesson opens
-  // so the FIRST coaching line lands fast, not after a cold /api/voice round-trip. A real coach doesn't
-  // pause 4 seconds before the first word.
+  // Warm TTS on open so the first coaching word lands fast (a real coach doesn't pause 4s before talking).
   useEffect(() => { try { prewarmVoice(); } catch { /* opportunistic */ } }, []);
+  // Stop everything on unmount — no timers, speech, or state-sets after leaving.
+  useEffect(() => () => {
+    loopGenRef.current++;
+    if (rearmRef.current) clearTimeout(rearmRef.current);
+    if (progressTimer.current) clearTimeout(progressTimer.current);
+    void stopSpeaking().catch(() => {});
+  }, []);
 
-  // Re-entrancy guard for the capture→analyze→speak cycle. Without it, a second tap during the spoken
-  // feedback (the cloud-TTS delay window, when the record button is visible again) fires a SECOND
-  // capture + a second coaching line — the "double messaging" Tim heard. One swing in flight at a time.
-  const captureInFlightRef = useRef(false);
+  // ── camera on the live session (no per-rep mount) ──────────────────────────
+  const prepareCamera = useCallback(async (): Promise<boolean> => {
+    if (preparedRef.current) return true;
+    const ready = await (coachCamRef.current?.prepare() ?? Promise.resolve(false));
+    preparedRef.current = !!ready;
+    return preparedRef.current;
+  }, []);
 
-  // In-app SmartMotion-style camera (replaces the image-picker modal so the lesson stays on ONE screen
-  // and the caddie can talk between reps). Mounted ONLY during the record window (see `capturing`) so a
-  // video-mode CameraView never holds the audio session while the caddie is speaking.
-  const coachCamRef = useRef<CoachCameraHandle>(null);
-  const [capturing, setCapturing] = useState(false);
-  const RECORD_WINDOW_SEC = 8;
-
-  // ── shared capture ────────────────────────────────────────────────────────
-  const captureSwing = useCallback(async (): Promise<SwingBiomechanics | null> => {
-    // Guard against a re-entrant capture (double-tap during the spoken line / delay). One in flight.
-    if (captureInFlightRef.current) return null;
-    captureInFlightRef.current = true;
-    setError(null);
+  // Record ONE swing window on the already-live camera + analyze. Returns null when the camera can't
+  // record (falls the caller back to the image-picker) or the window held no readable swing.
+  const recordAndAnalyze = useCallback(async (): Promise<{ ok: boolean; m: SwingBiomechanics | null }> => {
+    const uri = await (coachCamRef.current?.record(WINDOW_SEC) ?? Promise.resolve(null));
+    if (!uri) return { ok: false, m: null };
+    setPhase('reading'); setCaption('Reading that one…');
     try {
-      // ── In-app camera (SmartMotion-style) — the lesson stays on ONE screen so the caddie can talk
-      //    between reps. Mount the camera, let the golfer frame, prompt, then record the swing window.
-      //    record() silences the caddie first, and the prompt finishes before we record, so voice and
-      //    capture never overlap (no audio-session fight, no TTS in the clip).
-      setCapturing(true);
-      await new Promise((r) => setTimeout(r, 300)); // let the component mount so the handle attaches
-      // Request camera+mic FIRST so the preview is live before we prompt (not a black overlay), and so a
-      // denial falls cleanly to the image-picker instead of the golfer swinging into a void.
-      const ready = await (coachCamRef.current?.prepare() ?? Promise.resolve(false));
-      if (ready) {
-        await new Promise((r) => setTimeout(r, 300)); // let the CameraView render after the grant
-        try {
-          const s = useSettingsStore.getState();
-          if (s.voiceEnabled) { say('Go ahead — swing when you’re ready.'); await new Promise((r) => setTimeout(r, 2200)); }
-        } catch { /* prompt is advisory */ }
-        const uri = await (coachCamRef.current?.record(RECORD_WINDOW_SEC) ?? Promise.resolve(null));
-        setCapturing(false);
-        if (uri) {
-          setCap('analyzing');
-          try {
-            // 2026-07-24 (full-app audit, root D) — angle is null (the Coach camera
-            // doesn't collect it) → computeBiomechanics INFERS it from pose geometry
-            // and nulls DTL-invalid metrics, so the Caddie never speaks a wrong turn/
-            // weight number as measured. Handedness threaded so lefties read right.
-            return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000, null, false, null, null, resolveSwingerHandedness());
-          } catch {
-            return null;
-          } finally {
-            setCap('idle');
-          }
-        }
-      } else {
-        setCapturing(false);
-      }
-      // ── Fallback: the proven image-picker modal (camera component unavailable / permission flow) —
-      //    keeps the lesson working even if the in-app camera can't start. No regression.
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
-      let res: ImagePicker.ImagePickerResult;
-      try {
-        res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 12, quality: 0.7, allowsEditing: false });
-      } catch { setError('Could not open the camera. Try again.'); return null; }
-      const asset = res.canceled ? null : res.assets?.[0];
-      if (!asset?.uri) return null;
-      setCap('analyzing');
-      const raw = asset.duration ?? 0;
-      const durationMs = raw > 0 && raw < 100 ? raw * 1000 : raw || 4000;
-      try {
-        return await analyzeSwingFromVideo(asset.uri, durationMs, null, false, null, null, resolveSwingerHandedness());
-      } catch {
-        return null;
-      } finally {
-        setCap('idle');
-      }
-    } finally {
-      setCapturing(false);
-      captureInFlightRef.current = false;
+      // angle null → computeBiomechanics infers it from pose geometry (nulls DTL-invalid metrics so the
+      // caddie never speaks a wrong number); handedness threaded so lefties read correctly.
+      const m = await analyzeSwingFromVideo(uri, WINDOW_SEC * 1000, null, false, null, null, resolveSwingerHandedness());
+      return { ok: true, m };
+    } catch {
+      return { ok: true, m: null };
     }
   }, []);
 
-  // ── diagnostic lesson ─────────────────────────────────────────────────────
-  const startDiagnostic = useCallback(() => {
-    setKind('diagnostic');
-    setDxStage('intro');
-    setPriority(null);
-    setLastValue(null);
-    setGoodReps(0);
-    setLastMetrics(null);
-    setAddressedIds([]);
-    setError(null);
-    // Compute ONCE — the shown line and the spoken line must be the same words (and it avoids a
-    // double evaluation), so the caption never disagrees with what the caddie says.
-    const intro = introLine();
-    setDxText(intro);
-    say(intro);
+  // Image-picker fallback — only when the in-app camera can't start (permission flow / unavailable).
+  const captureViaPicker = useCallback(async (): Promise<SwingBiomechanics | null> => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
+    let res: ImagePicker.ImagePickerResult;
+    try {
+      res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 12, quality: 0.7, allowsEditing: false });
+    } catch { setError('Could not open the camera. Try again.'); return null; }
+    const asset = res.canceled ? null : res.assets?.[0];
+    if (!asset?.uri) return null;
+    const raw = asset.duration ?? 0;
+    const durationMs = raw > 0 && raw < 100 ? raw * 1000 : raw || 4000;
+    try {
+      return await analyzeSwingFromVideo(asset.uri, durationMs, null, false, null, null, resolveSwingerHandedness());
+    } catch {
+      return null;
+    }
   }, []);
 
+  // ── FOCUS / GUIDED-PLAN auto-loop ──────────────────────────────────────────
+  // One rep: watch a window → read it → speak feedback as a caption → advance the plan or re-arm.
+  // Recursive via a cancelable timer (not a while-loop) so it plays nice with React + Pause/End.
+  const focusRep = useCallback(async () => {
+    if (!sessionLiveRef.current || pausedRef.current || captureInFlightRef.current) return;
+    const f = focusRef.current;
+    if (!f) return;
+    const gen = loopGenRef.current;
+    captureInFlightRef.current = true;
+    try {
+      setPhase('watching'); setCaption(promptRef.current); setError(null);
+      const { ok, m } = await recordAndAnalyze();
+      // Bail if the session ended OR the user paused DURING the window (don't analyze/speak past a pause).
+      if (gen !== loopGenRef.current || !sessionLiveRef.current || pausedRef.current) return;
+      if (!ok) {
+        // In-app camera couldn't record — fall back to the picker so the lesson still works. Re-arm
+        // afterwards either way (a cancelled picker must NOT silently kill the loop).
+        const pm = await captureViaPicker();
+        if (gen !== loopGenRef.current || !sessionLiveRef.current || pausedRef.current) return;
+        if (pm) applyFocusResult(f, pm);
+        else scheduleRearm(focusRep, REARM_MS);
+        return;
+      }
+      if (!m) {
+        // Empty window — don't nag every time; just keep watching with a soft re-prompt.
+        promptRef.current = 'Take your time — swing when you\'re ready.';
+        setPhase('watching'); setCaption(promptRef.current);
+        scheduleRearm(focusRep, REARM_MS);
+        return;
+      }
+      applyFocusResult(f, m);
+    } finally {
+      captureInFlightRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordAndAnalyze, captureViaPicker]);
+
+  // Apply a read swing to the focus/plan state: feedback caption + speech, then advance or re-arm.
+  const applyFocusResult = useCallback((f: LessonFocus, m: SwingBiomechanics) => {
+    const fb = composeFocusFeedback(f.id, m);
+    setFeedback(fb); setRep((n) => n + 1);
+    const repsNow = repsOnFocusRef.current + 1;
+    setRepsOnFocus(repsNow);
+    setPhase('feedback'); setCaption(fb.line); say(fb.line);
+
+    const p = planRef.current;
+    const hitCheckpoint = fb.verdict === 'good' || repsNow >= 2;
+    if (p && hitCheckpoint) {
+      const step = planStepRef.current;
+      const nextStep = step + 1;
+      if (nextStep >= p.focusIds.length) {
+        // Plan complete — wrap up and end the session after the win line is heard.
+        scheduleRearm(() => { say(sessionSummaryLine(p.label)); endSession(); }, 2600);
+        return;
+      }
+      const next = focusById(p.focusIds[nextStep]);
+      if (next) {
+        // Auto-advance: speak the transition after the feedback lands, move to the next focus, keep watching.
+        scheduleRearm(() => {
+          if (!sessionLiveRef.current) return;
+          setPlanStep(nextStep); setFocus(next); setFeedback(null); setRepsOnFocus(0);
+          const opener = transitionLine(next);
+          promptRef.current = `${next.cue} — swing when you\'re ready.`;
+          setPhase('watching'); setCaption(opener); say(opener);
+          scheduleRearm(focusRep, OPENER_LEAD_MS);
+        }, 2600);
+        return;
+      }
+    }
+    // Same focus — re-arm the next rep after the feedback is heard.
+    promptRef.current = 'Go again.';
+    scheduleRearm(focusRep, 3200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRep]);
+
+  const scheduleRearm = useCallback((fn: () => void, ms: number) => {
+    clearRearm();
+    if (pausedRef.current || !sessionLiveRef.current) return;
+    rearmRef.current = setTimeout(() => { rearmRef.current = null; if (!pausedRef.current && sessionLiveRef.current) void fn(); }, ms);
+  }, [clearRearm]);
+
+  // ── session lifecycle ──────────────────────────────────────────────────────
+  const goLiveAndOpen = useCallback(async (opener: string, firstPrompt: string) => {
+    loopGenRef.current++;
+    setSessionLive(true); sessionLiveRef.current = true;
+    setPaused(false); pausedRef.current = false;
+    setError(null); setFeedback(null);
+    promptRef.current = firstPrompt;
+    setPhase('watching'); setCaption(opener);
+    await new Promise((r) => setTimeout(r, 250)); // let the camera mount so record() has a handle
+    const ready = await prepareCamera();
+    say(opener);
+    if (ready) scheduleRearm(focusRep, OPENER_LEAD_MS);
+    // No camera → the first focusRep falls back to the picker on its own.
+    else scheduleRearm(focusRep, OPENER_LEAD_MS);
+  }, [prepareCamera, scheduleRearm, focusRep]);
+
+  const startFocus = useCallback((f: LessonFocus, opener: string) => {
+    setKind('focus'); setFocus(f); focusRef.current = f; setRep(0); setRepsOnFocus(0);
+    void goLiveAndOpen(opener, `${f.cue} — swing when you\'re ready.`);
+  }, [goLiveAndOpen]);
+  const pickFocus = useCallback((f: LessonFocus) => {
+    setPlan(null); planRef.current = null; setPlanStep(0); planStepRef.current = 0;
+    startFocus(f, openerLine(f));
+  }, [startFocus]);
+  const startPlan = useCallback((p: LessonPlan) => {
+    const first = focusById(p.focusIds[0]); if (!first) return;
+    setPlan(p); planRef.current = p; setPlanStep(0); planStepRef.current = 0;
+    setKind('focus'); setFocus(first); focusRef.current = first; setRep(0); setRepsOnFocus(0);
+    void goLiveAndOpen(`${p.intro} ${openerLine(first)}`, `${first.cue} — swing when you\'re ready.`);
+  }, [goLiveAndOpen]);
+
+  const togglePause = useCallback(() => {
+    setPaused((prev) => {
+      const next = !prev;
+      pausedRef.current = next;
+      if (next) { clearRearm(); void stopSpeaking().catch(() => {}); coachCamRef.current?.stop(); setCaption('Paused — tap resume when you\'re set.'); }
+      else { setCaption(promptRef.current); scheduleRearm(focusRep, 400); }
+      return next;
+    });
+  }, [clearRearm, scheduleRearm, focusRep]);
+
+  const endSession = useCallback(() => {
+    loopGenRef.current++;
+    clearRearm(); clearProgressTimer();
+    coachCamRef.current?.stop();
+    void stopSpeaking().catch(() => {});
+    setSessionLive(false); sessionLiveRef.current = false;
+    setPaused(false); pausedRef.current = false;
+    preparedRef.current = false;
+    setKind('menu'); setFocus(null); setFeedback(null); setPlan(null); setPriority(null); setError(null);
+  }, [clearRearm, clearProgressTimer]);
+
+  // ── diagnostic lesson (tap-to-swing on the live camera) ────────────────────
+  const startDiagnostic = useCallback(() => {
+    setKind('diagnostic'); setDxStage('intro'); setPriority(null); setLastValue(null);
+    setGoodReps(0); setLastMetrics(null); setAddressedIds([]); setError(null);
+    const intro = introLine();
+    setDxText(intro);
+    loopGenRef.current++;
+    setSessionLive(true); sessionLiveRef.current = true; setPaused(false); pausedRef.current = false;
+    setPhase('watching'); setCaption(intro);
+    void (async () => { await new Promise((r) => setTimeout(r, 250)); await prepareCamera(); say(intro); })();
+  }, [prepareCamera]);
+
   const beginPriority = useCallback((dx: Diagnosis, m: SwingBiomechanics) => {
-    // Personalize: continuity from the last lesson on this fault + a tie to the player's known miss.
     const prior = useCoachLessonStore.getState().lastFor(dx.fault.id);
     const days = prior ? Math.floor((Date.now() - prior.at) / 86_400_000) : null;
     const mem = memoryLine(dx.fault.name, days);
@@ -184,169 +317,91 @@ export default function CoachLessonScreen() {
     const reveal = diagnosisReveal(dx, m);
     const rx = prescriptionLine(dx.fault);
     const blocks = [mem, reveal, miss, rx].filter(Boolean) as string[];
-    setPriority(dx);
-    setLastValue(dx.value);
-    setGoodReps(0);
-    setDxStage('reps');
-    setDxText(blocks.join('\n\n'));
-    say(blocks.join(' '));
+    setPriority(dx); setLastValue(dx.value); setGoodReps(0); setDxStage('reps');
+    setDxText(blocks.join('\n\n')); setCaption(blocks[0] ?? reveal); say(blocks.join(' '));
   }, []);
 
   const recordDiagnostic = useCallback(async () => {
-    if (captureInFlightRef.current) return; // ignore a double-tap while a swing is already in flight
-    const m = await captureSwing();
-    if (!m) {
-      const line = "I couldn't read that swing — get your whole swing in frame (face-on is best) and let's try again.";
-      setError(line);
-      return;
-    }
-    setLastMetrics(m);
-
-    if (dxStage === 'intro') {
-      // Honesty gate: a down-the-line video (or a poor read) nulls most metrics — that's "couldn't
-      // see it", NOT a clean swing. Never praise a swing we couldn't actually read.
-      if (!isDiagnosable(m)) {
-        const line = "I couldn't read enough of that swing to coach it — film face-on with your whole swing in frame, good light, and give me another.";
-        setError(line);
-        say(line);
+    if (captureInFlightRef.current) return;
+    captureInFlightRef.current = true;
+    try {
+      setPhase('watching'); setCaption('Swing when you\'re ready — I\'m watching.'); setError(null);
+      const { ok, m: liveM } = await recordAndAnalyze();
+      const m = ok ? liveM : await captureViaPicker();
+      if (!m) {
+        const line = "I couldn't read that swing — get your whole swing in frame, face-on, and let's try again.";
+        setError(line); setPhase('watching'); setCaption(line);
         return;
       }
-      const dx = diagnoseBaseline(m);
-      if (!dx) {
-        // Genuinely sound swing (readable + no fault crossed a threshold) — reinforce.
-        const line = diagnosisReveal(null, m);
-        setDxText(line);
-        setDxStage('homework');
-        setPriority(null);
-        say(line);
-        return;
-      }
-      setAddressedIds([dx.fault.id]);
-      beginPriority(dx, m);
-      return;
-    }
+      setLastMetrics(m); setPhase('feedback');
 
-    if (dxStage === 'reps' && priority) {
-      const evalRep = evaluateRep(priority.fault, m, lastValue);
-      setLastValue(evalRep.value);
-      setDxText(evalRep.line);
-      say(evalRep.line);
-      if (evalRep.fixed) {
-        const nextGood = goodReps + 1;
-        setGoodReps(nextGood);
-        if (nextGood >= 2) {
-          // Lock it in. Hide the Swing button now (pendingProgress) so a second tap can't double-fire,
-          // and delay the spoken progress line so it doesn't cut off the win line. Timer is cancelable.
-          const next = diagnose(m).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
-          const line = progressLine(priority.fault, next);
-          setPendingProgress(true);
-          if (progressTimer.current) clearTimeout(progressTimer.current);
-          progressTimer.current = setTimeout(() => {
-            progressTimer.current = null;
-            setPendingProgress(false);
-            setDxStage('progress');
-            setDxText(line);
-            say(line);
-          }, 2200);
+      if (dxStage === 'intro') {
+        if (!isDiagnosable(m)) {
+          const line = "I couldn't read enough of that swing to coach it — film face-on, whole swing in frame, good light, and give me another.";
+          setError(line); setCaption(line); say(line); return;
         }
-      } else {
-        setGoodReps(0);
+        const dx = diagnoseBaseline(m);
+        if (!dx) {
+          const line = diagnosisReveal(null, m);
+          setDxText(line); setCaption(line); setDxStage('homework'); setPriority(null); say(line); return;
+        }
+        setAddressedIds([dx.fault.id]); beginPriority(dx, m); return;
       }
+
+      if (dxStage === 'reps' && priority) {
+        const evalRep = evaluateRep(priority.fault, m, lastValue);
+        setLastValue(evalRep.value); setDxText(evalRep.line); setCaption(evalRep.line); say(evalRep.line);
+        if (evalRep.fixed) {
+          const nextGood = goodReps + 1; setGoodReps(nextGood);
+          if (nextGood >= 2) {
+            const next = diagnose(m).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
+            const line = progressLine(priority.fault, next);
+            setPendingProgress(true);
+            if (progressTimer.current) clearTimeout(progressTimer.current);
+            progressTimer.current = setTimeout(() => {
+              progressTimer.current = null; setPendingProgress(false);
+              setDxStage('progress'); setDxText(line); setCaption(line); say(line);
+            }, 2200);
+          }
+        } else { setGoodReps(0); }
+      }
+    } finally {
+      captureInFlightRef.current = false;
     }
-  }, [captureSwing, dxStage, priority, lastValue, goodReps, addressedIds, beginPriority]);
+  }, [recordAndAnalyze, captureViaPicker, dxStage, priority, lastValue, goodReps, addressedIds, beginPriority]);
 
   const recordLesson = useCallback((fault: CoachFault) => {
-    try {
-      useCoachLessonStore.getState().record({ faultId: fault.id, faultName: fault.name, hitCheckpoint: goodReps >= 2 }, Date.now());
-    } catch { /* history is best-effort */ }
+    try { useCoachLessonStore.getState().record({ faultId: fault.id, faultName: fault.name, hitCheckpoint: goodReps >= 2 }, Date.now()); } catch { /* best-effort */ }
   }, [goodReps]);
-
   const takeNextPriority = useCallback(() => {
-    if (priority) recordLesson(priority.fault); // bank the one we just finished
+    if (priority) recordLesson(priority.fault);
     if (!lastMetrics) { setDxStage('homework'); return; }
     const next = diagnose(lastMetrics).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
-    if (!next) { setDxStage('homework'); const hw = priority ? homeworkLine(priority.fault) : ''; setDxText(hw); say(hw); return; }
-    setAddressedIds((ids) => [...ids, next.fault.id]);
-    beginPriority(next, lastMetrics);
+    if (!next) { setDxStage('homework'); const hw = priority ? homeworkLine(priority.fault) : ''; setDxText(hw); setCaption(hw); say(hw); return; }
+    setAddressedIds((ids) => [...ids, next.fault.id]); beginPriority(next, lastMetrics);
   }, [lastMetrics, addressedIds, priority, beginPriority, recordLesson]);
-
   const finishToHomework = useCallback(() => {
-    if (!priority) { setKind('menu'); return; }
+    if (!priority) { endSession(); return; }
     recordLesson(priority.fault);
-    const hw = homeworkLine(priority.fault);
-    setDxStage('homework');
-    setDxText(hw);
-    say(hw);
-  }, [priority, recordLesson]);
-
-  // ── focus / guided-plan mode (unchanged behavior) ─────────────────────────
-  const startFocus = (f: LessonFocus, spoken: string) => {
-    setKind('focus'); setFocus(f); setFeedback(null); setError(null); setRepsOnFocus(0); setRep(0);
-    say(spoken);
-  };
-  const pickFocus = useCallback((f: LessonFocus) => { setPlan(null); setPlanStep(0); startFocus(f, f.instruction); }, []);
-  const startPlan = useCallback((p: LessonPlan) => {
-    const first = focusById(p.focusIds[0]); if (!first) return;
-    setPlan(p); setPlanStep(0); setRep(0); startFocus(first, `${p.intro} ${first.instruction}`);
-  }, []);
-  const readyToAdvance = plan != null && feedback != null && (feedback.verdict === 'good' || repsOnFocus >= 2);
-  const isLastFocusInPlan = plan != null && planStep >= plan.focusIds.length - 1;
-  const advanceFocus = useCallback(() => {
-    if (!plan) return;
-    const nextStep = planStep + 1;
-    if (nextStep >= plan.focusIds.length) {
-      say(sessionSummaryLine(plan.label)); setPlan(null); setPlanStep(0); setKind('menu'); setFocus(null); setFeedback(null); return;
-    }
-    const next = focusById(plan.focusIds[nextStep]); if (!next) return;
-    setPlanStep(nextStep); startFocus(next, transitionLine(next));
-  }, [plan, planStep]);
-  const recordFocusSwing = useCallback(async () => {
-    if (!focus) return;
-    if (captureInFlightRef.current) return; // ignore a double-tap while a swing is already in flight
-    const m = await captureSwing();
-    let fb: FocusFeedback;
-    if (!m) fb = { verdict: 'unclear', line: "I couldn't pick up your swing — make sure your whole swing is in frame and let's go again.", metricLabel: null };
-    else fb = composeFocusFeedback(focus.id, m);
-    setFeedback(fb); setRep((n) => n + 1); setRepsOnFocus((n) => n + 1); say(fb.line);
-  }, [focus, captureSwing]);
+    const hw = homeworkLine(priority.fault); setDxStage('homework'); setDxText(hw); setCaption(hw); say(hw);
+  }, [priority, recordLesson, endSession]);
 
   const s = makeStyles(colors);
-  const verdictTint = (v: FocusFeedback['verdict']) => (v === 'good' ? colors.accent : v === 'refine' ? '#f5a623' : colors.text_muted);
-  const backToMenu = () => { clearProgressTimer(); setKind('menu'); setFocus(null); setFeedback(null); setPlan(null); setPriority(null); setError(null); };
 
-  return (
-    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
-      {/* In-app swing camera — shown ONLY during the record window (mounted → the caddie's TTS is
-          already done, so no audio-session fight). The golfer frames + swings; the pipeline finds the
-          swing in the window. "Done" ends the window early. */}
-      {capturing && (
-        <View style={s.cameraOverlay}>
-          <CoachSwingCamera ref={coachCamRef} facing="back" style={StyleSheet.absoluteFill} />
-          <View style={s.cameraBanner} pointerEvents="none">
-            <Ionicons name="videocam" size={16} color="#fff" />
-            <Text style={s.cameraBannerText}>Swing when you’re ready — I’m watching</Text>
-          </View>
-          <TouchableOpacity style={s.cameraStopBtn} onPress={() => coachCamRef.current?.stop()} accessibilityRole="button" accessibilityLabel="Done recording">
-            <Text style={s.cameraStopText}>Done</Text>
+  // ── MENU ───────────────────────────────────────────────────────────────────
+  if (kind === 'menu') {
+    return (
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
+            <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
           </TouchableOpacity>
+          <Text style={s.title}>Coach Caddie</Text>
+          <View style={s.headerBtn} />
         </View>
-      )}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => (kind === 'menu' ? safeBack() : backToMenu())} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
-        </TouchableOpacity>
-        <Text style={s.title}>Coach Caddie</Text>
-        <View style={s.headerBtn} />
-      </View>
-
-      {kind === 'menu' ? (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
-          {/* Flagship — the real diagnostic lesson. */}
           <TouchableOpacity style={s.heroCard} onPress={startDiagnostic} accessibilityRole="button">
-            <View style={s.heroTop}>
-              <Ionicons name="school" size={22} color="#0d1a0d" />
-              <Text style={s.heroTag}>AI LESSON</Text>
-            </View>
+            <View style={s.heroTop}><Ionicons name="school" size={22} color="#0d1a0d" /><Text style={s.heroTag}>AI LESSON</Text></View>
             <Text style={s.heroTitle}>Get a real lesson</Text>
             <Text style={s.heroSub}>Your caddie watches a swing, finds the one thing costing you the most, and coaches you through it like a pro — feel, drill, and checkpoints.</Text>
             <View style={s.heroCta}><Text style={s.heroCtaText}>Start lesson</Text><Ionicons name="arrow-forward" size={16} color="#0d1a0d" /></View>
@@ -355,10 +410,7 @@ export default function CoachLessonScreen() {
           <Text style={s.sectionLabel}>GUIDED SESSIONS</Text>
           {LESSON_PLANS.map((p) => (
             <TouchableOpacity key={p.id} style={s.planRow} onPress={() => startPlan(p)} accessibilityRole="button">
-              <View style={{ flex: 1 }}>
-                <Text style={s.focusLabel}>{p.label}</Text>
-                <Text style={s.planBlurb}>{p.blurb}</Text>
-              </View>
+              <View style={{ flex: 1 }}><Text style={s.focusLabel}>{p.label}</Text><Text style={s.planBlurb}>{p.blurb}</Text></View>
               <Ionicons name="play-circle" size={22} color={colors.accent} />
             </TouchableOpacity>
           ))}
@@ -371,121 +423,123 @@ export default function CoachLessonScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      ) : kind === 'diagnostic' ? (
-        <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }}>
-          {priority && (
-            <View style={s.focusPill}>
-              <Ionicons name="flag" size={13} color={colors.accent} />
-              <Text style={s.focusPillText}>{priority.fault.name}</Text>
-              {dxStage === 'reps' && <Text style={s.repText}>· {goodReps}/2 checkpoints</Text>}
-            </View>
-          )}
+      </SafeAreaView>
+    );
+  }
 
-          {cap === 'analyzing' ? (
-            <View style={s.center}><ActivityIndicator size="large" color={colors.accent} /><Text style={s.dim}>Watching your swing…</Text></View>
-          ) : (
-            <>
-              <View style={s.card}>
-                <Text style={s.coachLine}>{dxText}</Text>
-              </View>
-              {priority && (dxStage === 'reps') && (
-                <View style={[s.card, { borderColor: colors.accent }]}>
-                  <Text style={s.sectionLabel}>THE DRILL · {priority.fault.drill.name.toUpperCase()}</Text>
-                  <Text style={s.drillHow}>{priority.fault.drill.how}</Text>
-                  <View style={s.checkRow}>
-                    <Ionicons name="checkmark-circle-outline" size={16} color={colors.accent} />
-                    <Text style={s.checkText}>Checkpoint: {priority.fault.checkpoint}</Text>
-                  </View>
-                </View>
-              )}
-            </>
-          )}
+  // ── LIVE SESSION (camera-first, both modes) ─────────────────────────────────
+  const isDiag = kind === 'diagnostic';
+  const stepLabel = plan ? `step ${planStep + 1} of ${plan.focusIds.length}` : null;
+  const pillText = isDiag ? (priority?.fault.name ?? 'Baseline') : (focus?.label ?? 'Focus');
 
-          {error && <Text style={s.err}>{error}</Text>}
-          <View style={{ flex: 1 }} />
+  return (
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      {/* Persistent live camera — the lesson surface for the whole session (mounts once, no per-rep flip). */}
+      {sessionLive && <CoachSwingCamera ref={coachCamRef} facing="back" style={StyleSheet.absoluteFill} />}
+      <View style={s.scrimTop} pointerEvents="none" />
+      <View style={s.scrimBottom} pointerEvents="none" />
 
-          {cap !== 'analyzing' && dxStage === 'intro' && (
-            <TouchableOpacity style={s.primaryBtn} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Record a baseline swing</Text></TouchableOpacity>
-          )}
-          {cap !== 'analyzing' && dxStage === 'reps' && !pendingProgress && (
-            <TouchableOpacity style={s.primaryBtn} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Swing</Text></TouchableOpacity>
-          )}
-          {dxStage === 'progress' && (
-            <>
-              <TouchableOpacity style={s.primaryBtn} onPress={takeNextPriority}><Ionicons name="arrow-forward-circle" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Take on the next thing</Text></TouchableOpacity>
-              <TouchableOpacity style={s.secondaryBtn} onPress={finishToHomework}><Text style={s.secondaryText}>Bank it & finish</Text></TouchableOpacity>
-            </>
-          )}
-          {dxStage === 'homework' && (
-            <TouchableOpacity style={s.primaryBtn} onPress={backToMenu}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.primaryText}>Got it — end lesson</Text></TouchableOpacity>
-          )}
-        </ScrollView>
-      ) : (
-        // Focus / guided-plan mode.
-        <ScrollView contentContainerStyle={{ padding: 16, flexGrow: 1 }}>
-          <View style={s.focusPill}>
-            <Text style={s.focusPillText}>{focus?.label}</Text>
-            {plan && <Text style={s.repText}>step {planStep + 1} of {plan.focusIds.length}</Text>}
-            {rep > 0 && <Text style={s.repText}>· rep {rep}</Text>}
+      {/* Header over the camera. */}
+      <View style={s.headerOverlay}>
+        <TouchableOpacity onPress={endSession} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="End lesson">
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={s.livePill}>
+          <View style={[s.liveDot, { backgroundColor: phase === 'watching' && !paused ? '#ff5252' : colors.accent }]} />
+          <Text style={s.livePillText}>{pillText}{stepLabel ? ` · ${stepLabel}` : ''}{rep > 0 && !isDiag ? ` · rep ${rep}` : ''}</Text>
+        </View>
+        <View style={s.headerBtn} />
+      </View>
+
+      {/* Phase chip (watching / reading) — subtle, over the camera, replaces the black spinner. */}
+      <View style={s.phaseWrap} pointerEvents="none">
+        {phase === 'reading' ? (
+          <View style={s.phaseChip}><ActivityIndicator size="small" color="#fff" /><Text style={s.phaseChipText}>Reading that one…</Text></View>
+        ) : phase === 'watching' && !paused ? (
+          <View style={s.phaseChip}><Ionicons name="eye" size={14} color="#fff" /><Text style={s.phaseChipText}>Watching</Text></View>
+        ) : null}
+      </View>
+
+      {/* Coaching caption — the coach's current line, over the camera. */}
+      <View style={s.captionWrap} pointerEvents="box-none">
+        {isDiag && dxStage === 'reps' && priority && (
+          <View style={s.drillChip}>
+            <Text style={s.drillChipLabel}>DRILL · {priority.fault.drill.name.toUpperCase()}</Text>
+            <Text style={s.drillChipHow}>{priority.fault.drill.how}</Text>
           </View>
+        )}
+        <Text style={s.captionText}>{error ?? caption}</Text>
+        {feedback?.metricLabel && !isDiag && <Text style={s.captionMetric}>{feedback.metricLabel}</Text>}
+      </View>
 
-          {cap === 'analyzing' ? (
-            <View style={s.center}><ActivityIndicator size="large" color={colors.accent} /><Text style={s.dim}>Watching your swing…</Text></View>
-          ) : feedback ? (
-            <View style={s.card}>
-              <View style={s.verdictRow}>
-                <Ionicons name={feedback.verdict === 'good' ? 'checkmark-circle' : feedback.verdict === 'refine' ? 'sync-circle' : 'help-circle'} size={22} color={verdictTint(feedback.verdict)} />
-                <Text style={[s.verdictText, { color: verdictTint(feedback.verdict) }]}>{feedback.verdict === 'good' ? 'On it' : feedback.verdict === 'refine' ? 'Refine' : 'Try again'}</Text>
-                {feedback.metricLabel && <Text style={s.metric}>{feedback.metricLabel}</Text>}
-              </View>
-              <Text style={s.feedbackLine}>{feedback.line}</Text>
-            </View>
-          ) : (
-            <View style={s.card}><Text style={s.instruction}>{focus?.instruction}</Text>{focus && <Text style={s.cue}>Cue: {focus.cue}</Text>}</View>
-          )}
-
-          {error && <Text style={s.err}>{error}</Text>}
-          <View style={{ flex: 1 }} />
-
-          {cap !== 'analyzing' && (
-            readyToAdvance ? (
-              <TouchableOpacity style={s.primaryBtn} onPress={advanceFocus}>
-                <Ionicons name={isLastFocusInPlan ? 'flag' : 'arrow-forward-circle'} size={18} color="#0d1a0d" />
-                <Text style={s.primaryText}>{isLastFocusInPlan ? 'Finish session' : `Next: ${focusById(plan!.focusIds[planStep + 1])?.label ?? 'continue'}`}</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={s.primaryBtn} onPress={recordFocusSwing}>
-                <Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.primaryText}>{feedback ? 'Swing again' : 'Record my swing'}</Text>
-              </TouchableOpacity>
-            )
-          )}
-          {readyToAdvance && (
-            <TouchableOpacity style={s.secondaryBtn} onPress={recordFocusSwing}><Text style={s.secondaryText}>One more on this</Text></TouchableOpacity>
-          )}
-          <TouchableOpacity style={s.secondaryBtn} onPress={backToMenu}><Text style={s.secondaryText}>{plan ? 'End session' : 'Change focus'}</Text></TouchableOpacity>
-        </ScrollView>
-      )}
+      {/* Control bar. */}
+      <View style={s.controlBar}>
+        {isDiag ? (
+          // Diagnostic: tap-to-swing on the live camera; decision points stay explicit.
+          <>
+            {dxStage === 'intro' && phase !== 'reading' && (
+              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Record a baseline swing</Text></TouchableOpacity>
+            )}
+            {dxStage === 'reps' && !pendingProgress && phase !== 'reading' && (
+              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Swing</Text></TouchableOpacity>
+            )}
+            {dxStage === 'progress' && (
+              <>
+                <TouchableOpacity style={s.ctrlPrimary} onPress={takeNextPriority}><Ionicons name="arrow-forward-circle" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Take on the next thing</Text></TouchableOpacity>
+                <TouchableOpacity style={s.ctrlGhost} onPress={finishToHomework}><Text style={s.ctrlGhostText}>Bank it & finish</Text></TouchableOpacity>
+              </>
+            )}
+            {dxStage === 'homework' && (
+              <TouchableOpacity style={s.ctrlPrimary} onPress={endSession}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Got it — end lesson</Text></TouchableOpacity>
+            )}
+            {(dxStage === 'intro' || dxStage === 'reps') && (
+              <TouchableOpacity style={s.ctrlGhost} onPress={endSession}><Text style={s.ctrlGhostText}>End lesson</Text></TouchableOpacity>
+            )}
+          </>
+        ) : (
+          // Focus / plan: hands-free auto-loop — just Pause / End (no per-rep tap).
+          <>
+            <TouchableOpacity style={s.ctrlGhost} onPress={togglePause}>
+              <Ionicons name={paused ? 'play' : 'pause'} size={16} color="#fff" />
+              <Text style={s.ctrlGhostText}>{paused ? 'Resume' : 'Pause'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.ctrlGhost} onPress={endSession}>
+              <Text style={s.ctrlGhostText}>{plan ? 'End session' : 'End'}</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: colors.background },
-    cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 50, backgroundColor: '#000' },
-    cameraBanner: {
-      position: 'absolute', top: 56, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8,
-      backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    },
-    cameraBannerText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-    cameraStopBtn: {
-      position: 'absolute', bottom: 48, alignSelf: 'center', backgroundColor: colors.accent,
-      paddingHorizontal: 32, paddingVertical: 14, borderRadius: 28,
-    },
-    cameraStopText: { color: '#0d1a0d', fontSize: 16, fontWeight: '700' },
+    screen: { flex: 1, backgroundColor: '#000' },
+    scrimTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, backgroundColor: 'rgba(0,0,0,0.45)' },
+    scrimBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 260, backgroundColor: 'rgba(0,0,0,0.5)' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
+    headerOverlay: { position: 'absolute', top: 8, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, zIndex: 10 },
     headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     title: { color: colors.text_primary, fontSize: 18, fontWeight: '800' },
+    livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16 },
+    liveDot: { width: 8, height: 8, borderRadius: 4 },
+    livePillText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+    phaseWrap: { position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center', zIndex: 8 },
+    phaseChip: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
+    phaseChipText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+    captionWrap: { position: 'absolute', left: 16, right: 16, bottom: 120, gap: 10, zIndex: 9 },
+    captionText: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 27, textShadowColor: 'rgba(0,0,0,0.9)', textShadowRadius: 6 },
+    captionMetric: { color: colors.accent, fontSize: 14, fontWeight: '800' },
+    drillChip: { backgroundColor: 'rgba(0,0,0,0.55)', borderColor: colors.accent, borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
+    drillChipLabel: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+    drillChipHow: { color: '#fff', fontSize: 14, lineHeight: 20 },
+    controlBar: { position: 'absolute', left: 16, right: 16, bottom: 28, gap: 10, zIndex: 10 },
+    ctrlPrimary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 26, paddingVertical: 15 },
+    ctrlPrimaryText: { color: '#0d1a0d', fontSize: 16, fontWeight: '800' },
+    ctrlGhost: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 26, paddingVertical: 13 },
+    ctrlGhostText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    // Menu styles (kind === 'menu').
     heroCard: { backgroundColor: colors.accent, borderRadius: 16, padding: 18, gap: 8 },
     heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     heroTag: { color: '#0d1a0d', fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
@@ -498,26 +552,5 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     planBlurb: { color: colors.text_muted, fontSize: 13, marginTop: 3 },
     focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 16, marginTop: 12 },
     focusLabel: { color: colors.text_primary, fontSize: 16, fontWeight: '700' },
-    focusPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', backgroundColor: colors.surface, borderColor: colors.accent, borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 16 },
-    focusPillText: { color: colors.accent, fontSize: 14, fontWeight: '800' },
-    repText: { color: colors.text_muted, fontSize: 12, fontWeight: '600' },
-    center: { alignItems: 'center', justifyContent: 'center', gap: 14, paddingVertical: 60 },
-    dim: { color: colors.text_muted, fontSize: 14, textAlign: 'center' },
-    card: { backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 8, marginBottom: 12 },
-    coachLine: { color: colors.text_primary, fontSize: 16, lineHeight: 24 },
-    drillHow: { color: colors.text_primary, fontSize: 15, lineHeight: 22 },
-    checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 },
-    checkText: { flex: 1, color: colors.text_muted, fontSize: 13, lineHeight: 18 },
-    instruction: { color: colors.text_primary, fontSize: 17, fontWeight: '600', lineHeight: 24 },
-    cue: { color: colors.text_muted, fontSize: 14, fontStyle: 'italic' },
-    verdictRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    verdictText: { fontSize: 16, fontWeight: '800' },
-    metric: { color: colors.text_muted, fontSize: 13, fontWeight: '600', marginLeft: 'auto' },
-    feedbackLine: { color: colors.text_primary, fontSize: 16, lineHeight: 23 },
-    err: { color: '#F0803C', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 12 },
-    primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 24, paddingVertical: 15, marginTop: 12 },
-    primaryText: { color: '#0d1a0d', fontSize: 16, fontWeight: '800' },
-    secondaryBtn: { alignItems: 'center', paddingVertical: 14 },
-    secondaryText: { color: colors.text_muted, fontSize: 14, fontWeight: '700' },
   });
 }
