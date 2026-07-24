@@ -35,6 +35,16 @@ describe('resolveSpokenCourse — non-courses stay null (no false positives)', (
     'a song',
     'hole five',
     'the pin',       // must NOT false-match a course by a 3-letter fragment
+    // 2026-07-24 audit — generic on-course words that are SUBSTRINGS of bundled course names.
+    // These previously hijacked the round ("green" ⊂ "Killian Greens", etc.).
+    'the green',
+    'green',
+    'the greens',
+    'the lakes',
+    'the point',
+    'the hills',
+    'the front',
+    'the back',
     'my ball',
     'home',
     'x',

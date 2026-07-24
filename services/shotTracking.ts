@@ -120,6 +120,11 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
     end_location: loc, // completed shot — rest position known
     gps_location: startLoc ?? loc,
     distance_yards: shotDistanceYards,
+    // 2026-07-24 (audit — carry-honesty) — this distance is GPS/hole-yardage derived (a tee→rest TOTAL,
+    // includes roll), NOT a measured airtime carry. Mirror it into gps_distance_yards so roundStore's
+    // measuredCarry guard (distance_yards !== gps_distance_yards) correctly EXCLUDES it from training the
+    // learned per-club carry the caddie quotes. It stays a DISPLAY distance; it just doesn't teach the bag.
+    gps_distance_yards: shotDistanceYards ?? undefined,
   };
   round.logShot(shot);
 

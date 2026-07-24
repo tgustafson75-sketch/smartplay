@@ -919,7 +919,10 @@ export async function speakDeviceNotice(
   // Purely additive: a miss or any playback error falls straight through to device TTS (prior behavior).
   try {
     const cache = await import('./offlineVoiceCache');
-    const uri = cache.resolveCachedOfflineClipUri(text, gender);
+    // Key by the CURRENT persona so a caddie switch doesn't play the previous caddie's cached clip.
+    let persona = 'kevin';
+    try { persona = (require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? 'kevin') as string; } catch { /* default */ }
+    const uri = cache.resolveCachedOfflineClipUri(text, gender, persona);
     if (uri) {
       try { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
       catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }

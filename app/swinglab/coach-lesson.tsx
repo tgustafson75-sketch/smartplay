@@ -102,22 +102,30 @@ export default function CoachLessonScreen() {
       //    record() silences the caddie first, and the prompt finishes before we record, so voice and
       //    capture never overlap (no audio-session fight, no TTS in the clip).
       setCapturing(true);
-      await new Promise((r) => setTimeout(r, 500)); // let the CameraView mount + warm
-      try {
-        const s = useSettingsStore.getState();
-        if (s.voiceEnabled) { say('Go ahead — swing when you’re ready.'); await new Promise((r) => setTimeout(r, 2200)); }
-      } catch { /* prompt is advisory */ }
-      const uri = await (coachCamRef.current?.record(RECORD_WINDOW_SEC) ?? Promise.resolve(null));
-      setCapturing(false);
-      if (uri) {
-        setCap('analyzing');
+      await new Promise((r) => setTimeout(r, 300)); // let the component mount so the handle attaches
+      // Request camera+mic FIRST so the preview is live before we prompt (not a black overlay), and so a
+      // denial falls cleanly to the image-picker instead of the golfer swinging into a void.
+      const ready = await (coachCamRef.current?.prepare() ?? Promise.resolve(false));
+      if (ready) {
+        await new Promise((r) => setTimeout(r, 300)); // let the CameraView render after the grant
         try {
-          return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000);
-        } catch {
-          return null;
-        } finally {
-          setCap('idle');
+          const s = useSettingsStore.getState();
+          if (s.voiceEnabled) { say('Go ahead — swing when you’re ready.'); await new Promise((r) => setTimeout(r, 2200)); }
+        } catch { /* prompt is advisory */ }
+        const uri = await (coachCamRef.current?.record(RECORD_WINDOW_SEC) ?? Promise.resolve(null));
+        setCapturing(false);
+        if (uri) {
+          setCap('analyzing');
+          try {
+            return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000);
+          } catch {
+            return null;
+          } finally {
+            setCap('idle');
+          }
         }
+      } else {
+        setCapturing(false);
       }
       // ── Fallback: the proven image-picker modal (camera component unavailable / permission flow) —
       //    keeps the lesson working even if the in-app camera can't start. No regression.

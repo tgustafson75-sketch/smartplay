@@ -216,6 +216,10 @@ export default function UploadSwing() {
       uploadLog('save-failed', { error: e instanceof Error ? e.message : String(e) });
       setStep('metadata');
       Alert.alert('Upload failed', "Couldn't save that video. Please try again.");
+      // 2026-07-24 (audit) — RESET the in-flight guard on the failure path, else the entry guard
+      // (saveInFlightRef.current) makes every subsequent "Add to Library" tap a silent no-op → the
+      // retry the Alert asks for is impossible without leaving + re-entering the screen.
+      saveInFlightRef.current = false;
       return;
     }
     // Phase V — Kevin acknowledges the upload immediately and we navigate

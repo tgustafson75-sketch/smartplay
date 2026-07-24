@@ -49,12 +49,19 @@ function norm(text: string): string {
 const TEXT_TO_LINE = new Map<string, { slug: string; language: Lang }>();
 for (const l of OFFLINE_LINES) TEXT_TO_LINE.set(norm(l.text), { slug: l.slug, language: l.language });
 
-function cacheKey(slug: string, gender: Gender): string {
-  return `${gender}:${slug}`;
+// 2026-07-24 (audit) — key by PERSONA too. The /api/voice render depends on the persona, so a clip
+// cached for Kevin must NOT be served after a switch to Tank (it would play in the old caddie's voice).
+// Persona in the key + filename means each caddie gets its own cached clips; a switch just re-renders.
+function personaSlug(persona: string): string {
+  return (persona || 'kevin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'kevin';
 }
 
-function fileFor(slug: string, gender: Gender): File {
-  return new File(Paths.cache, `offline_voice_${gender}_${slug}.mp3`);
+function cacheKey(slug: string, gender: Gender, persona: string): string {
+  return `${personaSlug(persona)}:${gender}:${slug}`;
+}
+
+function fileFor(slug: string, gender: Gender, persona: string): File {
+  return new File(Paths.cache, `offline_voice_${personaSlug(persona)}_${gender}_${slug}.mp3`);
 }
 
 /** Minimum plausible mp3 size — mirrors the speak() path's small-payload guard so a truncated/empty
@@ -69,11 +76,11 @@ const cachedKeys = new Set<string>();
  * If the given spoken line is one of our fixed offline lines AND its persona-voice clip is cached on
  * disk, return the file uri to play. Otherwise null → caller uses device TTS. Sync + cheap.
  */
-export function resolveCachedOfflineClipUri(text: string, gender: Gender): string | null {
+export function resolveCachedOfflineClipUri(text: string, gender: Gender, persona: string): string | null {
   const line = TEXT_TO_LINE.get(norm(text));
   if (!line) return null;
-  if (!cachedKeys.has(cacheKey(line.slug, gender))) return null;
-  return fileFor(line.slug, gender).uri;
+  if (!cachedKeys.has(cacheKey(line.slug, gender, persona))) return null;
+  return fileFor(line.slug, gender, persona).uri;
 }
 
 let warmInFlight: Promise<void> | null = null;
@@ -88,9 +95,9 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
   warmInFlight = (async () => {
     const apiBase = getApiBaseUrl();
     for (const line of OFFLINE_LINES) {
-      const key = cacheKey(line.slug, gender);
+      const key = cacheKey(line.slug, gender, persona);
       if (cachedKeys.has(key)) continue;
-      const file = fileFor(line.slug, gender);
+      const file = fileFor(line.slug, gender, persona);
       // Already on disk from a prior session → register and skip the network.
       try {
         if (file.exists && (file.size ?? 0) >= MIN_CLIP_BYTES) { cachedKeys.add(key); continue; }
@@ -119,6 +126,6 @@ export function __resetOfflineVoiceCache(): void {
 }
 
 /** Test seam: register a slug as cached (used to assert resolve behavior without disk/network). */
-export function __markCachedForTest(slug: string, gender: Gender): void {
-  cachedKeys.add(cacheKey(slug, gender));
+export function __markCachedForTest(slug: string, gender: Gender, persona = 'kevin'): void {
+  cachedKeys.add(cacheKey(slug, gender, persona));
 }

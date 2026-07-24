@@ -204,11 +204,9 @@ export function GlobalToolsMenu() {
             const vspar = preRound.getScoreVsPar();
             const played = preRound.getHolesPlayed();
             const roundId = endRound();
-            // Award points matching caddie.tsx generateRoundSummary.
-            usePointsStore.getState().addPoints(
-              Math.max(10, 50 - Math.max(0, vspar * 2)),
-              'Round completed',
-            );
+            // 2026-07-24 (audit — double-credit fix) — round-completion points are awarded ONCE inside
+            // endRound() (sim/holes-gated). This caller-side award double-credited + skipped the sim
+            // gate; removed. endRound() is the single source.
             // 2026-07-04 (elite-clean audit) — the summary line now comes from the
             // SAME shared builder the caddie tab uses (services/roundEndSummary);
             // the inline verbatim copy that lived here had already drifted.

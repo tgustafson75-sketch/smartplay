@@ -51,20 +51,19 @@ export default function HoleShotMapScreen() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!courseId) {
-        setGeometryLoaded(true);
-        return;
-      }
-      const cached = getHoleGeometry(courseId, hole);
-      if (cached && !cancelled) {
-        setGeometry(cached);
-        setGeometryLoaded(true);
-        return;
-      }
-      const full = await fetchCourseGeometry(courseId);
-      if (cancelled) return;
-      setGeometry(full?.holes.find(h => h.hole_number === hole) ?? null);
-      setGeometryLoaded(true);
+      // 2026-07-24 (audit) — try/finally so a rejecting geometry fetch (corrupt/failed AsyncStorage
+      // cache read inside fetchCourseGeometry) can NEVER strand the loading spinner. Whatever happens,
+      // geometryLoaded flips → the screen renders its content or the honest empty state, never a
+      // permanent spinner. The static hole image below still shows the hole even with no geometry.
+      try {
+        if (!courseId) return;
+        const cached = getHoleGeometry(courseId, hole);
+        if (cached && !cancelled) { setGeometry(cached); return; }
+        const full = await fetchCourseGeometry(courseId);
+        if (cancelled) return;
+        setGeometry(full?.holes.find(h => h.hole_number === hole) ?? null);
+      } catch { /* geometry is best-effort — fall through to loaded with whatever we have */ }
+      finally { if (!cancelled) setGeometryLoaded(true); }
     }
     load();
     return () => { cancelled = true; };

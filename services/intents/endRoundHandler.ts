@@ -38,11 +38,10 @@ export const endRoundHandler: IntentHandler = {
     const roundId = round.endRound();
     track('end_round_voice', { round_id: roundId });
 
-    // Award points matching caddie.tsx generateRoundSummary.
-    usePointsStore.getState().addPoints(
-      Math.max(10, 50 - Math.max(0, vspar * 2)),
-      'Round completed',
-    );
+    // 2026-07-24 (audit — double-credit fix) — round-completion points are awarded ONCE inside
+    // round.endRound() (gated on holesPlayed>=9 && !isSimRound). This caller-side award was a
+    // leftover duplicate that also lacked the sim/holes gate — so a narrated sim round or a sub-9
+    // round wrongly earned points + climbed the tier. Removed; endRound() is the single source.
 
     // Build contextual spoken summary mirroring caddie.tsx buildContextualSummary.
     // 2026-07-07 (audit) — was `par ?? 4`, which scored par-3/par-5 holes against

@@ -1750,8 +1750,13 @@ export const useVoiceCaddie = ({
       let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null = null;
       if (coldFirstTurn) {
         void (async () => {
-          const [ping, get] = await Promise.all([reachabilityPing(3500), healthGet(3500)]);
-          if (!ping.ok) { coldUnreachable = { ping, get }; try { coldAbort.abort(); } catch { /* no-op */ } }
+          // 5s budget (not 3.5s) so a slow-but-real cold DNS/TLS handshake — the exact weak-signal
+          // case the long transcribe budget exists to absorb — isn't misjudged as down. And we abort
+          // ONLY when BOTH probes fail: the lightweight GET /api/health is the reliable "is the host
+          // there" signal; if it answers, the host IS reachable (POST may just be slow/blocked) and we
+          // must NOT abort the transcribe — it gets its full budget. Both failing = genuinely offline.
+          const [ping, get] = await Promise.all([reachabilityPing(5000), healthGet(5000)]);
+          if (!ping.ok && !get.ok) { coldUnreachable = { ping, get }; try { coldAbort.abort(); } catch { /* no-op */ } }
         })();
       }
       try {

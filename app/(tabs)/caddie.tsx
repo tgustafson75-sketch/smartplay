@@ -2014,10 +2014,9 @@ export default function CaddieTab() {
       }
     }
 
-    usePointsStore.getState().addPoints(
-      Math.max(10, 50 - Math.max(0, vspar * 2)),
-      'Round completed',
-    );
+    // 2026-07-24 (audit — double-credit fix) — round-completion points are awarded ONCE inside
+    // round.endRound() (sim/holes-gated). This caller-side award double-credited every round and
+    // wasn't sim-gated; removed. endRound() is the single source.
 
     // Kick off recap generation asynchronously — don't block the summary
     // 2026-06-21 — Use the roundId passed by the caller (captured BEFORE

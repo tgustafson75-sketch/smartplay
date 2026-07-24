@@ -19,6 +19,9 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 
 export interface CoachCameraHandle {
+  /** Request camera + mic permission (so the CameraView actually renders before we prompt/record).
+   *  Returns true when both are granted. Call this BEFORE record() on first use. */
+  prepare(): Promise<boolean>;
   /** Record up to `maxSec`, resolving with the clip uri (or null on permission denial / error).
    *  Auto-stops at maxSec; call stop() to end early. */
   record(maxSec: number): Promise<string | null>;
@@ -41,11 +44,21 @@ export const CoachSwingCamera = forwardRef<CoachCameraHandle, Props>(function Co
   const inFlightRef = useRef(false);
 
   useImperativeHandle(ref, (): CoachCameraHandle => ({
+    async prepare() {
+      // Request perms up front so the CameraView renders (camRef only attaches once camera is granted).
+      const cam = camPerm?.granted || (await requestCam()).granted;
+      const mic = micPerm?.granted || (await requestMic()).granted;
+      return !!(cam && mic);
+    },
     async record(maxSec) {
-      if (!camRef.current || inFlightRef.current) return null;
-      // Permissions — camera to see the swing, mic because recordAsync captures an audio track.
+      if (inFlightRef.current) return null;
+      // Permissions FIRST — camera to see the swing, mic because recordAsync captures an audio track.
+      // (Requesting before the camRef guard: on a fresh grant the CameraView hasn't mounted yet, so we
+      // wait a beat below for camRef to attach — otherwise record() would dead-return null.)
       if (!camPerm?.granted) { const r = await requestCam(); if (!r.granted) return null; }
       if (!micPerm?.granted) { const r = await requestMic(); if (!r.granted) return null; }
+      if (!camRef.current) { await new Promise((res) => setTimeout(res, 400)); } // let the CameraView mount
+      if (!camRef.current) return null;
       // Silence the caddie so its TTS doesn't land in the clip / fight the recording audio session
       // (modeled on SmartMotion's start-of-record stopSpeaking()).
       try {
