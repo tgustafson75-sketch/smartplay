@@ -19,9 +19,13 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 
 /** Canonical club ids, longest → shortest (used for the scroll picker order). */
 export const CLUB_ORDER = [
-  'Driver', '3W', '5W', '7W', '2H', '3H', '4H',
+  // 2026-07-24 (full-app audit) — added '5H' + 'AW' as their OWN slots. They were being collapsed onto
+  // '4H'/'GW' by CLUB_ID_TO_NAME (no slot existed), so a 5-hybrid shared the 4-hybrid's learned distance
+  // and approach-wedge shots corrupted the gap-wedge average. Additive: existing persisted data is
+  // unaffected; the new slots simply start empty.
+  'Driver', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
   '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'SW', 'LW', 'Putter',
+  'PW', 'AW', 'GW', 'SW', 'LW', 'Putter',
 ] as const;
 export type ClubName = (typeof CLUB_ORDER)[number];
 
@@ -31,9 +35,9 @@ export type ClubName = (typeof CLUB_ORDER)[number];
 // Putter + unknown → null (no full-shot carry). Type-only ClubId import = no cycle.
 const CLUB_ID_TO_NAME: Record<string, ClubName> = {
   DR: 'Driver', '3W': '3W', '5W': '5W', '7W': '7W',
-  '2H': '2H', '3H': '3H', '4H': '4H', '5H': '4H',
+  '2H': '2H', '3H': '3H', '4H': '4H', '5H': '5H',
   '3I': '3I', '4I': '4I', '5I': '5I', '6I': '6I', '7I': '7I', '8I': '8I', '9I': '9I',
-  PW: 'PW', GW: 'GW', AW: 'GW', SW: 'SW', LW: 'LW',
+  PW: 'PW', GW: 'GW', AW: 'AW', SW: 'SW', LW: 'LW',
 };
 export function clubIdToClubName(id: string | null | undefined): ClubName | null {
   if (!id) return null;
@@ -44,9 +48,9 @@ export function clubIdToClubName(id: string | null | undefined): ClubName | null
  *  player has logged enough real shots. Mid-handicap baseline. */
 const STANDARD_YARDS: Record<ClubName, number> = {
   Driver: 275, '3W': 255, '5W': 240, '7W': 228,
-  '2H': 222, '3H': 216, '4H': 211,
+  '2H': 222, '3H': 216, '4H': 211, '5H': 206,
   '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
-  PW: 110, GW: 98, SW: 86, LW: 74, Putter: 0,
+  PW: 110, AW: 104, GW: 98, SW: 86, LW: 74, Putter: 0,
 };
 
 export interface ClubStat {

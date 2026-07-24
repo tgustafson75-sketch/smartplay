@@ -145,6 +145,9 @@ const GROW_MOSTLY_KEYS = [
   // learned data (coaching knowledge, relationship history, team-intelligence handoffs,
   // practice counters) but were left out, so an emptier device clobbered the cloud copy.
   'coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store',
+  // 2026-07-24 (full-app audit) — newly-backed-up learned/authored stores; protect them from an
+  // emptier device clobbering the cloud copy, same class as the D3 fixes above.
+  'coach-lesson-history-v1', 'practice-plan-v1',
 ];
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email

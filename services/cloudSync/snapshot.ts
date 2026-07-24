@@ -41,6 +41,10 @@ export const BACKED_UP_STORE_KEYS: string[] = [
   'points-baseline',
   'workout-store-v1',      // imported SmartPump golf-workout history (third rail)
   'coach-knowledge-v1',
+  // 2026-07-24 (full-app audit) — added: both created after this allowlist was curated and were
+  // silently un-backed-up → lost on device swap. Irreplaceable learned/authored data.
+  'coach-lesson-history-v1', // Coach Caddie's per-fault lesson memory (a coach who knows you)
+  'practice-plan-v1',        // user-authored weekly goals/challenges narrative, fed into the brain prompt
   // ── Goals / social / relationships ────────────────────────────
   'tee-goals-v1',
   'tournament-v1',

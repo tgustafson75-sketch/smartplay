@@ -36,9 +36,9 @@ import type { ShotResult } from '../store/roundStore';
  *  recommendation has a distance for every club even before it's been logged. */
 const STANDARD_YARDS: Record<ClubName, number> = {
   Driver: 275, '3W': 255, '5W': 240, '7W': 228,
-  '2H': 222, '3H': 216, '4H': 211,
+  '2H': 222, '3H': 216, '4H': 211, '5H': 206,
   '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
-  PW: 110, GW: 98, SW: 86, LW: 74, Putter: 0,
+  PW: 110, AW: 104, GW: 98, SW: 86, LW: 74, Putter: 0,
 };
 
 /** Fewer than this many rounds at a course → the read is still "forming"; we
