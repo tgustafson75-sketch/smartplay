@@ -232,15 +232,28 @@ export function rebuildDifferentialsFromHistory(rounds: {
   startedAt: number;
   totalScore: number;
   holesPlayed: number;
+  // 2026-07-24 (M3/M4) — WHS posting basis for a round played IN-APP (per-hole data available):
+  //   handicapAgs   = Adjusted Gross Score (each hole capped at NET DOUBLE BOGEY, picked-up/unplayed
+  //                   holes filled with NET PAR — the WHS "most likely score" convention).
+  //   handicapHoles = the length it posts as (9 or 18), so a round where the player picked up on a
+  //                   couple of holes still counts (filled to the intended length).
+  // Imported/legacy rounds without per-hole data fall back to the raw total + exact 9/18 count.
+  handicapAgs?: number;
+  handicapHoles?: 9 | 18;
 }[]): number[] {
   const NINE_HOLE_CR = 36; // neutral 9-hole course rating (half of 72)
-  const eligible = rounds
-    .filter(r => r.totalScore > 0 && (r.holesPlayed === 9 || r.holesPlayed === 18))
+  const normalized = rounds.map(r => {
+    const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
+    const score = r.handicapAgs ?? r.totalScore;
+    return { startedAt: r.startedAt, score, posted };
+  });
+  const eligible = normalized
+    .filter((r): r is { startedAt: number; score: number; posted: 9 | 18 } => r.posted != null && r.score > 0)
     // 2026-06-11 — Drop INCOMPLETE rounds (under MIN_STROKES_PER_HOLE / hole).
     // An abandoned round (e.g. an imported "4") would otherwise convert into a
     // wildly-negative differential that lands in the "best 8" and craters the
     // Index — the single biggest cause of a too-low imported Index.
-    .filter(r => r.totalScore >= MIN_STROKES_PER_HOLE * r.holesPlayed)
+    .filter(r => r.score >= MIN_STROKES_PER_HOLE * r.posted)
     .sort((a, b) => a.startedAt - b.startedAt);
 
   // 2026-06-11 — 9-hole rounds need an 18-hole-EQUIVALENT differential.
@@ -254,9 +267,9 @@ export function rebuildDifferentialsFromHistory(rounds: {
   let diffs: number[] = [];
   for (let pass = 0; pass < 8; pass++) {
     diffs = eligible.map(r =>
-      r.holesPlayed === 9
-        ? Math.round((computeScoreDifferential(r.totalScore, NINE_HOLE_CR, NEUTRAL_SLOPE) + expectedNineDifferential(hi)) * 10) / 10
-        : computeScoreDifferential(r.totalScore, 72.0, NEUTRAL_SLOPE),
+      r.posted === 9
+        ? Math.round((computeScoreDifferential(r.score, NINE_HOLE_CR, NEUTRAL_SLOPE) + expectedNineDifferential(hi)) * 10) / 10
+        : computeScoreDifferential(r.score, 72.0, NEUTRAL_SLOPE),
     );
     const est = estimateNewIndex(diffs);
     if (est.newIndex == null) break;
@@ -265,6 +278,42 @@ export function rebuildDifferentialsFromHistory(rounds: {
     if (converged) break;
   }
   return diffs.slice(-20);
+}
+
+/**
+ * 2026-07-24 (M3/M4) — the WHS posting score for a round PLAYED IN-APP. Builds the full intended-length
+ * hole set: each played hole capped at NET DOUBLE BOGEY, each picked-up/unplayed hole filled with NET PAR
+ * (the accepted "most likely score" for a hole not completed). Returns the Adjusted Gross Score + the
+ * length it posts as, or null when the round is too incomplete to post (below the WHS minimum: 7 of 9 /
+ * 14 of 18) or the per-hole pars aren't known.
+ *
+ * courseHandicap drives the strokes-received (hence the net-par / net-double-bogey caps); pass a real
+ * one when slope/rating are known, else the player's rounded Index is a fair recreational estimate.
+ */
+export function computeWhsPostingScore(input: {
+  intendedHoles: 9 | 18;
+  courseHandicap: number;
+  pars: Record<number, number>;               // hole number → par (must cover 1..intendedHoles)
+  scores: Record<number, number>;             // hole number → strokes (missing / 0 = picked up / not played)
+  strokeIndexByHole?: Record<number, number>; // optional real HCP column; falls back to hole number
+}): { adjustedGrossScore: number; postedHoles: 9 | 18; playedHoles: number } | null {
+  const { intendedHoles, courseHandicap, pars, scores, strokeIndexByHole } = input;
+  const POST_MIN = intendedHoles === 9 ? 7 : 14;
+  let played = 0;
+  let ags = 0;
+  for (let hole = 1; hole <= intendedHoles; hole++) {
+    const par = pars[hole];
+    if (par == null || par <= 0) return null; // can't cap without a known par
+    const strokeIdx = strokeIndexByHole?.[hole] ?? hole;
+    const strokes = strokesReceivedOnHole(courseHandicap, strokeIdx);
+    const netPar = par + strokes;                 // hole not completed → net par (most-likely)
+    const netDoubleBogey = netDoubleBogeyCap(par, strokes);
+    const actual = scores[hole] ?? 0;
+    if (actual > 0) { played++; ags += Math.min(actual, netDoubleBogey); }
+    else { ags += netPar; }
+  }
+  if (played < POST_MIN) return null; // too incomplete to post an honest score
+  return { adjustedGrossScore: ags, postedHoles: intendedHoles, playedHoles: played };
 }
 
 export function computeRoundHandicap(input: {

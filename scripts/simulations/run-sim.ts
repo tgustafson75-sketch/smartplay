@@ -45,7 +45,7 @@ import { frameToContainerNorm, containerToFrameNorm } from '../../services/swing
 import { IndoorRepDetector, summarizeIndoorReps, type IndoorRep } from '../../services/indoorSwing';
 import { estimateCarryYards, fullCarryYards } from '../../services/swing/carryEstimate';
 import { normalizeImportedList, buildListPersistInput, type ListedRoundRow } from '../../services/roundImportRules';
-import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential } from '../../services/handicapCalculator';
+import { rebuildDifferentialsFromHistory, estimateNewIndex, expectedNineDifferential, computeWhsPostingScore } from '../../services/handicapCalculator';
 import { hasMobilityFlag } from '../../services/coachingAdaptation';
 import { planAimLines, layupFraction, LAYUP_THRESHOLD_YARDS } from '../../utils/layupPlan';
 import { composeBagRecommendation } from '../../services/bagRecommendation';
@@ -1198,6 +1198,30 @@ check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fal
     return okRouting && okChart;
   })(),
   'a mid-handicapper can ask "how far do I hit my 7 iron" (offline), flip persona/theme/cart/ghost offline, and the pre-data bag chart is internally consistent (no Driver=275, no 5H≈3I collision)');
+
+// 2026-07-24 (M3/M4 — WHS posting honesty for high-handicap play).
+check('Handicap: blow-up holes capped (net double bogey) + pick-up rounds still count',
+  (() => {
+    // Behavioral: a par-4 course, courseHcp 18 (1 stroke/hole → cap = par+3 = 7).
+    const pars: Record<number, number> = {}; for (let h = 1; h <= 18; h++) pars[h] = 4;
+    const blow: Record<number, number> = {}; for (let h = 1; h <= 18; h++) blow[h] = 5; blow[7] = 10;
+    const capped = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars, scores: blow });
+    const pickup: Record<number, number> = {}; for (let h = 1; h <= 18; h++) pickup[h] = 5; delete pickup[12];
+    const filled = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars, scores: pickup });
+    const okMath =
+      capped?.adjustedGrossScore === 17 * 5 + 7 &&      // the 10 caps to 7, not 10
+      filled?.playedHoles === 17 && filled?.postedHoles === 18 && filled?.adjustedGrossScore === 18 * 5 && // pick-up filled net par
+      computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars, scores: { 1: 5 } }) === null; // too incomplete → null
+    // Wiring: round-end computes + stores the posting basis; the recalc + eligibility honor it.
+    const rs = read('store/roundStore.ts');
+    const okWire =
+      /computeWhsPostingScore\(\{/.test(rs) &&
+      /record\.handicapAgs = post\.adjustedGrossScore; record\.handicapHoles = post\.postedHoles/.test(rs) &&
+      /handicapAgs: r\.handicapAgs, handicapHoles: r\.handicapHoles/.test(rs) &&
+      /r\.handicapHoles != null \|\| r\.holesPlayed === 9 \|\| r\.holesPlayed === 18/.test(rs); // eligibility includes filled pick-ups
+    return okMath && okWire;
+  })(),
+  'a 10 on a par 4 caps at net double bogey (stops inflating the Index), a round with a picked-up hole fills to net par and still posts, and the recalc/eligibility use the same WHS basis as round-end');
 
 // 2026-07-24 (final QA). Co-located course auto-detect + local search match.
 check('Final QA: co-located courses ask which nine; search matches bundled courses locally',
@@ -5514,8 +5538,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         // store: flag persisted + record tagged + shot movement wire + end restore wire
         /isSimRound: s\.isSimRound/.test(rs) && /simulated: s\.isSimRound \|\| undefined/.test(rs) &&
         /simAdvanceTowardGreen\(stated\)/.test(rs) && /stopVoiceSimRound\(\)/.test(rs) &&
-        // learning gates: handicap, both rebuild sites, points, CNS, reflection, drive, bag
-        /\(holesPlayed === 9 \|\| holesPlayed === 18\) && !s\.isSimRound/.test(rs) &&
+        // learning gates: handicap, both rebuild sites, points, CNS, reflection, drive, bag.
+        // 2026-07-24 (M3/M4) — the handicap post now gates on the WHS posting basis (record.handicapHoles,
+        // computed only in a `!s.isSimRound` block) so a sim round never posts; the compute is sim-guarded too.
+        /record\.handicapHoles != null && !s\.isSimRound/.test(rs) &&
         (rs.match(/filter\(\(r: RoundRecord\) => !r\.simulated\)/g) ?? []).length >= 2 &&
         /holesPlayed >= 9 && !s\.isSimRound/.test(rs) &&
         /s\.activeCourseId && !s\.isSimRound/.test(rs) &&

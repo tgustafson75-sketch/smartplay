@@ -235,6 +235,14 @@ export interface RoundRecord {
   holesPlayed: number;
   totalScore: number;
   scoreVsPar: number | null; // null = round had no hole with a known par (don't fabricate/trend a vs-par)
+  // 2026-07-24 (M3/M4) — WHS posting basis when this round was played in-app with known pars:
+  //   handicapAgs   = Adjusted Gross Score (per-hole net-double-bogey cap; picked-up/unplayed holes
+  //                   filled with net par). handicapHoles = length it posts as (9/18). Present only when
+  //                   the round met the WHS posting minimum (7 of 9 / 14 of 18) with known pars; the
+  //                   handicap recalc uses these instead of the raw total (blow-up holes no longer
+  //                   inflate the Index, and a couple of picked-up holes no longer drop the whole round).
+  handicapAgs?: number;
+  handicapHoles?: 9 | 18;
   isCompetition: boolean;
   nineHoleMode: boolean;
   mode: RoundMode;
@@ -1446,6 +1454,29 @@ export const useRoundStore = create<RoundState>()(
             return Object.keys(m).length > 0 ? m : undefined;
           })(),
         };
+        // 2026-07-24 (M3/M4 — WHS posting honesty). Cap each hole at net double bogey and fill
+        // picked-up/unplayed holes with net par, so (M3) a blow-up hole no longer inflates the Index
+        // and (M4) picking up on a couple of holes no longer drops the whole round from the Index.
+        // Uses the player's rounded Index as the course handicap — a fair recreational estimate absent
+        // a confirmed slope/rating — to set the per-hole stroke allowance. Stored on the record so the
+        // recalc (rebuildDifferentialsFromHistory) posts from this, not the raw total.
+        if (!s.isSimRound) {
+          try {
+            const calcMod = require('../services/handicapCalculator');
+            const profileMod = require('./playerProfileStore');
+            const idx = profileMod.usePlayerProfileStore.getState().handicapIndex;
+            const courseHandicap = Math.round(typeof idx === 'number' && Number.isFinite(idx) ? idx : 18);
+            const pars: Record<number, number> = {};
+            for (const h of s.courseHoles) if (h.par > 0) pars[h.hole] = h.par;
+            const post = calcMod.computeWhsPostingScore({
+              intendedHoles: s.nineHoleMode ? 9 : 18,
+              courseHandicap,
+              pars,
+              scores: s.scores,
+            });
+            if (post) { record.handicapAgs = post.adjustedGrossScore; record.handicapHoles = post.postedHoles; }
+          } catch (e) { console.log('[handicap] WHS posting score failed (non-fatal):', e); }
+        }
         // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
         // per-hole memory (rounds played, scoring avg, tee club, par). Additive
         // + best-effort; nothing reads it yet (Phase 2 retrieval). Reuses the
@@ -1638,45 +1669,37 @@ export const useRoundStore = create<RoundState>()(
         // round computed differential ≈ −32 against the 72.0 baseline
         // and dragged the estimated Index into negative territory.
         // 2026-07-04 — SIM rounds never touch the Index.
-        if ((holesPlayed === 9 || holesPlayed === 18) && !s.isSimRound) {
+        // 2026-07-24 (M3/M4) — gate on the WHS posting score computed above (record.handicapHoles),
+        // NOT a raw `holesPlayed === 9 || 18`: a round where the player picked up on a couple of holes
+        // (holesPlayed 14-17) now posts (filled to the intended 18), and the differential is built from
+        // the net-double-bogey-capped Adjusted Gross Score instead of the raw total.
+        if (record.handicapHoles != null && !s.isSimRound) {
           try {
             const profileMod = require('./playerProfileStore');
             const profile = profileMod.usePlayerProfileStore.getState();
             const calcMod = require('../services/handicapCalculator');
 
-            // Build HandicapHoleEntry[] from the just-ended round. Use the
-            // score>0 gated entries so an unfinalized 0-score hole can't drag
-            // the differential (the record + holesPlayed gate use the same set).
-            const holes = scoredEntries.map(([k, score]) => {
-              const holeNum = Number(k);
-              const par = s.courseHoles.find(h => h.hole === holeNum)?.par ?? 4;
-              return { hole_number: holeNum, par, score };
-            });
-
-            // 2026-07-01 (re-audit — 9-hole differential drift) — post the Index via
-            // the SAME rebuildDifferentialsFromHistory the deleteRound / recalc path
-            // uses, instead of a separate inline score×2 formula. The old inline path
-            // (double the AGS vs 72) diverged from the rebuild's WHS expected-nine
-            // method, so a 9-hole round's differential + Index SHIFTED the next time
-            // differentials were recomputed (delete a round / recalc). Rebuilding from
-            // the full history (which now includes this round, appended above) makes
-            // the posted Index IDENTICAL to any later recalc — one source of truth.
-            // `holes` is still built above for the score>0 gate + record consistency.
-            void holes;
+            // Post via the SAME rebuildDifferentialsFromHistory the delete/recalc path uses (one source
+            // of truth → the posted Index matches any later recalc). Each round now carries its WHS
+            // posting basis (handicapAgs + handicapHoles); rebuild uses those, falling back to the raw
+            // total + 9/18 count for imported/legacy rounds. This round was appended to history above.
             const hist = get().roundHistory;
             const diffs = calcMod.rebuildDifferentialsFromHistory(
-              hist.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+              hist.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({
+                startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed,
+                handicapAgs: r.handicapAgs, handicapHoles: r.handicapHoles,
+              })),
             );
             profile.resetDifferentials(diffs);
             const after = calcMod.estimateNewIndex(diffs);
             if (after?.newIndex != null && Number.isFinite(after.newIndex)) {
               profile.setHandicapIndex(after.newIndex);
             }
-            console.log(`[handicap] holesPlayed=${holesPlayed} rebuilt ${diffs.length} diffs newIndex=${after?.newIndex ?? '?'}`);
+            console.log(`[handicap] posted ${record.handicapHoles}h ags=${record.handicapAgs} rebuilt ${diffs.length} diffs newIndex=${after?.newIndex ?? '?'}`);
             // 2026-06-27 (smoke-test fix) — record that this round's differential
             // is already posted, so the recap card's "Post to my Index" button
             // can't post the SAME round again (the double-count bug).
-            if (holes.length > 0) get().markHandicapPosted(record.id);
+            get().markHandicapPosted(record.id);
           } catch (e) {
             console.log('[handicap] round-end update failed (non-fatal):', e);
           }
@@ -2636,7 +2659,11 @@ export function whenRoundStoreHydrated(body: () => void | (() => void)): () => v
 // WITHOUT !r.simulated, so one tap silently posted sim differentials into
 // the Index. All rebuild sites import this so the filter can't drift again.
 export function eligibleHandicapRounds(rounds: RoundRecord[]): RoundRecord[] {
+  // 2026-07-24 (M4) — a round that carries a WHS posting basis (handicapHoles: filled to 9/18 after
+  // a pick-up) is eligible even if its raw holesPlayed is 14-17. This keeps the recalc button IN SYNC
+  // with the round-end posting (one source of truth) so pick-up rounds count in both. Imported/legacy
+  // rounds still qualify only as exact complete 9/18.
   return rounds.filter(
-    r => (r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0 && !r.simulated,
+    r => (r.handicapHoles != null || r.holesPlayed === 9 || r.holesPlayed === 18) && r.totalScore > 0 && !r.simulated,
   );
 }
