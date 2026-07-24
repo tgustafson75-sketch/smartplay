@@ -23,6 +23,7 @@ import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transiti
 import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import { speak } from '../../services/voiceService';
+import { prewarmVoice } from '../../services/voiceWarmup';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCoachLessonStore } from '../../store/coachLessonStore';
@@ -71,27 +72,43 @@ export default function CoachLessonScreen() {
   // Cancel any pending progress transition if the screen unmounts (no state-set / speech after leave).
   useEffect(() => () => { if (progressTimer.current) clearTimeout(progressTimer.current); }, []);
 
+  // 2026-07-23 (Tim — "delay in hearing caddie") — warm the TTS pipeline the moment the lesson opens
+  // so the FIRST coaching line lands fast, not after a cold /api/voice round-trip. A real coach doesn't
+  // pause 4 seconds before the first word.
+  useEffect(() => { try { prewarmVoice(); } catch { /* opportunistic */ } }, []);
+
+  // Re-entrancy guard for the capture→analyze→speak cycle. Without it, a second tap during the spoken
+  // feedback (the cloud-TTS delay window, when the record button is visible again) fires a SECOND
+  // capture + a second coaching line — the "double messaging" Tim heard. One swing in flight at a time.
+  const captureInFlightRef = useRef(false);
+
   // ── shared capture ────────────────────────────────────────────────────────
   const captureSwing = useCallback(async (): Promise<SwingBiomechanics | null> => {
+    // Guard against a re-entrant capture (double-tap during the spoken line / delay). One in flight.
+    if (captureInFlightRef.current) return null;
+    captureInFlightRef.current = true;
     setError(null);
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
-    let res: ImagePicker.ImagePickerResult;
     try {
-      res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 12, quality: 0.7, allowsEditing: false });
-    } catch { setError('Could not open the camera. Try again.'); return null; }
-    const asset = res.canceled ? null : res.assets?.[0];
-    if (!asset?.uri) return null;
-    setCap('analyzing');
-    const raw = asset.duration ?? 0;
-    const durationMs = raw > 0 && raw < 100 ? raw * 1000 : raw || 4000;
-    try {
-      const analysis = await analyzeSwingFromVideo(asset.uri, durationMs);
-      setCap('idle');
-      return analysis;
-    } catch {
-      setCap('idle');
-      return null;
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
+      let res: ImagePicker.ImagePickerResult;
+      try {
+        res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 12, quality: 0.7, allowsEditing: false });
+      } catch { setError('Could not open the camera. Try again.'); return null; }
+      const asset = res.canceled ? null : res.assets?.[0];
+      if (!asset?.uri) return null;
+      setCap('analyzing');
+      const raw = asset.duration ?? 0;
+      const durationMs = raw > 0 && raw < 100 ? raw * 1000 : raw || 4000;
+      try {
+        return await analyzeSwingFromVideo(asset.uri, durationMs);
+      } catch {
+        return null;
+      } finally {
+        setCap('idle');
+      }
+    } finally {
+      captureInFlightRef.current = false;
     }
   }, []);
 
@@ -105,8 +122,11 @@ export default function CoachLessonScreen() {
     setLastMetrics(null);
     setAddressedIds([]);
     setError(null);
-    setDxText(introLine());
-    say(introLine());
+    // Compute ONCE — the shown line and the spoken line must be the same words (and it avoids a
+    // double evaluation), so the caption never disagrees with what the caddie says.
+    const intro = introLine();
+    setDxText(intro);
+    say(intro);
   }, []);
 
   const beginPriority = useCallback((dx: Diagnosis, m: SwingBiomechanics) => {
@@ -127,6 +147,7 @@ export default function CoachLessonScreen() {
   }, []);
 
   const recordDiagnostic = useCallback(async () => {
+    if (captureInFlightRef.current) return; // ignore a double-tap while a swing is already in flight
     const m = await captureSwing();
     if (!m) {
       const line = "I couldn't read that swing — get your whole swing in frame (face-on is best) and let's try again.";
@@ -235,6 +256,7 @@ export default function CoachLessonScreen() {
   }, [plan, planStep]);
   const recordFocusSwing = useCallback(async () => {
     if (!focus) return;
+    if (captureInFlightRef.current) return; // ignore a double-tap while a swing is already in flight
     const m = await captureSwing();
     let fb: FocusFeedback;
     if (!m) fb = { verdict: 'unclear', line: "I couldn't pick up your swing — make sure your whole swing is in frame and let's go again.", metricLabel: null };
