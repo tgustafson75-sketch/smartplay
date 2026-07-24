@@ -2,6 +2,7 @@ import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../..
 import { useSettingsStore, type Persona } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import type { RoundMode } from '../../types/patterns';
 import { getCaddieName } from '../../lib/persona';
 
@@ -19,8 +20,8 @@ export const changeSettingHandler: IntentHandler = {
   intent_type: 'change_setting',
 
   parameter_schema: {
-    setting_name: 'one of: theme, voice_enabled, auto_listen, language, response_mode, caddie_persona',
-    new_value: 'theme: light|dark|system; voice_enabled/auto_listen: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry',
+    setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units',
+    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry; handedness: left|right; units: yards|meters',
   },
 
   examples: [
@@ -32,6 +33,14 @@ export const changeSettingHandler: IntentHandler = {
     'switch to Tank',
     'change caddie to Serena',
     'put Harry in charge',
+    // 2026-07-24 (final QA — "ask for settings") — handedness + units were settable in
+    // the app but NOT by asking. A lefty (the app supports left-handed analysis) couldn't
+    // turn it on by voice; neither could a metric player switch units.
+    "I'm left-handed",
+    'set me to left-handed',
+    'switch to right-handed',
+    'switch to meters',
+    'use yards',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -179,10 +188,51 @@ export const changeSettingHandler: IntentHandler = {
         return ack(`${newName} here. I've got you.`, ['caddie_persona:' + v]);
       }
 
+      // 2026-07-24 (final QA — "ask for settings"). Handedness was settable in Settings +
+      // read by the swing analysis (resolveSwingerHandedness), but there was NO way to set it
+      // by ASKING — a lefty couldn't turn on left-handed by voice even though the analysis
+      // honors it. Sets the account-holder profile (the same field the analysis reads).
+      case 'handedness':
+      case 'left_handed':
+      case 'lefty':
+      case 'dominant_hand': {
+        const raw = String(rawValue ?? '').toLowerCase();
+        const hand: 'left' | 'right' | null =
+          /\bleft|lefty|left-handed|southpaw\b/.test(raw) ? 'left' :
+          /\bright|righty|right-handed\b/.test(raw) ? 'right' :
+          // "turn on left-handed" arrives as setting=left_handed + value=on/true → left.
+          (setting === 'left_handed' || setting === 'lefty') && asBool(rawValue) === true ? 'left' :
+          (setting === 'left_handed' || setting === 'lefty') && asBool(rawValue) === false ? 'right' :
+          null;
+        if (hand === null) return clarify('Left-handed or right-handed?');
+        usePlayerProfileStore.getState().setHandedness(hand);
+        return ack(
+          hand === 'left'
+            ? "Set to left-handed — I'll mirror your guides and read your swing that way."
+            : "Set to right-handed.",
+          ['handedness:' + hand],
+        );
+      }
+
+      // 2026-07-24 (final QA — "ask for settings"). Units (yards/meters) had a store setter
+      // but no ask path, so a metric player couldn't switch by voice.
+      case 'units':
+      case 'distance_unit':
+      case 'measurement': {
+        const raw = String(rawValue ?? '').toLowerCase();
+        const unit: 'yards' | 'meters' | null =
+          /\bmeter|metre|metric\b/.test(raw) ? 'meters' :
+          /\byard|imperial\b/.test(raw) ? 'yards' :
+          null;
+        if (unit === null) return clarify('Yards or meters?');
+        useSettingsStore.getState().setDistanceUnit(unit);
+        return ack(`Distances in ${unit} now.`, ['distance_unit:' + unit]);
+      }
+
       default:
         return {
           success: false,
-          voice_response: 'Which setting — theme, voice, language, or response length?',
+          voice_response: 'Which setting — theme, voice, language, handedness, units, or response length?',
           side_effects: ['unknown_setting:' + setting],
           follow_up_needed: true,
         };

@@ -1114,6 +1114,34 @@ check('Intent fix: "on the center of the green" marks it — offline + routed (L
   })(),
   '"on the center of the green" / "mark the pin" marks the green offline; the cloud path is aliased too; plain position + yardage queries untouched');
 
+// 2026-07-24 (final QA — "ask for features, tools, settings, and courses"). Handedness + units
+// were settable in the app but NOT by asking. Handedness now routes OFFLINE (local-first) and the
+// handler sets the profile the swing analysis reads. Critically: aiming/direction talk must NEVER
+// be misread as a handedness change.
+check('Ask for settings: handedness routes offline (and aiming talk never flips it)',
+  (() => {
+    // (a) behavioral: unambiguous handedness phrasings classify offline...
+    const lefty = precheckLocalIntent("I'm left-handed");
+    const setLeft = precheckLocalIntent('set me to left-handed');
+    const righty = precheckLocalIntent('switch to right-handed');
+    const isHand = (i: ReturnType<typeof precheckLocalIntent>, v: string) =>
+      i?.intent_type === 'change_setting' && i?.parameters?.setting_name === 'handedness' && i?.parameters?.new_value === v;
+    // ...but ordinary aiming/direction talk does NOT.
+    const aim = precheckLocalIntent('aim left');
+    const missRight = precheckLocalIntent('the green is to the right');
+    const okPrecheck =
+      isHand(lefty, 'left') && isHand(setLeft, 'left') && isHand(righty, 'right') &&
+      !(aim?.parameters?.setting_name === 'handedness') &&
+      !(missRight?.parameters?.setting_name === 'handedness');
+    // (b) source: the handler actually applies handedness + units (was missing entirely).
+    const h = read('services/intents/changeSettingHandler.ts');
+    const okHandler =
+      /usePlayerProfileStore\.getState\(\)\.setHandedness\(hand\)/.test(h) &&
+      /useSettingsStore\.getState\(\)\.setDistanceUnit\(unit\)/.test(h);
+    return okPrecheck && okHandler;
+  })(),
+  'a lefty can turn on left-handed by voice (offline), a metric player can switch units, and "aim left" / "green is to the right" never change handedness');
+
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
   // distance + wind/elevation (plays-like) + the player's real bag + tendency +

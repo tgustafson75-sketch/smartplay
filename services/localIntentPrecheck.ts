@@ -111,6 +111,17 @@ const PATTERNS: Pattern[] = [
     rx: /\b(what\s+course|which\s+course|where\s+am\s+i\s+playing|what(?:'s|s)?\s+the\s+course)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'course' }),
   },
+  // 2026-07-24 (final QA — "ask for settings", OFFLINE + local-first) — set handedness by voice.
+  // Anchored on UNAMBIGUOUS handedness terms ("left/right-handed", "lefty", "righty", "southpaw")
+  // so aiming/direction talk ("aim left", "the green's to the right", "go left") can NEVER trigger it.
+  // Routes to changeSettingHandler, which sets the profile the swing analysis reads.
+  {
+    rx: /\b(left[\s-]?handed|lefty|southpaw|right[\s-]?handed|righty)\b/i,
+    build: (raw, m) => intent(raw, 'change_setting', {
+      setting_name: 'handedness',
+      new_value: /left|lefty|southpaw/i.test(m[1]) ? 'left' : 'right',
+    }),
+  },
 
   // ── CLOSE / EXIT A TOOL → HOME (deterministic) ────────────
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — closing a tool routes
