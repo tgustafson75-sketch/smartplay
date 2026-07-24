@@ -72,14 +72,19 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
     const longer = ladder[i];
     const shorter = ladder[i + 1];
     const d = Math.round(longer.yards - shorter.yards);
-    if (d >= GAP_YARDS) {
+    // 2026-07-24 (full-app audit — honesty) — a gap is only REAL if at least one bounding club has a
+    // MEASURED or STATED yardage. Previously gaps (unlike overlaps below) didn't gate on this, so two
+    // pure standard-chart-estimate clubs could generate a "gap to fill → add a club" recommendation
+    // presented as the player's own bag. Gate it the SAME way as overlaps.
+    const realBound = longer.measured || longer.stated || shorter.measured || shorter.stated;
+    if (d >= GAP_YARDS && realBound) {
       gaps.push({
         lower: shorter.club,
         upper: longer.club,
         gapYards: d,
         centerYards: Math.round((longer.yards + shorter.yards) / 2),
       });
-    } else if (d <= OVERLAP_YARDS && (longer.measured || longer.stated || shorter.measured || shorter.stated)) {
+    } else if (d <= OVERLAP_YARDS && realBound) {
       overlaps.push({ shorter: shorter.club, longer: longer.club, gapYards: d });
     }
   }

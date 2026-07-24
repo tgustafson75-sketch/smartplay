@@ -433,6 +433,13 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
     } else if (eitherLow) {
       // Suppress — any value here would mislead the user.
       smashFactor = nullMetric('');
+    } else if (ballSpeed.estimateNote?.startsWith('club speed × typical smash')) {
+      // 2026-07-24 (full-app audit — honesty) — when ball speed was DERIVED as club_speed × typical_smash
+      // (no independent ball-speed read), smash = ball/club = the typical constant: identical for every
+      // swing of that club, ZERO per-swing signal. Printing it as "SMASH 1.45" reads as a measured
+      // per-swing value. Suppress it (→ "—"). Smash only surfaces when ball speed is independently
+      // measured (acoustic branch above, or truth-grade), where the ratio actually reflects THIS strike.
+      smashFactor = nullMetric('');
     } else {
       const ratio = ballSpeed.value / clubSpeed.value;
       smashFactor = finalize({
