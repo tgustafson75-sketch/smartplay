@@ -193,7 +193,7 @@ export default function Dashboard() {
   const practiceImpact = useMemo(
     () => computePracticeImpact({
       sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
-      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
       nowMs: Date.now(),
     }),
     [practiceHistory, realRounds],
@@ -221,7 +221,7 @@ export default function Dashboard() {
         // otherwise, so this keeps just the self-owned sessions.
         .filter((s) => resolvePlayerName(s.player_id, '__self__') === '__self__')
         .map((s) => ({ startedAt: s.date, swings: s.shots.length })),
-      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
       nowMs: Date.now(),
       sinceMs: pointsBaselineMs ?? undefined, // clean-start baseline (live build)
     }),
@@ -257,7 +257,7 @@ export default function Dashboard() {
   const workoutPerf = useMemo(
     () => computeWorkoutPerformance({
       workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),
-      rounds: realRounds.map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar })),
+      rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
       nowMs: Date.now(),
     }),
     [workoutHistory, realRounds],
@@ -382,7 +382,8 @@ export default function Dashboard() {
   const scoreVsPar = getScoreVsPar();
   const holesPlayed = getHolesPlayed();
   const scoreVsParDisplay =
-    scoreVsPar === 0 ? 'E'
+    scoreVsPar == null ? '—' // no known par → don't fabricate a vs-par
+    : scoreVsPar === 0 ? 'E'
     : scoreVsPar > 0 ? `+${scoreVsPar}`
     : String(scoreVsPar);
 
@@ -679,7 +680,8 @@ export default function Dashboard() {
                   styles.activeStatValue,
                   {
                     color:
-                      scoreVsPar < 0 ? colors.accent_lime
+                      scoreVsPar == null ? colors.text_muted
+                      : scoreVsPar < 0 ? colors.accent_lime
                       : scoreVsPar === 0 ? colors.text_primary
                       : '#fbbf24',
                   },
@@ -1060,8 +1062,8 @@ export default function Dashboard() {
               {[...roundHistory].reverse().slice(0, 6).map((r) => {
                 const d = new Date(r.endedAt || r.startedAt);
                 const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-                const vsPar = r.scoreVsPar === 0 ? 'E' : r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
-                const vsParColor = r.scoreVsPar > 0 ? '#E5484D' : r.scoreVsPar < 0 ? colors.accent_lime : colors.text_muted;
+                const vsPar = r.scoreVsPar == null ? '—' : r.scoreVsPar === 0 ? 'E' : r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
+                const vsParColor = r.scoreVsPar == null ? colors.text_muted : r.scoreVsPar > 0 ? '#E5484D' : r.scoreVsPar < 0 ? colors.accent_lime : colors.text_muted;
                 return (
                   <TouchableOpacity
                     key={r.id}

@@ -10,7 +10,7 @@
 
 export interface RoundEndSnapshot {
   total: number;
-  vspar: number;
+  vspar: number | null; // null tolerated — the summary recomputes vs-par from known-par holes below
   played: number;
   /** Captured BEFORE endRound() — it resets scores/courseHoles/activeCourse. */
   scores: Record<number, number>;
@@ -32,6 +32,10 @@ export function buildRoundEndSummary(s: RoundEndSnapshot): string {
     .filter((h): h is { hole: number; score: number; par: number; offset: number } => h.score > 0 && h.par != null);
   if (holesWithPar.length === 0) return `${s.played} holes at ${cName} — let's see what the recap says.`;
 
+  // 2026-07-24 (full-app audit) — compute vs-par HERE from the same known-par holes we use for best/
+  // worst, so the spoken number is always honest + self-consistent (never the caller's possibly-null or
+  // par-4-fabricated value). Guaranteed non-null past the guard above.
+  const vspar = holesWithPar.reduce((a, h) => a + h.offset, 0);
   const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
   const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
   const birdies = holesWithPar.filter((h) => h.offset < 0).length;
@@ -39,19 +43,19 @@ export function buildRoundEndSummary(s: RoundEndSnapshot): string {
   const bogeys = holesWithPar.filter((h) => h.offset === 1).length;
   const doublesPlus = holesWithPar.filter((h) => h.offset >= 2).length;
 
-  if (s.vspar <= -3) {
-    return `${s.total} at ${cName} — ${Math.abs(s.vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
+  if (vspar <= -3) {
+    return `${s.total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
   }
-  if (s.vspar === 0) {
+  if (vspar === 0) {
     return `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
   }
-  if (s.vspar <= 3 && s.played >= 9) {
+  if (vspar <= 3 && s.played >= 9) {
     const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
-    return `${s.total} on the card at ${cName} — ${s.vspar > 0 ? '+' + s.vspar : s.vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${s.played} holes at or under par.`;
+    return `${s.total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${s.played} holes at or under par.`;
   }
   if (s.played < 9) {
     return `${s.played} hole${s.played === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
   }
   const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
-  return `${s.total} at ${cName} — ${s.vspar > 0 ? '+' + s.vspar : s.vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
+  return `${s.total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
 }

@@ -256,7 +256,7 @@ export default function SwingSimScreen() {
   const ghostLabel = (r: RoundRecord) => {
     const d = new Date(r.endedAt);
     const vp = r.scoreVsPar;
-    return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${r.totalScore} (${vp === 0 ? 'E' : vp > 0 ? `+${vp}` : vp})`;
+    return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${r.totalScore} (${vp == null ? '—' : vp === 0 ? 'E' : vp > 0 ? `+${vp}` : vp})`;
   };
   const s = makeStyles(colors);
 

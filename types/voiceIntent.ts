@@ -19,7 +19,7 @@ export interface AppContext {
     mode: string;
     holesPlayed: number;
     totalScore: number;
-    scoreVsPar: number;
+    scoreVsPar: number | null; // null = no scored hole has a known par (don't fabricate vs-par)
   } | null;
   current_hole: number | null;
   recent_shots: ShotResult[];

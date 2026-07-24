@@ -190,9 +190,8 @@ export function buildGolferModel(force = false): GolferModel {
   const clubDistances = computeClubDistances(allShots);
 
   // ─── Scoring trend ────────────────────────────────────────────────────
-  const avgScoreVsPar = recentRounds.length >= 2
-    ? avg(recentRounds.map(r => r.scoreVsPar))
-    : null;
+  const knownVsPar = recentRounds.map(r => r.scoreVsPar).filter((v): v is number => v != null);
+  const avgScoreVsPar = knownVsPar.length >= 2 ? avg(knownVsPar) : null;
 
   // ─── Putting trend ────────────────────────────────────────────────────
   const puttsPerHole = recentRounds

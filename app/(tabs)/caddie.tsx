@@ -1924,7 +1924,7 @@ export default function CaddieTab() {
   // round" branch even when 18 holes were filled.
   const generateRoundSummary = async (snapshot?: {
     total: number;
-    vspar: number;
+    vspar: number | null; // null tolerated — roundEndSummary recomputes vs-par from known-par holes
     played: number;
     // 2026-06-21 — Callers must capture scores/courseHoles/activeCourse
     // BEFORE calling endRound(), because endRound() resets them to
@@ -2531,7 +2531,7 @@ export default function CaddieTab() {
     }
 
     let scoreContext = '';
-    if (scoreVsParSoFar <= -3) {
+    if (scoreVsParSoFar != null && scoreVsParSoFar <= -3) {
       scoreContext =
         " You're " + Math.abs(scoreVsParSoFar) + ' under through ' + currentHole + '.';
     }

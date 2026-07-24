@@ -234,7 +234,7 @@ export interface RoundRecord {
   endedAt: number;
   holesPlayed: number;
   totalScore: number;
-  scoreVsPar: number;
+  scoreVsPar: number | null; // null = round had no hole with a known par (don't fabricate/trend a vs-par)
   isCompetition: boolean;
   nineHoleMode: boolean;
   mode: RoundMode;
@@ -635,7 +635,7 @@ interface RoundState {
   getCurrentPar: () => number | null;
   getTotalScore: () => number;
   getHolesPlayed: () => number;
-  getScoreVsPar: () => number;
+  getScoreVsPar: () => number | null; // null = no scored hole has a known par (don't fabricate vs-par)
   getCurrentHoleData: () => CourseHole | null;
   computeHoleScore: (hole: number) => number | null;
 }
@@ -1248,7 +1248,7 @@ export const useRoundStore = create<RoundState>()(
             if (r.summary || r.id.startsWith('imported_')) return r;
             changed = true;
             const vs = r.scoreVsPar;
-            const vsStr = vs === 0 ? 'even par' : vs > 0 ? `+${vs}` : `${vs}`;
+            const vsStr = vs == null ? 'no par data' : vs === 0 ? 'even par' : vs > 0 ? `+${vs}` : `${vs}`;
             const where = r.courseName ? ` at ${r.courseName}` : '';
             const summary = r.holesPlayed > 0
               ? `${r.totalScore > 0 ? `${r.totalScore}, ` : ''}${vsStr} through ${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}${where}.`
@@ -1398,14 +1398,17 @@ export const useRoundStore = create<RoundState>()(
         // round handicap filter `totalScore >= MIN_STROKES_PER_HOLE * holesPlayed`)
         // while scoreVsPar already skipped it — an inconsistent saved triplet.
         const scoredEntries = Object.entries(s.scores).filter(([, score]) => score > 0);
-        let scoreVsPar = 0;
+        // 2026-07-24 (full-app audit — vs-par honesty) — count ONLY holes with a KNOWN par (>0), matching
+        // the live getScoreVsPar. Superseded the old `?? 4` (which fabricated par 4 for every unknown
+        // hole → a made-up "+N" on data-less courses that poisoned the dashboard trend). When NO scored
+        // hole has a known par, the saved vs-par is genuinely unknown → null, and the dashboard/recap
+        // skip it instead of trending a fabricated number.
+        let scoreVsPar: number | null = null;
         for (const [holeNum, score] of scoredEntries) {
-          // 2026-07-23 (QA) — par-4 fallback (was ?? 0). On a data-less course (layout fetch failed →
-          // courseHoles=[]) a ?? 0 made every par 0, so scoreVsPar equalled TOTAL STROKES (e.g. "+90"),
-          // poisoning the dashboard vs-par trend AND disagreeing with the scorecard, which already
-          // falls back to par 4. Match it so the saved stat is sane and consistent.
-          const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 4;
-          scoreVsPar += score - par;
+          const par = s.courseHoles.find(h => h.hole === Number(holeNum))?.par;
+          if (typeof par === 'number' && par > 0) {
+            scoreVsPar = (scoreVsPar ?? 0) + (score - par);
+          }
         }
         const record: RoundRecord = {
           id: s.currentRoundId ?? Date.now().toString(),
@@ -1484,7 +1487,7 @@ export const useRoundStore = create<RoundState>()(
           // anything. course_id is null for those — the reflection is still kept.
           const holesPlayed = holesData.length;
           if (holesPlayed > 0 && !s.isSimRound) { // 2026-07-04 — narrated sim rounds don't teach the CNS
-            const scoreLine = scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
+            const scoreLine = scoreVsPar == null ? 'Round' : scoreVsPar === 0 ? 'even par' : scoreVsPar > 0 ? `+${scoreVsPar}` : `${scoreVsPar}`;
             const summary = `${scoreLine} through ${holesPlayed} hole${holesPlayed === 1 ? '' : 's'}${s.activeCourse ? ` at ${s.activeCourse}` : ''}.`;
             const takeaways: string[] = [];
             const troubleHoles = holesData.filter(h => h.trouble.length > 0).map(h => `hole ${h.hole}`);
@@ -2443,18 +2446,26 @@ export const useRoundStore = create<RoundState>()(
         Object.values(get().scores).filter((score) => score > 0).length,
 
       getScoreVsPar: () => {
+        // 2026-07-24 (full-app audit — vs-par honesty) — compute vs-par ONLY over holes with a KNOWN
+        // par (>0). A missing OR par-0 hole (data-less course / AI-scan gap) is EXCLUDED from BOTH the
+        // score and the par sum, rather than fabricating par 4 (the old `?? 4`, which reported a made-up
+        // "+N" on data-less courses and poisoned the dashboard trend). When NO scored hole has a known
+        // par, vs-par is genuinely unknown → return null and every caller hides it instead of guessing.
         const { scores, courseHoles } = get();
         let total = 0;
         let par = 0;
+        let knownHoles = 0;
         for (const [holeNum, score] of Object.entries(scores)) {
           if (score > 0) {
-            total += score;
-            // par-4 fallback (was ?? 0) — see endRound: a data-less course must not report
-            // scoreVsPar == total strokes. Consistent with the scorecard's par-4 default.
-            par += courseHoles.find(h => h.hole === Number(holeNum))?.par ?? 4;
+            const holePar = courseHoles.find(h => h.hole === Number(holeNum))?.par;
+            if (typeof holePar === 'number' && holePar > 0) {
+              total += score;
+              par += holePar;
+              knownHoles++;
+            }
           }
         }
-        return total - par;
+        return knownHoles > 0 ? total - par : null;
       },
 
       getCurrentHoleData: () => {

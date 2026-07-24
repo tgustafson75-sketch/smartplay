@@ -62,6 +62,9 @@ export const endRoundHandler: IntentHandler = {
       const pars = holesWithPar.filter(h => h.offset === 0).length;
       const bogeys = holesWithPar.filter(h => h.offset === 1).length;
       const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
+      // 2026-07-24 (full-app audit) — compute vs-par from the SAME known-par holes (never the caller's
+      // possibly-null value), so the spoken tally is always honest + self-consistent. Non-null here.
+      const vspar = holesWithPar.reduce((a, h) => a + h.offset, 0);
       if (vspar <= -3) {
         summaryLine = `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
       } else if (vspar === 0) {

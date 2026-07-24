@@ -81,7 +81,7 @@ export function describeTeeGoal(goal: TeeScoreGoal): string {
 
 /** Did this round meet the goal's score bar? */
 function meetsTarget(goal: TeeScoreGoal, r: RoundRecord): boolean {
-  if (goal.beatPar) return r.scoreVsPar < 0;
+  if (goal.beatPar) return r.scoreVsPar != null && r.scoreVsPar < 0;
   return goal.targetScore != null && r.totalScore < goal.targetScore;
 }
 
@@ -123,7 +123,7 @@ export function evaluateTeeGoal(goal: TeeScoreGoal, history: RoundRecord[]): Tee
   let achievedAt: number | null = null;
   for (const r of qualifying) {
     if (r.totalScore < best) best = r.totalScore;
-    if (r.scoreVsPar < bestVsPar) bestVsPar = r.scoreVsPar;
+    if (r.scoreVsPar != null && r.scoreVsPar < bestVsPar) bestVsPar = r.scoreVsPar;
     if (meetsTarget(goal, r)) achievedAt = achievedAt == null ? r.endedAt : Math.min(achievedAt, r.endedAt);
   }
   // Most recent qualifying attempt by end time.

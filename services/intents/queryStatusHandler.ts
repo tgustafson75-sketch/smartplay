@@ -113,10 +113,14 @@ export const queryStatusHandler: IntentHandler = {
         const total = round.getTotalScore();
         const vsPar = round.getScoreVsPar();
         const holesPlayed = round.getHolesPlayed();
-        const vsParText = vsPar === 0 ? 'even' : vsPar > 0 ? '+' + vsPar : String(vsPar);
+        // 2026-07-24 (full-app audit) — omit vs-par when par is genuinely unknown (data-less course)
+        // rather than speaking a fabricated number; the raw total is still honest.
+        const vsParText = vsPar == null ? null : vsPar === 0 ? 'even' : vsPar > 0 ? '+' + vsPar : String(vsPar);
         return {
           success: true,
-          voice_response: `Through ${holesPlayed}, you're ${total} — ${vsParText}.`,
+          voice_response: vsParText == null
+            ? `Through ${holesPlayed}, you're at ${total}.`
+            : `Through ${holesPlayed}, you're ${total} — ${vsParText}.`,
           side_effects: ['query:score'],
           follow_up_needed: false,
         };

@@ -72,7 +72,7 @@ export async function generateRecap(
     startedAt: number;
     endedAt: number;
     totalScore: number;
-    scoreVsPar: number;
+    scoreVsPar: number | null; // null = no known par; the recap computes its own vs-par from hole comparisons
     scores: Record<number, number>;
     shots: ShotResult[];
     courseHoles: CourseHole[];

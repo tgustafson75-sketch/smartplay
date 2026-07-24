@@ -19,7 +19,7 @@ export function historyPromptBlock(): string {
         .slice(-4)
         .reverse()
         .map((r) => {
-          const vs = r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
+          const vs = r.scoreVsPar == null ? 'score n/a' : r.scoreVsPar > 0 ? `+${r.scoreVsPar}` : `${r.scoreVsPar}`;
           const course = r.courseName ?? 'a course';
           const when = r.endedAt ? new Date(r.endedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
           const holes = r.holesPlayed === 9 ? ' (9)' : '';
