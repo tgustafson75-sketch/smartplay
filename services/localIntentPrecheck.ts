@@ -30,6 +30,7 @@
 
 import type { VoiceIntent } from '../types/voiceIntent';
 import { isSmartMotionActive } from './smartMotionRecordBus';
+import { resolveSpokenCourse } from './courseNameResolver';
 
 interface Pattern {
   rx: RegExp;
@@ -200,6 +201,20 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     /\b(record|watch|swing away|hit away|fire away|rolling|begin|capture|start recording|go again|stop|done|finish|wrap|enough|cut it|that'?s it)\b/i.test(t)
   ) {
     return intent(t, 'media_capture', { capture_type: 'swing', raw_utterance: t });
+  }
+
+  // 2026-07-23 (Tim — "tell the Caddie what course and where and the caddie pulls it up in the play
+  // tab"). Deterministic, OFFLINE-first course open. We only CLAIM the intent when the spoken name
+  // actually RESOLVES to a known bundled course — otherwise we fall through to the brain, so this can
+  // never hijack "take me to the range", "play a song", or "go to hole five".
+  {
+    const cm = t.match(/\b(?:take me to|pull up|bring up|open up|load|go to|let'?s play|play|start)\s+(.+)/i);
+    if (cm) {
+      const resolved = resolveSpokenCourse(cm[1]);
+      if (resolved) {
+        return intent(t, 'open_course', { course_id: resolved.previewId, course_label: resolved.label, raw_utterance: t });
+      }
+    }
   }
 
   for (const p of PATTERNS) {

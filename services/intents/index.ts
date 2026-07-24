@@ -4,6 +4,7 @@ import { queryStatusHandler } from './queryStatusHandler';
 import { changeSettingHandler } from './changeSettingHandler';
 import { acknowledgeHandler } from './acknowledgeHandler';
 import { navigateHandler } from './navigateHandler';
+import { openCourseHandler } from './openCourseHandler';
 import { helpHandler } from './helpHandler';
 import { rulesQueryHandler } from './rulesQueryHandler';
 import { handicapQueryHandler } from './handicapQueryHandler';
@@ -37,6 +38,7 @@ voiceCommandRouter.registerHandler(queryStatusHandler);
 voiceCommandRouter.registerHandler(changeSettingHandler);
 voiceCommandRouter.registerHandler(acknowledgeHandler);
 voiceCommandRouter.registerHandler(navigateHandler);
+voiceCommandRouter.registerHandler(openCourseHandler);
 voiceCommandRouter.registerHandler(helpHandler);
 voiceCommandRouter.registerHandler(rulesQueryHandler);
 voiceCommandRouter.registerHandler(handicapQueryHandler);
@@ -74,6 +76,7 @@ export {
   changeSettingHandler,
   acknowledgeHandler,
   navigateHandler,
+  openCourseHandler,
   helpHandler,
   rulesQueryHandler,
   handicapQueryHandler,
