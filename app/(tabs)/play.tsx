@@ -613,17 +613,31 @@ export default function PlayTab() {
   // recognized the player's location. Player can tap the banner's
   // "Use it" to confirm and load that course's data. Null when no
   // course is close enough or GPS isn't available yet.
-  const atCourse: { course: CourseSummary; yards: number } | null = useMemo(() => {
+  const atCourse: { course: CourseSummary; yards: number; sibling: CourseSummary | null } | null = useMemo(() => {
     if (!userPosition) return null;
-    let best: { course: CourseSummary; yards: number } | null = null;
+    const within: { course: CourseSummary; yards: number }[] = [];
     for (const c of closestLocal) {
       if (c.lat == null || c.lng == null) continue;
       const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
-      if (yds <= 550 && (best == null || yds < best.yards)) {
-        best = { course: c, yards: yds };
-      }
+      if (yds <= 550) within.push({ course: c, yards: yds });
     }
-    return best;
+    if (within.length === 0) return null;
+    within.sort((a, b) => a.yards - b.yards);
+    const best = within[0];
+    // 2026-07-24 (final QA) — co-located sibling ambiguity. Menifee Lakes is one club with two
+    // courses (Palms + Lakes) ~854yd apart sharing one clubhouse, so at the parking lot both are
+    // within threshold and nearest-centroid is a coin flip. They have DIFFERENT par (72 vs 71) +
+    // yardages, so one-tap-starting a guess launches the wrong nine. Detect a second within-threshold
+    // course at the SAME location whose name shares the club family (before the "— <course>" suffix),
+    // and offer BOTH rather than silently pick.
+    const family = (name: string) => name.split(/\s[—-]\s/)[0].trim().toLowerCase();
+    const sibling = within.slice(1).find(o =>
+      o.course.id !== best.course.id &&
+      o.course.location === best.course.location &&
+      family(o.course.club_name).length > 0 &&
+      family(o.course.club_name) === family(best.course.club_name),
+    );
+    return { course: best.course, yards: best.yards, sibling: sibling?.course ?? null };
   }, [closestLocal, userPosition]);
 
   // Default the SELECTED COURSE card to the user's home course on first
@@ -682,15 +696,23 @@ export default function PlayTab() {
     const mySeq = ++searchSeqRef.current;
     setSearching(true);
     setSearchError(null);
-    setResults([]);
+    // 2026-07-24 (final QA) — match BUNDLED courses locally FIRST, so typing a bundled name
+    // ("Killian", "Highland", "Doral") always resolves — even offline or on an API error. These
+    // show immediately (before/without the network round-trip); API results merge in, deduped by id.
+    const ql = trimmed.toLowerCase();
+    const localMatches: CourseSummary[] = LOCAL_COURSES.filter(c =>
+      c.club_name.toLowerCase().includes(ql) || c.location.toLowerCase().includes(ql),
+    );
+    setResults(localMatches);
     setAiResult(null);
     setHasSearched(true);
     try {
       const found = await searchCourses(effective);
       // Audit — drop response if a newer request superseded us.
       if (mySeq !== searchSeqRef.current) return;
+      const localIds = new Set(localMatches.map(c => c.id));
       const mapped: CourseSummary[] = found
-        .filter(r => !r._error)
+        .filter(r => !r._error && !localIds.has(r.id))
         .map(r => ({
           id: r.id,
           club_name: r.club_name,
@@ -698,20 +720,25 @@ export default function PlayTab() {
           rating: null,
           slope: null,
         }));
-      setResults(mapped);
+      const merged = [...localMatches, ...mapped];
+      setResults(merged);
       const err = found.find(r => r._error);
-      if (err && mapped.length === 0) setSearchError(err._error ?? 'Search unavailable.');
+      // Only surface the connectivity error when we have NOTHING to show — a bundled match makes
+      // "check your connection" both wrong and unhelpful (the course is right there).
+      if (err && merged.length === 0) setSearchError(err._error ?? 'Search unavailable.');
       // 2026-06-30 — the DB responded but had NO match (not a network error): fall back
       // to the AI identifier so a real course off the DB still resolves. Keeps the main
-      // spinner up while it runs (~2-4s) so there's no empty-state flicker.
-      else if (mapped.length === 0) {
+      // spinner up while it runs (~2-4s) so there's no empty-state flicker. Skip when a bundled
+      // course already matched.
+      else if (merged.length === 0) {
         const ai = await aiSearchCourse(effective);
         if (mySeq === searchSeqRef.current) setAiResult(ai);
       }
     } catch (e) {
       if (mySeq !== searchSeqRef.current) return;
       console.warn('[play] search failed:', e);
-      setSearchError(e instanceof Error ? e.message : 'Search failed.');
+      // Network failed — keep any bundled matches (they don't need the network); only error if none.
+      if (localMatches.length === 0) setSearchError(e instanceof Error ? e.message : 'Search failed.');
     } finally {
       // Only clear searching if we're still the latest request, otherwise
       // the newer request owns the spinner state.
@@ -1068,7 +1095,29 @@ export default function PlayTab() {
             never see it (no pollution); when it fires, it's strongly
             indicative the player is on-site and should use that course.
             Tap to load. */}
-        {atCourse && selected?.id !== atCourse.course.id && (
+        {atCourse && atCourse.sibling && (
+          // 2026-07-24 (final QA) — co-located courses (Menifee Palms/Lakes): GPS can't tell which
+          // nine you're on, so ASK instead of one-tap-starting the wrong par/yardages.
+          <View style={styles.atCourseBanner}>
+            <AppIcon name="golf" size={14} color="#00C896" />
+            <Text style={styles.atCourseBannerText} numberOfLines={2}>
+              You&apos;re at{' '}
+              <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name.split(/\s[—-]\s/)[0]}</Text> · which course?
+            </Text>
+            {[atCourse.course, atCourse.sibling].map((c) => (
+              <TouchableOpacity
+                key={c.id}
+                style={styles.atCourseChoiceBtn}
+                onPress={() => startRoundAtCourse(c)}
+                accessibilityRole="button"
+                accessibilityLabel={`Start a round at ${c.club_name}`}
+              >
+                <Text style={styles.atCourseChoiceText}>{c.club_name.split(/\s[—-]\s/).pop()}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {atCourse && !atCourse.sibling && selected?.id !== atCourse.course.id && (
           <TouchableOpacity
             style={styles.atCourseBanner}
             onPress={() => startRoundAtCourse(atCourse.course)}
@@ -1699,6 +1748,20 @@ return StyleSheet.create({
   },
   atCourseBannerStrong: {
     color: c.accent,
+    fontWeight: '800',
+  },
+  // 2026-07-24 (final QA) — co-located course chooser buttons (Palms | Lakes).
+  atCourseChoiceBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.55)',
+    backgroundColor: 'rgba(0,200,150,0.16)',
+  },
+  atCourseChoiceText: {
+    color: '#e8f5e9',
+    fontSize: 13,
     fontWeight: '800',
   },
 

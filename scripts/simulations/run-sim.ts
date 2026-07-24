@@ -1199,6 +1199,27 @@ check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fal
   })(),
   'a mid-handicapper can ask "how far do I hit my 7 iron" (offline), flip persona/theme/cart/ghost offline, and the pre-data bag chart is internally consistent (no Driver=275, no 5H≈3I collision)');
 
+// 2026-07-24 (final QA). Co-located course auto-detect + local search match.
+check('Final QA: co-located courses ask which nine; search matches bundled courses locally',
+  (() => {
+    const play = read('app/(tabs)/play.tsx');
+    // (a) C3 — atCourse detects a same-location sibling that shares the club family, and the banner
+    //     offers BOTH (no one-tap-start of a guessed nine with the wrong par/yardages).
+    const okChooser =
+      /const sibling = within\.slice\(1\)\.find\(o =>/.test(play) &&
+      /family\(o\.course\.club_name\) === family\(best\.course\.club_name\)/.test(play) &&
+      /atCourse && atCourse\.sibling &&/.test(play) &&
+      /atCourse && !atCourse\.sibling && selected\?\.id !== atCourse\.course\.id/.test(play);
+    // (b) C5 — search matches BUNDLED courses locally first (offline-safe) and only shows the
+    //     connectivity error when there's nothing (local OR remote) to show.
+    const okSearch =
+      /const localMatches: CourseSummary\[\] = LOCAL_COURSES\.filter\(/.test(play) &&
+      /if \(err && merged\.length === 0\) setSearchError/.test(play) &&
+      /if \(localMatches\.length === 0\) setSearchError/.test(play);
+    return okChooser && okSearch;
+  })(),
+  'at a co-located club (Menifee Palms/Lakes) the app asks which course instead of starting the wrong nine, and typing a bundled course name resolves it locally even offline / on API error');
+
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
   // distance + wind/elevation (plays-like) + the player's real bag + tendency +
