@@ -175,7 +175,11 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
 
   // ── 1. Video URI → biomechanics + full keypoint stream ─────────────
   if (input.videoUri && input.durationMs) {
-    const bio = await analyzeSwingFromVideo(input.videoUri, input.durationMs, input.context?.angle ?? null).catch((e) => {
+    // 2026-07-24 (full-app audit, root D) — thread handedness: this path computes
+    // biomech from RAW (un-mirrored) frames, so a lefty needs the lead-side sign
+    // flipped. (The MediaPipe-frames branch below uses the mirror strategy instead —
+    // adjustFrames flips lefty→righty — so it must NOT also pass handedness.)
+    const bio = await analyzeSwingFromVideo(input.videoUri, input.durationMs, input.context?.angle ?? null, false, null, null, lefty ? 'left' : 'right').catch((e) => {
       devLog('[poseEstimator] swing video failed: ' + String(e));
       return null;
     });

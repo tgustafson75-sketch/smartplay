@@ -634,7 +634,10 @@ export default function SwingDetail() {
         // width-foreshortening metrics (hip/shoulder turn, weight shift) are NULLED for DTL rather
         // than shown as "Measured" — they're geometrically invalid from behind. Matches the primary
         // path (services/videoUpload.ts) which already passes angleOverride; this backfill dropped it.
-        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null);
+        // 2026-07-24 (full-app audit, root D) — thread handedness so a lefty's weight-shift
+        // sign isn't inverted (default 'right' read it backwards on this backfill path).
+        const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
+        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, null, null, resolveSwingerHandedness());
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);

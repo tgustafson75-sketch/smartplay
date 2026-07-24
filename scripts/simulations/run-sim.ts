@@ -1903,13 +1903,51 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
       /firstClipSwing\.clipEndSeconds > firstClipSwing\.clipStartSeconds/.test(up) &&
-      // 2026-07-07 (biomech #9) — the upload now passes its KNOWN camera angle.
-      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow\)/.test(up) &&
+      // 2026-07-07 (biomech #9) — the upload passes its KNOWN camera angle.
+      // 2026-07-24 (full-app audit, root D) — AND threads handedness so a lefty's
+      // weight-shift sign isn't inverted (default 'right' read it backwards).
+      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, null, resolveSwingerHandedness\(\)\)/.test(up) &&
       /session\.source === 'uploaded_video' \? \(/.test(detail) &&
       /onPress=\{onAnalyzeAtPosition\}/.test(detail)
     );
   })(),
   'uploaded swing windows the cloud read AND the on-device pose on the pointed moment → cards + skeleton');
+
+// 2026-07-24 (full-app audit, root D) — angle-honesty must be AUTOMATIC, not opt-in
+// per call-site. Before this, the Coach lesson + library-upload backfill passed no
+// angle → computeBiomechanics nulled nothing → geometrically-invalid DTL turn/weight/
+// sequencing numbers were spoken/shown as measured. Now computeBiomechanics INFERS the
+// angle from pose geometry when the caller doesn't know it, and every call site threads
+// handedness so a lefty's weight-shift sign isn't inverted.
+check('Biomech honesty is automatic: angle inferred when unknown + handedness threaded everywhere',
+  (() => {
+    const pose = read('services/poseAnalysisApi.ts');
+    const infer = read('services/cameraAngleInference.ts');
+    const coach = read('app/swinglab/coach-lesson.tsx');
+    const estimator = read('services/poseEstimator.ts');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const resolver = read('services/swingerHandedness.ts');
+    return (
+      // computeBiomechanics infers the angle when the caller passes none.
+      /if \(angle == null\) angle = inferCameraAngle\(frames\)/.test(pose) &&
+      // the detector keys off shoulder-width vs torso-height and is conservative
+      // (only asserts DTL/face-on at unambiguous ratios, else null = compute as-is).
+      /maxRatio < 0\.35\) return 'down_the_line'/.test(infer) &&
+      /maxRatio > 0\.60\) return 'face_on'/.test(infer) &&
+      // the ONE service-safe handedness source mirrors SmartMotion's derivation.
+      /active\?\.handedness === 'left' \|\| active\?\.handedness === 'right'/.test(resolver) &&
+      // the Coach lesson (both capture + picker paths) threads handedness.
+      /analyzeSwingFromVideo\(uri, RECORD_WINDOW_SEC \* 1000, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
+      /analyzeSwingFromVideo\(asset\.uri, durationMs, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
+      // the raw-frame poseEstimator path threads lefty; the MIRROR path must NOT
+      // (adjustFrames already flips lefty→righty — double-correcting would re-invert).
+      /input\.durationMs, input\.context\?\.angle \?\? null, false, null, null, lefty \? 'left' : 'right'\)/.test(estimator) &&
+      /computeBiomechanicsFromFrames\(adjusted\)/.test(estimator) &&
+      // the swing-detail backfill threads handedness too.
+      /resolveSwingerHandedness\(\)\)/.test(detail)
+    );
+  })(),
+  'the Coach lesson + upload backfill no longer speak DTL-invalid turn/weight numbers as measured (angle inferred from geometry), and lefty weight-shift reads with the correct sign on every analysis path');
 
 check('Smart Motion record by tap-to-talk is deterministic + local (no brain loop)',
   // 2026-06-15 (Tim — "active listening doesn't work; I tap the earbud/glasses and

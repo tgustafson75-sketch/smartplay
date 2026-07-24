@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { analyzeSwingFromVideo, type SwingBiomechanics } from '../../services/poseAnalysisApi';
+import { resolveSwingerHandedness } from '../../services/swingerHandedness';
 import { LESSON_FOCUSES, LESSON_PLANS, composeFocusFeedback, focusById, transitionLine, sessionSummaryLine, type LessonFocus, type LessonPlan, type FocusFeedback } from '../../services/coachLesson';
 import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../services/coachKnowledge';
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
@@ -117,7 +118,11 @@ export default function CoachLessonScreen() {
         if (uri) {
           setCap('analyzing');
           try {
-            return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000);
+            // 2026-07-24 (full-app audit, root D) — angle is null (the Coach camera
+            // doesn't collect it) → computeBiomechanics INFERS it from pose geometry
+            // and nulls DTL-invalid metrics, so the Caddie never speaks a wrong turn/
+            // weight number as measured. Handedness threaded so lefties read right.
+            return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000, null, false, null, null, resolveSwingerHandedness());
           } catch {
             return null;
           } finally {
@@ -141,7 +146,7 @@ export default function CoachLessonScreen() {
       const raw = asset.duration ?? 0;
       const durationMs = raw > 0 && raw < 100 ? raw * 1000 : raw || 4000;
       try {
-        return await analyzeSwingFromVideo(asset.uri, durationMs);
+        return await analyzeSwingFromVideo(asset.uri, durationMs, null, false, null, null, resolveSwingerHandedness());
       } catch {
         return null;
       } finally {

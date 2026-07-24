@@ -18,6 +18,7 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
+import { inferCameraAngle } from './cameraAngleInference';
 
 const apiUrl = (): string => getApiBaseUrl();
 
@@ -346,6 +347,12 @@ export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down
 }
 
 function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness: 'right' | 'left' | null = 'right'): SwingBiomechanics {
+  // 2026-07-24 (full-app audit, root D) — when the caller doesn't KNOW the angle
+  // (null/undefined — Coach lesson, library uploads), infer it from the pose
+  // geometry so the honesty gate below fires everywhere, not just where a caller
+  // happened to thread it. An EXPLICIT angle (SmartMotion's user override,
+  // glasses_pov) always wins over inference.
+  if (angle == null) angle = inferCameraAngle(frames);
   const address = frames.find(f => f.position === 'P1_address');
   const top = frames.find(f => f.position === 'P4_top');
   const impact = frames.find(f => f.position === 'P6_impact');
