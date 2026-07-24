@@ -1597,7 +1597,7 @@ export const useVoiceCaddie = ({
       // on perfect Wi-Fi, and because it stopped trying it could never clear.
       // The transcribe fetch has its own timeout; a genuine failure below
       // gives a brief haptic, not a sticky wall.)
-      const doTranscribeFetch = async (timeoutMs: number) => {
+      const doTranscribeFetch = async (timeoutMs: number, externalSignal?: AbortSignal) => {
         // Rebuild the multipart body per attempt — a consumed FormData stream
         // can't be safely re-sent on a retry.
         const fd = new FormData();
@@ -1605,11 +1605,18 @@ export const useVoiceCaddie = ({
         fd.append('language', language);
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeoutMs);
+        // 2026-07-23 — an EXTERNAL signal (the cold-turn reachability guard below) can abort the
+        // doomed fetch early when the host is proven unreachable, so we don't burn the full budget.
+        const onExt = () => { try { ctrl.abort(); } catch { /* no-op */ } };
+        if (externalSignal) {
+          if (externalSignal.aborted) ctrl.abort();
+          else externalSignal.addEventListener('abort', onExt);
+        }
         return fetch(apiUrl + '/api/transcribe', {
           method: 'POST',
           body: fd,
           signal: ctrl.signal,
-        }).finally(() => clearTimeout(t));
+        }).finally(() => { clearTimeout(t); externalSignal?.removeEventListener('abort', onExt); });
       };
 
       let transcribeRes: Response;
@@ -1732,9 +1739,32 @@ export const useVoiceCaddie = ({
       // Cold-boot patience: a longer budget on the first unwarmed turn so it lands a real cloud
       // transcript rather than racing the warmup and failing to on-device STT.
       const coldFirstTurn = !isConnectionWarmed();
+      // 2026-07-23 (field log: AbortError elapsedMs 25026, pingOk:false) — on a COLD turn the budget is
+      // long (~25s). Run a fast reachability probe CONCURRENTLY: the moment it PROVES the host
+      // unreachable (~3.5s), abort the doomed transcribe so we degrade fast instead of burning the full
+      // budget. Crucially this only shortcuts a PROVEN-unreachable host — a reachable-but-slow turn
+      // never gets aborted (the probe resolves ok and does nothing), preserving the cold-boot patience
+      // ([[voice-first-try-failure-timeout-root-cause]]). Fast/warm turns pay ZERO added latency (the
+      // guard runs concurrently and is only consulted if the transcribe itself throws).
+      const coldAbort = new AbortController();
+      let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null = null;
+      if (coldFirstTurn) {
+        void (async () => {
+          const [ping, get] = await Promise.all([reachabilityPing(3500), healthGet(3500)]);
+          if (!ping.ok) { coldUnreachable = { ping, get }; try { coldAbort.abort(); } catch { /* no-op */ } }
+        })();
+      }
       try {
-        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS);
+        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS, coldAbort.signal);
       } catch {
+        // Concurrent guard already proved the host unreachable → straight to offline, no extra probe.
+        // (Cast defeats TS's closure-assignment narrowing: coldUnreachable is set inside the async IIFE.)
+        const u = coldUnreachable as { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null;
+        if (u) {
+          void ensureBackendReachable({ force: true });
+          await failTranscribeOffline('AbortError', u.ping.ok, u.ping.ms, u.get.ok, u.get.ms);
+          return;
+        }
         // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
         // 27643) showed the old blind retry was a dead 15s wait on top of the
         // first 12s. Probe reachability (3s) FIRST: only retry when the host is
