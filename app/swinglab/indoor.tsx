@@ -17,7 +17,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Gyroscope } from 'expo-sensors';
+import { Gyroscope, Accelerometer } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import {
@@ -47,6 +47,7 @@ export default function IndoorHotelModeScreen() {
   const repsRef = useRef<IndoorRep[]>([]);
   const detectorRef = useRef<IndoorRepDetector | null>(null);
   const subRef = useRef<{ remove: () => void } | null>(null);
+  const accelSubRef = useRef<{ remove: () => void } | null>(null);
   const savedRef = useRef(false);
 
   // Pulsing ring while listening — the "I'm watching" heartbeat.
@@ -64,6 +65,8 @@ export default function IndoorHotelModeScreen() {
   const stopSensor = useCallback(() => {
     try { subRef.current?.remove(); } catch { /* already removed */ }
     subRef.current = null;
+    try { accelSubRef.current?.remove(); } catch { /* already removed */ }
+    accelSubRef.current = null;
   }, []);
 
   const start = useCallback(() => {
@@ -87,6 +90,15 @@ export default function IndoorHotelModeScreen() {
       useToastStore.getState().show('Couldn\'t start the motion sensor on this device.');
       setStage('intro');
     }
+    // 2026-07-24 — ALSO stream the accelerometer so the detector can fuse it for sharper through-swing
+    // timing. In its OWN try/catch: if the accelerometer is unavailable/denied, the gyro tempo above is
+    // completely unaffected (the detector degrades to gyro-only — see IndoorRepDetector.refineImpactWithAccel).
+    try {
+      Accelerometer.setUpdateInterval(10); // ~100Hz, matched to the gyro
+      accelSubRef.current = Accelerometer.addListener((a) => {
+        detectorRef.current?.onAccel({ t: Date.now(), x: a.x, y: a.y, z: a.z });
+      });
+    } catch { /* accel is a bonus — gyro tempo works without it */ }
   }, [mode]);
 
   // Finish → summary + credit (points, practice history, CNS tempo tendencies).

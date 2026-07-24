@@ -1238,6 +1238,37 @@ check('Club logic unified: one vocabulary (normalizeClub) + explicit carry vs to
   })(),
   'a driver logged by voice/quick-log now registers in the bag (normalizeClub), the caddie quotes honest CARRY (not a tee→rest total), and one club no longer splits into multiple usage rows');
 
+// 2026-07-24 (Tim — tempo, OTA-only). Accel+gyro fusion is ADDITIVE + hard-guarded on top of the proven
+// gyro tempo detector: it must NEVER change the result when accel isn't fed (safe fallback), and can only
+// nudge the through-swing timing by a bounded amount. Uses expo-sensors (already installed) → OTA, no build.
+check('Tempo: accel+gyro fusion refines the through-swing but safely falls back to gyro',
+  (() => {
+    // Behavioral: same synthetic swing gyro-only vs with a real linear-accel bottom burst.
+    const swing = (() => { const g: { t: number; x: number; y: number; z: number }[] = [];
+      for (let t = 0; t <= 700; t += 10) g.push({ t, x: 2.0 * Math.sin((Math.PI * t) / 700), y: 0, z: 0 });
+      for (let t = 710; t <= 1000; t += 10) g.push({ t, x: -3.0 * Math.sin((Math.PI * (t - 710)) / 290), y: 0, z: 0 });
+      for (let t = 1010; t <= 1350; t += 10) g.push({ t, x: 0.05, y: 0, z: 0 }); return g; })();
+    const run = (burst: boolean) => { const d = new IndoorRepDetector('swing'); let rep: ReturnType<IndoorRepDetector['onSample']> = null;
+      for (const s of swing) { if (burst) d.onAccel({ t: s.t, x: s.t >= 900 && s.t <= 940 ? 4 : 0, y: 0, z: 9.8 }); const r = d.onSample(s); if (r) rep = r; } return rep; };
+    const gyroOnly = run(false); const fused = run(true);
+    const okBehavior =
+      gyroOnly != null && fused != null &&
+      gyroOnly.impactSource === 'gyro' &&                                   // no accel → gyro fallback
+      fused.impactSource === 'gyro+accel' &&                               // a sane bottom engages fusion
+      fused.backswingMs === gyroOnly.backswingMs &&                        // backswing NEVER touched
+      Math.abs(fused.downswingMs - gyroOnly.downswingMs) <= 150;           // bounded ±150ms nudge
+    // Source: the master switch + the screen's OWN-try-catch accel subscription (gyro unaffected if accel fails).
+    const svc = read('services/indoorSwing.ts');
+    const screen = read('app/swinglab/indoor.tsx');
+    const okWiring =
+      /export const ACCEL_FUSION_ENABLED = true/.test(svc) &&
+      /if \(win\.length < 5\) return \{ downswingMs: gyroDownswingMs, source: 'gyro' \}/.test(svc) && // no coverage → gyro
+      /Accelerometer\.addListener/.test(screen) &&
+      /\/\* accel is a bonus — gyro tempo works without it \*\//.test(screen);
+    return okBehavior && okWiring;
+  })(),
+  'the accelerometer sharpens the through-swing bottom (tempo trends toward a truer 3:1) but is byte-identical to the gyro baseline when accel is absent, never moves the backswing, and is bounded to a small correction — OTA-safe (expo-sensors already installed)');
+
 // 2026-07-24 (M3/M4 — WHS posting honesty for high-handicap play).
 check('Handicap: blow-up holes capped (net double bogey) + pick-up rounds still count',
   (() => {

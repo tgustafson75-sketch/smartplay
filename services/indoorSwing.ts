@@ -18,6 +18,8 @@
  */
 
 export interface GyroSample { t: number; x: number; y: number; z: number }
+/** 2026-07-24 — accelerometer sample (m/s², includes gravity), same units as expo-sensors Accelerometer. */
+export interface AccelSample { t: number; x: number; y: number; z: number }
 
 export type IndoorMode = 'swing' | 'putt';
 export type TransitionGrade = 'smooth' | 'quick' | 'snatched';
@@ -31,7 +33,20 @@ export interface IndoorRep {
   transitionDwellMs: number;
   /** Putting only: did the through-stroke keep accelerating to the strike point? */
   throughStroke?: 'accelerating' | 'decelerating';
+  /** 2026-07-24 — which signal set produced the impact timing: 'gyro' (rotation only) or 'gyro+accel'
+   *  (the accelerometer sharpened the through-swing bottom). 'gyro' whenever fusion is off / not fed /
+   *  the refinement failed a sanity gate — so a caller can trust the number is at worst gyro-only. */
+  impactSource?: 'gyro' | 'gyro+accel';
 }
+
+/**
+ * 2026-07-24 — Accel+gyro fusion master switch. The gyro-only tempo detector is the proven, device-tuned
+ * baseline; the accelerometer refinement is ADDITIVE and hard-guarded (see refineImpactWithAccel), but
+ * this flag lets it be disabled instantly over-the-air if it ever misbehaves on a device, with zero
+ * other change. Fusion also self-disables whenever no accel samples are fed (the screen may not stream
+ * them), so the detector always degrades cleanly to gyro-only.
+ */
+export const ACCEL_FUSION_ENABLED = true;
 
 export interface IndoorConfig {
   startThresh: number;   // rad/s to enter a rep
@@ -69,6 +84,12 @@ export class IndoorRepDetector {
   private lastAbove = 0;      // last time |ω| was above endThresh
   private uCaptured = false;
   private sHistory: { t: number; s: number }[] = [];
+  // 2026-07-24 — optional accelerometer fusion. grav = complementary low-pass estimate of the gravity
+  // vector; linHistory = per-sample LINEAR acceleration magnitude (raw − gravity) over time. Feeding
+  // accel is optional; when it isn't fed these stay empty and the detector is pure gyro (see finishRep).
+  private grav = { x: 0, y: 0, z: 0 };
+  private gravInit = false;
+  private linHistory: { t: number; lin: number }[] = [];
 
   constructor(mode: IndoorMode) {
     this.mode = mode;
@@ -82,6 +103,29 @@ export class IndoorRepDetector {
     this.peakBack = 0;
     this.peakDown = 0;
     this.sHistory = [];
+    // NB: linHistory + grav are NOT reset here — the accel stream is continuous + windowed by time in
+    // finishRep, and the gravity estimate should persist across reps (it's the phone's resting tilt).
+  }
+
+  /**
+   * 2026-07-24 — Feed one accelerometer sample (optional). Maintains a gravity estimate via a textbook
+   * complementary low-pass (β≈0.08 → ~2s time-constant at 60Hz, isolates the ~1g DC gravity from the
+   * swing's dynamic motion), then stores the LINEAR acceleration magnitude |raw − gravity| over time.
+   * finishRep() uses this to sharpen the through-swing bottom timing — hard-guarded, gyro-only fallback.
+   * Pure; never throws. No-op when fusion is disabled.
+   */
+  onAccel(raw: AccelSample): void {
+    if (!ACCEL_FUSION_ENABLED) return;
+    const beta = 0.08;
+    if (!this.gravInit) { this.grav = { x: raw.x, y: raw.y, z: raw.z }; this.gravInit = true; }
+    else {
+      this.grav.x += (raw.x - this.grav.x) * beta;
+      this.grav.y += (raw.y - this.grav.y) * beta;
+      this.grav.z += (raw.z - this.grav.z) * beta;
+    }
+    const lin = Math.hypot(raw.x - this.grav.x, raw.y - this.grav.y, raw.z - this.grav.z);
+    this.linHistory.push({ t: raw.t, lin });
+    if (this.linHistory.length > 900) this.linHistory.shift(); // ~9s at 100Hz
   }
 
   /** Feed one gyro sample; returns a completed rep when one just finished. */
@@ -181,12 +225,18 @@ export class IndoorRepDetector {
     const transition: TransitionGrade =
       transitionDwellMs >= 140 ? 'smooth' : transitionDwellMs >= 70 ? 'quick' : 'snatched';
 
+    // 2026-07-24 — accel fusion refines ONLY the through-swing (downswing) timing, and only as a small,
+    // hard-guarded nudge; backswing (top via the gyro zero-crossing) is already solid. Degrades to the
+    // exact gyro value when accel isn't fed or a guard fails.
+    const refined = this.refineImpactWithAccel(dLo, dHi, downswingMs);
+
     const rep: IndoorRep = {
-      tempoRatio: backswingMs / Math.max(1, downswingMs),
+      tempoRatio: backswingMs / Math.max(1, refined.downswingMs),
       backswingMs,
-      downswingMs,
+      downswingMs: refined.downswingMs,
       transition,
       transitionDwellMs,
+      impactSource: refined.source,
     };
 
     // Putting: decel-into-the-ball read (the #1 amateur putting fault). Compare the
@@ -202,6 +252,33 @@ export class IndoorRepDetector {
       rep.throughStroke = s90 >= s60 * 0.92 ? 'accelerating' : 'decelerating';
     }
     return rep;
+  }
+
+  /**
+   * 2026-07-24 — Sharpen the downswing (through-swing) duration using the accelerometer, hard-guarded.
+   * The gyro fixes the through-swing bottom at the ANGULAR-speed peak (tPeakDown); the swing's LINEAR
+   * acceleration peaks fractionally later (max force through the impact zone), a slightly truer bottom.
+   * We take the linear-accel peak in the through-swing window, but only ACCEPT it as a small correction:
+   *   - accel must actually be streaming (window coverage) — else this is a no-op → pure gyro,
+   *   - the peak must be a real swing force (≥1 m/s²), not sensor noise,
+   *   - the shift stays within ±150 ms of the gyro bottom (a bounded nudge, never a wild jump),
+   *   - the refined downswing stays physically in range.
+   * Any miss → the gyro value. So the fusion can only ever make a small, sane improvement, and the
+   * feature is byte-identical to the proven baseline whenever accel is absent or uncertain.
+   */
+  private refineImpactWithAccel(dLo: number, dHi: number, gyroDownswingMs: number): { downswingMs: number; source: 'gyro' | 'gyro+accel' } {
+    if (!ACCEL_FUSION_ENABLED) return { downswingMs: gyroDownswingMs, source: 'gyro' };
+    const win = this.linHistory.filter((h) => h.t >= this.tTop && h.t <= this.tPeakDown + 250);
+    if (win.length < 5) return { downswingMs: gyroDownswingMs, source: 'gyro' }; // no accel coverage → gyro-only
+    let tImpact = this.tPeakDown;
+    let peakLin = 0;
+    for (const h of win) if (h.lin > peakLin) { peakLin = h.lin; tImpact = h.t; }
+    const refined = tImpact - this.tTop;
+    const SHIFT_CAP_MS = 150;
+    if (peakLin >= 1.0 && Math.abs(tImpact - this.tPeakDown) <= SHIFT_CAP_MS && refined >= dLo && refined <= dHi) {
+      return { downswingMs: refined, source: 'gyro+accel' };
+    }
+    return { downswingMs: gyroDownswingMs, source: 'gyro' };
   }
 }
 
