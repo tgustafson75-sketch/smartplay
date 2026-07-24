@@ -563,7 +563,12 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('mariner')) return 'mariners-point';
   // 2026-07-18 — Doral + Pembroke. Pembroke MUST precede the generic 'lakes' match below,
   // since the course is "Pembroke LAKES" and would otherwise resolve to the Menifee 'lakes'.
-  if (c.includes('doral')) return 'doral-gold';
+  // 2026-07-24 (full-app audit, root A) — Doral is a MULTI-COURSE resort; we only bundle GOLD.
+  // Resolve to 'doral-gold' ONLY when the name confirms Gold, so a "Doral Blue Monster" round
+  // doesn't inherit the Gold centroid (satellite tile centered on the wrong course) + Gold hole
+  // calibration lines. A non-Gold/ambiguous Doral returns null → the tile centers on the player's
+  // live GPS and no wrong overlay lines are drawn (honest degrade). Canonical local: id unaffected.
+  if (c.includes('doral')) return c.includes('gold') ? 'doral-gold' : null;
   if (c.includes('pembroke')) return 'pembroke-pines';
   if (c.includes('palms')) return 'palms';
   if (c.includes('lakes') && !c.includes('palms')) return 'lakes';
@@ -621,7 +626,12 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
   // 2026-07-18 — Doral + Pembroke. Pembroke precedes the 'lakes' match (course is "Pembroke Lakes").
-  if (c.includes('doral')) return DORAL_GOLD_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-24 (full-app audit, root A) — Doral is a MULTI-COURSE resort (Blue Monster, Gold, Silver,
+  // Red, Great White). We only bundle GOLD imagery, so match it ONLY when the name confirms Gold —
+  // otherwise a "Doral Blue Monster" round rendered GOLD holes as if they were its own course. A
+  // non-Gold or ambiguous Doral returns null → satellite / AI-vision geometry (honest, no wrong crop).
+  // The canonical id path (getLocalHoleImageById on local:doral-gold) is unaffected — it's name-free.
+  if (c.includes('doral')) return c.includes('gold') ? (DORAL_GOLD_HOLE_IMAGES[holeNumber] ?? null) : null;
   if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
   // "palms" check must follow "lakes" handling — Tim's home-course label
   // is often "Menifee Lakes — Palms" which contains both words. Without

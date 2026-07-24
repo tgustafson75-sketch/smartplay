@@ -2533,6 +2533,23 @@ check('Recap view-hole shows the saved static hole image when no shots logged',
   })(),
   'the hole view shows the static image (bundled course) instead of blank when no shots tracked');
 
+// 2026-07-24 (full-app audit, root A) — course dual-identity. Doral is a MULTI-COURSE resort
+// (Blue Monster, Gold, Silver, Red, Great White); we only bundle GOLD. A bare 'doral' name match
+// rendered GOLD hole imagery + centroid + calibration lines onto a "Doral Blue Monster" round —
+// the wrong course shown as if it were the player's. Lock the gold-required guard on BOTH name
+// resolvers so a non-Gold Doral degrades honestly (satellite / live-GPS tile, no wrong crop/lines).
+check('Course identity: a non-Gold Doral never inherits Gold imagery/centroid (dual-identity fix)',
+  (() => {
+    const img = read('data/localCourseImages.ts');
+    return (
+      // Hole imagery: only returns Gold crops when the name confirms Gold.
+      /if \(c\.includes\('doral'\)\) return c\.includes\('gold'\) \? \(DORAL_GOLD_HOLE_IMAGES\[holeNumber\] \?\? null\) : null;/.test(img) &&
+      // Slug (drives satellite centroid + hole calibration): gold-required, else null.
+      /if \(c\.includes\('doral'\)\) return c\.includes\('gold'\) \? 'doral-gold' : null;/.test(img)
+    );
+  })(),
+  'a Doral round that is NOT the Gold course falls through to satellite/live-GPS geometry instead of rendering Gold holes, Gold centroid, and Gold calibration lines as its own');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
@@ -3201,7 +3218,7 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
 // write-back: when detectBallDeparture resolves a no-launch, it persists the duff onto BOTH
 // the per-shot row (contact_read='fat') and the session headline — UPGRADE-ONLY.
 check('Chunk honesty PERSISTS: a live-detected duff is written back so it never reopens clean',
-  () => (
+  (
     // Guarded on the no-launch signal (ball present before, never departed).
     /accepted && accepted\.ball_present_before && !accepted\.departed/.test(smSrc) &&
     // Upgrade-only: skip if the shot already carries a named mishit (no clobber/downgrade).
