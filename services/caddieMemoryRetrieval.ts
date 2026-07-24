@@ -112,8 +112,11 @@ export function getCaddieContext(input: {
           ` from ${cm.samples} tracked shots.`,
         );
       } else if (typeof statsBag[input.club] === 'number' && statsBag[input.club] > 0) {
-        // CNS hasn't learned this club yet — use the tracked carry the rest of the app uses.
-        lines.push(`Your learned ${input.club} carry: ~${Math.round(statsBag[input.club])}y (tracked).`);
+        // 2026-07-24 (full-app audit — honesty) — clubStats/statsBag is a GPS tee→rest TOTAL (includes
+        // roll), NOT airtime carry. Quote it as "distance … includes roll" so the caddie doesn't state a
+        // roll-inclusive total as a measured carry (which would over-club by ~10-20y). The CNS bag above
+        // (cm.avgCarryYds) IS a real carry and keeps the "carry" wording.
+        lines.push(`Your learned ${input.club} distance: ~${Math.round(statsBag[input.club])}y (tracked total, includes roll).`);
       }
     }
     if (bag.length > 0) {
