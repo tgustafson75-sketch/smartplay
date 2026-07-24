@@ -395,7 +395,7 @@ export default function Dashboard() {
   // (the par-3 caveat means a few iron tee shots count as "fairway
   // tries" — acceptable until we add par-aware filtering).
   const shotStats = useMemo(() => {
-    const allHistoricalShots = realRounds.flatMap((r) => r.shots);
+    const allHistoricalShots = realRounds.flatMap((r) => r.shots ?? []);
     // 2026-06-11 (audit) — exclude quick-score placeholder shots (id "qs-…").
     // handleQuickScore mints synthetic 'clean' shots so a bare score tap logs a
     // stroke count; counting them here inflated lifetime fairway% and shot count
@@ -429,7 +429,7 @@ export default function Dashboard() {
     if (allShots.length > 0) return [...allShots].slice(-5).reverse();
     const last = realRounds[realRounds.length - 1];
     if (!last) return [];
-    return [...last.shots].slice(-5).reverse();
+    return [...(last.shots ?? [])].slice(-5).reverse();
   }, [allShots, realRounds]);
 
   // 2026-06-04 — topClubs derivation removed (Kevin's Read inline block
@@ -442,7 +442,7 @@ export default function Dashboard() {
     // anything above that is a corrupt capture — drop it. This also self-resets a bad value.
     const MAX_REAL_DRIVE = 500;
     const fromHistory = realRounds
-      .flatMap(r => r.shots)
+      .flatMap(r => r.shots ?? [])
       .filter(s => s.club === 'Driver')
       .map(s => s.carry_distance ?? s.distance_yards ?? 0)
       .filter(y => y > 0 && y <= MAX_REAL_DRIVE)

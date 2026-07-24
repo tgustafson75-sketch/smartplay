@@ -2093,7 +2093,14 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
   // react-native-svg. `!(axisYards > 0)` rejects NaN/Infinity too.
   if (!(axisYards > 0)) return <View style={styles.canvasWrap}><Text style={styles.empty}>Hole geometry invalid.</Text></View>;
 
-  const playerProj = projectToAxis(fix.location, geometry.tee, geometry.green);
+  // 2026-07-24 (audit — SVG NaN parity with L1HolePreview) — a non-finite projection (e.g. a bad
+  // fix.location) would flow through xRange = Math.max(60, NaN) = NaN into the SVG and white-screen.
+  // Every GPS writer is isValidWgs84-gated so this isn't reachable today; guard defensively anyway.
+  const rawProj = projectToAxis(fix.location, geometry.tee, geometry.green);
+  const playerProj = {
+    x: Number.isFinite(rawProj.x) ? rawProj.x : 0,
+    y: Number.isFinite(rawProj.y) ? rawProj.y : 0,
+  };
   const halfPad = 30;
   const xPad = 30;
   const xRange = Math.max(60, Math.abs(playerProj.x) * 2 + 60);
