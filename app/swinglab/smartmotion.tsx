@@ -1338,6 +1338,46 @@ export default function SmartMotion() {
           : (r ?? null);
         ballDepartureCacheRef.current[selectedSwing] = accepted;
         setBallDeparture(accepted);
+        // 2026-07-24 (full-app audit, root E) — PERSIST the duff. detectBallDeparture
+        // runs lazily on the Motion step, AFTER the save-time write (which only had the
+        // vision contact_read). A ball-never-launched duff showed live but the SAVED
+        // report reopened CLEAN. Write it back so the library card + swing detail honor
+        // it. UPGRADE-ONLY: we only ever make a persisted read MORE honest about a mishit
+        // — never overwrite a named fat/thin/topped, never downgrade a launch to clean.
+        if (accepted && accepted.ball_present_before && !accepted.departed) {
+          try {
+            const sessionId = ingestedSessionIdRef.current;
+            const shotIdx = Math.max(0, (seg?.index ?? selectedSwing + 1) - 1);
+            if (sessionId) {
+              const store = useCageStore.getState();
+              const sess = store.sessionHistory.find((s) => s.id === sessionId);
+              const persistShot = sess?.shots[shotIdx] ?? null;
+              const existingCr = persistShot?.perShotAnalysis?.contact_read;
+              const alreadyMishit = existingCr === 'fat' || existingCr === 'thin' || existingCr === 'topped';
+              if (persistShot && !alreadyMishit) {
+                const prev = persistShot.perShotAnalysis;
+                store.setShotAnalysis(sessionId, persistShot.id, {
+                  detected_issue: prev?.detected_issue ?? 'none',
+                  primary_fault: prev?.primary_fault ?? null,
+                  severity: prev?.severity ?? 'significant',
+                  confidence: prev?.confidence ?? 'medium',
+                  observation: prev?.observation ?? 'The ball never left its spot — a duff or heavy hit.',
+                  fault_frame_index: prev?.fault_frame_index ?? -1,
+                  visual_reference_path: prev?.visual_reference_path ?? null,
+                  contact_read: 'fat', // a no-launch duff is a heavy/fat strike for the per-shot row + club confidence
+                });
+              }
+              // Session headline: only UPGRADE a non-contact issue to the duff verdict
+              // (don't clobber an already-named contact miss). Mirrors the save path's dual write.
+              const curIssueId = sess?.primary_issue?.issue_id;
+              const contactIssueIds = ['no_launch', 'heavy_contact', 'thin_contact', 'topped_contact'];
+              if (sess && !(curIssueId && contactIssueIds.includes(curIssueId))) {
+                const duff = contactIssue({ ballLaunched: false, reportedMishit: null });
+                if (duff) store.setSessionAnalysis(sessionId, duff, null);
+              }
+            }
+          } catch { /* best-effort — the live badge is already honest */ }
+        }
       })
       .catch(() => undefined);
     return () => { cancelled = true; };

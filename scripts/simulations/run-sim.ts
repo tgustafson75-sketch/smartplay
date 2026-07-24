@@ -3195,6 +3195,26 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
   })(),
   'the contact signal (feel/ball-departure/contact_read) reaches the saved report, per-swing row, drill verdict, CNS, and narration — a chunk is never called clean on any surface, and lookup-only metrics render "—"');
 
+// 2026-07-24 (full-app audit, root E) — the ball-departure duff read is computed LAZILY on
+// the Motion step, AFTER the save-time write (which only carried the vision contact_read).
+// So a ball-never-launched duff showed live but the SAVED report REOPENED CLEAN. Lock the
+// write-back: when detectBallDeparture resolves a no-launch, it persists the duff onto BOTH
+// the per-shot row (contact_read='fat') and the session headline — UPGRADE-ONLY.
+check('Chunk honesty PERSISTS: a live-detected duff is written back so it never reopens clean',
+  () => (
+    // Guarded on the no-launch signal (ball present before, never departed).
+    /accepted && accepted\.ball_present_before && !accepted\.departed/.test(smSrc) &&
+    // Upgrade-only: skip if the shot already carries a named mishit (no clobber/downgrade).
+    /const alreadyMishit = existingCr === 'fat' \|\| existingCr === 'thin' \|\| existingCr === 'topped'/.test(smSrc) &&
+    /if \(persistShot && !alreadyMishit\)/.test(smSrc) &&
+    // Per-shot row gets the duff strike so club-confidence + the library row honor it.
+    /contact_read: 'fat'/.test(smSrc) &&
+    // Session headline only UPGRADES a non-contact issue to the duff verdict.
+    /!\(curIssueId && contactIssueIds\.includes\(curIssueId\)\)/.test(smSrc) &&
+    /const duff = contactIssue\(\{ ballLaunched: false, reportedMishit: null \}\)/.test(smSrc)
+  ),
+  'the lazily-computed ball-departure duff is persisted onto the per-shot row + session report when it resolves, so reopening the swing shows the chunk instead of a clean read — and the write is upgrade-only so it never overwrites a named mishit or downgrades a real launch');
+
 check('Verdict no longer claims ANALYZING forever',
   /function deriveVerdict\(/.test(smSrc) &&
     /a: SwingAnalysis \| null,\s*\n\s*analyzing: boolean,/.test(smSrc) &&
