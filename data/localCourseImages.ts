@@ -578,7 +578,9 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // Westlake property today; revisit if we add a sibling).
   if (c.includes('westlake')) return 'westlake-cc-nj';
   // 2026-06-21 — Greenhill Golf Course, Worcester MA.
-  if (c.includes('greenhill')) return 'greenhill';
+  // 2026-07-24 (final QA) — match "green hill" too; the canonical name "Green Hill" (with a space)
+  // does not contain "greenhill", so slug resolution (centroid + calibration) failed for it.
+  if (c.includes('greenhill') || c.includes('green hill')) return 'greenhill';
   // 2026-07-07 — the two courses added from SmartVision screenshots. Name-lookup
   // parity so voice ("I'm at Spessard", "open Dudley Hill") + homeCourse matching
   // resolve to bundled imagery/centroid, not just the `local:` id path.
@@ -634,7 +636,15 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   // bundled Westlake property today, so the bare substring is enough.
   // Revisit if a sibling Westlake course gets bundled.
   if (c.includes('westlake')) return WESTLAKE_CC_NJ_HOLE_IMAGES[holeNumber] ?? null;
-  if (c.includes('greenhill')) return GREENHILL_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-24 (final QA) — also match "green hill" (with a space): the canonical course name in
+  // data/courses.ts is "Green Hill", which does NOT contain "greenhill", so the name path returned
+  // null for its own bundled aerials (the id path masked it everywhere else).
+  if (c.includes('greenhill') || c.includes('green hill')) return GREENHILL_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-24 (final QA) — Spessard Holland + Webster Dudley had bundled aerials + a getLocalCourseSlug
+  // branch, but NO getLocalHoleImage branch, so any name-only consumer (course-detail hole grid,
+  // SmartVision hasCurated check) showed no imagery. Mirror getLocalCourseSlug.
+  if (c.includes('spessard') || c.includes('holland')) return SPESSARD_HOLLAND_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('webster') || c.includes('dudley')) return WEBSTER_DUDLEY_HOLE_IMAGES[holeNumber] ?? null;
   // 2026-07-23 — the 4 screenshot-anchored beta courses (name-keyed parity with the id path).
   if (c.includes('highland')) return HIGHLAND_LINKS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('miccosukee')) return MICCOSUKEE_HOLE_IMAGES[holeNumber] ?? null;

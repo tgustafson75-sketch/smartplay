@@ -232,7 +232,11 @@ export default function SwingSimScreen() {
 
   const nextHole = useCallback(() => {
     const nextIdx = holeIdx + 1;
-    if (nextIdx >= holeCount) {
+    // 2026-07-24 (final QA) — terminate on the course's actual hole count too, not just the
+    // selected round length. beginHole clamps the index to course.holes.length-1, so a course
+    // with fewer holes than holeCount would replay its last hole forever. Both sim courses are
+    // 18 today, so this is defensive; it makes adding a short course safe.
+    if (nextIdx >= Math.min(holeCount, course.holes.length)) {
       try {
         usePracticePointsStore.getState().awardPracticePoints({ key: 'indoor:sim', label: 'SwingSim Round', swings: scorecard.reduce((a, h) => a + h.strokes, 0), now: Date.now() });
       } catch { /* additive */ }
@@ -240,7 +244,7 @@ export default function SwingSimScreen() {
     } else {
       beginHole(nextIdx);
     }
-  }, [holeIdx, holeCount, beginHole, scorecard]);
+  }, [holeIdx, holeCount, beginHole, scorecard, course.holes.length]);
 
   const toPar = scorecard.reduce((a, h) => a + (h.strokes - h.par), 0);
   // Running ghost differential over the holes we've both "played" (ghost has a score).

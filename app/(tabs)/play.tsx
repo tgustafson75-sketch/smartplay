@@ -298,8 +298,11 @@ const LOCAL_COURSES: CourseSummary[] = [
     slope: 113,
     isLocal: true,
     thumbnail: (SPESSARD_HOLLAND_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 28.0686,
-    lng: -80.5603,
+    // 2026-07-24 (final QA) — reconciled to the LOCAL_COURSE_CENTROIDS value (~1.3mi apart before;
+    // the two registries are documented to mirror each other). This is the OSM/golfcourseapi-matched
+    // centroid; the prior value drifted.
+    lat: 28.04947,
+    lng: -80.55063,
   },
   // 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-view shots.
   // Approx town-center coords (hole GPS isn't in the screenshots); enough for the

@@ -216,6 +216,16 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   rangefinder: { type: 'open_smartfinder' },
   play: { type: 'navigate', path: '/(tabs)/play' },
   start_round: { type: 'navigate', path: '/(tabs)/play' },
+  // 2026-07-24 (final QA) — three headline SwingLab tools shipped with hub cards only and had
+  // NO voice route (spoken "open Coach Caddie / Hotel Mode / SwingSim" → "I don't know that tool").
+  // swingsim is DISTINCT from sim_round (the on-course narrated round) — the bare "sim" aliases
+  // still route to sim_round; "swingsim"/"swing sim game" open the phone-as-club game screen.
+  coach_lesson: { type: 'navigate', path: '/swinglab/coach-lesson' },
+  coach_caddie: { type: 'navigate', path: '/swinglab/coach-lesson' },
+  hotel_mode: { type: 'navigate', path: '/swinglab/indoor' },
+  indoor: { type: 'navigate', path: '/swinglab/indoor' },
+  swingsim: { type: 'navigate', path: '/swinglab/simround' },
+  swing_sim: { type: 'navigate', path: '/swinglab/simround' },
 };
 
 const TOOL_LABEL: Record<string, string> = {
@@ -287,6 +297,18 @@ const TOOL_LABEL: Record<string, string> = {
   rangefinder: 'SmartFinder',
   play: 'Play',
   start_round: 'Play',
+  // 2026-07-24 (final QA) — labels for the newly-routed tools AND for the vision-read / club-scan
+  // aliases that previously fell through to the else branch and spoke "Opening undefined." aloud.
+  coach_lesson: 'Coach Caddie',
+  coach_caddie: 'Coach Caddie',
+  hotel_mode: 'Hotel Mode',
+  indoor: 'Hotel Mode',
+  swingsim: 'SwingSim',
+  swing_sim: 'SwingSim',
+  scene_read: 'SmartVision',
+  look: 'SmartVision',
+  what_you_see: 'SmartVision',
+  register_club: 'club scan',
 };
 
 export const openToolHandler: IntentHandler = {
@@ -584,10 +606,18 @@ export const openToolHandler: IntentHandler = {
         voiceResponse = "Cage mode starting. I'll capture every swing.";
       } else if (toolName === 'smartplay' || toolName === 'smart_play') {
         voiceResponse = "I'll take a look.";
+      } else if (toolName === 'scene_read' || toolName === 'look' || toolName === 'what_you_see') {
+        // 2026-07-24 (final QA) — these had no label and spoke "Opening undefined." A vision
+        // read wants a caddie-natural line, not "Opening SmartVision."
+        voiceResponse = 'Let me take a look.';
+      } else if (toolName === 'register_club') {
+        voiceResponse = 'Hold the club up and I\'ll register it.';
       } else if (isIssueLog) {
         voiceResponse = wantsSend ? 'Opening Issue Log to send.' : 'Opening Issue Log.';
       } else {
-        voiceResponse = 'Opening ' + TOOL_LABEL[toolName] + '.';
+        // Fallback guard: an unlabeled tool must never speak "Opening undefined." (north star:
+        // always feel like a real caddie). Falls back to a neutral, grammatical line.
+        voiceResponse = 'Opening ' + (TOOL_LABEL[toolName] ?? 'that') + '.';
       }
 
       const sideEffects =

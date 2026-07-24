@@ -190,8 +190,15 @@ export function buildGolferModel(force = false): GolferModel {
   const clubDistances = computeClubDistances(allShots);
 
   // ─── Scoring trend ────────────────────────────────────────────────────
-  const knownVsPar = recentRounds.map(r => r.scoreVsPar).filter((v): v is number => v != null);
-  const avgScoreVsPar = knownVsPar.length >= 2 ? avg(knownVsPar) : null;
+  // 2026-07-24 (final QA) — scoreVsPar is a round TOTAL (9 holes for a 9, 18 for an 18).
+  // Averaging the totals blended a +9 nine with a +18 eighteen into a meaningless number.
+  // Normalize per-hole (over the holes each round actually scored), then project to an
+  // 18-hole basis so 9s and 18s are directly comparable and the figure reads like a typical
+  // full round. Mirrors avgPuttsForRound's per-hole treatment just below.
+  const perHoleVsPar = recentRounds
+    .filter(r => r.scoreVsPar != null && r.holesPlayed > 0)
+    .map(r => (r.scoreVsPar as number) / r.holesPlayed);
+  const avgScoreVsPar = perHoleVsPar.length >= 2 ? avg(perHoleVsPar) * 18 : null;
 
   // ─── Putting trend ────────────────────────────────────────────────────
   const puttsPerHole = recentRounds
@@ -302,7 +309,7 @@ export function describeForPrompt(model: GolferModel): string {
   }
   if (model.avg_score_vs_par != null) {
     const v = model.avg_score_vs_par;
-    parts.push(`Average score over last ${RECENT_ROUNDS} rounds: ${v >= 0 ? '+' : ''}${round1(v)} vs par.`);
+    parts.push(`Average vs par over last ${RECENT_ROUNDS} rounds (per 18 holes): ${v >= 0 ? '+' : ''}${round1(v)}.`);
   }
   if (model.putting.avg_putts_per_hole != null) {
     parts.push(`Avg putts/hole: ${model.putting.avg_putts_per_hole}.`);

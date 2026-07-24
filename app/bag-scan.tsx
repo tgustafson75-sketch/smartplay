@@ -53,7 +53,9 @@ export default function BagScanScreen() {
     const detected = await scanBagFromVideo(result.assets[0].uri);
     if (detected.length === 0) {
       setPhase('idle');
-      setError('No clubs read from that clip. Pan slowly across the heads in good light and try again — or add clubs manually.');
+      // 2026-07-24 (final QA) — point at a fallback that ACTUALLY exists (there is no manual
+      // club-entry screen). Single-club camera scan + on-course/range capture both learn the bag.
+      setError('No clubs read from that clip. Pan slowly across the heads in good light and try again — or point the camera at one club at a time to add them.');
       return;
     }
     setClubs(detected.map((c) => ({ ...c, include: true })));

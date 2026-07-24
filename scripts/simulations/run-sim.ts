@@ -61,6 +61,7 @@ import { estimateSessionPoints, computePointsPerformance } from '../../services/
 import { composeFitProfile, recommendFlex, recommendBallCategory } from '../../services/practice/fitProfile';
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
+import { resolveSpokenCourse } from '../../services/courseNameResolver';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
@@ -1141,6 +1142,39 @@ check('Ask for settings: handedness routes offline (and aiming talk never flips 
     return okPrecheck && okHandler;
   })(),
   'a lefty can turn on left-handed by voice (offline), a metric player can switch units, and "aim left" / "green is to the right" never change handedness');
+
+// 2026-07-24 (final QA pass — 4-agent audit). A cluster of confirmed, different-from-already-fixed bugs.
+check('Final QA: start-a-round + tool-open + course-imagery + scoring-math correctness',
+  (() => {
+    // (a) quick_round resolves EVERY bundled course via the shared resolver (was a stale 9-course
+    //     list → other courses hit the network / wrong course). Behavioral proof of unification:
+    const qr = resolveSpokenCourse('Pembroke');
+    const okQuickRound =
+      qr?.previewId === 'local:pembroke-pines' &&
+      /import \{ resolveSpokenCourse \} from '\.\.\/courseNameResolver'/.test(read('services/intents/quickRoundHandler.ts')) &&
+      /return spoken \? \{ id: spoken\.previewId, displayName: spoken\.label \} : null/.test(read('services/intents/quickRoundHandler.ts'));
+    // (b) the three headline SwingLab tools are voice-openable, swingsim is DISTINCT from sim_round,
+    //     and the "Opening undefined" fallback guard is in place.
+    const ot = read('services/intents/openToolHandler.ts');
+    const okTools =
+      /coach_lesson: \{ type: 'navigate', path: '\/swinglab\/coach-lesson' \}/.test(ot) &&
+      /hotel_mode: \{ type: 'navigate', path: '\/swinglab\/indoor' \}/.test(ot) &&
+      /swingsim: \{ type: 'navigate', path: '\/swinglab\/simround' \}/.test(ot) &&
+      /TOOL_LABEL\[toolName\] \?\? 'that'/.test(ot);
+    // (c) name-path imagery now covers Spessard/Webster + "green hill" (space) — were dead.
+    const img = read('data/localCourseImages.ts');
+    const okImagery =
+      /c\.includes\('spessard'\) \|\| c\.includes\('holland'\)\) return SPESSARD_HOLLAND_HOLE_IMAGES/.test(img) &&
+      /c\.includes\('webster'\) \|\| c\.includes\('dudley'\)\) return WEBSTER_DUDLEY_HOLE_IMAGES/.test(img) &&
+      /c\.includes\('greenhill'\) \|\| c\.includes\('green hill'\)\) return GREENHILL_HOLE_IMAGES/.test(img);
+    // (d) golfer-model vs-par is normalized per-hole then projected to 18 (was blending 9s + 18s).
+    const gm = read('services/golferModel.ts');
+    const okScoring =
+      /\(r\.scoreVsPar as number\) \/ r\.holesPlayed/.test(gm) &&
+      /avg\(perHoleVsPar\) \* 18/.test(gm);
+    return okQuickRound && okTools && okImagery && okScoring;
+  })(),
+  'start-a-round resolves every bundled course offline; Coach Caddie/Hotel Mode/SwingSim open by voice with no "Opening undefined"; Spessard/Webster/Green Hill name-path imagery works; and avg vs-par no longer blends 9- and 18-hole totals');
 
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses

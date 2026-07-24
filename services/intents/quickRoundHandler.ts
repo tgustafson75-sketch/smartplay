@@ -22,32 +22,18 @@ import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../..
 import { useRoundStore } from '../../store/roundStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { searchCourses } from '../golfCourseApi';
+import { resolveSpokenCourse } from '../courseNameResolver';
 
-// Local-course slug map mirrors the LOCAL_COURSES array in
-// app/(tabs)/play.tsx. Matching is substring + case-insensitive so
-// "lakes", "menifee lakes", "the lakes course" all resolve. Listed
-// most-specific-first so "menifee lakes — palms" doesn't get caught
-// by the bare "lakes" matcher.
-const LOCAL_COURSE_SLUGS: { needles: string[]; id: string; displayName: string }[] = [
-  { needles: ['palms', 'menifee palms'],            id: 'local:palms',             displayName: 'Menifee Lakes — Palms' },
-  { needles: ['menifee lakes', 'the lakes'],        id: 'local:lakes',             displayName: 'Menifee Lakes — Lakes' },
-  { needles: ['lakes'],                             id: 'local:lakes',             displayName: 'Menifee Lakes — Lakes' },
-  { needles: ['rancho california', 'rancho'],       id: 'local:rancho-california', displayName: 'Rancho California' },
-  { needles: ['crystal springs', 'crystal'],        id: 'local:crystal-springs',   displayName: 'Crystal Springs' },
-  { needles: ['mariners point', 'mariners'],        id: 'local:mariners-point',    displayName: 'Mariners Point' },
-  { needles: ['san jose muni', 'san jose'],         id: 'local:san-jose-muni',     displayName: 'San Jose Municipal' },
-  { needles: ['sunnyvale'],                         id: 'local:sunnyvale',         displayName: 'Sunnyvale Golf Course' },
-  { needles: ['echo hills', 'echo'],                id: 'local:echo-hills',        displayName: 'Echo Hills Golf Course' },
-  { needles: ['westlake'],                          id: 'local:westlake-cc-nj',    displayName: 'Westlake Country Club' },
-];
-
+// 2026-07-24 (final QA — "start a round at <course>"). This handler used to keep its OWN
+// stale 9-course slug list, so "start a round at Highland / Miccosukee / Pembroke / Doral /
+// Redlands / Killian / Greenhill / Spessard / Webster" all missed it and fell through to the
+// NETWORK search — a dead-end offline and a wrong-course risk online (it could resolve to a
+// non-bundled API course). The handler's own advertised example ("...at Pembroke Pines") wasn't
+// even in its list. Now it uses the SAME resolver "take me to <course>" uses (resolveSpokenCourse,
+// which covers every bundled course by name), so open-a-course and start-a-round behave identically.
 function resolveLocalCourse(hint: string): { id: string; displayName: string } | null {
-  const needle = hint.trim().toLowerCase();
-  if (!needle) return null;
-  for (const entry of LOCAL_COURSE_SLUGS) {
-    if (entry.needles.some(n => needle.includes(n))) return entry;
-  }
-  return null;
+  const spoken = resolveSpokenCourse(hint);
+  return spoken ? { id: spoken.previewId, displayName: spoken.label } : null;
 }
 
 function listJoin(items: string[]): string {
