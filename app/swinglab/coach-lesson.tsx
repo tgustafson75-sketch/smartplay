@@ -24,8 +24,6 @@ import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import { speak } from '../../services/voiceService';
 import { prewarmVoice } from '../../services/voiceWarmup';
-import { isMetaWearablesAvailable } from '../../services/metaWearablesBridge';
-import { captureGlassesSwing } from '../../services/glassesSwingCapture';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCoachLessonStore } from '../../store/coachLessonStore';
@@ -91,19 +89,6 @@ export default function CoachLessonScreen() {
     captureInFlightRef.current = true;
     setError(null);
     try {
-      // HANDS-FREE PATH — if the Ray-Ban glasses are connected, watch the swing through THEM: no camera
-      // modal, and the phone's audio session stays free so the caddie keeps talking (the phone video
-      // camera would seize it). The caddie prompts, the golfer just swings, we collect the window.
-      if (isMetaWearablesAvailable()) {
-        setCap('analyzing');
-        try {
-          const handed = (usePlayerProfileStore.getState().handedness === 'left' ? 'left' : 'right') as 'left' | 'right';
-          const res = await captureGlassesSwing({ windowMs: 6000, handedness: handed });
-          if (res.biomech) return res.biomech;
-          // Glasses gave nothing usable (too few frames / unreadable) → fall through to the phone camera.
-        } catch { /* fall through to phone capture */ }
-        finally { setCap('idle'); }
-      }
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
       let res: ImagePicker.ImagePickerResult;

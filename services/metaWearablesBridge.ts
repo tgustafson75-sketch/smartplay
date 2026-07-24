@@ -103,13 +103,6 @@ function subscribeOnce(): void {
       void submitVisionFrame(frame).catch((e) => {
         devLog('[mwdat-bridge] submitVisionFrame failed: ' + String(e));
       });
-      // 2026-07-23 — fan the raw frame out to direct subscribers too (glassesSwingCapture collects a
-      // swing window from here). Separate from the 6-frame vision queue, which is too short for a swing.
-      if (frameListeners.size > 0) {
-        for (const cb of frameListeners) {
-          try { cb({ uri: payload.uri, captured_at: frame.captured_at }); } catch { /* one bad listener can't drop the frame */ }
-        }
-      }
     } catch (e) {
       devLog('[mwdat-bridge] frame handler threw: ' + String(e));
     }
@@ -174,20 +167,6 @@ function ensureVoiceCoordination(): void {
 
 export function isMetaWearablesAvailable(): boolean {
   return NativeMod !== null;
-}
-
-// ─── Raw frame subscription (swing capture) ─────────────────────────
-// 2026-07-23 — direct tap on the glasses frame stream, separate from the short vision queue, so
-// services/glassesSwingCapture can collect a full swing window (~6s) and run it through the pose
-// pipeline. Fanned out from the MetaWearableFrame handler above.
-type GlassesFrameListener = (frame: { uri: string; captured_at: number }) => void;
-const frameListeners = new Set<GlassesFrameListener>();
-
-/** Subscribe to raw glasses frames as they arrive. Returns an unsubscribe fn. No-op safe when the
- *  native module is absent (no frames ever arrive). */
-export function onGlassesFrame(cb: GlassesFrameListener): () => void {
-  frameListeners.add(cb);
-  return () => { frameListeners.delete(cb); };
 }
 
 export async function getMetaWearablesStatus(): Promise<{
