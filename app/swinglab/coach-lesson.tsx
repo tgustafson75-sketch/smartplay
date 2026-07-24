@@ -24,6 +24,7 @@ import { diagnose, isDiagnosable, type CoachFault, type Diagnosis } from '../../
 import { introLine, diagnosisReveal, prescriptionLine, evaluateRep, progressLine, homeworkLine, diagnoseBaseline, missConnectionLine, memoryLine } from '../../services/coachSession';
 import { speak } from '../../services/voiceService';
 import { prewarmVoice } from '../../services/voiceWarmup';
+import { CoachSwingCamera, type CoachCameraHandle } from '../../components/coach/CoachSwingCamera';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCoachLessonStore } from '../../store/coachLessonStore';
@@ -82,6 +83,13 @@ export default function CoachLessonScreen() {
   // capture + a second coaching line — the "double messaging" Tim heard. One swing in flight at a time.
   const captureInFlightRef = useRef(false);
 
+  // In-app SmartMotion-style camera (replaces the image-picker modal so the lesson stays on ONE screen
+  // and the caddie can talk between reps). Mounted ONLY during the record window (see `capturing`) so a
+  // video-mode CameraView never holds the audio session while the caddie is speaking.
+  const coachCamRef = useRef<CoachCameraHandle>(null);
+  const [capturing, setCapturing] = useState(false);
+  const RECORD_WINDOW_SEC = 8;
+
   // ── shared capture ────────────────────────────────────────────────────────
   const captureSwing = useCallback(async (): Promise<SwingBiomechanics | null> => {
     // Guard against a re-entrant capture (double-tap during the spoken line / delay). One in flight.
@@ -89,6 +97,30 @@ export default function CoachLessonScreen() {
     captureInFlightRef.current = true;
     setError(null);
     try {
+      // ── In-app camera (SmartMotion-style) — the lesson stays on ONE screen so the caddie can talk
+      //    between reps. Mount the camera, let the golfer frame, prompt, then record the swing window.
+      //    record() silences the caddie first, and the prompt finishes before we record, so voice and
+      //    capture never overlap (no audio-session fight, no TTS in the clip).
+      setCapturing(true);
+      await new Promise((r) => setTimeout(r, 500)); // let the CameraView mount + warm
+      try {
+        const s = useSettingsStore.getState();
+        if (s.voiceEnabled) { say('Go ahead — swing when you’re ready.'); await new Promise((r) => setTimeout(r, 2200)); }
+      } catch { /* prompt is advisory */ }
+      const uri = await (coachCamRef.current?.record(RECORD_WINDOW_SEC) ?? Promise.resolve(null));
+      setCapturing(false);
+      if (uri) {
+        setCap('analyzing');
+        try {
+          return await analyzeSwingFromVideo(uri, RECORD_WINDOW_SEC * 1000);
+        } catch {
+          return null;
+        } finally {
+          setCap('idle');
+        }
+      }
+      // ── Fallback: the proven image-picker modal (camera component unavailable / permission flow) —
+      //    keeps the lesson working even if the in-app camera can't start. No regression.
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { setError('Camera permission is needed to watch your swing.'); return null; }
       let res: ImagePicker.ImagePickerResult;
@@ -108,6 +140,7 @@ export default function CoachLessonScreen() {
         setCap('idle');
       }
     } finally {
+      setCapturing(false);
       captureInFlightRef.current = false;
     }
   }, []);
@@ -270,6 +303,21 @@ export default function CoachLessonScreen() {
 
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      {/* In-app swing camera — shown ONLY during the record window (mounted → the caddie's TTS is
+          already done, so no audio-session fight). The golfer frames + swings; the pipeline finds the
+          swing in the window. "Done" ends the window early. */}
+      {capturing && (
+        <View style={s.cameraOverlay}>
+          <CoachSwingCamera ref={coachCamRef} facing="back" style={StyleSheet.absoluteFill} />
+          <View style={s.cameraBanner} pointerEvents="none">
+            <Ionicons name="videocam" size={16} color="#fff" />
+            <Text style={s.cameraBannerText}>Swing when you’re ready — I’m watching</Text>
+          </View>
+          <TouchableOpacity style={s.cameraStopBtn} onPress={() => coachCamRef.current?.stop()} accessibilityRole="button" accessibilityLabel="Done recording">
+            <Text style={s.cameraStopText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={s.header}>
         <TouchableOpacity onPress={() => (kind === 'menu' ? safeBack() : backToMenu())} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
@@ -411,6 +459,17 @@ export default function CoachLessonScreen() {
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
+    cameraOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 50, backgroundColor: '#000' },
+    cameraBanner: {
+      position: 'absolute', top: 56, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    },
+    cameraBannerText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+    cameraStopBtn: {
+      position: 'absolute', bottom: 48, alignSelf: 'center', backgroundColor: colors.accent,
+      paddingHorizontal: 32, paddingVertical: 14, borderRadius: 28,
+    },
+    cameraStopText: { color: '#0d1a0d', fontSize: 16, fontWeight: '700' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
     headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     title: { color: colors.text_primary, fontSize: 18, fontWeight: '800' },
