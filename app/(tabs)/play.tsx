@@ -1080,7 +1080,12 @@ export default function PlayTab() {
           </TouchableOpacity>
         )}
         <View style={styles.localList}>
-          {(showAllCourses ? closestLocal : closestLocal.slice(0, NEARBY_COLLAPSED)).map(c => {
+          {/* 2026-07-23 (Tim — "Dad didn't see Highland Links when he played") — collapsing to the
+              5 GPS-closest only makes sense WITH a GPS fix. Without one (clubhouse, cold start, or the
+              app opened before arriving) "closest" is meaningless and was BURYING a course the player
+              needed behind "Show all". So: no fix → show every course; fix present → keep the tidy
+              5-closest with the expand toggle. Voice ("pull up Highland Links") is the direct path. */}
+          {((showAllCourses || !userPosition) ? closestLocal : closestLocal.slice(0, NEARBY_COLLAPSED)).map(c => {
             const isActive = selected?.id === c.id || activeCourseId === c.id;
             return (
               <TouchableOpacity
@@ -1125,10 +1130,9 @@ export default function PlayTab() {
               </TouchableOpacity>
             );
           })}
-          {/* Show-all / minimize toggle — only when there's more than the
-              collapsed count. Lets the owner see every beta-tester course
-              (some far away) without cluttering the default view. */}
-          {closestLocal.length > NEARBY_COLLAPSED && (
+          {/* Show-all / minimize toggle — only when GPS gave a proximity order AND there's more than
+              the collapsed count. With no GPS fix every course is already shown (above), so no toggle. */}
+          {userPosition && closestLocal.length > NEARBY_COLLAPSED && (
             <TouchableOpacity
               style={styles.showAllRow}
               onPress={() => setShowAllCourses(v => !v)}
