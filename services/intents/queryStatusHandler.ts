@@ -99,7 +99,7 @@ export const queryStatusHandler: IntentHandler = {
       try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
     }
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle') /* end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle' || topic === 'holes_left' || topic === 'par' || topic === 'course') /* 2026-07-24 added holes_left/par/course so they don't fabricate "on 1 of 18" off-round. end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -149,14 +149,17 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'holes_left': {
-        const total = round.courseHoles.length > 0 ? round.courseHoles.length : 18;
+        // Match the canonical formula in localStatusResponder.holesLeftReply EXACTLY so voice never
+        // gives two different answers: "holes to play" INCLUDES the current hole (hole 1 of 18 → 18 to
+        // play; hole 18 → 1), total from nineHoleMode (not courseHoles.length).
+        const total = round.nineHoleMode ? 9 : 18;
         const cur = round.currentHole ?? 1;
-        const left = Math.max(0, total - cur);
+        const left = Math.max(0, total - cur + 1);
         return {
           success: true,
-          voice_response: left <= 0
-            ? `You're on the last hole — ${cur} of ${total}.`
-            : `You're on ${cur} of ${total} — ${left} to go.`,
+          voice_response: left <= 1
+            ? `Last hole — ${cur} of ${total}.`
+            : `${left} holes to play — you're on ${cur} of ${total}.`,
           side_effects: ['query:holes_left'],
           follow_up_needed: false,
         };
