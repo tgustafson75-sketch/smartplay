@@ -2304,11 +2304,22 @@ export const useRoundStore = create<RoundState>()(
             return null;
           };
 
+          // 2026-07-24 (club-logic unification) — NORMALIZE the shot's club once. enriched.club can be
+          // any of the four vocabularies (ClubName from tap, ClubId 'DR' from voice, 'driver' from
+          // quick-log). Reading it raw meant `=== 'Driver'` missed voice/quick-log drivers, and the
+          // learned bag was keyed by a form nothing reads. All bag writes below use the normalized name.
+          const normClub = (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              return (require('../services/clubNormalize') as typeof import('../services/clubNormalize')).normalizeClub(enriched.club);
+            } catch { return null; }
+          })();
+
           // 2026-06-04 — Auto-update longestDrive when a Driver shot with a real
           // (measured) distance beats the player's current best. Profile store is
           // dynamic-required to avoid a module cycle (playerProfileStore doesn't
           // import roundStore today, but this side-channel update is a single hop).
-          const driverYards = enriched.club === 'Driver' ? measuredCarry(enriched) : null;
+          const driverYards = normClub === 'Driver' ? measuredCarry(enriched) : null;
           if (driverYards != null && !s.isSimRound) { // 2026-07-04 — sim shots can't set records
             try {
               // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -2328,10 +2339,17 @@ export const useRoundStore = create<RoundState>()(
             // 2026-06-14 (audit #5) — train the bag ONLY on a measured carry, never a
             // GPS estimate (see measuredCarry above). Keeps the learned model honest.
             const carry = measuredCarry(enriched);
-            if (enriched.club && carry != null && !s.isSimRound) { // 2026-07-04 — sim shots never train the bag
+            if (normClub && carry != null && !s.isSimRound) { // 2026-07-04 — sim shots never train the bag
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
-              mem.useCaddieMemoryStore.getState().recordShot({ club: enriched.club, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
+              mem.useCaddieMemoryStore.getState().recordShot({ club: normClub, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
+              // 2026-07-24 (club-logic unification) — ALSO feed the clubStats CARRY ladder from this real
+              // airtime carry, so the app-wide bag (bagDistances / Fit Profile / dashboard) shares ONE
+              // honest carry number with the CNS bag instead of diverging by unit.
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                (require('./clubStatsStore') as typeof import('./clubStatsStore')).useClubStatsStore.getState().recordCarry(normClub, carry);
+              } catch { /* additive */ }
             }
           } catch (e) {
             console.log('[roundStore] caddie-memory recordShot failed (non-fatal):', e);

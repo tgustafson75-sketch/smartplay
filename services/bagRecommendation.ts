@@ -31,6 +31,7 @@ import {
 // RN asset requires) so the pure composer stays node/unit-test importable. The
 // store is loaded lazily inside recommendBagForCourse, the only place that needs it.
 import type { ShotResult } from '../store/roundStore';
+import { normalizeClub } from './clubNormalize';
 
 /** Standard amateur carry chart — mirrors clubStatsStore's private table so the
  *  recommendation has a distance for every club even before it's been logged. */
@@ -95,7 +96,7 @@ function classOf(club: string): 'wood' | 'hybrid' | 'iron' | 'wedge' | 'other' {
   if (club === 'Driver' || /\dW$/.test(club)) return 'wood';
   if (/\dH$/.test(club)) return 'hybrid';
   if (/\dI$/.test(club)) return 'iron';
-  if (club === 'PW' || club === 'GW' || club === 'SW' || club === 'LW') return 'wedge';
+  if (club === 'PW' || club === 'AW' || club === 'GW' || club === 'SW' || club === 'LW') return 'wedge';
   return 'other';
 }
 
@@ -135,7 +136,10 @@ export function composeBagRecommendation(input: BagRecInput): BagRecommendation 
   const map = new Map<string, { count: number; distSum: number; distCount: number; estCount: number }>();
   for (const s of safeShots) {
     const d = (s.distance_yards ?? s.carry_distance ?? null) as number | null;
-    let club = s.club;
+    // 2026-07-24 (club-logic unification) — normalize the shot's club to the canonical name so a
+    // driver logged by voice ('DR') / quick-log ('driver') / tap ('Driver') aggregates into ONE row
+    // (and classifies correctly, incl. AW), instead of splitting into several mismatched rows.
+    let club = normalizeClub(s.club) as string | null;
     let inferred = false;
     if (!club) {
       if (typeof d === 'number' && d > 0) { club = inferClub(d); inferred = true; }

@@ -38,17 +38,18 @@ export default function BallFitScreen() {
   const experience = usePlayerProfileStore((s) => s.experienceContext);
   const goal = usePlayerProfileStore((s) => s.goal);
   const longestDrive = usePlayerProfileStore((s) => s.longestDrive);
-  const clubStats = useClubStatsStore((s) => s.stats);
+  const clubCarry = useClubStatsStore((s) => s.carry);
+  const clubTotal = useClubStatsStore((s) => s.total);
 
   const fit = useMemo(() => {
-    const driver = clubStats?.Driver;
-    // Prefer a learned, multi-sample driver carry; fall back to longestDrive only
-    // if we have nothing measured (it overstates, so it's the last resort).
-    const driverCarry =
-      driver && driver.samples > 0 ? driver.avgYards : (longestDrive ?? null);
-    const wedge =
-      (clubStats?.PW?.samples ?? 0) + (clubStats?.GW?.samples ?? 0) +
-      (clubStats?.SW?.samples ?? 0) + (clubStats?.LW?.samples ?? 0);
+    const st = useClubStatsStore.getState();
+    // 2026-07-24 (club-logic unification) — ball fit keys off driver CARRY (speed tier). Use the honest
+    // carry (measured → stated → tracked-total−roll), NOT the old tracked value which was a GPS total and
+    // read ~20y hot → pushed players into a firmer/faster ball than their real speed. longestDrive stays
+    // the last resort (it overstates). Wedge SAMPLES count either ladder.
+    const driverCarry = st.hasCarry('Driver') || st.hasTotal('Driver') ? st.carryFor('Driver') : (longestDrive ?? null);
+    const wedge = (['PW', 'GW', 'SW', 'LW'] as const).reduce(
+      (a, c) => a + (st.carry[c]?.samples ?? 0) + (st.total[c]?.samples ?? 0), 0);
     return composeBallFit({
       handicap,
       driverCarryYards: driverCarry,
@@ -57,7 +58,7 @@ export default function BallFitScreen() {
       shortGameWedgeSamples: wedge,
       goal,
     });
-  }, [handicap, missType, experience, goal, longestDrive, clubStats]);
+  }, [handicap, missType, experience, goal, longestDrive, clubCarry, clubTotal]);
 
   const confColor =
     fit.confidence === 'high' ? colors.accent : fit.confidence === 'medium' ? colors.text_secondary : colors.text_muted;

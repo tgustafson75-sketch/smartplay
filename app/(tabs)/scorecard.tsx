@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useClubStatsStore } from '../../store/clubStatsStore';
+import { normalizeClub } from '../../services/clubNormalize';
 import { useCageStore } from '../../store/cageStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
@@ -285,7 +286,9 @@ export default function Scorecard() {
     shots.forEach(s => {
       const d = (s as ShotResult & { distance_yards?: number | null }).distance_yards
         ?? (s as ShotResult & { carry_distance?: number | null }).carry_distance ?? null;
-      let club = s.club;
+      // 2026-07-24 (club-logic unification) — normalize so a club logged in different vocabularies
+      // ('DR'/'driver'/'Driver') aggregates into ONE usage row instead of three.
+      let club = normalizeClub(s.club) as string | null;
       let inferred = false;
       if (!club) {
         if (typeof d === 'number' && d > 0) { club = clubStats.inferClub(d); inferred = true; }

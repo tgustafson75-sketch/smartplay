@@ -62,6 +62,7 @@ import { composeFitProfile, recommendFlex, recommendBallCategory } from '../../s
 import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { resolveSpokenCourse } from '../../services/courseNameResolver';
+import { normalizeClub } from '../../services/clubNormalize';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
@@ -809,9 +810,12 @@ check('White-screen guard: SVG hole maps reject a non-finite axis (NaN-safe), cl
 }
 
 // ─── 2026-06-09 audit fixes (honesty + wiring) ─────────────────────────────
-check('Caddie bag distances only include real (logged) clubs',
-  /if \(!stats\.hasSamples\(c\)\) continue/.test(read('services/shotStrategy.ts')),
-  "bagDistances gates on hasSamples — no STANDARD_YARDS leak into 'real distances'");
+check('Caddie bag distances only include real (logged) clubs — as honest CARRY',
+  // 2026-07-24 (club-logic unification) — gates on hasDistance() (real data, not the chart) and emits
+  // carryFor() so the safety hub feeds the brain honest CARRY, never a roll-inclusive total-as-carry.
+  /if \(!stats\.hasDistance\(c\)\) continue/.test(read('services/shotStrategy.ts')) &&
+  /const y = stats\.carryFor\(c\)/.test(read('services/shotStrategy.ts')),
+  "bagDistances gates on hasDistance + emits carryFor — no chart leak, and no tee→rest total quoted as carry");
 
 check('Caddie TARGET no longer a hardcoded CENTER',
   !/const targetDirection = 'CENTER'/.test(read('app/(tabs)/caddie.tsx')),
@@ -1198,6 +1202,41 @@ check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fal
     return okRouting && okChart;
   })(),
   'a mid-handicapper can ask "how far do I hit my 7 iron" (offline), flip persona/theme/cart/ghost offline, and the pre-data bag chart is internally consistent (no Driver=275, no 5H≈3I collision)');
+
+// 2026-07-24 (Tim — "club logic always causes issues; it's a central tenet"). Two roots fixed:
+// (a) VOCABULARY — a shot's club was written as ClubName/ClubId/acoustic/words then read as one, so a
+//     driver logged by voice ('DR') / quick-log ('driver') never registered in the bag. normalizeClub()
+//     collapses all four to canonical ClubName, applied at every shot.club write/aggregate boundary.
+// (b) CARRY vs TOTAL — clubStats was fed a GPS tee→rest TOTAL by shot tracking but read as CARRY
+//     everywhere (over-clubbing forced carries). Now explicit carry/total ladders + carryFor/totalFor.
+check('Club logic unified: one vocabulary (normalizeClub) + explicit carry vs total',
+  (() => {
+    // (a) behavioral: every vocabulary of Driver/Putter/7-iron collapses to the canonical name.
+    const okVocab =
+      normalizeClub('DR') === 'Driver' && normalizeClub('driver') === 'Driver' && normalizeClub('D') === 'Driver' &&
+      normalizeClub('PT') === 'Putter' && normalizeClub('7-iron') === '7I' && normalizeClub('hybrid') === null;
+    // (b) source: the store has explicit carry/total ladders + honest carryFor (total − roll), and the
+    // GPS-total writer feeds recordTotal while real carries feed recordCarry.
+    const cs = read('store/clubStatsStore.ts');
+    const okStore =
+      /recordCarry: \(club: ClubName, yards: number\) => void/.test(cs) &&
+      /recordTotal: \(club: ClubName, yards: number\) => void/.test(cs) &&
+      /carryFor: \(club: ClubName\) => number/.test(cs) &&
+      /Math\.max\(1, Math\.round\(t\.avgYards - ROLL_YARDS\[club\]\)\)/.test(cs) && // carry = tracked total − roll
+      /version: 2/.test(cs); // migration moves old GPS-total `stats` → the `total` ladder
+    // (c) the writers are wired to the right ladder + normalized.
+    const track = read('services/shotTracking.ts');
+    const round = read('store/roundStore.ts');
+    const okWiring =
+      /const club = normalizeClub\(shot\.club\);/.test(track) &&
+      /useClubStatsStore\.getState\(\)\.recordTotal\(club, yards\)/.test(track) && // GPS total → total ladder
+      /const normClub = \(\(\) => \{/.test(round) &&
+      /\.recordCarry\(normClub, carry\)/.test(round) &&                            // real carry → carry ladder
+      // the safety hub emits carry.
+      /const y = stats\.carryFor\(c\)/.test(read('services/shotStrategy.ts'));
+    return okVocab && okStore && okWiring;
+  })(),
+  'a driver logged by voice/quick-log now registers in the bag (normalizeClub), the caddie quotes honest CARRY (not a tee→rest total), and one club no longer splits into multiple usage rows');
 
 // 2026-07-24 (M3/M4 — WHS posting honesty for high-handicap play).
 check('Handicap: blow-up holes capped (net double bogey) + pick-up rounds still count',
@@ -3638,7 +3677,9 @@ check('Drive distance: "what did my driver do" finds the driver shot + GPS auto-
       // learning uses measuredCarry, which excludes a GPS-sourced distance_yards.
       /const measuredCarry = \(sh: ShotResult\): number \| null =>/.test(store) &&
       /sh\.distance_yards !== sh\.gps_distance_yards/.test(store) &&
-      /const driverYards = enriched\.club === 'Driver' \? measuredCarry\(enriched\) : null/.test(store) &&
+      // 2026-07-24 (club-logic unification) — the driver check uses the NORMALIZED club so a voice
+      // ('DR') / quick-log ('driver') drive is recognized (was `=== 'Driver'`, which missed them).
+      /const driverYards = normClub === 'Driver' \? measuredCarry\(enriched\) : null/.test(store) &&
       !/gpsCompleted/.test(store); // the GPS-feeds-learning path was removed
     return askFindsDriver && gpsBackfill;
   })(),
@@ -5903,10 +5944,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       const screen = read('app/practice/fit-profile.tsx');
       const dash = read('app/(tabs)/dashboard.tsx');
       return (
-        /setManual:/.test(store) && /distanceFor:/.test(store) && /hasManual:/.test(store) &&
-        /else if \(s\.manual\[club\] != null\) out\[club\] = s\.manual\[club\]!/.test(store) &&
+        // 2026-07-24 (club-logic unification) — setManual (stated CARRY) still writes the bag; the honest
+        // carry ladder feeds the Fit Profile (carryFor) + the stated carry surfaces in the learned map.
+        /setManual:/.test(store) && /carryFor:/.test(store) && /hasManual:/.test(store) &&
+        /s\.manual\[club\] != null\) out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
         /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
-        /st\.distanceFor\(c\), measured: st\.hasSamples\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
+        /yards: st\.carryFor\(c\), measured: st\.hasSamples\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
         /MY BAG/.test(dash) && /router\.push\('\/practice\/fit-profile'/.test(dash)
       );
     })(),

@@ -17,19 +17,19 @@ import { useClubStatsStore, CLUB_ORDER, type ClubName } from '../store/clubStats
 
 const FULL_CLUBS: ClubName[] = CLUB_ORDER.filter(c => c !== 'Putter');
 
-/** A compact map of the player's REAL (measured) bag distances for the caddie
- *  brain. 2026-06-09 (honesty) — only include clubs the player has actually
- *  logged shots for. avgFor() falls back to a STANDARD_YARDS chart when there
- *  are no samples, and the caddie prompt labels this block "real distances",
- *  so emitting the fallback made the caddie assert generic numbers as the
- *  player's measured bag. Gate on hasSamples() so untracked clubs are simply
- *  absent (the model then won't claim a distance it doesn't actually have). */
+/** A compact map of the player's real bag CARRY distances for the caddie brain.
+ *  2026-07-24 (club-logic unification) — returns honest CARRY, not the tee→rest TOTAL. This is THE
+ *  hub the safety-critical readers consume (Kevin's "go for it if ≤ your longest", the offline
+ *  reach/"can I carry it" answers, cnsShotRead's "your {club} carries ~X" + lay-up gating). Feeding
+ *  them a roll-inclusive total made the caddie green-light carries the player can't actually FLY.
+ *  carryFor() = measured carry → stated → (tracked total − typical roll) → chart. Gate on hasDistance()
+ *  so untracked clubs stay absent (the prompt calls this "real distances"; never emit the bare chart). */
 export function bagDistances(): Partial<Record<ClubName, number>> {
   const stats = useClubStatsStore.getState();
   const out: Partial<Record<ClubName, number>> = {};
   for (const c of FULL_CLUBS) {
-    if (!stats.hasSamples(c)) continue;
-    const y = stats.avgFor(c);
+    if (!stats.hasDistance(c)) continue;
+    const y = stats.carryFor(c);
     if (y > 0) out[c] = y;
   }
   return out;

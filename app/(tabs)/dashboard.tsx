@@ -169,15 +169,17 @@ export default function Dashboard() {
     for (let i = 1; i < days.length; i++) { if (daysApart(days[i - 1], days[i]) === 1) streak++; else break; }
     return streak;
   }, [realRounds, practiceHistory]);
-  const clubStats = useClubStatsStore((s) => s.stats);
+  const clubStats = useClubStatsStore((s) => s.total);
+  const clubCarry = useClubStatsStore((s) => s.carry);
   // 2026-07-09 (audit fix) — subscribe to the registered bag so scanned / "added to my bag"
   // clubs actually appear here (they used to be invisible unless they had a tracked distance).
   const registeredBag = useClubBagStore((s) => s.clubs);
   const bagClubs = useMemo(() => {
     const st = useClubStatsStore.getState();
+    // 2026-07-24 (club-logic unification) — show the honest CARRY (the "My Bag" heading says carry).
     const withDist: { club: string; yards: number | null; measured: boolean }[] = CLUB_ORDER
       .filter((c) => c !== 'Putter' && st.hasDistance(c))
-      .map((c) => ({ club: c as string, yards: Math.round(st.distanceFor(c)), measured: st.hasSamples(c) }))
+      .map((c) => ({ club: c as string, yards: Math.round(st.carryFor(c)), measured: st.hasSamples(c) }))
       .sort((a, b) => (b.yards ?? 0) - (a.yards ?? 0));
     // Registered-but-no-distance-yet clubs, appended honestly (no fabricated yardage).
     const shown = new Set(withDist.map((x) => x.club));
@@ -187,7 +189,7 @@ export default function Dashboard() {
       .map((n) => ({ club: n as string, yards: null, measured: false }));
     return [...withDist, ...registered];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clubManual, clubStats, registeredBag]);
+  }, [clubManual, clubStats, clubCarry, registeredBag]);
   // 2026-06-14 (Tim — phase 3) — the honest practice→course connection: practice
   // volume per week vs score-vs-par per round. Association, never causation.
   const practiceImpact = useMemo(

@@ -21,6 +21,7 @@
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
 import { useRoundStore, type ShotResult, type ShotLocation } from '../../store/roundStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
+import { normalizeClub } from '../clubNormalize';
 import { getLastFix as getSmartFinderLastFix } from '../smartFinderService';
 import { getLastFix as getGpsLastFix } from '../gpsManager';
 import { track } from '../analytics';
@@ -154,7 +155,9 @@ export const logShotHandler: IntentHandler = {
       id: `${Date.now()}_voice`,
       hole: round.currentHole,
       hole_number: round.currentHole,
-      club: parsedClub.club_id,
+      // 2026-07-24 (club-logic unification) — store the CANONICAL ClubName (not the raw ClubId 'DR'/'PT'),
+      // so the learned bag, scorecard usage, and recommendations all key off one vocabulary.
+      club: normalizeClub(parsedClub.club_id) ?? parsedClub.club_id,
       timestamp: Date.now(),
       feel: null,
       direction: direction ?? null,

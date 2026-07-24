@@ -25,6 +25,7 @@ import { getGreenCentroid, getTeeCentroid } from './shotLocationService';
 import { resolveYardage } from './yardageResolver';
 import { haversineYards, type ShotLocation } from '../utils/geoDistance';
 import { useClubStatsStore, type ClubName } from '../store/clubStatsStore';
+import { normalizeClub } from './clubNormalize';
 
 export interface ShotTrackResult {
   ok: boolean;
@@ -161,7 +162,14 @@ export function confirmTrackedShot(shotId: string): void {
   if (useRoundStore.getState().isSimRound) return;
   // 2026-07-01 (whole-app audit) — same >500y guard the longestDrive path got (a corrupt GPS jump
   // must not train the club-bag average with an impossible shot). No single shot exceeds ~500y.
-  if (yards != null && yards > 0 && yards <= 500) {
-    useClubStatsStore.getState().record(shot.club as ClubName, yards);
+  // 2026-07-24 (club-logic unification) — NORMALIZE the club before training the bag. shot.club can
+  // arrive as any of the four vocabularies (ClubName from the tap flow, ClubId 'DR'/'PT' from voice,
+  // lowercase words 'driver'/'7-iron' from quick-log). The old `as ClubName` cast recorded voice/quick-log
+  // drivers + putters under keys NOT in CLUB_ORDER, so they never showed in the bag. Skip training when the
+  // club is unresolvable (e.g. a bare "hybrid") rather than corrupt a slot. This distance is a GPS TOTAL
+  // (tee→rest, includes roll) — recorded into the TOTAL ladder, not carry (see recordTotal).
+  const club = normalizeClub(shot.club);
+  if (club && yards != null && yards > 0 && yards <= 500) {
+    useClubStatsStore.getState().recordTotal(club, yards);
   }
 }

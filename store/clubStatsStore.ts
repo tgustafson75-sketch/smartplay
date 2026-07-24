@@ -62,64 +62,87 @@ const STANDARD_YARDS: Record<ClubName, number> = {
 export interface ClubStat {
   club: ClubName;
   samples: number;
-  /** Rolling average carry (yds). */
+  /** Rolling average yards (CARRY in the `carry` ladder, TOTAL tee→rest in the `total` ladder). */
   avgYards: number;
   lastYards: number;
   lastUsedAt: number;
 }
 
+/**
+ * 2026-07-24 (club-logic unification) — typical ROLLOUT per club (yds), the bridge between CARRY and
+ * TOTAL. Driver runs out a lot; wedges barely. Used to ESTIMATE carry from a tracked GPS total (and
+ * vice-versa) so the caddie never quotes a tee→rest total as the carry the player must FLY a hazard.
+ * Deliberately conservative. (Reconcile with smartfinder.estimateCarryTotal's rollout if they drift.)
+ */
+const ROLL_YARDS: Record<ClubName, number> = {
+  Driver: 28, '3W': 22, '5W': 19, '7W': 17, '2H': 16, '3H': 15, '4H': 13, '5H': 12,
+  '3I': 12, '4I': 10, '5I': 9, '6I': 8, '7I': 6, '8I': 5, '9I': 5,
+  PW: 4, AW: 4, GW: 4, SW: 3, LW: 2, Putter: 0,
+};
+
 interface ClubStatsState {
-  stats: Partial<Record<ClubName, ClubStat>>;
-  /** 2026-06-15 (Tim — editable My Bag) — user-entered carry per club. The fastest
-   *  honest source of distances: it populates the Fit Profile + the caddie's
-   *  yardages immediately with the player's own numbers, before any rounds are
-   *  tracked. Real tracked shots (stats) take precedence as they accumulate. */
+  // 2026-07-24 (club-logic unification) — TWO explicit ladders so the app stops confusing units.
+  //   carry = measured AIRTIME carry (acoustic/pose, range Flat-Carry, or My Bag stated).
+  //   total = GPS tee→rest TOTAL (includes roll) — what cart-mark shot-tracking measures.
+  // The legacy single `stats` ladder was fed a GPS TOTAL by shot-tracking but read as CARRY everywhere;
+  // that's the root over-club bug. Migration v1→v2 moves old `stats` → `total` (its true unit).
+  carry: Partial<Record<ClubName, ClubStat>>;
+  total: Partial<Record<ClubName, ClubStat>>;
+  /** 2026-06-15 (Tim — editable My Bag) — user-entered CARRY per club (their own numbers, day one). */
   manual: Partial<Record<ClubName, number>>;
-  /** 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — per-club
-   *  practice REP tally (Smart Motion / drills / range). HONEST volume, NOT a
-   *  measured distance — it never feeds the fitting's distance ladder, just shows
-   *  the player they're getting credit for the work. */
+  /** Per-club practice REP tally — HONEST volume, NOT a distance. */
   reps: Partial<Record<ClubName, number>>;
-  /** Record a tracked shot: updates the club's rolling average + usage. */
+  /** Record a measured AIRTIME carry (acoustic/pose, range Flat-Carry, stated). */
+  recordCarry: (club: ClubName, yards: number) => void;
+  /** Record a GPS tee→rest TOTAL (cart-mark shot tracking — includes roll). */
+  recordTotal: (club: ClubName, yards: number) => void;
+  /** @deprecated back-compat alias → recordTotal (the old `record` was fed GPS totals). */
   record: (club: ClubName, yards: number) => void;
-  /** Add N practice reps for a club (volume credit, no distance). */
   addReps: (club: ClubName, n: number) => void;
-  /** Practice reps logged for a club. */
   repsFor: (club: ClubName) => number;
-  /** Set the player's stated carry for a club (My Bag). yards<=0 clears it. */
+  /** Set the player's stated CARRY for a club (My Bag). yards<=0 clears it. */
   setManual: (club: ClubName, yards: number) => void;
-  /** Remove a club's stated carry. */
   clearManual: (club: ClubName) => void;
-  /** Learned average for a club, or the standard-chart value if none yet. */
+  /** HONEST carry: measured carry → stated → (tracked total − typical roll) → chart. The DEFAULT for
+   *  club/reach/forced-carry advice (never over-states what the player can fly). */
+  carryFor: (club: ClubName) => number;
+  /** Tee→rest TOTAL: measured total → (carry/stated + typical roll) → chart+roll. For "how far it goes". */
+  totalFor: (club: ClubName) => number;
+  /** @deprecated back-compat — returns the TOTAL (what the old tracked `avgYards` effectively was). */
   avgFor: (club: ClubName) => number;
-  /** Best known carry: learned avg (if tracked) → user-stated → standard chart. */
+  /** @deprecated back-compat — returns totalFor (matches the old tracked-distance behavior). */
   distanceFor: (club: ClubName) => number;
-  /** True if we have any real sample for this club. */
+  /** True if we have any real sample (carry OR total) for this club. */
   hasSamples: (club: ClubName) => boolean;
-  /** True if the player has stated a carry for this club (My Bag). */
   hasManual: (club: ClubName) => boolean;
-  /** True if we have ANY real number (tracked or stated) — not just the chart. */
+  /** True if we have ANY real number (carry, total, or stated) — not just the chart. */
   hasDistance: (club: ClubName) => boolean;
-  /** Best default club for a needed yardage: closest learned avg (or
-   *  standard chart). Putter excluded from full-shot inference. */
+  hasCarry: (club: ClubName) => boolean;
+  hasTotal: (club: ClubName) => boolean;
+  /** Best default club for a needed (to-target, total-ish) yardage. */
   inferClub: (yards: number) => ClubName;
-  /** Bag sorted by usage (most-used first) — for stats/usage views. */
+  /** Bag sorted by usage (most-used first) — carry+total samples combined. */
   bagByUsage: () => ClubStat[];
   clearAll: () => void;
 }
 
-// Weighted rolling average: recent shots matter more, but a single
-// mishit can't swing the average wildly. New = old*(1-w) + sample*w,
-// with w shrinking as samples grow (caps the early volatility).
+// Weighted rolling average: recent shots matter more, but a single mishit can't swing it wildly.
 function rollingAvg(prevAvg: number, prevSamples: number, sample: number): number {
   const w = Math.max(0.15, 1 / (prevSamples + 1));
   return prevAvg * (1 - w) + sample * w;
+}
+function recordInto(ladder: Partial<Record<ClubName, ClubStat>>, club: ClubName, yards: number): Partial<Record<ClubName, ClubStat>> {
+  const prev = ladder[club];
+  const samples = (prev?.samples ?? 0) + 1;
+  const avgYards = prev ? rollingAvg(prev.avgYards, prev.samples, yards) : yards;
+  return { ...ladder, [club]: { club, samples, avgYards: Math.round(avgYards), lastYards: Math.round(yards), lastUsedAt: Date.now() } };
 }
 
 export const useClubStatsStore = create<ClubStatsState>()(
   persist(
     (set, get) => ({
-      stats: {},
+      carry: {},
+      total: {},
       manual: {},
       reps: {},
       addReps: (club, n) => {
@@ -143,76 +166,107 @@ export const useClubStatsStore = create<ClubStatsState>()(
           return { manual: next };
         });
       },
-      record: (club, yards) => {
+      recordCarry: (club, yards) => {
         if (!Number.isFinite(yards) || yards <= 0) return;
-        set((s) => {
-          const prev = s.stats[club];
-          const samples = (prev?.samples ?? 0) + 1;
-          const avgYards = prev ? rollingAvg(prev.avgYards, prev.samples, yards) : yards;
-          return {
-            stats: {
-              ...s.stats,
-              [club]: {
-                club,
-                samples,
-                avgYards: Math.round(avgYards),
-                lastYards: Math.round(yards),
-                lastUsedAt: Date.now(),
-              },
-            },
-          };
-        });
+        set((s) => ({ carry: recordInto(s.carry, club, yards) }));
       },
-      avgFor: (club) => get().stats[club]?.avgYards ?? STANDARD_YARDS[club],
-      distanceFor: (club) => {
+      recordTotal: (club, yards) => {
+        if (!Number.isFinite(yards) || yards <= 0) return;
+        set((s) => ({ total: recordInto(s.total, club, yards) }));
+      },
+      record: (club, yards) => get().recordTotal(club, yards), // deprecated alias
+      carryFor: (club) => {
         const g = get();
-        if ((g.stats[club]?.samples ?? 0) > 0) return g.stats[club]!.avgYards; // tracked wins
-        return g.manual[club] ?? STANDARD_YARDS[club];                          // then stated, then chart
+        const c = g.carry[club];
+        if (c && c.samples > 0) return c.avgYards;              // measured carry
+        if (g.manual[club] != null) return g.manual[club]!;     // stated carry (My Bag)
+        const t = g.total[club];
+        if (t && t.samples > 0) return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll (est)
+        return STANDARD_YARDS[club];                            // chart (a carry chart)
       },
-      hasSamples: (club) => (get().stats[club]?.samples ?? 0) > 0,
+      totalFor: (club) => {
+        const g = get();
+        const t = g.total[club];
+        if (t && t.samples > 0) return t.avgYards;              // measured total
+        const c = g.carry[club];
+        if (c && c.samples > 0) return Math.round(c.avgYards + ROLL_YARDS[club]); // carry + roll (est)
+        if (g.manual[club] != null) return Math.round(g.manual[club]! + ROLL_YARDS[club]);
+        return STANDARD_YARDS[club] + ROLL_YARDS[club];         // chart carry + roll
+      },
+      avgFor: (club) => get().totalFor(club),      // deprecated back-compat
+      distanceFor: (club) => get().totalFor(club), // deprecated back-compat
+      hasSamples: (club) => (get().carry[club]?.samples ?? 0) > 0 || (get().total[club]?.samples ?? 0) > 0,
+      hasCarry: (club) => (get().carry[club]?.samples ?? 0) > 0 || get().manual[club] != null,
+      hasTotal: (club) => (get().total[club]?.samples ?? 0) > 0,
       hasManual: (club) => get().manual[club] != null,
-      hasDistance: (club) => (get().stats[club]?.samples ?? 0) > 0 || get().manual[club] != null,
+      hasDistance: (club) => (get().carry[club]?.samples ?? 0) > 0 || (get().total[club]?.samples ?? 0) > 0 || get().manual[club] != null,
       inferClub: (yards) => {
         const g = get();
         let best: ClubName = '7I';
         let bestDiff = Infinity;
         for (const club of CLUB_ORDER) {
           if (club === 'Putter') continue;
-          // tracked → stated (My Bag) → standard chart
-          const avg = g.stats[club]?.avgYards ?? g.manual[club] ?? STANDARD_YARDS[club];
-          const diff = Math.abs(avg - yards);
+          const dist = g.totalFor(club); // match a to-target (total-ish) yardage against total distances
+          const diff = Math.abs(dist - yards);
           if (diff < bestDiff) { bestDiff = diff; best = club; }
         }
         return best;
       },
       bagByUsage: () => {
-        const list = Object.values(get().stats).filter((x): x is ClubStat => !!x);
-        return list.sort((a, b) => b.samples - a.samples);
+        const g = get();
+        const merged = new Map<ClubName, ClubStat>();
+        for (const ladder of [g.total, g.carry]) {
+          for (const st of Object.values(ladder)) {
+            if (!st) continue;
+            const prev = merged.get(st.club);
+            merged.set(st.club, prev ? { ...st, samples: prev.samples + st.samples } : st);
+          }
+        }
+        return Array.from(merged.values()).sort((a, b) => b.samples - a.samples);
       },
-      clearAll: () => set({ stats: {} }),
+      clearAll: () => set({ carry: {}, total: {} }),
     }),
     {
       name: 'club-stats-v1',
-      version: 1,
-      migrate: (s) => s as never, // 2026-06-15 (audit) — passthrough; protect learned distances on bump
+      version: 2,
+      // 2026-07-24 — v1→v2: the old single `stats` ladder was fed a GPS tee→rest TOTAL by shot tracking,
+      // so it belongs in the `total` ladder (not carry). Carry starts empty and fills from real airtime
+      // carries + My Bag going forward. Manual (stated carry) + reps carry over untouched.
+      migrate: (persisted: unknown, version: number) => {
+        const s = (persisted ?? {}) as { stats?: Partial<Record<ClubName, ClubStat>>; total?: Partial<Record<ClubName, ClubStat>>; carry?: Partial<Record<ClubName, ClubStat>>; manual?: unknown; reps?: unknown };
+        if (version < 2 && s.stats && !s.total) {
+          return { ...s, total: s.stats, carry: {}, stats: undefined } as never;
+        }
+        return s as never;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
 );
 
-/** Snapshot of learned averages as a {club: yards} map — for feeding
- *  swingMetricsService.profile.clubDistances and caddie recommendations. */
+/** Snapshot of learned TOTAL distances as a {club: yards} map (tee→rest, includes roll).
+ *  Historical name/shape — consumers that quote this as "the bag" must label it a total (see
+ *  caddieMemoryRetrieval). For the honest CARRY bag use getLearnedCarryDistances(). */
 export function getLearnedClubDistances(): Record<string, number> {
   const s = useClubStatsStore.getState();
   const out: Record<string, number> = {};
   for (const club of CLUB_ORDER) {
-    // 2026-06-15 (Tim — My Bag) — tracked carry wins; otherwise fall back to the
-    // player's STATED carry so the caddie uses the real bag even before any rounds
-    // are tracked. Clubs with neither stay off the map (standard chart is not a
-    // "known" distance the caddie should quote as the player's own).
-    const st = s.stats[club];
-    if (st && st.samples > 0) out[club] = st.avgYards;
-    else if (s.manual[club] != null) out[club] = s.manual[club]!;
+    const t = s.total[club];
+    if (t && t.samples > 0) out[club] = t.avgYards;
+    else if (s.carry[club]?.samples) out[club] = Math.round(s.carry[club]!.avgYards + ROLL_YARDS[club]);
+    else if (s.manual[club] != null) out[club] = Math.round(s.manual[club]! + ROLL_YARDS[club]);
+  }
+  return out;
+}
+
+/** 2026-07-24 — the honest CARRY bag: {club: carry yards} for clubs the player has real data on
+ *  (measured carry, stated, or estimated from a tracked total). Feeds forced-carry / reach advice. */
+export function getLearnedCarryDistances(): Record<string, number> {
+  const s = useClubStatsStore.getState();
+  const out: Record<string, number> = {};
+  for (const club of CLUB_ORDER) {
+    if (club === 'Putter') continue;
+    if (s.carry[club]?.samples || s.manual[club] != null || s.total[club]?.samples) out[club] = s.carryFor(club);
   }
   return out;
 }

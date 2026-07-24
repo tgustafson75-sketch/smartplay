@@ -23,7 +23,8 @@ import { useRouter } from 'expo-router';
 export default function FitProfileScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const stats = useClubStatsStore((s) => s.stats);
+  // 2026-07-24 (club-logic unification) — re-render trigger; the memos read current carry/total via getState.
+  const stats = useClubStatsStore((s) => s.total);
   const handicap = usePlayerProfileStore((s) => s.handicap);
   // 2026-06-24 — extra readable signals for the honest Ball Fit (directional).
   const handicapIndex = usePlayerProfileStore((s) => s.handicap_index);
@@ -45,7 +46,7 @@ export default function FitProfileScreen() {
   const openEdit = (club: string) => {
     const st = useClubStatsStore.getState();
     setEditingClub(club);
-    setDraft(st.hasDistance(club as ClubName) ? String(Math.round(st.distanceFor(club as ClubName))) : '');
+    setDraft(st.hasDistance(club as ClubName) ? String(Math.round(st.carryFor(club as ClubName))) : '');
   };
   const saveEdit = (club: string) => {
     const y = parseInt(draft, 10);
@@ -61,7 +62,9 @@ export default function FitProfileScreen() {
     const st = useClubStatsStore.getState();
     const clubs: FitClubInput[] = CLUB_ORDER
       .filter((c) => c !== 'Putter')
-      .map((c) => ({ club: c, yards: st.distanceFor(c), measured: st.hasSamples(c), stated: st.hasManual(c) }));
+      // 2026-07-24 (club-logic unification) — the Fit Profile ladder is a CARRY ladder ("set your carry"),
+      // so read carryFor (honest carry), not the tee→rest total.
+      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasSamples(c), stated: st.hasManual(c) }));
     return composeFitProfile(clubs);
     // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,19 +99,16 @@ export default function FitProfileScreen() {
   const { flex, ball } = useMemo(() => {
     const st = useClubStatsStore.getState();
     const driverMeasured = st.hasSamples('Driver');
-    // Prefer the player's REAL driver carry: tracked avg, else a stated (My Bag)
-    // number. Never feed the standard chart as if it were the player's own speed.
-    const driverCarry = st.hasDistance('Driver')
-      ? st.distanceFor('Driver')
-      : null;
-    // Wedge-work proxy for short-game / greenside-feel priority (tracked samples).
-    const wedgeSamples =
-      (st.stats.PW?.samples ?? 0) + (st.stats.GW?.samples ?? 0) +
-      (st.stats.SW?.samples ?? 0) + (st.stats.LW?.samples ?? 0);
+    // 2026-07-24 (club-logic unification) — flex + ball fit key off the honest driver CARRY (carryFor:
+    // measured → stated → tracked-total−roll), not the old tracked value which was a GPS total (~20y hot).
+    const driverCarry = st.hasDistance('Driver') ? st.carryFor('Driver') : null;
+    // Wedge-work proxy for short-game / greenside-feel priority (samples in either ladder).
+    const wedgeSamples = (['PW', 'GW', 'SW', 'LW'] as const).reduce(
+      (a, c) => a + (st.carry[c]?.samples ?? 0) + (st.total[c]?.samples ?? 0), 0);
     const hcp = typeof handicapIndex === 'number' ? handicapIndex
       : typeof handicap === 'number' ? handicap : null;
     return {
-      flex: recommendFlex(st.avgFor('Driver'), driverMeasured),
+      flex: recommendFlex(st.carryFor('Driver'), driverMeasured),
       ball: recommendBall({
         handicap: hcp,
         driverCarryYards: driverCarry,

@@ -4566,9 +4566,9 @@ export default function SmartMotion() {
   let learnedCarryYds: number | null = null;
   if (shotMapClubName) {
     const cs = useClubStatsStore.getState();
-    learnedCarryYds = (cs.stats[shotMapClubName]?.samples ?? 0) > 0
-      ? cs.stats[shotMapClubName]!.avgYards
-      : (cs.manual[shotMapClubName] ?? null);
+    // 2026-07-24 (club-logic unification) — honest CARRY (measured → stated → tracked-total−roll),
+    // only when we actually have data for this club (never the generic chart as the player's own).
+    learnedCarryYds = cs.hasDistance(shotMapClubName) ? cs.carryFor(shotMapClubName) : null;
   }
   const shotMapPage = showShotMap ? (
     <ShotMapPage

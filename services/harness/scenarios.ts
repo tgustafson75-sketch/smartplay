@@ -436,12 +436,13 @@ const SCEN_18: Scenario = {
   category: 'nice',
   run: () => runWithAsserts('N18', 'bagDistances reflects clubStats', async (a) => {
     const stats = useClubStatsStore.getState();
-    const before = JSON.parse(JSON.stringify(stats.stats ?? {}));
-    stats.record('7I', 150);
+    const beforeTotal = JSON.parse(JSON.stringify(stats.total ?? {}));
+    const beforeCarry = JSON.parse(JSON.stringify(stats.carry ?? {}));
+    stats.recordCarry('7I', 150);
     const bag = bagDistances();
-    a.expect('7I present in bag after a logged shot', typeof bag['7I'] === 'number' && (bag['7I'] ?? 0) > 0);
+    a.expect('7I present in bag after a logged carry', typeof bag['7I'] === 'number' && (bag['7I'] ?? 0) > 0);
     a.expect('Putter excluded from full-shot bag', bag['Putter'] === undefined);
-    useClubStatsStore.setState({ stats: before });
+    useClubStatsStore.setState({ total: beforeTotal, carry: beforeCarry });
   }),
 };
 
