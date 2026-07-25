@@ -29,14 +29,20 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
   const [course, setCourse] = useState<Course | null>(null);
   const [holesForModal, setHolesForModal] = useState<ModalHole[]>([]);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
+  // 2026-07-25 (deep audit S2) — track whether the hero-imagery fetch has COMPLETED, so a null result
+  // (no Mapbox token / no geometry / no tee) shows a static placeholder instead of spinning forever.
+  const [heroResolved, setHeroResolved] = useState(false);
   const [open, setOpen] = useState(false);
   const isPalms = courseName.toLowerCase().includes('palms');
 
   useEffect(() => {
     let cancelled = false;
+    setHeroResolved(false); // new course → show the spinner until this fetch resolves
+    setHeroUrl(null);
     if (!courseId) {
       setCourse(null);
       setHolesForModal([]);
+      setHeroResolved(true);
       return;
     }
     void (async () => {
@@ -68,7 +74,8 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
         }
       } catch {}
       const tee = c?.tees[0];
-      if (cancelled || !tee) return;
+      if (cancelled) return;
+      if (!tee) { setHeroResolved(true); return; } // no tee → no imagery; stop the spinner
       const holes: ModalHole[] = tee.holes.map(h => {
         const geom = getHoleGeometry(courseId, h.hole_number);
         return {
@@ -84,6 +91,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
         const url = getCourseImageryUrl({ courseId, holes }, 800, 450);
         setHeroUrl(url);
       }
+      if (!cancelled) setHeroResolved(true); // fetch done (url may be null → placeholder, not spinner)
     })();
     return () => { cancelled = true; };
   }, [courseId, isPalms]);
@@ -101,9 +109,16 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
             <Image source={PALMS_IMAGES[1] as ImageSourcePropType} style={styles.hero} resizeMode="cover" />
           ) : heroUrl ? (
             <Image source={{ uri: heroUrl }} style={styles.hero} resizeMode="cover" />
-          ) : (
+          ) : !heroResolved ? (
             <View style={[styles.hero, styles.heroPlaceholder]}>
               <ActivityIndicator color="#00C896" size="small" />
+            </View>
+          ) : (
+            // 2026-07-25 (deep audit S2) — imagery resolved to null (no token/geometry): a static
+            // "aerial unavailable" placeholder, NOT an infinite spinner.
+            <View style={[styles.hero, styles.heroPlaceholder]}>
+              <AppIcon name="image-outline" size={26} color="#3a5245" />
+              <Text style={styles.heroUnavailable}>Aerial unavailable</Text>
             </View>
           )}
           <View style={styles.heroOverlay}>
@@ -162,6 +177,7 @@ const styles = StyleSheet.create({
   heroWrap: { width: '100%', position: 'relative' },
   hero: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#060f09' },
   heroPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  heroUnavailable: { color: '#3a5245', fontSize: 11, marginTop: 4 },
   heroOverlay: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     flexDirection: 'row', alignItems: 'flex-end',

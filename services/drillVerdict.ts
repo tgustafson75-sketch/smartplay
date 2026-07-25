@@ -73,6 +73,18 @@ export function deriveDrillVerdict(input: {
     };
   }
 
+  // 2026-07-25 (deep audit S2 — honesty) — ballLaunched === null means ball-departure RAN but
+  // couldn't confirm the strike (range/video/unseen), NOT that the drill has no ball. Grading a
+  // confident GREEN got_it off an unconfirmed strike violates "green = confirmed strike only". Mirror
+  // the mishit branch above (non-green 'closer') so we don't credit a rep we couldn't verify landed.
+  // (undefined is left as-is: the drill never tracked a ball, e.g. a motion-only/mirror drill.)
+  if (input.ballLaunched === null && !stillPresent) {
+    return {
+      grade: 'closer',
+      line: `Drill check: the motion looked clean and the fault this drill targets didn't show — but I couldn't confirm the strike on that rep, so I can't fully credit the ${drill} yet. One more with a clear ball-first strike.`,
+    };
+  }
+
   if (!stillPresent) {
     return {
       grade: 'got_it',

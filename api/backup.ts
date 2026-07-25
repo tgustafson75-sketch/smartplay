@@ -20,6 +20,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHash } from 'crypto';
 import { getSmartPlaySupabase } from './_supabase';
 import { hitInMemory } from './_rateLimit';
+// Single source of truth for the grow-mostly guard, shared with the client (services/cloudSync/
+// snapshot.ts) so the two lists can't drift (deep audit S2 — data loss). Zero-dep module.
+import { GROW_MOSTLY_KEYS } from '../services/cloudSync/growMostlyKeys';
 
 const TABLE = 'device_backups';
 const MIN_SECRET_LEN = 4;
@@ -126,29 +129,12 @@ function mergeSnapshots(prev: Record<string, unknown>, next: Record<string, unkn
   return merged;
 }
 
-// Learned/earned data that only grows over a player's history — never let a fresh or
-// second device's near-empty blob overwrite the cloud's richer copy. (Round history has its
-// own id-union above.) Keys mirror store/cloudSync BACKED_UP_STORE_KEYS learned-data set.
-const GROW_MOSTLY_KEYS = [
-  'caddie-memory-v1', 'club-stats-v1', 'club-bag-v1', 'player-profile-v2',
-  'practice-points', 'points-store-v1', 'workout-store-v1', 'family-store-v1',
-  'vocabulary-profile-v1',
-  // 2026-07-10 (audit D1) — was the misspelled 'practice-session-store-v1'; the real
-  // persist key is 'practice-session-v1' (store/practiceSessionStore.ts), so the guard
-  // never ran and practice-session history was clobbered last-write-wins.
-  'practice-session-v1',
-  // 2026-07-10 (audit D3) — these are backed up but were NOT protected → an emptier 2nd
-  // device wiped them last-write-wins. Irreplaceable learned/authored data.
-  'custom-courses-v1', 'course-captures-v1', 'watch-store-v1', 'guest-profiles-v1',
-  'green-rolls-v1', 'tee-goals-v1', 'tournament-v1',
-  // 2026-07-20 (bug-hunt fix) — same class as D3: these four accumulate irreplaceable
-  // learned data (coaching knowledge, relationship history, team-intelligence handoffs,
-  // practice counters) but were left out, so an emptier device clobbered the cloud copy.
-  'coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store',
-  // 2026-07-24 (full-app audit) — newly-backed-up learned/authored stores; protect them from an
-  // emptier device clobbering the cloud copy, same class as the D3 fixes above.
-  'coach-lesson-history-v1', 'practice-plan-v1',
-];
+// Learned/earned data that only grows over a player's history — never let a fresh or second
+// device's near-empty blob overwrite the cloud's richer copy. (Round history has its own id-union
+// above.) 2026-07-25 (deep audit S2 — data loss) — was a hand-maintained list that DRIFTED from the
+// client's copy in services/cloudSync/snapshot.ts (coach-lesson-history-v1 + practice-plan-v1 were
+// protected here but not there; five calibrated/earned stores guarded on neither). Both sides now
+// import the SINGLE shared source of truth so they can never diverge again. (See the import at top.)
 
 /** The storage key is a hash of the (lower-cased) email + the passphrase. Email
  *  alone can't derive it, so there's no enumeration/overwrite without the secret. */
@@ -228,6 +214,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const secret = norm(body.secret);
       if (!email) return res.status(400).json({ ok: false, error: 'no_key' });
       if (secret.length < MIN_SECRET_LEN) return res.status(400).json({ ok: false, error: 'no_secret' });
+      // 2026-07-25 (deep audit S2 — storage DoS) — the WRITE path had NO throttle (isRateLimited ran
+      // only on GET), so anyone could POST up to 8 MB blobs under any unused sha256 key with zero auth,
+      // filling device_backups unbounded (Supabase cost). Same IP+email limiter the GET already uses;
+      // checked before we serialize/store so a hammer loop is rejected cheaply.
+      if (await isRateLimited(db, req, email)) return res.status(429).json({ ok: false, error: 'rate_limited' });
       if (body.data == null || typeof body.data !== 'object') {
         return res.status(400).json({ ok: false, error: 'no_data' });
       }

@@ -14,6 +14,8 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Single source of truth for the grow-mostly guard, shared with api/backup.ts (no drift).
+import { GROW_MOSTLY_KEYS } from './growMostlyKeys';
 
 /** The current snapshot shape. Bump when the SET of keys or the wrapper shape
  *  changes so restore can migrate/skip an old payload cleanly. */
@@ -141,19 +143,6 @@ export async function applySnapshot(snapshot: Snapshot): Promise<number> {
   return entries.length;
 }
 
-// Learned/earned stores that only grow — never let an emptier device clobber the cloud's
-// richer copy. Mirrors api/backup.ts GROW_MOSTLY_KEYS.
-const GROW_MOSTLY_KEYS = [
-  'caddie-memory-v1', 'club-stats-v1', 'club-bag-v1', 'player-profile-v2', 'practice-points',
-  'points-store-v1', 'workout-store-v1', 'family-store-v1', 'vocabulary-profile-v1',
-  'practice-session-v1', 'custom-courses-v1', 'course-captures-v1', 'watch-store-v1',
-  'guest-profiles-v1', 'green-rolls-v1', 'tee-goals-v1', 'tournament-v1',
-  // 2026-07-20 (bug-hunt fix) — these four accumulate irreplaceable learned data
-  // (coaching knowledge FIFO, relationship observations/hero-moments, team-intelligence
-  // handoffs, practice counters) but were missing here, so an emptier second device
-  // clobbered the cloud's rich copy last-write-wins. Same class as the D1/D3/D4 fixes.
-  'coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store',
-];
 
 /**
  * 2026-07-10 (audit D5) — non-destructive UPLOAD merge for the client-direct cloud path.

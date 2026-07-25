@@ -1365,7 +1365,15 @@ export const useRoundStore = create<RoundState>()(
           const profile = profileMod.usePlayerProfileStore.getState();
           const diffs = calcMod.rebuildDifferentialsFromHistory(
             // 2026-07-04 — SIM rounds never count toward the Index.
-            next.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({ startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed })),
+            // 2026-07-25 (deep audit S2) — pass handicapAgs/handicapHoles, exactly like endRound
+            // (:1713). Omitting them made a delete rebuild the Index from RAW totals: blow-up holes
+            // re-inflated every round (net-double-bogey cap lost) and pick-up rounds that posted as
+            // 9/18 via handicapHoles were dropped entirely — so deleting one round silently disagreed
+            // with what endRound had posted.
+            next.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({
+              startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed,
+              handicapAgs: r.handicapAgs, handicapHoles: r.handicapHoles,
+            })),
           );
           profile.resetDifferentials(diffs);
           const result = calcMod.estimateNewIndex(diffs);

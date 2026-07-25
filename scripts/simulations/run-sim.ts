@@ -77,6 +77,8 @@ import { detectPlainSpeakRequest } from '../../services/plainSpeak';
 import { GOLF_KNOWLEDGE } from '../../services/knowledgeBase/modules';
 import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
 import { assessDiagnosticEvidence, evidenceGateQuestion } from '../../services/intents/inRoundDiagnosticHandler';
+import { GROW_MOSTLY_KEYS } from '../../services/cloudSync/growMostlyKeys';
+import { BACKED_UP_STORE_KEYS } from '../../services/cloudSync/snapshot';
 
 interface ScenarioResult {
   scenario: string;
@@ -158,6 +160,21 @@ console.log('\n=== Scenario 0b: evidence-order diagnostic gate ===');
   check('Practice: brush-the-grass low-point focus resolves + builds a plan',
     !!brush && brush.emphasis === 'contact' && /brush the grass/i.test(brush.intent) && brushPlan.length > 0,
     brush ? `${brush.label} · plan ${brushPlan.length}` : 'focus missing');
+}
+
+// ─── Scenario 0d: backup grow-mostly guard (data-loss protection) ──────────────
+// 2026-07-25 (deep audit S2) — the client + server grow-mostly lists had drifted (data loss); they
+// now share ONE constant. Assert the formerly-clobbered stores are protected AND that every protected
+// key is actually backed up (a guard on an un-backed-up key is dead).
+console.log('\n=== Scenario 0d: backup grow-mostly guard ===');
+{
+  const formerlyLost = ['coach-lesson-history-v1', 'practice-plan-v1', 'trust-level-store-v1', 'points-baseline', 'smartfinder-store-v1', 'acoustic-calibration-v1', 'cage-overlay-calibration-v1'];
+  const missing = formerlyLost.filter((k) => !GROW_MOSTLY_KEYS.includes(k));
+  check('Backup: grow-mostly guard protects the formerly-clobbered stores',
+    missing.length === 0, missing.length === 0 ? `${GROW_MOSTLY_KEYS.length} protected` : `UNPROTECTED: ${missing.join(', ')}`);
+  const notBackedUp = GROW_MOSTLY_KEYS.filter((k) => !BACKED_UP_STORE_KEYS.includes(k));
+  check('Backup: every grow-mostly key is actually in the backup allowlist',
+    notBackedUp.length === 0, notBackedUp.length === 0 ? 'all protected keys are backed up' : `DEAD GUARD on: ${notBackedUp.join(', ')}`);
 }
 
 // ─── Scenario 0c: undo precheck must not fire on the dismissal "never mind" ─────
@@ -5152,11 +5169,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'cold-install users always see the Terms/Privacy consent + profile-capture welcome screen (gate keys on termsAcceptedAt, which only welcome.tsx sets)');
 
   check('Bug-hunt: backup grow-mostly guards the four accumulating learned stores',
-    // an emptier device must not clobber these last-write-wins in the cloud (client + server lists).
-    ['coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store'].every(k =>
-      new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('services/cloudSync/snapshot.ts')) &&
-      new RegExp(`GROW_MOSTLY_KEYS[\\s\\S]*'${k}'`).test(read('api/backup.ts'))),
-    'coach-knowledge / relationship / team-intelligence / practice stores are grow-mostly protected in BOTH the client and server merge, so a second emptier device can no longer wipe the cloud copy');
+    // 2026-07-25 (deep audit S2) — the client + server lists were unified into ONE shared constant
+    // (services/cloudSync/growMostlyKeys.ts) so they can't drift. Verify the keys are protected AND
+    // that BOTH the client (snapshot.ts) and server (backup.ts) import that shared source of truth.
+    ['coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store'].every(k => GROW_MOSTLY_KEYS.includes(k)) &&
+      /from '.*growMostlyKeys'/.test(read('services/cloudSync/snapshot.ts')) &&
+      /from '.*growMostlyKeys'/.test(read('api/backup.ts')),
+    'coach-knowledge / relationship / team-intelligence / practice stores are in the SHARED grow-mostly constant that both client + server import — a second emptier device can no longer wipe the cloud copy');
 
   check('Fault→workout map: curated golf exercises per fault, aliases normalized, honest-empty otherwise', (() => {
     // 2026-07-21 — curated (not AI-generated) fault→exercise table; keys match the analysis fault

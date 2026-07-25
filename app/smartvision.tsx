@@ -858,11 +858,17 @@ export default function SmartVisionScreen() {
         // FRAMED tee→green URL (computeFitView: centered on the midpoint, rotated hole-vertical, with
         // margin) that the <Image> loads directly — so even if the file pre-fetch fails, the whole hole
         // INCLUDING the tee is in frame. Green-centered is only the last resort (no tee coord at all).
+        // 2026-07-25 (deep audit S2 — crash) — `geo!` asserted non-null, but this block is gated on
+        // effectiveGreen (which can resolve from a marked/voice green with geo still null), NOT on geo.
+        // A geo-null hole here threw a TypeError inside this un-awaited async → the catch/setLoading(false)
+        // never ran → the canvas hung on the loading spinner. par/yardage only tune the imagery ZOOM
+        // heuristic (the frame itself comes from the real tee/green coords), so a neutral default is
+        // safe + non-crashing and shows nothing fabricated to the user.
         const holeInput = {
           courseId,
           holeNumber: holeIndex,
-          par: geo!.par,
-          yardage: geo!.yardage,
+          par: geo?.par ?? 4,
+          yardage: geo?.yardage ?? 400,
           tee: effectiveTee,
           green: effectiveGreen,
         };
