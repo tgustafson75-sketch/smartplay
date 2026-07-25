@@ -641,7 +641,14 @@ export default function SwingDetail() {
         // 2026-07-24 (full-app audit, root D) — thread handedness so a lefty's weight-shift
         // sign isn't inverted (default 'right' read it backwards on this backfill path).
         const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
-        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, null, null, resolveSwingerHandedness());
+        // 2026-07-25 (Tim — "body mechanics run before the swing even starts in the library") — the
+        // backfill sampled the WHOLE clip by fixed fractions (address=5%, top=50%…), so on an upload with
+        // pre-swing setup/waggle the metrics were computed off pre-swing frames. When the shot carries a
+        // trimmed swing window, pass it so sampling stays INSIDE the actual swing (address→finish).
+        const wStart = shot.clipStartSeconds != null ? shot.clipStartSeconds * 1000 : null;
+        const wEnd = shot.clipEndSeconds != null ? shot.clipEndSeconds * 1000 : null;
+        const swingWindow = (wStart != null && wEnd != null && wEnd - wStart >= 500) ? { startMs: wStart, endMs: wEnd } : null;
+        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, null, resolveSwingerHandedness());
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
