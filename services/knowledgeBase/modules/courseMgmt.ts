@@ -109,4 +109,43 @@ export const COURSE_MGMT: KBEntry[] = [
     related: ['cm.dispersion-cone', 'cm.expected-value'],
     source: 'decade',
   },
+  // Decision framing: how much to change on the course, and picking the smart shot.
+  {
+    id: 'cm.course-vs-range',
+    layer: 'course_mgmt',
+    module: MODULE,
+    topic: 'course vs range — how much to change',
+    aliases: ['should i fix my swing on the course', 'im on the course', 'mid round swing fix', 'on the range vs on the course'],
+    principle:
+      "The range is where you work on things; the course is where you let your practice come out to play. On the course, avoid swing changes — prioritize breathing, the lie, target, club, the shot shape of the day, a safe miss, and commitment. On the range, do the technical work: setup, grip, ball position, face contact, where the grass first gets cut, drills, exaggerated feels.",
+    honesty: 'coaching_only',
+    coachingCues: ["course = decide + commit, don't rebuild", 'range = setup + contact + drills'],
+    related: ['cm.smart-miss-shape', 'contact.brush-the-grass'],
+  },
+  {
+    id: 'cm.smart-miss-shape',
+    layer: 'course_mgmt',
+    module: MODULE,
+    topic: 'pick the shot — smart miss over perfect',
+    aliases: ['should i go for it', 'whats the play here', 'can i hit this shot', 'shot shape of the day'],
+    principle:
+      "Start with the lie, then pick the shot with the best chance of avoiding disaster — not the one that only works if it's perfect. Read: lie, target, the danger (water, short-side, OB, trees), your shot shape of the day, the conditions (wind, elevation, firmness), and where you can miss and still play golf. Aim to your shot shape and hold enough for the curve toward the safest useful target.",
+    appSignals: ['gps', 'wind'],
+    honesty: 'directional',
+    cnsPersonalize: ['tendencies', 'bag'],
+    coachingCues: ['play the shot shape of the day, not the perfect shot', 'aim where a miss still plays golf'],
+    related: ['cm.course-vs-range', 'mind.breathe-reset'],
+  },
+  {
+    id: 'cm.beginner-comfort',
+    layer: 'course_mgmt',
+    module: MODULE,
+    topic: 'beginner comfort and pace of play',
+    aliases: ['im terrible at golf', 'how do i not slow people down', 'what if i embarrass myself', 'first time on a course', 'where do i stand'],
+    principle:
+      "You don't have to hit it perfect. Get the ball moving toward the safest part of the hole and keep pace — pick up when you've had enough on a hole, keep the group moving, and enjoy it. Comfort and pace come first; the good shots follow.",
+    honesty: 'coaching_only',
+    coachingCues: ['safest part of the hole + keep pace', 'pick up and keep moving — it is okay'],
+    related: ['mind.breathe-reset'],
+  },
 ];

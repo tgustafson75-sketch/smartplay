@@ -208,4 +208,29 @@ export const MENTAL_GAME: KBEntry[] = [
     related: ['mind.expectations-not-the-score', 'mind.go-to-shot', 'mind.finish-strong'],
     source: 'sport-psychology',
   },
+  // Pre-shot discipline + emotional reset: do the thinking behind the ball, breathe first.
+  {
+    id: 'mind.think-behind-ball',
+    layer: 'psychology',
+    module: MODULE,
+    topic: 'pre-shot routine — do the thinking behind the ball',
+    aliases: ['pre shot routine', 'i overthink over the ball', 'how do i commit', 'i freeze over the ball', 'too many swing thoughts'],
+    principle:
+      "Get ALL the thinking done behind the ball — inspect, evaluate, adjust, rehearse, confirm, align, commit. Over the ball, just swing. Don't carry your swing thoughts with you to the ball; one clear intention beats five swing thoughts.",
+    honesty: 'coaching_only',
+    coachingCues: ['do the thinking behind the ball; over the ball, just swing', "don't take swing thoughts to the ball"],
+    related: ['mind.breathe-reset', 'cm.smart-miss-shape'],
+  },
+  {
+    id: 'mind.breathe-reset',
+    layer: 'psychology',
+    module: MODULE,
+    topic: 'frustrated / nervous — reset before the next shot',
+    aliases: ['how do i calm down', 'im so frustrated', 'i keep blowing up', 'i play bad when people watch', 'i lost my temper'],
+    principle:
+      "When emotion is high, don't lead with mechanics. Breathe in through your nose, out through your mouth, then look at the lie and choose the smartest shot available. Decide second, breathe first — the next shot doesn't care how mad you are.",
+    honesty: 'coaching_only',
+    coachingCues: ['breathe in through the nose, out through the mouth', 'the next shot does not care how mad you are'],
+    related: ['mind.think-behind-ball'],
+  },
 ];

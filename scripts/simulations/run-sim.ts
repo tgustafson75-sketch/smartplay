@@ -74,6 +74,8 @@ import { detectSingRequest, buildSingMessage } from '../../services/singAttempt'
 import { detectPlaySongRequest } from '../../services/musicIntent';
 import { SCREEN_HELP, detectHelpRequest as detectScreenHelp } from '../../services/screenHelp';
 import { detectPlainSpeakRequest } from '../../services/plainSpeak';
+import { GOLF_KNOWLEDGE } from '../../services/knowledgeBase/modules';
+import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
 
 interface ScenarioResult {
   scenario: string;
@@ -87,6 +89,44 @@ function check(scenario: string, condition: boolean, details: string): void {
   results.push({ scenario, passed: condition, details });
   const tag = condition ? 'PASS' : 'FAIL';
   console.log(`[${tag}] ${scenario} :: ${details}`);
+}
+
+// ─── Scenario 0: KB integrity (data-dump safety guard) ─────────────────────────
+// 2026-07-25 — before/after ingesting any data-dump into the caddie KB (e.g. the Tank
+// Doctrine beta layer), every entry must be structurally sound: globally-unique id, a
+// valid honesty tag (so the caddie never presents coaching_only reasoning as measurable),
+// a valid layer, and non-empty topic/aliases/principle so retrieval can actually match it.
+// This runs FIRST so a malformed ingest fails the gate loudly instead of silently shipping.
+console.log('\n=== Scenario 0: KB integrity ===');
+{
+  const VALID_LAYERS: KBLayer[] = ['app_feature', 'setup', 'contact', 'full_swing', 'short_game', 'putting', 'ball_flight', 'course_mgmt', 'psychology', 'practice', 'equipment'];
+  const VALID_HONESTY: KBHonesty[] = ['measurable', 'directional', 'coaching_only'];
+  const ids = new Set<string>();
+  const dupes: string[] = [];
+  const badHonesty: string[] = [];
+  const badLayer: string[] = [];
+  const emptyField: string[] = [];
+  for (const e of GOLF_KNOWLEDGE) {
+    if (ids.has(e.id)) dupes.push(e.id); else ids.add(e.id);
+    if (e.honesty != null && !VALID_HONESTY.includes(e.honesty)) badHonesty.push(e.id);
+    if (!VALID_LAYERS.includes(e.layer)) badLayer.push(e.id);
+    if (!e.id || !e.topic || !e.principle || !Array.isArray(e.aliases) || e.aliases.length === 0) emptyField.push(e.id || '(no id)');
+  }
+  check('KB: all entry ids are globally unique',
+    dupes.length === 0, dupes.length === 0 ? `${GOLF_KNOWLEDGE.length} entries, no dupes` : `DUPLICATE ids: ${dupes.join(', ')}`);
+  check('KB: every honesty tag is a valid KBHonesty value',
+    badHonesty.length === 0, badHonesty.length === 0 ? 'all honesty tags valid' : `INVALID honesty: ${badHonesty.join(', ')}`);
+  check('KB: every layer is a valid KBLayer value',
+    badLayer.length === 0, badLayer.length === 0 ? 'all layers valid' : `INVALID layer: ${badLayer.join(', ')}`);
+  check('KB: no entry has an empty id/topic/principle/aliases',
+    emptyField.length === 0, emptyField.length === 0 ? 'all entries populated' : `EMPTY fields on: ${emptyField.join(', ')}`);
+  // The mined decision-engine reasoning (evidence-order, course-vs-range, brush-the-grass, smart-miss,
+  // test-before-buy, breathe-first) is folded into the CENTRAL KB modules as plain caddie knowledge —
+  // not a separate branded layer. Spot-check the anchor entries actually landed + resolve.
+  const anchors = ['contact.diagnose-evidence-order', 'cm.course-vs-range', 'cm.smart-miss-shape', 'contact.brush-the-grass', 'mind.think-behind-ball', 'mind.breathe-reset', 'equip.test-before-buy'];
+  const present = anchors.filter((id) => GOLF_KNOWLEDGE.some((e) => e.id === id));
+  check('KB: decision-engine reasoning folded into central modules',
+    present.length === anchors.length, present.length === anchors.length ? `all ${anchors.length} anchor entries present` : `MISSING: ${anchors.filter((a) => !present.includes(a)).join(', ')}`);
 }
 
 // ─── Scenario 1: persona resolution returns the right name for each input shape ─

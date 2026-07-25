@@ -93,4 +93,57 @@ export const CONTACT: KBEntry[] = [
     related: ['contact.dispersion-centroid', 'psych.over-control'],
     source: 'golf-father',
   },
+  // Diagnosis + contact reasoning: read the evidence before blaming the swing.
+  {
+    id: 'contact.diagnose-evidence-order',
+    layer: 'contact',
+    module: MODULE,
+    topic: 'why did that happen — diagnose a bad shot',
+    aliases: ['why did i slice that', 'why did i chunk that', 'why did i pull it', 'why did i top it', 'why did i blade that', 'what happened on that shot', 'why did that go wrong'],
+    principle:
+      'Read the evidence before blaming the swing, in this order: the LIE (what shot was even possible), the BALL FLIGHT (where it started + which way it curved = what the club did), the STRIKE (heel/toe/high/low/center), where the GRASS FIRST GOT CUT (before or after the ball), then SETUP (grip, face, alignment, ball position), and only then MOTION. Most misses are explained before you ever get to mechanics.',
+    honesty: 'coaching_only',
+    cnsPersonalize: ['tendencies'],
+    coachingCues: ['lie first, then ball flight, strike, where the grass first got cut, setup, then motion', "don't rebuild the swing to explain one shot"],
+    related: ['contact.diagnose-ask-one', 'cm.course-vs-range'],
+  },
+  {
+    id: 'contact.diagnose-ask-one',
+    layer: 'contact',
+    module: MODULE,
+    topic: 'not enough info to diagnose — ask one useful question',
+    aliases: ['help me fix my shot', "i don't know why", 'diagnose my miss', 'whats wrong with my swing'],
+    principle:
+      "When the evidence is missing, don't pretend — ask the ONE most useful thing, not twenty: where did the ball start, which way did it curve, where did you strike the face, what was the lie, where did the grass first get cut, course or range, what club. One or two questions, then answer.",
+    honesty: 'coaching_only',
+    coachingCues: ['ask the single most useful missing piece', 'one or two questions, not twenty'],
+    related: ['contact.diagnose-evidence-order'],
+  },
+  {
+    id: 'contact.brush-the-grass',
+    layer: 'contact',
+    module: MODULE,
+    topic: 'practice swing — brush the grass to find contact',
+    aliases: ['how to stop chunking', 'stop hitting it fat', 'stop hitting behind it', 'stop blading it', 'find my contact', 'practice swing purpose'],
+    principle:
+      "Use the practice swing to find where to hold the club so you barely brush the grass — just a few blades, not a dig and not a whiff. If the club takes too much ground, choke down slightly; if it misses the ground, adjust posture, distance from the ball, or where you're holding it. Once you can barely hear a few blades, step in with confidence and stop worrying about chunking or blading it.",
+    appSignals: ['acoustic', 'pose_biomech'],
+    honesty: 'directional',
+    coachingCues: ['barely brush a few blades of grass', 'too much ground → choke down; missed ground → adjust posture/distance'],
+    related: ['cm.course-vs-range', 'equip.test-before-buy'],
+  },
+  {
+    id: 'contact.center-over-speed',
+    layer: 'contact',
+    module: MODULE,
+    topic: 'more distance — center contact beats swinging harder',
+    aliases: ['how do i hit it farther', 'i want more distance', 'why am i losing distance', 'should i swing harder', 'my smash factor'],
+    principle:
+      "Numbers only matter if they tell you what to do next. Your speed is usually fine — the easiest distance to find is centeredness of contact, not swinging harder. A heel-side strike with high spin leaks right and loses yards even with good speed. Compare yourself to your handicap group and your next target group, not the PGA Tour.",
+    appSignals: ['acoustic', 'ball_speed', 'smash_factor'],
+    honesty: 'directional',
+    cnsPersonalize: ['bag', 'tendencies'],
+    coachingCues: ['center the strike before you add speed', 'compare to your handicap group, not tour'],
+    related: ['contact.brush-the-grass', 'equip.test-before-buy'],
+  },
 ];

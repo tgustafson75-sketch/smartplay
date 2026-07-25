@@ -336,4 +336,16 @@ export const EQUIPMENT: KBEntry[] = [
     related: ['equip.gapping-even', 'equip.driver-basics', 'equip.shaft-flex', 'equip.wedge-gapping'],
     source: 'fitting fundamentals',
   },
+  {
+    id: 'equip.test-before-buy',
+    layer: 'equipment',
+    module: MODULE,
+    topic: 'equipment problem — test what you have first',
+    aliases: ['are my clubs too long', 'should i get new clubs', 'do i need new irons', 'should i choke down', 'what shaft flex do i need', 'my clubs feel too long'],
+    principle:
+      "Before buying new clubs, test what your current clubs are telling us. Choke down an inch and compare face contact; use impact tape; check grip size; compare ball flight. Repeated heel or toe strikes, better contact when you choke down, or ball flight that doesn't match your effort are the clues — chase the evidence before spending money.",
+    honesty: 'directional',
+    coachingCues: ['choke down an inch and compare contact', 'impact tape + grip size before new clubs'],
+    related: ['contact.brush-the-grass', 'contact.center-over-speed'],
+  },
 ];

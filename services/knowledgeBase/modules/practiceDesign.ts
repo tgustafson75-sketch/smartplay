@@ -330,4 +330,16 @@ export const PRACTICE_DESIGN: KBEntry[] = [
     related: ['prac.spacing', 'prac.block-vs-random', 'prac.fault-fix-protocol'],
     source: 'make-it-stick / desirable difficulty',
   },
+  {
+    id: 'prac.at-home',
+    layer: 'practice',
+    module: MODULE,
+    topic: 'practicing at home without a course',
+    aliases: ['practice at home', 'no range near me', 'what can i do at home', 'indoor practice'],
+    principle:
+      "You don't need a golf course to build better habits. At home, work grip, setup, putting stroke, wrist stability, the shoulder triangle, mirror work, tempo, breathing, and your pre-shot routine — the parts that transfer straight to the course.",
+    honesty: 'coaching_only',
+    coachingCues: ['grip + setup + putting + routine build at home', 'mirror work + tempo'],
+    related: ['mind.think-behind-ball'],
+  },
 ];
