@@ -11,8 +11,8 @@
  * CADDIE_BAR_ENABLED is a one-line kill switch: flip to false + OTA to remove the bar app-wide instantly
  * if it ever mis-renders on a device, with zero other change.
  */
-import React from 'react';
-import { View, KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Keyboard, Platform, StyleSheet } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -47,16 +47,30 @@ export function GlobalCaddieBar() {
   const path = usePathname() ?? '';
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    // iOS reports the frame before the animation (Will*); Android only fires Did*.
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const onShow = (e: { endCoordinates?: { height?: number } }) => setKeyboardHeight(e?.endCoordinates?.height ?? 0);
+    const onHide = () => setKeyboardHeight(0);
+    const subShow = Keyboard.addListener(showEvt, onShow);
+    const subHide = Keyboard.addListener(hideEvt, onHide);
+    return () => { subShow.remove(); subHide.remove(); };
+  }, []);
   if (!CADDIE_BAR_ENABLED) return null;
   if (HIDE_PREFIXES.some((p) => path.startsWith(p))) return null;
+  // 2026-07-25 (Tim — "when the keyboard comes up I can't see what I'm typing") — the old
+  // KeyboardAvoidingView was a NO-OP on Android (behavior undefined), so the input sat behind the
+  // keyboard. Lift the whole bar by the measured keyboard height instead (works on both platforms,
+  // independent of the native windowSoftInputMode). The bar isn't lifted by anything else today, so
+  // this can't double-lift. When the keyboard is up it owns the bottom inset, so we drop the
+  // home-indicator pad to avoid an extra gap between the bar and the keyboard.
+  const bottomPad = keyboardHeight > 0 ? 6 : Math.max(insets.bottom, 8) + 6;
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* 2026-07-25 (Tim — "the caddie mic/text is slightly cut off at the bottom") — a small buffer on
-          top of the safe-area inset so the bar always sits fully above the system nav / home indicator. */}
-      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) + 6, backgroundColor: colors.background }]}>
-        <CaddieBottomBar />
-      </View>
-    </KeyboardAvoidingView>
+    <View style={[styles.wrap, { paddingBottom: bottomPad, marginBottom: keyboardHeight, backgroundColor: colors.background }]}>
+      <CaddieBottomBar />
+    </View>
   );
 }
 
