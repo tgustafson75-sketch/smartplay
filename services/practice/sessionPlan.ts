@@ -53,6 +53,20 @@ export const PRACTICE_FOCUSES: PracticeFocus[] = [
     intent: 'Vary the carry every few balls — feel different distances instead of one stock wedge.',
   },
   {
+    // 2026-07-25 (Tim) — brush-the-grass / low-point drill from the Tank doctrine (KB
+    // contact.brush-the-grass). Fits the existing focus model: emphasis 'contact' claims only
+    // the strike read we actually give (acoustic/pose), rotates the clubs where turf contact
+    // matters most, and the intent voices the drill — a few practice swings that just brush the
+    // grass to find the low point BEFORE each strike. No new/unverifiable detection.
+    key: 'contact_lowpoint',
+    label: 'Contact — brush the grass',
+    clubs: ['PW', '9I', '8I'],
+    blockSize: 2,
+    view: 'down_the_line',
+    emphasis: 'contact',
+    intent: 'Find your low point: a few practice swings that just brush the grass — no dig, no whiff. Digging? choke down an inch. Then hit, rotating clubs so it transfers.',
+  },
+  {
     key: 'driver_distance',
     label: 'Driver — distance',
     clubs: ['Driver'],

@@ -151,6 +151,13 @@ console.log('\n=== Scenario 0b: evidence-order diagnostic gate ===');
   const richStrike = evidenceGateQuestion(assessDiagnosticEvidence('pulled it left and caught it thin'));
   check('Diagnostic gate: flight + strike passes through to the brain',
     richStrike === null, richStrike === null ? 'passed through' : `unexpectedly gated: ${richStrike}`);
+
+  // Brush-the-grass / low-point practice focus (Tank drill) — resolves + interleaves like any focus.
+  const brush = getFocus('contact_lowpoint');
+  const brushPlan = brush ? buildInterleavedPlan(brush, 8) : [];
+  check('Practice: brush-the-grass low-point focus resolves + builds a plan',
+    !!brush && brush.emphasis === 'contact' && /brush the grass/i.test(brush.intent) && brushPlan.length > 0,
+    brush ? `${brush.label} · plan ${brushPlan.length}` : 'focus missing');
 }
 
 // ─── Scenario 1: persona resolution returns the right name for each input shape ─
