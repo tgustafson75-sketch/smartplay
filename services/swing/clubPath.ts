@@ -172,7 +172,7 @@ export async function detectClubPath(args: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ frames: usable.map((u) => u.base64), media_type: 'image/jpeg' }),
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(32_000), // background analysis; room for the stronger clubhead model
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { positions?: ({ x: number; y: number } | null)[]; configured?: boolean };

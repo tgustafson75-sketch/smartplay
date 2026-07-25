@@ -25,7 +25,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import Anthropic from '@anthropic-ai/sdk';
 import { allowInference } from './_inferLimit';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 22_000, maxRetries: 1 });
+// 2026-07-24 (Tim — "trace it correctly or not at all") — clubhead localization across a swing is a
+// HARD vision task (small head, heavy motion blur through impact). Haiku 4.5 rarely locked it, so the
+// arc almost never had enough real points and the client fell back to the (wrong) wrist path. Timeout
+// widened to give a stronger model room; it stays UNDER the client's fetch timeout so a slow call
+// degrades to an honest "no trace", never a hang.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 28_000, maxRetries: 1 });
 
 type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 
@@ -62,19 +67,24 @@ function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
 
 const PROMPT = `You are tracking the CLUBHEAD of a golf club across an ordered sequence of video frames from a single golf swing (frame 1 is earliest — near address; later frames move through the backswing, downswing, impact, and follow-through).
 
-The CLUBHEAD is the weighted head at the FAR end of the shaft from the hands — the part that strikes the ball (driver head, iron blade, wedge, etc.). It is NOT the grip, the hands, or the shaft; report the HEAD only.
+HOW TO FIND THE CLUBHEAD — anchor it to the SHAFT, do not free-hunt for the small head:
+1. First locate the golfer's HANDS/GRIP (where both hands meet the top of the club). The hands are reliably visible almost every frame.
+2. From the grip, follow the SHAFT — the long, thin, high-contrast straight line (or motion-blur streak) leading AWAY from the hands. The shaft is much easier to see than the head.
+3. The CLUBHEAD is the weighted mass at the FAR END of that shaft line — the end opposite the hands (driver head, iron blade, wedge). Report THAT endpoint.
 
-For EACH frame, report whether you can CLEARLY identify the clubhead, and if so, its position as fractions of that frame (x=0 left edge, x=1 right edge, y=0 top, y=1 bottom).
+So the clubhead position = (grip point) + (shaft direction) × (shaft length). Use the shaft you can see to pin the head; this keeps the detection ON the actual club instead of floating near the body.
 
-The clubhead is LARGE and clearest at address, at the top of the backswing, and through the follow-through (it moves slowest there); it is smallest/most blurred through the downswing and impact.
+For EACH frame, report whether you can CLEARLY trace the shaft to its far end, and if so, the clubhead position as fractions of that frame (x=0 left edge, x=1 right edge, y=0 top, y=1 bottom).
 
-The clubhead traces ONE SMOOTH CONTINUOUS ARC across the frames — it cannot jump to an unrelated spot in one frame and back in the next. Use the positions you find in the neighboring frames to stay consistent: a correct detection sits ON the arc formed by the clear detections around it.
+The shaft + head are clearest at address, at the top of the backswing, and through the follow-through (they move slowest there); smallest/most blurred through the downswing and impact.
+
+The clubhead traces ONE SMOOTH CONTINUOUS ARC across the frames — a large sweeping arc from the ball up to above the shoulders, NOT a tight loop around the torso (that would be the hands, not the head). Use neighboring frames to stay consistent: a correct detection sits ON the wide arc formed by the clear detections around it.
 
 Rules:
-- Report ONLY what you can actually, clearly see. Through the downswing and impact the clubhead moves extremely fast and is usually a motion-blur streak or gone — returning null for those frames is CORRECT and expected. Do not force a position.
-- If the clubhead is blurred beyond clear identification, ambiguous, off-frame, or hidden behind the body, return null for that frame. Do NOT guess, do NOT carry a previous frame's position forward, do NOT interpolate.
-- When the head is a motion-blur streak, only report it if you can confidently pick the head end of the streak; otherwise null.
-- Do NOT report the hands/grip/ball/shaft as the clubhead. If a candidate would sit FAR OFF the smooth arc formed by your other clear detections, it is almost certainly the hands, the shaft, or a background object — return null for that frame instead of a point off the arc.
+- Report ONLY what you can actually trace. Through the downswing and impact the shaft/head is often a pure motion-blur streak or gone — returning null for those frames is CORRECT and expected. Do not force a position.
+- If you cannot follow the shaft to a clear far end (blurred beyond identification, head off-frame, or hidden behind the body), return null for that frame. Do NOT guess, do NOT carry a previous frame's position forward, do NOT interpolate.
+- CRITICAL — do NOT report the HANDS/GRIP as the clubhead. The head is always at the FAR end of the shaft from the hands, a real distance away. A point sitting right at the hands, or looping tightly around the torso, is WRONG — return null instead.
+- Do NOT report the ball or a background object as the clubhead. If a candidate would sit FAR OFF the smooth wide arc formed by your other clear detections, return null for that frame.
 - Return exactly one entry per frame, in the same order as the frames were given.`;
 
 const CLUB_PATH_TOOL: Anthropic.Tool = {
@@ -134,7 +144,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const completion = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      // 2026-07-24 — Haiku 4.5 → Sonnet 5 for the clubhead localization. Far stronger at picking a
+      // small/blurred head out of a full frame and keeping detections ON the swing arc, which is what
+      // makes the trace actually follow the CLUBHEAD (Tim's repeated ask) instead of coming back empty.
+      model: 'claude-sonnet-5',
       max_tokens: 700,
       tools: [CLUB_PATH_TOOL],
       tool_choice: { type: 'tool', name: 'report_club_path' },

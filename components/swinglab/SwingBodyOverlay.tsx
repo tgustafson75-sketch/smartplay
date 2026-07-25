@@ -242,24 +242,21 @@ export default function SwingBodyOverlay({
   // "seen in N of M" honesty count still reflects reality); this is a faithful render of a
   // continuous clubhead sweep, not a fabricated curve.
   const tracePts = useMemo<{ pts: ArcPoint[]; isClub: boolean }>(() => {
-    const sx = aligned ? aligned.sx : 1;
-    const sy = aligned ? aligned.sy : 1;
-    let raw: ArcPoint[];
-    if (aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) {
-      // clubArc points are full-frame normalized (0..1) → scale by frame dims (audit SM2).
-      raw = clubArc.map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh, t: p.tMs }));
-    } else {
-      const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
-      const traceName = sorted.some(f => getKp(f, 'right_wrist')) ? 'right_wrist' : 'left_wrist';
-      const wr = sorted
-        .map(f => ({ k: getKp(f, traceName), t: f.timestampMs }))
-        .filter((r): r is { k: Keypoint; t: number } => r.k != null);
-      raw = wr.map(r => ({ x: r.k.x * sx, y: r.k.y * sy, t: r.t }));
+    // 2026-07-24 (Tim — "SmartMotion STILL following hands not clubhead... 20 times... false fixes").
+    // ROOT CAUSE: this used to fall back to the LEAD-WRIST path whenever the clubhead wasn't
+    // detected. The wrist path loops tightly around the torso — it looks like a broken clubhead
+    // trace, and no amount of tuning the wrist proxy ever made it "the clubhead". Per Tim's law
+    // ("trace it correctly or not at all"), the swing trace now draws ONLY through the REAL detected
+    // clubhead arc. No clubhead detection → NO trace (skeleton only). We never draw the hand path.
+    if (!(aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS)) {
+      return { pts: [], isClub: false };
     }
+    // clubArc points are full-frame normalized (0..1) → scale by frame dims (audit SM2).
+    const raw: ArcPoint[] = clubArc.map(p => ({ x: p.x * aligned.fw, y: p.y * aligned.fh, t: p.tMs }));
     // cleanArc guards non-finite (a NaN in the `d` string throws in native SVG → white screen),
     // rejects spikes, and averages the jitter.
-    return { pts: cleanArc(raw), isClub: !!(aligned && clubArc && clubArc.length >= MIN_CLUB_POINTS) };
-  }, [frames, aligned, clubArc]);
+    return { pts: cleanArc(raw), isClub: true };
+  }, [aligned, clubArc]);
 
   const traceSegments = useMemo(() => {
     const P = tracePts.pts;
