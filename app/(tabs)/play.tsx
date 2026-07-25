@@ -189,6 +189,21 @@ const LOCAL_COURSES: CourseSummary[] = [
     lat: 36.5090, lng: -86.8853,
   },
   {
+    // Gleneagles is scorecard-only; approx Plano coords for the card + proximity only.
+    id: 'local:gleneagles-kings',
+    club_name: "Gleneagles — King's",
+    location: 'Plano, TX',
+    rating: 74.7, slope: 143, isLocal: true, thumbnail: satelliteThumb(33.0280, -96.7550),
+    lat: 33.0280, lng: -96.7550,
+  },
+  {
+    id: 'local:gleneagles-queens',
+    club_name: "Gleneagles — Queen's",
+    location: 'Plano, TX',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(33.0280, -96.7550),
+    lat: 33.0280, lng: -96.7550,
+  },
+  {
     id: 'local:palms',
     club_name: 'Menifee Lakes — Palms',
     location: 'Menifee, CA',

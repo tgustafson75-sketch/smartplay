@@ -1582,6 +1582,51 @@ const LEGACY_HOLES: CourseHole[] = [
   { hole: 18, par: 5, distance: 550, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
 ];
 
+// 2026-07-25 (Bill Rhoda's home club) — Gleneagles CC, Plano TX (Invited). Two courses; NOT in OSM
+// (5 stray greens, no hole-ways) → SCORECARD-ONLY: real par + Black-tee yardages, coords 0/estimated,
+// F/M/B degrades to the scorecard until marked. GolfLink cards. Geometry = later OSM/marking pass.
+const GLENEAGLES_KINGS_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 417, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  2, par: 4, distance: 439, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  3, par: 4, distance: 383, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  4, par: 3, distance: 178, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  5, par: 5, distance: 579, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  6, par: 4, distance: 377, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  7, par: 3, distance: 200, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  8, par: 5, distance: 539, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  9, par: 4, distance: 377, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 5, distance: 484, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 218, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 5, distance: 496, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 329, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 4, distance: 462, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 163, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 5, distance: 532, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 3, distance: 197, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 436, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
+const GLENEAGLES_QUEENS_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 388, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  2, par: 3, distance: 186, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  3, par: 5, distance: 571, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  4, par: 3, distance: 193, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  5, par: 4, distance: 464, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  6, par: 4, distance: 467, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  7, par: 4, distance: 427, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  8, par: 5, distance: 490, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  9, par: 4, distance: 411, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 5, distance: 492, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 155, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 4, distance: 451, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 414, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 4, distance: 403, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 3, distance: 215, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 5, distance: 562, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 3, distance: 190, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 422, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'mines-gc',
@@ -1624,6 +1669,20 @@ export const COURSES: Course[] = [
     fullName: 'The Legacy — Springfield, TN',
     rating: '73.3', slope: '131', par: 72, totalYards: 6755,
     holes: LEGACY_HOLES,
+  },
+  {
+    id: 'gleneagles-kings',
+    name: 'Gleneagles Kings',
+    fullName: "Gleneagles Country Club — King's, Plano TX",
+    rating: '74.7', slope: '143', par: 72, totalYards: 6806,
+    holes: GLENEAGLES_KINGS_HOLES,
+  },
+  {
+    id: 'gleneagles-queens',
+    name: 'Gleneagles Queens',
+    fullName: "Gleneagles Country Club — Queen's, Plano TX",
+    rating: '', slope: '', par: 71, totalYards: 6901,
+    holes: GLENEAGLES_QUEENS_HOLES,
   },
   {
     id: 'redlands-cc',
