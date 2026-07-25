@@ -2798,9 +2798,12 @@ export default function CaddieTab() {
       {(() => {
         const caddiePrimary = trustLevel !== 1; // 1 = Quiet → SmartVision leads
         const zoneBottom = 150 + insets.bottom;
+        // 2026-07-25 (Tim — "need a buffer at the top; Kevin's jammed to the status bar") — larger top
+        // reserve (was +80) so the avatar starts BELOW the top nav with breathing room instead of the
+        // head touching the status bar.
         const zoneHeight = Math.min(
           Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
-          H - (insets.top + 80) - zoneBottom,
+          H - (insets.top + 120) - zoneBottom,
         );
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
@@ -3522,7 +3525,10 @@ export default function CaddieTab() {
           // makes the button visually invincible against anything it could
           // overlap (L2 cells zIndex 6, L3 SmartVision inlay zIndex 12,
           // dropdown row zIndex 15, bubble zIndex 6).
-          style={[styles.startRoundBtn, { bottom: 24 + insets.bottom }]}
+          // 2026-07-25 (Tim — "too much space around Start Round") — the global caddie bar + tab bar now
+          // own the bottom safe area, so the old `24 + insets.bottom` double-counted it and floated the
+          // button too high. Sit it just above the tab row.
+          style={[styles.startRoundBtn, { bottom: 22 }]}
           // Caddie's Start Round button now routes to the Play tab (Course
           // Discovery). After a course is picked there, the Selected Course
           // card's "Start Round" button navigates back here with
