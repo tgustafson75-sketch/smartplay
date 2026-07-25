@@ -2798,13 +2798,15 @@ export default function CaddieTab() {
       {(() => {
         const caddiePrimary = trustLevel !== 1; // 1 = Quiet → SmartVision leads
         const zoneBottom = 150 + insets.bottom;
-        // 2026-07-25 (Tim — "need a buffer at the top; Kevin's jammed to the status bar") — larger top
-        // reserve (was +80) so the avatar starts BELOW the top nav with breathing room instead of the
-        // head touching the status bar.
-        const zoneHeight = Math.min(
-          Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
-          H - (insets.top + 120) - zoneBottom,
-        );
+        // 2026-07-25 (Tim — top+bottom buffer, clean transition to ANY screen size incl. Fold-Z open):
+        // reserve a top buffer below the nav, then FILL the space down to the controls. On big screens
+        // (Fold-open/tablet) the old 2/3 ratio cap left a large black gap — now the primary view fills
+        // the available height between the top buffer and the bottom row; phones keep a portrait cap so
+        // the avatar isn't over-tall.
+        const availZone = H - (insets.top + 120) - zoneBottom;
+        const zoneHeight = W >= 540
+          ? availZone
+          : Math.min(Math.round(H * 2 / 3), availZone);
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
           setTrustLevel(caddiePrimary ? 1 : 3);
