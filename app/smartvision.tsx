@@ -773,13 +773,22 @@ export default function SmartVisionScreen() {
       };
       const resolved = resolveGreenCoords(holeIndex);
       const resolvedTee = resolveTeeCoords(holeIndex);
+      // 2026-07-25 (Tim — "new courses show a GREEN SCREEN; I NEVER want to see that again") — the
+      // OSM-built courses aren't in the golf-course API, so geo is null pre-round AND they have no
+      // curated photo, so the old `isRoundActive`-gated satellite fetch never fired → bare green canvas.
+      // Fall back to the BUNDLED hole coords (data/courses.ts carries real tee/green lat-lng) so we can
+      // frame + fetch the satellite tile even pre-round.
+      const bundledHole = courseHoles.find(x => x.hole === holeIndex);
+      const okCoord = (la?: number, ln?: number) => la != null && ln != null && la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
+      const bundledGreen = bundledHole && okCoord(bundledHole.middleLat, bundledHole.middleLng) ? { lat: bundledHole.middleLat, lng: bundledHole.middleLng } : null;
+      const bundledTee = bundledHole && okCoord(bundledHole.teeLat, bundledHole.teeLng) ? { lat: bundledHole.teeLat, lng: bundledHole.teeLng } : null;
       const effectiveGreen =
-        resolved.middle ?? geo?.green ?? polygonCentroid(geo?.green_polygon);
+        resolved.middle ?? geo?.green ?? polygonCentroid(geo?.green_polygon) ?? bundledGreen;
       const effectiveTee =
-        resolvedTee.tee ?? geo?.tee ?? polygonCentroid(geo?.tee_polygon);
-      // GPS tile only during an active round — satellite has no value pre-round
-      // and causes confusion when curated photos are the expected visual.
-      if (isRoundActive && imageryMode !== 'curated' && effectiveGreen && courseId) {
+        resolvedTee.tee ?? geo?.tee ?? polygonCentroid(geo?.tee_polygon) ?? bundledTee;
+      // Satellite tile in-round OR whenever there's no curated photo to show (the OSM courses) — never a
+      // green screen when we have coords. Curated-photo courses still keep the photo pre-round.
+      if ((isRoundActive || !curatedAvailable) && imageryMode !== 'curated' && effectiveGreen && courseId) {
         // Phase 401 — cap Mapbox request dims at 1280 (API limit) while
         // preserving the container's aspect ratio. Without this, a
         // Galaxy Fold unfolded container (1800×1660) requests
