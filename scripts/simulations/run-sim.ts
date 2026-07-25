@@ -5181,18 +5181,22 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Swing-replay crash: clubhead extraction never runs concurrent with video playback',
     // 2026-07-21 (Tim: crash after replaying an uploaded swing). ROOT CAUSE: a native
     // MediaMetadataRetriever (detectClubPath) decoding the file while ExoPlayer decodes it for
-    // playback → SIGSEGV to the launcher. Fix: extraction is gated OFF during playback and aborts
-    // between frames the instant play starts; grab-frame pauses first; all extraction routed
-    // through the single-flight queue.
+    // playback → SIGSEGV to the launcher / WHITE screen. Timing guards (gated off during playback,
+    // abort between frames, grab-frame pauses first) can't interrupt a native call already in flight,
+    // so 2026-07-24 added the STRUCTURAL fix: extract from a PRIVATE COPY of the clip so the retriever
+    // and ExoPlayer never share a file handle — the crash condition is impossible regardless of timing.
     /shouldAbort\?: \(\) => boolean/.test(read('services/swing/clubPath.ts')) &&
-      /if \(shouldAbort\?\.\(\)\) \{ await cleanup\(frames\); return null; \}/.test(read('services/swing/clubPath.ts')) &&
+      /if \(shouldAbort\?\.\(\)\) \{ await cleanup\(frames, tempCopy\); return null; \}/.test(read('services/swing/clubPath.ts')) &&
+      // STRUCTURAL decoupling: copy the clip, extract frames from the COPY (workUri), never videoUri.
+      /FileSystem\.copyAsync\(\{ from: videoUri, to: dest \}\)/.test(read('services/swing/clubPath.ts')) &&
+      /const f = await frameAt\(workUri, o\)/.test(read('services/swing/clubPath.ts')) &&
       /if \(isPlaying\) return;/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /shouldAbort: \(\) => cancelled \|\| isPlayingRef\.current/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       // grab-frame pauses before extracting; extraction routed through the queue wrapper
       /await videoRef\.current\?\.pauseAsync\(\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /from '\.\.\/\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /from '\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('components/swinglab/SwingStillComposite.tsx')),
-    'clubhead-arc frame extraction is gated off during playback + aborts between frames when play starts, grab-frame pauses first, and every retriever routes through the single-flight queue — closes the native SIGSEGV-on-replay');
+    'clubhead-arc frame extraction is gated off during playback + aborts between frames + extracts from a PRIVATE COPY (never the file ExoPlayer holds) — structurally closes the native SIGSEGV/white-screen on replay');
 
   check('Crash capture: render crashes + uncaught JS errors funnel into the Issue Log',
     // 2026-07-21 (Tim: "crashes still don't show up in the error log"). The ErrorBoundary must

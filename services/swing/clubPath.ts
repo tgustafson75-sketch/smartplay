@@ -102,10 +102,11 @@ async function downscaled(frame: Frame): Promise<string | null> {
   }
 }
 
-async function cleanup(frames: (Frame | null)[]): Promise<void> {
-  await Promise.all(
-    frames.map((f) => (f?.uri ? FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => undefined) : Promise.resolve())),
-  );
+async function cleanup(frames: (Frame | null)[], tempCopy?: string | null): Promise<void> {
+  await Promise.all([
+    ...frames.map((f) => (f?.uri ? FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => undefined) : Promise.resolve())),
+    tempCopy ? FileSystem.deleteAsync(tempCopy, { idempotent: true }).catch(() => undefined) : Promise.resolve(),
+  ]);
 }
 
 /**
@@ -137,6 +138,27 @@ export async function detectClubPath(args: {
     offsets.push(Math.round(startMs + ((endMs - startMs) * i) / (SAMPLE_COUNT - 1)));
   }
 
+  // 2026-07-24 (Tim — WHITE-SCREEN crash in the swing library AFTER analysis, ROOT CAUSE) — the
+  // frame-extraction retriever and ExoPlayer must never touch the SAME file. The isPlaying/
+  // shouldAbort guards can't interrupt a native frame grab already in flight, so a replay tapped
+  // mid-extraction still collided → native SIGSEGV. Because it's a NATIVE crash it bypasses the JS
+  // ErrorBoundary entirely — the user sees a blank WHITE screen, not our dark error card (that's the
+  // tell). Structural fix, independent of timing: extract from a PRIVATE COPY of the clip. The player
+  // keeps the original; the retriever only ever opens the copy → different file handles → the crash
+  // condition cannot occur. Best-effort — if the copy fails we fall back to the original (no worse
+  // than before), and the shouldAbort guards stay as a second layer.
+  let workUri = videoUri;
+  let tempCopy: string | null = null;
+  try {
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}clubpath-src-${Date.now()}.mp4`;
+      await FileSystem.copyAsync({ from: videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+    }
+  } catch { /* copy failed — keep the original uri */ }
+
   // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
   // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent
   // VideoThumbnails.getThumbnailAsync calls spins up 12 native Android MediaMetadataRetriever
@@ -149,8 +171,8 @@ export async function detectClubPath(args: {
     // 2026-07-21 — bail BETWEEN frames the moment playback (re)starts, so a retriever is never
     // decoding the file while ExoPlayer does. Clean up what we grabbed and abort — the arc is
     // best-effort (falls back to the wrist trace); a crash-to-launcher is not acceptable.
-    if (shouldAbort?.()) { await cleanup(frames); return null; }
-    const f = await frameAt(videoUri, o);
+    if (shouldAbort?.()) { await cleanup(frames, tempCopy); return null; }
+    const f = await frameAt(workUri, o);
     frames.push(f);
     b64s.push(f ? await downscaled(f) : null);
   }
@@ -160,7 +182,7 @@ export async function detectClubPath(args: {
     if (b) usable.push({ idx: i, base64: b, tMs: offsets[i] - offsets[0] });
   });
   if (usable.length < 4) {
-    await cleanup(frames);
+    await cleanup(frames, tempCopy);
     return null; // not enough frames to attempt an arc
   }
 
@@ -198,6 +220,6 @@ export async function detectClubPath(args: {
   } catch {
     return null;
   } finally {
-    await cleanup(frames);
+    await cleanup(frames, tempCopy);
   }
 }
