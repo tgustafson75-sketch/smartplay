@@ -20,10 +20,15 @@ import { CaddieBottomBar } from './caddie/CaddieBottomBar';
 
 export const CADDIE_BAR_ENABLED = true;
 
-// Boot / onboarding flows + the full-screen swing camera — no caddie bar there.
+// Boot / onboarding flows + full-bleed IMMERSIVE tool screens. The bar RESERVES height at the root,
+// which is right for normal scroll screens but would clip screens that lay themselves out to the full
+// window height and own their own dense bottom controls (SmartVision aerial F/M/B, SmartFinder/TightLie
+// camera, the mark-tee/green maps, the swing camera). Those own the bottom; the caddie tab is where the
+// unified input lives. 2026-07-24 (Tim — Fold Z: "many screens the bottom gets overlapped").
 const HIDE_PREFIXES = [
   '/intro-video', '/permissions', '/greeting', '/welcome', '/paywall',
   '/swinglab/smartmotion', '/swinglab/coach-lesson',
+  '/smartvision', '/smartfinder', '/lie-analysis', '/mark-tee', '/mark-green',
 ];
 
 export function GlobalCaddieBar() {
