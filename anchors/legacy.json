@@ -1,0 +1,12 @@
+{ "name":"The Legacy Springfield","query":"Springfield, Robertson County, Tennessee","greensPerLoop":18,
+  "holes":[
+    {"hole":1,"par":5,"center":522,"front":0,"back":0},{"hole":2,"par":4,"center":406,"front":0,"back":0},
+    {"hole":3,"par":3,"center":189,"front":0,"back":0},{"hole":4,"par":4,"center":364,"front":0,"back":0},
+    {"hole":5,"par":4,"center":436,"front":0,"back":0},{"hole":6,"par":3,"center":153,"front":0,"back":0},
+    {"hole":7,"par":5,"center":498,"front":0,"back":0},{"hole":8,"par":4,"center":404,"front":0,"back":0},
+    {"hole":9,"par":4,"center":405,"front":0,"back":0},{"hole":10,"par":4,"center":416,"front":0,"back":0},
+    {"hole":11,"par":4,"center":415,"front":0,"back":0},{"hole":12,"par":3,"center":188,"front":0,"back":0},
+    {"hole":13,"par":4,"center":394,"front":0,"back":0},{"hole":14,"par":5,"center":529,"front":0,"back":0},
+    {"hole":15,"par":4,"center":360,"front":0,"back":0},{"hole":16,"par":4,"center":359,"front":0,"back":0},
+    {"hole":17,"par":3,"center":167,"front":0,"back":0},{"hole":18,"par":5,"center":550,"front":0,"back":0}
+  ] }

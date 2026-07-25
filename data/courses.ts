@@ -1557,6 +1557,31 @@ const HERMITAGE_PR_HOLES: CourseHole[] = [
     note: '', estimated: false },
 ];
 
+// 2026-07-25 — The Legacy, Springfield TN (jcsmith233's HOME course; Raymond Floyd design). NOT in
+// OSM (unmapped on the town outskirts), so SCORECARD-ONLY: real par 72 + Floyd-tee yardages, coords
+// 0/estimated → F/M/B degrades to the scorecard distance until jcsmith marks tees/greens on-course
+// (same honest-degrade as custom courses). Geometry = a later OSM/satellite or on-course-marking pass.
+const LEGACY_HOLES: CourseHole[] = [
+  { hole:  1, par: 5, distance: 522, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  2, par: 4, distance: 406, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  3, par: 3, distance: 189, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  4, par: 4, distance: 364, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  5, par: 4, distance: 436, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  6, par: 3, distance: 153, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  7, par: 5, distance: 498, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  8, par: 4, distance: 404, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  9, par: 4, distance: 405, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 416, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 4, distance: 415, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 3, distance: 188, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 4, distance: 394, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 5, distance: 529, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 4, distance: 360, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 4, distance: 359, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 3, distance: 167, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 5, distance: 550, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'mines-gc',
@@ -1592,6 +1617,13 @@ export const COURSES: Course[] = [
     fullName: "Hermitage Golf Course — President's Reserve, Old Hickory TN",
     rating: '74.2', slope: '134', par: 72, totalYards: 7157,
     holes: HERMITAGE_PR_HOLES,
+  },
+  {
+    id: 'legacy-springfield',
+    name: 'Legacy',
+    fullName: 'The Legacy — Springfield, TN',
+    rating: '73.3', slope: '131', par: 72, totalYards: 6755,
+    holes: LEGACY_HOLES,
   },
   {
     id: 'redlands-cc',
