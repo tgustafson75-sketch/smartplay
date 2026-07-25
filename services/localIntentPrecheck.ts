@@ -238,6 +238,15 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     return intent(t, 'media_capture', { capture_type: 'swing', raw_utterance: t });
   }
 
+  // 2026-07-25 (Tim — the app's whole point: "ask the caddie to find/pull up ANY of my data"). Checked
+  // BEFORE the course-open below so "pull up my round at Mines" finds the ROUND record (not just opens
+  // the Mines course). Fires only when the ask names a data noun (round/scorecard/recap/swing) — a bare
+  // "pull up Highland Links" has none, so it falls through to the course-open path. → findMyDataHandler.
+  {
+    const dm = t.match(/\b(?:pull up|bring up|find|show|open|get|see|look up)\s+(?:me\s+)?(?:my\s+)?(.*\b(?:round|rounds|scorecard|score\s*card|recap|swing|swings)\b.*)/i);
+    if (dm) return intent(t, 'find_my_data', { query: dm[1].trim(), raw_utterance: t });
+  }
+
   // 2026-07-23 (Tim — "tell the Caddie what course and where and the caddie pulls it up in the play
   // tab"). Deterministic, OFFLINE-first course open. We only CLAIM the intent when the spoken name
   // actually RESOLVES to a known bundled course — otherwise we fall through to the brain, so this can

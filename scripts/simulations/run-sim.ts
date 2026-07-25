@@ -5202,6 +5202,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /from '\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('components/swinglab/SwingStillComposite.tsx')),
     'clubhead-arc frame extraction is gated off during playback + aborts between frames + extracts from a PRIVATE COPY (never the file ExoPlayer holds) — structurally closes the native SIGSEGV/white-screen on replay');
 
+  check('Universal ask: caddie finds/opens the user\'s OWN data (rounds + swings)',
+    // 2026-07-25 (Tim — the whole point of the app: "ask the caddie to find ANY of my data"). The
+    // precheck routes "pull up my last scorecard / find my round at Mines / show my driver swings" to
+    // find_my_data BEFORE course-open (so it finds the ROUND, not just the course); universalFind ranks
+    // the user's rounds + swings and the handler opens the best match. Local-first, offline.
+    /export function universalFind/.test(read('services/universalFind.ts')) &&
+      /roundHistory/.test(read('services/universalFind.ts')) &&
+      /sessionHistory/.test(read('services/universalFind.ts')) &&
+      /intent_type: 'find_my_data'/.test(read('services/intents/findMyDataHandler.ts')) &&
+      /universalFind\(/.test(read('services/intents/findMyDataHandler.ts')) &&
+      /registerHandler\(findMyDataHandler\)/.test(read('services/intents/index.ts')) &&
+      /'find_my_data'/.test(read('services/localIntentPrecheck.ts')),
+    'the caddie retrieves + opens the user\'s own rounds/swings from a natural "pull up my …" ask, routed locally before course-open');
+
   check('Crash capture: render crashes + uncaught JS errors funnel into the Issue Log',
     // 2026-07-21 (Tim: "crashes still don't show up in the error log"). The ErrorBoundary must
     // log a caught render crash, and a global ErrorUtils handler must catch async/handler errors
