@@ -294,7 +294,7 @@ export type LocalCourseSlug =
   | 'redlands-cc'
   // 2026-07-24 — tester home courses (OSM-built, no bundled imagery → live Mapbox). Centroids
   // registered below so GPS auto-arrival works for jcsmith233's rotation etc.
-  | 'mines-gc' | 'dale-hollow' | 'old-fort' | 'nashboro';
+  | 'mines-gc' | 'dale-hollow' | 'old-fort' | 'nashboro' | 'hermitage-pr';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -514,6 +514,7 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   'dale-hollow':       { lat: 36.6624323, lng: -85.2906308 },
   'old-fort':          { lat: 35.8523026, lng: -86.4181595 },
   'nashboro':          { lat: 36.0888711, lng: -86.6363585 },
+  'hermitage-pr':      { lat: 36.2298354, lng: -86.6409463 },
   'highland-links':   { lat: 42.0366308, lng: -70.0589550 },
   'miccosukee':       { lat: 25.7113237, lng: -80.4219701 },
   'killian-greens':   { lat: 25.6747540, lng: -80.3600897 },

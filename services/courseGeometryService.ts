@@ -13,6 +13,7 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'dale-hollow': 18,
   'old-fort': 18,
   'nashboro': 18,
+  'hermitage-pr': 18,
   'palms': 18,
   'lakes': 18,
   'rancho-california': 18,
