@@ -76,6 +76,7 @@ import { SCREEN_HELP, detectHelpRequest as detectScreenHelp } from '../../servic
 import { detectPlainSpeakRequest } from '../../services/plainSpeak';
 import { GOLF_KNOWLEDGE } from '../../services/knowledgeBase/modules';
 import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
+import { assessDiagnosticEvidence, evidenceGateQuestion } from '../../services/intents/inRoundDiagnosticHandler';
 
 interface ScenarioResult {
   scenario: string;
@@ -127,6 +128,29 @@ console.log('\n=== Scenario 0: KB integrity ===');
   const present = anchors.filter((id) => GOLF_KNOWLEDGE.some((e) => e.id === id));
   check('KB: decision-engine reasoning folded into central modules',
     present.length === anchors.length, present.length === anchors.length ? `all ${anchors.length} anchor entries present` : `MISSING: ${anchors.filter((a) => !present.includes(a)).join(', ')}`);
+}
+
+// ─── Scenario 0b: evidence-order diagnostic gate (Tank doctrine) ───────────────
+// A vague "why did that happen" must ask the ONE most-useful question (ball flight / low
+// point) OFFLINE before guessing at mechanics; a shot already described with real evidence
+// must pass straight through to the brain (null = no gate question).
+console.log('\n=== Scenario 0b: evidence-order diagnostic gate ===');
+{
+  const vague = evidenceGateQuestion(assessDiagnosticEvidence('why did that happen'));
+  check('Diagnostic gate: vague "why" asks the ball-flight question',
+    typeof vague === 'string' && /which way|start left or right|curve/i.test(vague), vague ?? 'null (should have asked)');
+
+  const chunk = evidenceGateQuestion(assessDiagnosticEvidence("why'd I chunk that"));
+  check('Diagnostic gate: a named mishit asks the low-point / grass question',
+    typeof chunk === 'string' && /grass|before the ball|lie/i.test(chunk), chunk ?? 'null (should have asked)');
+
+  const rich = evidenceGateQuestion(assessDiagnosticEvidence('driver started right and kept slicing off the tee'));
+  check('Diagnostic gate: a shot with flight + lie passes through to the brain',
+    rich === null, rich === null ? 'passed through' : `unexpectedly gated: ${rich}`);
+
+  const richStrike = evidenceGateQuestion(assessDiagnosticEvidence('pulled it left and caught it thin'));
+  check('Diagnostic gate: flight + strike passes through to the brain',
+    richStrike === null, richStrike === null ? 'passed through' : `unexpectedly gated: ${richStrike}`);
 }
 
 // ─── Scenario 1: persona resolution returns the right name for each input shape ─
