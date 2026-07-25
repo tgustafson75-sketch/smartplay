@@ -101,6 +101,7 @@ import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStor
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
 import {
   SmartMotionHeader,
@@ -879,7 +880,9 @@ export default function SmartMotion() {
                   if (!framingSpokeRef.current) {
                     framingSpokeRef.current = true;
                     const s = useSettingsStore.getState();
-                    if (s.voiceEnabled) {
+                    // 2026-07-24 (Tim — Quiet stays calm) — this "you're framed up" cue is an UNPROMPTED
+                    // auto-prompt; only volunteer it in Active (trustLevel 3). Quiet (1) stays silent.
+                    if (s.voiceEnabled && useTrustLevelStore.getState().level !== 1) {
                       void (async () => {
                         try {
                           await configureAudioForSpeech();
