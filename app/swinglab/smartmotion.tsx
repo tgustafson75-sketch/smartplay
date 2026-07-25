@@ -3642,7 +3642,7 @@ export default function SmartMotion() {
             result. Mirrors the right rail so the metrics flank the video and the
             centre stays clear (Tim). Honest "—" until measured. Hide-toggle gated. */}
         {isReview && showResults && !isPutt ? (
-          <View style={[styles.leftRail, { top: insets.top + 60 }]} pointerEvents="none">
+          <View style={[styles.leftRail, { top: insets.top + 60, width: isNarrow ? 100 : 124 }]} pointerEvents="none">
             {leftMetrics.map((m) => (
               <View key={m.key} style={styles.metricBadgeCard}>
                 <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
@@ -3963,7 +3963,7 @@ export default function SmartMotion() {
 
         {/* RIGHT RAIL — floating metric cards (review) */}
         {isReview && showResults && !isPutt ? (
-          <View style={[styles.rightRail, { top: insets.top + 60 }]} pointerEvents="none">
+          <View style={[styles.rightRail, { top: insets.top + 60, width: isNarrow ? 100 : 124 }]} pointerEvents="none">
             {rightMetrics.map((m) => (
               <View key={m.key} style={styles.metricBadgeCard}>
                 <Image source={m.img} style={styles.metricBadgeImg} resizeMode="contain" />
@@ -4076,18 +4076,22 @@ export default function SmartMotion() {
                   honest verdict + the number it's based on. This is the primary, always-honest read
                   (thresholds on real kinematics); the vision read below adds contact/clubface. */}
               {poseRead.usable ? (
-                <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, gap: 8 }]}>
-                  <Text style={[styles.insightLabel, { color: colors.text_muted }]}>SWING BREAKDOWN</Text>
+                // 2026-07-25 (Tim — "analysis blocks most of the video") — the SWING BREAKDOWN was a
+                // SOLID card; with 6 dimensions it grew tall and covered the bottom of the clip. Made it
+                // a DARK TRANSLUCENT card with light text (matching the metric rails + the redesign's
+                // "camera shows through") so the read overlays the video instead of hiding it.
+                <View style={[styles.insightCard, { backgroundColor: 'rgba(6,15,9,0.78)', borderColor: 'rgba(124,224,79,0.28)', gap: 8 }]}>
+                  <Text style={[styles.insightLabel, { color: 'rgba(255,255,255,0.55)' }]}>SWING BREAKDOWN</Text>
                   {poseRead.dimensions.map((d) => {
                     const vc = d.verdict === 'strength' ? '#88F700' : d.verdict === 'solid' ? '#7ED3A3' : d.verdict === 'watch' ? '#f59e0b' : '#ef4444';
                     return (
                       <View key={d.key} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: vc, marginTop: 5 }} />
                         <View style={{ flex: 1 }}>
-                          <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '800' }}>
+                          <Text style={{ color: '#F1F5F9', fontSize: 13, fontWeight: '800' }}>
                             {d.label}{d.display ? `  ${d.display}` : ''}
                           </Text>
-                          <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 16 }}>{d.note}</Text>
+                          <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, lineHeight: 16 }}>{d.note}</Text>
                         </View>
                       </View>
                     );
