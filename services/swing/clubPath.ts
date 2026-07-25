@@ -132,10 +132,22 @@ export async function detectClubPath(args: {
   if (startMs == null || endMs == null || !(endMs > startMs)) return null;
   if (shouldAbort?.()) return null; // don't even start if already playing
 
-  // Sample evenly across the swing window.
+  // 2026-07-25 (Tim's hypothesis — "offset passes to get the in-between frames near impact for better
+  // analysis"). Done as ONE adaptive-density pass (same benefit, no extra native retriever passes that
+  // risk the SIGSEGV/battery cost): cluster the samples in the DOWNSWING→IMPACT→early-follow-through band
+  // (~0.45–1.0 of the swing) where the clubhead moves fastest and the arc is most informative; sparse
+  // through the slow address/backswing. A few early samples still anchor the arc's start. The ceiling is
+  // the source frame rate — past that, closer offsets return the same decoded frame (device-tune later).
   const offsets: number[] = [];
-  for (let i = 0; i < SAMPLE_COUNT; i++) {
-    offsets.push(Math.round(startMs + ((endMs - startMs) * i) / (SAMPLE_COUNT - 1)));
+  const span = endMs - startMs;
+  const BAND = 0.45; // address/backswing gets the first 45% of the timeline but only ~30% of the samples
+  const early = Math.max(2, Math.round(SAMPLE_COUNT * 0.3));
+  const late = SAMPLE_COUNT - early;
+  for (let i = 0; i < early; i++) {
+    offsets.push(Math.round(startMs + span * ((i / early) * BAND)));
+  }
+  for (let i = 0; i < late; i++) {
+    offsets.push(Math.round(startMs + span * (BAND + ((1 - BAND) * i) / (late - 1))));
   }
 
   // 2026-07-24 (Tim — WHITE-SCREEN crash in the swing library AFTER analysis, ROOT CAUSE) — the

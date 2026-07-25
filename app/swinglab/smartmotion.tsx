@@ -848,6 +848,11 @@ export default function SmartMotion() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tick = async () => {
       if (cancelled) return;
+      // 2026-07-25 (Tim — battery) — adaptive cadence. Fast (~900ms) while the golfer is getting into
+      // frame; once FRAMED (set up, standing still waiting to swing) slow to ~2.6s. Cuts the
+      // takePictureAsync + on-device pose rate ~3× during the idle stretch before the swing, with no
+      // functional loss (framing is already achieved). Impact detection is acoustic, not this loop.
+      let nextDelay = 900;
       try {
         // Don't grab a still while a club scan is running OR while a recording is
         // starting/active/stopping — a takePictureAsync overlapping recordAsync can
@@ -867,6 +872,7 @@ export default function SmartMotion() {
               const res = evaluateFraming(frame.keypoints as { name: string; x: number; y: number; score: number }[]);
               if (!cancelled) {
                 setFraming(res);
+                nextDelay = res.status === 'framed' ? 2600 : 900; // throttle once set up + stable
                 if (res.status === 'framed' && res.feetCenter) {
                   // Auto-anchor the box below the feet ONCE, only while it's still the
                   // default (never override a placement the user dragged).
@@ -899,7 +905,7 @@ export default function SmartMotion() {
           }
         }
       } catch { /* non-fatal — just retry next tick */ }
-      if (!cancelled) timer = setTimeout(() => void tick(), 900);
+      if (!cancelled) timer = setTimeout(() => void tick(), nextDelay);
     };
     timer = setTimeout(() => void tick(), 700); // let the camera settle first
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
