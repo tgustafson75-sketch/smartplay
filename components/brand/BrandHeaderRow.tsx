@@ -15,11 +15,12 @@
  * lock-step by sharing the same constants below.
  */
 
-import React from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
+import { useBrandRevealStore } from '../../store/brandRevealStore';
 // 2026-05-21 — Fix A: BrandHeaderRow's badge logic moved to the shared
 // CaddieMicBadge component so every tap-to-talk surface (this row +
 // SmartMotion + Cage Mode) uses the same ring / halo / mic-icon
@@ -94,10 +95,31 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
   const wmFont = compact ? 15 : 18;
   const wmSpacing = compact ? 1.2 : 2.5;
 
+  // 2026-07-24 (Tim) — the wordmark is a first-load flourish, not permanent chrome. Show
+  // SMARTPLAY CADDIE on the first app load, then fade it out ~2.6s later so every header
+  // settles to just the logo badge (cleaner, less repetitive). Session-scoped + shared, so
+  // it happens once app-wide; navigating to a new screen after the fade shows logo-only
+  // instantly. The badge itself never fades — the logo always anchors the top-left.
+  const nameVisible = useBrandRevealStore((s) => s.nameVisible);
+  const hideName = useBrandRevealStore((s) => s.hide);
+  const nameOpacity = useRef(new Animated.Value(nameVisible ? 1 : 0)).current;
+  useEffect(() => {
+    if (!nameVisible) return;
+    const t = setTimeout(() => hideName(), 2600);
+    return () => clearTimeout(t);
+  }, [nameVisible, hideName]);
+  useEffect(() => {
+    Animated.timing(nameOpacity, {
+      toValue: nameVisible ? 1 : 0,
+      duration: 550,
+      useNativeDriver: true,
+    }).start();
+  }, [nameVisible, nameOpacity]);
+
   return (
     <View style={styles.wrap}>
       <CaddieMicBadge size={BRAND_BADGE_SIZE} onPress={onLogoPress ?? undefined} hideMicIcon={hideLogoMicIcon} />
-      <View style={styles.titleBlock}>
+      <Animated.View style={[styles.titleBlock, { opacity: nameOpacity }]} pointerEvents="none">
         {/* 2026-06-23 (Tim — wordmark cut off on small screens) — ONE
             auto-shrinking line so "SMARTPLAY CADDIE" always fits the available
             width (badge + tools pill take the rest) instead of clipping "CADDIE".
@@ -111,7 +133,7 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
         <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {tagline}
         </Text>
-      </View>
+      </Animated.View>
       {/* ••• Tools pill — same control on every tab so mode cycler +
           persona cycler + Settings link are always one tap away. Opens
           the GlobalToolsMenu mounted at app/_layout.tsx root. Hidden

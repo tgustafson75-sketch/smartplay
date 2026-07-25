@@ -392,10 +392,14 @@ export default function CaddieTab() {
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
   const setYardageMode = useSettingsStore(s => s.setYardageMode);
-  // 2026-06-04 — Cockpit is now Trust Level 1 (Quiet). The 2026-06-04
-  // collapse merged the prior L5 Cockpit + Harry binding into L1 and
-  // removed L4 / L5. The early-return below uses trustLevel === 1.
-  const cockpitMode = trustLevel === 1;
+  // 2026-07-24 (Tim — "remove harry for now; keep caddie consistent between
+  // Kevin and Serena and Tank" + "simplify into essentially one version").
+  // The branded Cockpit (L1) carried the Harry persona binding and was a
+  // WHOLE separate layout — that layout-switching is what made the screen
+  // "smash around". Collapsed to ONE layout: cockpit never renders; the
+  // Active layout below is the single caddie layout for every trust level.
+  // (The SmartVision↔caddie dominance toggle rides on top of this one layout.)
+  const cockpitMode = false;
   // markTick increments on every position-mark event AND every 4s tick
   // during an active round so liveYardage recomputes both on push (Mark
   // fires) and pull (organic GPS movement during walking). Phase BG —
@@ -2681,7 +2685,9 @@ export default function CaddieTab() {
            render the same CaddieAvatar with position/size adjustments. L1
            skips the avatar entirely; the L1 mic-button overlay below
            takes its place. */}
-      {trustLevel === 2 && (() => {
+      {/* 2026-07-24 (Tim) — Companion split DISABLED. Collapsed to the single
+          Active layout below so the screen no longer smashes between layouts. */}
+      {false && (() => {
         // L2 Companion split. Fold-open (wide) → side-by-side. Fold-closed
         // (narrow) → stacked vertically, both full width. Wind arrow allowed
         // to overlay freely; its zIndex (11) sits above these cells (6).
@@ -2785,7 +2791,9 @@ export default function CaddieTab() {
           </>
         );
       })()}
-      {trustLevel === 3 && (
+      {/* 2026-07-24 (Tim) — THE one caddie layout, rendered for every trust
+          level now (was L3-only). Cockpit + Companion removed above. */}
+      {true && (
         // L3 Active — Kevin takes 2/3 of screen height (80% of that on
         // Fold-open / wide screens, per Tim). Anchored from the bottom so
         // his lower edge sits just above the dropdown row.

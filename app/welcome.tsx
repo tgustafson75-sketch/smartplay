@@ -48,7 +48,6 @@ const CADDIES: CaddiePick[] = [
   { id: 'kevin',  name: 'Kevin',  blurb: 'Warm, balanced, decisive',                 accent: '#00C896' },
   { id: 'tank',   name: 'Tank',   blurb: 'Marine cadence, intense, demanding',       accent: '#ef4444' },
   { id: 'serena', name: 'Serena', blurb: 'Precise instructor, confident, energetic', accent: '#a855f7' },
-  { id: 'harry',  name: 'Harry',  blurb: 'Army medic, measured wisdom, partnership', accent: '#3b82f6' },
 ];
 
 export default function WelcomeScreen() {

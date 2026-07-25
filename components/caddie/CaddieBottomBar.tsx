@@ -136,16 +136,24 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
+    // 2026-07-24 (Tim — "not sure the new bar at the bottom is visible enough"). Give it a
+    // neon-tinted border + soft green glow so it reads as THE branded caddie surface, not a
+    // muted input strip. Taller pad + darker fill lift it off the page behind it.
     bar: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      paddingHorizontal: 8,
-      paddingVertical: 7,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
       borderRadius: 26,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: '#0d1a0d',
+      borderWidth: 1.5,
+      borderColor: 'rgba(136,247,0,0.6)',
+      shadowColor: NEON,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.35,
+      shadowRadius: 9,
+      elevation: 7,
     },
     chevron: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     // The caddie mark IS the button (the neon speaking-caddie), sized to its wide aspect. A soft neon

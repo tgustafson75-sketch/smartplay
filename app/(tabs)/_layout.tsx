@@ -48,13 +48,19 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 
+  // 2026-07-24 (Tim — "tab bar is too big"). Icon-only row (labels hidden), so it
+  // doesn't need 60pt. Shrunk to 48. Also: the anchored caddie bar now sits BELOW the
+  // tab bar and owns the home-indicator safe area, so the tab bar no longer adds
+  // insets.bottom — that stranded inset was opening a phantom gap inside the tab bar
+  // ("doesn't lay out right"). A small constant bottom pad keeps it breathing if the
+  // caddie bar is ever disabled via its kill switch.
   const sharedTabBarStyle = {
     backgroundColor: '#0d1a0d',
     borderTopColor: '#1e3a28',
     borderTopWidth: 1,
-    height: 60 + insets.bottom,
-    paddingBottom: insets.bottom + 6,
-    paddingTop: 6,
+    height: 48,
+    paddingBottom: 6,
+    paddingTop: 4,
   };
 
   return (

@@ -51,7 +51,6 @@ const CARDS: Card[] = [
       { name: 'Kevin — The Steady Hand',        body: 'Warm, knowledgeable, balanced. Your default caddie on the course.' },
       { name: 'Serena — The Composed Professional', body: 'Confident, supportive, precise. Good for technical drill work.' },
       { name: 'Tank — The Intense Coach',       body: 'Marine vet intensity. Direct, motivating. Cage practice specialist.' },
-      { name: 'Harry — The Wise Counsel',       body: 'Decades of golf wisdom. Calm authority. Course play alternative.' },
     ],
     footer:
       'Pick your caddie team in Settings → Caddie Team. Defaults work fine to start. Change anytime.',
