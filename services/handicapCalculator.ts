@@ -299,9 +299,18 @@ export function computeWhsPostingScore(input: {
 }): { adjustedGrossScore: number; postedHoles: 9 | 18; playedHoles: number } | null {
   const { intendedHoles, courseHandicap, pars, scores, strokeIndexByHole } = input;
   const POST_MIN = intendedHoles === 9 ? 7 : 14;
+  // 2026-07-25 (deep audit) — a 9-hole round can be the BACK nine (holes 10–18). The loop assumed
+  // 1..intendedHoles, so a back-nine round saw scores[1..9] all empty → played=0 → never posted to the
+  // Index. Detect which nine was actually played from where the scores are, and iterate that range.
+  let firstHole = 1;
+  let lastHole = intendedHoles;
+  if (intendedHoles === 9) {
+    const scored = Object.keys(scores).map(Number).filter((h) => (scores[h] ?? 0) > 0);
+    if (scored.length > 0 && scored.every((h) => h >= 10)) { firstHole = 10; lastHole = 18; }
+  }
   let played = 0;
   let ags = 0;
-  for (let hole = 1; hole <= intendedHoles; hole++) {
+  for (let hole = firstHole; hole <= lastHole; hole++) {
     const par = pars[hole];
     if (par == null || par <= 0) return null; // can't cap without a known par
     const strokeIdx = strokeIndexByHole?.[hole] ?? hole;

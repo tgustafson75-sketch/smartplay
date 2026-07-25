@@ -22,6 +22,10 @@ const INTENT_TYPE_ENUM = [
   'putt_watch', 'ask_golf_father', 'quick_round', 'open_external',
   'state_yardage', 'refresh_gps', 'coach_refine', 'position_declaration',
   'confirm_position', 'end_round', 'social_greeting', 'conversational', 'unknown',
+  // 2026-07-25 (deep audit) — these three had handlers + precheck regex but were MISSING from the
+  // classifier enum, so any phrasing the narrow regex missed fell to conversational (the caddie
+  // chatted instead of acting). Now the cloud classifier can emit them too.
+  'undo', 'find_my_data', 'open_course',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -198,6 +202,26 @@ Available intents:
    - "save my interpretation" / "save my take" / "remember my take" -> { intent_type: "coach_refine" }
    - "add my version" / "save this for the brain" -> { intent_type: "coach_refine" }
    IMPORTANT: only matches when these phrases stand alone right after a caddie reply. NOT for "remember I'm 142" (that's state_yardage) or "save this issue" (that's log_issue). Handler gates on coach authorization; non-coach users get a polite "coach tool" reply, no harm.
+
+3.35 undo — User wants to REVERT their last logged score / putts / shot. Reserve for EXPLICIT undo verbs — NOT the dismissal "never mind" (that's just ending the exchange, leave it conversational).
+   parameters: {}
+   Examples:
+   - "undo that" / "undo my last score" -> { intent_type: "undo", parameters: {} }
+   - "scratch that" / "take that back" / "delete that shot" / "delete the last one" -> { intent_type: "undo", parameters: {} }
+   - "reverse that" / "cancel that hole" / "that was wrong, remove it" -> { intent_type: "undo", parameters: {} }
+
+3.36 find_my_data — User wants to PULL UP one of their OWN saved records (a past round, scorecard, recap, or a swing). The parameter is a free-text query the handler searches over round history + swing sessions. Distinct from open_course (that opens a course to PLAY).
+   parameters: { query: "<verbatim data ask>" }
+   Examples:
+   - "pull up my last scorecard" / "show me my last round" -> { intent_type: "find_my_data", parameters: { query: "last scorecard" } }
+   - "find my round at Mines" / "where's my Mines round" -> { intent_type: "find_my_data", parameters: { query: "round at Mines" } }
+   - "show me my driver swings" / "pull up my last swing" -> { intent_type: "find_my_data", parameters: { query: "driver swings" } }
+
+3.37 open_course — User wants to OPEN a specific golf course (to view/plan/play it), naming the course. Distinct from quick_round (which also names players) and find_my_data (past records). If they only say "start a round" with NO course, that's open_tool { tool_name: "play" }.
+   parameters: { course_label: "<spoken course name>" }
+   Examples:
+   - "pull up Highland Links" / "open Pebble Beach" -> { intent_type: "open_course", parameters: { course_label: "Highland Links" } }
+   - "take me to Mines" / "let's play Dale Hollow" -> { intent_type: "open_course", parameters: { course_label: "Dale Hollow" } }
 
 3.4 refresh_gps — User wants the caddie to force-refresh the GPS subscription (drop + restart the location watch). Use when the player says GPS is wrong, stale, or they want a fresh fix.
    parameters: {}
