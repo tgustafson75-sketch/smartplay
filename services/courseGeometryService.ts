@@ -9,6 +9,10 @@ import { getApiBaseUrl } from './apiBase';
 // the server emits 9 real + practice green ghost holes). Defaults to
 // 18 when the slug isn't known.
 const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
+  'mines-gc': 18,
+  'dale-hollow': 18,
+  'old-fort': 18,
+  'nashboro': 18,
   'palms': 18,
   'lakes': 18,
   'rancho-california': 18,

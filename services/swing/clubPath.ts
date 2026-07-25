@@ -57,7 +57,7 @@ const MIN_ARC_POINTS = 4;
  * the detections form a plausible clubhead SWEEP before returning them. A real swing arc spans a
  * meaningful fraction of the frame; a cluster is a mis-detection (the ball, the grip, or a
  * background object read as the head — the "off" club at address). If it doesn't look like a
- * sweep, the caller keeps the honest hand/tempo trace instead of drawing a wrong club.
+ * sweep, the caller draws NO trace instead of a wrong club (clubhead-or-nothing; the wrist fallback was removed).
  */
 function looksLikeClubArc(pts: ClubPathPoint[]): boolean {
   if (pts.length < MIN_ARC_POINTS) return false;
@@ -114,7 +114,7 @@ async function cleanup(frames: (Frame | null)[], tempCopy?: string | null): Prom
  * MEASURED positions (full-frame normalized) for the frames the head was actually seen
  * in, or null when we can't run it honestly (no server / bad window / extraction or
  * network failure). An empty `points` array is a valid honest result meaning "ran, but
- * never clearly saw the head" — the caller keeps the honest hand/tempo trace.
+ * never clearly saw the head" — the caller draws NO trace (clubhead-or-nothing).
  */
 export async function detectClubPath(args: {
   videoUri: string;
@@ -170,7 +170,7 @@ export async function detectClubPath(args: {
   for (const o of offsets) {
     // 2026-07-21 — bail BETWEEN frames the moment playback (re)starts, so a retriever is never
     // decoding the file while ExoPlayer does. Clean up what we grabbed and abort — the arc is
-    // best-effort (falls back to the wrist trace); a crash-to-launcher is not acceptable.
+    // best-effort (no trace drawn if we bail); a crash-to-launcher is not acceptable.
     if (shouldAbort?.()) { await cleanup(frames, tempCopy); return null; }
     const f = await frameAt(workUri, o);
     frames.push(f);
@@ -212,7 +212,7 @@ export async function detectClubPath(args: {
       i === 0 || Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) > 0.004);
     // Only surface the detections as a club arc if they actually form a plausible sweep; a
     // clustered/degenerate set is a mis-detection → return empty so the renderer keeps the
-    // honest hand/tempo trace rather than drawing a wrong "club" (Tim: trace it correctly).
+    // NO trace rather than a wrong "club" (Tim: trace it correctly or not at all).
     if (!looksLikeClubArc(deduped)) {
       return { points: [], framesSampled: usable.length, frameW, frameH };
     }

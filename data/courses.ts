@@ -1473,7 +1473,7 @@ const NASHBORO_HOLES: CourseHole[] = [
     teeLat: 36.0873705, teeLng: -86.6369579, middleLat: 36.0880462, middleLng: -86.6421425,
     frontLat: 36.0880431, frontLng: -86.6419836, backLat: 36.0880360, backLng: -86.6423048,
     note: '', estimated: false },
-  { hole: 18, par: 4, distance: 365, front: 333, back: 359,
+  { hole: 18, par: 4, distance: 365, front: 352, back: 378,
     teeLat: 36.0925266, teeLng: -86.6447040, middleLat: 36.0899481, middleLng: -86.6432498,
     frontLat: 36.0900290, frontLng: -86.6433103, backLat: 36.0898342, backLng: -86.6432055,
     note: '', estimated: false },
