@@ -72,13 +72,20 @@ export function getCaddieContext(input: {
       const cm = p.courses[input.courseId];
       const hole = input.hole ?? null;
       const hm = hole != null ? cm.holes[hole] ?? null : null;
+      // 2026-07-25 (deep audit — S1 honesty) — the learned-from-play fields (typical tee club, best
+      // line, green behavior) were surfaced from n=1: "you usually tee X here" got asserted after a
+      // SINGLE round because typicalTeeClub is written on the first recordRoundEnd. The sibling
+      // getCourseHoleGuidance gates the identical claim behind MIN_HOLE_PLAYS_FOR_GUIDANCE (2) —
+      // "one round isn't a pattern" — but this promptBlock (sent to the brain) skipped it. Gate the
+      // same way; par + rounds-played are factual counts and stay.
+      const patternReady = hm != null && hm.played >= MIN_HOLE_PLAYS_FOR_GUIDANCE;
       course = {
         name: cm.name,
         hole,
         par: hm?.par ?? null,
-        bestLine: hm?.bestLine ?? null,
-        greenBehavior: hm?.greenBehavior ?? null,
-        typicalClub: hm?.typicalTeeClub ?? null,
+        bestLine: patternReady ? (hm?.bestLine ?? null) : null,
+        greenBehavior: patternReady ? (hm?.greenBehavior ?? null) : null,
+        typicalClub: patternReady ? (hm?.typicalTeeClub ?? null) : null,
         roundsPlayed: cm.rounds_played,
       };
     }

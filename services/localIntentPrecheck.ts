@@ -244,9 +244,13 @@ const PATTERNS: Pattern[] = [
   },
 
   // ── UNDO + HOLE NAV + BARE START (2026-07-25 coverage-audit command gaps) ──
-  // "undo / scratch that / never mind / delete that shot" → revert the last score/putt/shot.
+  // "undo / scratch that / delete that shot" → revert the last score/putt/shot.
+  // 2026-07-25 (deep audit — S1) — REMOVED "never mind": it's the common phrase to DISMISS the
+  // caddie, and matching it here silently reverted the last logged score/putt/shot (a destructive
+  // mutation) on a hands-free path where the user may never hear the "reverted" line. Undo now
+  // requires an explicit undo verb; "never mind" falls through to the brain as a plain dismissal.
   {
-    rx: /\b(undo(?:\s+that)?|scratch\s+that|never\s*mind|delete\s+(?:that|the\s+last)(?:\s+(?:shot|score|putt))?|take\s+that\s+back|nix\s+that)\b/i,
+    rx: /\b(undo(?:\s+that)?|scratch\s+that|delete\s+(?:that|the\s+last)(?:\s+(?:shot|score|putt))?|take\s+that\s+back|nix\s+that)\b/i,
     build: (raw) => intent(raw, 'undo'),
   },
   // "next hole" / "next tee" → advance. Deterministic so it never rides the cloud (offline dead-end).

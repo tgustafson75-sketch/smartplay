@@ -858,15 +858,32 @@ export default function PlayTab() {
       setSetupNineHole(false);
     }
     if (s.isLocal) {
-      // Local courses — synthesize a minimal Course object for display.
+      // 2026-07-25 (deep audit — S1 fabrication) — was hardcoded `par_total: 72, holes: [], 6527y`
+      // for EVERY local course, so the card read "18 holes · Par 72" for Mines (par 70), 9-hole
+      // courses, etc. — and contradicted the 9-Hole chip toggled just above. Derive the real par /
+      // hole count / yards from the bundled holes we already resolved (bundledHoles). Falls back to
+      // the old neutral values only if a local course somehow has no bundled data (shouldn't happen).
+      const teeHoles: import('../../types/course').Hole[] = bundledHoles.map((h) => ({
+        hole_number: h.hole,
+        par: h.par,
+        yardage: h.distance ?? 0,
+        handicap: null,
+        gps: null,
+        hazards: [],
+      }));
+      const realPar = teeHoles.reduce((a, h) => a + (h.par || 0), 0);
+      const realYards = teeHoles.reduce((a, h) => a + (h.yardage || 0), 0);
       setSelected({
         id: s.id,
         club_name: s.club_name,
         course_name: s.club_name,
         location: { city: s.location.split(',')[0]?.trim() ?? '', state: s.location.split(',')[1]?.trim() ?? '', country: 'US' },
         tees: [{
-          tee_name: 'default', total_yards: 6527, course_rating: s.rating, slope_rating: s.slope,
-          par_total: 72, holes: [],
+          tee_name: 'default',
+          total_yards: realYards > 0 ? realYards : 6527,
+          course_rating: s.rating, slope_rating: s.slope,
+          par_total: realPar > 0 ? realPar : 72,
+          holes: teeHoles,
         }],
         cached_at: Date.now(),
       });

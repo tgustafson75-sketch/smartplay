@@ -160,6 +160,22 @@ console.log('\n=== Scenario 0b: evidence-order diagnostic gate ===');
     brush ? `${brush.label} · plan ${brushPlan.length}` : 'focus missing');
 }
 
+// ─── Scenario 0c: undo precheck must not fire on the dismissal "never mind" ─────
+// 2026-07-25 (deep audit S1) — "never mind" was matching the undo regex and silently reverting the
+// last logged score/putt/shot. It must NOT trigger undo; explicit undo verbs still must.
+console.log('\n=== Scenario 0c: undo precheck guard ===');
+{
+  const nm = precheckLocalIntent('never mind');
+  check('Undo precheck ignores the dismissal "never mind"',
+    !nm || nm.intent_type !== 'undo', nm ? `got ${nm.intent_type}` : 'no match (ok)');
+  const undo = precheckLocalIntent('undo that');
+  check('Undo precheck still fires on explicit "undo that"',
+    !!undo && undo.intent_type === 'undo', undo ? undo.intent_type : 'no match');
+  const scratch = precheckLocalIntent('scratch that');
+  check('Undo precheck still fires on "scratch that"',
+    !!scratch && scratch.intent_type === 'undo', scratch ? scratch.intent_type : 'no match');
+}
+
 // ─── Scenario 1: persona resolution returns the right name for each input shape ─
 
 console.log('\n=== Scenario 1: persona resolution ===');

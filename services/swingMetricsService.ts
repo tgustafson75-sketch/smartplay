@@ -441,14 +441,14 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       // measured (acoustic branch above, or truth-grade), where the ratio actually reflects THIS strike.
       smashFactor = nullMetric('');
     } else {
-      const ratio = ballSpeed.value / clubSpeed.value;
-      smashFactor = finalize({
-        value: Math.round(ratio * 100) / 100,
-        unit: '',
-        source: 'pose',
-        confidence: Math.min(clubSpeed.confidence, ballSpeed.confidence) * 0.7,
-        estimateNote: 'compounded — inherits both estimates',
-      });
+      // 2026-07-25 (deep audit — S1 honesty) — this branch divided ball speed by a POSE-estimated
+      // club-head speed. Club-head speed is the exact metric the app states it CANNOT measure (needs
+      // 240fps+; parked — see smartmotion-metrics-honesty / face-smash-fps-future). The left rail
+      // strips the estimate marker, so a pose-denominator smash printed as a clean, measured-looking
+      // "1.4x". Suppress it — matching the two branches above (eitherLow / typical-smash), which null
+      // out for the same reason: any value here misleads. Smash returns only when ball speed is
+      // independently measured against a truth-grade club speed.
+      smashFactor = nullMetric('');
     }
   } else {
     smashFactor = nullMetric('');

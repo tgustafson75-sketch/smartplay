@@ -121,19 +121,13 @@ export default function CourseDetailScreen() {
         // 'rancho' id was renamed to 'rancho-california' on 2026-05-17,
         // so the old 'rancho-california' -> 'rancho' mapping went stale
         // and dropped Rancho to the fabricated stub layout — audit DP-1).
-        const dataCourseId =
-          slug === 'rancho-california' ? 'rancho-california' :
-          slug === 'palms' ? 'palms' :
-          slug === 'lakes' ? 'lakes' :
-          slug === 'crystal-springs' ? 'crystal-springs' :
-          slug === 'mariners-point' ? 'mariners-point' :
-          slug === 'sunnyvale' ? 'sunnyvale' :
-          slug === 'san-jose-muni' ? 'san-jose-muni' :
-          slug === 'echo-hills' ? 'echo-hills' :
-          slug === 'greenhill' ? 'greenhill' :
-          slug === 'westlake-cc-nj' ? 'westlake-cc-nj' :
-          null;
-        const dataCourse = dataCourseId ? getLocalCourseData(dataCourseId) : null;
+        // 2026-07-25 (deep audit — S1 fabrication) — this was a hardcoded 10-slug allowlist that
+        // dropped the NEWEST shipped courses (mines-gc/dale-hollow/old-fort/nashboro/hermitage-pr) to
+        // the fabricated 18×par-4×380y / par-72 stub AND a false "estimated layout" caveat — even
+        // though their real per-hole data already ships in data/courses.ts. getLocalCourseData matches
+        // by id===slug and returns null for unknown slugs, so resolve straight off the slug: every
+        // bundled course now shows its real layout, and there's no allowlist to keep in sync.
+        const dataCourse = getLocalCourseData(slug);
 
         // Build the holes array. Prefer the bundled per-hole data (with
         // correct par + yardage per hole) over the legacy generic

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS, KEVIN_TTS_SPEED } from './_kevinVoice';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
+import { allowInference } from './_inferLimit';
 // 2026-06-04 — ElevenLabs path removed. OpenAI gpt-4o-mini-tts is
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
@@ -396,6 +397,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[kevin] warmup completed (${provider} + OpenAI TTS hot)`);
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
+
+  // 2026-07-25 (deep audit — S1) — the brain is the highest-volume paid-LLM route and shipped with
+  // NO throttle (only applyCors), so a curl loop against the public domain could run up an unbounded
+  // Anthropic/OpenAI bill and exhaust the provider quota → outage for every real user. IP rate-limit
+  // via allowInference: the app key is public (it ships in the bundle) so a hard key gate can't
+  // actually protect this AND would 401 the caddie (the client doesn't send the header). 90/min is
+  // far above any human voice cadence (~6-12 turns/min) but stops an abuse loop cold. Placed AFTER
+  // the warmup return so pre-warm is never throttled.
+  if (!allowInference(req, res, 'kevin', 90)) return;
 
   try {
     const body = req.body ?? {};
