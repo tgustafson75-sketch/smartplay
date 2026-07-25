@@ -1314,6 +1314,19 @@ check('Final QA: co-located courses ask which nine; search matches bundled cours
   })(),
   'at a co-located club (Menifee Palms/Lakes) the app asks which course instead of starting the wrong nine, and typing a bundled course name resolves it locally even offline / on API error');
 
+// 2026-07-24 (Tim field log — "I only want local mode if local toggle is on; its clashing error state
+// overtakes the first minute of warmup"). A cold-boot network blip was dropping EVERY user into the
+// on-device (LOCAL) STT re-prompt loop ("Say that again for me?") regardless of the Local Mode toggle.
+check('Voice: on-device (local) STT fallback is gated behind the Local Mode toggle',
+  (() => {
+    const v = read('hooks/useVoiceCaddie.ts');
+    return (
+      /const localModeOn = \(\(\) => \{ try \{ return useSettingsStore\.getState\(\)\.localMode === true;/.test(v) &&
+      /if \(localModeOn && stt\.isOnDeviceSTTReady\(\)\)/.test(v)
+    );
+  })(),
+  'a player who has NOT turned on Local Mode no longer gets dropped into the on-device STT re-prompt loop on a cold-boot network blip — they degrade straight to the seamless "stay on this shot" line; on-device STT runs only when Local Mode is explicitly ON');
+
 check('SmartFinder MOAT: brain composes one answer-first shot read (offline-safe)',
   // 2026-06-13 — "this is what the caddie brain is for." composeShotRead fuses
   // distance + wind/elevation (plays-like) + the player's real bag + tendency +

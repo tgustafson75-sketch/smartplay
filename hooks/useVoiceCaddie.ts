@@ -1694,14 +1694,18 @@ export const useVoiceCaddie = ({
           return;
         }
 
-        // Host UNREACHABLE. Phase B — if THIS binary has on-device STT, listen on
-        // the phone (zero network) and answer from the on-device caddie. We
-        // re-prompt because the recorded m4a can't be transcribed offline (the
-        // on-device recognizer only takes live mic / 16k WAV-MP3). [[offline-caddie-plan]]
+        // Host UNREACHABLE. Phase B — the on-device (LOCAL) STT path. 2026-07-24 (Tim — field log:
+        // this was overtaking the first minute of warmup) — GATE it behind the Local Mode toggle. A
+        // brief cold-boot network blip was dropping every user into on-device STT ("Say that again for
+        // me?" → re-listen → local answer), a clashing error-state loop, even for players who never
+        // opted into Local Mode. Now: only ONLINE-first players (localMode off) skip straight to the
+        // seamless deadEnd line; the on-device re-prompt path runs only when the user has turned Local
+        // Mode ON (they've explicitly chosen the offline caddie). [[offline-caddie-plan]]
+        const localModeOn = (() => { try { return useSettingsStore.getState().localMode === true; } catch { return false; } })();
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
-          if (stt.isOnDeviceSTTReady()) {
+          if (localModeOn && stt.isOnDeviceSTTReady()) {
             const prompt = "Say that again for me?";
             onResponseReceived(prompt);
             if (voiceEnabled) await speakDeviceNotice(prompt, language, voiceGender).catch(() => {});
