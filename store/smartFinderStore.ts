@@ -3,10 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { RangefinderLock } from '../types/smartfinder';
 
-// 'measure' (2026-07-22, Tim) — GPS-free known-height rangefinder: point at any target of
-// known height (flag, person, marker), tap its top + base, get the distance. Works anywhere —
-// yard, cage, range, on-course — not gated to being in a round.
-export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt' | 'measure';
+// 2026-07-25 (Tim — "remove Measure entirely") — the GPS-free known-height 'measure' rangefinder is
+// retired (fiddly manual two-tap; the on-course Camera tap-for-yardage is the simple pointfinder). Kept
+// out of the type; a persisted 'measure' maps to 'target' via migrate v3 + the setMode guard below.
+export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt';
 
 interface SmartFinderState {
   // Transient — not persisted. AR lock from the legacy camera mode.
@@ -25,7 +25,8 @@ export const useSmartFinderStore = create<SmartFinderState>()(
       setLock: (lock) => set({ currentLock: lock }),
       clearLock: () => set({ currentLock: null }),
       mode: 'target',
-      setMode: (mode) => set({ mode }),
+      // Guard: a stale/legacy 'measure' can never stick as the active mode.
+      setMode: (mode) => set({ mode: (mode as string) === 'measure' ? 'target' : mode }),
     }),
     {
       name: 'smartfinder-store-v1',
@@ -35,10 +36,12 @@ export const useSmartFinderStore = create<SmartFinderState>()(
       // 2026-06-23 SF-3 — v2: retire the dead, ungated 'standard' camera path
       // (no longer UI-selectable) by mapping any persisted mode to 'target'.
       // All other persisted fields are preserved.
-      version: 2,
+      // 2026-07-25 v3 — retire 'measure' (Tim) alongside the already-retired 'standard'; map either to
+      // 'target' so a persisted value from an older build doesn't select a mode that no longer exists.
+      version: 3,
       migrate: (s) => {
         const prev = (s ?? {}) as Partial<SmartFinderState>;
-        if (prev.mode === 'standard') {
+        if (prev.mode === 'standard' || (prev.mode as string) === 'measure') {
           return { ...prev, mode: 'target' } as never;
         }
         return prev as never;

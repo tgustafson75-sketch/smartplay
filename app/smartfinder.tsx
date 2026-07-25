@@ -49,8 +49,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
-import { computeDistance, computeHeightRangedDistance, REFERENCE_HEIGHTS } from '../services/rangefinder';
-import { detectMeasureReference } from '../services/measureScan';
+import { computeDistance } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -237,7 +236,7 @@ export default function SmartFinder() {
   // The old flat-canvas TargetView is retained below the route for
   // surfaces that explicitly ask for top-down, but the default TARGET
   // path is now camera + overlay.
-  const isCameraMode = displayMode === 'putt' || displayMode === 'target' || displayMode === 'measure';
+  const isCameraMode = displayMode === 'putt' || displayMode === 'target';
 
   if (isCameraMode) {
     return (
@@ -304,16 +303,6 @@ export default function SmartFinder() {
         >
           <Ionicons name="golf-outline" size={16} color="#9ca3af" />
           <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Putt</Text>
-        </TouchableOpacity>
-        {/* 2026-07-22 (Tim) — Measure: point-and-tap rangefinder for anywhere (yard/cage/range). */}
-        <TouchableOpacity
-          onPress={() => setMode('measure')}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#0a1e12', borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28' }}
-          accessibilityRole="button"
-          accessibilityLabel="Measure a distance anywhere"
-        >
-          <Ionicons name="resize-outline" size={16} color="#9ca3af" />
-          <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Measure</Text>
         </TouchableOpacity>
       </View>
 
@@ -441,13 +430,6 @@ function CameraSmartFinder({
   // second tap stops it cleanly.
   const [captureMode, setCaptureMode] = useState<'picture' | 'video'>('picture');
   const [recording, setRecording] = useState(false);
-  // 2026-07-23 (QA) — Measure mode's Auto-detect uses takePictureAsync, which fails when the
-  // CameraView is left in mode='video' (e.g. after recording a target-mode pano). Force picture
-  // mode whenever Measure is active; runs on mode change, so the mode prop has re-rendered to
-  // 'picture' well before the user taps Auto-detect (unlike an in-tap setState, which is too late).
-  useEffect(() => {
-    if (mode === 'measure' && captureMode !== 'picture' && !recording) setCaptureMode('picture');
-  }, [mode, captureMode, recording]);
   // 2026-06-13 — Scene Read (Tim's "mind-blown" moment): snap the view, the
   // multimodal brain reads the meta scene (water/trees/sky/leaves) grounded in the
   // MEASURED wind/temp/distance, and ties it to how to play + think. OTA-safe (reuses
@@ -746,8 +728,6 @@ function CameraSmartFinder({
               onTargetYardsChange={setSceneTargetYards}
               onHeadingUpdate={onHeadingUpdate}
             />
-          ) : mode === 'measure' ? (
-            <MeasureCameraOverlay cameraRef={cameraRef} />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
           )}
@@ -910,7 +890,6 @@ function CameraSmartFinder({
             swap); tapping the highlighted one returns to the plain camera. Map is a jump to the top-down. */}
         <View style={styles.modeToggleWrap}>
           {([
-            { key: 'measure', icon: 'resize-outline', label: 'Measure' },
             { key: 'putt', icon: 'golf-outline', label: 'Putt' },
             { key: 'map', icon: 'map-outline', label: 'Map' },
           ] as const).map(({ key, icon, label }) => {
@@ -1701,153 +1680,6 @@ function TargetCameraOverlay({
         </View>
       </View>
     </View>
-  );
-}
-
-// ─── Measure mode (GPS-free known-height rangefinder — usable anywhere) ──────
-// 2026-07-22 (Tim — "use SmartFinder anytime to measure distance in my yard or cage").
-// Point at any target of known height (flag, person, marker), tap its TOP then its BASE,
-// and the angular height it fills gives the distance — no GPS, no course data, any distance.
-// The camera-TILT rangefinder (target mode) caps at ~50 yds; this doesn't. Model mirrors
-// PuttCameraOverlay's two-tap capture; the math is services/rangefinder.computeHeightRangedDistance.
-function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<CameraView | null> }) {
-  const styles = useStyles();
-  const insets = useSafeAreaInsets();
-  const [viewH, setViewH] = useState(0);
-  const [viewW, setViewW] = useState(0);
-  const [topPt, setTopPt] = useState<{ x: number; y: number } | null>(null);
-  const [basePt, setBasePt] = useState<{ x: number; y: number } | null>(null);
-  const [autoBusy, setAutoBusy] = useState(false);
-  const [autoMsg, setAutoMsg] = useState<string | null>(null);
-  // 2026-07-25 (Tim — "leave it the way it was before the new settings; make them auto-detected") — the
-  // manual reference-object chips are gone. Auto-detect identifies the object + its real height; a plain
-  // manual two-tap falls back to a flagstick (7 ft), the most common reference. autoRef, when set by a
-  // scan, carries the DETECTED object's real height + label so we range off whatever it actually is.
-  const [autoRef, setAutoRef] = useState<{ label: string; meters: number } | null>(null);
-  const DEFAULT_REF = REFERENCE_HEIGHTS[0]; // flagstick, 2.134 m — manual-tap fallback
-  const refMeters = autoRef?.meters ?? DEFAULT_REF.meters;
-  const refLabel = autoRef?.label ?? 'the flagstick';
-
-  const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
-    const { locationX, locationY } = event.nativeEvent;
-    if (!topPt) setTopPt({ x: locationX, y: locationY });
-    else if (!basePt) setBasePt({ x: locationX, y: locationY });
-    else { setTopPt({ x: locationX, y: locationY }); setBasePt(null); } // third tap restarts
-    setAutoMsg(null);
-  }, [topPt, basePt]);
-  const reset = () => { setTopPt(null); setBasePt(null); setAutoMsg(null); setAutoRef(null); };
-
-  // 2026-07-23 — Auto-detect: capture a frame, let the vision brain find the flag/person's
-  // top + base, and drop the two markers automatically. The model returns NORMALIZED image
-  // coords; setting the markers as normalized×view means the existing `result` (which divides
-  // y by viewH) recovers the exact image-normalized y the ranging math needs. HONEST fallback:
-  // found=false → keep the manual two-tap and tell the user what to do.
-  const runAutoDetect = useCallback(async () => {
-    if (autoBusy || !cameraRef.current || viewH === 0) return;
-    setAutoBusy(true);
-    setAutoMsg(null);
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.5, base64: true, skipProcessing: true });
-      const b64 = photo?.base64;
-      if (!b64) { setAutoMsg('Could not capture a frame — try again or tap manually.'); return; }
-      const det = await detectMeasureReference(b64);
-      if (!det.found || !det.top || !det.base) {
-        setAutoMsg('Nothing clear to measure — aim at a flag, cart, person or bag, or tap the top + base yourself.');
-        return;
-      }
-      // Range off whatever it detected, using THAT object's real height + label (no manual mode).
-      setAutoRef({ label: det.label, meters: det.real_height_m });
-      const w = viewW || 1;
-      setTopPt({ x: det.top.x * w, y: det.top.y * viewH });
-      setBasePt({ x: det.base.x * w, y: det.base.y * viewH });
-      setAutoMsg(null);
-    } catch {
-      setAutoMsg('Auto-detect failed — tap the top and base yourself.');
-    } finally {
-      setAutoBusy(false);
-    }
-  }, [autoBusy, cameraRef, viewH, viewW]);
-
-  // TOP = the smaller y (higher on screen); order-independent so tapping base first still works.
-  const result = topPt && basePt && viewH > 0
-    ? computeHeightRangedDistance({
-        top_y_normalized: Math.min(topPt.y, basePt.y) / viewH,
-        base_y_normalized: Math.max(topPt.y, basePt.y) / viewH,
-        real_height_m: refMeters,
-        vfov_deg: 60, // base camera VFOV (measure at 1×; zoom-corrected VFOV is a follow-up)
-      })
-    : null;
-
-  return (
-    <>
-      <TouchableOpacity
-        activeOpacity={1}
-        style={StyleSheet.absoluteFill}
-        onPress={handleTap}
-        onLayout={(e) => { setViewH(e.nativeEvent.layout.height); setViewW(e.nativeEvent.layout.width); }}
-      />
-
-      {/* 2026-07-25 (Tim) — the manual reference-object chips are REMOVED. Auto-detect identifies the
-          object; a plain manual two-tap ranges off a flagstick by default. */}
-
-      {/* Tap markers + the measured vertical span */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Svg width="100%" height="100%">
-          {topPt && (
-            <Circle cx={topPt.x} cy={topPt.y} r={10} fill="rgba(0,200,150,0.35)" stroke="#00C896" strokeWidth={2} />
-          )}
-          {basePt && (
-            <Circle cx={basePt.x} cy={basePt.y} r={10} fill="rgba(245,166,35,0.35)" stroke="#F5A623" strokeWidth={2} />
-          )}
-          {topPt && basePt && (
-            <Line x1={topPt.x} y1={topPt.y} x2={basePt.x} y2={basePt.y} stroke="#ffffff" strokeWidth={2} strokeDasharray="6 4" />
-          )}
-        </Svg>
-      </View>
-
-      {/* Bottom panel — instruction while capturing, distance once both taps land */}
-      {/* 2026-07-25 (deep audit S3) — flat clearance, not insets.bottom+16: the GlobalCaddieBar below
-          already owns the safe-area inset, so +16-plus-inset double-counted it into a dead band (same
-          fix as the target-mode strip; these two consumers were missed). */}
-      <View style={[styles.bottomPanel, { paddingBottom: 10 }]} pointerEvents="box-none">
-        {/* Auto-detect — hands-free capture of a flagstick / person. Shown until a read lands. */}
-        {!(topPt && basePt && result && !result.unmeasurable) && (
-          <TouchableOpacity
-            onPress={runAutoDetect}
-            disabled={autoBusy}
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, alignSelf: 'center', marginBottom: 10, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 22, backgroundColor: '#003d20', borderWidth: 1, borderColor: '#00C896', opacity: autoBusy ? 0.6 : 1 }}
-            accessibilityRole="button"
-            accessibilityLabel="Auto-detect a flag or person to measure"
-          >
-            {autoBusy ? <ActivityIndicator size="small" color="#00C896" /> : <Ionicons name="scan-outline" size={18} color="#00C896" />}
-            <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800' }}>{autoBusy ? 'Scanning…' : 'Auto-detect'}</Text>
-          </TouchableOpacity>
-        )}
-        {autoMsg && (
-          <Text style={{ color: '#F0C030', fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>{autoMsg}</Text>
-        )}
-        {!topPt ? (
-          <Text style={styles.instructionText}>Tap Auto-detect — or tap the TOP of your target, then its base</Text>
-        ) : !basePt ? (
-          <Text style={styles.instructionText}>Now tap its BASE (the ground)</Text>
-        ) : result && !result.unmeasurable ? (
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 40, fontWeight: '900' }}>{result.distance_yards}<Text style={{ fontSize: 18, fontWeight: '700' }}> yds</Text></Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-              off {refLabel} · {result.confidence} confidence
-            </Text>
-            {result.confidence === 'low' && (
-              <Text style={{ color: '#F0C030', fontSize: 11, fontWeight: '700', marginTop: 4 }}>Zoom in on the target for a tighter read</Text>
-            )}
-            <TouchableOpacity onPress={reset} style={{ marginTop: 10, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: '#00C896' }} accessibilityRole="button" accessibilityLabel="Measure again">
-              <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '800' }}>Measure again</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <Text style={styles.instructionText}>Line up the top and base and tap again</Text>
-        )}
-      </View>
-    </>
   );
 }
 
