@@ -141,6 +141,53 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(34.0250333, -117.1514339),
     lat: 34.0250333, lng: -117.1514339,
   },
+  // 2026-07-24/25 (Tim) — tester home courses. Built OSM-first into data/courses.ts; MUST also be
+  // registered HERE so they surface in the Play picker (this catalog is what the picker lists, not
+  // data/courses.ts). Coords = the course centroids.
+  {
+    id: 'local:mines-gc',
+    club_name: 'Mines Golf Club',
+    location: 'Grand Rapids, MI',
+    rating: null, slope: 143, isLocal: true, thumbnail: satelliteThumb(42.9595803, -85.7140174),
+    lat: 42.9595803, lng: -85.7140174,
+  },
+  {
+    id: 'local:dale-hollow',
+    club_name: 'Dale Hollow Lake State Resort Park',
+    location: 'Burkesville, KY',
+    rating: 71.0, slope: 131, isLocal: true, thumbnail: satelliteThumb(36.6624323, -85.2906308),
+    lat: 36.6624323, lng: -85.2906308,
+  },
+  {
+    id: 'local:old-fort',
+    club_name: 'Old Fort Golf Club',
+    location: 'Murfreesboro, TN',
+    rating: 72.8, slope: 125, isLocal: true, thumbnail: satelliteThumb(35.8523026, -86.4181595),
+    lat: 35.8523026, lng: -86.4181595,
+  },
+  {
+    id: 'local:nashboro',
+    club_name: 'Nashboro Golf Club',
+    location: 'Nashville, TN',
+    rating: 74.0, slope: 132, isLocal: true, thumbnail: satelliteThumb(36.0888711, -86.6363585),
+    lat: 36.0888711, lng: -86.6363585,
+  },
+  {
+    id: 'local:hermitage-pr',
+    club_name: "Hermitage — President's Reserve",
+    location: 'Old Hickory, TN',
+    rating: 74.2, slope: 134, isLocal: true, thumbnail: satelliteThumb(36.2298354, -86.6409463),
+    lat: 36.2298354, lng: -86.6409463,
+  },
+  {
+    // Legacy is SCORECARD-ONLY (not in OSM). Approx Springfield coords for the card thumbnail +
+    // proximity sort only; the holes carry no coords (F/M/B degrades to scorecard until marked).
+    id: 'local:legacy-springfield',
+    club_name: 'The Legacy',
+    location: 'Springfield, TN',
+    rating: 73.3, slope: 131, isLocal: true, thumbnail: satelliteThumb(36.5090, -86.8853),
+    lat: 36.5090, lng: -86.8853,
+  },
   {
     id: 'local:palms',
     club_name: 'Menifee Lakes — Palms',
