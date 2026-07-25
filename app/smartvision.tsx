@@ -716,6 +716,35 @@ export default function SmartVisionScreen() {
         }
       }
 
+      // 2026-07-25 (Tim — new courses show a green screen with no GPS) — the OSM-built courses carry
+      // REAL tee/green/front/back coords in data/courses.ts, but they're not in the golf API and the
+      // AI derivation needs an active-round GPS seed. So when we still have no green, BUILD the geometry
+      // straight from the bundled hole coords. No GPS required — the coords are already surveyed. This
+      // makes the entire hole view (satellite tile + F/M/B + markers) work pre-round for these courses.
+      if (!geo || !geo.green) {
+        const bh = courseHoles.find((x) => x.hole === holeIndex);
+        const okc = (la?: number, ln?: number) => la != null && ln != null && la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
+        if (bh && okc(bh.middleLat, bh.middleLng)) {
+          const bTee = okc(bh.teeLat, bh.teeLng) ? { lat: bh.teeLat, lng: bh.teeLng } : (geo?.tee ?? null);
+          const bGreen = { lat: bh.middleLat, lng: bh.middleLng };
+          geo = {
+            hole_number: holeIndex,
+            par: geo?.par ?? bh.par ?? 4,
+            yardage: geo?.yardage ?? bh.distance ?? 0,
+            tee: bTee,
+            green: bGreen,
+            green_front: geo?.green_front ?? (okc(bh.frontLat, bh.frontLng) ? { lat: bh.frontLat, lng: bh.frontLng } : null),
+            green_back: geo?.green_back ?? (okc(bh.backLat, bh.backLng) ? { lat: bh.backLat, lng: bh.backLng } : null),
+            bearing_deg: bTee ? bearingDegrees(bTee, bGreen) : (geo?.bearing_deg ?? null),
+            hazards: geo?.hazards ?? [],
+            fairway_centerline: geo?.fairway_centerline ?? [],
+            green_outline: geo?.green_outline ?? [],
+            green_polygon: geo?.green_polygon ?? null,
+            tee_polygon: geo?.tee_polygon ?? null,
+          };
+        }
+      }
+
       if (cancelled) return;
       setGeometry(geo);
 
@@ -902,7 +931,7 @@ export default function SmartVisionScreen() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode, isRoundActive]);
+  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode, isRoundActive, courseHoles]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared
