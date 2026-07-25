@@ -62,6 +62,7 @@ import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
+import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
 import { BodyAnalysisRow, TempoBar, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
@@ -323,6 +324,9 @@ export default function SwingDetail() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
+  // 2026-07-24 (Tim — universal screen timeout) — never let the idle rest-dim engage while a clip is
+  // actually playing (the user is watching, not touching). Resumes eligibility the moment it pauses.
+  useRestSuppress(isPlaying);
   const [seekBarW, setSeekBarW] = useState(0);
   // 2026-06-11 — tap the video to play/pause (Tim: intuitive, not hunting for the
   // button below + catching it in time). Single-tap routes through ZoomableView

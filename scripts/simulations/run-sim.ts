@@ -994,11 +994,15 @@ check('Round Rest mode: store toggles + OLED-black overlay wired globally (#8)',
       /IDLE_MS = 60_000/.test(ov) &&
       /backgroundColor: '#000'/.test(ov) &&
       /useKeepAwake\('round-rest'\)/.test(ov) &&
-      /if \(!active \|\| !isRoundActive\) return null/.test(ov) && // only dims in a round
+      // 2026-07-24 — now universal (every screen), NOT round-only. Route-suppressed on live-camera
+      // screens (a still golfer must not black out) + suppressCount blocks it during video/capture.
+      /if \(!active\) return null/.test(ov) &&
+      /SUPPRESS_ROUTES = \[.*smartmotion/.test(ov) &&
+      /routeSuppressedRef\.current \|\| suppressCount > 0/.test(ov) &&
       /onStartShouldSetResponderCapture=\{\(\) => \{ useRestModeStore\.getState\(\)\.noteActivity\(\); return false; \}\}/.test(lay) &&
       /<RestModeOverlay \/>/.test(lay);
   })(),
-  'idle-in-round → near-black rest screen that keeps GPS alive; any touch wakes it, OTA-safe (no native dep)');
+  'idle on ANY screen → near-black rest (keeps GPS alive in-round); route-suppressed on live-camera screens + during video/capture; any touch wakes it, OTA-safe');
 
 check('Drill engine: drill card → Smart Motion drill session (#5)',
   // 2026-06-13 — Tim's reframe: a link + an engine, not an overlay rebuild. A drill

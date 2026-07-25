@@ -21,17 +21,24 @@ interface RestModeState {
   active: boolean;
   /** Epoch ms of the last user touch anywhere in the app. */
   lastActivityAt: number;
+  /** 2026-07-24 (Tim — battery, timeout on every screen) — active suppressors that must BLOCK
+   *  auto-rest (a playing swing video, an active capture). Ref-counted via useRestSuppress so it
+   *  can never get stuck: each suppressor increments on mount/activate and decrements on cleanup. */
+  suppressCount: number;
   /** Bump on any touch — wakes the screen and resets the idle countdown. */
   noteActivity: () => void;
   /** Engage rest now (manual button or the idle timer). */
   enterRest: () => void;
   /** Wake the screen (tap on the overlay). */
   exitRest: () => void;
+  pushSuppress: () => void;
+  popSuppress: () => void;
 }
 
 export const useRestModeStore = create<RestModeState>((set, get) => ({
   active: false,
   lastActivityAt: Date.now(),
+  suppressCount: 0,
   noteActivity: () => {
     // Any touch both records activity AND wakes the screen if it was resting.
     const wasActive = get().active;
@@ -39,4 +46,6 @@ export const useRestModeStore = create<RestModeState>((set, get) => ({
   },
   enterRest: () => set({ active: true }),
   exitRest: () => set({ active: false, lastActivityAt: Date.now() }),
+  pushSuppress: () => set((s) => ({ suppressCount: s.suppressCount + 1 })),
+  popSuppress: () => set((s) => ({ suppressCount: Math.max(0, s.suppressCount - 1) })),
 }));
