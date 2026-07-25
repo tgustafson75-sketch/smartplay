@@ -2803,7 +2803,7 @@ export default function CaddieTab() {
         // controls. Top+bottom positioning fills the space cleanly on ANY screen size (phone → Fold-open)
         // and can never ride under the status bar again.
         const zoneTop = insets.top + 12;
-        const zoneHeight = H - zoneTop - zoneBottom;
+        const zoneHeight = Math.max(0, H - zoneTop - zoneBottom);
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
           setTrustLevel(caddiePrimary ? 1 : 3);

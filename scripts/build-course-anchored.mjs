@@ -132,17 +132,23 @@ for (const h of firstLoop) {
 }
 
 // Build every hole (all loops): green = its own (loop 1) or the matching earlier-loop hole's green.
+// 2026-07-25 (Tim — "make it right") — DEDUPE tees across holes: two holes were grabbing the SAME tee
+// polygon (nearest-by-distance with no dedupe), so one hole's tee marker rendered at another hole's tee.
+// Each tee is used at most once per loop; a hole whose best tee is taken falls to its next-best free tee.
 const rows = [];
+const usedTee = new Set();
 for (const h of anchor.holes) {
   const g = holeGreen[h.hole] ?? holeGreen[((h.hole - 1) % loop) + 1] ?? null;
   let teeC = null, fb = null, osmCenter = null;
   if (g) {
-    // pick the tee whose haversine to this green best matches the hole's center distance
-    let err = Infinity;
+    // pick the FREE tee whose haversine to this green best matches the hole's center distance
+    let err = Infinity, bestTeeId = null;
     for (const t of tees) {
+      if (usedTee.has(t.id)) continue;
       const e = Math.abs(haversineYards(t.c, g.c) - h.center);
-      if (e < err) { err = e; teeC = t.c; }
+      if (e < err) { err = e; teeC = t.c; bestTeeId = t.id; }
     }
+    if (bestTeeId != null) usedTee.add(bestTeeId);
     if (teeC) { fb = greenFrontBack(g.pts, teeC); osmCenter = Math.round(haversineYards(teeC, g.c)); }
   }
   rows.push({ h, g, teeC, fb, osmCenter });
