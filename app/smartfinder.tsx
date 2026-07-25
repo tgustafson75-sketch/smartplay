@@ -902,33 +902,34 @@ function CameraSmartFinder({
             <GPSQuality reading={gps} showText />
           </View>
         </View>
-        {/* Right side: measure + map + putt quick-access icons — replaces the 4-mode toggle bar */}
-        <View style={[styles.cameraIconBtn, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          {/* 2026-07-22 (Tim) — Measure: GPS-free known-height rangefinder, usable anywhere. */}
-          <TouchableOpacity
-            onPress={() => onModeChange(mode === 'measure' ? 'target' : 'measure')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel={mode === 'measure' ? 'Back to camera' : 'Measure a distance'}
-          >
-            <Ionicons name={mode === 'measure' ? 'camera-outline' : 'resize-outline'} size={20} color={mode === 'measure' ? '#F0C030' : '#00C896'} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => onModeChange(mode === 'putt' ? 'target' : 'putt')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel={mode === 'putt' ? 'Back to camera' : 'Putt mode'}
-          >
-            <Ionicons name={mode === 'putt' ? 'camera-outline' : 'golf-outline'} size={20} color="#00C896" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => onModeChange('map')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityRole="button"
-            accessibilityLabel="Map view"
-          >
-            <Ionicons name="map-outline" size={20} color="#9ca3af" />
-          </TouchableOpacity>
+        {/* Right side: mode toggles. 2026-07-25 (Tim — "icons are crowded and I don't know what
+            they're for, especially one with a closed camera") — ROOT CAUSE was the old icons MORPHING
+            into a 'camera-outline' glyph when their mode was active (it meant "tap to go back to camera",
+            but read as a mystery camera button). Fixed: STABLE, semantic icons + a tiny text LABEL each,
+            grouped in one pill. The ACTIVE camera sub-mode is shown by an accent highlight (not a glyph
+            swap); tapping the highlighted one returns to the plain camera. Map is a jump to the top-down. */}
+        <View style={styles.modeToggleWrap}>
+          {([
+            { key: 'measure', icon: 'resize-outline', label: 'Measure' },
+            { key: 'putt', icon: 'golf-outline', label: 'Putt' },
+            { key: 'map', icon: 'map-outline', label: 'Map' },
+          ] as const).map(({ key, icon, label }) => {
+            const active = mode === key; // 'map' never active in the camera overlay — it's a jump
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => onModeChange(key === 'map' ? 'map' : (active ? 'target' : key))}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={active ? `${label} on — tap to return to camera` : label}
+                style={[styles.modeToggle, active && styles.modeToggleActive]}
+              >
+                <Ionicons name={icon} size={19} color={active ? '#00C896' : '#cbd5e1'} />
+                <Text style={[styles.modeToggleLabel, active && styles.modeToggleLabelActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -1545,7 +1546,7 @@ function TargetCameraOverlay({
           while the rest of the strip (labels, F/M/B) stays touch-transparent and
           lets reticle drags through. */}
       <View
-        style={[styles.targetBottomStrip, { paddingBottom: insets.bottom + 16 }]}
+        style={[styles.targetBottomStrip, { paddingBottom: 10 }]}
         pointerEvents="box-none"
       >
         {targetYards != null && (
@@ -2338,6 +2339,15 @@ return StyleSheet.create({
   cameraIconText: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
   cameraTopCenter: { alignItems: 'center', flex: 1 },
   cameraTopTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
+  // 2026-07-25 — grouped, labeled mode toggles (replaces the crowded, morphing icon row).
+  modeToggleWrap: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 14, paddingHorizontal: 3, paddingVertical: 3,
+  },
+  modeToggle: { alignItems: 'center', justifyContent: 'flex-start', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 11, minWidth: 46, borderWidth: 1, borderColor: 'transparent' },
+  modeToggleActive: { backgroundColor: 'rgba(0,200,150,0.16)', borderWidth: 1, borderColor: 'rgba(0,200,150,0.55)' },
+  modeToggleLabel: { color: '#cbd5e1', fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: 2 },
+  modeToggleLabelActive: { color: '#00C896' },
   cameraToggleWrap: { position: 'absolute', left: 0, right: 0 },
 
   // Phase 502 — TARGET-mode bottom F/M/B strip.
@@ -2355,7 +2365,12 @@ return StyleSheet.create({
     // and the CONF column is fully visible (was clipped to "CO…" behind the
     // PHOTO/VIDEO pill).
     paddingRight: 16,
-    paddingTop: 12,
+    // 2026-07-25 (Tim — "the data takes up half the screen with giant useless gaps") — paddingBottom
+    // was insets.bottom + 16, which DOUBLE-COUNTED the safe-area inset: the GlobalCaddieBar below is a
+    // laid-out root sibling that already owns insets.bottom, so this strip (anchored to the bar's top)
+    // was floating an extra ~inset-height band of dead space above the bar. Now a flat 10px clearance +
+    // tightened internal margins so the read hugs the voice bar instead of ballooning.
+    paddingTop: 10,
     alignItems: 'stretch',
   },
   targetToLabel: {
@@ -2363,7 +2378,7 @@ return StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.4,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   targetToLabelMuted: { color: 'rgba(255,230,0,0.85)' },
   targetToYards: { color: '#FFE600', fontSize: 18 },
@@ -2375,8 +2390,8 @@ return StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.4,
-    marginTop: -4,
-    marginBottom: 8,
+    marginTop: -2,
+    marginBottom: 4,
   },
   targetIntelCard: {
     alignSelf: 'stretch',
@@ -2385,8 +2400,8 @@ return StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.14)',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 8,
+    paddingVertical: 7,
+    marginBottom: 6,
   },
   // 2026-06-13 — the brain read headline (answer-first).
   brainRead: {
