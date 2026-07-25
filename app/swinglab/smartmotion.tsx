@@ -3270,6 +3270,38 @@ export default function SmartMotion() {
   }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
   const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);
   persistReviewRef.current = persistReviewToLibrary;
+
+  // 2026-07-25 (Tim — "the full 4-card SmartMotion analysis STILL doesn't reach the swing library when
+  // saved; asked 20 times"). ROOT: biomech committed LIVE (review effect) but the SHOT MAP (tempo +
+  // body items + effort/carry/launch — the cards the library renders) only committed inside the explicit
+  // Save handler. Any exit that didn't run that exact path (auto-ingest, back-out, go-again timing)
+  // reached the library with biomech but NO shot-map cards. Commit the shot map LIVE the moment it's
+  // computed, for the PRIMARY swing — mirroring the biomech live-commit — so the library always mirrors
+  // the session's 4-card analysis regardless of how the user leaves.
+  useEffect(() => {
+    if (phase !== 'review' || selectedSwing !== 0) return;
+    const sid = ingestedSessionIdRef.current;
+    if (!sid) return;
+    if (!(estCarry != null || effortPct != null || ballTrace || cageCanvasFeet != null || tempo || biomech)) return;
+    try {
+      useCageStore.getState().setSessionShotMap(sid, {
+        estCarry: estCarry ?? null,
+        effortPct: effortPct ?? null,
+        trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
+        canvasFeet: cageCanvasFeet ?? null,
+        cameraBehindFeet: cameraBehindFeet ?? null,
+        angle,
+        club: club ?? null,
+        tempo: tempo ? {
+          ratio: tempo.ratio ?? null,
+          backswingMs: tempo.backswingMs ?? null,
+          downswingMs: tempo.downswingMs ?? null,
+          sequencingScore: tempo.sequencingScore ?? null,
+        } : null,
+        bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
+      });
+    } catch { /* non-fatal */ }
+  }, [phase, selectedSwing, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
