@@ -20,7 +20,13 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { screenContextForPrompt } from './screenContext';
-import { getApiBaseUrl } from './apiBase';
+import { getApiBaseUrl, isConnectionWarmed } from './apiBase';
+
+// 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
+// The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
+// Give the brain a longer budget until the connection is confirmed warm; warm turns keep the tight bound.
+const COLD_KEVIN_FETCH_TIMEOUT_MS = 48000;
+const kevinTimeout = (): number => (isConnectionWarmed() ? KEVIN_FETCH_TIMEOUT_MS : COLD_KEVIN_FETCH_TIMEOUT_MS);
 
 // 2026-07-04 (clean-audit) — the external-URL allowlist moved to
 // services/voice/conversationalToolDispatch.ts (the one tool dispatcher);
@@ -543,7 +549,7 @@ async function openSession() {
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
         }),
-      }, KEVIN_FETCH_TIMEOUT_MS).catch(() => null);
+      }, kevinTimeout()).catch(() => null);
 
       const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
         method: 'POST',
@@ -703,7 +709,7 @@ async function openSession() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settingsStore.aiProvider ?? 'gemini' },
           body: JSON.stringify(apiUrlBody),
-        }, KEVIN_FETCH_TIMEOUT_MS);
+        }, kevinTimeout());
         if (r.ok) {
           const j = await r.json() as { text?: string; audioBase64?: string };
           if (j.text && ttsAllowed && getSessionState() === 'responding') {
@@ -783,7 +789,7 @@ async function openSession() {
             try {
               speculativeController?.abort();
               speculativeBrainP = null;
-              const r = await conversationalBrainTurn(utterance, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+              const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
               // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
               // (switch_caddie / navigate) the conversational brain returned; this
               // branch previously spoke the reply but dropped them.
@@ -826,7 +832,7 @@ async function openSession() {
                 voiceGender: settings.voiceGender ?? 'male',
                 persona: settings.caddiePersonality,
               }),
-            }, KEVIN_FETCH_TIMEOUT_MS);
+            }, kevinTimeout());
             if (chatRes.ok) {
               const chatJson = await chatRes.json() as { text?: string; audioBase64?: string | null };
               // /api/kevin returns { text, audioBase64, toolAction } — not
@@ -918,7 +924,7 @@ async function openSession() {
       // total brain miss (signal drop) fall back to the offline caddie (local club-call).
       if (result.route_to_brain) {
         try {
-          const r = await conversationalBrainTurn(utterance, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+          const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
           if (r.toolActions?.length) {
             const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
             dispatchConversationalToolActions(r.toolActions);
@@ -1101,7 +1107,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       // orchestrator), so this answers in BOTH modes and can't regress below silence.
       console.log(`[handsFree-route] no tool handler for ${intent.intent_type} → conversational`);
       try {
-        const r = await conversationalBrainTurn(text, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+        const r = await conversationalBrainTurn(text, { timeoutMs: kevinTimeout() });
         // 2026-07-01 (re-audit — voice H2) — dispatch the service-safe tool actions
         // the brain returned (switch_caddie / navigate) so a hands-free "switch to
         // Tank" / "open SmartFinder" actually happens instead of only being spoken.
@@ -1152,7 +1158,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     // silence on "what's the play" from the watch. Mirror the earbud branch.
     if (result?.route_to_brain) {
       try {
-        const r = await conversationalBrainTurn(text, { timeoutMs: KEVIN_FETCH_TIMEOUT_MS });
+        const r = await conversationalBrainTurn(text, { timeoutMs: kevinTimeout() });
         if (r.toolActions?.length) {
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);

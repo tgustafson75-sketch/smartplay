@@ -97,6 +97,14 @@ const TRANSCRIBE_TIMEOUT_MS = 12000;
 // instead of aborting at 12s and dropping to a garbage on-device STT result (the "error reply,
 // then it's fine" symptom). Once warmed, the 12s fast-fail (below) resumes for genuine dead zones.
 const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
+// 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
+// step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
+// BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
+// 30s and abort → the guaranteed first-ask error. Give the brain a longer budget ONLY while the
+// connection isn't yet confirmed warm; every warm turn keeps the tight 30s. Abort still falls back to
+// the local responder, so a genuinely dead network still fails fast enough.
+const COLD_BRAIN_TIMEOUT_MS = 48000;
+const brainTimeoutMs = (): number => (isConnectionWarmed() ? BRAIN_TIMEOUT_MS : COLD_BRAIN_TIMEOUT_MS);
 // 2026-06-23 — 25s → 30s. Kevin's per-round AI timeout is now 12s and the
 // realistic worst-case (cold round + local-short-circuit tool rounds) is ~20s.
 // The CLIENT must be the OUTER bound so a healthy-but-slow brain isn't aborted
@@ -946,7 +954,7 @@ export const useVoiceCaddie = ({
       // timeout below and the catch path still routes to the local-status
       // responder fallback if it genuinely fails.)
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
+      const timeout = setTimeout(() => controller.abort(), brainTimeoutMs());
 
       // 2026-06-13 (audit G5) — the voice path was sending ONLY the CNS memory slice;
       // the LIVE context block (GPS/geometry/hazards/recent shots) the chat path sends
@@ -1224,7 +1232,7 @@ export const useVoiceCaddie = ({
       // why the caddie now works on the FIRST ask instead of needing retries.
       try {
         const rc = new AbortController();
-        const rt = setTimeout(() => rc.abort(), BRAIN_TIMEOUT_MS);
+        const rt = setTimeout(() => rc.abort(), brainTimeoutMs());
         const retryRes = await fetch(apiUrl + '/api/kevin', {
           method: 'POST',
           headers: {
