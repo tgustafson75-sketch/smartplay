@@ -51,7 +51,9 @@ export function GlobalCaddieBar() {
   if (HIDE_PREFIXES.some((p) => path.startsWith(p))) return null;
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 6), backgroundColor: colors.background }]}>
+      {/* 2026-07-25 (Tim — "the caddie mic/text is slightly cut off at the bottom") — a small buffer on
+          top of the safe-area inset so the bar always sits fully above the system nav / home indicator. */}
+      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) + 6, backgroundColor: colors.background }]}>
         <CaddieBottomBar />
       </View>
     </KeyboardAvoidingView>

@@ -2798,15 +2798,12 @@ export default function CaddieTab() {
       {(() => {
         const caddiePrimary = trustLevel !== 1; // 1 = Quiet → SmartVision leads
         const zoneBottom = 150 + insets.bottom;
-        // 2026-07-25 (Tim — top+bottom buffer, clean transition to ANY screen size incl. Fold-Z open):
-        // reserve a top buffer below the nav, then FILL the space down to the controls. On big screens
-        // (Fold-open/tablet) the old 2/3 ratio cap left a large black gap — now the primary view fills
-        // the available height between the top buffer and the bottom row; phones keep a portrait cap so
-        // the avatar isn't over-tall.
-        const availZone = H - (insets.top + 120) - zoneBottom;
-        const zoneHeight = W >= 540
-          ? availZone
-          : Math.min(Math.round(H * 2 / 3), availZone);
+        // 2026-07-25 (Tim — "top box extends to the top / overlays the status bar; contain it") — pin the
+        // top box with an EXPLICIT top gap below the phone's status bar and an explicit bottom above the
+        // controls. Top+bottom positioning fills the space cleanly on ANY screen size (phone → Fold-open)
+        // and can never ride under the status bar again.
+        const zoneTop = insets.top + 12;
+        const zoneHeight = H - zoneTop - zoneBottom;
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
           setTrustLevel(caddiePrimary ? 1 : 3);
@@ -2832,8 +2829,8 @@ export default function CaddieTab() {
         );
         return (
           <>
-            {/* PRIMARY zone — whichever view leads fills it, anchored from the bottom above the row. */}
-            <View style={{ position: 'absolute', left: 0, right: 0, bottom: zoneBottom, height: zoneHeight }}>
+            {/* PRIMARY zone — fills between the top gap (below the status bar) and the controls row. */}
+            <View style={{ position: 'absolute', left: 0, right: 0, top: zoneTop, bottom: zoneBottom }}>
               {caddiePrimary ? kevinAvatar : (
                 <L1HolePreview onOpenSmartVision={openSmartVision} width={W} height={zoneHeight} />
               )}
