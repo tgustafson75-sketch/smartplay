@@ -99,6 +99,11 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   // ?autoScan=1 so the camera comes up and runs the GUIDED club scan on arrival, which recognizes
   // the club and registers it to the bag (clubBagStore). Works from anywhere via voice.
   register_club: { type: 'navigate', path: '/swinglab/smartmotion?autoScan=1' },
+  // 2026-07-25 (Tim — the moat: "take a PIC of the scorecard and the caddie ingests it"). Voice/text
+  // opens the existing scorecard-photo flows: add_course → parse a scorecard into a COURSE (par/yardage);
+  // import_round → parse a played scorecard's SCORES into round history.
+  add_course: { type: 'navigate', path: '/add-course' },
+  import_round: { type: 'navigate', path: '/import-rounds-list' },
   // 2026-06-08 — Acoustic Test Bench removed (acoustic now lives in
   // SmartMotion calibration); its voice routes deleted with the screen.
   // 2026-05-19 — Owner GPS Test Bench voice intent. Same gating as
@@ -309,6 +314,8 @@ const TOOL_LABEL: Record<string, string> = {
   look: 'SmartVision',
   what_you_see: 'SmartVision',
   register_club: 'club scan',
+  add_course: 'the course-from-photo scanner',
+  import_round: 'the scorecard importer',
 };
 
 export const openToolHandler: IntentHandler = {

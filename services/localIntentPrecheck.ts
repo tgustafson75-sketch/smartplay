@@ -206,6 +206,19 @@ const PATTERNS: Pattern[] = [
     rx: /\b(open\s+swing\s*lab|swing\s*lab)\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'swinglab' }),
   },
+
+  // ── SCORECARD-PHOTO INGEST (the moat: "snap a card → the caddie ingests it") ──
+  // 2026-07-25 (Tim). add_course = parse a scorecard into a COURSE layout; import_round = parse a played
+  // scorecard's SCORES into round history. "course" wins the first; anything about a round/score/scorecard
+  // hits the second. Narrow verbs (add/scan/import/upload/load) so ordinary talk never fires it.
+  {
+    rx: /\b(?:add|create|set\s*up|scan|import|load)\s+(?:a\s+)?(?:new\s+)?course\b|\bcourse\s+from\s+(?:a\s+)?(?:photo|picture|scorecard|card)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'add_course' }),
+  },
+  {
+    rx: /\b(?:import|scan|upload|log|add)\s+(?:my\s+|a\s+|the\s+|last\s+|past\s+)*(?:round|rounds|score|scores|scorecard)\b|\bscorecard\s+(?:photo|picture|screenshot)\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'import_round' }),
+  },
 ];
 
 /**
