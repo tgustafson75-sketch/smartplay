@@ -542,9 +542,18 @@ export default function SmartVisionScreen() {
   // sit ABOVE the bar instead of being clipped by it (the bar reserves root height that our window-H
   // math doesn't otherwise know about).
   const barReserve = useCaddieBarReserve();
-  const availH = isSplit
+  // 2026-07-25 (Tim — Fold-Z: aerial leaves a big black gap + the club chip overlaps the F/M/B labels).
+  // The window-math estimate for the aerial height was off on the Fold, so the aerial didn't fill the
+  // column. Prefer the MEASURED column height (onLayout on the flow container) and size the aerial to
+  // fill it (minus the F/M/B strip in portrait) — the aerial then reaches the panel, the panel pins to
+  // the bottom, and the absolute club chip lands over the aerial's lower edge instead of the labels.
+  const [measuredColH, setMeasuredColH] = useState(0);
+  const estAvailH = isSplit
     ? H - insets.top - insets.bottom - TOP_BAR_H - barReserve
     : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H - barReserve;
+  const availH = measuredColH > 0
+    ? (isSplit ? measuredColH : Math.max(120, measuredColH - BOTTOM_PANEL_H))
+    : estAvailH;
   // 2026-06-24 (Tim — "the T you can't see") — our curated hole crops are 2:3
   // portrait (1024×1536). The box must be EXACTLY that aspect or resizeMode:cover
   // crops the top/bottom and the TEE (~83% down) falls off the visible image while
@@ -1960,7 +1969,13 @@ export default function SmartVisionScreen() {
           canvas + bottom panel sit side-by-side in a row so the panel
           becomes a right-side column. On portrait, vertical flow is
           unchanged. */}
-      <View style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}>
+      <View
+        style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}
+        onLayout={(e) => {
+          const h = Math.round(e.nativeEvent.layout.height);
+          if (h > 0 && Math.abs(h - measuredColH) > 1) setMeasuredColH(h);
+        }}
+      >
       {/* Image canvas + markers. Phase 4.1 — wrapped in a GestureDetector
           with a Tap gesture so tapping the image background drops the
           cart (Y target) at the tap location. Marker Pan gestures take
