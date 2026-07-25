@@ -87,25 +87,15 @@ export function GlobalCaddieMic() {
     setRouteLabel(labelForPath(path));
   }, [path]);
 
-  // Tabs render the header CaddieMicBadge; Smart Motion / Cage Mode own the camera+mic.
-  const onTab = segments[0] === '(tabs)';
-  const suppressed = onTab || SUPPRESS_PATH_PREFIXES.some((p) => path.startsWith(p));
-  const hidden = HIDE_PATH_PREFIXES.some((p) => path.startsWith(p));
-
-  return (
-    // 2026-07-01 (whole-app audit) — sits BELOW the header row, not at the very top-left corner,
-    // so the 44px badge never overlaps / intercepts a screen's back/close button (which owns the
-    // top-left on settings, smartvision, smartfinder, recap, mark-*, messages, etc.). Still the
-    // upper-left region Tim asked for, just clear of the back chevron.
-    // NOTE: hooks above must run every render (route-label sync), so we gate the RENDER here, not
-    // with an early return before the hooks.
-    (suppressed || hidden) ? null : (
-      <View style={[styles.wrap, { top: insets.top + 52 }]} pointerEvents="box-none">
-        <CaddieMicBadge size={40} />
-        <CaddieStateCue />
-      </View>
-    )
-  );
+  // 2026-07-24 (Tim — clean nav + "make the upper-left mic a static logo / bottom bar owns the mic").
+  // The floating upper-left mic is RETIRED. The global CaddieBottomBar now owns tap-to-talk on EVERY
+  // screen (with its own neon listening glow), so a second floating mic up top was redundant and
+  // overlapped screen nav (the SmartVision back chevron, etc.). This component stays mounted ONLY for
+  // the caddie's "where am I" route-label baseline (the useEffect above), which the brain relies on
+  // everywhere. It renders nothing. The upper-left now shows just the screen's nav + the static brand
+  // logo in the header. (CaddieStateCue / styles kept below but unused — the bottom bar is the cue now.)
+  void segments;
+  return null;
 }
 
 // The brand voice-state cue (icon + label) shown under the universal badge when a listening
