@@ -157,15 +157,9 @@ export default function CaddieTab() {
   // the dropdown row + DataStrip + insets. On phones the natural
   // W·16/9 fits within viewport so the cap doesn't trigger and the
   // canonical look is preserved.
-  // Phase BJ — pre-round Start Round CTA budget. Standard phones reserve
-  // 200px below the avatar; Fold Z open (W >= 540) reserves 280px because
-  // the wider avatar pushes its bottom gradient further down the visible
-  // viewport and a 200px reservation was clipping the CTA top edge.
-  // In-round both aspects share the 160px DataStrip + dropdown budget.
-  const _isRoundActiveForLayout = useRoundStore(s => s.isRoundActive);
-  const _preRoundBudget = W >= 540 ? 280 : 200;
-  const _avatarMaxH = H - insets.top - insets.bottom - 56 - (_isRoundActiveForLayout ? 160 : _preRoundBudget);
-  const _avatarFrameHeight = Math.min(Math.round(W * 16 / 9), _avatarMaxH);
+  // 2026-07-25 — removed a dead avatar-sizing trio (_preRoundBudget/_avatarMaxH/_avatarFrameHeight
+  // + _isRoundActiveForLayout): defined but referenced nowhere (the live layout sizes the portrait via
+  // the zoneTop/zoneBottom absolute container, not these). Confirmed unused before deleting.
 
   const apiUrl = getApiBaseUrl();
   const familyMembers = useFamilyStore(s => s.members);
@@ -2847,7 +2841,7 @@ export default function CaddieTab() {
                 bottom: 132 + insets.bottom,
                 width: 120,
                 height: 86,
-                borderRadius: 10,
+                borderRadius: 14,
                 borderWidth: 1.5,
                 borderColor: '#00C896',
                 overflow: 'hidden',
@@ -2865,12 +2859,14 @@ export default function CaddieTab() {
                   ? <L1HolePreview width={120} height={86} />
                   : kevinAvatar}
               </View>
-              {/* swap affordance — a small neon swap chip so it reads as tap-to-switch */}
+              {/* swap affordance — tap-to-switch chip. 2026-07-25 (Tim — theme congruence) — was neon
+                  #88F700, a THIRD accent green competing with the teal card border on one 120×86 element.
+                  Aligned to the card's teal #00C896 so the card reads as one system. */}
               <View
-                style={{ position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 }}
+                style={{ position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 }}
                 pointerEvents="none"
               >
-                <Ionicons name="swap-horizontal" size={12} color="#88F700" />
+                <Ionicons name="swap-horizontal" size={12} color="#00C896" />
               </View>
             </TouchableOpacity>
           </>
@@ -3095,6 +3091,11 @@ export default function CaddieTab() {
           On Fold-closed, the avatar is full-bleed and 160 lands on
           her cheek/eye line. Bump to 240 on Fold-closed so the
           circle clears the eye-line of the canonical face framing. */}
+      {/* 2026-07-25 (Tim — "home-made / not congruent") — this circle carries the live WIND arrow,
+          which only exists during a round. Pre-round it was a STATIC, non-interactive navigate icon
+          in an off-palette blue (#3b82f6, the only blue on the screen) that did nothing — pure visual
+          clutter. Render it ONLY when it has real data to show. */}
+      {isRoundActive && (
       <View
         style={{
           position: 'absolute',
@@ -3117,12 +3118,9 @@ export default function CaddieTab() {
         }}
         pointerEvents="none"
       >
-        {isRoundActive ? (
-          <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
-        ) : (
-          <Ionicons name="navigate" size={22} color="#3b82f6" />
-        )}
+        <WindArrow weather={caddieWeather} shotBearingDeg={caddieShotBearing} compact />
       </View>
+      )}
 
       {/* SMARTFINDER CARD — Phase D-2 embedded rangefinder. Hidden at
            L4 (Full — collapses to a right-side reticle). At L1 Quiet
@@ -4253,9 +4251,18 @@ return StyleSheet.create({
     right: 40,
     height: 60,
     borderRadius: 30,
-    backgroundColor: 'transparent',
+    // 2026-07-25 (Tim — "not congruent / home-made") — was a fully TRANSPARENT outline, which read
+    // as hollow/lighter than its filled, glowing neighbors (SmartVision card, caddie bar). Give it a
+    // subtle teal fill + a soft teal glow so the primary CTA shares the same depth treatment as the
+    // rest of the bottom stack and clearly leads.
+    backgroundColor: 'rgba(0,200,150,0.12)',
     borderWidth: 1.5,
     borderColor: '#00C896',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 7,
     alignItems: 'center',
     justifyContent: 'center',
     // Phase BN — zIndex bumped 5 → 50 so the CTA always renders above any
@@ -4268,8 +4275,8 @@ return StyleSheet.create({
   startRoundText: {
     color: '#00C896',
     fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: -0.2,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   backdrop: {
     flex: 1,

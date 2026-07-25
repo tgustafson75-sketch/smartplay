@@ -918,10 +918,14 @@ export default function CaddieAvatar({
           resizeMode={resolvedPersona === 'tank' ? 'contain' : fill}
         />
 
-        {/* Layer 2 — Bottom gradient */}
+        {/* Layer 2 — Bottom gradient. 2026-07-25 (Tim — "the bottom looks home-made, hard cut-off
+            under the portrait") — the fade stopped at 0.75 opacity, leaving a visible horizontal
+            edge where the portrait zone ends. Carry it to FULLY opaque #060f09 (the app's dark base,
+            = the zone/card bg) so the caddie DISSOLVES into the screen instead of being cut off —
+            the premium hero-fade look. Fades a touch earlier for a longer, smoother melt. */}
         <LinearGradient
-          colors={['transparent', 'transparent', 'rgba(6,15,9,0.3)', 'rgba(6,15,9,0.75)']}
-          locations={[0, 0.45, 0.75, 1]}
+          colors={['transparent', 'transparent', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.88)', '#060f09']}
+          locations={[0, 0.4, 0.72, 0.9, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />

@@ -157,7 +157,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       return (
         <SmartVisionTap onPress={onOpenSmartVision}>
           <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
-            <View style={styles.imageOverlay}>
+            {/* 2026-07-25 (Tim — "540 bleeds through the card") — the curated hole JPG has the yardage
+                printed on it, which showed through behind the label. A bottom-up scrim seats the text
+                on a clean dark base so only OUR label reads, not the baked-in number. */}
+            <View style={styles.planScrim} pointerEvents="none" />
+            <View style={styles.planLabelWrap} pointerEvents="none">
               <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
               <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
             </View>
@@ -431,6 +435,10 @@ const styles = StyleSheet.create({
   placeholderSub: { color: '#4b5563', fontSize: 11, marginTop: 6, textAlign: 'center' },
   placeholderSubLight: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 4, textAlign: 'center' },
   imgRadius: { borderRadius: 10 },
+  // 2026-07-25 — pre-round plan card: dark scrim + bottom-left label so the curated JPG's baked-in
+  // yardage doesn't bleed through behind our text.
+  planScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,15,9,0.42)' },
+  planLabelWrap: { position: 'absolute', left: 8, bottom: 8, right: 8 },
   imageOverlay: {
     position: 'absolute',
     top: 8,
