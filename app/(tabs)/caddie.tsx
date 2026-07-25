@@ -2791,86 +2791,89 @@ export default function CaddieTab() {
           </>
         );
       })()}
-      {/* 2026-07-24 (Tim) — THE one caddie layout, rendered for every trust
-          level now (was L3-only). Cockpit + Companion removed above. */}
-      {true && (
-        // L3 Active — Kevin takes 2/3 of screen height (80% of that on
-        // Fold-open / wide screens, per Tim). Anchored from the bottom so
-        // his lower edge sits just above the dropdown row.
-        <>
-          {/* L3 SmartVision INLAY — Tim: "in bottom left of Kevin box,
-              overlayed, not so big horizontally". Compact tile anchored
-              bottom-left of the Kevin avatar zone, zIndex above Kevin
-              so it overlays.
-
-              Phase BS-followup Issue 4 — shrunk 140×100 → 120×86 and
-              dropped bottom 158 → 132 so the tile sits flush at the
-              bottom-left corner of the avatar zone instead of floating
-              8px inside it. Previously the tile was covering the
-              SmartPlay shirt logo on Serena's chest. Smaller footprint
-              + lower anchor preserves the L3 overlay design intent
-              while clearing the wardrobe brand mark. */}
-          <View
-            style={{
-              position: 'absolute',
-              left: 12,
-              bottom: 132 + insets.bottom,
-              width: 120,
-              height: 86,
-              borderRadius: 10,
-              borderWidth: 1.5,
-              borderColor: '#00C896',
-              overflow: 'hidden',
-              backgroundColor: '#0d2418',
-              zIndex: 12,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.5,
-              shadowRadius: 4,
-              elevation: 8,
-            }}
-            pointerEvents="box-none"
-          >
-            <L1HolePreview onOpenSmartVision={openSmartVision} width={120} height={86} />
-          </View>
-          {/* L3 Kevin avatar — full L3 zone now that SmartVision is an
-              overlay inlay (not a top card). Top clamp ensures Kevin
-              starts at least below the topNav/banner row. */}
-          <View
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 150 + insets.bottom,
-              height: Math.min(
-                Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
-                H - (insets.top + 80) - (150 + insets.bottom),
-              ),
-            }}
-          >
-            <CaddieAvatar
-              key={`${W}x${H}`}
-              gender={voiceGender === 'female' ? 'female' : 'male'}
-              persona={caddiePersonality}
-              isOnCourse={isRoundActive}
-              isCageMode={false}
-              voiceState={voiceState}
-              hud={NULL_HUD}
-              openingPrompt=""
-              caddieResponse=""
-              onTap={handleMicPress}
-              emotion={kevinEmotion}
-              fillMode="cover"
-              isThinking={kevinThinking}
-              trustLevel={trustLevel}
-              customPortraitB64={activeCustomPortrait}
-            />
-            {/* 2026-06-04 — Coach Mode badge overlay removed. The
-                toggle now lives as a single entry in the central ⋯
-                Tools menu (components/tools/GlobalToolsMenu.tsx). */}
-          </View>
-        </>
-      )}
+      {/* 2026-07-24 (Tim) — THE one caddie interface. ONE layout that toggles which view LEADS:
+          Active (trustLevel 3) = the CADDIE leads (big avatar) + SmartVision in the small corner box;
+          Quiet (trustLevel 1) = SMARTVISION leads (big map) + the caddie in the corner. Tap the small
+          corner box to swap — that tap IS the Quiet<->Active toggle. No Cockpit, no Harry. */}
+      {(() => {
+        const caddiePrimary = trustLevel !== 1; // 1 = Quiet → SmartVision leads
+        const zoneBottom = 150 + insets.bottom;
+        const zoneHeight = Math.min(
+          Math.round(H * 2 / 3 * (W >= 540 ? 0.8 : 1)),
+          H - (insets.top + 80) - zoneBottom,
+        );
+        const swap = () => {
+          try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
+          setTrustLevel(caddiePrimary ? 1 : 3);
+        };
+        const kevinAvatar = (
+          <CaddieAvatar
+            key={`${W}x${H}`}
+            gender={voiceGender === 'female' ? 'female' : 'male'}
+            persona={caddiePersonality}
+            isOnCourse={isRoundActive}
+            isCageMode={false}
+            voiceState={voiceState}
+            hud={NULL_HUD}
+            openingPrompt=""
+            caddieResponse=""
+            onTap={handleMicPress}
+            emotion={kevinEmotion}
+            fillMode="cover"
+            isThinking={kevinThinking}
+            trustLevel={trustLevel}
+            customPortraitB64={activeCustomPortrait}
+          />
+        );
+        return (
+          <>
+            {/* PRIMARY zone — whichever view leads fills it, anchored from the bottom above the row. */}
+            <View style={{ position: 'absolute', left: 0, right: 0, bottom: zoneBottom, height: zoneHeight }}>
+              {caddiePrimary ? kevinAvatar : (
+                <L1HolePreview onOpenSmartVision={openSmartVision} width={W} height={zoneHeight} />
+              )}
+            </View>
+            {/* CORNER box = the toggle. Shows the OTHER view; tap it to bring that view forward. */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={swap}
+              accessibilityRole="button"
+              accessibilityLabel={caddiePrimary ? 'Bring SmartVision forward' : `Bring ${getCaddieName(caddiePersonality)} forward`}
+              style={{
+                position: 'absolute',
+                left: 12,
+                bottom: 132 + insets.bottom,
+                width: 120,
+                height: 86,
+                borderRadius: 10,
+                borderWidth: 1.5,
+                borderColor: '#00C896',
+                overflow: 'hidden',
+                backgroundColor: '#0d2418',
+                zIndex: 12,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.5,
+                shadowRadius: 4,
+                elevation: 8,
+              }}
+            >
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                {caddiePrimary
+                  ? <L1HolePreview width={120} height={86} />
+                  : kevinAvatar}
+              </View>
+              {/* swap affordance — a small neon swap chip so it reads as tap-to-switch */}
+              <View
+                style={{ position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 }}
+                pointerEvents="none"
+              >
+                <Ionicons name="swap-horizontal" size={12} color="#88F700" />
+              </View>
+            </TouchableOpacity>
+          </>
+        );
+      })()}
       {/* 2026-06-04 — L4 'Full' photoreal portrait + old L1 SmartFinder-
           hero layout both removed. Trust spectrum collapsed to {1,2,3};
           L1 is now Cockpit (rendered by the early-return at line ~1775

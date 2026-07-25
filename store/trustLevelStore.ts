@@ -35,95 +35,44 @@ export type TrustLevelMeta = {
   one_liner: string;    // one-line description
 };
 
+// 2026-07-24 (Tim — "remove harry, remove cockpit, TWO levels = Quiet + Active, one caddie interface
+// that toggles SmartVision <-> caddie"). Collapsed to TWO user-facing levels. Harry persona binding +
+// the branded Cockpit are GONE. Level now ONLY controls proactivity + which view leads:
+//   - Level 1 QUIET  = SmartVision leads (map primary); caddie is small + silent (tap/type to talk).
+//   - Level 3 ACTIVE = the caddie leads (avatar primary); volunteers along the way. DEFAULT.
+// The middle 'companion' (2) is retired — kept as a type-valid alias of Active so no consumer that
+// indexes TRUST_LEVEL_META[level] can crash; migration coerces any persisted 2 to 3.
 export const TRUST_LEVEL_META: Record<TrustLevel, TrustLevelMeta> = {
-  1: { level: 1, id: 'quiet',     label: 'Quiet',     one_liner: "Harry's cockpit. Tap to talk." },
-  2: { level: 2, id: 'companion', label: 'Companion', one_liner: "Kevin's there when I need him." },
-  3: { level: 3, id: 'active',    label: 'Active',    one_liner: 'Kevin engages along the way.' },
+  1: { level: 1, id: 'quiet',     label: 'Quiet',     one_liner: 'SmartVision leads · tap or type to talk.' },
+  2: { level: 2, id: 'active',    label: 'Active',    one_liner: 'Your caddie leads the way.' },
+  3: { level: 3, id: 'active',    label: 'Active',    one_liner: 'Your caddie leads the way.' },
 };
 
-/** Display order for the slider — numerical order matches intensity. */
-export const TRUST_LEVEL_SLIDER_ORDER: readonly TrustLevel[] = [1, 2, 3];
+/** Display order for the toggle — just the two live levels now (Quiet, Active). */
+export const TRUST_LEVEL_SLIDER_ORDER: readonly TrustLevel[] = [1, 3];
 
 interface TrustLevelState {
   level: TrustLevel;
-  /** 2026-06-04 — Persona we should restore when leaving L1 Cockpit. Was
-   *  formerly named preCockpitPersona and tied to L5; the Cockpit binding
-   *  moved to L1 in the 2026-06-04 trust-spectrum collapse. Captured at
-   *  the moment of entering L1 so the user's preferred Kevin/Tank/Serena
-   *  is restored on exit. Null when not in Cockpit. */
-  preCockpitPersona: string | null;
   setLevel: (level: TrustLevel) => void;
 }
 
 export const useTrustLevelStore = create<TrustLevelState>()(
   persist(
-    (set, get) => ({
-      level: 2,
-      preCockpitPersona: null,
-      setLevel: (level) => {
-        const prev = get().level;
-        const wasCockpit = prev === 1;
-        const willBeCockpit = level === 1;
-
-        // L1 IS Harry's cockpit. Entering L1 → save current persona, swap
-        // to Harry. Leaving L1 → restore the saved persona so the user
-        // gets back Kevin/Tank/Serena. Dynamic require avoids the
-        // circular import between settingsStore and trustLevelStore.
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
-          const currentPersona = settingsMod.useSettingsStore.getState().caddiePersonality;
-          if (willBeCockpit && !wasCockpit) {
-            set({ level, preCockpitPersona: currentPersona ?? null });
-            if (currentPersona !== 'harry') {
-              settingsMod.useSettingsStore.getState().setCaddiePersonality?.('harry');
-            }
-            // 2026-06-04 — Route to the Caddie tab on L1 entry so the
-            // user lands on the Cockpit render immediately. The Caddie
-            // screen already early-returns into the Cockpit layout when
-            // trustLevel === 1 (see app/(tabs)/caddie.tsx — `cockpitMode`),
-            // so this hop is the only thing needed to make L1 selection
-            // from Settings or any other tab "go to Cockpit." Wrapped in
-            // its own try because the router import can throw before the
-            // navigation tree is mounted.
-            void (async () => {
-              try {
-                const { router } = await import('expo-router');
-                router.replace('/(tabs)/caddie' as never);
-              } catch (e) {
-                console.log('[trustLevel] L1 router nav skipped:', e);
-              }
-            })();
-            return;
-          }
-          if (wasCockpit && !willBeCockpit) {
-            const restore = get().preCockpitPersona;
-            set({ level, preCockpitPersona: null });
-            if (restore && restore !== currentPersona) {
-              settingsMod.useSettingsStore.getState().setCaddiePersonality?.(restore as 'kevin' | 'tank' | 'serena' | 'harry');
-            }
-            return;
-          }
-        } catch (e) {
-          console.log('[trustLevel] cockpit persona binding skipped:', e);
-        }
-        set({ level });
-      },
+    (set) => ({
+      level: 3,
+      // No persona swap, no router hop — the level is pure proactivity/view state now.
+      setLevel: (level) => set({ level: level === 2 ? 3 : level }),
     }),
     {
       name: 'trust-level-store-v1',
       storage: createJSONStorage(() => getPersistStorage()),
-      // 2026-06-04 — version bumped from 1 → 2 for the {1,2,3} collapse.
-      // Migrate coerces any out-of-range persisted level to L2 default.
-      version: 2,
+      // 2026-07-24 — version 3 for the two-level {Quiet=1, Active=3} collapse. Any persisted
+      // Companion (2) or out-of-range level maps to Active (3), the new default.
+      version: 3,
       migrate: (persisted) => {
         const s = (persisted ?? {}) as Partial<TrustLevelState>;
         const lvl = s.level;
-        if (lvl !== 1 && lvl !== 2 && lvl !== 3) {
-          // Users on legacy L4/L5 land on L2 Companion (the safe default).
-          return { ...s, level: 2, preCockpitPersona: null } as TrustLevelState;
-        }
-        return s as TrustLevelState;
+        return { ...s, level: lvl === 1 ? 1 : 3 } as TrustLevelState;
       },
     },
   ),

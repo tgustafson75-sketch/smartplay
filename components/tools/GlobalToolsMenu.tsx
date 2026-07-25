@@ -29,11 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
-import {
-  useTrustLevelStore,
-  TRUST_LEVEL_META,
-  TRUST_LEVEL_SLIDER_ORDER,
-} from '../../store/trustLevelStore';
+import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -97,18 +93,12 @@ export function GlobalToolsMenu() {
     void Promise.resolve(next()).catch((e) => console.log('[tools] action threw', e));
   };
 
-  const cycleMode = () => {
-    const cur = TRUST_LEVEL_SLIDER_ORDER.indexOf(trustLevel);
-    const next = TRUST_LEVEL_SLIDER_ORDER[(cur + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
-    setTrustLevel(next);
-    useToastStore.getState().show(`Now in ${TRUST_LEVEL_META[next].label}`);
-    fire(() => router.push('/(tabs)/caddie' as never));
-  };
-
+  // 2026-07-24 (Tim) — the single caddie interface toggle: Quiet (SmartVision leads) <-> Active
+  // (caddie leads). No more Cockpit/Harry. Level 1 = Quiet, 3 = Active.
   const toggleQuiet = () => {
-    const next = trustLevel === 1 ? 2 : 1;
+    const next = trustLevel === 1 ? 3 : 1;
     setTrustLevel(next);
-    useToastStore.getState().show(trustLevel === 1 ? 'Back to Companion' : 'Cockpit on');
+    useToastStore.getState().show(next === 1 ? 'Quiet — SmartVision leads' : 'Active — caddie leads');
     fire(() => undefined);
   };
 
@@ -286,17 +276,12 @@ export function GlobalToolsMenu() {
                 menu that's meant to scan in one glance. Now each row
                 is icon + state + one short hint. */}
             <SectionHeader colors={colors}>PRESENCE & VOICE</SectionHeader>
+            {/* 2026-07-24 (Tim) — ONE toggle: Quiet (SmartVision leads, caddie quiet) <-> Active
+                (caddie leads + volunteers). Replaces the old Presence-cycler + Cockpit/Harry rows. */}
             <Row
-              icon="options-outline"
-              label={`Presence: ${TRUST_LEVEL_META[trustLevel].label}`}
-              sub="Tap to cycle modes"
-              onPress={cycleMode}
-              colors={colors}
-            />
-            <Row
-              icon={trustLevel === 1 ? 'volume-high-outline' : 'speedometer-outline'}
-              label={trustLevel === 1 ? 'Exit Cockpit' : 'Cockpit Mode'}
-              sub={trustLevel === 1 ? `Back to ${caddieName}` : "Harry's cockpit · tap to talk"}
+              icon={trustLevel === 1 ? 'map-outline' : 'mic-outline'}
+              label={trustLevel === 1 ? 'Quiet · SmartVision leads' : 'Active · caddie leads'}
+              sub={trustLevel === 1 ? `Tap → let ${caddieName} lead` : 'Tap → quiet, map-first'}
               onPress={toggleQuiet}
               colors={colors}
             />
