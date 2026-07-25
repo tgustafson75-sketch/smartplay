@@ -66,9 +66,15 @@ export function GlobalCaddieBar() {
   // independent of the native windowSoftInputMode). The bar isn't lifted by anything else today, so
   // this can't double-lift. When the keyboard is up it owns the bottom inset, so we drop the
   // home-indicator pad to avoid an extra gap between the bar and the keyboard.
+  // 2026-07-25 (Tim — "close but I still can't see what I typed") — lifting by exactly the reported
+  // keyboard height left the input a hair behind the keyboard: on Android edge-to-edge, keyboardDidShow
+  // height is measured to the screen bottom and EXCLUDES the nav-bar inset, so the bar sat ~a nav bar
+  // too low. Add insets.bottom + a small buffer to the lift. Erring slightly HIGH (a small gap above
+  // the keyboard) is fine; erring low hides the input — so bias upward.
   const bottomPad = keyboardHeight > 0 ? 6 : Math.max(insets.bottom, 8) + 6;
+  const lift = keyboardHeight > 0 ? keyboardHeight + insets.bottom + 10 : 0;
   return (
-    <View style={[styles.wrap, { paddingBottom: bottomPad, marginBottom: keyboardHeight, backgroundColor: colors.background }]}>
+    <View style={[styles.wrap, { paddingBottom: bottomPad, marginBottom: lift, backgroundColor: colors.background }]}>
       <CaddieBottomBar />
     </View>
   );
