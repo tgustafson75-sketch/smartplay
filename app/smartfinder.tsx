@@ -1716,10 +1716,16 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
   const [viewW, setViewW] = useState(0);
   const [topPt, setTopPt] = useState<{ x: number; y: number } | null>(null);
   const [basePt, setBasePt] = useState<{ x: number; y: number } | null>(null);
-  const [refId, setRefId] = useState(REFERENCE_HEIGHTS[0].id);
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoMsg, setAutoMsg] = useState<string | null>(null);
-  const ref = REFERENCE_HEIGHTS.find((r) => r.id === refId) ?? REFERENCE_HEIGHTS[0];
+  // 2026-07-25 (Tim — "leave it the way it was before the new settings; make them auto-detected") — the
+  // manual reference-object chips are gone. Auto-detect identifies the object + its real height; a plain
+  // manual two-tap falls back to a flagstick (7 ft), the most common reference. autoRef, when set by a
+  // scan, carries the DETECTED object's real height + label so we range off whatever it actually is.
+  const [autoRef, setAutoRef] = useState<{ label: string; meters: number } | null>(null);
+  const DEFAULT_REF = REFERENCE_HEIGHTS[0]; // flagstick, 2.134 m — manual-tap fallback
+  const refMeters = autoRef?.meters ?? DEFAULT_REF.meters;
+  const refLabel = autoRef?.label ?? 'the flagstick';
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -1728,7 +1734,7 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
     else { setTopPt({ x: locationX, y: locationY }); setBasePt(null); } // third tap restarts
     setAutoMsg(null);
   }, [topPt, basePt]);
-  const reset = () => { setTopPt(null); setBasePt(null); setAutoMsg(null); };
+  const reset = () => { setTopPt(null); setBasePt(null); setAutoMsg(null); setAutoRef(null); };
 
   // 2026-07-23 — Auto-detect: capture a frame, let the vision brain find the flag/person's
   // top + base, and drop the two markers automatically. The model returns NORMALIZED image
@@ -1745,12 +1751,11 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
       if (!b64) { setAutoMsg('Could not capture a frame — try again or tap manually.'); return; }
       const det = await detectMeasureReference(b64);
       if (!det.found || !det.top || !det.base) {
-        setAutoMsg('No flag or person clearly in view — tap the top and base yourself.');
+        setAutoMsg('Nothing clear to measure — aim at a flag, cart, person or bag, or tap the top + base yourself.');
         return;
       }
-      // Match the reference chip to what was detected so ref.meters reflects the real height.
-      const matchedId = det.kind === 'flagstick' ? 'flagstick' : det.kind === 'person' ? 'person' : refId;
-      setRefId(matchedId);
+      // Range off whatever it detected, using THAT object's real height + label (no manual mode).
+      setAutoRef({ label: det.label, meters: det.real_height_m });
       const w = viewW || 1;
       setTopPt({ x: det.top.x * w, y: det.top.y * viewH });
       setBasePt({ x: det.base.x * w, y: det.base.y * viewH });
@@ -1760,14 +1765,14 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
     } finally {
       setAutoBusy(false);
     }
-  }, [autoBusy, cameraRef, viewH, viewW, refId]);
+  }, [autoBusy, cameraRef, viewH, viewW]);
 
   // TOP = the smaller y (higher on screen); order-independent so tapping base first still works.
   const result = topPt && basePt && viewH > 0
     ? computeHeightRangedDistance({
         top_y_normalized: Math.min(topPt.y, basePt.y) / viewH,
         base_y_normalized: Math.max(topPt.y, basePt.y) / viewH,
-        real_height_m: ref.meters,
+        real_height_m: refMeters,
         vfov_deg: 60, // base camera VFOV (measure at 1×; zoom-corrected VFOV is a follow-up)
       })
     : null;
@@ -1781,22 +1786,8 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
         onLayout={(e) => { setViewH(e.nativeEvent.layout.height); setViewW(e.nativeEvent.layout.width); }}
       />
 
-      {/* Reference-target chips — what are we ranging off? */}
-      <View style={{ position: 'absolute', top: insets.top + 12, left: 0, right: 0 }} pointerEvents="box-none">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-          {REFERENCE_HEIGHTS.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              onPress={() => { setRefId(r.id); reset(); }}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1, backgroundColor: r.id === refId ? '#003d20' : 'rgba(0,0,0,0.55)', borderColor: r.id === refId ? '#00C896' : 'rgba(255,255,255,0.25)' }}
-              accessibilityRole="button"
-              accessibilityLabel={`Range off ${r.label}`}
-            >
-              <Text style={{ color: r.id === refId ? '#00C896' : '#e5e7eb', fontSize: 12, fontWeight: '700' }}>{r.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* 2026-07-25 (Tim) — the manual reference-object chips are REMOVED. Auto-detect identifies the
+          object; a plain manual two-tap ranges off a flagstick by default. */}
 
       {/* Tap markers + the measured vertical span */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -1832,14 +1823,14 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
           <Text style={{ color: '#F0C030', fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>{autoMsg}</Text>
         )}
         {!topPt ? (
-          <Text style={styles.instructionText}>Auto-detect, or tap the TOP of the {ref.label.replace(/\s*\(.*\)$/, '')}</Text>
+          <Text style={styles.instructionText}>Tap Auto-detect — or tap the TOP of your target, then its base</Text>
         ) : !basePt ? (
           <Text style={styles.instructionText}>Now tap its BASE (the ground)</Text>
         ) : result && !result.unmeasurable ? (
           <View style={{ alignItems: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 40, fontWeight: '900' }}>{result.distance_yards}<Text style={{ fontSize: 18, fontWeight: '700' }}> yds</Text></Text>
             <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginTop: 2 }}>
-              off {ref.label} · {result.confidence} confidence
+              off {refLabel} · {result.confidence} confidence
             </Text>
             {result.confidence === 'low' && (
               <Text style={{ color: '#F0C030', fontSize: 11, fontWeight: '700', marginTop: 4 }}>Zoom in on the target for a tighter read</Text>

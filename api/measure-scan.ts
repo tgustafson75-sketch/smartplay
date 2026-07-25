@@ -24,6 +24,10 @@ const POINT_OAI = { type: 'object', properties: { x: { type: 'number' }, y: { ty
 const POINT_OAI_NULLABLE = { type: ['object', 'null'], properties: POINT_OAI.properties, required: POINT_OAI.required, additionalProperties: false };
 const POINT_GEM = { type: 'OBJECT', properties: { x: { type: 'NUMBER' }, y: { type: 'NUMBER' } } };
 
+// 2026-07-25 (Tim — "should auto detect everything else; picking person/flag modes makes no sense").
+// The scan IDENTIFIES the object + estimates its real height, so the golfer never picks a reference.
+const KIND_ENUM = ['flagstick', 'person', 'golf_cart', 'stand_bag', 'range_flag', 'tee_marker', 'bench', 'ball_washer', 'other', 'none'];
+
 const SCHEMA: StructuredSchema = {
   name: 'measure_reference',
   strict: false,
@@ -31,43 +35,53 @@ const SCHEMA: StructuredSchema = {
     type: 'object',
     properties: {
       found: { type: 'boolean' },
-      kind: { type: 'string', enum: ['flagstick', 'person', 'none'] },
+      kind: { type: 'string', enum: KIND_ENUM },
+      label: { type: 'string' },
       real_height_m: { type: 'number' },
       top: POINT_OAI_NULLABLE,
       base: POINT_OAI_NULLABLE,
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
       notes: { type: 'string' },
     },
-    required: ['found', 'kind', 'real_height_m', 'top', 'base', 'confidence', 'notes'],
+    required: ['found', 'kind', 'label', 'real_height_m', 'top', 'base', 'confidence', 'notes'],
     additionalProperties: false,
   },
   gemini: {
     type: 'OBJECT',
     properties: {
       found: { type: 'BOOLEAN' },
-      kind: { type: 'STRING', enum: ['flagstick', 'person', 'none'] },
+      kind: { type: 'STRING', enum: KIND_ENUM },
+      label: { type: 'STRING' },
       real_height_m: { type: 'NUMBER' },
       top: { ...POINT_GEM, nullable: true },
       base: { ...POINT_GEM, nullable: true },
       confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
       notes: { type: 'STRING' },
     },
-    required: ['found', 'kind', 'real_height_m', 'top', 'base', 'confidence', 'notes'],
+    required: ['found', 'kind', 'label', 'real_height_m', 'top', 'base', 'confidence', 'notes'],
   },
 };
 
-const SYSTEM_PROMPT = `You are a golf rangefinder's vision assist. You are given ONE photo taken by a golfer pointing their phone at a target. Find the single BEST reference object of KNOWN real-world height to range off, and report its exact TOP and BASE (ground-contact) points as fractions of the image (x: 0 left … 1 right, y: 0 top … 1 bottom).
+const SYSTEM_PROMPT = `You are a golf rangefinder's vision assist. You are given ONE photo taken by a golfer pointing their phone at a target. IDENTIFY the single BEST object in view whose real-world height you can confidently estimate, and report its TOP and BASE (ground-contact) points as fractions of the image (x: 0 left to 1 right, y: 0 top to 1 bottom), plus WHAT it is and its real height in metres. The golfer should NOT have to tell you what it is - you figure it out.
 
-Prefer, in order:
-1. A golf FLAGSTICK / pin on a green — a thin pole with a flag. Real height ≈ 2.13 m (7 ft). The TOP is the very top of the flag/pole; the BASE is where the pole meets the green.
-2. A standing PERSON, fully visible head to feet. Real height ≈ 1.75 m. TOP = top of head, BASE = feet on the ground.
+Good references and their typical real heights:
+- golf FLAGSTICK / pin (thin pole with a flag on a green): 2.13 m. kind="flagstick".
+- standing PERSON, head to feet: 1.75 m. kind="person".
+- golf CART: 1.20 m tall at the roof. kind="golf_cart".
+- stand / carry BAG standing upright: 0.90 m. kind="stand_bag".
+- driving-range MARKER FLAG: 1.80 m. kind="range_flag".
+- TEE MARKER block or ball: 0.15 m. kind="tee_marker".
+- BENCH: 0.85 m. kind="bench".
+- BALL WASHER on a post: 0.95 m. kind="ball_washer".
+- anything else with a confidently known height: kind="other" and set real_height_m to your best estimate.
+
+Set label to a short human name of the object (e.g. "the flagstick", "the golf cart", "that bench").
 
 Rules:
-- Report ONLY a reference whose TOP and ground-contact BASE are BOTH clearly visible. If the base is hidden (behind a mound, out of frame, occluded) you cannot range it → found=false.
-- The reference must be roughly VERTICAL and standing on the ground the golfer is on.
-- If there is no clear flagstick or full standing person, set found=false, kind="none", top=null, base=null.
-- Do NOT guess a box for a partially-visible or ambiguous object. A wrong box gives a wrong distance — returning found=false is CORRECT and expected.
-- Set real_height_m to 2.13 for a flagstick, 1.75 for a person.`;
+- Report ONLY an object whose TOP and ground-contact BASE are BOTH clearly visible. If the base is hidden (behind a mound, out of frame, occluded) you cannot range it -> found=false.
+- The object must be roughly VERTICAL / sitting on the same ground as the golfer, and be a discrete thing you can put a real height on (NOT a tree line, wall, or the horizon).
+- Do NOT guess a box for a partially-visible or ambiguous object. A wrong box gives a wrong distance -> found=false is CORRECT and expected.
+- real_height_m must be the object's TRUE height in the range 0.1 to 3.0 m; never 0 when found=true.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
@@ -108,13 +122,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const top = pt(parsed.top);
     const base = pt(parsed.base);
-    const kind = parsed.kind === 'flagstick' || parsed.kind === 'person' ? parsed.kind : 'none';
-    // A usable read requires a real reference AND both endpoints AND a positive height.
+    const kindRaw = typeof parsed.kind === 'string' ? parsed.kind : 'none';
+    const kind = KIND_ENUM.includes(kindRaw) ? kindRaw : 'other';
+    const label = typeof parsed.label === 'string' && parsed.label.trim() ? parsed.label.trim() : 'the object';
+    // A usable read requires a real object AND both endpoints AND a PLAUSIBLE height (0.1-3.0 m).
     const heightM = Number(parsed.real_height_m);
-    const found = parsed.found === true && kind !== 'none' && top != null && base != null && Number.isFinite(heightM) && heightM > 0;
+    const found = parsed.found === true && kind !== 'none' && top != null && base != null && Number.isFinite(heightM) && heightM >= 0.1 && heightM <= 3.0;
     return res.status(200).json({
       found,
       kind: found ? kind : 'none',
+      label: found ? label : '',
       real_height_m: found ? heightM : 0,
       top: found ? top : null,
       base: found ? base : null,

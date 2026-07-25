@@ -10,9 +10,17 @@
  */
 import { getApiBaseUrl } from './apiBase';
 
+// 2026-07-25 (Tim — "auto detect everything else") — the scan now identifies ANY known-height object
+// (flagstick, person, cart, bag, range flag, tee marker, bench, ...) + a human label + its real height.
+export type MeasureKind =
+  | 'flagstick' | 'person' | 'golf_cart' | 'stand_bag' | 'range_flag'
+  | 'tee_marker' | 'bench' | 'ball_washer' | 'other' | 'none';
+
 export type MeasureScanResult = {
   found: boolean;
-  kind: 'flagstick' | 'person' | 'none';
+  kind: MeasureKind;
+  /** Human name of what was detected, e.g. "the flagstick", "the golf cart". */
+  label: string;
   real_height_m: number;
   top: { x: number; y: number } | null;
   base: { x: number; y: number } | null;
@@ -20,7 +28,7 @@ export type MeasureScanResult = {
   notes?: string;
 };
 
-const NOT_FOUND: MeasureScanResult = { found: false, kind: 'none', real_height_m: 0, top: null, base: null, confidence: 'low' };
+const NOT_FOUND: MeasureScanResult = { found: false, kind: 'none', label: '', real_height_m: 0, top: null, base: null, confidence: 'low' };
 
 /**
  * Detect a known-size reference in a camera frame. Best-effort — returns a found=false result
@@ -45,13 +53,17 @@ export async function detectMeasureReference(imageBase64: string, mediaType: 'im
     const data = (await res.json()) as Partial<MeasureScanResult>;
     const top = validPoint(data.top);
     const base2 = validPoint(data.base);
-    const kind = data.kind === 'flagstick' || data.kind === 'person' ? data.kind : 'none';
+    const VALID: MeasureKind[] = ['flagstick', 'person', 'golf_cart', 'stand_bag', 'range_flag', 'tee_marker', 'bench', 'ball_washer', 'other'];
+    const kind: MeasureKind = VALID.includes(data.kind as MeasureKind) ? (data.kind as MeasureKind) : 'none';
+    const label = typeof data.label === 'string' && data.label.trim() ? data.label.trim() : 'the object';
     const heightM = Number(data.real_height_m);
-    const found = data.found === true && kind !== 'none' && !!top && !!base2 && Number.isFinite(heightM) && heightM > 0;
+    // Plausible-height gate mirrors the server (0.1–3.0 m) so a bad estimate never ranges off junk.
+    const found = data.found === true && kind !== 'none' && !!top && !!base2 && Number.isFinite(heightM) && heightM >= 0.1 && heightM <= 3.0;
     if (!found) return { ...NOT_FOUND, notes: typeof data.notes === 'string' ? data.notes : undefined };
     return {
       found: true,
       kind,
+      label,
       real_height_m: heightM,
       top,
       base: base2,
