@@ -76,7 +76,8 @@ import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
 import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
 import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
-import { fetchHoleImagery, computeFitView, getCenteredImageryUrl } from '../services/mapboxImagery';
+import { fetchHoleImagery, computeFitView, getCenteredImageryUrl, getHoleImageryUrl } from '../services/mapboxImagery';
+import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
@@ -537,9 +538,13 @@ export default function SmartVisionScreen() {
   const isSplit = layout.isLandscape;
   const SIDE_PANEL_W = isSplit ? Math.floor(W * 0.35) : 0;
   const fullW = isSplit ? W - SIDE_PANEL_W : W;
+  // 2026-07-25 (Tim — the caddie bar rides SmartVision too) — reserve its height so the aerial + F/M/B
+  // sit ABOVE the bar instead of being clipped by it (the bar reserves root height that our window-H
+  // math doesn't otherwise know about).
+  const barReserve = useCaddieBarReserve();
   const availH = isSplit
-    ? H - insets.top - insets.bottom - TOP_BAR_H
-    : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H;
+    ? H - insets.top - insets.bottom - TOP_BAR_H - barReserve
+    : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H - barReserve;
   // 2026-06-24 (Tim — "the T you can't see") — our curated hole crops are 2:3
   // portrait (1024×1536). The box must be EXACTLY that aspect or resizeMode:cover
   // crops the top/bottom and the TEE (~83% down) falls off the visible image while
@@ -801,21 +806,25 @@ export default function SmartVisionScreen() {
         // satellite tile centered on the green ALWAYS produces a URL (no network fetch; the Image loads
         // the Mapbox URL directly). It's the guaranteed floor whenever we have hole coords, so a failed/
         // empty framed fetch never leaves a bare green canvas.
-        const greenTileUrl = getCenteredImageryUrl({ lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH });
+        // 2026-07-25 (Tim — "the teebox always gets cut off") — the fallback used to be a GREEN-CENTERED
+        // tile, which cuts the tee off (it's a full hole-length away from the green). Prefer a properly
+        // FRAMED tee→green URL (computeFitView: centered on the midpoint, rotated hole-vertical, with
+        // margin) that the <Image> loads directly — so even if the file pre-fetch fails, the whole hole
+        // INCLUDING the tee is in frame. Green-centered is only the last resort (no tee coord at all).
+        const holeInput = {
+          courseId,
+          holeNumber: holeIndex,
+          par: geo!.par,
+          yardage: geo!.yardage,
+          tee: effectiveTee,
+          green: effectiveGreen,
+        };
+        const framedUrl = getHoleImageryUrl(holeInput, { width: reqW, height: reqH });
+        const greenTileUrl = framedUrl ?? getCenteredImageryUrl({ lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH });
         try {
-          const uri = await fetchHoleImagery(
-            {
-              courseId,
-              holeNumber: holeIndex,
-              par: geo!.par,
-              yardage: geo!.yardage,
-              tee: effectiveTee,
-              green: effectiveGreen,
-            },
-            { width: reqW, height: reqH },
-          );
+          const uri = await fetchHoleImagery(holeInput, { width: reqW, height: reqH });
           if (cancelled) return;
-          setImageUri(uri ?? greenTileUrl); // framed tile if we got one, else the green-centered fallback
+          setImageUri(uri ?? greenTileUrl); // cached framed tile if we got one, else the direct framed URL
         } catch (e) {
           // 2026-06-08 (audit #2) — imagery fetch failure must not crash the hole view.
           // 2026-07-24 — and it must NOT leave a green screen: fall back to the client tile.

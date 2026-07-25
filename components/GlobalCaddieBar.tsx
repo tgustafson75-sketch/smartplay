@@ -20,16 +20,28 @@ import { CaddieBottomBar } from './caddie/CaddieBottomBar';
 
 export const CADDIE_BAR_ENABLED = true;
 
-// Boot / onboarding flows + full-bleed IMMERSIVE tool screens. The bar RESERVES height at the root,
-// which is right for normal scroll screens but would clip screens that lay themselves out to the full
-// window height and own their own dense bottom controls (SmartVision aerial F/M/B, SmartFinder/TightLie
-// camera, the mark-tee/green maps, the swing camera). Those own the bottom; the caddie tab is where the
-// unified input lives. 2026-07-24 (Tim — Fold Z: "many screens the bottom gets overlapped").
+// 2026-07-25 (Tim — "we said EVERY screen goddammit"). The caddie input rides EVERY screen. Only the
+// boot/onboarding flows and the live SWING-CAPTURE camera are exempt (that camera owns the mic for
+// acoustic strike detection + has its own record controls). Everything else — SmartVision, SmartFinder,
+// TightLie, the mark-* maps — gets the bar; screens that size to the full window read useCaddieBarReserve()
+// so their bottom content sits ABOVE the bar instead of clipping.
 const HIDE_PREFIXES = [
   '/intro-video', '/permissions', '/greeting', '/welcome', '/paywall',
   '/swinglab/smartmotion', '/swinglab/coach-lesson',
-  '/smartvision', '/smartfinder', '/lie-analysis', '/mark-tee', '/mark-green',
 ];
+
+/** Height (px) the bar reserves at the root ABOVE the home-indicator inset, or 0 where it's hidden.
+ *  Full-window-height screens (SmartVision) subtract this so their layout fits above the bar. The bar's
+ *  own paddingBottom owns the safe-area inset, so this is the bar's content height only. */
+export function useCaddieBarReserve(): number {
+  const path = usePathname() ?? '';
+  if (!CADDIE_BAR_ENABLED) return 0;
+  if (HIDE_PREFIXES.some((p) => path.startsWith(p))) return 0;
+  return CADDIE_BAR_RESERVE;
+}
+
+// wrap paddingTop (6) + the bar row (~54) + a hair = the space the bar takes above the safe-area inset.
+export const CADDIE_BAR_RESERVE = 64;
 
 export function GlobalCaddieBar() {
   const path = usePathname() ?? '';

@@ -33,6 +33,9 @@ interface Props {
 export default function GlassesStatusBadge({ onPress, hideWhenUnavailable = true }: Props) {
   const status = useGlassesStatus();
   if (hideWhenUnavailable && !status.available) return null;
+  // 2026-07-25 (Tim — "we don't need to show a glasses off pill") — only surface the badge when the
+  // glasses are ACTUALLY engaged (paired or multimodal). The idle "GLASSES OFF" state is just clutter.
+  if (!status.connected && !status.multimodalReady) return null;
 
   const { label, color, dotColor } = (() => {
     if (status.multimodalReady) {
