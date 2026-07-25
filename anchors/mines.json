@@ -1,0 +1,133 @@
+{
+  "name": "Mines Golf Club",
+  "query": "Mines Golf Course Grand Rapids",
+  "greensPerLoop": 18,
+  "holes": [
+    {
+      "hole": 1,
+      "par": 4,
+      "center": 371,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 2,
+      "par": 4,
+      "center": 410,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 3,
+      "par": 4,
+      "center": 398,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 4,
+      "par": 4,
+      "center": 275,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 5,
+      "par": 5,
+      "center": 556,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 6,
+      "par": 4,
+      "center": 298,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 7,
+      "par": 3,
+      "center": 131,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 8,
+      "par": 3,
+      "center": 140,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 9,
+      "par": 4,
+      "center": 364,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 10,
+      "par": 4,
+      "center": 333,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 11,
+      "par": 3,
+      "center": 136,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 12,
+      "par": 4,
+      "center": 321,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 13,
+      "par": 4,
+      "center": 434,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 14,
+      "par": 4,
+      "center": 385,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 15,
+      "par": 3,
+      "center": 122,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 16,
+      "par": 4,
+      "center": 456,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 17,
+      "par": 5,
+      "center": 506,
+      "front": 0,
+      "back": 0
+    },
+    {
+      "hole": 18,
+      "par": 4,
+      "center": 431,
+      "front": 0,
+      "back": 0
+    }
+  ]
+}
