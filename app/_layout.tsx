@@ -89,6 +89,7 @@ import { useRestModeStore } from '../store/restModeStore';
 // hides itself after the visibility window. Sibling to GlobalToast.
 import { UndoMarkBanner } from '../components/UndoMarkBanner';
 import GlobalCaddieMic from '../components/GlobalCaddieMic';
+import GlobalCaddieBar from '../components/GlobalCaddieBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';
@@ -989,6 +990,8 @@ function AppNavigator() {
         style={{ flex: 1 }}
         onStartShouldSetResponderCapture={() => { useRestModeStore.getState().noteActivity(); return false; }}
       >
+      {/* Screen content fills the area ABOVE the anchored caddie bar. */}
+      <View style={{ flex: 1 }}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -1277,6 +1280,10 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
       </Stack>
+      </View>
+      {/* 2026-07-24 (Tim) — the unified caddie bar, anchored as the BOTTOM-MOST element on every screen.
+          Screen content + per-screen bars (data strip, tab bar, F/M/B) stack above it; scroll passes behind. */}
+      <GlobalCaddieBar />
       </View>
       {/* 2026-06-13 (Tim #8) — Round Rest: near-black OLED overlay after 1 min
           idle in a round. GPS/voice keep running; tap to wake. Mounted last so
