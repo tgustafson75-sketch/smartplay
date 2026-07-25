@@ -2699,6 +2699,10 @@ export const useRoundStore = create<RoundState>()(
         // + selectedTee (Play tab tee picker). `goal` is already
         // partialized above.
         pendingLieAnalysis: s.pendingLieAnalysis,
+        // 2026-07-25 (deep audit S3) — persist the pending Kevin club rec, like pendingLieAnalysis
+        // above. It's set when Kevin gives a call and consumed when the shot is logged; a crash/
+        // restart in between dropped it, so kevin_adhered/kevin_rec_club never stamped on that shot.
+        pendingKevinRec: s.pendingKevinRec,
         selectedTee: s.selectedTee,
         transportMode: s.transportMode,
         // 2026-06-05 — third audit pass: four more in-round fields

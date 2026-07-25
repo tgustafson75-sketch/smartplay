@@ -1704,8 +1704,10 @@ return StyleSheet.create({
   },
 
   playTitleBlock: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
-  playTitle: { fontSize: 28, fontWeight: '900', color: '#f4f4f4', letterSpacing: 0.3 },
-  playTagline: { fontSize: 13, fontWeight: '500', color: '#9ca3af', marginTop: 2 },
+  // 2026-07-25 (deep audit S3) — were hardcoded light hex (#f4f4f4/#9ca3af), so the "PLAY" header was
+  // near-invisible in light mode while the rest of the screen themed via makeStyles(c). Use the theme.
+  playTitle: { fontSize: 28, fontWeight: '900', color: c.text_primary, letterSpacing: 0.3 },
+  playTagline: { fontSize: 13, fontWeight: '500', color: c.text_muted, marginTop: 2 },
   sectionLabel: {
     color: c.text_muted, fontSize: 11, fontWeight: '700',
     letterSpacing: 1.6, paddingHorizontal: 16, marginTop: 16, marginBottom: 8,

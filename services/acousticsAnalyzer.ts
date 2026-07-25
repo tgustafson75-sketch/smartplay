@@ -116,8 +116,12 @@ export function analyzeStrike(input: AcousticAnalysisInput): AcousticAnalysis {
   const duration_ms = null; // reserved — detector exposes impact_ms only
 
   // Coarse quality bucket from SNR (best signal we have).
+  // 2026-07-25 (deep audit S3 — honesty) — WITHOUT a noise floor (snr == null) we only have peak
+  // LOUDNESS, and loudness ≠ strike quality: a loud thin/toe strike is still loud. So don't assert
+  // 'good'/'pure' from volume alone — cap at 'okay' when there's no SNR to judge quality by. (A real
+  // 'good'/'pure' requires the SNR path below.)
   const quality: StrikeQuality =
-    snr == null ? (peak > -10 ? 'good' : peak > -20 ? 'okay' : 'bad')
+    snr == null ? (peak > -20 ? 'okay' : 'bad')
     : snr >= PURE_SNR_MIN_DB ? 'pure'
     : snr >= GOOD_SNR_MIN_DB ? 'good'
     : snr >= OKAY_SNR_MIN_DB ? 'okay'

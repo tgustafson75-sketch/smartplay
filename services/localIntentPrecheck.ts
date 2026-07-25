@@ -176,7 +176,7 @@ const PATTERNS: Pattern[] = [
   // it nowhere → white screen). "go back" stays a real back(); this is the
   // explicit close/exit/home set only.
   {
-    rx: /\b(close\s+(?:smart\s*motion|this|it|the\s+(?:tool|camera|screen))|exit\b|go\s+home|take\s+me\s+home|back\s+to\s+(?:the\s+)?caddie)\b/i,
+    rx: /\b(close\s+(?:smart\s*motion|this|it|the\s+(?:tool|camera|screen))|exit\s+(?:smart\s*motion|this|it|the\s+(?:tool|camera|screen))|go\s+home|take\s+me\s+home|back\s+to\s+(?:the\s+)?caddie)\b/i,
     build: (raw) => intent(raw, 'navigate', { direction: 'home' }),
   },
 

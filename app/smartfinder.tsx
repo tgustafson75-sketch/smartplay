@@ -1806,7 +1806,10 @@ function MeasureCameraOverlay({ cameraRef }: { cameraRef: React.RefObject<Camera
       </View>
 
       {/* Bottom panel — instruction while capturing, distance once both taps land */}
-      <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+      {/* 2026-07-25 (deep audit S3) — flat clearance, not insets.bottom+16: the GlobalCaddieBar below
+          already owns the safe-area inset, so +16-plus-inset double-counted it into a dead band (same
+          fix as the target-mode strip; these two consumers were missed). */}
+      <View style={[styles.bottomPanel, { paddingBottom: 10 }]} pointerEvents="box-none">
         {/* Auto-detect — hands-free capture of a flagstick / person. Shown until a read lands. */}
         {!(topPt && basePt && result && !result.unmeasurable) && (
           <TouchableOpacity
@@ -1995,7 +1998,10 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
       </View>
 
       {/* Bottom panel */}
-      <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 16 }]} pointerEvents="box-none">
+      {/* 2026-07-25 (deep audit S3) — flat clearance, not insets.bottom+16: the GlobalCaddieBar below
+          already owns the safe-area inset, so +16-plus-inset double-counted it into a dead band (same
+          fix as the target-mode strip; these two consumers were missed). */}
+      <View style={[styles.bottomPanel, { paddingBottom: 10 }]} pointerEvents="box-none">
         {!pointA ? (
           <Text style={styles.instructionText}>Tap your ball position (point A)</Text>
         ) : !pointB ? (

@@ -27,7 +27,9 @@ export function applyCors(req: VercelRequest, res: VercelResponse): boolean {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-AI-Provider, Authorization');
+    // 2026-07-25 (deep audit S3) — include x-app-key: key-gated routes (image-edit, etc.) require it,
+    // and a browser (SmartPlay web-lite) call would fail CORS preflight without it in the allow-list.
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-AI-Provider, Authorization, x-app-key');
     res.setHeader('Access-Control-Max-Age', '86400');
   }
   if (req.method === 'OPTIONS') {

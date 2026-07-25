@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
+import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import type { Persona } from '../store/settingsStore';
 
 const PORTRAIT_FOR: Record<Persona, ImageSourcePropType> = {
@@ -46,6 +47,9 @@ export default function CaddieSuggestionCard() {
   const { colors } = useTheme();
   const suppression = useSettingsStore(s => s.caddieSuggestions);
   const pending = useTeamIntelligenceStore(s => s.pendingSuggestion);
+  // 2026-07-25 (deep audit S3) — a custom caddie showed Kevin's face under "My Caddie" here. This
+  // surface CAN read the user's real portrait, so use it when the suggesting persona is custom.
+  const customPortraitB64 = useCustomCaddieMediaStore(s => s.customCaddiePortraitB64);
   const acceptPending = useTeamIntelligenceStore(s => s.acceptPendingSuggestion);
   const declinePending = useTeamIntelligenceStore(s => s.declinePendingSuggestion);
   const [expanded, setExpanded] = useState(false);
@@ -62,7 +66,12 @@ export default function CaddieSuggestionCard() {
       { top: insets.top + 12, backgroundColor: colors.surface, borderColor: colors.border },
     ]}>
       <View style={styles.header}>
-        <Image source={PORTRAIT_FOR[pending.fromPersona]} style={styles.portrait} />
+        <Image
+          source={pending.fromPersona === 'custom' && customPortraitB64
+            ? { uri: `data:image/png;base64,${customPortraitB64}` }
+            : PORTRAIT_FOR[pending.fromPersona]}
+          style={styles.portrait}
+        />
         <View style={styles.headerText}>
           <Text style={[styles.from, { color: colors.text_muted }]}>{fromName} suggests</Text>
           <Text style={[styles.title, { color: colors.text_primary }]}>Bring in {toName}?</Text>

@@ -191,6 +191,14 @@ console.log('\n=== Scenario 0c: undo precheck guard ===');
   const scratch = precheckLocalIntent('scratch that');
   check('Undo precheck still fires on "scratch that"',
     !!scratch && scratch.intent_type === 'undo', scratch ? scratch.intent_type : 'no match');
+  // 2026-07-25 (deep audit S3) — bare "exit" token no longer yanks the user home.
+  const whereExit = precheckLocalIntent("where's the exit");
+  check('Nav precheck ignores a bare "exit" mention',
+    !whereExit || !(whereExit.intent_type === 'navigate' && whereExit.parameters?.direction === 'home'),
+    whereExit ? `${whereExit.intent_type}:${whereExit.parameters?.direction ?? ''}` : 'no match (ok)');
+  const closeThis = precheckLocalIntent('close this');
+  check('Nav precheck still fires on "close this"',
+    !!closeThis && closeThis.intent_type === 'navigate', closeThis ? closeThis.intent_type : 'no match');
 }
 
 // ─── Scenario 1: persona resolution returns the right name for each input shape ─
