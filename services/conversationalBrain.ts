@@ -152,3 +152,66 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
   const k = await tryKevin(utterance, timeoutMs);
   return k ?? { text: null, audioBase64: null, toolActions: [], source: 'none' };
 }
+
+/**
+ * 2026-07-25 (Tim — KILL the canned opener) — generate the caddie's post-splash OPENER from the
+ * BRAIN instead of a bundled mp3. The mp3 had no text anywhere in the app, so the player's reply
+ * ("yes") hit the brain with EMPTY history and got a generic "what do you want to work on?" — the
+ * "simpleton, not AI" bug. This makes the opener a real, personalized brain line AND — critically —
+ * SEEDS the shared conversation history with it (assistant turn), so the very next reply is answered
+ * in context. Returns text + TTS audio in one call (kevin TTS's by default). Best-effort: text:null
+ * on any failure and the caller simply stays silent (no canned fallback — that was the whole problem).
+ */
+export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Promise<BrainReply> {
+  const timeoutMs = opts?.timeoutMs ?? 12_000;
+  try {
+    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
+    const settings = useSettingsStore.getState();
+    const profile = (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
+          name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
+          missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
+        };
+      } catch { return {} as Record<string, never>; }
+    })();
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    const resp = await fetch(`${apiBase}/api/kevin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.
+        message: 'The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script.',
+        is_proactive: true,
+        language: settings.language,
+        isRoundActive: false,
+        voiceGender: settings.voiceGender ?? 'male',
+        persona: settings.caddiePersonality,
+        personaIntensity: settings.personaIntensity?.[settings.caddiePersonality] ?? 100,
+        tankSoftIntro: settings.tankSoftIntro ?? false,
+        responseMode: settings.responseMode ?? 'neutral',
+        cecilyMode: settings.cecilyMode ?? false,
+        playerName: profile.name ?? '',
+        firstName: profile.firstName ?? '',
+        handicap: profile.handicap ?? 18,
+        dominantMiss: profile.dominantMiss ?? null,
+        missType: profile.missType ?? null,
+        kevinContext: profile.kevinContext ?? null,
+        persistentPatterns: profile.persistentPatterns ?? null,
+      }),
+    }).finally(() => clearTimeout(t));
+    if (!resp.ok) return { text: null, audioBase64: null, toolActions: [], source: 'none' };
+    const j = (await resp.json()) as { text?: string; audioBase64?: string | null };
+    const text = typeof j.text === 'string' && j.text.trim() ? j.text.trim() : null;
+    if (!text) return { text: null, audioBase64: null, toolActions: [], source: 'none' };
+    // Seed the shared history with ONLY the caddie's opener (assistant turn). The directive above is
+    // deliberately NOT recorded, so the player's next reply is answered against the greeting.
+    setPipecatHistory([{ role: 'assistant', content: text }]);
+    return { text, audioBase64: typeof j.audioBase64 === 'string' ? j.audioBase64 : null, toolActions: [], source: 'kevin' };
+  } catch {
+    return { text: null, audioBase64: null, toolActions: [], source: 'none' };
+  }
+}

@@ -67,7 +67,7 @@ import { useKevin, type ToolAction } from '../../hooks/useKevin';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
-import { speak, speakChunked, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
+import { speak, speakChunked, speakFromBase64, configureAudioForSpeech, captureUtterance, playLocalFile, subscribeToSpeaking, isSpeaking, primeMicPipeline, speakDeviceNotice } from '../../services/voiceService';
 import { answerOffline } from '../../services/offlineCaddie';
 // 2026-05-25 — Bestround celebration: when the round-end summary
 // detects a new personal best, play Kevin's D-ID bestround clip
@@ -75,7 +75,10 @@ import { answerOffline } from '../../services/offlineCaddie';
 // time via getCaddieClip; falls back to TTS if the asset fails.
 import { getCaddieClip } from '../../services/getCaddieClip';
 import { Asset } from 'expo-asset';
-import { getOpenerAssetForPersona } from '../../services/kevinGreetingManifest';
+// 2026-07-25 (Tim) — the canned mp3 opener is gone; the opener is now a real brain turn that seeds
+// conversation history (generateProactiveOpener), so replies keep context. getOpenerAssetForPersona
+// (bundled-mp3 opener) is no longer used.
+import { generateProactiveOpener } from '../../services/conversationalBrain';
 import { awaitGreetingComplete } from '../greeting';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
@@ -1308,20 +1311,27 @@ export default function CaddieTab() {
         return;
       }
       try {
-        const openerMod = getOpenerAssetForPersona(liveSettings.caddiePersonality);
-        const asset = Asset.fromModule(openerMod);
-        await asset.downloadAsync();
-        if (!asset.localUri) {
-          console.log('[caddie] opener skipped: asset has no localUri', { persona: liveSettings.caddiePersonality });
-          return;
+        // 2026-07-25 (Tim — KILL the canned opener) — the opener was a bundled mp3 with NO text
+        // anywhere in the app, so the player's reply reached the brain with EMPTY history → a
+        // generic "what do you want to work on?" (the "simpleton, not AI" bug). Generate a REAL,
+        // personalized opener from the brain and SEED it into the shared conversation history, so
+        // the very next reply ("yes") is answered in context. Best-effort: on any failure we stay
+        // silent (no canned fallback — that was the whole problem). One call returns text + TTS audio.
+        console.log('[caddie] opener: generating from brain', { persona: liveSettings.caddiePersonality });
+        const r = await generateProactiveOpener();
+        if (r.text) {
+          if (r.audioBase64) {
+            await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+          } else {
+            // No TTS came back but we have the text (still seeded into history) — voice it.
+            await speak(r.text, liveSettings.voiceGender, liveSettings.language ?? 'en', getApiBaseUrl(), { userInitiated: true })?.catch?.(() => undefined);
+          }
+          // Set the flag ONLY after a real opener landed. A failure leaves it false so the next
+          // launch / hot-reload retries cleanly (same guarantee the mp3 path had).
+          openerPlayedThisProcess = true;
+        } else {
+          console.log('[caddie] opener skipped: brain returned no text (staying silent, not canned)');
         }
-        console.log('[caddie] opener playing:', { persona: liveSettings.caddiePersonality });
-        // userInitiated:true — cold launch IS user-initiated; lets
-        // L1 Quiet through (voiceEnabled is the hard kill switch above).
-        await playLocalFile(asset.localUri, undefined, { userInitiated: true });
-        // Set the flag ONLY after play resolves. Silent failures leave
-        // it false so the next launch (or hot-reload remount) retries.
-        openerPlayedThisProcess = true;
       } catch (e) {
         console.log('[caddie] opener failed (non-fatal):', e);
       }
