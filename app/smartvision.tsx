@@ -797,6 +797,11 @@ export default function SmartVisionScreen() {
         // centroids). Without this, the tile fetch would still
         // miss because geo.green is null even though we have a
         // usable polygon centroid right here.
+        // 2026-07-24 (Tim — "I never want to see another green screen in SmartVision") — a client-built
+        // satellite tile centered on the green ALWAYS produces a URL (no network fetch; the Image loads
+        // the Mapbox URL directly). It's the guaranteed floor whenever we have hole coords, so a failed/
+        // empty framed fetch never leaves a bare green canvas.
+        const greenTileUrl = getCenteredImageryUrl({ lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH });
         try {
           const uri = await fetchHoleImagery(
             {
@@ -810,13 +815,13 @@ export default function SmartVisionScreen() {
             { width: reqW, height: reqH },
           );
           if (cancelled) return;
-          setImageUri(uri);
+          setImageUri(uri ?? greenTileUrl); // framed tile if we got one, else the green-centered fallback
         } catch (e) {
-          // 2026-06-08 (audit #2) — imagery fetch failure must not crash
-          // the hole view; fall through to no-image (vector still renders).
-          console.log('[smartvision] imagery fetch failed (non-fatal)', e);
+          // 2026-06-08 (audit #2) — imagery fetch failure must not crash the hole view.
+          // 2026-07-24 — and it must NOT leave a green screen: fall back to the client tile.
+          console.log('[smartvision] imagery fetch failed (non-fatal, using green tile)', e);
           if (cancelled) return;
-          setImageUri(null);
+          setImageUri(greenTileUrl);
         }
       } else if (isRoundActive && imageryMode !== 'curated') {
         // Centroid-fallback Mapbox tile — only during an active round,
@@ -836,7 +841,13 @@ export default function SmartVisionScreen() {
           const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
           const fix = getLastFix();
           const playerPt = fix && okc(fix.location) ? { lat: fix.location.lat, lng: fix.location.lng } : null;
-          const center = okc(centroid) ? centroid! : playerPt;
+          // 2026-07-24 (Tim — "never a green screen") — center on the BEST coord we have: this hole's own
+          // green/tee (from resolved geometry) → the player's live GPS → the course centroid. Any single
+          // coordinate is enough to render a real aerial; only a total absence of location falls through.
+          const center = (okc(effectiveGreen) ? effectiveGreen! : null)
+            ?? (okc(effectiveTee) ? effectiveTee! : null)
+            ?? playerPt
+            ?? (okc(centroid) ? centroid! : null);
           if (center) {
             const MAX = 1280;
             let reqW = imageW;
@@ -846,8 +857,10 @@ export default function SmartVisionScreen() {
               reqW = Math.floor(reqW * scale);
               reqH = Math.floor(reqH * scale);
             }
-            // Player-GPS is a precise standing spot → tighter zoom; a whole-course centroid → wider.
-            const zoom = playerPt && !okc(centroid) ? 17 : 15;
+            // A specific point (this hole's green/tee, or the player's GPS) → tighter zoom; a
+            // whole-course centroid → wider.
+            const onSpecificPoint = okc(effectiveGreen) || okc(effectiveTee) || !!playerPt;
+            const zoom = onSpecificPoint ? 16 : 15;
             const uri = getCenteredImageryUrl({
               lat: center.lat,
               lng: center.lng,
@@ -1936,12 +1949,15 @@ export default function SmartVisionScreen() {
             <ActivityIndicator color="#00C896" />
           </View>
         ) : (
+          // 2026-07-24 (Tim — "never a green screen again") — we reach here ONLY when there is NO
+          // coordinate at all (no hole geometry, no GPS fix, no centroid) AND no bundled/framed imagery,
+          // so we genuinely can't draw an aerial. Make it a CLEAR, actionable state — never a bare void.
           <View style={styles.canvasFallback}>
-            <Text style={styles.canvasFallbackTitle}>{courseName ?? 'No course'}</Text>
+            <Ionicons name="location-outline" size={30} color="#00C896" style={{ marginBottom: 10 }} />
+            <Text style={styles.canvasFallbackTitle}>{courseName ?? 'Locating…'}</Text>
             <Text style={styles.canvasFallbackSub}>
-              {imageryMode === 'gps'
-                ? 'Satellite needs your location or a course fix — start a round to place the aerial.'
-                : geometry ? 'Hole imagery unavailable' : 'No geometry for this hole'}
+              Waiting on your location to drop the satellite aerial. Make sure Location is on — the moment
+              I get a GPS fix, the map appears here with live front / middle / back yardages.
             </Text>
           </View>
         )}

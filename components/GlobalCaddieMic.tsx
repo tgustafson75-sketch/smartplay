@@ -62,7 +62,11 @@ const ROUTE_LABELS: { prefix: string; label: string }[] = [
 // route segment / pathname prefix.
 // 2026-07-01 (re-audit) — dropped '/swinglab/cage-mode' (Cage Mode was merged into
 // SmartMotion; no such route exists) — it was dead config suppressing nothing.
-const SUPPRESS_PATH_PREFIXES = ['/swinglab/smartmotion'];
+// 2026-07-24 (Tim — beta screenshot: the floating mic sat ON the SmartVision back chevron). SmartVision
+// is a dense full-screen aerial that owns its own top-left navigation + hole switcher; a floating mic
+// there overlaps the nav. Suppress it (the route-label baseline below still runs, so the caddie knows
+// you're on the hole view). Cleaner-nav pass for the whole mic/text-input surface is tracked separately.
+const SUPPRESS_PATH_PREFIXES = ['/swinglab/smartmotion', '/smartvision'];
 // Boot / full-screen flows where a floating mic would be wrong.
 const HIDE_PATH_PREFIXES = ['/intro-video', '/permissions', '/greeting', '/welcome'];
 
