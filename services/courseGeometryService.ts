@@ -17,6 +17,7 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'legacy-springfield': 18,
   'gleneagles-kings': 18,
   'gleneagles-queens': 18,
+  'querencia': 18,
   'palms': 18,
   'lakes': 18,
   'rancho-california': 18,

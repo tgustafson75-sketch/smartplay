@@ -1627,6 +1627,29 @@ const GLENEAGLES_QUEENS_HOLES: CourseHole[] = [
   { hole: 18, par: 4, distance: 422, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
 ];
 
+// 2026-07-25 (Bill Rhoda's other course) — Querencia (Campo Bajo, Tom Fazio), San José del Cabo MX.
+// Private; NOT in OSM → SCORECARD-ONLY: par + Black-tee yardages from GolfPass, coords 0/estimated.
+const QUERENCIA_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 426, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  2, par: 3, distance: 246, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  3, par: 4, distance: 393, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  4, par: 5, distance: 552, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  5, par: 4, distance: 373, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  6, par: 4, distance: 439, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  7, par: 4, distance: 426, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  8, par: 3, distance: 197, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole:  9, par: 5, distance: 578, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 10, par: 4, distance: 431, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 11, par: 3, distance: 164, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 12, par: 5, distance: 539, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 13, par: 3, distance: 183, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 14, par: 5, distance: 574, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 15, par: 4, distance: 498, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 16, par: 4, distance: 466, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 17, par: 4, distance: 350, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 18, par: 4, distance: 449, front: 0, back: 0, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'mines-gc',
@@ -1683,6 +1706,13 @@ export const COURSES: Course[] = [
     fullName: "Gleneagles Country Club — Queen's, Plano TX",
     rating: '', slope: '', par: 71, totalYards: 6901,
     holes: GLENEAGLES_QUEENS_HOLES,
+  },
+  {
+    id: 'querencia',
+    name: 'Querencia',
+    fullName: 'Querencia — Campo Bajo, Los Cabos MX',
+    rating: '', slope: '', par: 72, totalYards: 7284,
+    holes: QUERENCIA_HOLES,
   },
   {
     id: 'redlands-cc',

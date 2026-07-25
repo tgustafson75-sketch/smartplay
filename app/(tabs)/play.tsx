@@ -204,6 +204,14 @@ const LOCAL_COURSES: CourseSummary[] = [
     lat: 33.0280, lng: -96.7550,
   },
   {
+    // Querencia scorecard-only; approx Los Cabos coords for the card + proximity only.
+    id: 'local:querencia',
+    club_name: 'Querencia — Campo Bajo',
+    location: 'Los Cabos, MX',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(23.0300, -109.7200),
+    lat: 23.0300, lng: -109.7200,
+  },
+  {
     id: 'local:palms',
     club_name: 'Menifee Lakes — Palms',
     location: 'Menifee, CA',
