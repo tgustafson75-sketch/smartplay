@@ -1291,7 +1291,7 @@ const DALE_HOLLOW_HOLES: CourseHole[] = [
     teeLat: 36.6621695, teeLng: -85.2971752, middleLat: 36.6652975, middleLng: -85.2988172,
     frontLat: 36.6651535, frontLng: -85.2988823, backLat: 36.6653908, backLng: -85.2988834,
     note: '', estimated: false },
-  { hole: 11, par: 4, distance: 192, front: 174, back: 208,
+  { hole: 11, par: 3, distance: 192, front: 174, back: 208,
     teeLat: 36.6651163, teeLng: -85.3001352, middleLat: 36.6666479, middleLng: -85.2996658,
     frontLat: 36.6664858, frontLng: -85.2996123, backLat: 36.6667868, backLng: -85.2996908,
     note: '', estimated: false },
@@ -1491,7 +1491,7 @@ export const COURSES: Course[] = [
     id: 'dale-hollow',
     name: 'Dale Hollow',
     fullName: 'Dale Hollow Lake State Resort Park — KY',
-    rating: '', slope: '', par: 73, totalYards: 6473,
+    rating: '71.0', slope: '131', par: 72, totalYards: 6473,
     holes: DALE_HOLLOW_HOLES,
   },
   {
