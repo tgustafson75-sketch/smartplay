@@ -31,6 +31,7 @@ import { inRoundDiagnosticHandler } from './inRoundDiagnosticHandler';
 import { confirmPositionHandler } from './confirmPositionHandler';
 import { setHoleNoteHandler } from './setHoleNoteHandler';
 import { socialGreetingHandler } from './socialGreetingHandler';
+import { undoHandler } from './undoHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -71,6 +72,7 @@ voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
 voiceCommandRouter.registerHandler(confirmPositionHandler);
 voiceCommandRouter.registerHandler(setHoleNoteHandler);
 voiceCommandRouter.registerHandler(socialGreetingHandler);
+voiceCommandRouter.registerHandler(undoHandler);
 
 export {
   openToolHandler,

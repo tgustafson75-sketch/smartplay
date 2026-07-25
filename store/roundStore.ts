@@ -219,6 +219,18 @@ export interface HoleStats {
   girHit: boolean | null;
 }
 
+/**
+ * 2026-07-25 — one revertible scoring action, captured just before it mutates state.
+ *  - score: restores the prior hole score (and prior currentHole, since the first score
+ *           on a hole can auto-advance) — deleting the entry when there was no prior score.
+ *  - putts: restores the prior putt count for the hole (deleting when there was none).
+ *  - shot:  removes the just-appended shot by id (via deleteShot).
+ */
+export type LastMutation =
+  | { kind: 'score'; hole: number; prevScore: number; prevCurrentHole: number; at: number }
+  | { kind: 'putts'; hole: number; prevPutts: number | undefined; at: number }
+  | { kind: 'shot'; shotId: string; hole: number; at: number };
+
 export interface RoundPhoto {
   uri: string;
   hole: number;
@@ -372,6 +384,11 @@ interface RoundState {
   penalties: Record<number, number>;
   shots: ShotResult[];
   holeStats: HoleStats[];
+  // 2026-07-25 (voice "undo / scratch that") — transient, single-depth snapshot of the
+  // most-recent scoring mutation so a misheard/mis-logged score, putt, or shot can be
+  // reverted by voice. NOT persisted (absent from partialize) — undo is an in-the-moment
+  // affordance, never resurrected across app restarts. Cleared after it's consumed.
+  lastMutation: LastMutation | null;
   // Phase R — memory photos captured during the active round.
   currentRoundPhotos: RoundPhoto[];
 
@@ -615,6 +632,10 @@ interface RoundState {
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   logShot: (shot: ShotResult) => void;
+  /** 2026-07-25 — revert the last score/putt/shot (voice "undo / scratch that").
+   *  Returns a spoken description of what was undone, or ok:false when there's
+   *  nothing to undo. Single-depth: consumes the snapshot. */
+  undoLastMutation: () => { ok: boolean; description: string | null };
   // Phase BJ — append an emotional state entry. Caller passes state +
   // valence + hole; timestamp stamped here.
   logEmotionalState: (state: string, valence: 'positive' | 'neutral' | 'negative', hole: number) => void;
@@ -712,6 +733,7 @@ export const useRoundStore = create<RoundState>()(
       penalties: {},
       shots: [],
       holeStats: [],
+      lastMutation: null,
       currentRoundPhotos: [],
       roundStartTime: null,
       roundEndTime: null,
@@ -876,6 +898,7 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
+          lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
           roundStartTime: Date.now(),
@@ -1286,6 +1309,7 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
+          lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
@@ -1575,6 +1599,7 @@ export const useRoundStore = create<RoundState>()(
           penalties: {},
           shots: [],
           holeStats: [],
+          lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
           pendingLieAnalysis: null,
@@ -2124,6 +2149,9 @@ export const useRoundStore = create<RoundState>()(
 
       logScore: (hole, score) => {
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
+        // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
+        // "scratch that" restores both the prior score and the hole we were on.
+        set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now() } });
         set(s => ({ scores: { ...s.scores, [hole]: score } }));
         // 2026-05-22 — Ghost Rounds. Push the just-logged score into the
         // active ghost match so the per-hole delta + running overall
@@ -2171,7 +2199,10 @@ export const useRoundStore = create<RoundState>()(
         })),
 
       logPutts: (hole, putts) =>
-        set(s => ({ putts: { ...s.putts, [hole]: putts } })),
+        set(s => ({
+          putts: { ...s.putts, [hole]: putts },
+          lastMutation: { kind: 'putts', hole, prevPutts: s.putts[hole], at: Date.now() },
+        })),
 
       addPenalty: (hole) => {
         // Unified path: creates a ShotResult so the penalty flows through computeHoleScore,
@@ -2370,8 +2401,58 @@ export const useRoundStore = create<RoundState>()(
           return {
             shots: [...backfilled, enriched],
             pendingLieAnalysis: enriched.lie_analysis ? null : s.pendingLieAnalysis,
+            // 2026-07-25 — snapshot for voice "undo": remove THIS shot by id. (A penalty
+            // is logShot + logScore, so logScore's snapshot overwrites this — "undo" after
+            // a penalty reverts the score bump, which is the sensible thing to hear.)
+            lastMutation: { kind: 'shot', shotId: enriched.id ?? shot.id ?? '', hole: enriched.hole, at: Date.now() },
           };
         });
+      },
+
+      undoLastMutation: () => {
+        const snap = get().lastMutation;
+        if (!snap) return { ok: false, description: null };
+        // Consume it first so a double "undo" can't double-revert.
+        set({ lastMutation: null });
+        if (snap.kind === 'score') {
+          set(s => {
+            const scores = { ...s.scores };
+            if (snap.prevScore > 0) scores[snap.hole] = snap.prevScore;
+            else delete scores[snap.hole];
+            return { scores, currentHole: snap.prevCurrentHole };
+          });
+          // Keep the ghost match in step with the reverted score.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const ghostMod = require('./ghostStore');
+            if (ghostMod.useGhostStore.getState().ghostRecord) {
+              ghostMod.useGhostStore.getState().updateHole(snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);
+            }
+          } catch { /* non-fatal */ }
+          return {
+            ok: true,
+            description: snap.prevScore > 0
+              ? `Put hole ${snap.hole} back to ${snap.prevScore}.`
+              : `Cleared your score on hole ${snap.hole}.`,
+          };
+        }
+        if (snap.kind === 'putts') {
+          set(s => {
+            const putts = { ...s.putts };
+            if (typeof snap.prevPutts === 'number') putts[snap.hole] = snap.prevPutts;
+            else delete putts[snap.hole];
+            return { putts };
+          });
+          return {
+            ok: true,
+            description: typeof snap.prevPutts === 'number'
+              ? `Putts on hole ${snap.hole} back to ${snap.prevPutts}.`
+              : `Cleared the putts on hole ${snap.hole}.`,
+          };
+        }
+        // shot
+        get().deleteShot(snap.shotId);
+        return { ok: true, description: `Removed that last shot on hole ${snap.hole}.` };
       },
 
       // Phase 109-followup — edit a previously logged shot. Patch is a

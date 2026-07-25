@@ -99,7 +99,7 @@ export const queryStatusHandler: IntentHandler = {
       try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
     }
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle' || topic === 'holes_left' || topic === 'par' || topic === 'course') /* 2026-07-24 added holes_left/par/course so they don't fabricate "on 1 of 18" off-round. end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle' || topic === 'holes_left' || topic === 'par' || topic === 'course' || topic === 'putt_stats' || topic === 'gir' || topic === 'nine_split' || topic === 'last_round_here' || topic === 'longest_drive') /* 2026-07-24 added holes_left/par/course so they don't fabricate "on 1 of 18" off-round. 2026-07-25 added the round-stat topics. end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -1186,6 +1186,118 @@ export const queryStatusHandler: IntentHandler = {
           follow_up_needed: false,
           tool_action: { type: 'open_url', url: `/swinglab/swing/${session.id}` },
         };
+      }
+
+      // 2026-07-25 (coverage-audit gaps) — round-stat queries answered LOCALLY + OFFLINE from
+      // data we already capture (scores, putts, shots). Honest by construction: each derives only
+      // from logged values and says so when the data isn't there yet (never fabricates a stat).
+      case 'putt_stats': {
+        const holes = Object.keys(round.putts).map(Number).filter((h) => Number.isFinite(h));
+        if (holes.length === 0) {
+          return { success: true, voice_response: 'No putts logged yet this round.', side_effects: ['query:putt_stats:empty'], follow_up_needed: false };
+        }
+        let total = 0, threePutts = 0, onePutts = 0;
+        for (const h of holes) {
+          const p = round.putts[h];
+          total += p;
+          if (p >= 3) threePutts++;
+          if (p === 1) onePutts++;
+        }
+        const avg = total / holes.length;
+        const bits = [`${total} putts over ${holes.length} hole${holes.length === 1 ? '' : 's'}`, `averaging ${avg.toFixed(1)}`];
+        if (threePutts > 0) bits.push(`${threePutts} three-putt${threePutts === 1 ? '' : 's'}`);
+        if (onePutts > 0) bits.push(`${onePutts} one-putt${onePutts === 1 ? '' : 's'}`);
+        return { success: true, voice_response: bits.join(', ') + '.', side_effects: [`query:putt_stats:total_${total}`], follow_up_needed: false };
+      }
+
+      case 'gir': {
+        // Greens in regulation DERIVED honestly: strokes-to-green = hole score − putts; a green
+        // is hit in regulation when that's ≤ par − 2. Counts only holes where score, putts, AND
+        // par are all known — no putts logged for a hole means we can't derive it, so we skip it.
+        const parOf = (h: number) => round.courseHoles.find((c) => c.hole === h)?.par ?? null;
+        let counted = 0, hit = 0;
+        for (const hStr of Object.keys(round.scores)) {
+          const h = Number(hStr);
+          const score = round.scores[h];
+          const putts = round.putts[h];
+          const par = parOf(h);
+          if (!(score > 0) || typeof putts !== 'number' || par == null) continue;
+          counted++;
+          if ((score - putts) <= (par - 2)) hit++;
+        }
+        if (counted === 0) {
+          return { success: true, voice_response: "I need a few holes with both score and putts logged before I can call greens in regulation.", side_effects: ['query:gir:no_data'], follow_up_needed: false };
+        }
+        return { success: true, voice_response: `${hit} of ${counted} green${counted === 1 ? '' : 's'} in regulation.`, side_effects: [`query:gir:${hit}_of_${counted}`], follow_up_needed: false };
+      }
+
+      case 'nine_split': {
+        const raw = (intent.raw_text ?? '').toLowerCase();
+        const wantBack = /\bback\b/.test(raw);
+        const lo = wantBack ? 10 : 1, hi = wantBack ? 18 : 9;
+        const parOf = (h: number) => round.courseHoles.find((c) => c.hole === h)?.par ?? null;
+        let strokes = 0, parSum = 0, played = 0;
+        for (let h = lo; h <= hi; h++) {
+          const s = round.scores[h];
+          if (!(s > 0)) continue;
+          played++;
+          strokes += s;
+          const par = parOf(h);
+          if (par != null) parSum += par;
+        }
+        const nineName = wantBack ? 'back nine' : 'front nine';
+        if (played === 0) {
+          return { success: true, voice_response: `You haven't scored any holes on the ${nineName} yet.`, side_effects: ['query:nine_split:empty'], follow_up_needed: false };
+        }
+        const vs = parSum > 0 ? strokes - parSum : null;
+        const vsText = vs == null ? null : vs === 0 ? 'even' : vs > 0 ? `+${vs}` : String(vs);
+        return {
+          success: true,
+          voice_response: vsText == null
+            ? `${strokes} on the ${nineName} through ${played}.`
+            : `${strokes} on the ${nineName} through ${played} — ${vsText}.`,
+          side_effects: [`query:nine_split:${wantBack ? 'back' : 'front'}`],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'last_round_here': {
+        if (!round.activeCourseId) {
+          return { success: true, voice_response: "I'd need to know which course you're on for that.", side_effects: ['query:last_round_here:no_course'], follow_up_needed: false };
+        }
+        const prior = round.roundHistory.filter((r) => r.courseId === round.activeCourseId && r.id !== round.currentRoundId);
+        if (prior.length === 0) {
+          return { success: true, voice_response: "This is the first round I've got for you here.", side_effects: ['query:last_round_here:none'], follow_up_needed: false };
+        }
+        const last = prior[prior.length - 1];
+        const vs = last.scoreVsPar;
+        const vsText = vs == null ? null : vs === 0 ? 'even par' : vs > 0 ? `${vs} over` : `${Math.abs(vs)} under`;
+        const best = prior.reduce((b, r) => (r.totalScore < b.totalScore ? r : b), prior[0]);
+        const bestBit = prior.length > 1 && best.id !== last.id ? ` Your best here was ${best.totalScore}.` : '';
+        return {
+          success: true,
+          voice_response: vsText
+            ? `Last time here you shot ${last.totalScore} — ${vsText}.${bestBit}`
+            : `Last time here you shot ${last.totalScore}.${bestBit}`,
+          side_effects: [`query:last_round_here:${last.totalScore}`],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'longest_drive': {
+        const isDriver = (c: string | null) => !!c && /driver|\b1\s?w\b|^dr$/i.test(c);
+        let bestYds: number | null = null;
+        for (const sh of round.shots) {
+          if (!isDriver(sh.club)) continue;
+          const y = (typeof sh.gps_distance_yards === 'number' ? sh.gps_distance_yards : null)
+            ?? (typeof sh.carry_distance === 'number' ? sh.carry_distance : null)
+            ?? (typeof sh.distance_yards === 'number' ? sh.distance_yards : null);
+          if (typeof y === 'number' && y > 0 && (bestYds == null || y > bestYds)) bestYds = Math.round(y);
+        }
+        if (bestYds == null) {
+          return { success: true, voice_response: 'No measured drives yet this round.', side_effects: ['query:longest_drive:empty'], follow_up_needed: false };
+        }
+        return { success: true, voice_response: `Your longest drive this round is ${bestYds} yards.`, side_effects: [`query:longest_drive:${bestYds}`], follow_up_needed: false };
       }
 
       default:

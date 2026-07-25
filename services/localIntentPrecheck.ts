@@ -111,6 +111,29 @@ const PATTERNS: Pattern[] = [
     rx: /\b(what\s+course|which\s+course|where\s+am\s+i\s+playing|what(?:'s|s)?\s+the\s+course)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'course' }),
   },
+
+  // ── ROUND STATS (2026-07-25 coverage-audit gaps — all answered locally/offline) ──
+  {
+    rx: /\b(how\s+many\s+putts|putts?\s+(?:so\s+far|this\s+round|today)|how(?:'s|\s+is|\s+am\s+i)\s+(?:my\s+)?putting|putting\s+stats?)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'putt_stats' }),
+  },
+  {
+    rx: /\b(greens?\s+in\s+regulation|hitting\s+(?:the\s+)?greens?|how\s+many\s+greens?|g\.?i\.?r\.?)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'gir' }),
+  },
+  {
+    // "how'd I do on the front/back nine" — captures which nine in raw_text for the handler.
+    rx: /\b(front\s+nine|back\s+nine|front\s+side|back\s+side|on\s+the\s+(?:front|back))\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'nine_split' }),
+  },
+  {
+    rx: /\b(longest\s+drive|farthest\s+drive|furthest\s+drive|my\s+best\s+drive|biggest\s+drive)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'longest_drive' }),
+  },
+  {
+    rx: /\b(last\s+time\s+(?:i|we)\s+(?:played|were)\s+here|how\s+did\s+i\s+(?:do|play|shoot)\s+(?:here\s+)?last\s+time|my\s+(?:best|average)\s+(?:round|score)\s+here|last\s+round\s+here)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'last_round_here' }),
+  },
   // 2026-07-24 (final QA — "ask for settings", OFFLINE + local-first) — set handedness by voice.
   // Anchored on UNAMBIGUOUS handedness terms ("left/right-handed", "lefty", "righty", "southpaw")
   // so aiming/direction talk ("aim left", "the green's to the right", "go left") can NEVER trigger it.
@@ -218,6 +241,28 @@ const PATTERNS: Pattern[] = [
   {
     rx: /\b(?:import|scan|upload|log|add)\s+(?:my\s+|a\s+|the\s+|last\s+|past\s+)*(?:round|rounds|score|scores|scorecard)\b|\bscorecard\s+(?:photo|picture|screenshot)\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'import_round' }),
+  },
+
+  // ── UNDO + HOLE NAV + BARE START (2026-07-25 coverage-audit command gaps) ──
+  // "undo / scratch that / never mind / delete that shot" → revert the last score/putt/shot.
+  {
+    rx: /\b(undo(?:\s+that)?|scratch\s+that|never\s*mind|delete\s+(?:that|the\s+last)(?:\s+(?:shot|score|putt))?|take\s+that\s+back|nix\s+that)\b/i,
+    build: (raw) => intent(raw, 'undo'),
+  },
+  // "next hole" / "next tee" → advance. Deterministic so it never rides the cloud (offline dead-end).
+  {
+    rx: /\b(next\s+hole|next\s+tee|on\s+to\s+the\s+next(?:\s+hole)?|done\s+here,?\s*next)\b/i,
+    build: (raw) => intent(raw, 'navigate', { direction: 'next_hole' }),
+  },
+  {
+    rx: /\b(previous\s+hole|go\s+back\s+a\s+hole|back\s+(?:one|a)\s+hole|last\s+hole\s+again)\b/i,
+    build: (raw) => intent(raw, 'navigate', { direction: 'previous_hole' }),
+  },
+  // Bare "start a round" (no course/name) → open the Play tab to pick one. A NAMED start
+  // ("start a round at Pebble with Mike") is caught earlier / stays a quick_round via the brain.
+  {
+    rx: /^(?:hey\s+)?(?:let'?s\s+)?(?:start|begin|play)\s+(?:a\s+)?round\s*[.!?]?$|^(?:let'?s\s+)?tee\s+off\s*[.!?]?$/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'play' }),
   },
 ];
 
