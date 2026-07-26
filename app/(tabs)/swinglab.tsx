@@ -458,7 +458,15 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
       </View>
       <View style={styles.cardText}>
         <View style={styles.titleRow}>
-          <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+          {/* 2026-07-26 (Tim — Fold-Z FOLDED cuts long titles to "Hotel M…"/"Coach Mo…" next to the
+              badge; looks great when open). Shrink-to-fit keeps the WHOLE word on one line on the narrow
+              cover screen instead of truncating, and is a no-op at the roomy open/large widths. */}
+          <Text
+            style={[styles.cardTitle, { color: colors.text_primary }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >{title}</Text>
           <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
             <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
           </View>

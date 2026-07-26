@@ -542,18 +542,20 @@ export default function SmartVisionScreen() {
   // sit ABOVE the bar instead of being clipped by it (the bar reserves root height that our window-H
   // math doesn't otherwise know about).
   const barReserve = useCaddieBarReserve();
-  // 2026-07-25 (Tim — Fold-Z: aerial leaves a big black gap + the club chip overlaps the F/M/B labels).
-  // The window-math estimate for the aerial height was off on the Fold, so the aerial didn't fill the
-  // column. Prefer the MEASURED column height (onLayout on the flow container) and size the aerial to
-  // fill it (minus the F/M/B strip in portrait) — the aerial then reaches the panel, the panel pins to
-  // the bottom, and the absolute club chip lands over the aerial's lower edge instead of the labels.
-  const [measuredColH, setMeasuredColH] = useState(0);
+  // 2026-07-26 (Tim — Fold-Z: big bottom void + the club chip overlapping the F/M/B labels). Root cause:
+  // the aerial had a FIXED height inside a flex:1 column, the F/M/B panel was TOP-aligned (so it floated
+  // up under the aerial and left a huge void below), and the club chip was ABSOLUTE-positioned by
+  // guesswork (so on a tall-narrow screen it landed on the labels). Fix: the aerial now lives in a flex:1
+  // wrapper that GROWS to fill the space left after the club-rec bar + F/M/B panel and CENTERS the crop
+  // (symmetric padding, not one big void); the chip is IN-FLOW between the aerial and the panel (no
+  // overlap); the panel pins to the bottom above the caddie bar. We size the image to the MEASURED
+  // wrapper height so the fit is correct by construction on any device instead of via window math.
+  const [measuredAerialH, setMeasuredAerialH] = useState(0);
+  const AIREC_EST = 52; // in-flow club-rec bar footprint (portrait) — first-frame estimate only
   const estAvailH = isSplit
     ? H - insets.top - insets.bottom - TOP_BAR_H - barReserve
-    : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H - barReserve;
-  const availH = measuredColH > 0
-    ? (isSplit ? measuredColH : Math.max(120, measuredColH - BOTTOM_PANEL_H))
-    : estAvailH;
+    : H - insets.top - insets.bottom - TOP_BAR_H - BOTTOM_PANEL_H - barReserve - AIREC_EST;
+  const availH = measuredAerialH > 0 ? measuredAerialH : estAvailH;
   // 2026-06-24 (Tim — "the T you can't see") — our curated hole crops are 2:3
   // portrait (1024×1536). The box must be EXACTLY that aspect or resizeMode:cover
   // crops the top/bottom and the TEE (~83% down) falls off the visible image while
@@ -1975,11 +1977,17 @@ export default function SmartVisionScreen() {
           canvas + bottom panel sit side-by-side in a row so the panel
           becomes a right-side column. On portrait, vertical flow is
           unchanged. */}
+      <View style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}>
+      {/* 2026-07-26 (Tim) — aerial lives in a flex:1 wrapper that GROWS to fill the space left after the
+          club-rec bar + F/M/B panel and CENTERS the (aspect-capped) crop, so a tall-narrow Fold-Z gets
+          symmetric padding around the aerial instead of one big void at the bottom. Measuring THIS wrapper
+          (not the whole column) and sizing the image to it makes the fit correct by construction. In split
+          it grows horizontally beside the side panel — same centering, works both ways. */}
       <View
-        style={{ flexDirection: isSplit ? 'row' : 'column', flex: 1 }}
+        style={styles.aerialWrap}
         onLayout={(e) => {
           const h = Math.round(e.nativeEvent.layout.height);
-          if (h > 0 && Math.abs(h - measuredColH) > 1) setMeasuredColH(h);
+          if (h > 0 && Math.abs(h - measuredAerialH) > 1) setMeasuredAerialH(h);
         }}
       >
       {/* Image canvas + markers. Phase 4.1 — wrapped in a GestureDetector
@@ -2273,17 +2281,19 @@ export default function SmartVisionScreen() {
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
       </GestureDetector>
+      </View>{/* close aerialWrap */}
 
       {/* Mark T/P is voice-only — "mark tee" / "mark the green". No visible buttons.
           The signal store is set by caddie.tsx's handleToolAction and consumed here. */}
 
-      {/* 2026-06-23 (Phase 3b) — AI recommendation bar. Floats just above the
-          F/M/B panel (portrait only). Honest signals only: club from the real
-          bag + plays-like + top "why" line. No fabricated success %. */}
+      {/* 2026-06-23 (Phase 3b) — AI recommendation bar. Portrait only. Honest signals only: club from
+          the real bag + plays-like + top "why" line. No fabricated success %.
+          2026-07-26 (Tim) — IN-FLOW between the aerial and the F/M/B panel (was absolute, which overlapped
+          the labels on narrow screens). It now stacks cleanly above the panel on every device. */}
       {!isSplit && aiRead?.club && yardages.middle != null && (
         <TouchableOpacity
           activeOpacity={0.8}
-          style={[styles.aiRecBar, { bottom: BOTTOM_PANEL_H + Math.max(insets.bottom, 8) }]}
+          style={styles.aiRecBarFlow}
           onPress={() => {
             // 2026-06-23 (Tim — "Explain the pick") — tap the bar → show WHY this club.
             const r = aiRead;
@@ -2324,7 +2334,9 @@ export default function SmartVisionScreen() {
           isSplit ? styles.sidePanel : styles.bottomPanel,
           isSplit
             ? { width: SIDE_PANEL_W, height: imageH, paddingBottom: insets.bottom + 12 }
-            : { height: BOTTOM_PANEL_H, paddingBottom: Math.max(insets.bottom, 8) },
+            // 2026-07-26 (Tim) — content-sized + reserve the caddie bar so the panel pins to the bottom
+            // ABOVE the bar (the flex:1 aerialWrap pushes it down). No fixed height → no clipped labels.
+            : { paddingBottom: barReserve + Math.max(insets.bottom, 8) },
         ]}
       >
         {/* 2026-07-08 (Tim — "if I move the cart I lose the tee→cart distance, which I need
@@ -2463,6 +2475,9 @@ const styles = StyleSheet.create({
   // 2026-06-23 (Tim) — glowing-green bordered container for the map canvas (caddie
   // style). overflow:hidden + radius clip the image + markers to the box so nothing
   // bleeds off the physical screen edge when the device aspect changes.
+  // 2026-07-26 (Tim) — grows to fill the space left after the club-rec bar + F/M/B panel and centers the
+  // aspect-capped aerial, so a tall-narrow screen gets symmetric padding instead of a big bottom void.
+  aerialWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   canvasBox: {
     backgroundColor: '#0a1f12',
     borderRadius: 18,
@@ -2470,9 +2485,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(136,247,0,0.55)',
   },
-  // 2026-06-23 (Phase 3b) — AI recommendation bar (floats above F/M/B panel).
-  aiRecBar: {
-    position: 'absolute', left: 10, right: 10, zIndex: 25,
+  // 2026-07-26 (Tim) — IN-FLOW club-rec bar (portrait): stacks between the aerial and the F/M/B panel so
+  // it can never overlap the labels the way the old absolute version did on narrow screens.
+  aiRecBarFlow: {
+    marginHorizontal: 10, marginTop: 8,
     flexDirection: 'row', alignItems: 'center', gap: 9,
     backgroundColor: 'rgba(0,0,0,0.82)',
     borderWidth: 1, borderColor: 'rgba(136,247,0,0.45)',
