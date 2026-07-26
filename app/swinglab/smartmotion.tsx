@@ -117,6 +117,7 @@ import {
   type BodyItem,
   type SmTone,
 } from '../../components/smartmotion/SmartMotionHud';
+import { CaddieStatusStrip } from '../../components/caddie/CaddieStatusStrip';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
 import { useClubStatsStore, clubIdToClubName, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
@@ -4645,6 +4646,12 @@ export default function SmartMotion() {
 
   return (
     <View style={[styles.root, { backgroundColor: '#000' }]}>
+      {/* 2026-07-26 (Tim — "the bar has to be everywhere logical; it's not in smartmotion") — the full
+          caddie bar can't go here (it would shrink the swing camera + fight the record controls), so
+          float the shared status strip over the camera instead: it shows the caddie's Listening/
+          Thinking/spoken-feedback text (previously audio-only on this screen), clear of the controls.
+          Absolute + zIndex → overlays; pointerEvents=none → never blocks the capture UI. */}
+      <CaddieStatusStrip floating bottomOffset={insets.bottom + 140} />
       <ScrollView
         ref={pagerRef}
         horizontal
