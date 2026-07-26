@@ -17,6 +17,13 @@ export interface Exercise {
   category: WorkoutCategory;
   /** Honest one-line rationale tying the exercise to THIS fault. */
   why: string;
+  /**
+   * 2026-07-26 (Tim) — an optional curated instructor video tagged to the exercise. Watching it
+   * full-length IN-APP (via /drill-video) awards a one-time +5 through awardVideoWatch. REAL links
+   * only — never fabricated; an exercise with no vetted video simply omits this (no fake "Watch").
+   * [[pro-video-drill-loop-moat]] [[points-practice-correlation]]
+   */
+  video?: { url: string; title: string; source?: string };
 }
 
 // Canonical fault keys → 2-3 vetted golf exercises each. Aliases (early extension is emitted as
@@ -33,7 +40,7 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Trail-hip loading drill (gate)', category: 'drill', why: 'Feels the difference between rotating into the trail hip and sliding off the ball.' },
   ],
   reverse_pivot: [
-    { name: 'Step-through weight-shift drill', category: 'drill', why: 'Trains driving onto the lead side through impact instead of hanging back.' },
+    { name: 'Step-through weight-shift drill', category: 'drill', why: 'Trains driving onto the lead side through impact instead of hanging back.', video: { url: 'https://youtu.be/_Z5a76bGBeE', title: 'Weight Shift Drill', source: 'Golf Channel · SwingFix' } },
     { name: 'Lateral lunges', category: 'strength', why: 'Strength in the lateral shift so your weight actually gets forward.' },
     { name: 'Med-ball rotational throw (to lead side)', category: 'strength', why: 'Builds the transfer of weight + speed toward the target.' },
   ],

@@ -121,6 +121,9 @@ export default function Dashboard() {
   // practice side of the future practice→on-course-improvement ledger.
   const practiceTotal = usePracticePointsStore((s) => s.total);
   const practiceByDrill = usePracticePointsStore((s) => s.byDrill);
+  // 2026-07-26 (Tim) — which tagged exercise videos have already been watched (→ "✓ Watched",
+  // and the +5 is one-time). Keyed the same way we route into /drill-video below.
+  const watchedVideos = usePracticePointsStore((s) => s.watchedVideos);
   const topDrills = useMemo(
     () => Object.entries(practiceByDrill).sort((a, b) => b[1].points - a[1].points).slice(0, 4),
     [practiceByDrill],
@@ -947,15 +950,42 @@ export default function Dashboard() {
             </View>
             <Text style={[styles.impactHeadline, { color: colors.text_primary, textTransform: 'capitalize' }]}>{faultLabel}</Text>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 2, marginBottom: 8 }]}>Exercises that help this fault</Text>
-            {faultWorkouts.map((e, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 6 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '800' }}>{e.name}</Text>
-                  <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 16 }}>{e.why}</Text>
+            {faultWorkouts.map((e, i) => {
+              // 2026-07-26 (Tim) — a tagged exercise video plays IN-APP (/drill-video) and awards a
+              // one-time +5 on full watch. Stable key per exercise so the anti-farm ledger is consistent.
+              const videoKey = e.video ? `exvid:${e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}` : null;
+              const watched = videoKey ? !!watchedVideos[`watch:${videoKey}`] : false;
+              return (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.accent, marginTop: 6 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '800' }}>{e.name}</Text>
+                    <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 16 }}>{e.why}</Text>
+                    {e.video && videoKey && (
+                      <TouchableOpacity
+                        onPress={() => router.push({
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          pathname: '/drill-video' as any,
+                          params: { url: e.video!.url, title: e.video!.title, instructor: e.video!.source ?? '', drillId: videoKey, drillName: e.name },
+                        })}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Watch ${e.video.title}${watched ? '' : ', earns 5 points'}`}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 6, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.surface_elevated }}
+                      >
+                        <Ionicons name={watched ? 'checkmark-circle' : 'play-circle'} size={15} color={colors.accent} />
+                        <Text style={{ color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 }}>
+                          {watched ? 'WATCHED' : `WATCH · +5 PTS`}
+                        </Text>
+                        {e.video.source ? (
+                          <Text style={{ color: colors.text_muted, fontSize: 10, fontWeight: '600' }} numberOfLines={1}>· {e.video.source}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
