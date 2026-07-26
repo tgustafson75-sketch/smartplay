@@ -353,12 +353,13 @@ export default function SwingDetail() {
         // any in-flight clubhead-frame extraction aborts before the two native media pipelines can
         // touch the file at once. (The isPlaying state update from the status callback lands later.)
         isPlayingRef.current = true;
-        // 2026-06-15 (Tim) — if we're at (or a hair from) the end, restart from
-        // the top so a tap ALWAYS plays. expo-av's playAsync() at end-of-clip is
-        // a no-op — that's why the controls felt dead after the video finished.
+        // 2026-06-15 (Tim) — if we're at (or a hair from) the end, restart so a tap ALWAYS plays
+        // (expo-av's playAsync() at end-of-clip is a no-op). 2026-07-26 — restart at the LOCATED
+        // swing (clipStartSeconds), not 0, so replay doesn't re-show the pre-swing setup.
         const pos = st.positionMillis ?? 0;
         const dur = st.durationMillis ?? 0;
-        if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(0);
+        const swingStartMs = (shot?.clipStartSeconds ?? 0) > 0.05 ? (shot!.clipStartSeconds as number) * 1000 : 0;
+        if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(swingStartMs);
         await v.playAsync();
       } else {
         isPlayingRef.current = true;
@@ -1794,6 +1795,13 @@ export default function SwingDetail() {
                 shouldCorrectPitch={false}
                 onLoad={async () => {
                   setVideoError(null);
+                  // 2026-07-26 (Tim — "in swing library and elsewhere it starts at the beginning") —
+                  // begin at the LOCATED swing, not the clip's pre-swing setup/waggle. Seek to
+                  // clipStartSeconds first, then play. Guarded; no valid start → plays from 0 as before.
+                  try {
+                    const start = shot?.clipStartSeconds ?? 0;
+                    if (start > 0.05) await videoRef.current?.setPositionAsync(start * 1000);
+                  } catch { /* best-effort */ }
                   // expo-av can ignore the shouldPlay PROP on first load (the
                   // documented quirk); kick playback explicitly so it ALWAYS starts.
                   try { await videoRef.current?.playAsync(); } catch { /* best-effort */ }
@@ -1814,7 +1822,18 @@ export default function SwingDetail() {
               {motionOnly && (
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B1220' }]} pointerEvents="none" />
               )}
-              {hasPose && (showSkeleton || showTrace || motionOnly) && (
+              {hasPose && (showSkeleton || showTrace || motionOnly) && (() => {
+                // 2026-07-26 (Tim — "the mechanics is playing BEFORE the swing; locate the swing then
+                // only apply to the swing") — the clip includes pre-swing setup/waggle, and the skeleton
+                // was drawn across the WHOLE clip. Gate the overlay to the located swing window
+                // [clipStartSeconds, clipEndSeconds] so the mechanics only render on the actual swing.
+                // No valid window (legacy clip) → show throughout (no regression).
+                const st = shot?.clipStartSeconds ?? null;
+                const en = shot?.clipEndSeconds ?? null;
+                const windowed = st != null && en != null && en > st;
+                const inSwing = !windowed || (position >= (st as number) - 0.08 && position <= (en as number) + 0.08);
+                if (!inSwing) return null;
+                return (
                 <SwingBodyOverlay
                   frames={poseFrames}
                   currentTimeMs={Number.isFinite(position) ? position * 1000 : 0}
@@ -1827,7 +1846,8 @@ export default function SwingDetail() {
                   faultSevere={session?.primary_issue?.severity === 'significant'}
                   clubArc={clubArcPoints}
                 />
-              )}
+                );
+              })()}
               <CageTargetingOverlay
                 ballArea={session?.ball_area_norm ?? null}
                 target={session?.target_norm ?? null}
