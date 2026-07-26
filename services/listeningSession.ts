@@ -381,17 +381,15 @@ async function openSession() {
     trustLevel !== 1 &&
     (route !== 'phone_speaker' || allowPhoneSpeaker);
 
-  // Phase 1 — speak opener
-  const opener = pickOpener();
-  if (ttsAllowed && opener) {
-    try {
-      await speak(opener, settings.voiceGender, settings.language, apiUrl);
-    } catch (e) {
-      console.log('[listeningSession] opener TTS failed', e);
-    }
-    if (state !== 'opening') return;  // user cancelled mid-opener
-  }
-  console.log(`[path4:voice] opener_done allowed=${ttsAllowed && !!opener}`);
+  // Phase 1 — NO canned spoken opener.
+  // 2026-07-26 (Tim — "we were supposed to remove the canned speech when I tap the earbuds w/ haptics;
+  // unify the caddie mic and take out the prompts") — a tap-to-listen no longer announces itself with a
+  // scripted line ("Yeah?" / the earbud_open dialog). The HAPTIC at the trigger chokepoint + the
+  // universal "Listening…" status strip are the confirmation now — consistent across every mic source
+  // (earbud, glasses, the mic badge). Go straight to the mic. `ttsAllowed` is still computed above and
+  // used by the reply path below.
+  void ttsAllowed;
+  console.log('[path4:voice] opener_done (canned opener removed — haptic + Listening strip)');
 
   // Phase 2 — open mic for utterance
   setSessionStateMirror('listening');
