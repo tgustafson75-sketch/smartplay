@@ -12,11 +12,67 @@
  * if it ever mis-renders on a device, with zero other change.
  */
 import React, { useEffect, useState } from 'react';
-import { View, Keyboard, Platform, StyleSheet } from 'react-native';
+import { View, Text, Keyboard, Platform, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { CaddieBottomBar } from './caddie/CaddieBottomBar';
+import { useListeningSessionStore } from '../store/listeningSessionStore';
+import { subscribeToCaption, subscribeToSpeaking } from '../services/voiceService';
+
+const NEON = '#88F700';
+
+/**
+ * 2026-07-25 (Tim — "response plays but the text doesn't show, only 'tap to talk'; give ALL mics a
+ * universal state display; otherwise not sure he's going to answer"). A single status strip above the
+ * caddie bar, on EVERY screen (the bar is mounted once at root). It reads the existing signals —
+ * listening-session state + the voiceService caption (the caddie's spoken text is already broadcast on
+ * every speak(); nothing was displaying it) + the speaking flag — and shows one of:
+ *   • "Listening…"  (mic open)         • "Thinking…"  (brain working)
+ *   • the caddie's words while it speaks (so you SEE the answer, not just hear it)
+ * Hidden when idle. pointerEvents=none so it never blocks the bar/taps.
+ */
+function CaddieStatusStrip() {
+  const state = useListeningSessionStore((s) => s.state);
+  const [caption, setCaption] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    const unCap = subscribeToCaption(setCaption);
+    const unSpk = subscribeToSpeaking(setSpeaking);
+    return () => { unCap(); unSpk(); };
+  }, []);
+
+  const cap = caption?.trim() || '';
+  let label: string | null = null;
+  let icon: React.ComponentProps<typeof Ionicons>['name'] = 'ellipse';
+  let speakingStyle = false;
+  if ((speaking || state === 'responding') && cap) { label = cap; icon = 'volume-medium'; speakingStyle = true; }
+  else if (state === 'thinking') { label = 'Thinking…'; icon = 'ellipsis-horizontal'; }
+  else if (state === 'listening') { label = 'Listening…'; icon = 'mic'; }
+  else if (state === 'opening') { label = 'One sec…'; icon = 'ellipsis-horizontal'; }
+  if (!label) return null;
+
+  return (
+    <View style={strip.wrap} pointerEvents="none">
+      <View style={[strip.pill, speakingStyle && strip.pillSpeaking]}>
+        <Ionicons name={icon} size={14} color={NEON} style={{ marginTop: 1 }} />
+        <Text style={strip.text} numberOfLines={speakingStyle ? 4 : 1}>{label}</Text>
+      </View>
+    </View>
+  );
+}
+
+const strip = StyleSheet.create({
+  wrap: { paddingHorizontal: 10, paddingBottom: 6, alignItems: 'stretch' },
+  pill: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: 'rgba(6,15,9,0.94)', borderRadius: 16, borderWidth: 1,
+    borderColor: 'rgba(136,247,0,0.45)', paddingHorizontal: 12, paddingVertical: 8,
+  },
+  pillSpeaking: { borderColor: 'rgba(136,247,0,0.7)' },
+  text: { flex: 1, color: '#e8f5e9', fontSize: 13, fontWeight: '600', lineHeight: 18 },
+});
 
 export const CADDIE_BAR_ENABLED = true;
 
@@ -75,6 +131,7 @@ export function GlobalCaddieBar() {
   const lift = keyboardHeight > 0 ? keyboardHeight + insets.bottom + 10 : 0;
   return (
     <View style={[styles.wrap, { paddingBottom: bottomPad, marginBottom: lift, backgroundColor: colors.background }]}>
+      <CaddieStatusStrip />
       <CaddieBottomBar />
     </View>
   );

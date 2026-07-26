@@ -1069,6 +1069,15 @@ function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
 export async function handleTranscribedUtterance(utterance: string): Promise<void> {
   const text = (utterance ?? '').trim();
   if (!text) return;
+  // 2026-07-25 (Tim — "give all mics a universal state display; not sure he's going to answer") — this
+  // TYPED / watch path never drove the shared listening state, so the universal status strip showed
+  // nothing after you hit send. Set 'thinking' now (strip shows "Thinking…" immediately) and reset to
+  // idle in finally; the caddie's ANSWER shows via the voiceService caption while it speaks. Drive the
+  // store directly (not the session-machine mirror, which arms voice-session watchdogs).
+  const setSharedState = (s: 'thinking' | 'idle') => {
+    try { require('../store/listeningSessionStore').useListeningSessionStore.getState().setState(s); } catch { /* non-fatal */ }
+  };
+  setSharedState('thinking');
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
@@ -1187,5 +1196,9 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     }
   } catch (e) {
     console.log('[handsFree-route] failed:', e);
+  } finally {
+    // Clear "Thinking…"; the response text keeps showing via the caption/speaking signals while the
+    // caddie is talking, then the strip hides once speech ends.
+    setSharedState('idle');
   }
 }
