@@ -2301,7 +2301,10 @@ export default function SmartVisionScreen() {
           }}
         >
           <Ionicons name="sparkles" size={15} color="#88F700" />
-          <Text style={styles.aiRecClub}>{aiRead.club}</Text>
+          {/* 2026-07-26 (Tim — SmartVision cross-size formatting) — a long club name ("Pitching Wedge")
+              could push the divider + plays-like text off the bar on a narrow screen. Cap it to one
+              line so the row stays intact; the plays-like sub keeps its flex + its own numberOfLines. */}
+          <Text style={styles.aiRecClub} numberOfLines={1}>{aiRead.club}</Text>
           <View style={styles.aiRecDivider} />
           <Text style={styles.aiRecSub} numberOfLines={1}>
             {aiRead.deltaYards !== 0 ? `plays like ${aiRead.playsLikeYards}y` : `${aiRead.playsLikeYards}y to pin`}
@@ -2378,13 +2381,22 @@ function YdCell({ label, value, emphasis = false, stacked = false }: {
 }) {
   return (
     <View style={[styles.ydCell, stacked && styles.ydCellStacked]}>
-      <Text style={styles.ydLabel}>{label}</Text>
-      <Text style={[
-        styles.ydValue,
-        emphasis && styles.ydValueEmph,
-        stacked && styles.ydValueStacked,
-        stacked && emphasis && styles.ydValueStackedEmph,
-      ]}>
+      {/* 2026-07-26 (Tim — SmartVision cross-size formatting) — the label + value had no overflow
+          rule, so on a narrow screen (Fold-Z folded) the 5 cells (CARRY/FRONT/MIDDLE/BACK) + a
+          3-digit number at 26px could clip/wrap. numberOfLines + adjustsFontSizeToFit shrink to fit
+          the cell on any width instead of overflowing — the missing formatting rule. */}
+      <Text style={styles.ydLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+      <Text
+        style={[
+          styles.ydValue,
+          emphasis && styles.ydValueEmph,
+          stacked && styles.ydValueStacked,
+          stacked && emphasis && styles.ydValueStackedEmph,
+        ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+      >
         {value != null ? Math.round(value) : '—'}
       </Text>
     </View>
