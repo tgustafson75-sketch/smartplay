@@ -3445,26 +3445,11 @@ export default function CaddieTab() {
           that needs to move down so it never goes up into elements above
           it"). In-round bottom sits above the data strip (168 + insets) so
           it doesn't overlap the dropdown chevron. */}
-      {((!isRoundActive && shownText) || (isRoundActive && caddieResponse)) ? (
-        <Animated.View
-          style={[
-            styles.bubble,
-            {
-              bottom: (isRoundActive ? 168 : 108) + insets.bottom,
-              opacity: bubbleOpacity,
-            },
-          ]}
-          pointerEvents="none"
-        >
-          <View style={[StyleSheet.absoluteFill, styles.bubbleTint]} />
-          {/* 2026-06-13 (Tim) — 3 lines let the bubble top ride up over the caddie's
-              mouth on the big-avatar view. 2 lines keeps it just above the shirt line.
-              (If it still rides up, lower the bubble `bottom` offset — single knob.) */}
-          <Text style={styles.bubbleText} numberOfLines={2}>
-            {isRoundActive ? caddieResponse : shownText}
-          </Text>
-        </Animated.View>
-      ) : null}
+      {/* 2026-07-26 (Tim — "the bottom bar is the source of text; remove it elsewhere; unify the text
+          into the mic text box") — the mid-screen greeting/response bubble is REMOVED. The universal
+          status strip above the caddie bar (CaddieStatusStrip in GlobalCaddieBar) is now the single
+          place the caddie's words + state show, on every screen. No more duplicate text over the
+          persona (and no "Tap to talk." over the avatar — the bar shows the prompt). */}
 
       {/* DATA STRIP — cross-fades in when round starts. Hidden pre-round
            on every trust level (no round, no data). */}
