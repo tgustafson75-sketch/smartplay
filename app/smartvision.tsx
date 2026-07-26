@@ -2334,9 +2334,12 @@ export default function SmartVisionScreen() {
           isSplit ? styles.sidePanel : styles.bottomPanel,
           isSplit
             ? { width: SIDE_PANEL_W, height: imageH, paddingBottom: insets.bottom + 12 }
-            // 2026-07-26 (Tim) — content-sized + reserve the caddie bar so the panel pins to the bottom
-            // ABOVE the bar (the flex:1 aerialWrap pushes it down). No fixed height → no clipped labels.
-            : { paddingBottom: barReserve + Math.max(insets.bottom, 8) },
+            // 2026-07-26 (Tim — "still a lot of space between the yardage bar and the mic bar, bring it
+            // down"). The caddie bar is mounted IN-FLOW below the screen content (_layout.tsx) and owns
+            // its own safe-area inset, so reserving barReserve + insets.bottom here DOUBLE-counted it and
+            // floated the numbers ~90px too high. The flex:1 aerialWrap already pins the panel to the
+            // bottom of the content area (just above the bar) — so this only needs a small breathing gap.
+            : { paddingBottom: 10 },
         ]}
       >
         {/* 2026-07-08 (Tim — "if I move the cart I lose the tee→cart distance, which I need
