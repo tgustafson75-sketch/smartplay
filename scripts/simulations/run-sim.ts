@@ -79,6 +79,7 @@ import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
 import { assessDiagnosticEvidence, evidenceGateQuestion } from '../../services/intents/inRoundDiagnosticHandler';
 import { GROW_MOSTLY_KEYS } from '../../services/cloudSync/growMostlyKeys';
 import { BACKED_UP_STORE_KEYS } from '../../services/cloudSync/snapshot';
+import { classifyLayout } from '../../hooks/layoutClassify';
 
 interface ScenarioResult {
   scenario: string;
@@ -175,6 +176,36 @@ console.log('\n=== Scenario 0d: backup grow-mostly guard ===');
   const notBackedUp = GROW_MOSTLY_KEYS.filter((k) => !BACKED_UP_STORE_KEYS.includes(k));
   check('Backup: every grow-mostly key is actually in the backup allowlist',
     notBackedUp.length === 0, notBackedUp.length === 0 ? 'all protected keys are backed up' : `DEAD GUARD on: ${notBackedUp.join(', ')}`);
+}
+
+// ─── Scenario 0e: useLayout responsive classifier (one source of truth for sizing) ─────────
+// 2026-07-26 (Tim) — every screen used its own W/H breakpoints → drift + per-size bugs. classifyLayout
+// is the single classifier; guard the device classes so a refactor can't silently mis-size a class.
+console.log('\n=== Scenario 0e: useLayout responsive classifier ===');
+{
+  const iphone = classifyLayout(390, 844);
+  check('Layout: iPhone (390×844) → phone, not tablet, not split',
+    iphone.breakpoint === 'phone' && !iphone.isTablet && !iphone.isSplit && iphone.isPhone,
+    `${iphone.breakpoint} tablet=${iphone.isTablet} split=${iphone.isSplit}`);
+  const foldFolded = classifyLayout(344, 882);
+  check('Layout: Fold-Z folded (344×882) → phone + isNarrow (compact gutter)',
+    foldFolded.breakpoint === 'phone' && foldFolded.isNarrow && foldFolded.gutter === 12,
+    `${foldFolded.breakpoint} narrow=${foldFolded.isNarrow} gutter=${foldFolded.gutter}`);
+  const proMax = classifyLayout(430, 932);
+  check('Layout: Pro Max (430×932) → largePhone, not narrow',
+    proMax.breakpoint === 'largePhone' && !proMax.isNarrow && proMax.isPhone,
+    `${proMax.breakpoint} narrow=${proMax.isNarrow}`);
+  const ipad = classifyLayout(768, 1024);
+  check('Layout: iPad portrait (768×1024) → tablet (shortest-side rule), capped content',
+    ipad.isTablet && ipad.breakpoint === 'tablet' && ipad.maxContentWidth === 760 && !ipad.isPhone,
+    `tablet=${ipad.isTablet} maxW=${ipad.maxContentWidth}`);
+  const ipadLand = classifyLayout(1024, 768);
+  check('Layout: iPad landscape (1024×768) → tablet + split + landscape',
+    ipadLand.isTablet && ipadLand.isSplit && ipadLand.isLandscape,
+    `tablet=${ipadLand.isTablet} split=${ipadLand.isSplit} land=${ipadLand.isLandscape}`);
+  check('Layout: contentWidth never exceeds the screen width',
+    [classifyLayout(320, 800), classifyLayout(1400, 900)].every((l) => l.contentWidth <= l.width),
+    'clamped');
 }
 
 // ─── Scenario 0c: undo precheck must not fire on the dismissal "never mind" ─────
