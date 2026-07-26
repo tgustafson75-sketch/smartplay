@@ -648,6 +648,12 @@ export default function SmartMotion() {
     if (phase === 'setup' || phase === 'recording') prewarmSwingAnalysis();
   }, [phase]);
   const [clipUri, setClipUri] = useState<string | null>(clipUriParam ?? null);
+  // 2026-07-26 (Tim — swing playback crash; device log "Maximum update depth exceeded" from
+  // onPlaybackStatusUpdate) — memoize the Video source so it isn't a NEW object literal every render.
+  // Playback fires the status callback ~25×/s (progressUpdateIntervalMillis:40 with the skeleton on) →
+  // setPlaybackMs → re-render; an inline source would reload the clip each time → onLoad → play →
+  // status → … a synchronous loop that crashes. Stable unless the URI actually changes.
+  const clipSource = useMemo(() => ({ uri: clipUri ?? '' }), [clipUri]);
   const [recordedSeconds, setRecordedSeconds] = useState(0);
 
   const [analysis, setAnalysis] = useState<SwingAnalysis | null>(null);
@@ -3542,7 +3548,7 @@ export default function SmartMotion() {
         {isReview && clipUri ? (
           <Video
             ref={videoRef}
-            source={{ uri: clipUri }}
+            source={clipSource}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
             isLooping

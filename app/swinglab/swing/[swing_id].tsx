@@ -206,6 +206,13 @@ export default function SwingDetail() {
   // basename under the live documentDirectory. Falls back to the raw clipUri
   // while resolving so first paint isn't blocked.
   const [playbackUri, setPlaybackUri] = useState<string | null>(shot?.clipUri ?? null);
+  // 2026-07-26 (Tim — "swing library crashes after playing a while"; device log: FATAL "Maximum update
+  // depth exceeded" from onPlaybackStatusUpdate) — the <Video> source was an INLINE object literal, so
+  // EVERY re-render made a new source reference. Playback fires onPlaybackStatusUpdate ~25×/s with the
+  // pose overlay on (progressUpdateIntervalMillis:40) → setPosition → re-render → new source object →
+  // expo-av reloads → onLoad → playAsync → status → setPosition → … a synchronous re-render loop that
+  // trips React's update-depth limit and crashes. Memoize the source so it only changes with the URI.
+  const videoSource = useMemo(() => ({ uri: playbackUri ?? shot?.clipUri ?? '' }), [playbackUri, shot?.clipUri]);
   // 2026-06-23 (Tim — "NONE of them play") — surface the actual reason on screen
   // instead of a silent black frame, so a real failure (codec / missing file /
   // expo-av error) is visible + reportable rather than a guess.
@@ -1754,7 +1761,7 @@ export default function SwingDetail() {
               <ZoomableView style={StyleSheet.absoluteFill} onSingleTap={togglePlayPause}>
               <Video
                 ref={videoRef}
-                source={{ uri: playbackUri ?? shot.clipUri }}
+                source={videoSource}
                 style={[styles.video, motionOnly && { opacity: 0 }]}
                 resizeMode={ResizeMode.CONTAIN}
                 // 2026-07-02 (Tim — skeleton lags behind the motion) — ~25x/s time reports (vs
