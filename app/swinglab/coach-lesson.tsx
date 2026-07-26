@@ -248,6 +248,12 @@ export default function CoachLessonScreen() {
   // ── session lifecycle ──────────────────────────────────────────────────────
   const goLiveAndOpen = useCallback(async (opener: string, firstPrompt: string) => {
     loopGenRef.current++;
+    // 2026-07-25 (Tim — "double overlapping text + races in the caddie's speech" on Coach Caddie) — a
+    // lesson must OWN the voice. If the global caddie was still mid-line when the lesson starts (a
+    // pending brain response, the post-splash opener, an active-listening reply), that speech + the
+    // lesson's opener play over each other and both captions render. Cancel any in-flight speech first
+    // so only the lesson speaks. stopSpeaking() kills both the cloud/mp3 and device-TTS pipelines.
+    try { await stopSpeaking(); } catch { /* best-effort */ }
     setSessionLive(true); sessionLiveRef.current = true;
     setPaused(false); pausedRef.current = false;
     setError(null); setFeedback(null);
@@ -306,7 +312,9 @@ export default function CoachLessonScreen() {
     loopGenRef.current++;
     setSessionLive(true); sessionLiveRef.current = true; setPaused(false); pausedRef.current = false;
     setPhase('watching'); setCaption(intro);
-    void (async () => { await new Promise((r) => setTimeout(r, 250)); await prepareCamera(); say(intro); })();
+    // Same as goLiveAndOpen — cancel any in-flight global caddie speech so the lesson intro doesn't
+    // race it (double voice + double caption). See the note there.
+    void (async () => { try { await stopSpeaking(); } catch { /* best-effort */ } await new Promise((r) => setTimeout(r, 250)); await prepareCamera(); say(intro); })();
   }, [prepareCamera]);
 
   const beginPriority = useCallback((dx: Diagnosis, m: SwingBiomechanics) => {
