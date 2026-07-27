@@ -530,6 +530,9 @@ export default function SwingDetail() {
     faultSevere: overlayFaultSevere,
     showSkeleton: true,
     showTrace: true,
+    // 2026-07-27 (full-app audit) — pass the detected clubhead arc so the baked still keeps the real
+    // clubhead trace + blue club (the trace is clubhead-or-nothing, so without this it went skeleton-only).
+    clubArc: clubArcPoints,
   });
 
   // 2026-05-17 — dropped the Coach Audio / Kevin Analysis toggle.

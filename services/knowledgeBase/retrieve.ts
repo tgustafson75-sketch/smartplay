@@ -214,30 +214,7 @@ export function kbForPrompt(entries: KBEntry[], cnsProfile?: CnsProfile): string
     .join('\n');
 }
 
-/**
- * Honesty filter — split retrieved entries by how grounded they are, so the
- * caddie can be told which facts it may state as MEASURED vs which are
- * coaching guidance only. (north-star honesty gate.)
- */
-export function splitByHonesty(entries: KBEntry[]): Record<KBHonesty, KBEntry[]> {
-  const out: Record<KBHonesty, KBEntry[]> = {
-    measurable: [],
-    directional: [],
-    coaching_only: [],
-  };
-  for (const e of entries) {
-    out[e.honesty ?? 'coaching_only'].push(e);
-  }
-  return out;
-}
-
-/** Keep only entries at or above a minimum honesty (measurable > directional > coaching_only). */
-export function filterByHonesty(entries: KBEntry[], min: KBHonesty): KBEntry[] {
-  const rank: Record<KBHonesty, number> = {
-    coaching_only: 0,
-    directional: 1,
-    measurable: 2,
-  };
-  const floor = rank[min];
-  return entries.filter(e => rank[e.honesty ?? 'coaching_only'] >= floor);
-}
+// 2026-07-27 (full-app audit) — removed splitByHonesty() + filterByHonesty(): exported but ZERO callers.
+// Honesty already reaches the brain a live way — kbForPrompt appends the inline `[coaching_only]` /
+// `[directional]` tag per entry + both routes add a "Honesty:" instruction — so these split/filter
+// helpers were dead code. (If a hard honesty FILTER is ever wanted, re-add against KBHonesty.)

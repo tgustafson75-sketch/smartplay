@@ -582,13 +582,16 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     // imported face-on clip is read as face-on without flipping the cage default.
     const uploadAngle = session.upload?.angleOverride ?? null;
     if (uploadAngle === 'down_the_line' || uploadAngle === 'face_on') {
-      cageAngleCtx = uploadAngle;
+      cageAngleCtx = uploadAngle; // an EXPLICIT user choice (upload angle picker / SmartMotion toggle) wins
     } else {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const calMod = require('../store/cageOverlayCalibrationStore');
-        cageAngleCtx = calMod.useCageOverlayCalibrationStore.getState().cameraAngle as 'down_the_line' | 'face_on';
-      } catch { /* ignore — default in analyzer */ }
+      // 2026-07-27 (full-app audit + Tim — "do an AI pass to auto-detect orientation") — no explicit user
+      // angle → leave it NULL so computeBiomechanics runs inferCameraAngle(frames) (the conservative
+      // pose-geometry detector). The old cageOverlayCalibrationStore.cameraAngle was a passive default
+      // STUCK at 'down_the_line' (its setters had zero callers after the calibration UI was dropped in the
+      // SmartMotion rebuild), which masqueraded as an explicit choice and forced a face-on swing — opened
+      // by voice/library without touching the toggle — to be mis-read as down-the-line. Let the AI decide.
+      // (undefined, not null — computeBiomechanics treats `angle == null` (both) as "infer".)
+      cageAngleCtx = undefined;
     }
 
     // 2026-05-28 — Fix FQ (bug #3) / Fix FU: bounded wait for the

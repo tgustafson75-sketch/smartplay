@@ -635,6 +635,13 @@ export default function SmartMotion() {
   // reset() can restore it. A putt forces 'down_the_line'; without this, that
   // forced DTL bled into the next full swing's capture guides + analysis prior.
   const lastChosenAngleRef = useRef<Angle>(initialAngle);
+  // 2026-07-27 (Tim — "do an AI pass to auto-detect orientation") — did the user EXPLICITLY choose the
+  // angle (a toggle tap, or a voice/route param like "face on")? If NOT, the pose biomech read defers to
+  // inferCameraAngle(frames) rather than assuming the DTL default — so a face-on swing opened/captured
+  // without touching the toggle isn't read as down-the-line. The visible overlay still follows the toggle.
+  const userSetAngleRef = useRef<boolean>(
+    angleParam === 'face_on' || angleParam === 'face-on' || angleParam === 'down_the_line',
+  );
   // 2026-06-11 (audit H1) — the auto-window-end timeout is armed inside
   // startRecording's closure (deps [micPerm, requestMicPerm]) and would otherwise
   // capture a STALE stopRecording (stale appliedCalibration + stale runAnalysis,
@@ -762,6 +769,7 @@ export default function SmartMotion() {
   // quick fade-away label. Putt forces down-the-line under the hood (same as the old
   // PUTT chip). Keeps lastChosenAngleRef in sync so reset() restores the real angle.
   const cycleMode = () => {
+    userSetAngleRef.current = true; // 2026-07-27 — an explicit tap means "use THIS angle", not auto-detect
     const cur = isPutt ? 'putt' : angle;
     if (cur === 'down_the_line') { setAngle('face_on'); setPuttMode(false); lastChosenAngleRef.current = 'face_on'; showModeFade('FACE-ON'); }
     else if (cur === 'face_on') { setPuttMode(true); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('PUTTING'); }
@@ -1982,8 +1990,16 @@ export default function SmartMotion() {
         const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
         if (cancelled) return;
         setPoseFrames(frames);
-        const bio = frames ? computeBiomechanicsFromFrames(frames, angle, swingerHandedness === 'left' ? 'left' : 'right') : null;
+        // 2026-07-27 (Tim — AI auto-detect) — when the user hasn't explicitly chosen the angle, pass null
+        // so computeBiomechanics runs inferCameraAngle(frames) (conservative pose-geometry detector); an
+        // explicit toggle/param wins. Then sync the visible toggle to the inferred angle so the overlay
+        // matches the read.
+        const angleForBiomech = userSetAngleRef.current ? angle : null;
+        const bio = frames ? computeBiomechanicsFromFrames(frames, angleForBiomech, swingerHandedness === 'left' ? 'left' : 'right') : null;
         if (!cancelled && bio) {
+          if (!userSetAngleRef.current && (bio.angle === 'face_on' || bio.angle === 'down_the_line') && bio.angle !== angle) {
+            setAngle(bio.angle); lastChosenAngleRef.current = bio.angle;
+          }
           setBiomech(bio);
           const sessionId = ingestedSessionIdRef.current;
           // 2026-07-10 (audit SM3) — only the PRIMARY swing (index 0) writes the SESSION-level

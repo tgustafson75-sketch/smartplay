@@ -37,6 +37,10 @@ type OverlayOpts = {
   faultSevere?: boolean;
   showSkeleton?: boolean;
   showTrace?: boolean;
+  // 2026-07-27 (full-app audit) — the DETECTED clubhead arc. Without it the trace is skeleton-only
+  // (the trace is clubhead-OR-NOTHING now), so exported "Grab Frame" stills + the coach report silently
+  // lost the swing trace. Threading it restores the real clubhead trace + blue club in the baked still.
+  clubArc?: { x: number; y: number; tMs: number }[] | null;
 };
 
 type Job = {
@@ -138,6 +142,7 @@ export function useSwingStillCapture(opts: OverlayOpts) {
           resizeMode="contain"
           faultJoints={opts.faultJoints}
           faultSevere={opts.faultSevere}
+          clubArc={opts.clubArc}
         />
       </View>
     </View>
