@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import OpenAI from 'openai';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 
@@ -11,6 +12,7 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'preround')) return;
 
   try {
     const {

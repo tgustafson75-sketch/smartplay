@@ -18,6 +18,7 @@ import { usePathname } from 'expo-router';
 import { subscribeToCaption, getCurrentCaption, subscribeToSpeaking, isSpeaking } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCurrentRoute, subscribeRouteChanges, type AudioRoute } from '../services/audioRoutingService';
+import { useCaddieBarReserve } from './GlobalCaddieBar';
 
 export default function CaptionStrip(): React.ReactElement | null {
   const insets = useSafeAreaInsets();
@@ -46,6 +47,15 @@ export default function CaptionStrip(): React.ReactElement | null {
   // while just duplicating text already on screen. Same rationale as the Caddie
   // tab's own speech bubble.
   const suppressOnSwingDetail = pathname.includes('/swinglab/swing');
+  // 2026-07-26 (deep audit S2 — duplicate captions) — CaddieStatusStrip (in the bottom caddie bar) is
+  // now "the ONE universal caddie text display" and renders the same spoken line on every screen where
+  // the bar shows, so the top pill was DOUBLING the caption everywhere. Suppress the top pill wherever a
+  // bottom/floating status strip already shows it: any bar screen (reserve > 0) or SmartMotion (which
+  // mounts its own floating CaddieStatusStrip). CaptionStrip stays alive only on bar-less screens with no
+  // strip (e.g. coach-lesson) so the accessibility caption + Bluetooth auto-prompt still work there.
+  const caddieBarShown = useCaddieBarReserve() > 0;
+  const onSmartMotion = pathname.includes('/swinglab/smartmotion');
+  const suppressWhereStatusStripShows = caddieBarShown || onSmartMotion;
   // Re-sim P1 — when audio routes through Bluetooth we surface captions
   // automatically *for the duration of the BT connection only*, then ask
   // the user once whether to keep them on permanently. This avoids the
@@ -142,6 +152,8 @@ export default function CaptionStrip(): React.ReactElement | null {
   if (suppressOnCaddieTab) return null;
   // Suppress on swing detail — own header + on-screen report (see note above).
   if (suppressOnSwingDetail) return null;
+  // Suppress wherever the bottom/floating CaddieStatusStrip already shows this line (no double caption).
+  if (suppressWhereStatusStripShows) return null;
 
   return (
     <Animated.View

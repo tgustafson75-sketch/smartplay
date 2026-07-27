@@ -15,6 +15,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeader, type StructuredSchema } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You are reading a screenshot from TopTracer Range — a ball-tracking system used at golf driving ranges. The image will be one of two views:
@@ -132,6 +133,7 @@ const TOPTRACER_SCHEMA: StructuredSchema = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!allowInference(req, res, 'toptracer-parse')) return;
   if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }

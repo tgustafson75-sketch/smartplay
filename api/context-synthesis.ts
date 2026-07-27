@@ -21,6 +21,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getCaddieName, type VoiceGender } from '../lib/persona';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
@@ -100,6 +101,7 @@ Write the cross-session pattern summary.`,
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'context-synthesis')) return;
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as {
       type?: SynthesisType;

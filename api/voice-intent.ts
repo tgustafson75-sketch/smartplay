@@ -8,6 +8,7 @@
 // Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
 import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
@@ -600,6 +601,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'voice-intent')) return;
 
   // 2026-06-04 — Pre-warm. Client hits this with { mode: 'warmup' }
   // after splash completes so the brain SDK (OpenAI or Gemini) + TLS

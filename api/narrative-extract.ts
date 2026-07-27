@@ -15,6 +15,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import Anthropic from '@anthropic-ai/sdk';
 
 // 2026-07-08 (pre-release sweep) — SDK timeout kept UNDER the ~15s platform function
@@ -64,6 +65,7 @@ const TOOL: Anthropic.Tool = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!allowInference(req, res, 'narrative-extract')) return;
   if (!process.env.ANTHROPIC_API_KEY) return res.status(200).json({ configured: false });
 
   try {

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS, KEVIN_TTS_SPEED } from './_kevinVoice';
 
@@ -39,6 +40,7 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'voice')) return;
 
   // 2026-06-04 — Pre-warm. Client hits this endpoint with
   // { mode: 'warmup' } after splash completes so OpenAI TTS SDK +

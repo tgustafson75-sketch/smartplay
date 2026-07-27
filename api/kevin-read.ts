@@ -19,6 +19,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 const SYSTEM_PROMPT = `You are Kevin, an elite AI golf caddie. Based on this player's recent round data, give a 2-3 sentence honest prevailing tendency assessment. Speak directly to the player in Kevin's voice — confident, direct, encouraging. Focus on patterns: what's working, what's costing strokes, one actionable tendency. No bullet points. Natural speech. Never quote the data verbatim; talk about it like a caddie noticing patterns walking next to the player.`;
@@ -122,6 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  if (!allowInference(req, res, 'kevin-read')) return;
 
   // Mirrors api/kevin warmup pattern so services/voiceWarmup could
   // optionally also warm this endpoint later. ~$0.00005 per warmup.

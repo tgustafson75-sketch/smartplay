@@ -16,6 +16,7 @@
  * Auth: shared secret in PIPECAT_SESSION_SECRET env var (set in Vercel dashboard).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
 // 2026-06-24 — APP-FEATURE CATALOG (shared client+server). Gives the caddie a
 // map of the app's real tools/cards/drills (e.g. Smart Tempo) so he can name
@@ -415,6 +416,7 @@ interface HistoryMsg { role: 'user' | 'assistant'; content: string }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'pipecat-turn')) return;
 
   // 2026-06-24 — Pre-warm. pipecat is the DEFAULT brain (since the v15 migration),
   // but the warmup heartbeat only hit /api/kevin, so this Lambda + the Anthropic

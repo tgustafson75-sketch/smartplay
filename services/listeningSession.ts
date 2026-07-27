@@ -977,7 +977,14 @@ async function openSession() {
         // (e.g. navigation tool_actions that route the user); those set
         // result.tool_action, which we still execute below. For the
         // pure-no-output case the user gets the localized failure line.
-        if (!result.tool_action && getSessionState() === 'responding') {
+        // 2026-07-26 (deep audit S2) — but a SUCCESSFUL handler that chose
+        // silence (acknowledge: "thanks"/"okay"/"got it" → success:true,
+        // voice_response:null, side_effects:['acknowledge']) was falling in
+        // here and speaking "I'm having trouble connecting" on a totally
+        // normal ack. Only speak the failure line when the handler actually
+        // FAILED (success === false) — an intentional silent-success stays
+        // silent, matching the text/watch path which guards on voice_response.
+        if (!result.tool_action && result.success === false && getSessionState() === 'responding') {
           await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
         }
       }

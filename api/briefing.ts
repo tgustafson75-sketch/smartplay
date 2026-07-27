@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
@@ -11,6 +12,7 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!allowInference(req, res, 'briefing')) return;
 
   // 2026-06-15 (Tim — pre-round brief fired ~25s late) — Pre-warm. The client
   // pings this with { mode: 'warmup' } the instant "Start Round Here" is tapped,

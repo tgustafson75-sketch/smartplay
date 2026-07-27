@@ -1496,7 +1496,12 @@ export const useRoundStore = create<RoundState>()(
           try {
             const calcMod = require('../services/handicapCalculator');
             const profileMod = require('./playerProfileStore');
-            const idx = profileMod.usePlayerProfileStore.getState().handicapIndex;
+            // 2026-07-26 (deep audit S2) — this read `.handicapIndex` (camelCase), which the profile
+            // store does NOT expose — it's `handicap_index` (snake_case) — so idx was ALWAYS undefined
+            // and courseHandicap defaulted to 18 for EVERY player, silently defeating the net-double-
+            // bogey cap + net-par pickup fill for anyone not ~18. The import path already read the
+            // correct field. Matches getState().handicap_index used elsewhere.
+            const idx = profileMod.usePlayerProfileStore.getState().handicap_index;
             const courseHandicap = Math.round(typeof idx === 'number' && Number.isFinite(idx) ? idx : 18);
             const pars: Record<number, number> = {};
             for (const h of s.courseHoles) if (h.par > 0) pars[h.hole] = h.par;
