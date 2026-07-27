@@ -797,7 +797,7 @@ async function openSession() {
               if (r.text && getSessionState() === 'responding') {
                 await stopSpeaking().catch(() => {});
                 if (getSessionState() === 'responding') {
-                  if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch((e) => console.log('[listeningSession] pipecat speakFromBase64 failed', e));
+                  if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch((e) => console.log('[listeningSession] pipecat speakFromBase64 failed', e));
                   else await speak(r.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] pipecat speak failed', e));
                   chatSpoken = true;
                 }
@@ -851,7 +851,7 @@ async function openSession() {
                   return;
                 }
                 if (replyAudio) {
-                  await speakFromBase64(replyAudio, { userInitiated: true })
+                  await speakFromBase64(replyAudio, { userInitiated: true, caption: reply })
                     .catch((e) => console.log('[listeningSession] chat fallback speakFromBase64 failed', e));
                 } else {
                   await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
@@ -929,7 +929,7 @@ async function openSession() {
           if (r.text && responseAllowed && getSessionState() === 'responding') {
             await stopSpeaking().catch(() => {});
             if (getSessionState() === 'responding') {
-              if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speakFromBase64 failed', e));
+              if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch((e) => console.log('[listeningSession] route_to_brain speakFromBase64 failed', e));
               else await speak(r.text, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speak failed', e));
             }
           } else if (!r.text && responseAllowed && getSessionState() === 'responding') {
@@ -1137,7 +1137,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         if (r.text && ttsAllowed) {
           const { speak, speakFromBase64 } = await import('./voiceService');
           if (r.audioBase64) {
-            await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+            await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
           } else {
             await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
               ?.catch?.(() => undefined);
@@ -1178,7 +1178,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         }
         if (r.text) {
           const { speak, speakFromBase64 } = await import('./voiceService');
-          if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+          if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
           else await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
         }
       } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }

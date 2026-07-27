@@ -605,7 +605,11 @@ const playbackTimeoutForDuration = (durationMs: number | null | undefined): numb
 // Pass { userInitiated: true } from any speak() call that's a direct reply
 // to a user mic-tap or hero-moment confirmation. Default false treats the
 // utterance as scripted (briefing, opener, filler, proactive, summary).
-type SpeakOpts = { userInitiated?: boolean };
+// 2026-07-27 (Tim — "no text shows in the bottom mic box when the caddie speaks") — speakFromBase64
+// plays CLOUD audio (the brain's reply / the opener) and only knew the base64, not the words, so it
+// broadcast the speaking flag but never the caption → the status strip had `speaking` but no text and
+// rendered nothing. Callers that have the reply text pass it here so the strip shows what's being said.
+type SpeakOpts = { userInitiated?: boolean; caption?: string | null };
 
 // PGA HOPE follow-up (A5) — read the active persona's intensity dial and
 // convert to playback volume. Floor at 0.3 so the slider never silences
@@ -1079,6 +1083,9 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
   try { Speech.stop(); } catch {}
 
   notifySpeaking(true);
+  // 2026-07-27 (Tim — bottom mic box showed no text when the caddie spoke) — broadcast the reply words
+  // so the status strip displays what's being said, matching speak(). Cleared when playback ends below.
+  notifyCaption(opts?.caption ?? null);
   await configureAudioForSpeech();
 
   // 2026-06-14 (audit — perf) — write the base64 audio straight to disk with
@@ -1122,6 +1129,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
+              notifyCaption(null);
             }
             resolve();
             return;
@@ -1132,6 +1140,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
+              notifyCaption(null);
             }
             resolve();
           }
@@ -1143,6 +1152,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
           if (myId === currentSpeechId) {
             currentSound = null;
             notifySpeaking(false);
+            notifyCaption(null);
           }
           resolve();
         }, timeoutMs)
@@ -1154,6 +1164,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
       currentSound = null;
       currentAbortController = null;
       notifySpeaking(false);
+      notifyCaption(null);
     }
     console.log('[voice] speakFromBase64 error:', err);
   }

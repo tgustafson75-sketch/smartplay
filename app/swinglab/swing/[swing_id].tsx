@@ -25,7 +25,7 @@ import * as VideoThumbnails from '../../../utils/videoThumbnail';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
-import { useCageStore, OTHER_PLAYER_ID, type AnalysisStatus, type CageShot } from '../../../store/cageStore';
+import { useCageStore, OTHER_PLAYER_ID, type AnalysisStatus, type CageShot, type CageSession } from '../../../store/cageStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
 import { useFamilyStore } from '../../../store/familyStore';
@@ -260,6 +260,19 @@ export default function SwingDetail() {
   const allSessions = useCageStore(s => s.sessionHistory);
   const otherSessions = useMemo(
     () => allSessions.filter(x => x.id !== swing_id).slice(0, 30),
+    [allSessions, swing_id],
+  );
+  // 2026-07-27 (Tim — "compare two swings from different DATES with a different analysis metric") — the
+  // engine (compareSwings self_vs_self) + the result sheet already exist for reference-compare; this just
+  // adds a DATE-oriented entry. comparableSessions = your other swings that HAVE biomechanics (so a metric
+  // diff is real), newest first. Picking one runs the same self_vs_self pass → per-metric better/worse/same.
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const comparableSessions = useMemo(
+    () => allSessions
+      .filter(x => x.id !== swing_id && !!x.biomechanics && !x.putting_analysis)
+      .slice()
+      .sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
+      .slice(0, 40),
     [allSessions, swing_id],
   );
   // 2026-05-23 — Comparison result sheet state. Holds the resolved
@@ -1506,6 +1519,64 @@ export default function SwingDetail() {
     })();
   };
 
+  // 2026-07-27 (Tim — cross-date compare) — diff THIS swing's biomechanics against an EARLIER swing of
+  // the player's (picked by date), on every metric the engine tracks (tempo, hip slide, head drift,
+  // coil, tilt) → better/worse/same. Mirrors onCompareToSelect but builds the reference from a real
+  // CageSession instead of the reference DB. Reuses the same self_vs_self engine + ComparisonResultSheet.
+  const compareToSession = (os: CageSession) => {
+    const bio = os.biomechanics;
+    if (!currentPoseForCompare || !bio) {
+      useToastStore.getState().show("That swing doesn't have mechanics yet — analyze it first.");
+      return;
+    }
+    void (async () => {
+      try {
+        const engineMod = await import('../../../services/swingComparisonEngine');
+        const dateLabel = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return 'earlier swing'; } })();
+        const club = os.currentClub ?? os.club ?? 'swing';
+        const ref: ReferenceSwing = {
+          id: os.id,
+          label: `${club} · ${dateLabel}`,
+          source: 'self_upload', // → kind self_vs_self (comparing you to your past self)
+          biomechanics: bio,
+          frames: bio.frames ?? [],
+          club: os.club ?? null,
+          created_at: os.date ?? 0,
+          last_used_at: null,
+        };
+        const referencePose: PoseEstimate = {
+          source: 'video',
+          confidence: 80,
+          frames: ref.frames ?? [],
+          biomechanics: ref.biomechanics ?? null,
+          swingVerdict: null,
+          reason: `earlier swing: ${ref.label}`,
+          age_band: 'adult',
+          mirrored: false,
+          joint_confidence: { hip: 0.9, shoulder: 0.9, knee: 0.7, wrist: 0.7, ankle: 0.7, head: 0.7 },
+          partial_view: false,
+        };
+        const result = engineMod.compareSwings({
+          current: currentPoseForCompare,
+          reference: referencePose,
+          kind: 'self_vs_self',
+          club: session?.club ?? os.club ?? null,
+        });
+        setComparisonResult({ result, reference: ref });
+        if (voiceEnabled && trustLevel !== 1) {
+          await configureAudioForSpeech();
+          const headline = (result.overall_match == null
+            ? `Not enough to compare against your ${ref.label} swing yet. ${result.takeaways[0] ?? ''}`
+            : `${result.overall_match}% match to your ${ref.label} swing. ${result.takeaways[0] ?? ''}`).trim();
+          await speakChunked(result.voice_summary || headline, voiceGender, language, apiUrl);
+        }
+      } catch (e) {
+        console.log('[swing-detail] compare-to-session failed:', e);
+        useToastStore.getState().show('Compare failed — try again.');
+      }
+    })();
+  };
+
   const onAddReferenceFromSheet = () => {
     setCompareSheetOpen(false);
     router.push('/swinglab/upload' as never);
@@ -2415,6 +2486,39 @@ export default function SwingDetail() {
             </View>
           </Modal>
 
+          {/* 2026-07-27 (Tim — compare across dates) — pick an earlier analyzed swing; runs the same
+              self_vs_self metric diff and opens the existing ComparisonResultSheet (tempo, hip slide,
+              coil, tilt → better/worse/same). */}
+          <Modal visible={datePickerOpen} transparent animationType="slide" onRequestClose={() => setDatePickerOpen(false)}>
+            <View style={styles.linkBackdrop}>
+              <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Compare to an earlier swing</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Pick a past swing — I&apos;ll show what got better or worse across your mechanics (tempo, hip slide, coil, tilt).</Text>
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {comparableSessions.length === 0 ? (
+                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other analyzed swings yet — analyze another swing first.</Text>
+                  ) : comparableSessions.map((os) => {
+                    const club = os.currentClub ?? os.club ?? 'swing';
+                    const d = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } })();
+                    return (
+                      <TouchableOpacity
+                        key={os.id}
+                        style={[styles.linkRow, { borderColor: colors.border }]}
+                        onPress={() => { setDatePickerOpen(false); compareToSession(os); }}
+                      >
+                        <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{club} · {d}</Text>
+                        <Text style={[styles.linkRowBadge, { color: colors.accent }]}>⇄</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity onPress={() => setDatePickerOpen(false)} style={styles.linkCancel}>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
           {/* 2026-06-23 (Tim) — golfer attribution picker. Always-editable: who hit
               this swing. Rows = You (account holder) + each family member + "Add
               golfer". The auto-detect row is a disabled future stub. Mirrors the
@@ -2765,6 +2869,20 @@ export default function SwingDetail() {
                 >
                   <Text style={[styles.reanalyzeText, { color: colors.accent }]}>
                     ⇄  Compare to a reference swing
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {/* 2026-07-27 (Tim) — compare THIS swing to an EARLIER one of yours (by date) on every
+                  metric. Only when there's another analyzed swing to diff against. */}
+              {session.biomechanics && !session.putting_analysis && comparableSessions.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
+                  onPress={() => setDatePickerOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Compare this swing to an earlier swing to see your progress"
+                >
+                  <Text style={[styles.reanalyzeText, { color: colors.accent }]}>
+                    📈  Compare to an earlier swing
                   </Text>
                 </TouchableOpacity>
               )}

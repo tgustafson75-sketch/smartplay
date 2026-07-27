@@ -294,7 +294,7 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       }
 
       if (audioBase64) {
-        await speakFromBase64(audioBase64);
+        await speakFromBase64(audioBase64, { caption: text });
       }
 
       return text ?? "Got nothing back from the brain. Try again.";

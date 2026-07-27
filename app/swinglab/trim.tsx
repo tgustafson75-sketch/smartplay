@@ -24,7 +24,7 @@
  * everyone who uploads a >6s clip.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
 } from 'react-native';
@@ -50,6 +50,10 @@ export default function TrimScreen() {
   const session = useCageStore(s => s.sessionHistory.find(x => x.id === session_id));
   const shot = session?.shots[0] ?? null;
   const clipUri = shot?.clipUri ?? null;
+  // 2026-07-27 (deep audit — same FATAL as the swing player) — memoize the Video source. An inline
+  // {{ uri }} literal is a new ref every render; onPlaybackStatusUpdate setStates position ~25×/s →
+  // re-render → new source → expo-av reload → status → "Maximum update depth exceeded".
+  const trimSource = useMemo(() => ({ uri: clipUri ?? '' }), [clipUri]);
 
   const videoRef = useRef<Video>(null);
   const [position, setPosition] = useState(0);
@@ -145,7 +149,7 @@ export default function TrimScreen() {
         <View style={styles.videoFrame}>
           <Video
             ref={videoRef}
-            source={{ uri: clipUri }}
+            source={trimSource}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.CONTAIN}
             useNativeControls

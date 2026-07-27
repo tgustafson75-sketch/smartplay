@@ -1437,7 +1437,7 @@ export const useVoiceCaddie = ({
         wrappedOnVoiceStateChange('speaking');
         await stopSpeaking();
         if (checked.audioBase64 && voiceEnabled) {
-          await speakFromBase64(checked.audioBase64, { userInitiated: true });
+          await speakFromBase64(checked.audioBase64, { userInitiated: true, caption: checked.text });
         } else {
           await speakResponse(checked.text);
         }

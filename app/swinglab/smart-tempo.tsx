@@ -157,6 +157,9 @@ export default function SmartTempoScreen() {
   // ── Resolve the playable URI (re-anchor stale container paths) ────────
   const [playbackUri, setPlaybackUri] = useState<string | null>(sourceClipUri);
   const [videoError, setVideoError] = useState<string | null>(null);
+  // 2026-07-27 (deep audit — same FATAL as the swing player) — memoize the Video source; an inline
+  // {{ uri }} literal + onStatus setState (position ~25×/s) drives the reload loop ("Maximum update depth").
+  const tempoSource = useMemo(() => ({ uri: playbackUri ?? sourceClipUri ?? '' }), [playbackUri, sourceClipUri]);
   useEffect(() => {
     let cancelled = false;
     setPlaybackUri(sourceClipUri);
@@ -528,7 +531,7 @@ export default function SmartTempoScreen() {
             <Pressable style={StyleSheet.absoluteFill} onPress={() => void togglePlayPause()}>
               <Video
                 ref={videoRef}
-                source={{ uri: playbackUri ?? sourceClipUri ?? '' }}
+                source={tempoSource}
                 style={StyleSheet.absoluteFill}
                 resizeMode={ResizeMode.CONTAIN}
                 useNativeControls={false}

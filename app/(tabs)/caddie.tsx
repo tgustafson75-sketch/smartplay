@@ -1321,7 +1321,7 @@ export default function CaddieTab() {
         const r = await generateProactiveOpener();
         if (r.text) {
           if (r.audioBase64) {
-            await speakFromBase64(r.audioBase64, { userInitiated: true }).catch(() => undefined);
+            await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
           } else {
             // No TTS came back but we have the text (still seeded into history) — voice it.
             await speak(r.text, liveSettings.voiceGender, liveSettings.language ?? 'en', getApiBaseUrl(), { userInitiated: true })?.catch?.(() => undefined);
