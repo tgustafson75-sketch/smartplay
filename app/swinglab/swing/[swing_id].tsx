@@ -746,6 +746,14 @@ export default function SwingDetail() {
     // screen.
     let cancelled = false;
     void (async () => {
+      // 2026-07-27 (Tim — swing library: "see the text but can't hear the caddie… heard a stutter, then
+      // misses/races"). ROOT: the analysis read started WITHOUT first cancelling anything already
+      // speaking (a prior narrate tail, the global caddie, an ack), so the two collided → the stutter,
+      // and speakChunked's own barge-in guard (speakGeneration) then broke the report mid-way → silence.
+      // OWN the voice first: stopSpeaking() cancels any in-flight utterance across BOTH audio subsystems;
+      // speakChunked snapshots speakGeneration AFTER this, so it never self-aborts.
+      await stopSpeaking().catch(() => {});
+      if (cancelled) return;
       await configureAudioForSpeech();
       if (cancelled) return;
       await speakChunked(text, voiceGender, language, apiUrl);
