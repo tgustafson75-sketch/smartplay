@@ -1430,9 +1430,19 @@ export default function SmartVisionScreen() {
   // the camera. The bus claim (openToolHandler) routes here when SmartVision is mounted.
   const svReadRef = useRef<{ ar: typeof aiRead; mid: number | null; holeNo: number }>({ ar: aiRead, mid: yardages.middle, holeNo: holeIndex });
   svReadRef.current = { ar: aiRead, mid: yardages.middle, holeNo: holeIndex };
+  // 2026-07-27 (Tim — "I got a read for the hole twice" after skipping the intro). The read handler is
+  // invoked by requestSmartVisionRead() and speaks through the SERIALIZED speak queue, so if it's asked
+  // twice in quick succession (the intro-skip tap can dispatch a second scene_read while one is already
+  // queued), the read plays through TWICE back-to-back. Make it idempotent: never re-read the SAME hole
+  // within a short window — a legitimate invariant regardless of what double-fired the request.
+  const svLastReadRef = useRef<{ holeNo: number; at: number }>({ holeNo: -1, at: 0 });
   useEffect(() => {
     registerSmartVisionRead(() => {
       const { ar, mid, holeNo } = svReadRef.current;
+      const now = Date.now();
+      const last = svLastReadRef.current;
+      if (last.holeNo === holeNo && now - last.at < 4000) return; // dedupe a double-fire on the same hole
+      svLastReadRef.current = { holeNo, at: now };
       const parts: string[] = [];
       if (mid != null) parts.push(`Hole ${holeNo}. Middle of the green, ${mid} yards.`);
       if (ar?.playsLikeYards != null && ar.deltaYards !== 0) parts.push(`Plays like ${ar.playsLikeYards}.`);
