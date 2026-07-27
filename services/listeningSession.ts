@@ -4,6 +4,7 @@ import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, pla
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -164,11 +165,9 @@ let lastCaptureEndMs: number | null = null;
 // 2026-07-18 (Tim — "vary it so it's natural, not a robot repeating one line") — a rotating set of
 // short, natural acknowledgments spoken the moment we finish capturing your voice, so you know it
 // heard you before it processes. Kept to clear words that read well in device TTS (no "mm-hmm").
-const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
-  en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
-  es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],
-  zh: ['好的，明白了。', '明白了。', '好的。', '收到。', '让我看看。', '稍等。'],
-};
+// 2026-07-26 (deep audit) — ack lines + the "Didn't catch that." notice now live in a dependency-free
+// module (services/caddieAckLines) so offlineVoiceCache pre-renders them in the persona's REAL voice from
+// the SAME source (no drift possible). [[feels-like-a-real-caddie]]
 let lastAckIdx = -1;
 function pickAck(lang: 'en' | 'es' | 'zh'): string {
   const arr = ACK_PHRASES[lang] ?? ACK_PHRASES.en;
@@ -430,7 +429,7 @@ async function openSession() {
       // device-TTS notice bypassed that gate and spoke aloud on a route the user muted.
       if (settingsNow.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
         const { speakDeviceNotice } = await import('./voiceService');
-        await speakDeviceNotice("Didn't catch that.", lang, settingsNow.voiceGender).catch(() => {});
+        await speakDeviceNotice(CADDIE_NOTICE_DIDNT_CATCH, lang, settingsNow.voiceGender).catch(() => {});
       }
     } catch { /* notice is best-effort */ }
     setSessionStateMirror('idle');

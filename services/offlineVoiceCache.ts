@@ -24,6 +24,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { DEAD_END_PRACTICE } from './localStatusResponder';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH } from './caddieAckLines';
 
 type Lang = 'en' | 'es' | 'zh';
 type Gender = 'male' | 'female';
@@ -34,6 +35,13 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   { slug: 'didnt_catch_close', language: 'en', text: "Didn't catch that — try once more, a bit closer to the mic." },
   { slug: 'didnt_catch_again', language: 'en', text: "Didn't catch that — say it again?" },
   { slug: 'say_again',          language: 'en', text: 'Say that again for me?' },
+  // 2026-07-26 (deep audit — robotic device-TTS on the HAPPY PATH) — every captured turn speaks a rotating
+  // ack + the bare "Didn't catch that." via speakDeviceNotice; none were cached, so they always played in
+  // the robotic OS voice (north-star defect, heard every turn). Pre-render the ENGLISH set in the persona
+  // voice, built from the SAME source listeningSession speaks (caddieAckLines) so they can't drift. es/zh
+  // acks keep the device-TTS fallback until there are non-English testers.
+  { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH },
+  ...ACK_PHRASES.en.map((text, i) => ({ slug: `ack_en_${i}`, language: 'en' as const, text })),
   // Off-course practice nudge — the one FIXED deadEndLine branch (the others are dynamic reads).
   { slug: 'off_course_en', language: 'en', text: DEAD_END_PRACTICE.en },
   { slug: 'off_course_es', language: 'es', text: DEAD_END_PRACTICE.es },

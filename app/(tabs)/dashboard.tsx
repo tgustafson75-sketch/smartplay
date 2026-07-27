@@ -182,7 +182,10 @@ export default function Dashboard() {
     // 2026-07-24 (club-logic unification) — show the honest CARRY (the "My Bag" heading says carry).
     const withDist: { club: string; yards: number | null; measured: boolean }[] = CLUB_ORDER
       .filter((c) => c !== 'Putter' && st.hasDistance(c))
-      .map((c) => ({ club: c as string, yards: Math.round(st.carryFor(c)), measured: st.hasSamples(c) }))
+      // 2026-07-26 (deep audit S3 — honesty) — "measured" (lime) only when the CARRY is real (measured
+      // sample or the carry you stated), NOT when it's a GPS-total-only club whose carry is an estimate
+      // (total − roll). hasSamples was true for total-only → the badge over-claimed. hasCarry excludes it.
+      .map((c) => ({ club: c as string, yards: Math.round(st.carryFor(c)), measured: st.hasCarry(c) }))
       .sort((a, b) => (b.yards ?? 0) - (a.yards ?? 0));
     // Registered-but-no-distance-yet clubs, appended honestly (no fabricated yardage).
     const shown = new Set(withDist.map((x) => x.club));
