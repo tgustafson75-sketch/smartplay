@@ -43,6 +43,35 @@ function listJoin(items: string[]): string {
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
+// 2026-07-27 (tester UX — wrong-course trap) — golfcourseapi search returns MANY courses for a
+// common name ("Riverside", "Pine Valley", "Lakes"). The old code silently started the round at
+// the FIRST result, so a tester who meant the Riverside in their town could get dropped onto a
+// namesake three states away — wrong yardages, wrong everything, trust gone on hole 1. These two
+// helpers let us (a) collapse the same physical club appearing as multiple tees/nines so we don't
+// ask "the one in NJ, or the one in NJ?", and (b) speak a clean location so a single confident
+// match is still AUDITABLE ("Starting at Pine Valley in Pine Valley, NJ" — the user hears a wrong
+// hit immediately). Country is dropped when it's the US (the common case) to keep speech tight.
+type SearchHit = { id: string; club_name: string; course_name: string; location: string; _error?: string };
+
+function shortLoc(loc: string): string {
+  const parts = loc.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length && /^(us|usa|united states)$/i.test(parts[parts.length - 1])) parts.pop();
+  return parts.join(', ');
+}
+
+/** Collapse hits that are the same club in the same place (multiple tees/9s) to one, preserving order. */
+function dedupeCourses(hits: SearchHit[]): SearchHit[] {
+  const seen = new Set<string>();
+  const out: SearchHit[] = [];
+  for (const h of hits) {
+    const key = `${(h.club_name || h.course_name).toLowerCase().trim()}|${shortLoc(h.location).toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(h);
+  }
+  return out;
+}
+
 export const quickRoundHandler: IntentHandler = {
   intent_type: 'quick_round',
 
@@ -73,6 +102,7 @@ export const quickRoundHandler: IntentHandler = {
     // 1) Course resolution — local-first, API fallback.
     let courseId: string | null = null;
     let courseDisplayName: string | null = null;
+    let courseLocationSpoken: string | null = null; // set only for API hits, to voice back for auditability
 
     if (courseHint) {
       const local = resolveLocalCourse(courseHint);
@@ -82,10 +112,32 @@ export const quickRoundHandler: IntentHandler = {
       } else {
         try {
           const results = await searchCourses(courseHint);
-          const real = results.find(r => !r._error && r.id);
+          const reals = dedupeCourses(results.filter((r): r is SearchHit => !r._error && !!r.id));
+          if (reals.length > 1) {
+            // Ambiguous — DON'T silently pick the first (wrong-course trap). Name the top few with
+            // their cities and ask, so the tester lands on the course they actually meant. They
+            // re-issue with the city ("start a round at Pine Valley, New Jersey") and the more
+            // specific search resolves cleanly. Guest names carry in that re-issue too.
+            const options = reals
+              .slice(0, 3)
+              .map(r => {
+                const nm = r.club_name || r.course_name;
+                const loc = shortLoc(r.location);
+                return loc ? `${nm} in ${loc}` : nm;
+              })
+              .filter(Boolean);
+            return {
+              success: false,
+              voice_response: `I found a few courses like "${courseHint}" — ${listJoin(options)}. Which one? Say the course and the city.`,
+              side_effects: [`quick_round:ambiguous_course=${reals.length}`],
+              follow_up_needed: true,
+            };
+          }
+          const real = reals[0];
           if (real) {
             courseId = real.id;
             courseDisplayName = real.club_name || real.course_name || courseHint;
+            courseLocationSpoken = shortLoc(real.location) || null;
           }
         } catch (e) {
           console.log('[quickRoundHandler] searchCourses failed (non-fatal):', e);
@@ -147,9 +199,11 @@ export const quickRoundHandler: IntentHandler = {
 
     const holeWord = holeCount === 9 ? '9-hole ' : '';
     const guestSuffix = mintedGuests.length > 0 ? ` with ${listJoin(mintedGuests)}` : '';
+    // Voice the city for API-resolved courses so a wrong single match is caught by ear before hole 1.
+    const locationSuffix = courseLocationSpoken ? ` in ${courseLocationSpoken}` : '';
     return {
       success: true,
-      voice_response: `Starting a ${holeWord}quick round at ${courseDisplayName}${guestSuffix}.`,
+      voice_response: `Starting a ${holeWord}quick round at ${courseDisplayName}${locationSuffix}${guestSuffix}.`,
       side_effects: [
         `quick_round:course=${courseId}`,
         `quick_round:hole_count=${holeCount}`,
