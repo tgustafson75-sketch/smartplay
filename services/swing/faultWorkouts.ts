@@ -30,7 +30,7 @@ export interface Exercise {
 // both 'early_extension' and 'spine_angle_loss'; weight-hang as 'reverse_pivot') are normalized below.
 const FAULT_EXERCISES: Record<string, Exercise[]> = {
   early_extension: [
-    { name: 'Hip-hinge holds (dowel on spine)', category: 'drill', why: 'Grooves keeping your spine angle so your hips stop thrusting toward the ball.' },
+    { name: 'Hip-hinge holds (dowel on spine)', category: 'drill', why: 'Grooves keeping your spine angle so your hips stop thrusting toward the ball.', video: { url: 'https://youtu.be/cJa4lQ5_ZnQ', title: 'Stay In Posture — Early Extension Fix', source: 'Me and My Golf' } },
     { name: 'Glute bridges', category: 'strength', why: 'Stronger glutes let you post up and rotate instead of standing up through impact.' },
     { name: 'Hip airplanes', category: 'stability', why: 'Trains single-leg rotation control — the move that keeps posture into impact.' },
   ],
@@ -45,7 +45,7 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Med-ball rotational throw (to lead side)', category: 'strength', why: 'Builds the transfer of weight + speed toward the target.' },
   ],
   over_the_top: [
-    { name: 'Hip-lead separation drill (pump)', category: 'drill', why: 'Sequences the hips to start the downswing so the club drops on plane.' },
+    { name: 'Hip-lead separation drill (pump)', category: 'drill', why: 'Sequences the hips to start the downswing so the club drops on plane.', video: { url: 'https://youtu.be/SYtoiQBXOFc', title: 'The Golf Fix — Stop Coming Over the Top', source: 'Golf Channel · Michael Breed' } },
     { name: 'Thoracic rotation mobility', category: 'mobility', why: 'More upper-back turn means less need to throw the shoulders over the top.' },
     { name: 'Med-ball scoop toss', category: 'strength', why: 'Ingrains the lower-body-first sequence that fixes the over-the-top move.' },
   ],
@@ -54,7 +54,7 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Seated shoulder-turn stretch', category: 'mobility', why: 'Adds coil range so you can make a fuller, wider backswing.' },
   ],
   casting: [
-    { name: 'Wrist-hinge / lag hold drill', category: 'drill', why: 'Retains the angle you\'re casting away too early in the downswing.' },
+    { name: 'Wrist-hinge / lag hold drill', category: 'drill', why: 'Retains the angle you\'re casting away too early in the downswing.', video: { url: 'https://youtu.be/ID71I0_JcyY', title: 'School of Golf — 3 Drills to Create Lag', source: 'Golf Channel · Martin Hall' } },
     { name: 'Forearm + grip strength', category: 'strength', why: 'Holds lag under load so the club releases at the ball, not before it.' },
   ],
   chicken_wing: [
