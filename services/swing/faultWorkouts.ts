@@ -37,7 +37,7 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
   sway: [
     { name: 'Single-leg balance (trail leg)', category: 'stability', why: 'Builds the trail-side stability to turn around a centered post instead of sliding.' },
     { name: 'Pallof press (anti-rotation)', category: 'strength', why: 'Teaches your core to resist lateral drift so the backswing coils, not sways.' },
-    { name: 'Trail-hip loading drill (gate)', category: 'drill', why: 'Feels the difference between rotating into the trail hip and sliding off the ball.' },
+    { name: 'Trail-hip loading drill (gate)', category: 'drill', why: 'Feels the difference between rotating into the trail hip and sliding off the ball.', video: { url: 'https://youtu.be/sg8xbRBw_y4', title: 'The Golf Fix — Tips & Drills to Avoid Swaying', source: 'Golf Channel' } },
   ],
   reverse_pivot: [
     { name: 'Step-through weight-shift drill', category: 'drill', why: 'Trains driving onto the lead side through impact instead of hanging back.', video: { url: 'https://youtu.be/_Z5a76bGBeE', title: 'Weight Shift Drill', source: 'Golf Channel · SwingFix' } },
@@ -74,7 +74,7 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Posture + hinge patterning', category: 'drill', why: 'Sets the address angles that support a more upright, on-plane swing.' },
   ],
   quick_tempo: [
-    { name: 'Metronome tempo reps (3:1)', category: 'drill', why: 'Slows a rushed transition toward the tour ~3:1 backswing-to-downswing ratio.' },
+    { name: 'Metronome tempo reps (3:1)', category: 'drill', why: 'Slows a rushed transition toward the tour ~3:1 backswing-to-downswing ratio.', video: { url: 'https://youtu.be/5RZ4VqyQTWA', title: 'Stop Rushing Your Golf Swing (Tempo Drill)', source: 'Danny Maude' } },
     { name: 'Slow-motion rehearsal swings', category: 'drill', why: 'Rebuilds a smooth, unrushed transition you can trust under pressure.' },
   ],
 };
