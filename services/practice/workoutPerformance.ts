@@ -27,6 +27,8 @@ export interface WorkoutPerformance {
   scoreSeries: number[];
   /** 'minutes' when most workouts had a duration, else 'sessions'. */
   metric: 'minutes' | 'sessions';
+  /** True when the minutes total includes assumed-duration fills (so the UI shows "est."). */
+  minutesEstimated: boolean;
   totalWorkouts: number;
   totalMinutes: number;
   roundsCounted: number;
@@ -51,6 +53,10 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   // Use minutes only when we actually have durations for most of the workouts —
   // otherwise a couple of stray durations would skew a mostly-count series.
   const metric: 'minutes' | 'sessions' = valid.length > 0 && withDuration >= Math.ceil(valid.length / 2) ? 'minutes' : 'sessions';
+  // 2026-07-26 (deep audit S3) — when we show minutes, some workouts had no stated duration and got the
+  // ASSUMED_SESSION_MIN fill, so the "Xh total" is partly estimated. Surface that so the UI can say "est."
+  // instead of presenting a synthesized number as fact (illustration-honesty rule).
+  const minutesEstimated = metric === 'minutes' && withDuration < valid.length;
 
   const workoutSeries = new Array(WEEKS).fill(0) as number[];
   let totalWorkouts = 0;
@@ -93,5 +99,5 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
     else headline = 'Steady stretch — a bump in golf-specific training tends to move the scoring line over time.';
   }
 
-  return { workoutSeries, scoreSeries, metric, totalWorkouts, totalMinutes, roundsCounted, hasEnough, headline };
+  return { workoutSeries, scoreSeries, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline };
 }

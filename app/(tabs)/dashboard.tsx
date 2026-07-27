@@ -1064,7 +1064,7 @@ export default function Dashboard() {
               </>
             )}
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
-              From your SmartPump golf workouts{workoutPerf.metric === 'minutes' ? ` · ${Math.round(workoutPerf.totalMinutes / 60)}h total` : ''}. Import updates in Settings → Backup & Data.
+              From your SmartPump golf workouts{workoutPerf.metric === 'minutes' ? ` · ${workoutPerf.minutesEstimated ? '~' : ''}${Math.round(workoutPerf.totalMinutes / 60)}h total${workoutPerf.minutesEstimated ? ' (est.)' : ''}` : ''}. Import updates in Settings → Backup & Data.
             </Text>
           </View>
         )}

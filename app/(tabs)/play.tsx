@@ -1431,7 +1431,9 @@ export default function PlayTab() {
                   </Text>
                   {selected.tees[0] && (
                     <Text style={styles.selectedStats} numberOfLines={1}>
-                      {selected.tees[0].holes.length || 18} holes · Par {selected.tees[0].par_total}
+                      {/* 2026-07-26 (deep audit S3) — don't fabricate "18 holes" when a searched tee returns
+                          an empty hole list (could be a 9-hole course); show the count only when real. */}
+                      {selected.tees[0].holes.length ? `${selected.tees[0].holes.length} holes · ` : ''}Par {selected.tees[0].par_total}
                       {selected.tees[0].course_rating != null && ` · Rating ${selected.tees[0].course_rating.toFixed(1)}`}
                       {selected.tees[0].slope_rating != null && ` · Slope ${selected.tees[0].slope_rating}`}
                     </Text>

@@ -510,7 +510,9 @@ function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
         </View>
         <View style={styles.heroText}>
           <View style={styles.titleRow}>
-            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1}>{title}</Text>
+            {/* 2026-07-26 (deep audit S3) — same folded-Fold-Z shrink-to-fit the LauncherCard got, so the
+                bigger hero titles ("Import Range Session") don't truncate next to the tag on the cover screen. */}
+            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
             <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
               <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
             </View>

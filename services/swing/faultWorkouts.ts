@@ -77,12 +77,25 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Metronome tempo reps (3:1)', category: 'drill', why: 'Slows a rushed transition toward the tour ~3:1 backswing-to-downswing ratio.', video: { url: 'https://youtu.be/5RZ4VqyQTWA', title: 'Stop Rushing Your Golf Swing (Tempo Drill)', source: 'Danny Maude' } },
     { name: 'Slow-motion rehearsal swings', category: 'drill', why: 'Rebuilds a smooth, unrushed transition you can trust under pressure.' },
   ],
+  // 2026-07-26 (deep audit S3) — CONTACT faults (thin/topped/heavy/fat) are the single most common
+  // recorded tendency, but had no exercise set, so the Train-Your-Swing card silently never showed for
+  // those players. These are honest low-point-control drills — the real fix for strike location.
+  low_point_control: [
+    { name: 'Towel-behind-the-ball drill', category: 'drill', why: 'Lay a towel a few inches behind the ball — forces ball-first contact so the low point moves in FRONT of the ball, curing thin and heavy strikes.' },
+    { name: 'Brush-the-grass drill', category: 'drill', why: 'Make swings that just brush the turf at a target line, bottoming out past the ball — grooves a consistent low point instead of digging or topping.' },
+    { name: 'Spray-line / divot ladder', category: 'drill', why: 'Mark a line and check where your divot starts — feedback to move the strike point ahead of the ball for crisp, ball-first contact.' },
+  ],
 };
 
 // Aliases → canonical key (the analysis emits several names for the same underlying issue).
 const ALIASES: Record<string, string> = {
   spine_angle_loss: 'early_extension',
   slow_tempo: 'quick_tempo', // same tempo-drill family (metronome), rationale differs but exercises overlap
+  // 2026-07-26 — the contact-mishit ids the analysis/classifier emit all map to low-point control.
+  thin_contact: 'low_point_control',
+  topped_contact: 'low_point_control',
+  heavy_contact: 'low_point_control',
+  fat_contact: 'low_point_control',
 };
 
 /** Exercises curated for a swing fault, or [] if we don't have a vetted set (never a fabricated one). */
