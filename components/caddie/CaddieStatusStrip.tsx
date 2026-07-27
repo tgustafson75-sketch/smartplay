@@ -34,7 +34,10 @@ export function CaddieStatusStrip({ floating = false, bottomOffset = 120 }: { fl
   let label: string | null = null;
   let icon: React.ComponentProps<typeof Ionicons>['name'] = 'ellipse';
   let speakingStyle = false;
-  if ((speaking || state === 'responding') && cap) { label = cap; icon = 'volume-medium'; speakingStyle = true; }
+  // 2026-07-27 (Tim — "always see what the caddie says") — show the caption whenever there IS one, not
+  // only while audio plays. A muted/voice-off reply flashes its text via flashCaption (speaking=false),
+  // and it should still appear. The broadcaster owns clearing it (on speech end or the flash timer).
+  if (cap) { label = cap; icon = 'volume-medium'; speakingStyle = true; }
   else if (state === 'thinking') { label = 'Thinking…'; icon = 'ellipsis-horizontal'; }
   else if (state === 'listening') { label = 'Listening…'; icon = 'mic'; }
   else if (state === 'opening') { label = 'One sec…'; icon = 'ellipsis-horizontal'; }

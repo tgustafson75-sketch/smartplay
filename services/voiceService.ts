@@ -1062,7 +1062,10 @@ export const playLocalFile = async (
 
 export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — guard for parity with speak() / playLocalFile.
-  if (!isVoiceAllowed(opts)) return;
+  // 2026-07-27 (24h audit + Tim: "always see what the caddie says") — when the SPOKEN path is gated
+  // (voice off), still SHOW the reply text so a muted user reads the answer. flashCaption auto-clears
+  // and yields to any real speak that starts meanwhile.
+  if (!isVoiceAllowed(opts)) { if (opts?.caption) flashCaption(opts.caption, 6500); return; }
 
   currentSpeechId++;
   const myId = currentSpeechId;
@@ -1212,7 +1215,9 @@ export const speak = async (
   opts?: SpeakOpts,
 ): Promise<void> => enqueueSpeak(async () => {
   // Phase V.7 — shared guard (formerly inlined here).
-  if (!isVoiceAllowed(opts)) return;
+  // 2026-07-27 (24h audit — always show the caddie's words even when muted) — the spoken line IS the
+  // caption; flash it so a voice-off user still SEES the reply.
+  if (!isVoiceAllowed(opts)) { flashCaption(text, 6500); return; }
   // 2026-06-13 — ingest the caddie's line into the conversation log (learning
   // input + the "save those stretches" recall target). speakChunked feeds full
   // sentences through here; lastCaddieText() rejoins a chunked run. Best-effort.

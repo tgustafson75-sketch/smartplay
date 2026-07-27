@@ -123,7 +123,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!allowInference(req, res, 'kevin-read')) return;
+  // 2026-07-27 (24h audit) — skip the gate for the splash warmup (must always land); gate the real path.
+  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'kevin-read')) return;
 
   // Mirrors api/kevin warmup pattern so services/voiceWarmup could
   // optionally also warm this endpoint later. ~$0.00005 per warmup.

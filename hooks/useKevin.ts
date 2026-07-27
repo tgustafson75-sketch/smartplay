@@ -294,7 +294,10 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
       }
 
       if (audioBase64) {
-        await speakFromBase64(audioBase64, { caption: text });
+        // 2026-07-27 (24h audit) — a caddie-tab ask is USER-INITIATED, so it should speak in Quiet trust
+        // / Local Mode (those suppress PROACTIVE speech, not a direct ask). caption shows the text even
+        // when voice is fully off (flashCaption in speakFromBase64's gated path).
+        await speakFromBase64(audioBase64, { userInitiated: true, caption: text });
       }
 
       return text ?? "Got nothing back from the brain. Try again.";

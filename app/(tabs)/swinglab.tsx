@@ -683,7 +683,9 @@ const styles = StyleSheet.create({
   heroMediaIcon: { width: 50, height: 50 },
 
   heroText: { flex: 1, minWidth: 0 },
-  heroTitle: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
+  // 2026-07-27 (24h audit) — flex:1 so adjustsFontSizeToFit actually engages next to the tag (RN
+  // default flexShrink:0 left the title at natural width, so the shrink-to-fit was a no-op + it clipped).
+  heroTitle: { flex: 1, fontSize: 20, fontWeight: '800', marginBottom: 2 },
   heroSub: { fontSize: 12, lineHeight: 16 },
   heroFeatures: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14, gap: 8 },
   heroFeat: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },

@@ -130,9 +130,14 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // differential on any blow-up/pick-up round vs what actually moved the Index. Use the capped AGS:
     // the round's STORED handicapAgs when it has posted (exact match by construction), else the capped
     // AGS computeRoundHandicap just derived (preview). 9-hole uses its own 9-hole capped AGS + par 36.
+    // 2026-07-27 (24h audit) — BOTH branches now use the stored capped AGS (handicapAgs) when the round
+    // has posted, matching rebuildDifferentialsFromHistory exactly (it uses handicapAgs w/ CR 36 +
+    // expectedNineDifferential for 9-hole). The 9-hole branch previously used the freshly-recomputed
+    // out.adjusted_gross_score, whose course handicap is derived differently → could diverge from what
+    // actually moved the Index on a 9-hole blow-up/pickup round.
     const cappedGross = round.handicapAgs ?? out.adjusted_gross_score;
     const perRoundDiff = is9Hole
-      ? Math.round((computeScoreDifferential(out.adjusted_gross_score, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
+      ? Math.round((computeScoreDifferential(cappedGross, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
       : Math.round(computeScoreDifferential(cappedGross, 72, 113) * 10) / 10;
     return {
       ...out,

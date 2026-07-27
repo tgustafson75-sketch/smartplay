@@ -40,7 +40,9 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!allowInference(req, res, 'voice')) return;
+  // 2026-07-27 (24h audit) — don't throttle the splash-time warmup (it must always land); gate only the
+  // real paid path, matching kevin.ts's gate-after-warmup intent.
+  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice')) return;
 
   // 2026-06-04 — Pre-warm. Client hits this endpoint with
   // { mode: 'warmup' } after splash completes so OpenAI TTS SDK +

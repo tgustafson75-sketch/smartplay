@@ -567,6 +567,10 @@ export const useSettingsStore = create<SettingsState>()(
           try {
             const voiceMod = require('../services/voiceService');
             voiceMod.stopSpeaking?.()?.catch?.(() => {});
+            // 2026-07-27 (24h audit) — re-render the offline ack/"didn't catch that" clips in the NEW
+            // persona's voice. Cache is keyed by persona, so without this the acks fall back to the
+            // robotic OS voice until the next startup warmup. Best-effort, fire-and-forget.
+            voiceMod.prewarmOfflineVoiceClips?.()?.catch?.(() => {});
           } catch { /* ignore */ }
         }
         set({
@@ -745,7 +749,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 19,
+      version: 20,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -903,6 +907,15 @@ export const useSettingsStore = create<SettingsState>()(
         // split (brain=openai, analysis=gemini) caused inconsistency; consolidate.
         if (version < 19) {
           if (p.aiProvider !== 'openai') p.aiProvider = 'openai';
+        }
+        // v20 — 2026-07-27 (24h audit — PRIVACY) — the consent split added `shareDiagnostics`
+        // (default ON). Without this, an existing tester who turned the OLD combined toggle OFF
+        // (shareCommunityData=false, which then also stopped the email+diagnostics auto-send) would
+        // have shareDiagnostics resolve to the new default TRUE on upgrade → their PII silently starts
+        // sending again. Carry their prior opt-out forward: if they had community sharing off, keep
+        // diagnostics off too. (Someone who left it ON keeps ON, unchanged.)
+        if (version < 20) {
+          if (p.shareCommunityData === false && p.shareDiagnostics == null) p.shareDiagnostics = false;
         }
         return p as SettingsState;
       },

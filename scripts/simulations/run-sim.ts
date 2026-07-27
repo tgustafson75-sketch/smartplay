@@ -3946,12 +3946,16 @@ check('Analysis honesty: kids\' progress delta only when both scores are real',
   'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
-  // refreshed: store is at version 19 now (v18 active-listening on, v19 single-provider
-  // aiProvider→openai); the one-time version<12 localMode clear is still present
-  // (migrations are cumulative), which is what this guards.
-  /version: 19/.test(read('store/settingsStore.ts')) &&
+  // refreshed: store is at version 20 now (…v19 single-provider, v20 consent-split shareDiagnostics
+  // carry-forward); the one-time version<12 localMode clear is still present (migrations are
+  // cumulative), which is what this guards.
+  /version: 20/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
+
+check('Consent split: prior opt-out carries into shareDiagnostics (v20 privacy migration)',
+  /if \(version < 20\)[\s\S]{0,220}shareCommunityData === false[\s\S]{0,90}shareDiagnostics = false/.test(read('store/settingsStore.ts')),
+  'a tester who had community sharing OFF keeps their email+diagnostics auto-send OFF after upgrade (no silent PII re-enable)');
 
 // 2026-06-14 (Tim — bilateral / second video source) — link two analyzed swings (one
 // DTL, one face-on of the same swing) → one combined read. Honest: each angle's valid
