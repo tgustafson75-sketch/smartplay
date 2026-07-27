@@ -68,7 +68,9 @@ export const useSessionFocusStore = create<SessionFocusState>()(
 export function sessionFocusPromptLine(now?: number): string | null {
   const f = useSessionFocusStore.getState().activeFocus(now);
   if (!f) return null;
-  const where = f.context === 'range' ? ' at the range' : f.context === 'course' ? ' on the course' : '';
+  // 2026-07-27 (full-app audit) — DON'T bake the location ("at the range") into the line. The focus
+  // persists up to 8h across contexts, so a range focus would inject "…at the range" into on-course reads.
+  // Keep it location-neutral; the brain already knows the current context from the rest of the block.
   const note = f.note ? ` (${f.note})` : '';
-  return `SESSION FOCUS — the player set this session to work on ${f.goal}${note}${where}. Orient everything around it: tie your reads, drill picks, and encouragement back to this focus rather than treating each shot fresh. If they clearly move on to something else, let it go naturally.`;
+  return `SESSION FOCUS — the player set this session to work on ${f.goal}${note}. Orient everything around it: tie your reads, drill picks, and encouragement back to this focus rather than treating each shot fresh. If they clearly move on to something else, let it go naturally.`;
 }

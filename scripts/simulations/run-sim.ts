@@ -2800,11 +2800,14 @@ check('Recap Handicap Impact: no differential on an incomplete round (was -33 on
   // 2026-06-16 (Tim) — a Score Differential is only valid for a complete 9/18; a
   // partial round compared the partial AGS to the full 18-hole rating → ~-33. Now
   // gated: partial rounds show an honest message, no bogus differential / post button.
+  // 2026-07-27 (full-app audit) — postability now keys off what the round ACTUALLY posted
+  // (round.handicapHoles set by endRound's WHS engine), NOT holesPlayed, so the card can't show/post a
+  // differential the engine refused (9-in-18-mode, pickup rounds, unknown par).
   (() => {
     const card = read('components/recap/HandicapImpactCard.tsx');
     return (
-      // 2026-07-04 — sim rounds are ALSO never postable (voice sim round).
-      /const isPostable = \(holesPlayed === 9 \|\| holesPlayed === 18\) && !round\?\.simulated/.test(card) &&
+      /postedHoles: 9 \| 18 \| null = \(round\?\.handicapHoles === 9 \|\| round\?\.handicapHoles === 18\)/.test(card) &&
+      /const isPostable = postedHoles != null && !round\?\.simulated/.test(card) &&
       /handicapIndex == null \|\| !round \|\| !isPostable/.test(card) &&
       /finish 9 or 18 to post a Score Differential/.test(card)
     );
@@ -6164,7 +6167,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /setManual:/.test(store) && /carryFor:/.test(store) && /hasManual:/.test(store) &&
         /s\.manual\[club\] != null\) out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
         /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
-        /yards: st\.carryFor\(c\), measured: st\.hasSamples\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
+        /yards: st\.carryFor\(c\), measured: st\.hasCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
         /MY BAG/.test(dash) && /router\.push\('\/practice\/fit-profile'/.test(dash)
       );
     })(),

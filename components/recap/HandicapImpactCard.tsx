@@ -69,15 +69,25 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
   // already-correct Index (endRound + rebuild were scaled in 5b722ca
   // but this card was a separate push path that the audit missed).
   // Tapping "Update Index?" then pushed the wrong unscaled diff AGAIN.
-  const is9Hole = round?.holesPlayed === 9;
+  // 2026-07-27 (full-app audit) — key postability + 9-vs-18 off what the round ACTUALLY posted
+  // (round.handicapHoles, set by endRound's WHS computeWhsPostingScore), NOT holesPlayed. holesPlayed
+  // disagreed with the engine three ways: a 9-played-in-18-mode round (engine refuses, card posted a
+  // differential anyway), a 14-17-hole pickup (engine posts, card denied it), and it let the card offer
+  // a differential the engine declined. handicapHoles is the single source of truth for "did/would this
+  // post, and as what length". (Legacy pre-M3/M4 rounds lack it → not shown; they're historical + were
+  // already computed off raw totals, which was the bug we're removing anyway.)
+  const postedHoles: 9 | 18 | null = (round?.handicapHoles === 9 || round?.handicapHoles === 18) ? round.handicapHoles : null;
+  const is9Hole = postedHoles === 9;
   // 2026-06-16 (Tim — recap showed a -33.0 differential on an 8-hole round) — a
   // Score Differential is only valid for a COMPLETE 9- or 18-hole round. A partial
   // round (e.g. 8 holes) compared the partial AGS against the FULL 18-hole rating
   // → a wildly-negative bogus differential that also craters the Index estimate.
   // Only postable rounds compute a differential; partials show an honest message.
+  // Holes with a real score — for the honest "N holes in the books" copy on non-postable rounds.
   const holesPlayed = round ? (round.holesPlayed ?? Object.keys(round.scores ?? {}).length) : 0;
   // 2026-07-04 — SIM rounds are never postable (narrated test rounds don't touch the Index).
-  const isPostable = (holesPlayed === 9 || holesPlayed === 18) && !round?.simulated;
+  // 2026-07-27 (full-app audit) — postable iff the engine posted it (handicapHoles set), matching endRound.
+  const isPostable = postedHoles != null && !round?.simulated;
   const result = useMemo(() => {
     if (handicapIndex == null || !round || !isPostable) return null;
     // Best-available rating + slope. Phase Q.5b's getHoleGeometry would be
@@ -88,8 +98,11 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // was wrong. Resolve real par: the round's holePars snapshot, then the bundled
     // hole list for its courseId, then live courseHoles (active round only).
     const bundled = round.courseId ? getBundledHoles(round.courseId) : [];
-    const parForHole = (hole: number): number =>
-      round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? courseHoles.find(c => c.hole === hole)?.par ?? 4;
+    // 2026-07-27 (full-app audit) — return null (not a fabricated par-4) when a hole's par is unknown, so
+    // the card DECLINES to compute/post a differential on unknown par — matching endRound/computeWhsPostingScore,
+    // which return null on any unknown par. (Removes the "card posts a fabricated-par differential the engine refused".)
+    const parForHole = (hole: number): number | null =>
+      round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? courseHoles.find(c => c.hole === hole)?.par ?? null;
     const tee = (courseHoles[0] ?? bundled[0]) as ({ course_rating?: number; slope_rating?: number } | undefined);
     // 2026-07-18 (audit) — resolve par from REAL sources only; do NOT fall back to a fabricated 72.
     // A differential computed off par-72/slope-113 neutrals would be wrong on a par-70/71 course, so
@@ -105,7 +118,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // 2026-07-01 (re-audit — M3) — gate to scored holes (score>0). A stray
     // unfinalized 0-score in round.scores otherwise adds a phantom hole to the
     // AGS/par accounting, diverging from endRound (which uses the score>0 set).
-    const holes = Object.entries(round.scores)
+    const holeEntries = Object.entries(round.scores)
       .filter(([, score]) => typeof score === 'number' && score > 0)
       .map(([h, score]) => ({
         hole_number: Number(h),
@@ -113,6 +126,9 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
         score,
         hole_stroke_index: Number(h),
       }));
+    // Any scored hole with unknown par → don't fabricate; render the honest "no impact" state.
+    if (holeEntries.some(e => e.par == null)) return null;
+    const holes = holeEntries as { hole_number: number; par: number; score: number; hole_stroke_index: number }[];
 
     const equivalentPar = is9Hole ? par * 2 : par;
     const out = computeRoundHandicap({

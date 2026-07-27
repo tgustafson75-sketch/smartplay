@@ -826,6 +826,11 @@ function _startSyntheticRoundInternal(round: MockRound): string {
     const { useRoundStore } = require('../store/roundStore');
     useRoundStore.setState({
       isRoundActive: true,
+      // 2026-07-27 (full-app audit, owner-only) — TAG as a sim round. This surgical setState bypassed
+      // startRound({simulated:true}) and never set isSimRound, so if a synthetic walk auto-completes and
+      // the owner saves via the normal "End Round" UI, the fabricated round would archive UNTAGGED
+      // (archival tags via `simulated: s.isSimRound`) and pollute the owner's stats/handicap.
+      isSimRound: true,
       mode: 'free_play',
       currentRoundId: 'synthetic-' + Date.now(),
       activeCourse: round.courseName,

@@ -196,10 +196,10 @@ interface SettingsState {
    *  voice ("I made a 5"). STROKE count then reflects the player's
    *  manual score, not derived from auto-detected shots. */
   autoShotDetection: boolean;
-  /** 2026-07-23 (Tim — Course Cloud) — ONE consent toggle: share derived course
-   *  maps (coords only, no PII) to the community DB AND auto-send issue logs to
-   *  the team. Default ON for beta; opt out anytime. Gates courseCloud upload +
-   *  issueLogExport's auto-POST. */
+  /** 2026-07-23 (Tim — Course Cloud) — share derived course MAPS (coords only, no PII) to the community
+   *  DB. Default ON for beta; opt out anytime. Gates ONLY courseCloud upload.
+   *  2026-07-27 — the issue-report/diagnostics auto-send was SPLIT OUT to `shareDiagnostics` (below); do
+   *  NOT re-bundle PII onto this course-map toggle. */
   shareCommunityData: boolean;
   /** 2026-07-26 (deep audit S3) — SEPARATE consent for auto-sending your issue reports, which include
    *  your EMAIL + app diagnostics — split out of shareCommunityData so PII no longer rides the

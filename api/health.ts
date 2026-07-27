@@ -136,7 +136,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-07-27 (24h audit) — the full probe fires 3 BILLABLE provider calls (Anthropic+OpenAI+Gemini)
   // per hit with no auth; a curl loop drains quota on all three. Throttle the expensive path per IP (the
   // cheap ?lite=1 cron path above stays ungated). A real monitor at any sane cadence stays well under.
-  if (!allowInference(req, res, 'health')) return;
+  // 2026-07-27 (full-app audit) — 120/min so a reasonable external uptime monitor on the full probe isn't
+  // throttled into a false "down"; still caps the 3-provider quota-drain abuse. Monitors should prefer ?lite=1.
+  if (!allowInference(req, res, 'health', 120)) return;
 
   const [anthropic, openai, gemini] = await Promise.all([
     probeAnthropic(),

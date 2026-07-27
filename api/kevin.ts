@@ -398,6 +398,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ ok: true, mode: 'warmup' });
   }
 
+  // 2026-07-27 (full-app audit) — reachability pings ("__ping__") are FREE like warmup: pingHost /
+  // reachability checks + up-to-6 warmBackendConnection retries fire them during a weak-signal stretch,
+  // and they shouldn't burn the brain bucket the real turn needs. Short-circuit BEFORE the rate gate.
+  if ((req.body?.message ?? '') === '__ping__') {
+    return res.status(200).json({ text: 'ok', audioBase64: null, toolAction: null });
+  }
+
   // 2026-07-25 (deep audit — S1) — the brain is the highest-volume paid-LLM route and shipped with
   // NO throttle (only applyCors), so a curl loop against the public domain could run up an unbounded
   // Anthropic/OpenAI bill and exhaust the provider quota → outage for every real user. IP rate-limit
@@ -418,10 +425,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // builder already slices to 4000. Vision images ride separate base64 fields (not this).
     if (body.message.length > 8000) {
       return res.status(413).json({ error: 'message too long' });
-    }
-
-    if (body.message === '__ping__') {
-      return res.status(200).json({ text: 'ok', audioBase64: null, toolAction: null });
     }
 
     const {

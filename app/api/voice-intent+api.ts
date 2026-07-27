@@ -21,6 +21,11 @@ const INTENT_TYPE_ENUM = [
   'putt_watch', 'ask_golf_father', 'quick_round', 'open_external',
   'state_yardage', 'refresh_gps', 'coach_refine', 'position_declaration',
   'confirm_position', 'end_round', 'social_greeting', 'conversational', 'unknown',
+  // 2026-07-27 (full-app audit) — SYNC with the prod twin api/voice-intent.ts: these four drifted (added
+  // to prod but not here), so on the Expo-Router/local path they were dead (fell through to conversational).
+  // NOTE: this file is a hand-maintained duplicate of api/voice-intent.ts and WILL re-drift — it should be
+  // collapsed to import the shared enum + prompt. Prod (api.smartplaycaddie.com) is the live path.
+  'undo', 'find_my_data', 'open_course', 'set_session_focus',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {

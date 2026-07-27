@@ -169,7 +169,13 @@ export async function detectClubPath(args: {
       const info = await FileSystem.getInfoAsync(dest);
       if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
     }
-  } catch { /* copy failed — keep the original uri */ }
+  } catch { /* copy failed */ }
+  // 2026-07-27 (full-app audit) — if the private copy could NOT be made, do NOT fall back to decoding the
+  // ORIGINAL. On a surface that keeps looping the same file (SmartMotion review), a native retriever on
+  // the file ExoPlayer is playing is the exact SIGSEGV / white-screen vector. Return no arc instead —
+  // skeleton-only is a fine degrade; a crash-to-launcher is not. (The old fallback assumed the caller had
+  // paused playback, which is true for swing-detail but NOT for the always-looping review surface.)
+  if (!tempCopy) return null;
 
   // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
   // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent

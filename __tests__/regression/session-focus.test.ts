@@ -23,7 +23,9 @@ describe('sessionFocusStore', () => {
     const line = sessionFocusPromptLine(T0 + 1000);
     expect(line).toContain('SESSION FOCUS');
     expect(line).toContain('my slice');
-    expect(line).toContain('at the range');
+    // 2026-07-27 (audit) — the line is intentionally location-NEUTRAL now (a range focus persists up to
+    // 8h and must not inject "at the range" into on-course reads), so it should NOT contain the location.
+    expect(line).not.toContain('at the range');
   });
 
   it('auto-expires a stale focus (no ghost driving the caddie tomorrow)', () => {

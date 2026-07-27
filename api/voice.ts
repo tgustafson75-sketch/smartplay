@@ -42,7 +42,10 @@ export default async function handler(
   }
   // 2026-07-27 (24h audit) — don't throttle the splash-time warmup (it must always land); gate only the
   // real paid path, matching kevin.ts's gate-after-warmup intent.
-  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice')) return;
+  // 2026-07-27 (full-app audit) — 150/min (not the default 60): a persona switch legitimately renders the
+  // 58-clip filler library + ~15 offline ack clips in one window; 60 guaranteed-429'd them → the caddie
+  // fell back to the robot voice. 150 fits the warm burst + live TTS while still capping a curl loop.
+  if (!(req.body?.mode === 'warmup' || req.query?.mode === 'warmup') && !allowInference(req, res, 'voice', 150)) return;
 
   // 2026-06-04 — Pre-warm. Client hits this endpoint with
   // { mode: 'warmup' } after splash completes so OpenAI TTS SDK +

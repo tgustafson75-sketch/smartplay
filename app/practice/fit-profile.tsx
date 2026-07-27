@@ -64,7 +64,10 @@ export default function FitProfileScreen() {
       .filter((c) => c !== 'Putter')
       // 2026-07-24 (club-logic unification) — the Fit Profile ladder is a CARRY ladder ("set your carry"),
       // so read carryFor (honest carry), not the tee→rest total.
-      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasSamples(c), stated: st.hasManual(c) }));
+      // 2026-07-27 (full-app audit) — "measured" = hasCarry (real/stated CARRY), NOT hasSamples (true for
+      // GPS-total-only clubs whose carry is a total−roll ESTIMATE). Matches the dashboard + ball-fit fix;
+      // otherwise the whole pre-v2-migration cohort's total-only clubs over-claim "measured" here.
+      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c) }));
     return composeFitProfile(clubs);
     // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,7 +101,7 @@ export default function FitProfileScreen() {
   // feel emphasis). Both starting points, never launch-monitor specs.
   const { flex, ball } = useMemo(() => {
     const st = useClubStatsStore.getState();
-    const driverMeasured = st.hasSamples('Driver');
+    const driverMeasured = st.hasCarry('Driver'); // 2026-07-27 audit — real/stated carry, not total-only estimate
     // 2026-07-24 (club-logic unification) — flex + ball fit key off the honest driver CARRY (carryFor:
     // measured → stated → tracked-total−roll), not the old tracked value which was a GPS total (~20y hot).
     const driverCarry = st.hasDistance('Driver') ? st.carryFor('Driver') : null;

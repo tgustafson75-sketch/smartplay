@@ -1452,12 +1452,19 @@ export default function SmartMotion() {
     }
     setClubArcPoints(null);
     let cancelled = false;
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs })
+    const segStart = seg.startMs;
+    // 2026-07-27 (full-app audit) — pass shouldAbort so a dep change / unmount stops the native retriever
+    // between frames (swing-detail has this; this surface lacked it). The concurrent-decode crash is
+    // primarily closed at the source now: detectClubPath extracts from a PRIVATE COPY and, on copy
+    // failure, returns no arc rather than decoding the file ExoPlayer is playing (clubPath.ts).
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, shouldAbort: () => cancelled })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
-        // clustered mis-detection) so we never draw a wrong "club". Below that → honest hand trace.
-        const pts = r && r.points.length >= 4 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })) : null;
+        // clustered mis-detection) so we never draw a wrong "club". Below that → skeleton only.
+        // 2026-07-27 (audit) — rebase window-relative tMs to ABSOLUTE (+segStart) so the live blue clubTip
+        // tracks correctly on the 2nd/3rd split swing (was pinning to the finish point).
+        const pts = r && r.points.length >= 4 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
         clubPathCacheRef.current[selectedSwing] = pts;
         setClubArcPoints(pts);
       })

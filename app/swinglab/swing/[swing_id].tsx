@@ -500,7 +500,12 @@ export default function SwingDetail() {
         // set falls through to the honest hand trace instead of a wrong "club".
         if (r && r.points.length >= 4) {
           clubArcRunKeyRef.current = runKey; // mark THIS window done only on a real result
-          setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs })));
+          // 2026-07-27 (full-app audit) — detectClubPath returns WINDOW-RELATIVE tMs (0-based from swing
+          // start), but the overlay's live clubTip compares against ABSOLUTE playback position. Rebase to
+          // absolute (+ startMs) so the blue club tracks correctly on uploads-with-waggle and split swings
+          // (was pinning to the finish point → a wrong static shaft). Adding a constant doesn't affect the
+          // static trace's speed coloring (it uses deltas).
+          setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs })));
         }
         // null = aborted (playback started) OR genuinely no arc; leave the key unset so a later
         // paused pass can retry, and keep any prior points rather than blanking mid-study.
@@ -2501,7 +2506,10 @@ export default function SwingDetail() {
             <View style={styles.linkBackdrop}>
               <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
                 <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Compare to an earlier swing</Text>
-                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Pick a past swing — I&apos;ll show what got better or worse across your mechanics (tempo, hip slide, coil, tilt).</Text>
+                {/* 2026-07-27 (full-app audit) — honest copy: don't name specific metrics. "tempo" isn't in
+                    the comparison at all (no tempo field on the biomech), and coil/hip-slide are nulled on
+                    the default down-the-line angle, so naming them over-promised. State what it does. */}
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Pick a past swing — I&apos;ll show what got better or worse across the mechanics your camera angle captured.</Text>
                 <ScrollView style={{ maxHeight: 360 }}>
                   {comparableSessions.length === 0 ? (
                     <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other analyzed swings yet — analyze another swing first.</Text>

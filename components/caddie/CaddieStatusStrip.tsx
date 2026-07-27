@@ -15,13 +15,19 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { usePathname } from 'expo-router';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { subscribeToCaption, subscribeToSpeaking } from '../../services/voiceService';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const NEON = '#88F700';
 
 export function CaddieStatusStrip({ floating = false, bottomOffset = 120 }: { floating?: boolean; bottomOffset?: number }) {
   const state = useListeningSessionStore((s) => s.state);
+  // 2026-07-27 (full-app audit) — the OLD top CaptionStrip honored this opt-out; this newer strip didn't,
+  // silently defeating "captions off". Respect it here too.
+  const ttsCaptions = useSettingsStore((s) => s.ttsCaptions);
+  const pathname = usePathname();
   const [caption, setCaption] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
   useEffect(() => {
@@ -29,15 +35,20 @@ export function CaddieStatusStrip({ floating = false, bottomOffset = 120 }: { fl
     const unSpk = subscribeToSpeaking(setSpeaking);
     return () => { unCap(); unSpk(); };
   }, []);
+  // 2026-07-27 (full-app audit — caption bleed) — this is a single global instance (mounted in
+  // GlobalCaddieBar) whose caption state was never reset by route, so a line spoken on one screen (or a
+  // 6.5s muted flash) lingered onto unrelated screens. Clear it on navigation so a caption only shows on
+  // the screen it fired on; a new speak on the next screen re-sets it immediately.
+  useEffect(() => { setCaption(null); }, [pathname]);
 
   const cap = caption?.trim() || '';
   let label: string | null = null;
   let icon: React.ComponentProps<typeof Ionicons>['name'] = 'ellipse';
   let speakingStyle = false;
-  // 2026-07-27 (Tim — "always see what the caddie says") — show the caption whenever there IS one, not
-  // only while audio plays. A muted/voice-off reply flashes its text via flashCaption (speaking=false),
-  // and it should still appear. The broadcaster owns clearing it (on speech end or the flash timer).
-  if (cap) { label = cap; icon = 'volume-medium'; speakingStyle = true; }
+  // 2026-07-27 (Tim — "always see what the caddie says", every line incl. proactive) — show the caption
+  // whenever there IS one and captions aren't turned off. A "speaking" treatment only when audio is
+  // actually playing; a muted flash gets a text glyph (no false audio cue).
+  if (cap && ttsCaptions) { label = cap; icon = speaking ? 'volume-medium' : 'chatbox-ellipses'; speakingStyle = true; }
   else if (state === 'thinking') { label = 'Thinking…'; icon = 'ellipsis-horizontal'; }
   else if (state === 'listening') { label = 'Listening…'; icon = 'mic'; }
   else if (state === 'opening') { label = 'One sec…'; icon = 'ellipsis-horizontal'; }
