@@ -110,6 +110,15 @@ export function getCaddieContext(input: {
 
     // promptBlock — built from the most decision-relevant facts, empties omitted.
     const lines: string[] = [];
+    // 2026-07-27 (Tim — SESSION FOCUS) — inject the stated session focus FIRST so it frames everything
+    // below (the brain orients its reads/drills/encouragement around it). Session-scoped + auto-expiring,
+    // pulled lazily so this CNS module has no hard dep on the focus store.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sf = require('../store/sessionFocusStore') as typeof import('../store/sessionFocusStore');
+      const focusLine = sf.sessionFocusPromptLine();
+      if (focusLine) lines.push(focusLine);
+    } catch { /* session focus optional */ }
     if (input.club) {
       const cm = bag.find((c) => c.club === input.club);
       if (cm?.avgCarryYds != null) {

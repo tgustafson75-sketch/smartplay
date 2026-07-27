@@ -19,6 +19,7 @@ import { mediaCaptureHandler, mediaPlaybackHandler, puttWatchHandler } from './m
 import { atBallHandler } from './atBallHandler';
 import { logIssueHandler } from './logIssueHandler';
 import { sequenceHandler } from './sequenceHandler';
+import { sessionFocusHandler } from './sessionFocusHandler';
 import { declareHoleHandler } from './declareHoleHandler';
 import { askGolfFatherHandler } from './askGolfFatherHandler';
 import { quickRoundHandler } from './quickRoundHandler';
@@ -60,6 +61,7 @@ voiceCommandRouter.registerHandler(puttWatchHandler);
 voiceCommandRouter.registerHandler(atBallHandler);
 voiceCommandRouter.registerHandler(logIssueHandler);
 voiceCommandRouter.registerHandler(sequenceHandler);
+voiceCommandRouter.registerHandler(sessionFocusHandler);
 voiceCommandRouter.registerHandler(declareHoleHandler);
 voiceCommandRouter.registerHandler(askGolfFatherHandler);
 voiceCommandRouter.registerHandler(quickRoundHandler);

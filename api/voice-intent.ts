@@ -27,6 +27,9 @@ const INTENT_TYPE_ENUM = [
   // classifier enum, so any phrasing the narrow regex missed fell to conversational (the caddie
   // chatted instead of acting). Now the cloud classifier can emit them too.
   'undo', 'find_my_data', 'open_course',
+  // 2026-07-27 (Tim — SESSION FOCUS) — capture "I want to work on X this session" so the caddie holds
+  // that intent and orients the whole session around it.
+  'set_session_focus',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -217,6 +220,14 @@ Available intents:
    - "pull up my last scorecard" / "show me my last round" -> { intent_type: "find_my_data", parameters: { query: "last scorecard" } }
    - "find my round at Mines" / "where's my Mines round" -> { intent_type: "find_my_data", parameters: { query: "round at Mines" } }
    - "show me my driver swings" / "pull up my last swing" -> { intent_type: "find_my_data", parameters: { query: "driver swings" } }
+
+3.37 set_session_focus — User declares WHAT THEY WANT TO WORK ON THIS SESSION (a goal that should color the rest of the session), or says to drop it. Capture the goal in their own words. Add context ('range'|'course'|'practice') only if they said where; note for extra detail. Set clear:true when they say to forget/end the focus. This is NOT a one-off question ("how do I fix my slice?" is conversational) — it's setting the session's THEME.
+   parameters: { goal: "<what to work on>", note?: "<detail>", context?: "range|course|practice", clear?: true }
+   Examples:
+   - "I'm at the range, I want to work on my slice today" -> { intent_type: "set_session_focus", parameters: { goal: "my slice", context: "range" } }
+   - "let's focus on tempo this session" / "today is all about tempo" -> { intent_type: "set_session_focus", parameters: { goal: "tempo" } }
+   - "we're dialing in my chipping, staying under the wind" -> { intent_type: "set_session_focus", parameters: { goal: "chipping", note: "staying under the wind" } }
+   - "forget the focus, let's just hit some balls" -> { intent_type: "set_session_focus", parameters: { clear: true } }
 
 3.37 open_course — User wants to OPEN a specific golf course (to view/plan/play it), naming the course. Distinct from quick_round (which also names players) and find_my_data (past records). If they only say "start a round" with NO course, that's open_tool { tool_name: "play" }.
    parameters: { course_label: "<spoken course name>" }
