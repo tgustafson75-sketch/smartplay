@@ -487,7 +487,23 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
-      const kbBlock = kbForPrompt(retrieveKB(text, { max: 3 }));
+      // 2026-07-26 (deep audit — wire the dormant cnsPersonalize/appSignals) — build the player's REAL
+      // signal profile from the structured context the client already sends, so KB entries rerank toward
+      // THIS player and the brain tailors the generic principle to them. Only real values personalize
+      // (honest — an unknown dimension stays generic). The full CNS detail is still in the memory block
+      // below; this just points the brain at which entries to personalize.
+      const plc = (context.player ?? {}) as Record<string, unknown>;
+      const bgc = (context.bag ?? {}) as Record<string, unknown>;
+      const rdc = (context.round ?? {}) as Record<string, unknown>;
+      const cnsSignals: Record<string, string> = {};
+      if (typeof plc.dominantMiss === 'string' && plc.dominantMiss.trim()) cnsSignals.dominantMiss = plc.dominantMiss.trim();
+      if (typeof plc.tendencies === 'string' && plc.tendencies.trim()) cnsSignals.tendencies = plc.tendencies.trim();
+      else if (typeof context.memory === 'string' && context.memory.trim()) cnsSignals.tendencies = 'known';
+      if (bgc && Object.keys(bgc).length > 0) cnsSignals.bag = 'known';
+      const liveSignals: string[] = [];
+      if (rdc && Object.keys(rdc).length > 0) liveSignals.push('gps'); // a live round → GPS distances are real
+      const cnsProfile = { signals: cnsSignals, liveSignals };
+      const kbBlock = kbForPrompt(retrieveKB(text, { max: 3, cnsProfile }), cnsProfile);
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
         + `\n\n${howToForPrompt()}`

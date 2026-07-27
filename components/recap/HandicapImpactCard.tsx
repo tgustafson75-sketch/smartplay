@@ -123,16 +123,17 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       holes,
       recentDifferentials,
     });
-    // 2026-07-01 (re-audit — 9-hole differential drift) — DISPLAY the same
-    // differential the round actually posts. endRound + the recalc path both post
-    // via rebuildDifferentialsFromHistory (gross totalScore, WHS expected-nine for
-    // 9-hole). The old card math (score×2 vs the AGS) produced a DIFFERENT number
-    // than what landed in the Index. Compute the per-round differential with the
-    // rebuild's exact formula so the card matches.
-    const totalScore = holes.reduce((a, h) => a + h.score, 0);
+    // 2026-07-01 (re-audit — 9-hole differential drift) — DISPLAY the same differential the round posts.
+    // 2026-07-26 (deep audit S3) — endRound + rebuildDifferentialsFromHistory now post from the net-
+    // double-bogey-CAPPED Adjusted Gross Score (handicapCalculator uses `r.handicapAgs ?? r.totalScore`),
+    // NOT the raw total the older comment assumed. Using raw totalScore here over-stated the card's
+    // differential on any blow-up/pick-up round vs what actually moved the Index. Use the capped AGS:
+    // the round's STORED handicapAgs when it has posted (exact match by construction), else the capped
+    // AGS computeRoundHandicap just derived (preview). 9-hole uses its own 9-hole capped AGS + par 36.
+    const cappedGross = round.handicapAgs ?? out.adjusted_gross_score;
     const perRoundDiff = is9Hole
-      ? Math.round((computeScoreDifferential(totalScore, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
-      : Math.round(computeScoreDifferential(totalScore, 72, 113) * 10) / 10;
+      ? Math.round((computeScoreDifferential(out.adjusted_gross_score, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
+      : Math.round(computeScoreDifferential(cappedGross, 72, 113) * 10) / 10;
     return {
       ...out,
       adjusted_gross_score: is9Hole ? out.adjusted_gross_score * 2 : out.adjusted_gross_score,

@@ -40,6 +40,30 @@ interface Scored {
 }
 
 /**
+ * 2026-07-26 (deep audit — wire the dormant personalization) — the player's REAL known signals, used to
+ * (a) rerank KB entries toward this specific player and (b) tell the brain to TAILOR a generic principle
+ * to them. Built server-side from context.player / context.bag (dominantMiss, handedness, …) — see the
+ * brain routes. HONEST by construction: only keys with a real value personalize; unknown → generic entry,
+ * never a fabricated one.
+ */
+export interface CnsProfile {
+  /** cnsPersonalize key → concise real value, e.g. { dominantMiss: 'slice', handedness: 'left' }. */
+  signals?: Record<string, string>;
+  /** appSignals that are LIVE for this player right now, e.g. ['tempo','bag','gps'] (grounding). */
+  liveSignals?: string[];
+}
+
+/** Personalization boost: an on-topic entry whose cnsPersonalize matches a signal the player HAS. */
+const CNS_MATCH_BOOST = 4;
+
+/** True when the entry personalizes against a dimension the player has a real value for. */
+function personalizationMatch(entry: KBEntry, profile?: CnsProfile): boolean {
+  const sig = profile?.signals;
+  if (!sig || !entry.cnsPersonalize?.length) return false;
+  return entry.cnsPersonalize.some(k => typeof sig[k] === 'string' && sig[k].trim().length > 0);
+}
+
+/**
  * Score one entry against the normalized query.
  *   - whole-phrase alias contained in the query → strong (10 + alias length)
  *   - topic phrase contained in the query → solid (8)
@@ -101,6 +125,12 @@ export interface RetrieveOpts {
    * 2026-06-29 (Tim) — this is the "no vortex" gate.
    */
   minScore?: number;
+  /**
+   * 2026-07-26 — the player's real signals. When present, an ON-TOPIC entry whose cnsPersonalize matches
+   * a known signal gets a small rerank boost so the slice-fix (not the hook-fix) surfaces for a slicer.
+   * Never lifts an off-topic entry (boost only applies when the base relevance score is already > 0).
+   */
+  cnsProfile?: CnsProfile;
 }
 
 /**
@@ -122,8 +152,11 @@ export function retrieveKB(query: string, opts: RetrieveOpts = {}): KBEntry[] {
 
   const scored: Scored[] = [];
   for (const entry of pool) {
-    const score = scoreEntry(entry, q, qWords);
-    if (score > 0) scored.push({ entry, score });
+    const base = scoreEntry(entry, q, qWords);
+    if (base <= 0) continue; // never let personalization surface an off-topic entry
+    // On-topic AND personalizes to a dimension this player actually has → nudge it up the list.
+    const score = base + (personalizationMatch(entry, opts.cnsProfile) ? CNS_MATCH_BOOST : 0);
+    scored.push({ entry, score });
   }
 
   // Require a minimal floor so a single weak keyword doesn't surface noise.
@@ -137,15 +170,47 @@ export function retrieveKB(query: string, opts: RetrieveOpts = {}): KBEntry[] {
     .map(s => s.entry);
 }
 
+/** Humanize a cnsPersonalize key for the prompt hint ('dominantMiss' → 'dominant miss'). */
+function humanizeKey(k: string): string {
+  return k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase();
+}
+
 /**
  * Compact text block for prompt injection. One tight bullet per entry:
  *   "• <principle> [<honesty>]"
+ * 2026-07-26 (deep audit — wire personalization) — when a `cnsProfile` is supplied, an entry tagged to
+ * personalize against a dimension the player HAS a real value for gets a compact tailoring directive
+ * appended ("→ tailor to this player: dominant miss: slice"), and an entry grounded in a signal that's
+ * LIVE for this player is marked so the brain speaks it as measured. Both fire ONLY from real values —
+ * an unknown dimension stays generic (no fabrication). Without a profile, behavior is unchanged.
  * Returns '' when there are no entries (so the caller can omit the section).
  */
-export function kbForPrompt(entries: KBEntry[]): string {
+export function kbForPrompt(entries: KBEntry[], cnsProfile?: CnsProfile): string {
   if (!entries.length) return '';
+  const sig = cnsProfile?.signals;
+  const live = cnsProfile?.liveSignals?.length ? new Set(cnsProfile.liveSignals) : null;
   return entries
-    .map(e => `• ${e.principle}${e.honesty ? ` [${e.honesty}]` : ''}`)
+    .map(e => {
+      let line = `• ${e.principle}${e.honesty ? ` [${e.honesty}]` : ''}`;
+      // Tailoring directive — only for dimensions the player has a real value for.
+      if (sig && e.cnsPersonalize?.length) {
+        const matched = e.cnsPersonalize
+          .filter(k => typeof sig[k] === 'string' && sig[k].trim().length > 0)
+          .map(k => {
+            const v = sig[k].trim();
+            // 'known' is a dimension flag — the detail lives in the CNS memory block the brain already
+            // has, so just name the dimension. A concrete value (dominant miss: slice) is shown inline.
+            return v === 'known' ? humanizeKey(k) : `${humanizeKey(k)}: ${v.slice(0, 40)}`;
+          });
+        if (matched.length) line += `  → tailor to this player (${matched.join('; ')})`;
+      }
+      // Grounding note — only when the entry's app signal is actually live for this player.
+      if (live && e.appSignals?.length) {
+        const grounded = e.appSignals.filter(s => live.has(s));
+        if (grounded.length) line += `  → grounded in the player's ${grounded.join(', ')} data`;
+      }
+      return line;
+    })
     .join('\n');
 }
 

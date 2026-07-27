@@ -190,6 +190,8 @@ export default function Settings() {
   const setHealthDataEnabled = useSettingsStore(s => s.setHealthDataEnabled);
   const shareCommunityData = useSettingsStore(s => s.shareCommunityData);
   const setShareCommunityData = useSettingsStore(s => s.setShareCommunityData);
+  const shareDiagnostics = useSettingsStore(s => s.shareDiagnostics);
+  const setShareDiagnostics = useSettingsStore(s => s.setShareDiagnostics);
   const setHasAskedHealthPermission = useSettingsStore(s => s.setHasAskedHealthPermission);
 
   const {
@@ -1673,15 +1675,20 @@ export default function Settings() {
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
           />
-          {/* 2026-07-23 — Course Cloud: ONE consent toggle for community course maps +
-              auto-sending issue reports. Coords/diagnostics only — no scores, no personal
-              data beyond the email you already set to reach you about a bug. Default ON for
-              beta so the shared course database + issue triage fill quickly; opt out anytime. */}
+          {/* 2026-07-26 (deep audit S3) — SPLIT the old single toggle into two: course maps (coords only)
+              vs. issue reports (which include your email + diagnostics). Previously bundled, so PII rode
+              the "course maps" consent silently. Now each is its own honest, separately-controllable toggle. */}
           <ToggleRow
-            label="Share course maps & issue reports"
-            sub="Contribute the hole layouts your phone maps so other golfers get them instantly, and auto-send your issue reports to the team. Coordinates and diagnostics only — never your scores. On for beta; turn off anytime."
+            label="Share course maps"
+            sub="Contribute the hole layouts your phone maps so other golfers get them instantly. Coordinates only — never your scores or personal data. On for beta; turn off anytime."
             value={shareCommunityData}
-            onValueChange={confirmToggle('Community data sharing', setShareCommunityData)}
+            onValueChange={confirmToggle('Course map sharing', setShareCommunityData)}
+          />
+          <ToggleRow
+            label="Auto-send my issue reports"
+            sub="When you log a bug, send it to the team automatically so it gets fixed faster. Includes your email (so we can follow up) and app diagnostics — never your scores. On for beta; turn off anytime."
+            value={shareDiagnostics}
+            onValueChange={confirmToggle('Issue report sharing', setShareDiagnostics)}
           />
           {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">

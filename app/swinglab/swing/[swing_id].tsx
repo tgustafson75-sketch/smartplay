@@ -315,6 +315,13 @@ export default function SwingDetail() {
     return () => { cancelled = true; };
   }, [rightShot?.clipUri]);
 
+  // 2026-07-26 (deep audit S3) — memoize the compare-pane sources, same reason as the main player
+  // (an inline {{ uri }} literal is a fresh ref every render → expo-av reloads the clip → snap-back /
+  // churn while comparing). Lower risk here than the main player (these panes have no
+  // onPlaybackStatusUpdate, so no runaway loop) but the same fix keeps them stable.
+  const leftCompareSource = useMemo(() => ({ uri: leftPlaybackUri ?? leftShot?.clipUri ?? '' }), [leftPlaybackUri, leftShot?.clipUri]);
+  const rightCompareSource = useMemo(() => ({ uri: rightPlaybackUri ?? rightShot?.clipUri ?? '' }), [rightPlaybackUri, rightShot?.clipUri]);
+
   const videoRef = useRef<Video>(null);
   // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
   // for swing review. The `rate` prop survives native play/pause; the corner
@@ -1708,7 +1715,7 @@ export default function SwingDetail() {
                 </Text>
                 <Video
                   ref={leftCompareVideoRef}
-                  source={{ uri: leftPlaybackUri ?? leftShot?.clipUri ?? '' }}
+                  source={leftCompareSource}
                   style={styles.compareVideo}
                   resizeMode={ResizeMode.CONTAIN}
                   shouldPlay={false}
@@ -1725,7 +1732,7 @@ export default function SwingDetail() {
                 </Text>
                 <Video
                   ref={rightCompareVideoRef}
-                  source={{ uri: rightPlaybackUri ?? rightShot?.clipUri ?? '' }}
+                  source={rightCompareSource}
                   style={styles.compareVideo}
                   resizeMode={ResizeMode.CONTAIN}
                   shouldPlay={false}

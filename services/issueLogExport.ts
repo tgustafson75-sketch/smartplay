@@ -46,20 +46,21 @@ export function buildIssueLogBody(): { subject: string; body: string; count: num
 }
 
 /**
- * 2026-07-23 — Consented auto-send: when the community-data toggle is ON, push unsent
- * issue entries to /api/issue-report so the team sees them centrally without the tester
- * having to tap "Send". Debounced + deduped by entry id. Best-effort; never throws, never
- * blocks. The mailto export below stays as the explicit manual action. Call schedule* from
- * the store's user-reported add path (NOT the high-volume diagnostic traces).
+ * 2026-07-23 — Consented auto-send: push unsent issue entries to /api/issue-report so the team sees
+ * them centrally without the tester tapping "Send". Debounced + deduped by entry id. Best-effort; never
+ * throws, never blocks. The mailto export below stays as the explicit manual action.
+ * 2026-07-26 (deep audit S3) — this ships the tester's EMAIL + diagnostics, so it's gated on the SEPARATE
+ * `shareDiagnostics` consent (was `shareCommunityData`, which is really about course-map coords) so PII
+ * no longer rides the course-sharing toggle silently.
  */
 export function scheduleIssueAutoSend(): void {
-  if (useSettingsStore.getState().shareCommunityData === false) return;
+  if (useSettingsStore.getState().shareDiagnostics === false) return;
   if (autoSendTimer) clearTimeout(autoSendTimer);
   autoSendTimer = setTimeout(() => { void autoSendIssues(); }, AUTOSEND_DEBOUNCE_MS);
 }
 
 export async function autoSendIssues(): Promise<boolean> {
-  if (useSettingsStore.getState().shareCommunityData === false) return false;
+  if (useSettingsStore.getState().shareDiagnostics === false) return false;
   const base = getApiBaseUrl();
   if (!base) return false;
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
