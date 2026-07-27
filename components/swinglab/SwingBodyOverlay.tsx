@@ -293,6 +293,26 @@ export default function SwingBodyOverlay({
     return tracePts.pts.filter(d => Number.isFinite(d.x) && Number.isFinite(d.y));
   }, [useClub, tracePts]);
 
+  // 2026-07-27 (Tim — "line the club shaft and head as a jointed body part, blue for clarity") — the
+  // clubhead position at the CURRENT frame, interpolated along the cleaned club arc (already in frame-
+  // pixel space). Paired with the grip (wrist midpoint) below to draw a blue shaft + head that extends
+  // the skeleton into the club. Only when we have a REAL detected clubhead path (useClub) → honest.
+  const clubTip = useMemo(() => {
+    const P = tracePts.pts;
+    if (!useClub || P.length < 2) return null;
+    const t = currentTimeMs;
+    if (t <= P[0].t) return { x: P[0].x, y: P[0].y };
+    if (t >= P[P.length - 1].t) return { x: P[P.length - 1].x, y: P[P.length - 1].y };
+    for (let i = 0; i < P.length - 1; i++) {
+      const a = P[i], b = P[i + 1];
+      if (t >= a.t && t <= b.t) {
+        const s = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
+        return { x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s };
+      }
+    }
+    return { x: P[P.length - 1].x, y: P[P.length - 1].y };
+  }, [useClub, tracePts, currentTimeMs]);
+
   if (!live) return null;
   // Aligned mode draws in true frame space and matches the video resizeMode;
   // fallback self-fits to the keypoint bbox.
@@ -315,6 +335,19 @@ export default function SwingBodyOverlay({
   // 2026-06-15 (Tim) — joint dots were too big and overlapped; smaller so the
   // skeleton reads cleanly (joints sit on the lines, not blobs over them).
   const dotR = strokeBase * 0.008;
+
+  // 2026-07-27 (Tim) — the BLUE club: a shaft from the grip (wrist midpoint) to the live clubhead + a
+  // blue clubhead dot, drawn ON TOP so it reads as the club extending off the hands. Only when a real
+  // clubhead path is detected (useClub) and we have both endpoints this frame — honest, never faked.
+  const CLUB_BLUE = '#4EA8FF';
+  const gripKps = [getKp(live, 'left_wrist'), getKp(live, 'right_wrist')].filter(Boolean) as Keypoint[];
+  const grip = gripKps.length
+    ? { x: (gripKps.reduce((s, k) => s + k.x, 0) / gripKps.length) * sx, y: (gripKps.reduce((s, k) => s + k.y, 0) / gripKps.length) * sy }
+    : null;
+  const showClub = useClub && !!clubTip && !!grip
+    && Number.isFinite(grip.x) && Number.isFinite(grip.y)
+    && Number.isFinite(clubTip.x) && Number.isFinite(clubTip.y)
+    && (showSkeleton || showTrace);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -375,6 +408,20 @@ export default function SwingBodyOverlay({
                 />
               );
             })}
+          </G>
+        )}
+        {/* Blue club — shaft (grip → clubhead) + clubhead dot. Drawn last so it sits on top of the
+            skeleton, reading as the club jointed off the hands. Only when a real clubhead is detected. */}
+        {showClub && grip && clubTip && (
+          <G>
+            <Line
+              x1={grip.x} y1={grip.y} x2={clubTip.x} y2={clubTip.y}
+              stroke={CLUB_BLUE}
+              strokeWidth={sw * 1.15}
+              strokeOpacity={0.95}
+              strokeLinecap="round"
+            />
+            <Circle cx={clubTip.x} cy={clubTip.y} r={dotR * 1.7} fill={CLUB_BLUE} fillOpacity={0.95} stroke="#ffffff" strokeWidth={sw * 0.4} />
           </G>
         )}
       </Svg>

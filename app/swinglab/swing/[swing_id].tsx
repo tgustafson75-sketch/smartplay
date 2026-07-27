@@ -410,23 +410,11 @@ export default function SwingDetail() {
     controlsOpacity.setValue(1);
   }, [isPlaying, controlsOpacity]);
   const [showSkeleton, setShowSkeleton] = useState(true);
-  // 2026-07-22 (Tim — "the hand/clubhead trace shows even on a practice swing; it should only
-  // be applied once the shot arc + full shot points are identified"). The trace/club arc is a
-  // SHOT overlay, not a practice overlay. Default it OFF and auto-enable it only for a CONFIRMED
-  // shot (see shotConfirmed below); the manual toggle is the escape hatch either way.
+  // 2026-07-27 (Tim) — trace default is applied once analysis resolves (see the auto-default effect
+  // below: ON whenever the swing has pose). Starts OFF so a mid-analysis swing shows nothing yet.
+  // The trace is clubhead-OR-NOTHING, so defaulting it on never fabricates anything. The old
+  // `shotConfirmed` gate was removed — it silently killed the trace on uploaded/unconfirmed swings.
   const [showTrace, setShowTrace] = useState(false);
-  // CONFIRMED-SHOT signal (drives the trace/club gate below + the club-arc detection effect).
-  // Only draw a shot overlay once a real ball strike is identified, never on a practice swing:
-  //   • live_cage shots are created FROM a detected acoustic strike → confirmed by construction.
-  //   • perShotAnalysis.contact_read is the vision model's honest strike read; a known value
-  //     (clean/fat/thin/topped) means a ball was there and struck. 'unknown'/absent = not
-  //     confirmed (a practice swing, or a shot we couldn't verify) → no shot overlay.
-  const shotConfirmed = useMemo(() => {
-    if (!shot) return false;
-    if (session?.source === 'live_cage') return true;
-    const cr = shot.perShotAnalysis?.contact_read;
-    return cr === 'clean' || cr === 'fat' || cr === 'thin' || cr === 'topped';
-  }, [shot, shot?.perShotAnalysis?.contact_read, session?.source]);
   // 2026-07-06 (Tim: "remove the golfer and just move the overlay in a
   // separate view") — MOTION ONLY: video keeps playing (it drives the
   // clock) but renders invisible under a dark backdrop, leaving skeleton +
@@ -473,10 +461,15 @@ export default function SwingDetail() {
   // pass that overlaps the running one (two retriever loops on the live file → the native crash).
   const clubArcRunKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    // 2026-07-22 (Tim) — the club arc feeds the swing TRACE only, and the trace is a confirmed-
-    // shot overlay. Only run the (expensive, native) clubhead-frame extraction when we'll actually
-    // draw it: the trace is on AND this is a confirmed shot. Practice/unconfirmed swings skip it.
-    if (!hasPose || !shot?.clipUri || !showTrace || !shotConfirmed) { setClubArcPoints(null); return; }
+    // 2026-07-22 (Tim) — the club arc feeds the swing TRACE only, so only run the (expensive, native)
+    // clubhead-frame extraction when the trace is actually on.
+    // 2026-07-27 (Tim — "not seeing the clubhead or swing arc at all now") — REMOVED the extra
+    // `shotConfirmed` gate. It silently made the Swing Trace toggle DEAD on uploaded/unconfirmed swings
+    // (extraction never ran → no arc no matter what you tapped). The trace is clubhead-OR-NOTHING (draws
+    // only ≥4 REAL detected clubhead points, never a wrist proxy), so showing the real detected path on
+    // any swing is honest — it's the clubhead's PATH, not a claim about contact. The crash guards below
+    // (never extract while playing) are independent of this and unchanged.
+    if (!hasPose || !shot?.clipUri || !showTrace) { setClubArcPoints(null); return; }
     // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
     // clip is playing. detectClubPath opens a native MediaMetadataRetriever on the file, and a
     // retriever decoding the SAME mp4 that ExoPlayer is decoding for playback SIGSEGVs the app to
@@ -515,7 +508,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, shotConfirmed, isPlaying]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -589,17 +582,19 @@ export default function SwingDetail() {
     }
   }, [analysisStatus, swing_id, session?.primary_issue, session?.drill_recommendation, session?.analysis_error]);
 
-  // Auto-default the trace ONCE per swing, after the analysis resolves: on for a confirmed shot,
-  // off for a practice/unconfirmed swing. The ref makes it a one-time default so a later manual
-  // toggle (the escape hatch) is never overwritten when shotConfirmed recomputes.
+  // Auto-default the trace ONCE per swing, after the analysis resolves. The ref makes it a one-time
+  // default so a later manual toggle (the escape hatch) is never overwritten.
+  // 2026-07-27 (Tim — "not seeing the clubhead or swing arc at all now") — default the trace ON whenever
+  // the swing has pose (was: only for a CONFIRMED shot, so uploads showed nothing). Safe + honest: the
+  // trace is clubhead-OR-NOTHING, so a swing where no real clubhead is detected simply draws nothing.
   const autoTraceAppliedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!swing_id || autoTraceAppliedForRef.current === swing_id) return;
     if (analysisStatus === 'pending' || analysisStatus === 'analyzing_frames'
       || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') return; // wait for the read
     autoTraceAppliedForRef.current = swing_id;
-    setShowTrace(shotConfirmed);
-  }, [swing_id, shotConfirmed, analysisStatus]);
+    setShowTrace(hasPose);
+  }, [swing_id, hasPose, analysisStatus]);
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
   // completes and biomechanics is present. Idempotent per swing_id;
@@ -1909,7 +1904,12 @@ export default function SwingDetail() {
                 const st = shot?.clipStartSeconds ?? null;
                 const en = shot?.clipEndSeconds ?? null;
                 const windowed = st != null && en != null && en > st;
-                const inSwing = !windowed || (position >= (st as number) - 0.08 && position <= (en as number) + 0.08);
+                // 2026-07-27 (Tim — "mechanics must stay on THROUGH the finish; right now the skeleton
+                // disappears at swing finish"). Keep the LOWER gate (don't draw during the pre-swing
+                // walk-up/waggle) but DROP the upper cap: once the swing has started, the overlay stays
+                // on through impact, follow-through and finish (and while paused at the end). Applies the
+                // same on single-swing clips and each split-swing clip in multi-swing playback.
+                const inSwing = !windowed || position >= (st as number) - 0.08;
                 if (!inSwing) return null;
                 return (
                 <SwingBodyOverlay
