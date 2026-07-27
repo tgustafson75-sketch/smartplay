@@ -1,4 +1,13 @@
 /**
+ * ⛔️ LAYOUT FROZEN — 2026-07-26 (Tim: "smartvision looks perfect. lock it so it does not get touched
+ * without my permission"). The on-screen LAYOUT/FORMATTING of this screen is LOCKED: the aerial wrapper,
+ * the club-rec bar, the F/M/B panel, their sizing/spacing/positioning, breakpoints, and the styles that
+ * drive them. Do NOT restructure, restyle, reposition, resize, or "clean up" any of it — not even a
+ * padding tweak — without Tim's EXPLICIT per-change OK. This includes well-intentioned refactors and
+ * responsive passes. Pure logic fixes that DON'T alter the visual layout (yardage math, projection,
+ * data wiring, crash safety) are still allowed. If a layout change seems needed, ASK FIRST.
+ * See memory: smartvision-layout-freeze.
+ *
  * Phase AV — SmartVision (GolfShot-class hole view).
  *
  * Single-purpose screen: satellite hole tile (Mapbox, oriented tee→green
