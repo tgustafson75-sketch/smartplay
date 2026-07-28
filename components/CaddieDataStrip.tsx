@@ -264,7 +264,7 @@ export default function CaddieDataStrip({
                     color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                   />
                 </Pressable>
-                <Text style={[styles.cellValue, { fontSize: 24 }]}>{`${hole.current}/${hole.total}`}</Text>
+                <Text style={[styles.cellValue, styles.holeValue, { fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{`${hole.current}/${hole.total}`}</Text>
                 <Pressable
                   onPress={handleHoleNext}
                   disabled={hole.current >= hole.total}
@@ -382,7 +382,7 @@ export default function CaddieDataStrip({
                   color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
-              <Text style={[styles.cellValue, { fontSize: 22 }]}>{`${hole.current}/${hole.total}`}</Text>
+              <Text style={[styles.cellValue, styles.holeValue, { fontSize: 22 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{`${hole.current}/${hole.total}`}</Text>
               <Pressable
                 onPress={handleHoleNext}
                 disabled={hole.current >= hole.total}
@@ -520,6 +520,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
+    // 2026-07-28 (containment) — reserve a top band so the absolutely-positioned status pills
+    // (STATIC/LIVE top-left, OFF COURSE top-right) sit ABOVE the cell labels instead of overlapping
+    // them. Values are single-line now, so there's vertical room for this.
+    paddingTop: 10,
   },
   cell: {
     flex: 1,
@@ -571,7 +575,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 4,
+  },
+  // 2026-07-28 (containment) — the hole value shrinks to fit its flex cell (with the ◀/▶ steppers)
+  // on a narrow/folded strip instead of overflowing into the neighbouring PLAYS cell.
+  holeValue: {
+    flexShrink: 1,
+    textAlign: 'center',
   },
   // 2026-06-13 (Tim) — the bottom-strip hole arrows were too small to hit on the
   // course. Bigger glyphs (below) + a real ~36px touch target here.

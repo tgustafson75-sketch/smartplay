@@ -4615,22 +4615,37 @@ check('Perf: on-course dot tickers ride the GPS watch cache (peekFix), not force
   })(),
   'the SmartFinder screen and hole-preview dot tickers read the running watch cache instead of forcing a high-accuracy GPS pull every 3-4s — the dominant avoidable on-course battery cost; the manual Refresh button stays guaranteed-fresh');
 
-// 2026-06-14 (audit — perf) — SmartVisionTap was defined INSIDE L1HolePreview's
-// render, so every 4s dot-tick made a new component type and React remounted the
-// whole subtree (hero Image reload + ParallaxTilt DeviceMotion re-subscribe).
-check('Perf: L1HolePreview SmartVisionTap is module-level (no 4s remount cascade)',
+// 2026-06-14 (audit — perf) — the tap wrapper was defined INSIDE L1HolePreview's render, so every 4s
+// dot-tick made a new component type and React remounted the whole subtree (hero Image reload +
+// ParallaxTilt DeviceMotion re-subscribe). 2026-07-28 — renamed to HoleFrame and given fill+measure
+// (onLayout) + centering so the box is fold-robust and aspect-locks curated art; still module-level.
+check('Perf: L1HolePreview HoleFrame is module-level + fills/measures (no 4s remount cascade)',
   (() => {
     const prev = read('components/caddie/L1HolePreview.tsx');
-    // module-level component (declared BEFORE the default export, takes onPress)
-    const defIdx = prev.search(/const SmartVisionTap: React\.FC<\{ onPress\?: \(\) => void; children: React\.ReactNode \}>/);
+    const defIdx = prev.search(/const HoleFrame: React\.FC</);
     const fnIdx = prev.search(/export default function L1HolePreview/);
     return (
-      defIdx >= 0 && fnIdx >= 0 && defIdx < fnIdx &&        // defined at module scope, before the component
-      /<SmartVisionTap onPress=\{onOpenSmartVision\}>/.test(prev) &&
-      !/const SmartVisionTap: React\.FC<\{ children: React\.ReactNode \}>/.test(prev)  // old in-render def gone
+      defIdx >= 0 && fnIdx >= 0 && defIdx < fnIdx &&                                  // module scope, before the component
+      /<HoleFrame onPress=\{onOpenSmartVision\} onLayout=\{setMeasuredDims\}>/.test(prev) &&
+      !/const SmartVisionTap:/.test(prev)                                             // old wrapper gone
     );
   })(),
-  'the hole-preview tap wrapper is a stable module-level component, so the 4s GPS tick reconciles in place instead of remounting the image + parallax sensor every cycle');
+  'the hole-preview tap wrapper is a stable module-level component that fills its parent and measures its real size, so the 4s GPS tick reconciles in place and the box is fold-robust');
+
+// 2026-07-28 (Tim — "the larger element is off-center / containment isn't right"). The hole preview
+// aspect-locks a curated 2:3 crop into a centered box (cover == contain) instead of the box taking the
+// screen's aspect and cropping the baked-in yardage off — the same fix smartvision.tsx already uses.
+check('L1HolePreview: curated hole art is aspect-locked + centered (contained, not screen-cropped)',
+  (() => {
+    const p = read('components/caddie/L1HolePreview.tsx');
+    return (
+      /const CURATED_ASPECT = 1536 \/ 1024/.test(p) &&                 // 2:3 portrait lock
+      /function buildHoleBox\(/.test(p) &&                             // fit-and-center helper
+      /Math\.min\(h, Math\.round\(w \* CURATED_ASPECT\)\)/.test(p) &&   // shrink to a true 1.5 box
+      /alignItems: 'center',\s*\n\s*justifyContent: 'center'/.test(p)  // frame centers the locked box
+    );
+  })(),
+  'a portrait hole crop is fully contained (whole hole + baked-in number visible) and centered with dark letterbox bars, instead of cover-cropping the art to the screen aspect and lopping off the yardage');
 
 // 2026-06-14 (audit — redundant work) — golfbert holes were re-fetched over the
 // network on every hole switch even though the cache was populated. Now read-through.

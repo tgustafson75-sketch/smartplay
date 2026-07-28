@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
@@ -20,79 +20,84 @@ import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
 const DEFAULT_H = 300;
+// Bundled hole crops are 2:3 PORTRAIT (1024×1536). A box that isn't this exact aspect makes
+// resizeMode:cover crop the art — which lopped the baked-in yardage/tee off the visible image (worse
+// on the Fold, where the box aspect swings between fold states). smartvision.tsx fixed this the same
+// way; L1 now matches. See buildHoleBox() below.
+const CURATED_ASPECT = 1536 / 1024; // = 1.5
 
 /**
  * L1 (Quiet) hole preview — a glanceable top-down sketch of the current hole
  * (tee at bottom, green at top, dashed centerline, player dot when GPS is
- * available). Sized for the L1 layout's logo+preview block above the
- * SmartFinder card. No tap interaction — purely informational.
+ * available). Falls back to a quiet "Hole geometry unavailable" placeholder
+ * when the upstream lacks tee/green coordinates.
  *
- * Falls back to a quiet "Hole geometry unavailable" placeholder when the
- * upstream lacks tee/green coordinates (the typical golfcourseapi case
- * today). Sizing is fixed so the L1 block doesn't reflow when geometry
- * resolves.
+ * 2026-07-28 (Tim — "the larger element is off-center / containment isn't right") — two containment
+ * fixes: (1) the box now MEASURES its own laid-out size via onLayout instead of trusting the width
+ * prop (which lags the native re-layout across a Fold transition → off-center image + one-sided blank
+ * band); (2) a curated 2:3 crop is fit into a TRUE 1.5-aspect box and centered (cover == contain — the
+ * whole hole + its baked-in number stay visible) instead of the box taking the screen's aspect and
+ * cropping the art. Non-curated sources (captured aerials, the SVG sketch, placeholders) fill the box.
  */
 type Props = {
   /** Tap handler — opens the full SmartVision tool for the current hole. */
   onOpenSmartVision?: () => void;
-  /** Optional width override (default 320). */
+  /** Optional width override (first-render fallback; the box then measures its real size). */
   width?: number;
-  /** Optional height override (default 300). */
+  /** Optional height override (first-render fallback; the box then measures its real size). */
   height?: number;
 };
 
-// 2026-06-14 (audit — perf) — hoisted to MODULE level. It was defined inside the
-// render body, so every 4s dot-tick (setTick) created a NEW component type and React
-// unmounted/remounted the whole subtree — the hero Image reloaded and ParallaxTilt
-// re-subscribed DeviceMotion every tick. A stable module-level component lets React
-// reconcile in place. The tap handler is passed as a prop.
-const SmartVisionTap: React.FC<{ onPress?: () => void; children: React.ReactNode }> = ({ onPress, children }) => (
+/** Fit a curated 2:3 crop inside w×h and center it (contain); non-curated fills w×h. */
+function buildHoleBox(isCurated: boolean, w: number, h: number): { width: number; height: number } {
+  if (!isCurated) return { width: w, height: h };
+  const bh = Math.min(h, Math.round(w * CURATED_ASPECT));
+  return { width: Math.round(bh / CURATED_ASPECT), height: bh };
+}
+
+// 2026-06-14 (audit — perf) — hoisted to MODULE level so the 4s dot-tick doesn't remount the subtree.
+// 2026-07-28 — now the measuring + centering frame: it FILLS its parent (so the true container size
+// is used, not a lagging width prop), reports its measured size, and centers the aspect-locked child.
+const HoleFrame: React.FC<{
+  onPress?: () => void;
+  onLayout?: (w: number, h: number) => void;
+  children: React.ReactNode;
+}> = ({ onPress, onLayout, children }) => (
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={onPress ? 0.85 : 1}
     disabled={!onPress}
     accessibilityRole="button"
     accessibilityLabel="Open SmartVision for this hole"
+    style={styles.frame}
+    onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height) : undefined}
   >
     {children}
   </TouchableOpacity>
 );
 
 export default function L1HolePreview({ onOpenSmartVision, width, height }: Props) {
-  const W = width ?? DEFAULT_W;
-  const H = height ?? DEFAULT_H;
+  const propW = width ?? DEFAULT_W;
+  const propH = height ?? DEFAULT_H;
+  // Measured container size — the source of truth once laid out (robust to Fold resize). The width/
+  // height props are only the first-render fallback before onLayout fires.
+  const [dims, setDims] = useState({ w: propW, h: propH });
+  const setMeasuredDims = useCallback((w: number, h: number) => {
+    if (w > 0 && h > 0) setDims(prev => (Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1 ? { w, h } : prev));
+  }, []);
+  const W = dims.w;
+  const H = dims.h;
+  const wrapDims = { width: W, height: H };
+
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const activeCourse = useRoundStore(s => s.activeCourse);
-  // 2026-05-17 — pre-round planning context. When there's no active
-  // round but the user has picked a course on the Play tab (sets
-  // pendingStartCourseId) or has a home course set, use that course's
-  // hole 1 imagery in the L1 preview AND drop the "Start a round to
-  // see your hole" gate. Tim's point: "we have save in the upper right
-  // corner... I wanted to be able to see the whole view images to
-  // preplan around using the measuring tool. Right now, pre round,
-  // it's just green screens."
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const _homeCourseName = usePlayerProfileStore(s => s.homeCourse);
-  // 2026-05-17 — Removed the hard "palms" fallback at the tail of the
-  // cascade. Previously when there was no active round, no pending
-  // course, no preview, and no home-course set, we'd return the literal
-  // string "palms" and getLocalHoleImage would resolve to Palms hole 1.
-  // That leaked Palms imagery into every empty state, and in active
-  // rounds where activeCourse briefly read null during a state
-  // transition. Empty state now renders the explicit "pick a course"
-  // copy instead.
   const previewCourseId_resolved: string | null =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
-  // 2026-05-17 — Removed the trailing `homeCourseName` fallback. Tim's
-  // homeCourse is "Menifee Lakes — Palms", so when the user opens the
-  // app WITHOUT first selecting a course on the Play tab, this branch
-  // returned a string containing "palms" and getLocalHoleImage
-  // substring-matched to PALMS_HOLE_IMAGES — rendering Palms imagery
-  // for whatever the user actually thought they were looking at. The
-  // empty state is more honest.
   const previewCourseLabel: string | null = (() => {
     if (activeCourse) return activeCourse;
     if (previewCourseId_resolved && previewCourseId_resolved.startsWith('local:')) {
@@ -107,9 +112,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   // 2026-06-13 (Tim) — course-data bootstrap: prefer a real captured shot of THIS hole
   // (snapped in SmartFinder) over the generic Mapbox tile. Self-built course imagery.
   const captured = useCourseCaptureStore(s => s.bestForward(activeCourseId, currentHole));
-  // 2026-07-06 (elite audit) — manifest uris are ABSOLUTE file:// paths and iOS
-  // regenerates the container UUID on app update, so re-anchor under the LIVE
-  // documentDirectory before rendering (a stale prefix drew a blank hero tile).
   const capturedUri = captured?.kind === 'single' ? resolveCaptureUri(captured.uri) : null;
 
   useEffect(() => {
@@ -137,26 +139,17 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     return () => { cancelled = true; clearInterval(id); };
   }, [isRoundActive]);
 
-  const wrapDims = { width: W, height: H };
-
-  // 2026-05-17 — Pre-round path. Show the selected/planned course's
-  // hole 1 imagery if available (so the user can tap into SmartVision
-  // and pre-plan with the measuring tool), otherwise fall back to the
-  // default preview. The "Start a round to see your hole" copy is
-  // replaced with "Tap to plan" — Tim's preplanning workflow.
+  // 2026-05-17 — Pre-round path. Show the selected/planned course's hole 1 imagery if available
+  // (curated 2:3 crop → aspect-locked + centered), else a soft placeholder.
   if (!isRoundActive) {
-    // 2026-05-17 — courseId-first lookup so a planning preview for a
-    // local course resolves to that course's imagery (not the
-    // home-course substring-match leak). Name-based fallback only when
-    // we don't have a local: id.
     const previewImg =
       getLocalHoleImageById(previewCourseId_resolved, 1) ??
       (previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null);
-    const defaultImg = previewImg;
-    if (defaultImg) {
+    if (previewImg) {
+      const box = buildHoleBox(true, W, H);
       return (
-        <SmartVisionTap onPress={onOpenSmartVision}>
-          <ImageBackground source={defaultImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+        <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+          <ImageBackground source={previewImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
             {/* 2026-07-25 (Tim — "540 bleeds through the card") — the curated hole JPG has the yardage
                 printed on it, which showed through behind the label. A bottom-up scrim seats the text
                 on a clean dark base so only OUR label reads, not the baked-in number. */}
@@ -166,99 +159,69 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
               <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
             </View>
           </ImageBackground>
-        </SmartVisionTap>
+        </HoleFrame>
       );
     }
     return (
-      <SmartVisionTap onPress={onOpenSmartVision}>
+      <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>SMARTVISION</Text>
           <Text style={styles.placeholderSub}>Pick a course on the Play tab to plan.</Text>
         </View>
-      </SmartVisionTap>
+      </HoleFrame>
     );
   }
 
-  // 2026-05-19 — Curated bundled image takes priority over any aerial/
-  // SVG fallback whenever one exists for the course, regardless of
-  // whether geometry is loaded. Tim's repeated "the whole view is gone"
-  // complaint on Menifee Palms was the geometry-seeded synthetic round
-  // bypassing the curated image and falling into the aerial/Mapbox path
-  // (which renders a generic green satellite tile). Curated photos
-  // are the canonical render for any course that has them; geometry
-  // only drives the player-dot overlay coordinates.
+  // Curated bundled image takes priority over any aerial/SVG fallback whenever one exists.
   const curatedImage =
     getLocalHoleImageById(activeCourseId, currentHole) ??
     getLocalHoleImage(activeCourse, currentHole);
 
-  // Prefer the player's own captured shot; fall back to the curated bundle. A captured
-  // shot (uri) and a curated require() are both valid Image sources.
+  // Prefer the player's own captured shot; fall back to the curated bundle.
   const heroImageSource = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? null);
 
   if (heroImageSource) {
+    // A curated crop (require) is 2:3 → aspect-lock; a captured aerial (uri) isn't → fill.
+    const heroIsCurated = !capturedUri;
+    const box = buildHoleBox(heroIsCurated, W, H);
     const fix = getLastFix();
     const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
-    // Prefer the seeded geometry's tee/green if available; fall back to
-    // courseHoles record (Palms has these). Either path produces an
-    // axis we can project the player onto.
-    // 2026-07-01 (audit) — prefer the canonical green (truth → Mark-Green override →
-    // golfbert → courseHoles) for the player→green distance so this preview matches
-    // the SmartFinder strip after the user marks the green; fall back to raw geometry.
     const resolvedGreen = (() => { try { return resolveGreenCoords(currentHole).middle; } catch { return null; } })();
     const previewGreen = resolvedGreen ?? geometry?.green ?? null;
     const teeLatLng = (geometry?.tee && previewGreen)
       ? { tee: geometry.tee, green: previewGreen }
       : holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (previewGreen || holeRecord.middleLat || holeRecord.middleLng)
-        // 2026-07-01 (re-audit) — prefer the resolved (override-aware) green here too,
-        // so this branch doesn't silently fall back to the raw courseHoles pin after
-        // a Mark-Green. Only use the record's middle when the resolver had nothing.
         ? { tee: { lat: holeRecord.teeLat, lng: holeRecord.teeLng }, green: previewGreen ?? { lat: holeRecord.middleLat, lng: holeRecord.middleLng } }
         : null;
     let pctAlong: number | null = null;
     let yardsToGreen: number | null = null;
     if (fix && teeLatLng) {
       let total = haversineYards(teeLatLng.tee, teeLatLng.green);
-      // 2026-06-12 (Tim's Lakes round) — sanity-check the GPS tee→green against the
-      // BUNDLED hole distance. A bad tee MARK (GPS off, or marking the wrong hole's tee)
-      // produced a 548y "total" on a 134y par-3, which threw the player-dot position.
-      // When the trusted bundled distance disagrees wildly (>1.6× or <0.55×), trust it.
       const bundledDist = holeRecord?.distance;
       if (typeof bundledDist === 'number' && bundledDist > 0 && total > 0 &&
           (total > bundledDist * 1.6 || total < bundledDist * 0.55)) {
         total = bundledDist;
       }
       const fromPlayer = haversineYards(fix.location, teeLatLng.green);
-      // 2026-05-19 — Sanity guard. If the player is more than 1500y
-      // from the green, it's not a real position — usually means a
-      // prior simulator session's fix leaked into a new course's
-      // round, or a real GPS coord landed in a synthetic round. Hide
-      // the overlay instead of rendering "629,441y" which is
-      // meaningless and alarming to the user.
       if (total > 0 && Number.isFinite(fromPlayer) && fromPlayer < 1500) {
         yardsToGreen = Math.round(fromPlayer);
         pctAlong = Math.max(0, Math.min(1, 1 - fromPlayer / total));
       }
     }
-    // Vertical position along the photo: hole photos are framed
-    // tee-at-bottom, green-at-top. pctAlong=0 at tee → dot near bottom.
-    // pctAlong=1 at green → dot near top.
-    // 2026-05-19 — Direction was inverted (used 1-pctAlong by mistake).
-    // bottom: cartY positions the icon `cartY` px from the bottom of
-    // the container, so AT TEE (pctAlong=0) we want cartY small, and
-    // AT GREEN (pctAlong=1) we want cartY large.
+    // Vertical position along the photo: tee at bottom (pctAlong=0), green at top (pctAlong=1).
     const padTop = 8;
     const padBottom = 8;
-    const trackHeight = wrapDims.height - padTop - padBottom;
+    const trackHeight = box.height - padTop - padBottom;
     const cartY = pctAlong != null ? (padBottom + pctAlong * trackHeight) : null;
     return (
-      <SmartVisionTap onPress={onOpenSmartVision}>
-        <ImageBackground source={heroImageSource} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+      <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+        <ImageBackground source={heroImageSource} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
           <View style={styles.imageOverlay}>
             <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
           </View>
           {cartY != null && yardsToGreen != null ? (
             <>
-              <View style={[styles.playerCartOnImage, { bottom: cartY, left: wrapDims.width / 2 - 12 }]}>
+              <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>
                 <Ionicons name="navigate" size={14} color="#0d1a0d" />
               </View>
               <View style={styles.playerYardageBadge}>
@@ -267,25 +230,16 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
             </>
           ) : null}
         </ImageBackground>
-      </SmartVisionTap>
+      </HoleFrame>
     );
   }
 
   if (!geometry || !geometry.tee || !geometry.green) {
-    // 2026-05-17 — courseId-first lookup. Falls back to name-based only
-    // when no local: id is set (e.g. golfcourseapi-only rounds).
     const localImg =
       getLocalHoleImageById(activeCourseId, currentHole) ??
       getLocalHoleImage(activeCourse, currentHole);
     if (localImg) {
-      // 2026-05-18 — Overlay a live player-position indicator on the
-      // curated hole image. The image isn't pixel-mapped (we don't know
-      // its framing), so we use a horizontal progress bar at the bottom
-      // showing how far the player is along the hole's GPS axis plus a
-      // small dot tracking it. Lets the user (and the synthetic round
-      // harness) eyeball that GPS is updating without opening full
-      // SmartVision. Falls back to no overlay when fix or hole record
-      // is missing.
+      const box = buildHoleBox(true, W, H);
       const fix = getLastFix();
       const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
       let pctAlong: number | null = null;
@@ -301,14 +255,14 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
         }
       }
       return (
-        <SmartVisionTap onPress={onOpenSmartVision}>
-          <ImageBackground source={localImg} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+        <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+          <ImageBackground source={localImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.imageOverlay}>
               <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
             </View>
             {pctAlong != null && yardsToGreen != null ? (
               <>
-                <View style={[styles.playerTrackBar, { width: wrapDims.width - 16 }]}>
+                <View style={[styles.playerTrackBar, { width: box.width - 16 }]}>
                   <View style={styles.playerTrackTee} />
                   <View style={styles.playerTrackGreen} />
                   <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
@@ -319,28 +273,22 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
               </>
             ) : null}
           </ImageBackground>
-        </SmartVisionTap>
+        </HoleFrame>
       );
     }
-    // No geometry + no curated image. Don't shout "unavailable" — that
-    // alarmed Tim ("where did my images go?") when he picked a course
-    // whose photo bundle isn't dropped in yet. Show a soft placeholder
-    // that names the hole and offers SmartVision as the path forward.
+    // No geometry + no curated image — soft placeholder.
     return (
-      <SmartVisionTap onPress={onOpenSmartVision}>
+      <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
           <Text style={styles.placeholderSub}>Preview coming for this course.</Text>
           <Text style={styles.placeholderCta}>Tap to open SmartVision →</Text>
         </View>
-      </SmartVisionTap>
+      </HoleFrame>
     );
   }
 
   let axisYards = haversineYards(geometry.tee, geometry.green);
-  // 2026-06-12 (Tim's Lakes round) — same bundled-distance sanity guard as the photo
-  // path: a bad tee mark made axisYards read 548y on a 134y par-3 (the satellite/aerial
-  // view's hole total + dot scale). Trust the bundled distance when GPS disagrees wildly.
   {
     const bundledDist = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole)?.distance;
     if (typeof bundledDist === 'number' && bundledDist > 0 && axisYards > 0 &&
@@ -348,12 +296,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       axisYards = bundledDist;
     }
   }
-  // 2026-07-20 (white-screen guard) — `<= 0` misses NaN (NaN <= 0 is false); a non-finite
-  // tee/green coordinate would flow into the <Circle>/<Line> below and crash react-native-svg
-  // (white-screen the live-round home surface). `!(axisYards > 0)` rejects NaN/Infinity too.
+  // 2026-07-20 (white-screen guard) — `!(axisYards > 0)` rejects NaN/Infinity before they reach SVG.
   if (!(axisYards > 0)) {
     return (
-      <View style={[styles.wrap, styles.placeholder]}>
+      <View style={[styles.wrap, wrapDims, styles.placeholder]}>
         <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
       </View>
     );
@@ -361,14 +307,10 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
 
   const fix = getLastFix();
   const rawProj = fix ? projectToAxis(fix.location, geometry.tee, geometry.green) : null;
-  // 2026-07-23 (QA — white-screen guard) — a leaked/simulator/bad GPS fix makes projectToAxis
-  // return NaN, which flows through xRange → xScale → the tee/green <Circle>/<Line> coords and
-  // crashes react-native-svg (white-screens the live-round home). The `!(axisYards>0)` guard above
-  // only covers the tee↔green axis, not this player projection. Drop a non-finite fix (render the
-  // hole without the you-are-here dot) — mirrors the finite guard on the photo path.
+  // Drop a non-finite fix (render the hole without the you-are-here dot) — SVG NaN white-screen guard.
   const playerProj = rawProj && Number.isFinite(rawProj.x) && Number.isFinite(rawProj.y) ? rawProj : null;
 
-  // Fit-to-canvas projection
+  // Fit-to-canvas projection (the SVG sketch fills the measured box).
   const pad = 18;
   const xRange = Math.max(60, (playerProj ? Math.abs(playerProj.x) * 2 : 0) + 60);
   const yRange = axisYards + 40;
@@ -383,41 +325,52 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const playerPos = playerProj ? project(playerProj.x, playerProj.y) : null;
 
   return (
-    <SmartVisionTap onPress={onOpenSmartVision}>
-    <View style={[styles.wrap, wrapDims]}>
-      <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
-        {/* SVG sketch — always dark, no satellite */}
-        <>
-          <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
-          <Line
-            x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
-            stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
-          />
-          <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
-          <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
-          <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
-          <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
-        </>
-        {/* Player position overlay */}
-        {playerPos && (
+    <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+      <View style={[styles.wrap, wrapDims]}>
+        <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
+          {/* SVG sketch — always dark, no satellite */}
           <>
-            <Path
-              d={`M ${playerPos.sx} ${playerPos.sy} L ${greenPos.sx} ${greenPos.sy}`}
-              stroke="#F5A623" strokeWidth={1.5} strokeDasharray="3 3" opacity={0.85}
+            <Rect x={0} y={0} width={W} height={H} rx={10} fill="#0a1f12" />
+            <Line
+              x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy}
+              stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
             />
-            <Circle cx={playerPos.sx} cy={playerPos.sy} r={5} fill="#F5A623" stroke="#0d1a0d" strokeWidth={1.5} />
+            <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
+            <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
+            <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
+            <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
           </>
-        )}
-        <SvgText x={W - pad} y={pad + 2} fill="#fff" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>
-          HOLE {currentHole}
-        </SvgText>
-      </Svg>
-    </View>
-    </SmartVisionTap>
+          {/* Player position overlay */}
+          {playerPos && (
+            <>
+              <Path
+                d={`M ${playerPos.sx} ${playerPos.sy} L ${greenPos.sx} ${greenPos.sy}`}
+                stroke="#F5A623" strokeWidth={1.5} strokeDasharray="3 3" opacity={0.85}
+              />
+              <Circle cx={playerPos.sx} cy={playerPos.sy} r={5} fill="#F5A623" stroke="#0d1a0d" strokeWidth={1.5} />
+            </>
+          )}
+          <SvgText x={W - pad} y={pad + 2} fill="#fff" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>
+            HOLE {currentHole}
+          </SvgText>
+        </Svg>
+      </View>
+    </HoleFrame>
   );
 }
 
 const styles = StyleSheet.create({
+  // 2026-07-28 — fills the parent + centers the aspect-locked hole box (so a curated 2:3 crop is
+  // contained, not screen-aspect-cropped). Dark bg shows as clean letterbox bars around the crop.
+  frame: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0a1f12',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
   wrap: {
     borderRadius: 10,
     overflow: 'hidden',
@@ -435,8 +388,6 @@ const styles = StyleSheet.create({
   placeholderSub: { color: '#4b5563', fontSize: 11, marginTop: 6, textAlign: 'center' },
   placeholderSubLight: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 4, textAlign: 'center' },
   imgRadius: { borderRadius: 10 },
-  // 2026-07-25 — pre-round plan card: dark scrim + bottom-left label so the curated JPG's baked-in
-  // yardage doesn't bleed through behind our text.
   planScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,15,9,0.42)' },
   planLabelWrap: { position: 'absolute', left: 8, bottom: 8, right: 8 },
   imageOverlay: {
@@ -461,9 +412,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   svHintText: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
-  // 2026-05-18 — Live player-position overlay on curated hole image.
-  // Bottom track: tee marker (left), green marker (right), player dot
-  // slides between them based on GPS distance-to-green / hole length.
   playerTrackBar: {
     position: 'absolute',
     bottom: 8,
@@ -499,10 +447,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   playerYardageText: { color: '#F5A623', fontSize: 11, fontWeight: '800', fontFamily: 'monospace' },
-  // 2026-05-19 — Live player cart icon overlaid on the curated hole
-  // photo. Moves vertically from tee (bottom) to pin (top) as the
-  // player progresses along the GPS axis. Position computed inline at
-  // render time.
   playerCartOnImage: {
     position: 'absolute',
     width: 24, height: 24,
