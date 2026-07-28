@@ -2277,24 +2277,12 @@ export default function CaddieTab() {
     // gracefully (offCourseDetector exits early, smartFinder uses
     // scorecard yardages, UI shows "—"). What we never do again is
     // pretend a non-Palms course IS Palms.
-    if (holes.length === 0) {
+    // 2026-07-27 — the geometry fetch (+ its player-facing "map ready / couldn't map" heads-up) is
+    // handled in ONE place AFTER startRound (see below), so a non-listed API course reports honestly
+    // instead of loading GPS silently. Here we just note the honest empty start.
+    const startedWithoutHoles = holes.length === 0;
+    if (startedWithoutHoles) {
       console.log('[startRound] no holes loaded for', courseName, '— starting empty; geometry fetch will populate async');
-      // Fire-and-forget geometry fetch. When it lands, it caches into
-      // courseGeometryService for subsequent reads; users in active
-      // rounds can re-enter via the geometry-aware paths (SmartVision,
-      // smartFinder) and pick up the cached data on the next call.
-      if (courseId) {
-        void (async () => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const geomMod = require('../../services/courseGeometryService') as typeof import('../../services/courseGeometryService');
-            await geomMod.fetchCourseGeometry(courseId, { courseLocation });
-            console.log('[startRound] async geometry fetch landed for', courseId);
-          } catch (e) {
-            console.log('[startRound] async geometry fetch failed (non-fatal):', e);
-          }
-        })();
-      }
     }
 
     startRound(courseName, holes, {
@@ -2336,8 +2324,35 @@ export default function CaddieTab() {
       }
     }
 
+    // GPS geometry: bundled courses resolve from their shipped screenshot-anchored coords; a
+    // non-listed API course fetches from golfcourseapi → OSM → Mapbox async. For an API course we
+    // tell the player HONESTLY how mapping went — a namesake we can't fully map would otherwise show
+    // blank GPS distances with no explanation, and a tester reads that as a broken app. Bundled/local
+    // courses fetch silently (they always have geometry). Only two states are worth voicing: mapping
+    // landed after we started blank (materially new — distances are suddenly live), or we couldn't map
+    // it at all (own it, don't fabricate). A successful map on a course that already had scorecard
+    // holes stays silent — distances just sharpen, nothing to narrate.
     if (courseId) {
-      fetchCourseGeometry(courseId, { courseLocation }).catch(err => console.log('[caddie] geometry warm failed:', err));
+      const isApiCourse = !picked.isLocal;
+      const courseLabel = courseName;
+      void (async () => {
+        try {
+          const geom = await fetchCourseGeometry(courseId, { courseLocation });
+          const hasMapping = !!geom && geom.holes.length > 0;
+          if (isApiCourse) {
+            if (hasMapping && startedWithoutHoles) {
+              setCaddieResponse(`Got the map for ${courseLabel} — GPS distances are live now.`);
+            } else if (!hasMapping) {
+              setCaddieResponse(`Heads up — I couldn't pull full GPS mapping for ${courseLabel}. You've got scorecard yardages, and I'll flag any distance I can't confirm rather than guess.`);
+            }
+          }
+        } catch (err) {
+          console.log('[caddie] geometry fetch failed (non-fatal):', err);
+          if (isApiCourse) {
+            setCaddieResponse(`I couldn't load the GPS map for ${courseLabel} right now — scorecard yardages are still good, and I'll keep distances honest.`);
+          }
+        }
+      })();
     }
 
     // 2026-05-21 — Fix N: the pre-warm GPS block that used to live

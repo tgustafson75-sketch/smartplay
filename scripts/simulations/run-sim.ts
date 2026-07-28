@@ -2944,6 +2944,35 @@ check('Course identity: a non-Gold Doral never inherits Gold imagery/centroid (d
   })(),
   'a Doral round that is NOT the Gold course falls through to satellite/live-GPS geometry instead of rendering Gold holes, Gold centroid, and Gold calibration lines as its own');
 
+// 2026-07-27 (tester UX — wrong-course trap). Starting a round by voice for a course NOT in our
+// bundle resolves through golfcourseapi, which returns MANY hits for a common name. The handler used
+// to silently start at the FIRST → a tester lands on a namesake states away (wrong yardages hole 1).
+check('Voice quick-round: ambiguous non-listed course asks which one (no silent wrong start)',
+  (() => {
+    const h = read('services/intents/quickRoundHandler.ts');
+    return (
+      /dedupeCourses\(/.test(h) &&        // collapse same club as multiple tees/nines
+      /reals\.length > 1/.test(h) &&       // multiple DISTINCT matches → don't guess
+      /ambiguous_course=/.test(h) &&
+      /shortLoc\(/.test(h)                 // city named for the user (country trimmed)
+    );
+  })(),
+  'a common course name that maps to several distinct golfcourseapi hits names the cities and asks which one, instead of silently starting the round at the first (possibly wrong) match');
+
+// 2026-07-27 (tester UX — map honesty). An API-resolved course fetches GPS geometry async; a
+// namesake we can't fully map would otherwise show blank distances with no explanation (reads as a
+// broken app). The round-start flow now tells the player when mapping lands or when it couldn't.
+check('Round start: a non-listed API course reports GPS mapping honestly (no silent blank distances)',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    return (
+      /const isApiCourse = !picked\.isLocal;/.test(c) &&
+      /const hasMapping = !!geom && geom\.holes\.length > 0;/.test(c) &&
+      /couldn't pull full GPS mapping/.test(c)
+    );
+  })(),
+  'starting a round on a course resolved via golfcourseapi tells the player when GPS mapping lands (after a blank start) or that it could not be pulled — never blank distances with no explanation');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
