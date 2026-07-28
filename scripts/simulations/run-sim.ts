@@ -2973,6 +2973,38 @@ check('Round start: a non-listed API course reports GPS mapping honestly (no sil
   })(),
   'starting a round on a course resolved via golfcourseapi tells the player when GPS mapping lands (after a blank start) or that it could not be pulled — never blank distances with no explanation');
 
+// 2026-07-27 (tester UX — multi-turn wrong-course fix). The ambiguous-course question now HOLDS the
+// candidate list; the user's next utterance resolves against it directly instead of re-issuing the
+// whole command or misrouting to the brain (which never had the list).
+check('Voice quick-round: "which one?" answer resolves against the held candidate list (multi-turn)',
+  (() => {
+    const h = read('services/intents/quickRoundHandler.ts');
+    const v = read('hooks/useVoiceCaddie.ts');
+    const p = read('services/pendingDisambiguation.ts');
+    return (
+      /setPendingCourseChoices\(/.test(h) &&                                 // handler holds candidates
+      /Which one — say the city or state, or "the first one"\?/.test(h) &&    // ends with ? → auto-opens mic
+      /resolvePendingCourseUtterance\(/.test(v) &&                            // hook resolves the answer
+      /export function matchCourseChoice/.test(p)                             // pure matcher exists
+    );
+  })(),
+  'when the caddie asks which of several matching courses, the next utterance ("the New Jersey one") resolves against the held list and starts the round — no re-issuing the full command, no brain misroute');
+
+// 2026-07-27 (double-fire sweep). runStartRound is reachable from two effects + the setup modal, and
+// startRound() unconditionally mints a roundId + incrementRounds(); an in-flight lock dedupes a
+// concurrent double-fire without blocking a deliberate later start.
+check('Round start: an in-flight lock drops a concurrent duplicate call (no double round-start)',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    return (
+      /const startRoundInFlightRef = useRef\(false\);/.test(c) &&
+      /if \(startRoundInFlightRef\.current\) \{/.test(c) &&
+      /startRoundInFlightRef\.current = true;/.test(c) &&
+      /startRoundInFlightRef\.current = false;/.test(c) // released after startRound()
+    );
+  })(),
+  'runStartRound dedupes a concurrent double-fire (two effects on the same entry) so incrementRounds / ghost / the round record never double-execute, while a deliberate later new-round start still proceeds');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

@@ -2156,6 +2156,14 @@ export default function CaddieTab() {
    * the "Start Round loop" where the modal kept reappearing after the
    * Play tab handed off control.
    */
+  // 2026-07-27 (double-fire sweep) — runStartRound is reachable from two independent effects (the
+  // pendingStartCourseId consumer + the legacy pre_course_id param consumer) plus the setup modal.
+  // startRound() unconditionally mints a fresh roundId and calls incrementRounds()/ghost activation,
+  // so two calls landing on the SAME entry would double-count the round and duplicate the record.
+  // An in-flight lock dedupes a concurrent double-fire WITHOUT blocking a legitimate later new-round
+  // start (it's cleared as soon as the round is started, with a failsafe timeout for safety). This
+  // is defense-in-depth: no live caller currently triggers the double path, but it's cheap to close.
+  const startRoundInFlightRef = useRef(false);
   const runStartRound = useCallback(async (
     picked: PickedCourse,
     opts: {
@@ -2172,6 +2180,15 @@ export default function CaddieTab() {
       void triggerPaywall('round_start', () => router.push('/paywall' as never));
       return;
     }
+    // In-flight lock — drop a concurrent duplicate call (two effects firing on the same entry) so
+    // the round isn't started twice. Cleared right after startRound() below; the 5s failsafe guards
+    // against an unexpected throw leaving the lock stuck. A deliberate later start re-acquires freely.
+    if (startRoundInFlightRef.current) {
+      console.log('[startRound] already in flight — dropping duplicate call');
+      return;
+    }
+    startRoundInFlightRef.current = true;
+    setTimeout(() => { startRoundInFlightRef.current = false; }, 5000);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     // FIX B5 — snapshot selectedTee and transportMode from store at call time so
     // the values reflect the user's current selection rather than ambient state
@@ -2297,6 +2314,8 @@ export default function CaddieTab() {
       selectedTee: selectedTeeSnapshot,
       transportMode: transportModeSnapshot,
     });
+    // Round is started — release the in-flight lock so a deliberate later new-round start proceeds.
+    startRoundInFlightRef.current = false;
     // FIX B1 — apply mentalState from pendingStartFactors so the player's
     // pre-round mental check-in survives into Kevin's first-hole context.
     if (opts.mentalState) {

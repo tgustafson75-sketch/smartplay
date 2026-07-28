@@ -41,6 +41,7 @@ import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
 import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
+import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
 import { useConversationLog } from '../store/conversationLogStore';
 import { buildFullPracticeContext } from '../services/tutorialContext';
 import { screenContextForPrompt } from '../services/screenContext';
@@ -1420,6 +1421,23 @@ export const useVoiceCaddie = ({
           }
         }
 
+        // 2026-07-27 — the caddie just asked WHICH of several matching courses (voice quick-round
+        // disambiguation). Resolve "the New Jersey one" / "Austin" / "the first one" against the held
+        // candidate list and start the round DIRECTLY — don't send it to the brain, which never had
+        // the list. Mirrors the awaitingPutts intercept above. A non-match returns null and falls
+        // through so the user can rephrase (or ask something else entirely).
+        const courseResolved = resolvePendingCourseUtterance(trimmed);
+        if (courseResolved) {
+          recordUserTurn(trimmed);
+          onResponseReceived(courseResolved.confirmLine);
+          recordKevinTurn(courseResolved.confirmLine);
+          wrappedOnVoiceStateChange('speaking');
+          await stopSpeaking();
+          await speakResponse(courseResolved.confirmLine);
+          wrappedOnVoiceStateChange('idle');
+          return;
+        }
+
         // Match the manual-tap pattern: record the user turn, send to
         // brain, speak, then check if Kevin asked ANOTHER question —
         // recurse via this same loop so a multi-turn back-and-forth
@@ -1885,6 +1903,24 @@ export const useVoiceCaddie = ({
       // NOT touch transcription / VAD / the response flow). This is what makes every
       // conversation — get-to-know or not — teach the caddie who you are.
       try { useConversationLog.getState().logUser(transcript, Date.now()); } catch { /* non-fatal */ }
+
+      // 2026-07-27 — secondary disambiguation resolve. If the follow-up mic window timed out after
+      // the caddie asked "which course?" and the user TAPPED the mic to answer, that answer lands
+      // here (not in processFollowUp). Match it against the still-held candidate list before any
+      // classification, so "the New Jersey one" resolves instead of misrouting to the brain. Only
+      // fires when a choice is actually pending (getPendingCourseChoices non-empty inside).
+      {
+        const resolved = resolvePendingCourseUtterance(transcript);
+        if (resolved) {
+          onResponseReceived(resolved.confirmLine);
+          recordKevinTurn(resolved.confirmLine);
+          wrappedOnVoiceStateChange('speaking');
+          await speakResponse(resolved.confirmLine);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+      }
 
       const appContext: AppContext = {
         active_screen: pathnameToSurface(currentPathname),

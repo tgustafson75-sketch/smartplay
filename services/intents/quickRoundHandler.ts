@@ -23,6 +23,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { searchCourses } from '../golfCourseApi';
 import { resolveSpokenCourse } from '../courseNameResolver';
+import { setPendingCourseChoices } from '../pendingDisambiguation';
 
 // 2026-07-24 (final QA — "start a round at <course>"). This handler used to keep its OWN
 // stale 9-course slug list, so "start a round at Highland / Miccosukee / Pembroke / Doral /
@@ -115,20 +116,24 @@ export const quickRoundHandler: IntentHandler = {
           const reals = dedupeCourses(results.filter((r): r is SearchHit => !r._error && !!r.id));
           if (reals.length > 1) {
             // Ambiguous — DON'T silently pick the first (wrong-course trap). Name the top few with
-            // their cities and ask, so the tester lands on the course they actually meant. They
-            // re-issue with the city ("start a round at Pine Valley, New Jersey") and the more
-            // specific search resolves cleanly. Guest names carry in that re-issue too.
-            const options = reals
-              .slice(0, 3)
-              .map(r => {
-                const nm = r.club_name || r.course_name;
-                const loc = shortLoc(r.location);
-                return loc ? `${nm} in ${loc}` : nm;
-              })
-              .filter(Boolean);
+            // their cities, HOLD the candidate list, and ask. The user's next utterance ("the New
+            // Jersey one" / "Austin" / "the first one") resolves against the held list directly in
+            // the voice follow-up loop (services/pendingDisambiguation.ts) — no need to re-issue the
+            // whole command. nineHole + guest names carry through so the resolved start keeps them.
+            const top = reals.slice(0, 3);
+            const options = top.map(r => {
+              const nm = r.club_name || r.course_name;
+              const loc = shortLoc(r.location);
+              return loc ? `${nm} in ${loc}` : nm;
+            });
+            setPendingCourseChoices(
+              top.map(r => ({ id: r.id, name: r.club_name || r.course_name, location: shortLoc(r.location) })),
+              { nineHole: holeCount === 9, guestNames },
+            );
             return {
               success: false,
-              voice_response: `I found a few courses like "${courseHint}" — ${listJoin(options)}. Which one? Say the course and the city.`,
+              // Must end with a question so the pipeline auto-opens the mic for the answer.
+              voice_response: `I found a few courses like "${courseHint}" — ${listJoin(options)}. Which one — say the city or state, or "the first one"?`,
               side_effects: [`quick_round:ambiguous_course=${reals.length}`],
               follow_up_needed: true,
             };
