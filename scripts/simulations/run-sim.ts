@@ -3060,6 +3060,18 @@ check('SmartVision Live Strategy: player yardages gated on a good GPS fix (no co
   })(),
   "the Live Strategy card + the brain prompt only show player-relative yardages when the GPS fix is ≤15m and fresh — a soft fix degrades to '—'/omitted instead of a confident green number (matches yardageResolver)");
 
+// 2026-07-28 (audit Defect 2 — labeling). The Yardage Book measures every F/B from the TEE; without
+// a qualifier a tester on their approach reads them as distances from where they stand.
+check('SmartVision Yardage Book labels its reference point ("from tee")',
+  (() => {
+    const p = read('components/smartvision/YardageBookPanel.tsx');
+    return (
+      /originLabel = 'tee'/.test(p) &&       // defaults to the sole caller's origin (the tee)
+      /from \{originLabel\}/.test(p)          // qualifier rendered under the title
+    );
+  })(),
+  'the Yardage Book shows a "from tee" qualifier so tee-referenced hazard/green F/B yardages are not misread as from the player\'s current position mid-hole');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

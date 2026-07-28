@@ -89,12 +89,17 @@ export interface YardageBookPanelProps {
    *  ahead of the origin (front >= 50 yds). Stops the panel from
    *  cluttering with hazards already behind the player. */
   filterInPlay?: boolean;
+  /** 2026-07-28 — what `origin` actually IS, shown as a "from <label>" qualifier under the title so a
+   *  tester on their approach doesn't read tee-referenced F/B numbers as distances from where they
+   *  stand. Every F/B in the list is measured from this point. Defaults to the sole caller's origin. */
+  originLabel?: string;
 }
 
 export default function YardageBookPanel({
   geometry,
   origin,
   filterInPlay = true,
+  originLabel = 'tee',
 }: YardageBookPanelProps) {
   const rows: Row[] = useMemo(() => {
     if (!geometry || !origin) return [];
@@ -166,7 +171,10 @@ export default function YardageBookPanel({
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>YARDAGE BOOK</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>YARDAGE BOOK</Text>
+        <Text style={styles.titleQualifier} numberOfLines={1}>from {originLabel}</Text>
+      </View>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {rows.map(r => (
           <View key={r.key} style={styles.row}>
@@ -186,12 +194,24 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 6,
+  },
   title: {
     color: '#9ca3af',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1.4,
-    marginBottom: 6,
+  },
+  titleQualifier: {
+    color: '#6b7280',
+    fontSize: 9.5,
+    fontStyle: 'italic',
+    letterSpacing: 0.3,
+    marginLeft: 6,
+    flexShrink: 1,
   },
   scroll: {
     maxHeight: 220,
