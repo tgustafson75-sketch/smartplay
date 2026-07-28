@@ -1423,22 +1423,17 @@ export const useVoiceCaddie = ({
 
         // 2026-07-27 — the caddie just asked WHICH of several matching courses (voice quick-round
         // disambiguation). Resolve "the New Jersey one" / "Austin" / "the first one" against the held
-        // candidate list and start the round DIRECTLY — don't send it to the brain, which never had
-        // the list. Mirrors the awaitingPutts intercept above. On an unclear answer it re-asks (kind
-        // 'retry', re-opening the mic); after a couple tries it gives up and returns null so the
-        // utterance falls through to normal handling — the user is never trapped.
-        const courseOutcome = resolvePendingCourseUtterance(trimmed);
-        if (courseOutcome) {
+        // candidate list and start the round DIRECTLY. Mirrors the awaitingPutts intercept above.
+        // Returns null on a non-match (strict matcher) so an unclear answer or a different command
+        // falls through to the brain instead of being swallowed — never hijacks or false-starts.
+        const courseResolved = resolvePendingCourseUtterance(trimmed);
+        if (courseResolved) {
           recordUserTurn(trimmed);
-          const line = courseOutcome.kind === 'resolved' ? courseOutcome.confirmLine : courseOutcome.reAskLine;
-          onResponseReceived(line);
-          recordKevinTurn(line);
+          onResponseReceived(courseResolved.confirmLine);
+          recordKevinTurn(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('speaking');
           await stopSpeaking();
-          await speakResponse(line);
-          if (courseOutcome.kind === 'retry' && voiceEnabled && !userInterruptedRef.current) {
-            await runFollowUpListenLoop(); // re-open mic for another try (line ends with "?")
-          }
+          await speakResponse(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('idle');
           return;
         }
@@ -1911,20 +1906,18 @@ export const useVoiceCaddie = ({
 
       // 2026-07-27 — secondary disambiguation resolve. If the follow-up mic window timed out after
       // the caddie asked "which course?" and the user TAPPED the mic to answer, that answer lands
-      // here (not in processFollowUp). Match it against the still-held candidate list before any
-      // classification, so "the New Jersey one" resolves instead of misrouting to the brain. Only
-      // fires when a choice is actually pending (getPendingCourseChoices non-empty inside).
-      {
-        const outcome = resolvePendingCourseUtterance(transcript);
-        if (outcome) {
-          const line = outcome.kind === 'resolved' ? outcome.confirmLine : outcome.reAskLine;
-          onResponseReceived(line);
-          recordKevinTurn(line);
+      // here (not in processFollowUp). Match it against the still-held candidate list so "the New
+      // Jersey one" resolves instead of misrouting to the brain. Guarded on BOTH sides against
+      // hijack: (1) MANUAL captures only — never ambient VAD, so a playing partner's speech can't
+      // trigger a round start; (2) resolvePendingCourseUtterance returns null on anything but a
+      // CONFIDENT course choice, so a normal command ("what's my score?") falls straight through.
+      if (source === 'manual') {
+        const resolved = resolvePendingCourseUtterance(transcript);
+        if (resolved) {
+          onResponseReceived(resolved.confirmLine);
+          recordKevinTurn(resolved.confirmLine);
           wrappedOnVoiceStateChange('speaking');
-          await speakResponse(line);
-          if (outcome.kind === 'retry' && voiceEnabled && !userInterruptedRef.current) {
-            await runFollowUpListenLoop(); // re-open mic for another try (line ends with "?")
-          }
+          await speakResponse(resolved.confirmLine);
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;

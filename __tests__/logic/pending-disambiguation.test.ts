@@ -56,6 +56,16 @@ describe('matchCourseChoice', () => {
     expect(matchCourseChoice('the second one', CHOICES)?.id).toBe('2');
     expect(matchCourseChoice('number 1', CHOICES)?.id).toBe('1');
     expect(matchCourseChoice('the last one', CHOICES)?.id).toBe('3');
+    expect(matchCourseChoice('second', CHOICES)?.id).toBe('2');
+    expect(matchCourseChoice('number two', CHOICES)?.id).toBe('2');
+  });
+  it('does NOT read a positional token embedded in a sentence (no false round-start)', () => {
+    // These are normal commands that happen to contain last/ordinal/digit — must NOT resolve.
+    expect(matchCourseChoice('what did I shoot on the last hole', CHOICES)).toBeNull();
+    expect(matchCourseChoice('let me hit my first shot', CHOICES)).toBeNull();
+    expect(matchCourseChoice('give me 3 tips', CHOICES)).toBeNull();
+    expect(matchCourseChoice('I am 3 over through 5', CHOICES)).toBeNull();
+    expect(matchCourseChoice("what's my score", CHOICES)).toBeNull();
   });
   it('resolves a distinctive club-name word (ignoring generic golf words)', () => {
     expect(matchCourseChoice('Pine Valley', CHOICES)?.id).toBe('3');
@@ -105,12 +115,10 @@ describe('resolvePendingCourseUtterance', () => {
   it('commits the matched course start and voices a confirmation', () => {
     setPendingCourseChoices(CHOICES, { nineHole: true, guestNames: ['Mike'] });
     const r = resolvePendingCourseUtterance('the New Jersey one');
-    expect(r?.kind).toBe('resolved');
-    const confirm = r?.kind === 'resolved' ? r.confirmLine : '';
-    expect(confirm).toContain('Pine Valley Golf Club');
-    expect(confirm).toContain('Pine Valley, NJ');
-    expect(confirm).toContain('9-hole');
-    expect(confirm).toContain('Mike');
+    expect(r?.confirmLine).toContain('Pine Valley Golf Club');
+    expect(r?.confirmLine).toContain('Pine Valley, NJ');
+    expect(r?.confirmLine).toContain('9-hole');
+    expect(r?.confirmLine).toContain('Mike');
     expect(roundState.setPendingStartCourse).toHaveBeenCalledWith('3');
     expect(roundState.setPendingStartFactors).toHaveBeenCalledWith(
       expect.objectContaining({ nineHole: true, mode: 'free_play' }),
@@ -119,18 +127,15 @@ describe('resolvePendingCourseUtterance', () => {
     expect(getPendingCourseChoices()).toBeNull();
   });
 
-  it('re-asks (keeping the choices) when the answer is unclear, then gives up after MAX_RETRIES', () => {
+  it('returns null on an unclear answer WITHOUT consuming it (no swallow, no false start)', () => {
     setPendingCourseChoices(CHOICES, { nineHole: false, guestNames: [] });
-    // 1st unclear answer → retry, choices still held
-    const a = resolvePendingCourseUtterance('Riverside'); // ambiguous (matches 1 AND 2)
-    expect(a?.kind).toBe('retry');
-    expect(a?.kind === 'retry' ? a.reAskLine : '').toMatch(/which course\?$/i);
+    // Unrelated command while a disambiguation is pending: must fall through, NOT start a round.
+    expect(resolvePendingCourseUtterance("what's my score")).toBeNull();
+    expect(resolvePendingCourseUtterance('what did I shoot on the last hole')).toBeNull();
     expect(roundState.setPendingStartCourse).not.toHaveBeenCalled();
+    // choices stay pending so a later CLEAR answer still resolves
     expect(getPendingCourseChoices()?.choices).toHaveLength(3);
-    // 2nd unclear answer → still a retry
-    expect(resolvePendingCourseUtterance('uhh')?.kind).toBe('retry');
-    // 3rd unclear answer → give up: returns null AND clears so the user isn't trapped
-    expect(resolvePendingCourseUtterance('nevermind what is it')).toBeNull();
-    expect(getPendingCourseChoices()).toBeNull();
+    expect(resolvePendingCourseUtterance('the New Jersey one')?.confirmLine).toContain('Pine Valley');
+    expect(roundState.setPendingStartCourse).toHaveBeenCalledWith('3');
   });
 });

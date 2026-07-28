@@ -2990,6 +2990,20 @@ check('Voice quick-round: "which one?" answer resolves against the held candidat
   })(),
   'when the caddie asks which of several matching courses, the next utterance ("the New Jersey one") resolves against the held list and starts the round — no re-issuing the full command, no brain misroute');
 
+// 2026-07-27 (audit fix — anti-hijack). The disambiguation resolver runs BEFORE classification, so it
+// must never swallow a normal command or false-start a round from a stray token. Three guards:
+check('Voice disambiguation: strict + fall-through — never swallows a command or false-starts a round',
+  (() => {
+    const p = read('services/pendingDisambiguation.ts');
+    const v = read('hooks/useVoiceCaddie.ts');
+    return (
+      /function positionalIndex\(/.test(p) &&      // positional match only when the utterance is answer-shaped
+      /if \(!choice\) return null;/.test(p) &&      // a non-match FALLS THROUGH (does not consume the utterance)
+      /if \(source === 'manual'\)/.test(v)          // secondary resolver never fires on ambient VAD speech
+    );
+  })(),
+  'a live 90s pending disambiguation cannot hijack an unrelated command ("what did I shoot on the LAST hole" / "give me 3 tips") or start a round from a playing partner\'s ambient speech — positional matching is answer-shaped, non-matches fall through, and the passive resolver is manual-capture only');
+
 // 2026-07-27 (double-fire sweep). runStartRound is reachable from two effects + the setup modal, and
 // startRound() unconditionally mints a roundId + incrementRounds(); an in-flight lock dedupes a
 // concurrent double-fire without blocking a deliberate later start.

@@ -36,22 +36,15 @@ export interface PendingCourseFactors {
 // resolves a much later, unrelated utterance.
 const DECAY_MS = 90_000;
 
-// Give the user a couple of tries to answer "which one?" before we give up and let the utterance
-// flow to normal handling — so a mumble or an answer the matcher misses gets a friendly re-ask
-// (like a real caddie) instead of silently confusing the brain, but we never trap them in a loop.
-const MAX_RETRIES = 2;
-
 let choices: CourseChoice[] = [];
 let factors: PendingCourseFactors | null = null;
 let setAt = 0;
-let attempts = 0;
 let lastRoundActiveSeen: boolean | null = null;
 
 export function setPendingCourseChoices(next: CourseChoice[], f: PendingCourseFactors): void {
   choices = next.slice(0, 5);
   factors = f;
   setAt = Date.now();
-  attempts = 0;
   try { lastRoundActiveSeen = useRoundStore.getState().isRoundActive; } catch { lastRoundActiveSeen = null; }
 }
 
@@ -67,14 +60,6 @@ export function clearPendingCourseChoices(reason?: string): void {
   choices = [];
   factors = null;
   setAt = 0;
-  attempts = 0;
-}
-
-/** "A", "A and B", "A, B, and C". */
-function listJoin(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? '';
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
 function evictIfStale(): void {
@@ -89,15 +74,47 @@ function evictIfStale(): void {
 // ─── Matching ───────────────────────────────────────────────────────────────
 
 // Positional answers ONLY — deliberately NOT bare cardinals ("one"/"two"), because "the New Jersey
-// ONE" would then falsely resolve to candidate #1. "first"/"second"/"1st"/a standalone digit are
-// unambiguous position references; "the ___ one" falls through to the location/name match below.
-const ORDINALS: Record<string, number> = {
+// ONE" would then falsely resolve to candidate #1. positionalIndex() below is STRICT — it only reads
+// a position when the utterance is answer-shaped (nothing but position words after filler), so
+// "the ___ one" and sentence-embedded positions ("hit my FIRST shot") fall through instead.
+// Cardinals (two/three…) are safe to include for the SAME reason: they only count inside the gate.
+const POSITION_WORDS: Record<string, number> = {
   first: 0, '1st': 0,
-  second: 1, '2nd': 1,
-  third: 2, '3rd': 2,
-  fourth: 3, '4th': 3,
-  fifth: 4, '5th': 4,
+  second: 1, '2nd': 1, two: 1,
+  third: 2, '3rd': 2, three: 2,
+  fourth: 3, '4th': 3, four: 3,
+  fifth: 4, '5th': 4, five: 4,
 };
+
+// Filler that can surround a positional answer without changing it ("the FIRST one, please").
+const POSITION_FILLER = new Set([
+  'the', 'one', 'ones', 'please', 'number', 'no', 'option', 'course', 'it', 'that', 'this',
+  'lets', 'let', 'go', 'with', 'make', 'ill', 'i', 'take', 'do', 'choose', 'pick', 'give', 'me',
+  'just', 'um', 'uh', 'okay', 'ok', 'yeah', 'yep', 'and', 'a', 'an', 'to',
+]);
+
+/**
+ * STRICT positional resolver: returns an index ONLY when the utterance is answer-shaped — after
+ * removing filler, every remaining token is a position reference ("last", an ordinal, or a bare
+ * digit). This is the key guard against false round-starts: "hit my FIRST shot" / "give me 3 tips" /
+ * "what did I shoot on the LAST hole" all keep leftover content words, so they return null instead
+ * of silently starting a round at candidate #1/#3/last.
+ */
+function positionalIndex(normalized: string, len: number): number | null {
+  const core = normalized.trim().split(' ').filter(w => w && !POSITION_FILLER.has(w));
+  if (core.length === 0 || core.length > 2) return null; // empty, or clearly a sentence → not an answer
+  let found: number | null = null;
+  for (const w of core) {
+    let idx: number | null = null;
+    if (w === 'last') idx = len - 1;
+    else if (w in POSITION_WORDS) idx = POSITION_WORDS[w];
+    else if (/^[1-9]$/.test(w)) idx = parseInt(w, 10) - 1;
+    else return null; // a non-position content word → not a pure positional answer
+    if (found !== null && found !== idx) return null; // conflicting positions
+    found = idx;
+  }
+  return found !== null && found >= 0 && found < len ? found : null;
+}
 
 const STATE_ABBREV: Record<string, string> = {
   alabama: 'al', alaska: 'ak', arizona: 'az', arkansas: 'ar', california: 'ca', colorado: 'co',
@@ -126,16 +143,10 @@ export function matchCourseChoice(utterance: string, list: CourseChoice[]): Cour
   if (!utterance || list.length === 0) return null;
   const u = normalize(utterance);
 
-  // 1) Position — "the last one", "the second", "1st", a standalone digit.
-  if (/\blast\b/.test(u)) return list[list.length - 1];
-  for (const [word, idx] of Object.entries(ORDINALS)) {
-    if (new RegExp(`\\b${word}\\b`).test(u) && idx < list.length) return list[idx];
-  }
-  const digit = u.match(/\b([1-9])\b/);
-  if (digit) {
-    const idx = parseInt(digit[1], 10) - 1;
-    if (idx >= 0 && idx < list.length) return list[idx];
-  }
+  // 1) Position — STRICT: only when the utterance is essentially just a position reference, so a
+  //    positional token embedded in a normal command can never false-start a round.
+  const pos = positionalIndex(u, list.length);
+  if (pos !== null) return list[pos];
 
   // 2) Location — a full state name spoken ("new jersey" → nj), or the stored city / state token.
   const locHits = list.filter(c => {
@@ -157,40 +168,26 @@ export function matchCourseChoice(utterance: string, list: CourseChoice[]): Cour
   );
   if (nameHits.length === 1) return nameHits[0];
 
-  return null; // ambiguous or no match → caller re-asks
+  return null; // ambiguous or no match → caller falls through to normal handling
 }
 
 /**
- * Outcome of trying to resolve a spoken answer against a pending "which course?" question:
- *   - null            → nothing was pending (caller proceeds with normal handling)
- *   - kind 'resolved' → matched + round start committed; speak `confirmLine`
- *   - kind 'retry'    → pending but unclear, and tries remain; speak `reAskLine` (ends with "?") and
- *                       re-open the mic. After MAX_RETRIES unclear answers we clear + return null so
- *                       the user is never trapped (the utterance flows to normal handling instead).
+ * Match a spoken answer against the pending choices and, on a CONFIDENT hit, commit the round start
+ * exactly as quickRoundHandler's success path does (mint guests → setPendingStartCourse → factors →
+ * clear). Best-effort nav to the caddie tab for parity.
+ *
+ * Returns the spoken confirmation line, or null when there's nothing pending OR the answer isn't a
+ * confident course choice. Returning null on a non-match (rather than "consuming" it as a re-ask) is
+ * DELIBERATE: this resolver runs before intent classification, so consuming a non-match would swallow
+ * a normal command ("what's my score?") while a stale disambiguation is pending. Fall-through +
+ * strict matching keeps it from ever hijacking or false-starting a round. The choice stays pending
+ * (up to its 90s TTL), so a later CLEAR answer still resolves.
  */
-export type ResolveOutcome =
-  | { kind: 'resolved'; confirmLine: string }
-  | { kind: 'retry'; reAskLine: string };
-
-/**
- * Match a spoken answer against the pending choices and, on a hit, commit the round start exactly
- * as quickRoundHandler's success path does (mint guests → setPendingStartCourse → factors → clear).
- * Best-effort nav to the caddie tab for parity. See ResolveOutcome for the return contract.
- */
-export function resolvePendingCourseUtterance(utterance: string): ResolveOutcome | null {
+export function resolvePendingCourseUtterance(utterance: string): { confirmLine: string } | null {
   const pending = getPendingCourseChoices();
   if (!pending) return null;
   const choice = matchCourseChoice(utterance, pending.choices);
-  if (!choice) {
-    // Unclear answer. Re-ask a couple of times (real-caddie feel), then give up gracefully.
-    attempts += 1;
-    if (attempts > MAX_RETRIES) {
-      clearPendingCourseChoices('give_up_after_retries');
-      return null; // fall through to normal handling — never trap the user
-    }
-    const names = pending.choices.map(c => (c.location ? `${c.name} in ${c.location}` : c.name));
-    return { kind: 'retry', reAskLine: `I didn't catch which one — ${listJoin(names)}. Which course?` };
-  }
+  if (!choice) return null;
 
   const minted: string[] = [];
   try {
@@ -217,5 +214,5 @@ export function resolvePendingCourseUtterance(utterance: string): ResolveOutcome
   const holeWord = pending.factors.nineHole ? '9-hole ' : '';
   const loc = choice.location ? ` in ${choice.location}` : '';
   const guests = minted.length ? ` with ${minted.join(', ')}` : '';
-  return { kind: 'resolved', confirmLine: `Starting a ${holeWord}quick round at ${choice.name}${loc}${guests}.` };
+  return { confirmLine: `Starting a ${holeWord}quick round at ${choice.name}${loc}${guests}.` };
 }
