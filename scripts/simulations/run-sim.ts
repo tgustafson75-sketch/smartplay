@@ -3046,6 +3046,20 @@ check('TightLie: analysis failure shows a human caddie line, never a raw JS erro
   })(),
   'a mid-request failure in TightLie (the caddie surface) shows a human line rather than "Network request failed" — north-star robotic-moment fix');
 
+// 2026-07-27 (audit — honesty). SmartVision Live Strategy painted a confident green M/F/B yardage
+// from an UNGATED GPS fix (bypassing yardageResolver's accuracy gate). Now gated at the source so a
+// soft/stale fix degrades to null (card hides the row, brain prompt omits [GEOMETRY]).
+check('SmartVision Live Strategy: player yardages gated on a good GPS fix (no confident number from a bad fix)',
+  (() => {
+    const u = read('services/unifiedVisionContext.ts');
+    return (
+      /const q = sf\.classifyAccuracy\(fix\.accuracy_m, fix\.timestamp\)/.test(u) &&
+      /gpsTrustworthy = q\.level === 'strong' \|\| q\.level === 'moderate'/.test(u) &&
+      /yardagesFromPlayer: gpsTrustworthy/.test(u) // null when the fix isn't trustworthy
+    );
+  })(),
+  "the Live Strategy card + the brain prompt only show player-relative yardages when the GPS fix is ≤15m and fresh — a soft fix degrades to '—'/omitted instead of a confident green number (matches yardageResolver)");
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

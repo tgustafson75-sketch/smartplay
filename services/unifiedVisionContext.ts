@@ -173,6 +173,20 @@ export async function getUnifiedVisionContext(): Promise<UnifiedVisionContext> {
       const geoMod = await import('./courseGeometryService');
       const g = geoMod.getHoleGeometry(gps.courseId, gps.holeNumber);
       if (g) {
+        // 2026-07-27 (audit — honesty): only compute player-relative yardages when the GPS fix is
+        // actually good enough, matching yardageResolver's gps_live gate (accuracy ≤15m AND fresh).
+        // On a soft/stale/absent fix these stay null → the Live Strategy card hides the yardage row
+        // and the brain prompt omits the number, instead of painting a confident green "M 148"
+        // derived from a bad fix (the drift yardageResolver was built to kill, reintroduced here).
+        let gpsTrustworthy = false;
+        try {
+          const sf = await import('./smartFinderService');
+          const fix = sf.getLastFix();
+          if (fix) {
+            const q = sf.classifyAccuracy(fix.accuracy_m, fix.timestamp);
+            gpsTrustworthy = q.level === 'strong' || q.level === 'moderate';
+          }
+        } catch { /* fix unavailable → treat as soft, degrade honestly */ }
         geometry = {
           green: g.green ?? null,
           greenFront: g.green_front ?? null,
@@ -192,11 +206,13 @@ export async function getUnifiedVisionContext(): Promise<UnifiedVisionContext> {
                 })
                 .filter((x): x is { kind: string; lat: number; lng: number } => x !== null)
             : [],
-          yardagesFromPlayer: {
-            front: yardsBetween(gps.player, g.green_front),
-            middle: yardsBetween(gps.player, g.green),
-            back: yardsBetween(gps.player, g.green_back),
-          },
+          yardagesFromPlayer: gpsTrustworthy
+            ? {
+                front: yardsBetween(gps.player, g.green_front),
+                middle: yardsBetween(gps.player, g.green),
+                back: yardsBetween(gps.player, g.green_back),
+              }
+            : { front: null, middle: null, back: null },
         };
       }
     } catch (e) {
