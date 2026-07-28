@@ -333,10 +333,14 @@ export default function CaddieDataStrip({
   // 2026-05-21 — Fix O: the HOLE cell is now rendered separately (it has
   // its own ◀/▶ stepper arrows for manual hole nav) instead of via the
   // generic cell template. The remaining 3 cells use the cell array.
-  const cells = [
-    { label: 'PLAYS',  value: playsLike != null ? `${playsLike}${playsLikeDelta ? ` (${playsLikeDelta > 0 ? '+' : ''}${playsLikeDelta})` : ''}` : '—', fontSize: 20 },
-    { label: 'TARGET', value: targetDirection,                             fontSize: 14 },
-    { label: lastCellLabel, value: lastCellValue,                          fontSize: 20 },
+  // 2026-07-28 (Tim — "plays-like numbers are jumbled") — the PLAYS delta was baked into the value
+  // STRING ("254 (+5)") at the full 20px, so it wrapped to a second line in the narrow cell and
+  // collided with the header. Carry the delta SEPARATELY and render it as a small inline span (like
+  // the grid layout already does), and force the value to a single line.
+  const cells: { label: string; value: string; delta: number | null; fontSize: number }[] = [
+    { label: 'PLAYS',  value: playsLike != null ? String(playsLike) : '—', delta: playsLike != null && playsLikeDelta ? playsLikeDelta : null, fontSize: 20 },
+    { label: 'TARGET', value: targetDirection,                             delta: null, fontSize: 14 },
+    { label: lastCellLabel, value: lastCellValue,                          delta: null, fontSize: 20 },
   ];
 
   return (
@@ -400,8 +404,16 @@ export default function CaddieDataStrip({
             <React.Fragment key={cell.label}>
               <View style={styles.cell}>
                 <Text style={styles.cellLabel}>{cell.label}</Text>
-                <Text style={[styles.cellValue, { fontSize: cell.fontSize }]}>
+                <Text
+                  style={[styles.cellValue, { fontSize: cell.fontSize }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
                   {cell.value}
+                  {cell.delta ? (
+                    <Text style={styles.cellDelta}> ({cell.delta > 0 ? '+' : ''}{cell.delta})</Text>
+                  ) : null}
                 </Text>
               </View>
               {i < cells.length - 1 && (
@@ -544,6 +556,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.5,
     color: '#ffffff',
+  },
+  // 2026-07-28 — small green PLAYS delta span, sized so "254 (+5)" stays on ONE line in the cell.
+  cellDelta: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#88F700',
   },
   // 2026-05-21 — Fix O: hole-nav arrow row used by both horizontal and
   // grid layouts. Compact ◀/▶ around the hole value. Inner Pressables

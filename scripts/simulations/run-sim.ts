@@ -3072,6 +3072,24 @@ check('SmartVision Yardage Book labels its reference point ("from tee")',
   })(),
   'the Yardage Book shows a "from tee" qualifier so tee-referenced hazard/green F/B yardages are not misread as from the player\'s current position mid-hole');
 
+// 2026-07-28 (Tim) — the L4 green-chevron shortcut bar is removed (not needed anymore); the mic
+// lives in CaddieBottomBar. Lock the removal so it can't silently return.
+check('Caddie tab: the L4 green-chevron shortcut bar is removed',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    return !/l4ActionsExpanded/.test(c) && /shortcut bar was REMOVED/.test(c);
+  })(),
+  'the floating green chevron shortcut bar (l4ActionsExpanded) is gone from the Caddie tab — its functions live in the bottom bar / floating reticle / map tap / Tools');
+
+// 2026-07-28 (Tim — "plays-like numbers are jumbled"). The PLAYS delta is now a small inline span so
+// "254 (+5)" stays on ONE line instead of wrapping and colliding with the header.
+check('CaddieDataStrip: PLAYS "254 (+5)" stays on one line (small delta span, no wrap)',
+  (() => {
+    const d = read('components/CaddieDataStrip.tsx');
+    return /cellDelta:/.test(d) && /adjustsFontSizeToFit/.test(d) && /minimumFontScale=\{0\.7\}/.test(d);
+  })(),
+  'the plays-like adjustment renders as a small green inline span and the value is single-line + auto-shrink, so it no longer wraps into a jumbled two-line stack');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the
