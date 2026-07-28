@@ -2410,6 +2410,23 @@ check('Voice: explicit tap forces a warmup (bypasses dedupe) for the cold first 
   })(),
   'tap-to-talk forces a fresh warm; cold-first-tap chain heats during the speech window');
 
+// 2026-07-28 (Tim — "make sure the early warm-up is set and locked; no failures or robot voice").
+// LOCK the launch warm-up so it can't silently regress: the app pre-warms all voice endpoints + the
+// backend connection at app-root mount (ungated — NOT behind the heal probe), and caches the persona
+// offline clips so the offline path never falls to the robotic device-TTS fallback.
+check('Voice warm-up LOCKED at app start (no cold-tap failure / robot voice for testers)',
+  (() => {
+    const lay = read('app/_layout.tsx');
+    const w = read('services/voiceWarmup.ts');
+    return (
+      /bootMark\('voice_warmup_fired'\)/.test(lay) &&   // fires at launch, marked
+      /m\.prewarmVoice\(\)/.test(lay) &&                 // 5 voice endpoints warmed at root
+      /warmBackendConnection\(\)/.test(lay) &&           // DNS/TLS/pool warm (retry-with-backoff)
+      /prewarmOfflineVoiceClips\(\)/.test(w)             // persona offline clips cached → no robotic TTS
+    );
+  })(),
+  'the app pre-warms every voice endpoint + the backend connection at launch (ungated) and caches the persona offline clips, so a tester never hits a cold-start failure or the robotic device-TTS fallback');
+
 check('Smart Motion record cue is honest about camera startup',
   // 2026-06-16 — the camera takes ~a second after the cue; "swing when you're set"
   // (not "swing away") avoids swinging into a not-yet-recording window.
@@ -4635,17 +4652,17 @@ check('Perf: L1HolePreview HoleFrame is module-level + fills/measures (no 4s rem
 // 2026-07-28 (Tim — "the larger element is off-center / containment isn't right"). The hole preview
 // aspect-locks a curated 2:3 crop into a centered box (cover == contain) instead of the box taking the
 // screen's aspect and cropping the baked-in yardage off — the same fix smartvision.tsx already uses.
-check('L1HolePreview: curated hole art is aspect-locked + centered (contained, not screen-cropped)',
+check('L1HolePreview: hole art is aspect-locked to its OWN aspect + centered (contained, not cropped)',
   (() => {
     const p = read('components/caddie/L1HolePreview.tsx');
     return (
-      /const CURATED_ASPECT = 1536 \/ 1024/.test(p) &&                 // 2:3 portrait lock
-      /function buildHoleBox\(/.test(p) &&                             // fit-and-center helper
-      /Math\.min\(h, Math\.round\(w \* CURATED_ASPECT\)\)/.test(p) &&   // shrink to a true 1.5 box
+      /function imageAspect\(/.test(p) &&                              // per-image natural aspect (not hard-coded 1.5)
+      /Image\.resolveAssetSource/.test(p) &&                           // read real bundled dims
+      /function buildHoleBox\(aspect/.test(p) &&                       // fit-and-center to that aspect
       /alignItems: 'center',\s*\n\s*justifyContent: 'center'/.test(p)  // frame centers the locked box
     );
   })(),
-  'a portrait hole crop is fully contained (whole hole + baked-in number visible) and centered with dark letterbox bars, instead of cover-cropping the art to the screen aspect and lopping off the yardage');
+  'a hole crop is fully contained + centered at ITS OWN aspect (our crops range 2:3 → 2.6:1 → 1:1), so nothing is cropped off; only a null-aspect captured aerial fills+covers');
 
 // 2026-06-14 (audit — redundant work) — golfbert holes were re-fetched over the
 // network on every hole switch even though the cache was populated. Now read-through.

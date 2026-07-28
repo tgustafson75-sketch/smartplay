@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ImageBackground, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
@@ -20,11 +20,6 @@ import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
 const DEFAULT_H = 300;
-// Bundled hole crops are 2:3 PORTRAIT (1024×1536). A box that isn't this exact aspect makes
-// resizeMode:cover crop the art — which lopped the baked-in yardage/tee off the visible image (worse
-// on the Fold, where the box aspect swings between fold states). smartvision.tsx fixed this the same
-// way; L1 now matches. See buildHoleBox() below.
-const CURATED_ASPECT = 1536 / 1024; // = 1.5
 
 /**
  * L1 (Quiet) hole preview — a glanceable top-down sketch of the current hole
@@ -32,12 +27,14 @@ const CURATED_ASPECT = 1536 / 1024; // = 1.5
  * available). Falls back to a quiet "Hole geometry unavailable" placeholder
  * when the upstream lacks tee/green coordinates.
  *
- * 2026-07-28 (Tim — "the larger element is off-center / containment isn't right") — two containment
- * fixes: (1) the box now MEASURES its own laid-out size via onLayout instead of trusting the width
- * prop (which lags the native re-layout across a Fold transition → off-center image + one-sided blank
- * band); (2) a curated 2:3 crop is fit into a TRUE 1.5-aspect box and centered (cover == contain — the
- * whole hole + its baked-in number stay visible) instead of the box taking the screen's aspect and
- * cropping the art. Non-curated sources (captured aerials, the SVG sketch, placeholders) fill the box.
+ * 2026-07-28 (Tim — "off-center / containment isn't right" + "white on either side") — containment
+ * fixes: (1) the box MEASURES its own laid-out size via onLayout instead of trusting the width prop
+ * (which lags the native re-layout across a Fold transition → off-center + one-sided blank band);
+ * (2) a curated crop is fit into a box of ITS OWN natural aspect and centered (cover == contain — the
+ * whole hole stays visible, no crop) instead of the box taking the screen's aspect and cropping the
+ * art. Our bundled crops are NOT all 2:3 (they range 2:3 → 2.6:1 → 1:1), so the aspect is read per
+ * image via Image.resolveAssetSource rather than hard-coded. Non-curated sources (captured aerials,
+ * the SVG sketch, placeholders) fill the box.
  */
 type Props = {
   /** Tap handler — opens the full SmartVision tool for the current hole. */
@@ -48,11 +45,26 @@ type Props = {
   height?: number;
 };
 
-/** Fit a curated 2:3 crop inside w×h and center it (contain); non-curated fills w×h. */
-function buildHoleBox(isCurated: boolean, w: number, h: number): { width: number; height: number } {
-  if (!isCurated) return { width: w, height: h };
-  const bh = Math.min(h, Math.round(w * CURATED_ASPECT));
-  return { width: Math.round(bh / CURATED_ASPECT), height: bh };
+/** Natural aspect (height / width) of a bundled require() image (a number id); null for a uri/unknown. */
+function imageAspect(src: ImageSourcePropType | null | undefined): number | null {
+  if (typeof src !== 'number') return null; // captured uri / array / null → measured elsewhere / fill
+  try {
+    const r = Image.resolveAssetSource(src);
+    if (r && r.width > 0 && r.height > 0) return r.height / r.width;
+  } catch { /* ignore */ }
+  return null;
+}
+
+/**
+ * Fit a box of the given natural aspect (h/w) inside w×h and center it (CONTAIN — whole image, no
+ * crop). A null aspect (captured aerial / unknown) fills w×h.
+ */
+function buildHoleBox(aspect: number | null, w: number, h: number): { width: number; height: number } {
+  if (!aspect || aspect <= 0) return { width: w, height: h };
+  let bw = w;
+  let bh = Math.round(w * aspect);
+  if (bh > h) { bh = h; bw = Math.round(h / aspect); }
+  return { width: bw, height: bh };
 }
 
 // 2026-06-14 (audit — perf) — hoisted to MODULE level so the 4s dot-tick doesn't remount the subtree.
@@ -146,7 +158,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       getLocalHoleImageById(previewCourseId_resolved, 1) ??
       (previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null);
     if (previewImg) {
-      const box = buildHoleBox(true, W, H);
+      const box = buildHoleBox(imageAspect(previewImg), W, H);
       return (
         <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
           <ImageBackground source={previewImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
@@ -181,9 +193,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
   const heroImageSource = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? null);
 
   if (heroImageSource) {
-    // A curated crop (require) is 2:3 → aspect-lock; a captured aerial (uri) isn't → fill.
-    const heroIsCurated = !capturedUri;
-    const box = buildHoleBox(heroIsCurated, W, H);
+    // A curated crop (require) → aspect-lock to its natural aspect; a captured aerial (uri) → fill.
+    const box = buildHoleBox(imageAspect(heroImageSource), W, H);
     const fix = getLastFix();
     const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
     const resolvedGreen = (() => { try { return resolveGreenCoords(currentHole).middle; } catch { return null; } })();
@@ -239,7 +250,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       getLocalHoleImageById(activeCourseId, currentHole) ??
       getLocalHoleImage(activeCourse, currentHole);
     if (localImg) {
-      const box = buildHoleBox(true, W, H);
+      const box = buildHoleBox(imageAspect(localImg), W, H);
       const fix = getLastFix();
       const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
       let pctAlong: number | null = null;
