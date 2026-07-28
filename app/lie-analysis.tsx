@@ -245,7 +245,10 @@ export default function LieAnalysisScreen() {
         setPhase('error');
       }
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'Unknown error');
+      // Never surface a raw JS error to the player — TightLie IS the caddie. Log the detail, show a
+      // human line (null → the warm fallback in the error render below).
+      console.log('[lie-analysis] analyze failed:', e);
+      setErrorMessage(null);
       setPhase('error');
     }
   }, [playIntent, speakAnalysis, voiceEnabled, voiceGender, language, includeStrategy, playerNotes]);
@@ -421,12 +424,12 @@ export default function LieAnalysisScreen() {
   }
 
   if (phase === 'low_quality' || phase === 'no_network' || phase === 'error') {
-    const title = phase === 'low_quality' ? 'Hard to read' : phase === 'no_network' ? 'No connection' : 'Something went wrong';
+    const title = phase === 'low_quality' ? 'Hard to read' : phase === 'no_network' ? 'No connection' : "Couldn't get a read";
     const body = phase === 'low_quality'
       ? (followUp ?? 'The photo was tough to read. Try one with better light or a different angle.')
       : phase === 'no_network'
         ? "I'll save this photo and analyze it when you're back online."
-        : (errorMessage ?? 'Try again in a moment.');
+        : (errorMessage ?? "I couldn't get a read on that one — let's give it another shot.");
     return (
       <SafeAreaView style={styles.container}>
         <CourseDetailBanner />

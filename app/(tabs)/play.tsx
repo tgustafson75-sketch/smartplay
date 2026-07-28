@@ -520,6 +520,10 @@ export default function PlayTab() {
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
+  // 2026-07-27 (tester UX) — opening a searched/API course can fail (network) or return null. The
+  // load spinner lives inside the {selected && …} card, so a fresh tap that fails showed NOTHING —
+  // the row just did nothing. This surfaces an "opening…" state + a retry hint instead of a dead-end.
+  const [selectError, setSelectError] = useState<string | null>(null);
   const [selectedHero, setSelectedHero] = useState<string | null>(null);
   // DP-3 — resolve the selected LOCAL course's real bundled thumbnail
   // (hole-1 image) from its `local:<slug>` id via the canonical
@@ -908,6 +912,7 @@ export default function PlayTab() {
       return;
     }
     setSelectedLoading(true);
+    setSelectError(null);
     try {
       const c = await getCourse(s.id);
       if (c) {
@@ -954,9 +959,13 @@ export default function PlayTab() {
             setSelectedHero(url);
           }
         } catch (e) { console.log('[play] geometry warm failed:', e); }
+      } else {
+        // getCourse returned null — the course has no loadable record. Give the tester a next step.
+        setSelectError("Couldn't open that course. Tap it again to retry.");
       }
     } catch (e) {
       console.log('[play] selectSummary failed:', e);
+      setSelectError('Trouble opening that course — check your connection and tap it again.');
     } finally {
       setSelectedLoading(false);
     }
@@ -1376,6 +1385,16 @@ export default function PlayTab() {
               <Text style={styles.aiCourseNote}>
                 Not in our course database, so live GPS yardages aren&apos;t available for it yet — but your caddie knows the course and can talk strategy.
               </Text>
+              {/* 2026-07-27 (tester UX) — don't dead-end a tester whose home course isn't bundled:
+                  offer the scorecard-photo path so they can actually play it with yardages. */}
+              <TouchableOpacity
+                style={[styles.addFromPhotoBtn, { marginTop: 12 }]}
+                onPress={() => router.push('/add-course' as never)}
+                accessibilityRole="button"
+                accessibilityLabel="Add this course from a scorecard photo to play it"
+              >
+                <Text style={styles.addFromPhotoText}>＋  Add it from a scorecard photo to play with yardages</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <Text style={styles.statusText}>
@@ -1406,6 +1425,16 @@ export default function PlayTab() {
             </TouchableOpacity>
           </TouchableOpacity>
         ))}
+
+        {/* 2026-07-27 — opening a searched course is async; the card's own spinner only shows once
+            `selected` is set, so give feedback during the fresh load and a retry hint if it fails. */}
+        {selectedLoading && !selected && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator color="#00C896" size="small" />
+            <Text style={styles.statusText}>Opening course…</Text>
+          </View>
+        )}
+        {!selectedLoading && selectError && <Text style={styles.statusErr}>{selectError}</Text>}
 
         {/* Selected course card */}
         {selected && (

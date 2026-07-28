@@ -105,10 +105,12 @@ describe('resolvePendingCourseUtterance', () => {
   it('commits the matched course start and voices a confirmation', () => {
     setPendingCourseChoices(CHOICES, { nineHole: true, guestNames: ['Mike'] });
     const r = resolvePendingCourseUtterance('the New Jersey one');
-    expect(r?.confirmLine).toContain('Pine Valley Golf Club');
-    expect(r?.confirmLine).toContain('Pine Valley, NJ');
-    expect(r?.confirmLine).toContain('9-hole');
-    expect(r?.confirmLine).toContain('Mike');
+    expect(r?.kind).toBe('resolved');
+    const confirm = r?.kind === 'resolved' ? r.confirmLine : '';
+    expect(confirm).toContain('Pine Valley Golf Club');
+    expect(confirm).toContain('Pine Valley, NJ');
+    expect(confirm).toContain('9-hole');
+    expect(confirm).toContain('Mike');
     expect(roundState.setPendingStartCourse).toHaveBeenCalledWith('3');
     expect(roundState.setPendingStartFactors).toHaveBeenCalledWith(
       expect.objectContaining({ nineHole: true, mode: 'free_play' }),
@@ -117,10 +119,18 @@ describe('resolvePendingCourseUtterance', () => {
     expect(getPendingCourseChoices()).toBeNull();
   });
 
-  it('leaves the choices pending when the answer is unclear (caller re-asks)', () => {
+  it('re-asks (keeping the choices) when the answer is unclear, then gives up after MAX_RETRIES', () => {
     setPendingCourseChoices(CHOICES, { nineHole: false, guestNames: [] });
-    expect(resolvePendingCourseUtterance('Riverside')).toBeNull(); // ambiguous
+    // 1st unclear answer → retry, choices still held
+    const a = resolvePendingCourseUtterance('Riverside'); // ambiguous (matches 1 AND 2)
+    expect(a?.kind).toBe('retry');
+    expect(a?.kind === 'retry' ? a.reAskLine : '').toMatch(/which course\?$/i);
     expect(roundState.setPendingStartCourse).not.toHaveBeenCalled();
-    expect(getPendingCourseChoices()?.choices).toHaveLength(3); // still held
+    expect(getPendingCourseChoices()?.choices).toHaveLength(3);
+    // 2nd unclear answer → still a retry
+    expect(resolvePendingCourseUtterance('uhh')?.kind).toBe('retry');
+    // 3rd unclear answer → give up: returns null AND clears so the user isn't trapped
+    expect(resolvePendingCourseUtterance('nevermind what is it')).toBeNull();
+    expect(getPendingCourseChoices()).toBeNull();
   });
 });

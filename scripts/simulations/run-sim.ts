@@ -3005,6 +3005,33 @@ check('Round start: an in-flight lock drops a concurrent duplicate call (no doub
   })(),
   'runStartRound dedupes a concurrent double-fire (two effects on the same entry) so incrementRounds / ghost / the round record never double-execute, while a deliberate later new-round start still proceeds');
 
+// 2026-07-27 (tester UX round 2). Three one-screen dead-end/robotic fixes from the friction survey.
+check('Play: opening a searched course shows loading + a retry hint (no silent dead-end)',
+  (() => {
+    const p = read('app/(tabs)/play.tsx');
+    return (
+      /setSelectError\(/.test(p) &&                 // failure path sets a user-facing hint
+      /Opening course…/.test(p) &&                  // fresh-load feedback (card spinner only shows post-select)
+      /!selectedLoading && selectError/.test(p)     // the hint is actually rendered
+    );
+  })(),
+  'tapping a searched/API course that fails to open (network / null record) shows an "opening…" state then a retry hint, instead of the row silently doing nothing');
+
+check('Play: an AI-identified course offers a scorecard-photo path (dead-end → playable)',
+  (() => /Add it from a scorecard photo to play with yardages/.test(read('app/(tabs)/play.tsx')))(),
+  "a tester whose home course isn't in the DB can add it from a scorecard photo right on the AI card, instead of only a 'visit/book' link");
+
+check('TightLie: analysis failure shows a human caddie line, never a raw JS error',
+  (() => {
+    const l = read('app/lie-analysis.tsx');
+    return (
+      !/setErrorMessage\(e instanceof Error \? e\.message/.test(l) && // raw e.message leak removed
+      /Never surface a raw JS error/.test(l) &&
+      /Couldn't get a read/.test(l)                                   // warm caddie copy
+    );
+  })(),
+  'a mid-request failure in TightLie (the caddie surface) shows a human line rather than "Network request failed" — north-star robotic-moment fix');
+
 check('Practice reps credited per club (honest volume, not distance)',
   // 2026-06-16 (Tim — "I swung clubs in practice, got no credit") — Smart Motion
   // swings add per-club REPS (volume), surfaced as PRACTICE VOLUME. Never fed to the

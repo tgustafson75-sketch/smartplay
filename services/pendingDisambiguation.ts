@@ -36,15 +36,22 @@ export interface PendingCourseFactors {
 // resolves a much later, unrelated utterance.
 const DECAY_MS = 90_000;
 
+// Give the user a couple of tries to answer "which one?" before we give up and let the utterance
+// flow to normal handling — so a mumble or an answer the matcher misses gets a friendly re-ask
+// (like a real caddie) instead of silently confusing the brain, but we never trap them in a loop.
+const MAX_RETRIES = 2;
+
 let choices: CourseChoice[] = [];
 let factors: PendingCourseFactors | null = null;
 let setAt = 0;
+let attempts = 0;
 let lastRoundActiveSeen: boolean | null = null;
 
 export function setPendingCourseChoices(next: CourseChoice[], f: PendingCourseFactors): void {
   choices = next.slice(0, 5);
   factors = f;
   setAt = Date.now();
+  attempts = 0;
   try { lastRoundActiveSeen = useRoundStore.getState().isRoundActive; } catch { lastRoundActiveSeen = null; }
 }
 
@@ -60,6 +67,14 @@ export function clearPendingCourseChoices(reason?: string): void {
   choices = [];
   factors = null;
   setAt = 0;
+  attempts = 0;
+}
+
+/** "A", "A and B", "A, B, and C". */
+function listJoin(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 }
 
 function evictIfStale(): void {
@@ -146,16 +161,36 @@ export function matchCourseChoice(utterance: string, list: CourseChoice[]): Cour
 }
 
 /**
+ * Outcome of trying to resolve a spoken answer against a pending "which course?" question:
+ *   - null            → nothing was pending (caller proceeds with normal handling)
+ *   - kind 'resolved' → matched + round start committed; speak `confirmLine`
+ *   - kind 'retry'    → pending but unclear, and tries remain; speak `reAskLine` (ends with "?") and
+ *                       re-open the mic. After MAX_RETRIES unclear answers we clear + return null so
+ *                       the user is never trapped (the utterance flows to normal handling instead).
+ */
+export type ResolveOutcome =
+  | { kind: 'resolved'; confirmLine: string }
+  | { kind: 'retry'; reAskLine: string };
+
+/**
  * Match a spoken answer against the pending choices and, on a hit, commit the round start exactly
  * as quickRoundHandler's success path does (mint guests → setPendingStartCourse → factors → clear).
- * Returns the spoken confirmation line, or null when there's nothing pending or the answer is unclear
- * (the caller falls through to normal handling / re-asks). Best-effort nav to the caddie tab for parity.
+ * Best-effort nav to the caddie tab for parity. See ResolveOutcome for the return contract.
  */
-export function resolvePendingCourseUtterance(utterance: string): { confirmLine: string } | null {
+export function resolvePendingCourseUtterance(utterance: string): ResolveOutcome | null {
   const pending = getPendingCourseChoices();
   if (!pending) return null;
   const choice = matchCourseChoice(utterance, pending.choices);
-  if (!choice) return null;
+  if (!choice) {
+    // Unclear answer. Re-ask a couple of times (real-caddie feel), then give up gracefully.
+    attempts += 1;
+    if (attempts > MAX_RETRIES) {
+      clearPendingCourseChoices('give_up_after_retries');
+      return null; // fall through to normal handling — never trap the user
+    }
+    const names = pending.choices.map(c => (c.location ? `${c.name} in ${c.location}` : c.name));
+    return { kind: 'retry', reAskLine: `I didn't catch which one — ${listJoin(names)}. Which course?` };
+  }
 
   const minted: string[] = [];
   try {
@@ -182,5 +217,5 @@ export function resolvePendingCourseUtterance(utterance: string): { confirmLine:
   const holeWord = pending.factors.nineHole ? '9-hole ' : '';
   const loc = choice.location ? ` in ${choice.location}` : '';
   const guests = minted.length ? ` with ${minted.join(', ')}` : '';
-  return { confirmLine: `Starting a ${holeWord}quick round at ${choice.name}${loc}${guests}.` };
+  return { kind: 'resolved', confirmLine: `Starting a ${holeWord}quick round at ${choice.name}${loc}${guests}.` };
 }

@@ -1424,16 +1424,21 @@ export const useVoiceCaddie = ({
         // 2026-07-27 — the caddie just asked WHICH of several matching courses (voice quick-round
         // disambiguation). Resolve "the New Jersey one" / "Austin" / "the first one" against the held
         // candidate list and start the round DIRECTLY — don't send it to the brain, which never had
-        // the list. Mirrors the awaitingPutts intercept above. A non-match returns null and falls
-        // through so the user can rephrase (or ask something else entirely).
-        const courseResolved = resolvePendingCourseUtterance(trimmed);
-        if (courseResolved) {
+        // the list. Mirrors the awaitingPutts intercept above. On an unclear answer it re-asks (kind
+        // 'retry', re-opening the mic); after a couple tries it gives up and returns null so the
+        // utterance falls through to normal handling — the user is never trapped.
+        const courseOutcome = resolvePendingCourseUtterance(trimmed);
+        if (courseOutcome) {
           recordUserTurn(trimmed);
-          onResponseReceived(courseResolved.confirmLine);
-          recordKevinTurn(courseResolved.confirmLine);
+          const line = courseOutcome.kind === 'resolved' ? courseOutcome.confirmLine : courseOutcome.reAskLine;
+          onResponseReceived(line);
+          recordKevinTurn(line);
           wrappedOnVoiceStateChange('speaking');
           await stopSpeaking();
-          await speakResponse(courseResolved.confirmLine);
+          await speakResponse(line);
+          if (courseOutcome.kind === 'retry' && voiceEnabled && !userInterruptedRef.current) {
+            await runFollowUpListenLoop(); // re-open mic for another try (line ends with "?")
+          }
           wrappedOnVoiceStateChange('idle');
           return;
         }
@@ -1910,12 +1915,16 @@ export const useVoiceCaddie = ({
       // classification, so "the New Jersey one" resolves instead of misrouting to the brain. Only
       // fires when a choice is actually pending (getPendingCourseChoices non-empty inside).
       {
-        const resolved = resolvePendingCourseUtterance(transcript);
-        if (resolved) {
-          onResponseReceived(resolved.confirmLine);
-          recordKevinTurn(resolved.confirmLine);
+        const outcome = resolvePendingCourseUtterance(transcript);
+        if (outcome) {
+          const line = outcome.kind === 'resolved' ? outcome.confirmLine : outcome.reAskLine;
+          onResponseReceived(line);
+          recordKevinTurn(line);
           wrappedOnVoiceStateChange('speaking');
-          await speakResponse(resolved.confirmLine);
+          await speakResponse(line);
+          if (outcome.kind === 'retry' && voiceEnabled && !userInterruptedRef.current) {
+            await runFollowUpListenLoop(); // re-open mic for another try (line ends with "?")
+          }
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
