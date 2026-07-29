@@ -453,24 +453,19 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
       ]}
     >
       <View style={[styles.accentSpine, { backgroundColor: accent }]} />
-      <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
-        <Ionicons name={spec.icon} size={24} color={accent} />
+      {/* 2026-07-28 (Tim — "move calibrate under the icon on the left") — the topic tag used to sit to
+          the RIGHT of the title and squeeze long titles tiny. Stack it UNDER the icon instead: the pill
+          now labels the icon and the title gets the card's full width (no shrink, no wrap needed). */}
+      <View style={styles.iconCol}>
+        <View style={[styles.iconBox, { backgroundColor: hexFade(accent, 0.14), borderColor: accent }]}>
+          <Ionicons name={spec.icon} size={24} color={accent} />
+        </View>
+        <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
+          <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+        </View>
       </View>
       <View style={styles.cardText}>
-        <View style={styles.titleRow}>
-          {/* 2026-07-28 (Tim — "topic pills squeeze long titles way too small") — was shrink-to-fit
-              (numberOfLines=1 + adjustsFontSizeToFit), but on Android minimumFontScale isn't honored, so
-              a long title next to a long tag ("Import Range Session" · CALIBRATE) collapsed far below the
-              others. Wrap to 2 lines at full size instead — keeps every title the same 17px, no tiny text,
-              no truncation. Short titles stay 1 line; the tag is vertically centered either way. */}
-          <Text
-            style={[styles.cardTitle, { color: colors.text_primary }]}
-            numberOfLines={2}
-          >{title}</Text>
-          <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
-          </View>
-        </View>
+        <Text style={[styles.cardTitle, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
         <Text style={[styles.cardSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
@@ -645,7 +640,10 @@ const styles = StyleSheet.create({
   },
   cardText: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  cardTitle: { flex: 1, fontSize: 17, fontWeight: '800' },
+  // Left column: icon with its topic tag stacked underneath. minWidth keeps the title's left edge
+  // aligned across cards; a longer tag ("CALIBRATE") sets the width but the icon stays centered.
+  iconCol: { alignItems: 'center', gap: 6, minWidth: 52 },
+  cardTitle: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
   tag: { flexShrink: 0, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
   tagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   cardSub: { fontSize: 12, lineHeight: 17 },
