@@ -111,6 +111,29 @@ const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
 };
 
 const LOCAL_COURSES: CourseSummary[] = [
+  // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two 18s + Pruneridge (Santa Clara, CA)
+  // 9-hole par-30. OSM-built geometry (point-in-polygon split for Coyote's interleaved courses).
+  {
+    id: 'local:coyote-creek-tournament',
+    club_name: 'Coyote Creek (Tournament)',
+    location: 'Morgan Hill, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(37.194526, -121.699698),
+    lat: 37.194526, lng: -121.699698,
+  },
+  {
+    id: 'local:coyote-creek-valley',
+    club_name: 'Coyote Creek (Valley)',
+    location: 'Morgan Hill, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(37.198117, -121.710450),
+    lat: 37.198117, lng: -121.710450,
+  },
+  {
+    id: 'local:pruneridge',
+    club_name: 'Pruneridge G.C.',
+    location: 'Santa Clara, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(37.332490, -121.965502),
+    lat: 37.332490, lng: -121.965502,
+  },
   // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
   // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
   {

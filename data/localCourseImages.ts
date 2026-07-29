@@ -294,7 +294,10 @@ export type LocalCourseSlug =
   | 'redlands-cc'
   // 2026-07-24 — tester home courses (OSM-built, no bundled imagery → live Mapbox). Centroids
   // registered below so GPS auto-arrival works for jcsmith233's rotation etc.
-  | 'mines-gc' | 'dale-hollow' | 'old-fort' | 'nashboro' | 'hermitage-pr';
+  | 'mines-gc' | 'dale-hollow' | 'old-fort' | 'nashboro' | 'hermitage-pr'
+  // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two interleaved 18s + Pruneridge G.C.
+  // (Santa Clara, CA) 9-hole par-30. OSM-built; engine aerials bundled as the GPS-drop backup.
+  | 'coyote-creek-tournament' | 'coyote-creek-valley' | 'pruneridge';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -577,7 +580,64 @@ export const HERMITAGE_PR_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/hermitage-pr/hole-18.jpg'),
 };
 
+export const COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/coyote-creek-tournament/hole-01.jpg'),
+  2: require('../assets/courses/coyote-creek-tournament/hole-02.jpg'),
+  3: require('../assets/courses/coyote-creek-tournament/hole-03.jpg'),
+  4: require('../assets/courses/coyote-creek-tournament/hole-04.jpg'),
+  5: require('../assets/courses/coyote-creek-tournament/hole-05.jpg'),
+  6: require('../assets/courses/coyote-creek-tournament/hole-06.jpg'),
+  7: require('../assets/courses/coyote-creek-tournament/hole-07.jpg'),
+  8: require('../assets/courses/coyote-creek-tournament/hole-08.jpg'),
+  9: require('../assets/courses/coyote-creek-tournament/hole-09.jpg'),
+  10: require('../assets/courses/coyote-creek-tournament/hole-10.jpg'),
+  11: require('../assets/courses/coyote-creek-tournament/hole-11.jpg'),
+  12: require('../assets/courses/coyote-creek-tournament/hole-12.jpg'),
+  13: require('../assets/courses/coyote-creek-tournament/hole-13.jpg'),
+  14: require('../assets/courses/coyote-creek-tournament/hole-14.jpg'),
+  15: require('../assets/courses/coyote-creek-tournament/hole-15.jpg'),
+  16: require('../assets/courses/coyote-creek-tournament/hole-16.jpg'),
+  17: require('../assets/courses/coyote-creek-tournament/hole-17.jpg'),
+  18: require('../assets/courses/coyote-creek-tournament/hole-18.jpg'),
+};
+
+export const COYOTE_CREEK_VALLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/coyote-creek-valley/hole-01.jpg'),
+  2: require('../assets/courses/coyote-creek-valley/hole-02.jpg'),
+  3: require('../assets/courses/coyote-creek-valley/hole-03.jpg'),
+  4: require('../assets/courses/coyote-creek-valley/hole-04.jpg'),
+  5: require('../assets/courses/coyote-creek-valley/hole-05.jpg'),
+  6: require('../assets/courses/coyote-creek-valley/hole-06.jpg'),
+  7: require('../assets/courses/coyote-creek-valley/hole-07.jpg'),
+  8: require('../assets/courses/coyote-creek-valley/hole-08.jpg'),
+  9: require('../assets/courses/coyote-creek-valley/hole-09.jpg'),
+  10: require('../assets/courses/coyote-creek-valley/hole-10.jpg'),
+  11: require('../assets/courses/coyote-creek-valley/hole-11.jpg'),
+  12: require('../assets/courses/coyote-creek-valley/hole-12.jpg'),
+  13: require('../assets/courses/coyote-creek-valley/hole-13.jpg'),
+  14: require('../assets/courses/coyote-creek-valley/hole-14.jpg'),
+  15: require('../assets/courses/coyote-creek-valley/hole-15.jpg'),
+  16: require('../assets/courses/coyote-creek-valley/hole-16.jpg'),
+  17: require('../assets/courses/coyote-creek-valley/hole-17.jpg'),
+  18: require('../assets/courses/coyote-creek-valley/hole-18.jpg'),
+};
+
+export const PRUNERIDGE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/pruneridge/hole-01.jpg'),
+  2: require('../assets/courses/pruneridge/hole-02.jpg'),
+  3: require('../assets/courses/pruneridge/hole-03.jpg'),
+  4: require('../assets/courses/pruneridge/hole-04.jpg'),
+  5: require('../assets/courses/pruneridge/hole-05.jpg'),
+  6: require('../assets/courses/pruneridge/hole-06.jpg'),
+  7: require('../assets/courses/pruneridge/hole-07.jpg'),
+  8: require('../assets/courses/pruneridge/hole-08.jpg'),
+  9: require('../assets/courses/pruneridge/hole-09.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
+  'coyote-creek-tournament': COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES,
+  'coyote-creek-valley': COYOTE_CREEK_VALLEY_HOLE_IMAGES,
+  'pruneridge': PRUNERIDGE_HOLE_IMAGES,
   'mines-gc': MINES_GC_HOLE_IMAGES,
   'dale-hollow': DALE_HOLLOW_HOLE_IMAGES,
   'old-fort': OLD_FORT_HOLE_IMAGES,
@@ -623,6 +683,9 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 //   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
 // Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  'coyote-creek-tournament': { lat: 37.194526, lng: -121.699698 },
+  'coyote-creek-valley':      { lat: 37.198117, lng: -121.710450 },
+  'pruneridge':               { lat: 37.332490, lng: -121.965502 },
   'mines-gc':          { lat: 42.9595803, lng: -85.7140174 },
   'dale-hollow':       { lat: 36.6624323, lng: -85.2906308 },
   'old-fort':          { lat: 35.8523026, lng: -86.4181595 },
@@ -714,6 +777,9 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('miccosukee')) return 'miccosukee';
   if (c.includes('killian')) return 'killian-greens';
   if (c.includes('redlands')) return 'redlands-cc';
+  // 2026-07-28 — Coyote Creek (default Tournament unless "valley" named) + Pruneridge.
+  if (c.includes('coyote')) return c.includes('valley') ? 'coyote-creek-valley' : 'coyote-creek-tournament';
+  if (c.includes('pruneridge')) return 'pruneridge';
   return null;
 }
 
@@ -771,6 +837,9 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('miccosukee')) return MICCOSUKEE_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('killian')) return KILLIAN_GREENS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('redlands')) return REDLANDS_CC_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-07-28 — Coyote Creek (two courses; default to Tournament unless "valley" is named) + Pruneridge.
+  if (c.includes('coyote')) return (c.includes('valley') ? COYOTE_CREEK_VALLEY_HOLE_IMAGES[holeNumber] : COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES[holeNumber]) ?? null;
+  if (c.includes('pruneridge')) return PRUNERIDGE_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 
