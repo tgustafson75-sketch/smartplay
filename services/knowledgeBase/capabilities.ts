@@ -7,9 +7,44 @@
  * you do / how can you help / what are you capable of" across the ENTIRE app — grounded in the real
  * voice intents (services/intents) + query topics (queryStatusHandler), NOT invented.
  *
- * ADDITIVE + SAFE: prompt-only. Grouped + tight (paid every turn). When editing, keep it a summary
- * of things that ACTUALLY work in this build — verify against the intent handlers before adding.
+ * ADDITIVE + SAFE: prompt-only. Grouped + tight. When editing, keep it a summary of things that
+ * ACTUALLY work in this build — verify against the intent handlers before adding.
+ *
+ * 2026-07-29 (Tim — "adding to every voice turn worries me / could mess with the voice path"). This
+ * block + howToForPrompt() together are ~2.5k tokens and are ONLY useful when the player is asking
+ * ABOUT the app (what can you do / how do I / where is / what's new). On a normal golf turn ("what's
+ * the play on 7", "log a 7-iron") they're dead weight. So the brains inject them only when
+ * isAppHelpQuery(text) is true; the lean feature CATALOG (needed for the navigate tool) stays always
+ * on. Gate is deliberately RECALL-biased — a false positive just spends tokens on that one turn; a
+ * false negative means the caddie can't explain itself, which is the whole point of the feature.
  */
+
+/**
+ * Cheap, allocation-light check: is the player asking ABOUT the app (its features / how to use it /
+ * what's new / where to find something) rather than asking a golf question? Used to gate the heavier
+ * capabilities + how-to knowledge into the brain prompt only when it's relevant.
+ */
+export function isAppHelpQuery(text: string): boolean {
+  const t = ` ${(text || '').toLowerCase().replace(/[^a-z0-9\s']/g, ' ').replace(/\s+/g, ' ').trim()} `;
+  if (t.trim().length === 0) return false;
+  // Discovery / capability / how-to / changelog phrasing. Kept as substrings of the padded, punctuation-
+  // stripped text so "how do I…", "what can you do?", "where's the…" all hit regardless of punctuation.
+  const NEEDLES = [
+    ' how do i ', ' how do you ', ' how to ', ' how does the ', ' how does it ', ' how does this ',
+    ' how can i ', " how's it work ", ' how does the app ', ' how do i use ', ' how do you use ',
+    ' what can you ', ' what can the app ', ' what can this app ', ' what do you do ', ' what does the app ',
+    ' what are you able ', ' what else can ', ' what all can ', ' are you able to ',
+    " what's new ", ' whats new ', ' what is new ', ' any updates ', ' new features ', ' new feature ',
+    ' what features ', ' what feature ', ' latest update ', ' latest features ',
+    ' where is ', " where's ", ' where do i ', ' where can i ', ' where do i find ', ' how do i find ',
+    ' show me how ', ' walk me through ', ' teach me ', ' explain how ', ' explain the app ',
+    ' is there a way to ', ' does the app ', ' can the app ', ' can this app ', ' do you have a ',
+    ' is there a feature ', ' tutorial ', ' help me use ', ' how do i set up ', ' how do i turn on ',
+    ' what tools ', ' what can i do ', ' what should i do with this app ', ' guide me ',
+  ];
+  for (const n of NEEDLES) if (t.includes(n)) return true;
+  return false;
+}
 
 export function capabilitiesForPrompt(): string {
   return [

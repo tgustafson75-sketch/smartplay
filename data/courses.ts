@@ -2545,9 +2545,12 @@ const MANATEE_COVE_HOLES: CourseHole[] = [
     teeLat: 28.2154454, teeLng: -80.6108410, middleLat: 28.2181379, middleLng: -80.6085418,
     frontLat: 28.2180271, frontLng: -80.6086286, backLat: 28.2182570, backLng: -80.6084761,
     note: '', estimated: false },
-  { hole:  2, par: 4, distance: 551, front: 535, back: 568,
+  { hole:  2, par: 5, distance: 551, front: 535, back: 568,
     teeLat: 28.2172103, teeLng: -80.6081707, middleLat: 28.2213812, middleLng: -80.6061705,
     frontLat: 28.2212404, frontLng: -80.6061564, backLat: 28.2215228, backLng: -80.6061387,
+    // 2026-07-29 (audit — DISCO) — OSM tagged this par 4, but the tee→green geometry is a real,
+    // contiguous 551y (tee sits by hole 1's green, green by hole 3's tee) — physically a par 5, never a
+    // par 4. Corrected par 4→5 (course par 71→72). Geometry verified, not fabricated.
     note: '', estimated: false },
   { hole:  3, par: 4, distance: 338, front: 324, back: 354,
     teeLat: 28.2216718, teeLng: -80.6069385, middleLat: 28.2233995, middleLng: -80.6044671,
@@ -2627,7 +2630,7 @@ export const COURSES: Course[] = [
     id: 'manatee-cove',
     name: 'Manatee Cove',
     fullName: 'Manatee Cove Golf Club — Patrick SFB, FL',
-    rating: '', slope: '', par: 71, totalYards: 6569,
+    rating: '', slope: '', par: 72, totalYards: 6569,
     holes: MANATEE_COVE_HOLES,
   },
   {
@@ -2827,7 +2830,9 @@ export const COURSES: Course[] = [
     fullName: 'Menifee Lakes Country Club — Lakes',
     rating: '69.3',
     slope: '119',
-    par: 71,
+    // 2026-07-29 (audit — BRAIN) — was 71 but the 18 hole pars sum to 72, and golfcourseapi confirms
+    // Menifee Lakes is par 72 across every tee. The card total contradicted the per-hole math; fixed to 72.
+    par: 72,
     totalYards: 6119,
     holes: LAKES_HOLES,
   },

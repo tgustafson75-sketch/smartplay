@@ -16,6 +16,7 @@ import { routeQuery } from './responseRouter';
 import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
+import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { tryLocalReply } from './localStatusResponder';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
@@ -466,6 +467,29 @@ async function openSession() {
   // Phase P — TTFA instrumentation. t0 = capture end.
   const t0 = Date.now();
   try {
+    // 2026-07-29 (audit fix #2 — earbud disambiguation dead-end). When a quick-round utterance
+    // matched several courses, the caddie asked "which one?" and stashed the candidates. The on-screen
+    // mic path (useVoiceCaddie) resolves the follow-up ("the Valley one" / "Austin" / "the first one")
+    // against them BEFORE classification — but THIS hands-free / earbud / watch turn path never did,
+    // so on earbuds the answer was re-classified from scratch (which drops the list) and the round
+    // never started. Mirror the useVoiceCaddie intercept: resolve → speak the confirm line → done.
+    // Returns null on a non-match (strict matcher), so a normal command falls straight through to the
+    // precheck/classify below untouched — it never hijacks or false-starts.
+    const courseResolved = resolvePendingCourseUtterance(utterance);
+    if (courseResolved) {
+      const resolveAllowed = settings.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker);
+      if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
+      if (resolveAllowed && getSessionState() === 'responding') {
+        await stopSpeaking().catch(() => {});
+        if (getSessionState() === 'responding') {
+          await speak(courseResolved.confirmLine, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+            .catch((e) => console.log('[listeningSession] course-resolve speak failed', e));
+        }
+      }
+      setSessionStateMirror('idle');
+      return;
+    }
+
     const round = useRoundStore.getState();
     const ctx: AppContext = {
       active_screen: round.isRoundActive ? 'caddie' : 'swinglab',

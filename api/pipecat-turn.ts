@@ -493,8 +493,13 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
-      const { capabilitiesForPrompt } = await import('../services/knowledgeBase/capabilities');
+      const { capabilitiesForPrompt, isAppHelpQuery } = await import('../services/knowledgeBase/capabilities');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
+      // 2026-07-29 (Tim — don't bloat every voice turn). The lean feature CATALOG stays always on (the
+      // navigate tool needs feature names to route "open/take me to X"). The heavier conversational
+      // repertoire + step-by-step how-tos (~2.5k tokens) are injected ONLY when the player is actually
+      // asking about the app — a normal golf/round turn skips them entirely.
+      const appHelp = isAppHelpQuery(text);
       // 2026-07-26 (deep audit — wire the dormant cnsPersonalize/appSignals) — build the player's REAL
       // signal profile from the structured context the client already sends, so KB entries rerank toward
       // THIS player and the brain tailors the generic principle to them. Only real values personalize
@@ -514,8 +519,8 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       const kbBlock = kbForPrompt(retrieveKB(text, { max: 3, cnsProfile }), cnsProfile);
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
-        + `\n\n${capabilitiesForPrompt()}`
-        + `\n\n${howToForPrompt()}`
+        + (appHelp ? `\n\n${capabilitiesForPrompt()}` : '')
+        + (appHelp ? `\n\n${howToForPrompt()}` : '')
         + confirmRule
         + parseRule
         + (kbBlock
