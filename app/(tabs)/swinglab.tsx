@@ -458,14 +458,14 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
       </View>
       <View style={styles.cardText}>
         <View style={styles.titleRow}>
-          {/* 2026-07-26 (Tim — Fold-Z FOLDED cuts long titles to "Hotel M…"/"Coach Mo…" next to the
-              badge; looks great when open). Shrink-to-fit keeps the WHOLE word on one line on the narrow
-              cover screen instead of truncating, and is a no-op at the roomy open/large widths. */}
+          {/* 2026-07-28 (Tim — "topic pills squeeze long titles way too small") — was shrink-to-fit
+              (numberOfLines=1 + adjustsFontSizeToFit), but on Android minimumFontScale isn't honored, so
+              a long title next to a long tag ("Import Range Session" · CALIBRATE) collapsed far below the
+              others. Wrap to 2 lines at full size instead — keeps every title the same 17px, no tiny text,
+              no truncation. Short titles stay 1 line; the tag is vertically centered either way. */}
           <Text
             style={[styles.cardTitle, { color: colors.text_primary }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
+            numberOfLines={2}
           >{title}</Text>
           <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
             <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
@@ -510,9 +510,9 @@ function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
         </View>
         <View style={styles.heroText}>
           <View style={styles.titleRow}>
-            {/* 2026-07-26 (deep audit S3) — same folded-Fold-Z shrink-to-fit the LauncherCard got, so the
-                bigger hero titles ("Import Range Session") don't truncate next to the tag on the cover screen. */}
-            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{title}</Text>
+            {/* 2026-07-28 (Tim — long titles too small next to the tag) — wrap to 2 lines at full size
+                instead of Android-unreliable shrink-to-fit (see LauncherCard note). */}
+            <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
             <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
               <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
             </View>
