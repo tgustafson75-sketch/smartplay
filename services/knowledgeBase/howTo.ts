@@ -94,6 +94,42 @@ export const HOW_TO: HowTo[] = [
     asks: ['see my scorecard', 'keep score', 'add players'],
     steps: 'The Scorecard tab keeps score hole by hole during a round; add the people you\'re playing with and their handicaps there too.',
   },
+  // 2026-07-29 (Tim — full app awareness) — how-tos for the rest of the real flows.
+  {
+    id: 'scan-bag',
+    asks: ['scan my clubs', 'add my clubs', 'set up my bag', 'register my clubs', 'import my Arccos'],
+    steps: 'Two ways to build your bag: Bag Scan (point the camera at each club\'s sole to add it), or Arccos Import — snap your Arccos "Smart Club Distances" screen and I seed your carry numbers (tag the club by hand, since Arccos Air guesses club from distance).',
+  },
+  {
+    id: 'check-lie',
+    asks: ['check my lie', 'analyze my lie', 'look at my lie', 'what shot should I play from here'],
+    steps: 'Say "check my lie" or open Lie Check and point the camera at your ball — I read the lie (rough, sand, slope, sit) and factor it into the smart play.',
+  },
+  {
+    id: 'shot-map-and-history',
+    asks: ['see my past shots', 'shot map', 'how did I play this hole last time', 'what did I do here before'],
+    steps: 'On a course you\'ve played before, ask "how did I play this hole last time" and I\'ll replay your shots (club, distance, result). On the hole view, your past shots also show as colored dots + lines — a shot map that builds up over time.',
+  },
+  {
+    id: 'set-score-goal',
+    asks: ['set a goal', 'help me break 90', 'break 80', 'score goal', 'goal from the tees'],
+    steps: 'Open Tee Goals to set a target like "break 90 from the whites" — I\'ll build the strategy around it. For a full improvement plan, use SmartPlan.',
+  },
+  {
+    id: 'add-a-course',
+    asks: ['add a course', 'my course is not listed', 'course not here', 'add my home course'],
+    steps: 'If your course isn\'t in the list, use Add a Course to search for it — or snap your scorecard and I\'ll build it. If GPS geometry isn\'t available yet, it still works and fills in the hole layout the first time you play it on-course.',
+  },
+  {
+    id: 'ask-whats-new',
+    asks: ['what\'s new', 'what did you add', 'any updates', 'what can you do', 'what features do you have'],
+    steps: 'Just ask me "what can you do" and I\'ll walk you through the tools, or "what\'s new" and I\'ll tell you the latest updates — I know every feature in the app and how to use it.',
+  },
+  {
+    id: 'play-music',
+    asks: ['play music', 'put on some music', 'play a song'],
+    steps: 'Say "play some music" (or open Music) and I\'ll pull it up from YouTube while you practice or play.',
+  },
 ];
 
 /**
