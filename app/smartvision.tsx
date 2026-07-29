@@ -1188,6 +1188,48 @@ export default function SmartVisionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projection, imageW, imageH, markBumpTick, onCuratedPhoto, teeCoord, greenCoord]);
 
+  // 2026-07-29 (Tim — "a mark of the shots from the last time in different colors → a shot map") —
+  // project ANY lat/lng to canvas the SAME way the live player dot is placed (full 2D on satellite;
+  // along the tee→green axis on a curated photo, where lateral position isn't recoverable). Finite-
+  // guarded end-to-end — a NaN into <SvgCircle> white-screens the hole view.
+  const projectLoc = useCallback((loc: { lat: number; lng: number } | null | undefined): { x: number; y: number } | null => {
+    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
+    if (onCuratedPhoto && teeCoord && greenCoord) {
+      const total = haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng);
+      const fromGreen = haversineYards(loc.lat, loc.lng, greenCoord.lat, greenCoord.lng);
+      if (!(total > 0) || !Number.isFinite(fromGreen)) return null;
+      const pctAlong = Math.max(0, Math.min(1, 1 - fromGreen / total));
+      const y = 12 + (1 - pctAlong) * (imageH - 24);
+      return Number.isFinite(y) ? { x: imageW / 2, y } : null;
+    }
+    if (!projection) return null;
+    const off = projectToPixels(loc, projection.center, projection.zoom, projection.bearing);
+    const x = imageW / 2 + off.x, y = imageH / 2 - off.y;
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  }, [onCuratedPhoto, teeCoord, greenCoord, projection, imageW, imageH]);
+
+  // Prior rounds' shots ON THIS HOLE, grouped per round, most-recent first, color-coded — the raw
+  // material for the shot map. Only rounds with GPS-located shots on this hole; capped at 4 so the
+  // canvas stays readable. Each shot persists start/end lat-lng (roundStore ShotResult).
+  const shotHistory = useMemo(() => {
+    if (!courseId) return [] as { id: string; endedAt: number; color: string; label: string; shots: import('../store/roundStore').ShotResult[] }[];
+    const currentRoundId = useRoundStore.getState().currentRoundId;
+    const COLORS = ['#00E5FF', '#FFB300', '#FF4FD8', '#7CFF6B'];
+    return (useRoundStore.getState().roundHistory || [])
+      .filter(r => r.courseId === courseId && r.id !== currentRoundId && Array.isArray(r.shots))
+      .map(r => ({
+        id: r.id,
+        endedAt: r.endedAt,
+        shots: (r.shots as import('../store/roundStore').ShotResult[]).filter(s =>
+          ((s.hole ?? s.hole_number) === holeIndex) && !!s.start_location && Number.isFinite(s.start_location.lat)),
+      }))
+      .filter(r => r.shots.length > 0)
+      .sort((a, b) => b.endedAt - a.endedAt)
+      .slice(0, 4)
+      .map((r, i) => ({ ...r, color: COLORS[i % COLORS.length], label: i === 0 ? 'Last round' : `${i + 1} rounds ago` }));
+  }, [courseId, holeIndex, markBumpTick]);
+  const [showShotMap, setShowShotMap] = useState(true);
+
   // Bounds clamper used in drag handlers — keep markers visible.
   // 2026-07-23 (QA) — finite-guard like the sibling clampMarker: bare Math.max/min let a NaN pass
   // straight through to <SvgLine x2=…/> (NaN→react-native-svg white-screen). Center a non-finite input.
@@ -2287,6 +2329,63 @@ export default function SmartVisionScreen() {
             pill: it always overlapped the hole/markers. Tap-to-place + drag still work; the P/T
             markers are self-explanatory. */}
 
+        {/* 2026-07-29 (Tim — "a mark of the shots from the last time in different colors → a shot map of
+            the holes, very telling") — prior rounds' shots on THIS hole, color-coded per round, drawn as
+            start dots + dashed lines to where each came to rest. Builds a per-hole shot map over time.
+            EVERY coordinate is finite-guarded — a NaN into <SvgCircle>/<SvgLine> white-screens the hole. */}
+        {showShotMap && shotHistory.length > 0 ? (
+          <Svg width={imageW} height={imageH} style={StyleSheet.absoluteFill} pointerEvents="none">
+            {shotHistory.map(round => (
+              <SvgG key={round.id} opacity={0.92}>
+                {round.shots.map((s, i) => {
+                  const a = projectLoc(s.start_location);
+                  const b = projectLoc(s.end_location);
+                  const lineOk = !!a && !!b && [a.x, a.y, b.x, b.y].every(v => Number.isFinite(v));
+                  return (
+                    <SvgG key={s.id ?? `${round.id}-${i}`}>
+                      {lineOk ? (
+                        <SvgLine x1={a!.x} y1={a!.y} x2={b!.x} y2={b!.y} stroke={round.color} strokeWidth={2} strokeOpacity={0.6} strokeDasharray="5 3" />
+                      ) : null}
+                      {a && Number.isFinite(a.x) && Number.isFinite(a.y) ? (
+                        <SvgCircle cx={a.x} cy={a.y} r={4.5} fill={round.color} stroke="#08120c" strokeWidth={1.2} />
+                      ) : null}
+                    </SvgG>
+                  );
+                })}
+              </SvgG>
+            ))}
+          </Svg>
+        ) : null}
+
+        {/* Shot-map toggle + per-round legend, top-right (the branded badge is bottom-left, and
+            SmartVision has no ••• pill in the corner). Own Touchable → doesn't trigger tap-to-place. */}
+        {shotHistory.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => setShowShotMap(v => !v)}
+            activeOpacity={0.85}
+            style={styles.shotMapToggle}
+            accessibilityRole="button"
+            accessibilityLabel={showShotMap ? 'Hide shot history' : 'Show shot history'}
+          >
+            <View style={styles.shotMapToggleRow}>
+              <Ionicons name="footsteps" size={12} color={showShotMap ? '#00E5FF' : '#9ca3af'} />
+              <Text style={[styles.shotMapToggleText, { color: showShotMap ? '#dff9ff' : '#9ca3af' }]}>
+                {showShotMap ? 'SHOT MAP' : 'SHOT MAP OFF'}
+              </Text>
+            </View>
+            {showShotMap ? (
+              <View style={styles.shotMapLegend}>
+                {shotHistory.map(r => (
+                  <View key={r.id} style={styles.shotMapLegendRow}>
+                    <View style={[styles.shotMapDot, { backgroundColor: r.color }]} />
+                    <Text style={styles.shotMapLegendText}>{r.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : null}
+
         {/* 2026-07-28 (Tim — "badge risks covering green") — the green always sits top-center of the
             flyover, so on short/zoomed holes a top-right badge crowds it. Pin the SmartVision badge
             BOTTOM-LEFT (opposite end from the green, by the tee) instead. Rendered LAST → sits on top. */}
@@ -2479,6 +2578,20 @@ const styles = StyleSheet.create({
   estimatedBadgeText: { color: '#0a0a0a', fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
   canvasFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
+  // 2026-07-29 (Tim) — shot-map toggle + per-round legend (top-right of the canvas).
+  shotMapToggle: {
+    position: 'absolute', top: 8, right: 8, zIndex: 20,
+    backgroundColor: 'rgba(3,12,7,0.72)',
+    borderWidth: 1, borderColor: 'rgba(0,229,255,0.45)',
+    borderRadius: 9, paddingHorizontal: 8, paddingVertical: 5,
+    alignItems: 'flex-start',
+  },
+  shotMapToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  shotMapToggleText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  shotMapLegend: { marginTop: 4, gap: 2 },
+  shotMapLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  shotMapDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)' },
+  shotMapLegendText: { color: 'rgba(223,249,255,0.85)', fontSize: 8, fontWeight: '700' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
   // 2026-06-23 (Tim) — glowing-green bordered container for the map canvas (caddie
   // style). overflow:hidden + radius clip the image + markers to the box so nothing
