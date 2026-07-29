@@ -55,6 +55,7 @@ import { safeBack } from '../services/safeBack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassesStatusBadge from '../components/GlassesStatusBadge';
+import { HoleBrandBadge } from '../components/caddie/HoleBrandBadge';
 import SmartVisionLiveStrategy from '../components/SmartVisionLiveStrategy';
 // 2026-05-26 — Fix CD: theme the image-canvas fallback bg so light
 // mode doesn't show a dark rectangle while the hole image loads.
@@ -2282,20 +2283,14 @@ export default function SmartVisionScreen() {
             pin" box was a third copy of the same distance already in the AI-rec
             bar ("4 Iron · 184y to pin") AND the MIDDLE cell. Removed. */}
 
-        {/* First-time hint. Phase 4.1 — updated copy: tap-to-place is
-            the new primary interaction; drag still works. */}
-        <View pointerEvents="none" style={styles.measureHint}>
-          <Ionicons
-            name={(isRoundActive && holeIndex === currentHole && !userPlacedByHole[holeKeyOf(holeIndex)]) ? 'navigate' : 'hand-left-outline'}
-            size={12}
-            color="#facc15"
-          />
-          <Text style={styles.measureHintText}>
-            {(isRoundActive && holeIndex === currentHole && !userPlacedByHole[holeKeyOf(holeIndex)])
-              ? 'Following your GPS · tap to override · Drag P for pin'
-              : 'Tap to place your position · Drag P for pin'}
-          </Text>
-        </View>
+        {/* 2026-07-28 (Tim) — removed the yellow "Tap to place your position · Drag P for pin" hint
+            pill: it always overlapped the hole/markers. Tap-to-place + drag still work; the P/T
+            markers are self-explanatory. */}
+
+        {/* 2026-07-28 (Tim) — branded neon-green hole chip, upper-right. Same HoleBrandBadge the Caddie
+            tab uses so the two surfaces read as one system. SmartVision has no ••• tools pill in the
+            corner, so it keeps the default top:8. Rendered LAST inside the canvas → sits on top. */}
+        <HoleBrandBadge course={courseName} hole={holeIndex} distanceYds={courseHoles.find(x => x.hole === holeIndex)?.distance ?? null} />
 
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
@@ -2568,19 +2563,6 @@ const styles = StyleSheet.create({
   measureLabelBot: {
     color: '#ffffff', fontSize: 11, fontWeight: '700',
     fontVariant: ['tabular-nums'], marginTop: 1,
-  },
-  measureHint: {
-    // 2026-07-01 (Tim) — moved from top to the BOTTOM of the image so the instruction pill no
-    // longer overshadows the green + pin at the top. Self-centered so it doesn't crowd the tee.
-    position: 'absolute',
-    bottom: 8, left: 12,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    borderWidth: 1, borderColor: 'rgba(250,204,21,0.5)',
-    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5,
-  },
-  measureHintText: {
-    color: '#facc15', fontSize: 11, fontWeight: '700', letterSpacing: 0.3,
   },
   saveBtn: {
     position: 'absolute',

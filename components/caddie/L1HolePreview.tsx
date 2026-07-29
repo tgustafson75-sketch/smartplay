@@ -14,6 +14,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
+import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 
@@ -43,6 +44,13 @@ type Props = {
   width?: number;
   /** Optional height override (first-render fallback; the box then measures its real size). */
   height?: number;
+  /**
+   * Top inset (px) for the branded HoleBrandBadge. Default 8. The full-size Caddie-tab preview
+   * passes a larger value so the badge tucks BELOW the ••• tools pill in the upper-right (Tim:
+   * "tools pill … upper right … smartvision data … below that pill"). The corner mini + SmartVision
+   * have no pill in the way, so they keep the default.
+   */
+  badgeTop?: number;
 };
 
 /** Natural aspect (height / width) of a bundled require() image (a number id); null for a uri/unknown. */
@@ -88,7 +96,7 @@ const HoleFrame: React.FC<{
   </TouchableOpacity>
 );
 
-export default function L1HolePreview({ onOpenSmartVision, width, height }: Props) {
+export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8 }: Props) {
   const propW = width ?? DEFAULT_W;
   const propH = height ?? DEFAULT_H;
   // Measured container size — the source of truth once laid out (robust to Fold resize). The width/
@@ -227,9 +235,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <ImageBackground source={heroImageSource} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-          <View style={styles.imageOverlay}>
-            <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
-          </View>
+          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
           {cartY != null && yardsToGreen != null ? (
             <>
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>
@@ -268,9 +274,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height }: Prop
       return (
         <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
           <ImageBackground source={localImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-            <View style={styles.imageOverlay}>
-              <Text style={styles.imageHoleLabel}>HOLE {currentHole}</Text>
-            </View>
+            <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
             {pctAlong != null && yardsToGreen != null ? (
               <>
                 <View style={[styles.playerTrackBar, { width: box.width - 16 }]}>
@@ -401,15 +405,6 @@ const styles = StyleSheet.create({
   imgRadius: { borderRadius: 10 },
   planScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6,15,9,0.42)' },
   planLabelWrap: { position: 'absolute', left: 8, bottom: 8, right: 8 },
-  imageOverlay: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
   imageHoleLabel: { color: '#ffffff', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   svHint: {
     position: 'absolute',

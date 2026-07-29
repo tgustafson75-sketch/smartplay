@@ -2866,7 +2866,7 @@ export default function CaddieTab() {
             {/* PRIMARY zone — fills between the top gap (below the status bar) and the controls row. */}
             <View style={{ position: 'absolute', left: 0, right: 0, top: zoneTop, bottom: zoneBottom }}>
               {caddiePrimary ? kevinAvatar : (
-                <L1HolePreview onOpenSmartVision={openSmartVision} width={W} height={zoneHeight} />
+                <L1HolePreview onOpenSmartVision={openSmartVision} width={W} height={zoneHeight} badgeTop={62} />
               )}
             </View>
             {/* CORNER box = the toggle. Shows the OTHER view; tap it to bring that view forward. */}
