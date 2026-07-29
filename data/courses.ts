@@ -2435,7 +2435,41 @@ const YOCHA_DEHE_HOLES: CourseHole[] = [
     note: '', estimated: false },
 ];
 
+// 2026-07-29 (Tim — Jay Scott's HOME course). Shadow Lakes G.C., Brentwood CA. NOT in OSM and its
+// per-hole scorecard isn't on the club site, so geometry can't be pre-generated — BUT golfcourseapi
+// (id 24572) carries the REAL scorecard (par 71, Special Back 6475y, rt71.8/sl133). Bundled scorecard-
+// only (real par/yardage/stroke-index; coords 0/estimated) so the CARD shows + it's playable; per-hole
+// tee/green geometry derives on-course from live GPS (AI-vision), same honest degrade as other no-geo
+// courses. NO fabricated hole data — every number here is the course's own card.
+const SHADOW_LAKES_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 328, front: 328, back: 328, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 11', estimated: true },
+  { hole:  2, par: 5, distance: 528, front: 528, back: 528, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 9', estimated: true },
+  { hole:  3, par: 4, distance: 351, front: 351, back: 351, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 15', estimated: true },
+  { hole:  4, par: 3, distance: 191, front: 191, back: 191, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 7', estimated: true },
+  { hole:  5, par: 4, distance: 422, front: 422, back: 422, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 3', estimated: true },
+  { hole:  6, par: 5, distance: 537, front: 537, back: 537, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 1', estimated: true },
+  { hole:  7, par: 3, distance: 154, front: 154, back: 154, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 17', estimated: true },
+  { hole:  8, par: 4, distance: 387, front: 387, back: 387, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 13', estimated: true },
+  { hole:  9, par: 4, distance: 437, front: 437, back: 437, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 5', estimated: true },
+  { hole: 10, par: 4, distance: 362, front: 362, back: 362, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 18', estimated: true },
+  { hole: 11, par: 3, distance: 201, front: 201, back: 201, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 6', estimated: true },
+  { hole: 12, par: 4, distance: 337, front: 337, back: 337, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 2', estimated: true },
+  { hole: 13, par: 4, distance: 428, front: 428, back: 428, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 4', estimated: true },
+  { hole: 14, par: 3, distance: 179, front: 179, back: 179, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 16', estimated: true },
+  { hole: 15, par: 5, distance: 516, front: 516, back: 516, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 14', estimated: true },
+  { hole: 16, par: 4, distance: 363, front: 363, back: 363, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 8', estimated: true },
+  { hole: 17, par: 3, distance: 205, front: 205, back: 205, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 10', estimated: true },
+  { hole: 18, par: 5, distance: 549, front: 549, back: 549, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: 'SI 12', estimated: true },
+];
+
 export const COURSES: Course[] = [
+  {
+    id: 'shadow-lakes',
+    name: 'Shadow Lakes',
+    fullName: 'Shadow Lakes Golf Club — Brentwood, CA',
+    rating: '71.8', slope: '133', par: 71, totalYards: 6475,
+    holes: SHADOW_LAKES_HOLES,
+  },
   {
     id: 'wente-vineyards',
     name: 'Wente Vineyards',

@@ -298,8 +298,8 @@ export type LocalCourseSlug =
   // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two interleaved 18s + Pruneridge G.C.
   // (Santa Clara, CA) 9-hole par-30. OSM-built; engine aerials bundled as the GPS-drop backup.
   | 'coyote-creek-tournament' | 'coyote-creek-valley' | 'pruneridge'
-  // 2026-07-29 — Jay Scott's Bay Area courses (OSM-built).
-  | 'wente-vineyards' | 'yocha-dehe';
+  // 2026-07-29 — Jay Scott's Bay Area courses (OSM-built) + Shadow Lakes (scorecard-only, no geometry).
+  | 'wente-vineyards' | 'yocha-dehe' | 'shadow-lakes';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -731,6 +731,9 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
   'wente-vineyards':          { lat: 37.630166, lng: -121.753313 },
   'yocha-dehe':               { lat: 38.739773, lng: -122.131517 },
+  // Shadow Lakes G.C., Brentwood CA (401 W Country Club Dr). Scorecard-only; centroid for the card
+  // thumbnail + GPS auto-arrival — refine on-course via Mark Location.
+  'shadow-lakes':             { lat: 37.929130, lng: -121.752225 },
   'coyote-creek-tournament': { lat: 37.194526, lng: -121.699698 },
   'coyote-creek-valley':      { lat: 37.198117, lng: -121.710450 },
   'pruneridge':               { lat: 37.332490, lng: -121.965502 },
@@ -830,6 +833,7 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('pruneridge')) return 'pruneridge';
   if (c.includes('wente')) return 'wente-vineyards';
   if (c.includes('yocha')) return 'yocha-dehe';
+  if (c.includes('shadow lake') || c.includes('shadow lakes')) return 'shadow-lakes';
   return null;
 }
 

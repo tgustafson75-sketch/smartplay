@@ -150,6 +150,15 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(38.739773, -122.131517),
     lat: 38.739773, lng: -122.131517,
   },
+  {
+    // Jay's HOME course — scorecard-only (real golfcourseapi card, par 71); no OSM geometry, so the
+    // per-hole flyover derives live on-course. The card + satellite thumbnail use the same imagery engine.
+    id: 'local:shadow-lakes',
+    club_name: 'Shadow Lakes G.C.',
+    location: 'Brentwood, CA',
+    rating: 71.8, slope: 133, isLocal: true, thumbnail: satelliteThumb(37.929130, -121.752225),
+    lat: 37.929130, lng: -121.752225,
+  },
   // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
   // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
   {
