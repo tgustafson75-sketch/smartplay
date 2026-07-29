@@ -1,13 +1,12 @@
 /**
- * 2026-07-29 (Tim — "the caddie should answer about any features in the app OR any updates, so it's
- * baked in and I send fewer emails to users"). The catalog (appCatalog) tells the caddie what the app
- * HAS; how-to (howTo) tells it HOW; this tells it WHAT'S NEW. Injected into the brain prompt alongside
- * both so the caddie can answer "what's new / any updates / what did you just add / what changed" with
- * the REAL, current changelog — in its own voice — instead of the user emailing to find out.
+ * 2026-07-29 (Tim). The app changelog. Originally injected into the brain prompt, but Tim (rightly)
+ * pulled it out — a prompted announcement bloats every voice turn and risks the voice path. It now
+ * surfaces VISUALLY in Tools → What's New (app/whats-new.tsx) with a version pill + "N new" badge
+ * (store/whatsNewStore.ts). The caddie still HAS the app (appCatalog), knows HOW (howTo), and can
+ * mention updates conversationally (howTo "what's new" entry) — the full list just isn't in the prompt.
  *
- * ADDITIVE + SAFE: prompt-only knowledge; changes nothing in the voice/tool pipeline. Keep each entry
- * to ONE short, USER-FACING line (no internal jargon, no file names). Newest first. When something
- * ships, add a line here — that's the single place the "what's new" answer reads from.
+ * SINGLE SOURCE OF TRUTH: to announce a feature to every user, add ONE short, USER-FACING line below
+ * (no internal jargon / file names). Newest first. The screen + the Tools-menu badge both read it.
  */
 
 export interface WhatsNewEntry {
@@ -31,11 +30,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   { when: 'Jul 2026', note: 'Ask the caddie by voice to switch the hole view between satellite and the static photo, and open practice tools (Focus Session, Shot Shapes, Setup Check, Fit Profile, Import Range) by name.' },
 ];
 
-/**
- * Compact "what's new" block for the brain prompt. Newest first; the caddie speaks these in its own
- * voice when asked about updates/changes — and can offer to open the relevant screen.
- */
-export function whatsNewForPrompt(): string {
-  const lines = WHATS_NEW.map(e => `- (${e.when}) ${e.note}`).join('\n');
-  return `WHAT'S NEW (answer "what's new / any updates / what did you add / what changed" with these REAL, recent updates — speak them naturally in your own voice, newest first; offer to open the relevant screen):\n${lines}`;
-}
+// 2026-07-29 (Tim) — the changelog is surfaced in the Tools → What's New SCREEN (app/whats-new.tsx),
+// NOT injected into the brain prompt (a prompted announcement bloats every voice turn). WHATS_NEW above
+// is the single source both the screen and the Tools-menu badge read from. (The caddie can still speak
+// updates conversationally via the how-to entry "what's new" without the full list in every prompt.)

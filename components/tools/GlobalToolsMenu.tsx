@@ -31,6 +31,8 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useWhatsNewStore } from '../../store/whatsNewStore';
+import { WHATS_NEW } from '../../services/knowledgeBase/whatsNew';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
@@ -77,6 +79,9 @@ export function GlobalToolsMenu() {
   // OFF, both hide regardless of roster.
   const coachModeEnabled = useSettingsStore((s) => s.coachModeEnabled);
   const setCoachModeEnabled = useSettingsStore((s) => s.setCoachModeEnabled);
+  // What's New — reactive unseen count for the badge (changelog lives in whatsNew.ts; read-state in whatsNewStore).
+  const whatsNewSeen = useWhatsNewStore((s) => s.seenCount);
+  const whatsNewUnseen = Math.max(0, WHATS_NEW.length - whatsNewSeen);
   // Round
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const endRound = useRoundStore((s) => s.endRound);
@@ -453,6 +458,13 @@ export function GlobalToolsMenu() {
               label="Tutorials"
               sub="How each tool works"
               onPress={() => nav('/tutorials')}
+              colors={colors}
+            />
+            <Row
+              icon="megaphone-outline"
+              label={whatsNewUnseen > 0 ? `What's New  •  ${whatsNewUnseen} new` : "What's New"}
+              sub={whatsNewUnseen > 0 ? 'Latest updates since you last looked' : 'Latest updates & version'}
+              onPress={() => nav('/whats-new')}
               colors={colors}
             />
             <Row

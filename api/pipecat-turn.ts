@@ -493,7 +493,6 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
-      const { whatsNewForPrompt } = await import('../services/knowledgeBase/whatsNew');
       const { capabilitiesForPrompt } = await import('../services/knowledgeBase/capabilities');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       // 2026-07-26 (deep audit — wire the dormant cnsPersonalize/appSignals) — build the player's REAL
@@ -517,7 +516,6 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"}). Only use open_swinglab for the bare hub:\n${catalogForPrompt()}`
         + `\n\n${capabilitiesForPrompt()}`
         + `\n\n${howToForPrompt()}`
-        + `\n\n${whatsNewForPrompt()}`
         + confirmRule
         + parseRule
         + (kbBlock
