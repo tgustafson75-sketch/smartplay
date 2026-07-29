@@ -299,7 +299,9 @@ export type LocalCourseSlug =
   // (Santa Clara, CA) 9-hole par-30. OSM-built; engine aerials bundled as the GPS-drop backup.
   | 'coyote-creek-tournament' | 'coyote-creek-valley' | 'pruneridge'
   // 2026-07-29 — Jay Scott's Bay Area courses (OSM-built) + Shadow Lakes (scorecard-only, no geometry).
-  | 'wente-vineyards' | 'yocha-dehe' | 'shadow-lakes';
+  | 'wente-vineyards' | 'yocha-dehe' | 'shadow-lakes'
+  // 2026-07-29 — Gabe's Brevard County FL courses (OSM-built).
+  | 'crane-creek' | 'manatee-cove';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -678,7 +680,51 @@ export const YOCHA_DEHE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   18: require('../assets/courses/yocha-dehe/hole-18.jpg'),
 };
 
+export const CRANE_CREEK_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/crane-creek/hole-01.jpg'),
+  2: require('../assets/courses/crane-creek/hole-02.jpg'),
+  3: require('../assets/courses/crane-creek/hole-03.jpg'),
+  4: require('../assets/courses/crane-creek/hole-04.jpg'),
+  5: require('../assets/courses/crane-creek/hole-05.jpg'),
+  6: require('../assets/courses/crane-creek/hole-06.jpg'),
+  7: require('../assets/courses/crane-creek/hole-07.jpg'),
+  8: require('../assets/courses/crane-creek/hole-08.jpg'),
+  9: require('../assets/courses/crane-creek/hole-09.jpg'),
+  10: require('../assets/courses/crane-creek/hole-10.jpg'),
+  11: require('../assets/courses/crane-creek/hole-11.jpg'),
+  12: require('../assets/courses/crane-creek/hole-12.jpg'),
+  13: require('../assets/courses/crane-creek/hole-13.jpg'),
+  14: require('../assets/courses/crane-creek/hole-14.jpg'),
+  15: require('../assets/courses/crane-creek/hole-15.jpg'),
+  16: require('../assets/courses/crane-creek/hole-16.jpg'),
+  17: require('../assets/courses/crane-creek/hole-17.jpg'),
+  18: require('../assets/courses/crane-creek/hole-18.jpg'),
+};
+
+export const MANATEE_COVE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/manatee-cove/hole-01.jpg'),
+  2: require('../assets/courses/manatee-cove/hole-02.jpg'),
+  3: require('../assets/courses/manatee-cove/hole-03.jpg'),
+  4: require('../assets/courses/manatee-cove/hole-04.jpg'),
+  5: require('../assets/courses/manatee-cove/hole-05.jpg'),
+  6: require('../assets/courses/manatee-cove/hole-06.jpg'),
+  7: require('../assets/courses/manatee-cove/hole-07.jpg'),
+  8: require('../assets/courses/manatee-cove/hole-08.jpg'),
+  9: require('../assets/courses/manatee-cove/hole-09.jpg'),
+  10: require('../assets/courses/manatee-cove/hole-10.jpg'),
+  11: require('../assets/courses/manatee-cove/hole-11.jpg'),
+  12: require('../assets/courses/manatee-cove/hole-12.jpg'),
+  13: require('../assets/courses/manatee-cove/hole-13.jpg'),
+  14: require('../assets/courses/manatee-cove/hole-14.jpg'),
+  15: require('../assets/courses/manatee-cove/hole-15.jpg'),
+  16: require('../assets/courses/manatee-cove/hole-16.jpg'),
+  17: require('../assets/courses/manatee-cove/hole-17.jpg'),
+  18: require('../assets/courses/manatee-cove/hole-18.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
+  'crane-creek': CRANE_CREEK_HOLE_IMAGES,
+  'manatee-cove': MANATEE_COVE_HOLE_IMAGES,
   'wente-vineyards': WENTE_VINEYARDS_HOLE_IMAGES,
   'yocha-dehe': YOCHA_DEHE_HOLE_IMAGES,
   'coyote-creek-tournament': COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES,
@@ -729,6 +775,8 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 //   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
 // Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  'crane-creek':              { lat: 28.075233, lng: -80.630249 },
+  'manatee-cove':             { lat: 28.219306, lng: -80.608414 },
   'wente-vineyards':          { lat: 37.630166, lng: -121.753313 },
   'yocha-dehe':               { lat: 38.739773, lng: -122.131517 },
   // Shadow Lakes G.C., Brentwood CA (401 W Country Club Dr). Scorecard-only; centroid for the card
@@ -834,6 +882,8 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('wente')) return 'wente-vineyards';
   if (c.includes('yocha')) return 'yocha-dehe';
   if (c.includes('shadow lake') || c.includes('shadow lakes')) return 'shadow-lakes';
+  if (c.includes('crane creek') || c.includes('crane')) return 'crane-creek';
+  if (c.includes('manatee')) return 'manatee-cove';
   return null;
 }
 
@@ -896,6 +946,8 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   if (c.includes('pruneridge')) return PRUNERIDGE_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('wente')) return WENTE_VINEYARDS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('yocha')) return YOCHA_DEHE_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('crane creek') || c.includes('crane')) return CRANE_CREEK_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('manatee')) return MANATEE_COVE_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 

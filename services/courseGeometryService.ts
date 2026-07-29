@@ -35,6 +35,8 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'wente-vineyards': 18,
   'yocha-dehe': 18,
   'shadow-lakes': 18,
+  'crane-creek': 18,
+  'manatee-cove': 18,
 };
 
 /**

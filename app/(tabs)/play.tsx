@@ -159,6 +159,21 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: 71.8, slope: 133, isLocal: true, thumbnail: satelliteThumb(37.929130, -121.752225),
     lat: 37.929130, lng: -121.752225,
   },
+  // 2026-07-29 (Tim — Gabe's Brevard County FL courses).
+  {
+    id: 'local:crane-creek',
+    club_name: 'Crane Creek Reserve',
+    location: 'Melbourne, FL',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(28.075233, -80.630249),
+    lat: 28.075233, lng: -80.630249,
+  },
+  {
+    id: 'local:manatee-cove',
+    club_name: 'Manatee Cove G.C.',
+    location: 'Patrick SFB, FL',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(28.219306, -80.608414),
+    lat: 28.219306, lng: -80.608414,
+  },
   // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
   // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
   {
