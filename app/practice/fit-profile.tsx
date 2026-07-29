@@ -162,6 +162,18 @@ export default function FitProfileScreen() {
           <Text style={[styles.scanBagText, { color: colors.accent }]}>Scan my bag with video</Text>
         </TouchableOpacity>
 
+        {/* 2026-07-29 (Tim — Arccos Air trial) — seed the distance ladder from an Arccos club-averages
+            screenshot (their numbers are already outlier-stripped). Sibling of the bag video scan. */}
+        <TouchableOpacity
+          onPress={() => router.push('/arccos-import' as never)}
+          style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent_sky, marginTop: -4 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Import my club distances from an Arccos screenshot"
+        >
+          <Ionicons name="cloud-download-outline" size={18} color={colors.accent_sky} />
+          <Text style={[styles.scanBagText, { color: colors.accent_sky }]}>Import distances from Arccos</Text>
+        </TouchableOpacity>
+
         {/* 2026-07-23 (Tim — Bag Vision Phase 2) — FIT GAP: your owned bag vs your data. */}
         {fitGap.ownedCount > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>

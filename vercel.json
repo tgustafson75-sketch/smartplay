@@ -143,6 +143,13 @@
       }
     },
     {
+      "src": "api/arccos-import.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
       "src": "api/course-geometry-share.ts",
       "use": "@vercel/node",
       "config": {
@@ -471,6 +478,10 @@
     {
       "src": "/api/bag-scan",
       "dest": "/api/bag-scan.ts"
+    },
+    {
+      "src": "/api/arccos-import",
+      "dest": "/api/arccos-import.ts"
     },
     {
       "src": "/api/course-geometry-share",
