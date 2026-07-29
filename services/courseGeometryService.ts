@@ -27,6 +27,11 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'sunnyvale': 18,
   // 2026-05-28 — Westlake Country Club, Jackson NJ.
   'westlake-cc-nj': 18,
+  // 2026-07-28 (audit — DISCO-F4) — new bundled courses. Harmless today (no API hint → bundled path
+  // wins), but closes the latent trap where an added hint would pad Pruneridge's 9 holes to 18.
+  'coyote-creek-tournament': 18,
+  'coyote-creek-valley': 18,
+  'pruneridge': 9,
 };
 
 /**
@@ -229,7 +234,13 @@ export type CourseGeometry = {
   holes: HoleGeometry[];
 };
 
-const CACHE_KEY_PREFIX = 'course-geometry-v1::';
+// 2026-07-28 (audit — DISCO-F1, CONFIRMED ×2) — bumped v1→v2 so testers who persisted the OLD
+// scrambled bundled coords (from a pre-07-28 build) MISS on this key once and re-hydrate the CORRECTED
+// data/courses.ts geometry. The prefix carries no data-version otherwise, and nothing else invalidates
+// it on OTA — so without this bump the whole OSM-hole-ways framing fix stays shadowed by the old cache
+// on the 6 no-hint courses (Highland, Mines, Redlands, Killian, Hermitage, Miccosukee). Bump again on
+// any future bundled-coord change.
+const CACHE_KEY_PREFIX = 'course-geometry-v2::';
 const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // weekly maximum
 
 const memCache: Map<string, CourseGeometry> = new Map();
@@ -586,7 +597,22 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
       const real = await resolveLocalCourseId(slug);
       if (real) upstreamId = real;
       else if (!centroid) return;
-      else upstreamId = '__osm_only__';
+      else {
+        // 2026-07-28 (audit — DISCO-F2, CONFIRMED) — mirror the forward path's bundled-wins guard.
+        // For a no-hint local course, bundled data/courses.ts coords are ground truth and MUST win over
+        // OSM synthesis (OSM carries no hole numbers → scrambles routing). Without this, the weekly
+        // background refresh silently overwrote the corrected bundled geometry with scrambled OSM — even
+        // on fresh installs 7 days after first visit. Re-hydrate bundled + persist, and DON'T OSM-fetch.
+        const bundled = buildBundledGeometry(courseId);
+        if (bundled) {
+          bundled.fetched_at = Date.now();
+          bundled.course_id = courseId;
+          memCache.set(courseId, bundled);
+          await writePersistedCache(bundled);
+          return;
+        }
+        upstreamId = '__osm_only__';
+      }
     } else if (!centroid) {
       // 2026-06-03 — Mirror of fetchCourseGeometry's non-local: centroid
       // derivation. Stale-cache background refresh hits this for any
