@@ -572,20 +572,6 @@ const styles = StyleSheet.create({
   scroll: {
     paddingBottom: 32,
   },
-  brandWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    gap: 12,
-  },
-  brandBadge: { width: 56, height: 56, borderRadius: 28 },
-  brandTitleBlock: { flex: 1 },
-  brandWordmarkRow: { flexDirection: 'row', alignItems: 'baseline' },
-  brandName1: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
-  brandName2: { fontSize: 18, fontWeight: '800', letterSpacing: 2.5 },
-  brandTagline: { fontSize: 10, fontWeight: '500', letterSpacing: 1.4, marginTop: 2 },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '800',

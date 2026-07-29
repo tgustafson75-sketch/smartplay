@@ -2958,7 +2958,7 @@ export default function CaddieTab() {
            the menu effectively unreachable at L2 mid-round.
            Parent alignItems flipped from 'center' to 'flex-start' so the
            three columns (back, placeholder, right) all align at the top
-           edge of the bar — Tool stays pinned at insets.top+38, pills
+           edge of the bar — Tool stays pinned at insets.top+22 (aligned with the logo), pills
            extend downward without crossing into the avatar zone. */}
       <View style={[styles.topNav, { top: insets.top + 22 }]}>
         {/* 2026-05-25 — Fix AK follow-up: the chevron-back is a

@@ -2478,15 +2478,6 @@ const styles = StyleSheet.create({
   },
   estimatedBadgeText: { color: '#0a0a0a', fontSize: 8, fontWeight: '900', letterSpacing: 0.6 },
   canvasFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  premiumBadge: {
-    position: 'absolute', top: 8, right: 8, zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderColor: 'rgba(245, 166, 35, 0.85)', borderWidth: 1,
-    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4,
-  },
-  premiumBadgeText: {
-    color: '#F5A623', fontSize: 10, fontWeight: '900', letterSpacing: 0.6,
-  },
   canvasFallbackTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
   canvasFallbackSub: { color: '#6b7280', fontSize: 13, textAlign: 'center' },
   // 2026-06-23 (Tim) — glowing-green bordered container for the map canvas (caddie
@@ -2548,32 +2539,6 @@ const styles = StyleSheet.create({
     borderColor: '#00C896',
     opacity: 0.35,
     zIndex: 24,
-  },
-  measureLabel: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    borderWidth: 1, borderColor: '#facc15',
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
-    minWidth: 92,
-  },
-  measureLabelTop: {
-    color: '#facc15', fontSize: 12, fontWeight: '900',
-    fontVariant: ['tabular-nums'],
-  },
-  measureLabelBot: {
-    color: '#ffffff', fontSize: 11, fontWeight: '700',
-    fontVariant: ['tabular-nums'], marginTop: 1,
-  },
-  saveBtn: {
-    position: 'absolute',
-    top: 12, right: 12,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5, shadowRadius: 4, elevation: 8,
-    zIndex: 25,
   },
   bottomPanel: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
