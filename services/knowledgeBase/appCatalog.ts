@@ -349,6 +349,15 @@ export const APP_FEATURES: AppFeature[] = [
     blurb: 'Your handicap, home course, experience level, and player preferences',
     whenToUse: 'they want to view or edit their profile / handicap / home course',
   },
+  {
+    id: 'tutorials',
+    name: 'Tutorials',
+    aliases: ['tutorials', 'tutorial', 'show me a tutorial', 'how-to videos', 'walk me through the app'],
+    route: '/tutorials',
+    category: 'data',
+    blurb: 'Short how-to walkthroughs of the app\'s features',
+    whenToUse: 'they want a guided tutorial / walkthrough of the app',
+  },
 ];
 
 // ── FAULT DRILLS (voice-addressable) ─────────────────────────────────────────
