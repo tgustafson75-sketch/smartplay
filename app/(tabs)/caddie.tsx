@@ -2981,11 +2981,12 @@ export default function CaddieTab() {
             constant-false conditional that wrapped this placeholder. */}
         <View style={styles.modeBadgePlaceholder} />
 
-        {/* 2026-06-13 (Tim) — drop the Tools pill + leaf into the gap BELOW the
-            tagline ("real-time caddie intelligence") and ABOVE Kevin's box
-            (cellTop = insets.top + 100). The accented pill was kissing the end of the
-            tagline at the row's insets.top+38 anchor; +22 seats it cleanly in the gap. */}
-        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6, marginTop: 30 }}>
+        {/* 2026-07-29 (Tim — "move the tools pill up to just inside the upper-right corner; it still
+            sits on top of the SmartVision data") — was dropped 30px into the gap BELOW the tagline,
+            which is exactly where the SmartVision hole preview + data now render, so the pill overlapped
+            it. Pull it up flush with the back chevron (both anchored at the top of topNav) so it sits in
+            the true upper-right corner, clear of the data — matching the corner pill on every other tab. */}
+        <View style={{ alignItems: 'flex-end', flexDirection: 'row', gap: 6, marginTop: 0 }}>
           {/* 2026-05-30 — Fix FY: Local Mode indicator. Subtle leaf
               next to the Tools pill when localMode is ON. Honest "you
               are here" — NOT a warning, NOT an error state. Tap routes

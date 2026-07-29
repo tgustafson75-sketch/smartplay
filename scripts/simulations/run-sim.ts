@@ -75,6 +75,9 @@ import { detectPlaySongRequest } from '../../services/musicIntent';
 import { SCREEN_HELP, detectHelpRequest as detectScreenHelp } from '../../services/screenHelp';
 import { detectPlainSpeakRequest } from '../../services/plainSpeak';
 import { GOLF_KNOWLEDGE } from '../../services/knowledgeBase/modules';
+import { APP_FEATURES, lookupFeature } from '../../services/knowledgeBase/appCatalog';
+import { isAppHelpQuery } from '../../services/knowledgeBase/capabilities';
+import { WHATS_NEW } from '../../services/knowledgeBase/whatsNew';
 import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
 import { assessDiagnosticEvidence, evidenceGateQuestion } from '../../services/intents/inRoundDiagnosticHandler';
 import { GROW_MOSTLY_KEYS } from '../../services/cloudSync/growMostlyKeys';
@@ -5223,6 +5226,101 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('End-round: no end path builds navigate_replace to /recap/<id>',
     !/type:\s*'navigate_replace'/.test(endCallers) && !/router\.replace\s*\([^)]*recap/.test(endCallers),
     'none of the end-round entry points emit a navigate_replace targeting the recap route');
+}
+
+// ─── App knowledge & tools (current catalog + the 2026-07 upgrades) ─────────────
+// 2026-07-29 (Tim — "add scenarios to the sims/harness for the tools + upgrades that exist now").
+// The caddie's app awareness (catalog + capabilities + how-tos + what's-new) and the token gate that
+// keeps them off every voice turn are all recent and were UNGUARDED by the harness. These lock them in.
+{
+  // ── Catalog integrity: every feature is fully populated + uniquely id'd. ──
+  const badFeature = APP_FEATURES.filter(f =>
+    !f.id || !f.name || !f.route || !f.blurb || !f.whenToUse || !f.category ||
+    !Array.isArray(f.aliases) || f.aliases.length === 0 || !f.route.startsWith('/'));
+  check('App catalog: every feature fully populated (id/name/route/blurb/whenToUse/aliases)',
+    badFeature.length === 0,
+    badFeature.length === 0 ? `${APP_FEATURES.length} features, all complete` : `INCOMPLETE: ${badFeature.map(f => f.id || '(no id)').join(', ')}`);
+  const catIds = APP_FEATURES.map(f => f.id);
+  const dupCatIds = catIds.filter((id, i) => catIds.indexOf(id) !== i);
+  check('App catalog: feature ids are unique', dupCatIds.length === 0,
+    dupCatIds.length === 0 ? 'no dup ids' : `DUP ids: ${[...new Set(dupCatIds)].join(', ')}`);
+
+  // ── Every route resolves to a REAL app/ screen (dead-route guard). ──
+  const routeExists = (route: string): boolean => {
+    const rel = route.replace(/^\//, '');
+    return [`app/${rel}.tsx`, `app/${rel}.ts`, `app/${rel}/index.tsx`, `app/${rel}/index.ts`]
+      .some(c => fs.existsSync(path.resolve(__dirname, '../../', c)));
+  };
+  const deadRoutes = APP_FEATURES.filter(f => !routeExists(f.route)).map(f => `${f.id}→${f.route}`);
+  check('App catalog: every feature route resolves to a real app/ screen',
+    deadRoutes.length === 0,
+    deadRoutes.length === 0 ? `all ${APP_FEATURES.length} routes exist` : `DEAD ROUTES: ${deadRoutes.join(', ')}`);
+
+  // ── lookupFeature resolves representative spoken names to the right screen. ──
+  const lookups: Array<[string, string]> = [
+    ['open smart tempo', '/swinglab/smart-tempo'],
+    ['import my arccos numbers', '/arccos-import'],
+    ['shot shapes', '/practice/shot-shapes'],
+    ['setup check', '/swinglab/setup-check'],
+    ['open smartvision', '/smartvision'],
+    ['scan my bag', '/bag-scan'],
+  ];
+  const badLookups = lookups.filter(([say, route]) => lookupFeature(say)?.route !== route)
+    .map(([say]) => `"${say}"→${lookupFeature(say)?.route ?? 'null'}`);
+  check('App catalog: lookupFeature routes spoken tool names to the right screen',
+    badLookups.length === 0,
+    badLookups.length === 0 ? `${lookups.length} names routed` : `MISROUTED: ${badLookups.join(', ')}`);
+
+  // ── isAppHelpQuery: gates the heavy repertoire+how-tos onto app-help turns ONLY. ──
+  const HELP_YES = [
+    'how do I record my swing', 'what can you do', "what's new", 'where is the tempo drill',
+    'how do I import my arccos numbers', 'what features do you have', 'walk me through setup check',
+  ];
+  const HELP_NO = [
+    "what's the play on 7", 'log a 7 iron', 'how far to the pin', 'I hit it in the water',
+    'read this putt', 'give me a club', 'I made a birdie',
+  ];
+  const helpMissed = HELP_YES.filter(t => !isAppHelpQuery(t));
+  const helpFalsePos = HELP_NO.filter(t => isAppHelpQuery(t));
+  check('App help gate: app-questions are recognized (isAppHelpQuery true)',
+    helpMissed.length === 0, helpMissed.length === 0 ? `all ${HELP_YES.length} recognized` : `MISSED: ${helpMissed.join(' | ')}`);
+  check('App help gate: normal golf turns are NOT flagged as app-help (no false positives)',
+    helpFalsePos.length === 0, helpFalsePos.length === 0 ? `all ${HELP_NO.length} passed through` : `FALSE POS: ${helpFalsePos.join(' | ')}`);
+
+  // ── Both brains gate capabilities+how-tos behind the help query (Tim's voice-path concern). ──
+  const pipecatSrc = fs.readFileSync(path.resolve(__dirname, '../../api/pipecat-turn.ts'), 'utf-8');
+  const kevinApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/kevin.ts'), 'utf-8');
+  for (const [label, src] of [['pipecat-turn', pipecatSrc], ['kevin', kevinApiSrc]] as const) {
+    check(`App help gate: ${label} injects capabilities/how-tos only when isAppHelpQuery`,
+      /isAppHelpQuery\(/.test(src) && /appHelp \? /.test(src) && /catalogForPrompt\(\)/.test(src),
+      'the lean catalog is always-on (navigate needs it) but capabilitiesForPrompt/howToForPrompt are behind the appHelp gate');
+    // The changelog is UI-only — it must NOT be injected into the brain prompt (bloats every turn).
+    check(`App help gate: ${label} does NOT inject the What's-New changelog into the prompt`,
+      !/whatsNewForPrompt/.test(src),
+      'whatsNewForPrompt is gone from the brain prompt — the changelog lives in Tools → What\'s New only');
+  }
+
+  // ── What's New changelog: populated, user-facing, single-source. ──
+  const badWhatsNew = WHATS_NEW.filter(e => !e.when || !e.note || e.note.length < 10);
+  check("What's New: changelog is populated with user-facing entries",
+    WHATS_NEW.length > 0 && badWhatsNew.length === 0,
+    badWhatsNew.length === 0 ? `${WHATS_NEW.length} entries` : `BAD: ${badWhatsNew.length}`);
+  const jargon = WHATS_NEW.filter(e => /\.tsx?\b|api\/|services\/|store\/|useState|zustand/.test(e.note));
+  check("What's New: entries are player-facing (no file names / code jargon)",
+    jargon.length === 0, jargon.length === 0 ? 'all clean' : `JARGON in ${jargon.length} entries`);
+  const whatsNewScreenSrc = fs.readFileSync(path.resolve(__dirname, '../../app/whats-new.tsx'), 'utf-8');
+  const whatsNewStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/whatsNewStore.ts'), 'utf-8');
+  check("What's New: screen + badge store both read the one WHATS_NEW source",
+    /WHATS_NEW/.test(whatsNewScreenSrc) && /WHATS_NEW/.test(whatsNewStoreSrc) && /unseenWhatsNewCount/.test(whatsNewStoreSrc),
+    'app/whats-new.tsx renders WHATS_NEW and store/whatsNewStore exposes unseenWhatsNewCount off the same array');
+
+  // ── Arccos import upgrade is fully wired (api + service + screen + catalog entry). ──
+  const arccosFiles = ['api/arccos-import.ts', 'services/arccosImport.ts', 'app/arccos-import.tsx']
+    .filter(f => !fs.existsSync(path.resolve(__dirname, '../../', f)));
+  const hasArccosFeature = APP_FEATURES.some(f => f.route === '/arccos-import');
+  check('Arccos import: api + service + screen + catalog entry all present',
+    arccosFiles.length === 0 && hasArccosFeature,
+    arccosFiles.length === 0 ? 'api/arccos-import + services/arccosImport + app/arccos-import + catalog entry' : `MISSING: ${arccosFiles.join(', ')}`);
 }
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
