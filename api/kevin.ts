@@ -1179,6 +1179,7 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
+      const { whatsNewForPrompt } = await import('../services/knowledgeBase/whatsNew');
       const { retrieveKB, kbForPrompt } = await import('../services/knowledgeBase/retrieve');
       // 2026-07-26 (deep audit — wire the dormant cnsPersonalize) — personalize KB entries to this
       // player's REAL signals (dominant miss + whether we have learned CNS). Only real values tailor an
@@ -1191,6 +1192,7 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
       kbAddendum =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"} for "take me to the tempo drill"). Only use open_swinglab for the bare hub with no named destination:\n${catalogForPrompt()}`
         + `\n\n${howToForPrompt()}`
+        + `\n\n${whatsNewForPrompt()}`
         + (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
