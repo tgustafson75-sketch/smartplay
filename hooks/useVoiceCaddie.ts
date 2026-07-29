@@ -1654,16 +1654,19 @@ export const useVoiceCaddie = ({
       // down and a retry is a dead 15s wait — fail straight to offline. Returns
       // { ok, ms } (ms = -1 when it threw before any response).
       const reachabilityPing = async (timeoutMs: number): Promise<{ ok: boolean; ms: number }> => {
+        // 2026-07-29 — return the ACTUAL elapsed ms on failure (was hardcoded -1). A fast failure
+        // (<2.5s = real refusal / DNS block / no network) vs a slow timeout (ms≈budget = a reachable
+        // host still handshaking) is the signal that decides whether to abort the cold transcribe.
+        const pStart = Date.now();
         try {
           const pc = new AbortController();
           const pt = setTimeout(() => pc.abort(), timeoutMs);
-          const pStart = Date.now();
           const pr = await fetch(apiUrl + '/api/kevin', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: '__ping__' }), signal: pc.signal,
           }).finally(() => clearTimeout(pt));
           return { ok: pr.ok, ms: Date.now() - pStart };
-        } catch { return { ok: false, ms: -1 }; }
+        } catch { return { ok: false, ms: Date.now() - pStart }; }
       };
 
       // 2026-06-28 (Tim) — DIAGNOSTIC GET probe alongside the POST ping. Backend is
@@ -1672,14 +1675,14 @@ export const useVoiceCaddie = ({
       // the POST ping lets the log say definitively: getOk+!pingOk = "GET works, POST
       // stalls" (device/proxy POST path); !getOk+!pingOk = host blocked from here.
       const healthGet = async (timeoutMs: number): Promise<{ ok: boolean; ms: number }> => {
+        const gStart = Date.now();
         try {
           const gc = new AbortController();
           const gt = setTimeout(() => gc.abort(), timeoutMs);
-          const gStart = Date.now();
           const gr = await fetch(apiUrl + '/api/health', { method: 'GET', signal: gc.signal })
             .finally(() => clearTimeout(gt));
           return { ok: gr.ok, ms: Date.now() - gStart };
-        } catch { return { ok: false, ms: -1 }; }
+        } catch { return { ok: false, ms: Date.now() - gStart }; }
       };
 
       // Honest offline dead-end — log the diagnostic, then degrade as far as the
@@ -1786,7 +1789,19 @@ export const useVoiceCaddie = ({
           // there" signal; if it answers, the host IS reachable (POST may just be slow/blocked) and we
           // must NOT abort the transcribe — it gets its full budget. Both failing = genuinely offline.
           const [ping, get] = await Promise.all([reachabilityPing(5000), healthGet(5000)]);
-          if (!ping.ok && !get.ok) { coldUnreachable = { ping, get }; try { coldAbort.abort(); } catch { /* no-op */ } }
+          // 2026-07-29 (Tim field log: source=processAudioUri_fastfail, AbortError, elapsedMs 5022,
+          // pingOk:false getOk:false) — on the FIRST turn the probes hit the SAME cold DNS/TLS/Lambda
+          // penalty as the transcribe, so BOTH TIMED OUT at 5s on a REACHABLE host and the old
+          // "both !ok → abort" killed the first transcribe EVERY launch — defeating the whole 22s cold
+          // budget that exists to absorb exactly this slow first handshake. Now abort ONLY on a
+          // CONFIDENT-FAST failure: a genuine connection refusal / DNS block / no-network throws in
+          // <2.5s. A slow timeout (ms ≈ the 5s budget) means "reachable, still handshaking" → do NOT
+          // abort; let the cold transcribe run its full budget and land a real transcript.
+          const FAST_UNREACHABLE_MS = 2500;
+          if (!ping.ok && !get.ok && Math.min(ping.ms, get.ms) < FAST_UNREACHABLE_MS) {
+            coldUnreachable = { ping, get };
+            try { coldAbort.abort(); } catch { /* no-op */ }
+          }
         })();
       }
       try {
