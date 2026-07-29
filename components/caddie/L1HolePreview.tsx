@@ -235,7 +235,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <ImageBackground source={heroImageSource} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
           {cartY != null && yardsToGreen != null ? (
             <>
               <View style={[styles.playerCartOnImage, { bottom: cartY, left: box.width / 2 - 12 }]}>
@@ -247,6 +246,9 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
             </>
           ) : null}
         </ImageBackground>
+        {/* Branded badge is a FRAME child (full width), not inside the centered/narrower image box —
+            so it pins to the card's true top-right and clears the ••• tools pill (badgeTop). */}
+        <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
       </HoleFrame>
     );
   }
@@ -274,7 +276,6 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       return (
         <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
           <ImageBackground source={localImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
-            <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
             {pctAlong != null && yardsToGreen != null ? (
               <>
                 <View style={[styles.playerTrackBar, { width: box.width - 16 }]}>
@@ -288,6 +289,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               </>
             ) : null}
           </ImageBackground>
+          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
         </HoleFrame>
       );
     }
