@@ -43,10 +43,7 @@ import { forceMarkPosition } from '../../services/positionMarkBus';
 import { canAccess, type FeatureKey } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
-import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
-import { usePointsStore } from '../../store/pointsStore';
-import { getApiBaseUrl } from '../../services/apiBase';
-import { buildRoundEndSummary } from '../../services/roundEndSummary';
+import { promptEndRound } from '../../services/round/endRoundFlow';
 
 export function GlobalToolsMenu() {
   const router = useRouter();
@@ -84,7 +81,6 @@ export function GlobalToolsMenu() {
   const whatsNewUnseen = Math.max(0, WHATS_NEW.length - whatsNewSeen);
   // Round
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
-  const endRound = useRoundStore((s) => s.endRound);
   // Feature gate (subscription_status lives in playerProfileStore)
   const subscription_status = usePlayerProfileStore((s) => s.subscription_status);
   // 2026-06-15 (Tim) — Reference Authoring relocated to Settings → Owner Tools
@@ -177,81 +173,12 @@ export function GlobalToolsMenu() {
     }
   });
 
-  const endRoundAction = () => fire(() => {
-    // 2026-05-17 — offer Save vs Discard at end-of-round. Save path
-    // appends to roundHistory + pushes differential + routes to recap.
-    // Discard path resets everything without persisting.
-    Alert.alert(
-      'End round?',
-      'Save the scorecard to your history, or discard everything?',
-      [
-        { text: 'Keep playing', style: 'cancel' },
-        {
-          text: 'Save & end',
-          onPress: async () => {
-            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-            // Snapshot BEFORE endRound() resets scores/courseHoles/activeCourse.
-            const preRound = useRoundStore.getState();
-            const snapshotScores = { ...preRound.scores };
-            const snapshotCourseHoles = [...preRound.courseHoles];
-            const cName = preRound.activeCourse ?? 'the course';
-            const total = preRound.getTotalScore();
-            const vspar = preRound.getScoreVsPar();
-            const played = preRound.getHolesPlayed();
-            const roundId = endRound();
-            // 2026-07-24 (audit — double-credit fix) — round-completion points are awarded ONCE inside
-            // endRound() (sim/holes-gated). This caller-side award double-credited + skipped the sim
-            // gate; removed. endRound() is the single source.
-            // 2026-07-04 (elite-clean audit) — the summary line now comes from the
-            // SAME shared builder the caddie tab uses (services/roundEndSummary);
-            // the inline verbatim copy that lived here had already drifted.
-            const summary = buildRoundEndSummary({
-              total, vspar, played,
-              scores: snapshotScores,
-              courseHoles: snapshotCourseHoles,
-              activeCourse: cName,
-            });
-            if (voiceEnabled) {
-              try {
-                await configureAudioForSpeech();
-                await speakChunked(summary, voiceGender, language, getApiBaseUrl());
-              } catch (e) {
-                console.log('[tools] round-summary speak failed (non-fatal):', e);
-              }
-            }
-            useToastStore.getState().show('Round saved');
-            // 2026-07-04 (elite-clean audit) — route through the SAME post-round flow
-            // as the caddie tab: feelings first, then the recap. This menu used to
-            // skip straight to /recap/<id>, so ending from the Tools menu silently
-            // dropped the post-round feelings capture.
-            try { router.push(`/recap/feelings?roundId=${roundId}` as never); }
-            catch (e) { console.log('[tools] recap nav failed', e); }
-          },
-        },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Discard this round?',
-              'All shots, scores, and plans from this round will be deleted. This cannot be undone.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Discard everything',
-                  style: 'destructive',
-                  onPress: () => {
-                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
-                    useRoundStore.getState().discardRound();
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
-  });
+  // 2026-07-29 (Tim) — the Save/Discard end-round flow now lives in ONE place
+  // (services/round/endRoundFlow.promptEndRound) so the Tools menu, the caddie-tab button, and the
+  // voice/text "end round" command all present the identical choice + feelings→recap push. This used
+  // to be a ~70-line inline copy here; the voice/text path had diverged (auto-save + navigate_replace)
+  // and crashed. Single source now.
+  const endRoundAction = () => fire(() => { promptEndRound(); });
 
   const navOrPaywall = (feature: FeatureKey, path: string) => fire(() => {
     if (!canAccess(feature, subscription_status)) {

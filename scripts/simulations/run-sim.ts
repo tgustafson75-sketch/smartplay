@@ -5183,6 +5183,48 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'a re-imported round matching an existing (day, course, score, holes) is skipped so duplicates do not inflate the handicap window');
 }
 
+// ─── End-round: the save/discard choice is universal (crash regression) ─────────
+// 2026-07-29 (Tim — "say/type 'end round' crashes; to end a round you HAVE to choose save or
+// discard"). The voice/text end_round handler used to auto-save + navigate_replace straight to
+// /recap/<id>, the ONE path that skipped the save/discard choice every on-screen path enforces — and
+// that divergent immediate path crashed. These guards lock the single-source flow in place.
+{
+  const endFlowSrc = fs.readFileSync(path.resolve(__dirname, '../../services/round/endRoundFlow.ts'), 'utf-8');
+  const endHandlerSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/endRoundHandler.ts'), 'utf-8');
+  const toolsMenuSrc = fs.readFileSync(path.resolve(__dirname, '../../components/tools/GlobalToolsMenu.tsx'), 'utf-8');
+
+  // The shared flow offers Save AND Discard, and routes Save through feelings — never a
+  // navigate_replace straight to the recap.
+  check('End-round: shared flow presents Save AND Discard',
+    /Save & end/.test(endFlowSrc) && /text: 'Discard'/.test(endFlowSrc) && /discardRound\(\)/.test(endFlowSrc),
+    'endRoundFlow.promptEndRound offers Save & end + Discard (with a confirm), matching the on-screen choice');
+  // NB: match real CODE tokens (`router.replace(`, `type: 'navigate_replace'`, `tool_action:`), not the
+  // bare word — the comments in these files legitimately mention "navigate_replace" to explain the fix.
+  check('End-round: shared flow routes Save through feelings → recap (no navigate_replace)',
+    /\/recap\/feelings\?roundId=/.test(endFlowSrc) && !/router\.replace\s*\(/.test(endFlowSrc) && !/type:\s*'navigate_replace'/.test(endFlowSrc),
+    'Save pushes /recap/feelings (which then pushes the recap); the flow never uses navigate_replace or router.replace to the recap');
+
+  // The voice/text handler must DEFER to the shared prompt and emit NO tool_action (no auto-end, no
+  // navigate_replace). This is the exact regression that crashed.
+  check('End-round: voice/text handler defers to promptEndRound, emits no navigate_replace',
+    /promptEndRound\(\)/.test(endHandlerSrc) &&
+      !/tool_action:/.test(endHandlerSrc) &&
+      !/\.endRound\(\)/.test(endHandlerSrc),
+    'endRoundHandler calls promptEndRound() and returns no tool_action / navigate_replace and never calls endRound() itself — the crashing auto-save-and-jump path is gone');
+
+  // Single source of truth: the Tools menu uses the same flow, not an inline copy.
+  check('End-round: Tools menu uses the shared promptEndRound (single source)',
+    /promptEndRound\(\)/.test(toolsMenuSrc) && !/Save the scorecard to your history/.test(toolsMenuSrc),
+    'GlobalToolsMenu.endRoundAction delegates to promptEndRound — the ~70-line inline Alert copy is gone');
+
+  // No end path anywhere navigates_replace to a bare /recap/<id> at end-of-round (that was the crash
+  // vector). navigate_replace to /recap/... must not be constructed by any end-round caller.
+  const endCallers = [endFlowSrc, endHandlerSrc, toolsMenuSrc].join('\n');
+  check('End-round: no end path builds navigate_replace to /recap/<id>',
+    !/type:\s*'navigate_replace'/.test(endCallers) && !/router\.replace\s*\([^)]*recap/.test(endCallers),
+    'none of the end-round entry points emit a navigate_replace targeting the recap route');
+}
+
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');

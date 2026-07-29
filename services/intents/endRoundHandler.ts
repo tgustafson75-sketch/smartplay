@@ -1,7 +1,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
-import { usePointsStore } from '../../store/pointsStore';
 import { track } from '../analytics';
+import { promptEndRound } from '../round/endRoundFlow';
 
 export const endRoundHandler: IntentHandler = {
   intent_type: 'end_round',
@@ -26,66 +26,22 @@ export const endRoundHandler: IntentHandler = {
       };
     }
 
-    // Snapshot BEFORE endRound() resets scores/courseHoles/activeCourse,
-    // mirroring caddie.tsx generateRoundSummary snapshot pattern.
-    const snapshotScores = { ...round.scores };
-    const snapshotCourseHoles = [...round.courseHoles];
-    const cName = round.activeCourse ?? 'the course';
-    const total = round.getTotalScore();
-    const vspar = round.getScoreVsPar();
-    const played = round.getHolesPlayed();
-
-    const roundId = round.endRound();
-    track('end_round_voice', { round_id: roundId });
-
-    // 2026-07-24 (audit — double-credit fix) — round-completion points are awarded ONCE inside
-    // round.endRound() (gated on holesPlayed>=9 && !isSimRound). This caller-side award was a
-    // leftover duplicate that also lacked the sim/holes gate — so a narrated sim round or a sub-9
-    // round wrongly earned points + climbed the tier. Removed; endRound() is the single source.
-
-    // Build contextual spoken summary mirroring caddie.tsx buildContextualSummary.
-    // 2026-07-07 (audit) — was `par ?? 4`, which scored par-3/par-5 holes against
-    // par 4 and spoke the wrong birdie/bogey tally. Only count holes with KNOWN par.
-    const holesWithPar = Object.entries(snapshotScores)
-      .map(([h, s]) => {
-        const par = snapshotCourseHoles.find(c => c.hole === Number(h))?.par ?? null;
-        return { hole: Number(h), score: s, par, offset: par != null ? s - par : 0 };
-      })
-      .filter((h): h is { hole: number; score: number; par: number; offset: number } => h.score > 0 && h.par != null);
-    let summaryLine: string;
-    if (holesWithPar.length === 0) {
-      summaryLine = `${played} holes at ${cName} — let's see what the recap says.`;
-    } else {
-      const best = holesWithPar.reduce((b, h) => (h.offset < b.offset ? h : b));
-      const worst = holesWithPar.reduce((w, h) => (h.offset > w.offset ? h : w));
-      const birdies = holesWithPar.filter(h => h.offset < 0).length;
-      const pars = holesWithPar.filter(h => h.offset === 0).length;
-      const bogeys = holesWithPar.filter(h => h.offset === 1).length;
-      const doublesPlus = holesWithPar.filter(h => h.offset >= 2).length;
-      // 2026-07-24 (full-app audit) — compute vs-par from the SAME known-par holes (never the caller's
-      // possibly-null value), so the spoken tally is always honest + self-consistent. Non-null here.
-      const vspar = holesWithPar.reduce((a, h) => a + h.offset, 0);
-      if (vspar <= -3) {
-        summaryLine = `${total} at ${cName} — ${Math.abs(vspar)} under. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars. Real golf.`;
-      } else if (vspar === 0) {
-        summaryLine = `Even par at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys} bogeys — discipline showed up today.`;
-      } else if (vspar <= 3 && played >= 9) {
-        const bestLabel = best.offset < 0 ? 'birdie' : best.offset === 0 ? 'par' : `${best.score} on a par ${best.par}`;
-        summaryLine = `${total} on the card at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. Best hole was ${bestLabel} on ${best.hole}. ${pars + birdies} of ${played} holes at or under par.`;
-      } else if (played < 9) {
-        summaryLine = `${played} hole${played === 1 ? '' : 's'} in at ${cName}. ${birdies} birdie${birdies === 1 ? '' : 's'}, ${pars} pars, ${bogeys + doublesPlus} over — short sample, but I'm tracking it.`;
-      } else {
-        const worstLabel = worst.offset >= 2 ? `${worst.score} on hole ${worst.hole}` : `+${worst.offset} on ${worst.hole}`;
-        summaryLine = `${total} at ${cName} — ${vspar > 0 ? '+' + vspar : vspar}. ${worstLabel} stung, but ${pars + birdies} hole${pars + birdies === 1 ? '' : 's'} held up. Recap'll show the patterns.`;
-      }
-    }
+    // 2026-07-29 (Tim — "say/type 'end round' crashes; you HAVE to choose save or discard"). Ending a
+    // round is destructive-or-persistent, so it must offer the SAME Save/Discard choice every on-screen
+    // path does — never silently auto-save. Previously this handler called endRound() itself and then
+    // returned a navigate_replace straight to /recap/<id>; that divergent immediate path (the ONLY one
+    // that skipped the choice + used replace instead of the feelings→recap push) is what crashed. Now
+    // it defers entirely to the shared save/discard flow (the Alert + endRound + feelings→recap push),
+    // and returns NO tool_action — so there's no auto-end and no navigate_replace on this path.
+    promptEndRound();
+    track('end_round_voice', {});
 
     return {
       success: true,
-      voice_response: summaryLine,
-      side_effects: [`endRound:${roundId}`],
+      // Natural spoken prompt that matches the Save/Discard choice now on screen.
+      voice_response: 'Nice work out there. Want me to save this round to your history, or discard it?',
+      side_effects: ['endRound:prompted'],
       follow_up_needed: false,
-      tool_action: { type: 'navigate_replace', path: `/recap/${roundId}` },
     };
   },
 };
