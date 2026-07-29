@@ -14,6 +14,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
+import { getBundledHoles } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
@@ -167,6 +168,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       (previewCourseLabel ? getLocalHoleImage(previewCourseLabel, 1) : null);
     if (previewImg) {
       const box = buildHoleBox(imageAspect(previewImg), W, H);
+      // Pre-round hole-1 distance for the branded badge (bundled data; null for non-local courses).
+      const previewDist = (() => {
+        try { return getBundledHoles(previewCourseId_resolved || '')?.find(h => h.hole === 1)?.distance ?? null; }
+        catch { return null; }
+      })();
       return (
         <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
           <ImageBackground source={previewImg} style={[styles.wrap, box]} imageStyle={styles.imgRadius} resizeMode="cover">
@@ -175,10 +181,13 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
                 on a clean dark base so only OUR label reads, not the baked-in number. */}
             <View style={styles.planScrim} pointerEvents="none" />
             <View style={styles.planLabelWrap} pointerEvents="none">
-              <Text style={styles.imageHoleLabel}>SMARTVISION</Text>
               <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
             </View>
           </ImageBackground>
+          {/* 2026-07-28 (Tim — "branded badge not showing") — the Course/Hole/Distance badge was only on
+              the in-round branches, so browsing the Caddie tab pre-round showed no badge. Add it here too
+              (previewing hole 1 of the selected course), frame-level so it clears the ••• tools pill. */}
+          <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />
         </HoleFrame>
       );
     }
@@ -248,7 +257,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
         </ImageBackground>
         {/* Branded badge is a FRAME child (full width), not inside the centered/narrower image box —
             so it pins to the card's true top-right and clears the ••• tools pill (badgeTop). */}
-        <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
+        <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />
       </HoleFrame>
     );
   }
@@ -289,7 +298,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               </>
             ) : null}
           </ImageBackground>
-          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop }} />
+          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />
         </HoleFrame>
       );
     }

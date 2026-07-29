@@ -29,7 +29,9 @@ export function HoleBrandBadge({
   const courseLabel = (course || '').trim();
   const hasDist = typeof distanceYds === 'number' && distanceYds > 0;
   return (
-    <View pointerEvents="none" style={[styles.badge, style]}>
+    // Default corner = top-right (top:8/right:8); callers pass `style` to relocate (e.g. SmartVision
+    // pins it bottom-left so it never crowds the green, which always sits top-center of the flyover).
+    <View pointerEvents="none" style={[styles.badge, style ?? { top: 8, right: 8 }]}>
       {courseLabel ? (
         <Text style={styles.course} numberOfLines={1}>
           {courseLabel}
@@ -53,8 +55,6 @@ const NEON = '#00F5B0';
 const styles = StyleSheet.create({
   badge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
     maxWidth: '72%',
     backgroundColor: 'rgba(3,12,7,0.60)',
     borderWidth: 1,

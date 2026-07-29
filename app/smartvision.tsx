@@ -2287,10 +2287,10 @@ export default function SmartVisionScreen() {
             pill: it always overlapped the hole/markers. Tap-to-place + drag still work; the P/T
             markers are self-explanatory. */}
 
-        {/* 2026-07-28 (Tim) — branded neon-green hole chip, upper-right. Same HoleBrandBadge the Caddie
-            tab uses so the two surfaces read as one system. SmartVision has no ••• tools pill in the
-            corner, so it keeps the default top:8. Rendered LAST inside the canvas → sits on top. */}
-        <HoleBrandBadge course={courseName} hole={holeIndex} distanceYds={courseHoles.find(x => x.hole === holeIndex)?.distance ?? null} />
+        {/* 2026-07-28 (Tim — "badge risks covering green") — the green always sits top-center of the
+            flyover, so on short/zoomed holes a top-right badge crowds it. Pin the SmartVision badge
+            BOTTOM-LEFT (opposite end from the green, by the tee) instead. Rendered LAST → sits on top. */}
+        <HoleBrandBadge course={courseName} hole={holeIndex} distanceYds={courseHoles.find(x => x.hole === holeIndex)?.distance ?? null} style={{ bottom: 8, left: 8, alignItems: 'flex-start' }} />
 
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>
