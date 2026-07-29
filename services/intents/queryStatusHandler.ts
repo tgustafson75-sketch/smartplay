@@ -1031,6 +1031,24 @@ export const queryStatusHandler: IntentHandler = {
           };
         }
         const par = round.courseHoles.find(h => h.hole === round.currentHole)?.par ?? 4;
+        // 2026-07-29 (Tim — "not just score but a review of the shots") — narrate the actual shot
+        // SEQUENCE from a prior round on this hole, not just the number. Every shot persists club +
+        // outcome + distance (ShotResult on RoundRecord.shots), so replay them in order. Returns '' when
+        // that round has no per-shot detail (e.g. a scorecard-photo import) → we fall back to score only.
+        const reviewShots = (rec: typeof priorRounds[number]): string => {
+          const hs = ((rec.shots ?? []) as import('../../store/roundStore').ShotResult[])
+            .filter(s => (s.hole ?? s.hole_number) === round.currentHole)
+            .sort((a, b) => (a.shot_number ?? 0) - (b.shot_number ?? 0) || (a.timestamp ?? 0) - (b.timestamp ?? 0));
+          if (hs.length === 0) return '';
+          const parts = hs.map(s => {
+            const club = (s.club || 'a shot').toString();
+            const dist = s.distance_yards ?? s.gps_distance_yards ?? s.carry_distance ?? null;
+            const distStr = typeof dist === 'number' && dist > 0 ? ` ${Math.round(dist)}y` : '';
+            const where = (s.outcome_text || s.direction || (s.outcome && s.outcome !== 'clean' ? String(s.outcome).replace(/_/g, ' ') : '') || '').toString().trim();
+            return where ? `${club}${distStr} ${where}` : `${club}${distStr}`;
+          });
+          return ` Shot by shot: ${parts.join(', then ')}.`;
+        };
         if (priorRounds.length === 1) {
           const r = priorRounds[0];
           const score = r.scores[round.currentHole];
@@ -1038,12 +1056,12 @@ export const queryStatusHandler: IntentHandler = {
           const vStr = v === 0 ? 'paired it' : v > 0 ? `${v === 1 ? 'bogeyed' : v === 2 ? 'doubled' : `went +${v}`} it` : `went ${v} on it`;
           return {
             success: true,
-            voice_response: `Last time, you ${vStr}.`,
+            voice_response: `Last time, you ${vStr}.${reviewShots(r)}`,
             side_effects: ['query:hole_history_one'],
             follow_up_needed: false,
           };
         }
-        // Multiple prior rounds — last 3 + average
+        // Multiple prior rounds — last 3 + average, plus the most-recent round's shot-by-shot review.
         const lastThree = priorRounds.slice(-3);
         const labels = lastThree.map(r => {
           const v = r.scores[round.currentHole] - par;
@@ -1053,7 +1071,7 @@ export const queryStatusHandler: IntentHandler = {
         const avgPhrase = Math.abs(avgVsPar) < 0.25 ? 'around par' : avgVsPar > 0 ? `over par by ${avgVsPar.toFixed(1)}` : `under par by ${Math.abs(avgVsPar).toFixed(1)}`;
         return {
           success: true,
-          voice_response: `Last ${lastThree.length} times: ${labels.join(', ')}. Average here is ${avgPhrase}.`,
+          voice_response: `Last ${lastThree.length} times: ${labels.join(', ')}. Average here is ${avgPhrase}.${reviewShots(priorRounds[priorRounds.length - 1])}`,
           side_effects: ['query:hole_history_multi'],
           follow_up_needed: false,
         };
