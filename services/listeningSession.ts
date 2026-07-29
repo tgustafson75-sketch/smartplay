@@ -52,6 +52,14 @@ const kevinTimeout = (): number => (isConnectionWarmed() ? KEVIN_FETCH_TIMEOUT_M
 type SessionState = 'idle' | 'opening' | 'listening' | 'thinking' | 'responding';
 
 const INTENT_FETCH_TIMEOUT_MS = 8_000;
+// 2026-07-29 (Tim — "STILL a first-time failure gate in the speaking path, off-course, EVERY first ask")
+// — the brain timeout went cold-aware on 07-25, but the INTENT-classify fetch was left at a FIXED 8s.
+// On the first ask after launch, /api/voice-intent is a COLD Vercel Lambda (~8-12s cold start + classify)
+// — so the 8s bound ABORTED it, the fetch threw / returned !ok, and the turn spoke "I'm having trouble
+// connecting." Deterministic first-turn failure. Give the classifier the same cold budget until the
+// connection is confirmed warm (warmup completed OR a prior request succeeded); warm turns keep 8s.
+const COLD_INTENT_FETCH_TIMEOUT_MS = 22_000;
+const intentTimeout = (): number => (isConnectionWarmed() ? INTENT_FETCH_TIMEOUT_MS : COLD_INTENT_FETCH_TIMEOUT_MS);
 // 2026-06-23 (smoke-test) — match useVoiceCaddie BRAIN_TIMEOUT_MS (30s) so the
 // active-listen path doesn't abort a healthy-but-slow brain the tap path would keep.
 
@@ -559,7 +567,7 @@ async function openSession() {
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
         }),
-      }, INTENT_FETCH_TIMEOUT_MS);
+      }, intentTimeout());
       if (!parseRes.ok) {
         speculativeController?.abort();
         // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
@@ -1098,7 +1106,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
         }),
-      }, INTENT_FETCH_TIMEOUT_MS);
+      }, intentTimeout());
       if (!parseRes.ok) {
         console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
         return;
