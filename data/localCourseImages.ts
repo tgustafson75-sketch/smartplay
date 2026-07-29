@@ -297,7 +297,9 @@ export type LocalCourseSlug =
   | 'mines-gc' | 'dale-hollow' | 'old-fort' | 'nashboro' | 'hermitage-pr'
   // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two interleaved 18s + Pruneridge G.C.
   // (Santa Clara, CA) 9-hole par-30. OSM-built; engine aerials bundled as the GPS-drop backup.
-  | 'coyote-creek-tournament' | 'coyote-creek-valley' | 'pruneridge';
+  | 'coyote-creek-tournament' | 'coyote-creek-valley' | 'pruneridge'
+  // 2026-07-29 — Jay Scott's Bay Area courses (OSM-built).
+  | 'wente-vineyards' | 'yocha-dehe';
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
@@ -634,7 +636,51 @@ export const PRUNERIDGE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
   9: require('../assets/courses/pruneridge/hole-09.jpg'),
 };
 
+export const WENTE_VINEYARDS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/wente-vineyards/hole-01.jpg'),
+  2: require('../assets/courses/wente-vineyards/hole-02.jpg'),
+  3: require('../assets/courses/wente-vineyards/hole-03.jpg'),
+  4: require('../assets/courses/wente-vineyards/hole-04.jpg'),
+  5: require('../assets/courses/wente-vineyards/hole-05.jpg'),
+  6: require('../assets/courses/wente-vineyards/hole-06.jpg'),
+  7: require('../assets/courses/wente-vineyards/hole-07.jpg'),
+  8: require('../assets/courses/wente-vineyards/hole-08.jpg'),
+  9: require('../assets/courses/wente-vineyards/hole-09.jpg'),
+  10: require('../assets/courses/wente-vineyards/hole-10.jpg'),
+  11: require('../assets/courses/wente-vineyards/hole-11.jpg'),
+  12: require('../assets/courses/wente-vineyards/hole-12.jpg'),
+  13: require('../assets/courses/wente-vineyards/hole-13.jpg'),
+  14: require('../assets/courses/wente-vineyards/hole-14.jpg'),
+  15: require('../assets/courses/wente-vineyards/hole-15.jpg'),
+  16: require('../assets/courses/wente-vineyards/hole-16.jpg'),
+  17: require('../assets/courses/wente-vineyards/hole-17.jpg'),
+  18: require('../assets/courses/wente-vineyards/hole-18.jpg'),
+};
+
+export const YOCHA_DEHE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
+  1: require('../assets/courses/yocha-dehe/hole-01.jpg'),
+  2: require('../assets/courses/yocha-dehe/hole-02.jpg'),
+  3: require('../assets/courses/yocha-dehe/hole-03.jpg'),
+  4: require('../assets/courses/yocha-dehe/hole-04.jpg'),
+  5: require('../assets/courses/yocha-dehe/hole-05.jpg'),
+  6: require('../assets/courses/yocha-dehe/hole-06.jpg'),
+  7: require('../assets/courses/yocha-dehe/hole-07.jpg'),
+  8: require('../assets/courses/yocha-dehe/hole-08.jpg'),
+  9: require('../assets/courses/yocha-dehe/hole-09.jpg'),
+  10: require('../assets/courses/yocha-dehe/hole-10.jpg'),
+  11: require('../assets/courses/yocha-dehe/hole-11.jpg'),
+  12: require('../assets/courses/yocha-dehe/hole-12.jpg'),
+  13: require('../assets/courses/yocha-dehe/hole-13.jpg'),
+  14: require('../assets/courses/yocha-dehe/hole-14.jpg'),
+  15: require('../assets/courses/yocha-dehe/hole-15.jpg'),
+  16: require('../assets/courses/yocha-dehe/hole-16.jpg'),
+  17: require('../assets/courses/yocha-dehe/hole-17.jpg'),
+  18: require('../assets/courses/yocha-dehe/hole-18.jpg'),
+};
+
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
+  'wente-vineyards': WENTE_VINEYARDS_HOLE_IMAGES,
+  'yocha-dehe': YOCHA_DEHE_HOLE_IMAGES,
   'coyote-creek-tournament': COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES,
   'coyote-creek-valley': COYOTE_CREEK_VALLEY_HOLE_IMAGES,
   'pruneridge': PRUNERIDGE_HOLE_IMAGES,
@@ -683,6 +729,8 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 //   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
 // Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  'wente-vineyards':          { lat: 37.630166, lng: -121.753313 },
+  'yocha-dehe':               { lat: 38.739773, lng: -122.131517 },
   'coyote-creek-tournament': { lat: 37.194526, lng: -121.699698 },
   'coyote-creek-valley':      { lat: 37.198117, lng: -121.710450 },
   'pruneridge':               { lat: 37.332490, lng: -121.965502 },
@@ -780,6 +828,8 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   // 2026-07-28 — Coyote Creek (default Tournament unless "valley" named) + Pruneridge.
   if (c.includes('coyote')) return c.includes('valley') ? 'coyote-creek-valley' : 'coyote-creek-tournament';
   if (c.includes('pruneridge')) return 'pruneridge';
+  if (c.includes('wente')) return 'wente-vineyards';
+  if (c.includes('yocha')) return 'yocha-dehe';
   return null;
 }
 
@@ -840,6 +890,8 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   // 2026-07-28 — Coyote Creek (two courses; default to Tournament unless "valley" is named) + Pruneridge.
   if (c.includes('coyote')) return (c.includes('valley') ? COYOTE_CREEK_VALLEY_HOLE_IMAGES[holeNumber] : COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES[holeNumber]) ?? null;
   if (c.includes('pruneridge')) return PRUNERIDGE_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('wente')) return WENTE_VINEYARDS_HOLE_IMAGES[holeNumber] ?? null;
+  if (c.includes('yocha')) return YOCHA_DEHE_HOLE_IMAGES[holeNumber] ?? null;
   return null;
 }
 

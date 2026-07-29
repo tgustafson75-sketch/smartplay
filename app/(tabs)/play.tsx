@@ -134,6 +134,22 @@ const LOCAL_COURSES: CourseSummary[] = [
     rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(37.332490, -121.965502),
     lat: 37.332490, lng: -121.965502,
   },
+  // 2026-07-29 (Tim — new tester Jay Scott, Bay Area). Wente + Yocha Dehe bundled with real OSM
+  // geometry; Shadow Lakes (his home course) rides the golfcourseapi search — it's in that DB.
+  {
+    id: 'local:wente-vineyards',
+    club_name: 'Wente Vineyards',
+    location: 'Livermore, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(37.630166, -121.753313),
+    lat: 37.630166, lng: -121.753313,
+  },
+  {
+    id: 'local:yocha-dehe',
+    club_name: 'Yocha Dehe G.C.',
+    location: 'Brooks, CA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(38.739773, -122.131517),
+    lat: 38.739773, lng: -122.131517,
+  },
   // 2026-07-22 (Tim) — beta courses built from screenshots + OSM (data/courses.ts). No thumbnail
   // (golfcourseapi has no images); cards render from the data we have. rating/slope unknown → null.
   {

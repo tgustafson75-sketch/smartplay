@@ -32,6 +32,8 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'coyote-creek-tournament': 18,
   'coyote-creek-valley': 18,
   'pruneridge': 9,
+  'wente-vineyards': 18,
+  'yocha-dehe': 18,
 };
 
 /**
