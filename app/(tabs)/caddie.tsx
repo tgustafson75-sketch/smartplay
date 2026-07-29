@@ -2960,7 +2960,7 @@ export default function CaddieTab() {
            three columns (back, placeholder, right) all align at the top
            edge of the bar — Tool stays pinned at insets.top+38, pills
            extend downward without crossing into the avatar zone. */}
-      <View style={[styles.topNav, { top: insets.top + 38 }]}>
+      <View style={[styles.topNav, { top: insets.top + 22 }]}>
         {/* 2026-05-25 — Fix AK follow-up: the chevron-back is a
             shortcut to scorecard; its 12px top hitSlop was extending
             UP into the brand row above (insets.top to insets.top+38)
