@@ -14,6 +14,8 @@
     "generate:greetings": "node scripts/generate-kevin-greetings.mjs",
     "sim": "tsx scripts/simulations/run-sim.ts",
     "sim:round": "tsx scripts/simulations/synthetic-round.ts",
+    "sim:text": "tsx scripts/simulations/sim-text.ts",
+    "sim:auto": "tsx scripts/simulations/sim-auto-round.ts",
     "kevin": "tsx --env-file=.env.local scripts/generate-caddie.ts kevin",
     "caddie": "tsx --env-file=.env.local scripts/generate-caddie.ts",
     "ios:build:preview": "eas build --profile preview --platform ios",
