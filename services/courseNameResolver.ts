@@ -28,7 +28,7 @@ export function resolveSpokenCourse(spoken: string): { previewId: string; label:
   if (s.length < 3) return null;
   // Strip filler + a trailing "in <place>" location clause ("highland links in truro" → "highland links").
   const cleaned = s
-    .replace(/\b(the|a|to|golf\s+course|course|club|please|now|for\s+me|let'?s)\b/gi, ' ')
+    .replace(/\b(the|a|to|golf\s+course|golf|course|club|please|now|for\s+me|let'?s)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const namePart = cleaned.replace(/\s+in\s+[a-z0-9 .,'’-]+$/i, '').trim() || cleaned;
@@ -37,15 +37,21 @@ export function resolveSpokenCourse(spoken: string): { previewId: string; label:
   if (GENERIC_GOLF_WORDS.has(namePart)) return null;
 
   const hit = (c: { id: string; name: string }) => ({ previewId: `local:${c.id}`, label: c.name });
+  // 2026-07-28 (audit — VOICE-F1, CONFIRMED BLOCKER) — normalize a course name for matching: strip
+  // parentheses so multi-course names like "Coyote Creek (Tournament)" / "(Valley)" become
+  // "coyote creek tournament" / "…valley" and can be reached by their spoken qualifier. Without this,
+  // every parenthesized name failed exact + prefix matching → Coyote Creek Valley was voice-unreachable
+  // and bare "coyote creek" silently resolved to Tournament with no way to ask for Valley.
+  const norm = (name: string) => name.toLowerCase().replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
 
   // 1. Exact name.
   for (const c of COURSES) {
-    const cn = c.name.toLowerCase();
+    const cn = norm(c.name);
     if (cn === namePart || cn === cleaned) return hit(c);
   }
   // 2. The spoken phrase contains a FULL course name ("take me to pebble beach golf links today").
   for (const c of COURSES) {
-    const cn = c.name.toLowerCase();
+    const cn = norm(c.name);
     if (cn.length >= 4 && namePart.includes(cn)) return hit(c);
   }
   // 3. A solid spoken fragment is a PREFIX of a course name ("highland" → "Highland Links",
@@ -54,9 +60,33 @@ export function resolveSpokenCourse(spoken: string): { previewId: string; label:
   //    the reverse (course name is a prefix of the spoken fragment) covers trailing filler.
   if (namePart.length >= 5) {
     for (const c of COURSES) {
-      const cn = c.name.toLowerCase();
+      const cn = norm(c.name);
       if (cn.startsWith(namePart) || namePart.startsWith(cn)) return hit(c);
     }
   }
   return null;
+}
+
+/**
+ * 2026-07-28 (audit — VOICE-F2) — all bundled courses a bare spoken name prefix-matches, for
+ * disambiguation ("coyote creek" → both Coyote Creek 18s → ask "Tournament or Valley?"). resolveSpokenCourse
+ * returns the FIRST match (a sensible default); a caller that wants to disambiguate calls this and, when it
+ * gets >1, prompts. Uses the same normalization + prefix rule as branch 3 above.
+ */
+export function resolveSpokenCourseCandidates(spoken: string): { previewId: string; label: string }[] {
+  const s = (spoken ?? '').toLowerCase().trim();
+  if (s.length < 5) return [];
+  const cleaned = s
+    .replace(/\b(the|a|to|golf\s+course|golf|course|club|please|now|for\s+me|let'?s)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const namePart = cleaned.replace(/\s+in\s+[a-z0-9 .,'’-]+$/i, '').trim() || cleaned;
+  if (namePart.length < 5 || GENERIC_GOLF_WORDS.has(namePart)) return [];
+  const norm = (name: string) => name.toLowerCase().replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const out: { previewId: string; label: string }[] = [];
+  for (const c of COURSES) {
+    const cn = norm(c.name);
+    if (cn.startsWith(namePart) || namePart.startsWith(cn)) out.push({ previewId: `local:${c.id}`, label: c.name });
+  }
+  return out;
 }

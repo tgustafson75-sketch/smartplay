@@ -161,21 +161,31 @@ export default function CourseDetailScreen() {
         const ratingNumber = dataCourse ? parseFloat(dataCourse.rating) : null;
         const slopeNumber = dataCourse ? parseInt(dataCourse.slope, 10) : null;
 
+        // 2026-07-28 (audit — DISCO-F3) — prefer the REAL bundled name over the frozen slug allowlist
+        // (which dropped every course added after it froze to a raw dashed slug), and PARSE "City, ST"
+        // from the bundled fullName so out-of-state courses aren't mislabeled. The old block hard-coded
+        // state:'CA' and defaulted city to 'Menifee' — wrong for Coyote Creek/Pruneridge (Morgan Hill /
+        // Santa Clara) and for every TN/MA/KY tester course.
+        const realName = dataCourse?.name ?? friendly;
+        const parsedLoc: { city: string; state: string; country: string } = (() => {
+          const fn = dataCourse?.fullName ?? '';
+          const m = [...fn.matchAll(/([A-Za-z][A-Za-z .'-]*?),?\s+([A-Z]{2})\b/g)].pop();
+          if (m) return { city: m[1].trim(), state: m[2], country: 'USA' };
+          const city =
+            slug.startsWith('rancho') ? 'Temecula' :
+            slug === 'crystal-springs' ? 'Burlingame' :
+            slug === 'mariners-point' ? 'Foster City' :
+            slug === 'san-jose-muni' ? 'San Jose' :
+            slug === 'sunnyvale' ? 'Sunnyvale' :
+            slug === 'palms' || slug === 'lakes' ? 'Menifee' : '';
+          return { city, state: 'CA', country: 'USA' };
+        })();
+
         const stubCourse: Course = {
           id: course_id,
-          club_name: friendly,
-          course_name: friendly,
-          location: {
-            city:
-              slug.startsWith('rancho') ? 'Temecula' :
-              slug === 'crystal-springs' ? 'Burlingame' :
-              slug === 'mariners-point' ? 'Foster City' :
-              slug === 'san-jose-muni' ? 'San Jose' :
-              slug === 'sunnyvale' ? 'Sunnyvale' :
-              'Menifee',
-            state: 'CA',
-            country: 'USA',
-          },
+          club_name: realName,
+          course_name: realName,
+          location: parsedLoc,
           tees: [{
             tee_name: 'White',
             total_yards: totalYards,

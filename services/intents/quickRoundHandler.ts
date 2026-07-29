@@ -24,6 +24,7 @@ import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { searchCourses } from '../golfCourseApi';
 import { resolveSpokenCourse } from '../courseNameResolver';
 import { setPendingCourseChoices } from '../pendingDisambiguation';
+import { getBundledHoles } from '../../data/courses';
 
 // 2026-07-24 (final QA — "start a round at <course>"). This handler used to keep its OWN
 // stale 9-course slug list, so "start a round at Highland / Miccosukee / Pembroke / Doral /
@@ -94,7 +95,13 @@ export const quickRoundHandler: IntentHandler = {
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const courseHint = String(intent.parameters.course_hint ?? '').trim();
     const holeCountRaw = intent.parameters.hole_count;
-    const holeCount: 9 | 18 = holeCountRaw === 9 || holeCountRaw === '9' ? 9 : 18;
+    // 2026-07-28 (audit — VOICE-F8) — the user's EXPLICIT choice (9 or 18) wins; when they didn't say a
+    // number we default from the resolved course's own hole count below (so a 9-hole course like
+    // Pruneridge isn't posted to WHS as an 18-hole score). The play loop already clamps to the real hole
+    // count — this only fixes nineHoleMode / handicap classification.
+    const explicitHoles: 9 | 18 | null =
+      holeCountRaw === 9 || holeCountRaw === '9' ? 9 : holeCountRaw === 18 || holeCountRaw === '18' ? 18 : null;
+    let holeCount: 9 | 18 = explicitHoles ?? 18;
     const guestNamesRaw = intent.parameters.guest_names;
     const guestNames: string[] = Array.isArray(guestNamesRaw)
       ? guestNamesRaw.filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
@@ -110,6 +117,11 @@ export const quickRoundHandler: IntentHandler = {
       if (local) {
         courseId = local.id;
         courseDisplayName = local.displayName;
+        // Default 9-hole for a bundled 9-hole course when the user didn't state a count (VOICE-F8).
+        if (explicitHoles == null) {
+          const n = getBundledHoles(courseId).length;
+          if (n > 0 && n <= 9) holeCount = 9;
+        }
       } else {
         try {
           const results = await searchCourses(courseHint);

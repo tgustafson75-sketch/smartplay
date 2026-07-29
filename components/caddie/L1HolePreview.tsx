@@ -14,7 +14,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 // `assets/courses/rancho-california/hole-XX.jpg` files later picks them
 // up without further code changes (just add the require() entries here).
 import { getLocalHoleImage, getLocalHoleImageById } from '../../data/localCourseImages';
-import { getBundledHoles } from '../../data/courses';
+import { getBundledHoles, COURSES } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
@@ -122,7 +122,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   const previewCourseLabel: string | null = (() => {
     if (activeCourse) return activeCourse;
     if (previewCourseId_resolved && previewCourseId_resolved.startsWith('local:')) {
-      return previewCourseId_resolved.slice('local:'.length).replace(/-/g, ' ');
+      // 2026-07-28 (audit — DISCO-F5) — use the REAL course name ("Coyote Creek (Tournament)") from
+      // COURSES rather than a lowercase de-slugified guess ("coyote creek tournament").
+      const slug = previewCourseId_resolved.slice('local:'.length);
+      const real = COURSES.find(c => c.id === slug)?.name;
+      return real ?? slug.replace(/-/g, ' ');
     }
     if (previewCourseId_resolved) return previewCourseId_resolved;
     return null;
