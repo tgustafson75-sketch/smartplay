@@ -20,8 +20,8 @@ export const changeSettingHandler: IntentHandler = {
   intent_type: 'change_setting',
 
   parameter_schema: {
-    setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units',
-    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry; handedness: left|right; units: yards|meters',
+    setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units, imagery',
+    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)',
   },
 
   examples: [
@@ -41,6 +41,8 @@ export const changeSettingHandler: IntentHandler = {
     'switch to right-handed',
     'switch to meters',
     'use yards',
+    'show me the satellite view',
+    'switch to the static hole photo',
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
@@ -227,6 +229,26 @@ export const changeSettingHandler: IntentHandler = {
         if (unit === null) return clarify('Yards or meters?');
         useSettingsStore.getState().setDistanceUnit(unit);
         return ack(`Distances in ${unit} now.`, ['distance_unit:' + unit]);
+      }
+
+      // 2026-07-29 (audit — VOICE-F5) — SmartVision imagery toggle (satellite aerial vs static hole
+      // photo) was tap-only. "show me the satellite / aerial view" → gps; "static / drawn / hole photo"
+      // → curated; "auto / best" → auto. Setter: setSmartVisionImagery('curated'|'gps'|'auto').
+      case 'imagery':
+      case 'imagery_mode':
+      case 'satellite_view':
+      case 'map_view':
+      case 'smartvision_imagery': {
+        const raw = String(rawValue ?? setting).toLowerCase();
+        const mode: 'curated' | 'gps' | 'auto' | null =
+          /\b(satellite|aerial|sat|gps|real)\b/.test(raw) ? 'gps' :
+          /\b(static|drawn|photo|curated|diagram|map)\b/.test(raw) ? 'curated' :
+          /\b(auto|automatic|best|default)\b/.test(raw) ? 'auto' :
+          null;
+        if (mode === null) return clarify('Satellite view or the static hole photo?');
+        useSettingsStore.getState().setSmartVisionImagery(mode);
+        const label = mode === 'gps' ? 'satellite aerial' : mode === 'curated' ? 'the static hole photo' : 'auto (best available)';
+        return ack(`SmartVision showing ${label} now.`, ['smartvision_imagery:' + mode]);
       }
 
       default:

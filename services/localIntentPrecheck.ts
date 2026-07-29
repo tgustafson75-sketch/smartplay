@@ -314,7 +314,7 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // actually RESOLVES to a known bundled course — otherwise we fall through to the brain, so this can
   // never hijack "take me to the range", "play a song", or "go to hole five".
   {
-    const cm = t.match(/\b(?:take me to|pull up|bring up|open up|load|go to|let'?s play|play|start)\s+(.+)/i);
+    const cm = t.match(/\b(?:take me to|pull up|bring up|open up|open|load|go to|let'?s play|play|start)\s+(.+)/i);
     if (cm) {
       const resolved = resolveSpokenCourse(cm[1]);
       if (resolved) {

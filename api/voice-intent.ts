@@ -73,11 +73,12 @@ You are a voice intent parser for SmartPlay Caddie, a golf caddie app. The user 
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log" | "focus_session" | "shot_shapes" | "fit_profile" | "setup_check" | "import_range", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
    - "let me see SwingLab" -> { tool_name: "swinglab" }
+   - "start a focus session" / "focus session" -> { tool_name: "focus_session" }; "shot shapes" / "track my shot patterns" -> { tool_name: "shot_shapes" }; "open my fit profile" / "bag fitting" -> { tool_name: "fit_profile" }; "run a setup check" / "check my address" -> { tool_name: "setup_check" }; "import a range session" / "scan my TopTracer" / "calibrate from my range session" -> { tool_name: "import_range" }
    - "open the rangefinder" -> { tool_name: "smartfinder" }
    - "pull up my scorecard" -> { tool_name: "scorecard" }
    - "show my dashboard" -> { tool_name: "dashboard" }

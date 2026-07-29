@@ -131,7 +131,22 @@ export function buildPipecatContext() {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           history = require('./caddieHistoryContext').historyPromptBlock() as string;
         } catch { /* history block is additive */ }
-        return [base, plan, history, offline].filter((b) => b && b.trim()).join('\n\n');
+        // 2026-07-29 (audit — BRAIN-F4) — the server lookup_course tool queries golfcourseapi ONLY, so
+        // the brain couldn't resolve locally-authored/OSM courses (the new Coyote Creek/Pruneridge + the
+        // tester home courses) for OFF-round questions ("what courses do I have", "tell me about
+        // Pruneridge", "the par-3 course near me"). Fold a compact bundled catalog into context OFF-round
+        // (skipped on-course, where the round context already carries the active course) so the brain
+        // KNOWS they exist and can open/discuss them by name instead of "I can't find that course".
+        let bundled = '';
+        try {
+          if (!round.isRoundActive) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { COURSES } = require('../data/courses') as typeof import('../data/courses');
+            const list = COURSES.map((c) => `${c.name} (${c.holes?.length ?? 18}h par ${c.par})`).join('; ');
+            if (list) bundled = `BUNDLED COURSES the player can open or play by name (say "open <name>" / "play <name>"): ${list}. Coyote Creek has TWO separate 18s — Tournament and Valley. You KNOW every course in this list — open or discuss it by name; never claim you can't find one of these.`;
+          }
+        } catch { /* bundled catalog is additive */ }
+        return [base, plan, history, offline, bundled].filter((b) => b && b.trim()).join('\n\n');
       } catch { return ''; }
     })(),
   };

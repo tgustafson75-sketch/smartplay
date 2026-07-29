@@ -65,11 +65,12 @@ const buildSystemPrompt = (g: Persona | VoiceGender) => {
 Available intents:
 
 1. open_tool — User wants to launch a tool or screen.
-   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
+   parameters: { tool_name: "smartvision" | "smartfinder" | "scene_read" | "swinglab" | "scorecard" | "dashboard" | "settings" | "lie_analysis" | "smartmotion" | "register_club" | "coach_mode" | "cage_mode" | "library" | "issue_log" | "focus_session" | "shot_shapes" | "fit_profile" | "setup_check" | "import_range", play_intent?: "aggressive" | "conservative", angle?: "down_the_line" | "face_on", auto_start?: boolean, player_name?: string, send_log?: boolean }
    Examples:
    - "open SmartVision" -> { tool_name: "smartvision" }
    - "show me the smart finder" -> { tool_name: "smartfinder" }
    - "let me see SwingLab" -> { tool_name: "swinglab" }
+   - "start a focus session" -> { tool_name: "focus_session" }; "shot shapes" / "track my shot patterns" -> { tool_name: "shot_shapes" }; "open my fit profile" -> { tool_name: "fit_profile" }; "run a setup check" -> { tool_name: "setup_check" }; "import a range session" / "scan my TopTracer" -> { tool_name: "import_range" }
    - "open the rangefinder" -> { tool_name: "smartfinder" }
    - "pull up my scorecard" -> { tool_name: "scorecard" }
    - "show my dashboard" -> { tool_name: "dashboard" }
@@ -372,6 +373,12 @@ Available intents:
    - Game / swing comments: "I've been slicing", "my putting is off"
    - Reflections: "rough day", "I'm tired", "this is fun"
    - Questions about ${caddieName} or the app: "how does this work", "what can you do"
+
+3.37 open_course — User wants to OPEN a specific golf course (to view/plan/play it), naming the course. Distinct from quick_round (which also names players) and find_my_data (past records). If they only say "start a round" with NO course, that's open_tool { tool_name: "play" }.
+   parameters: { course_label: string }
+   Examples:
+   - "pull up Highland Links" / "open Pebble Beach" / "open Coyote Creek Valley" -> { intent_type: "open_course", parameters: { course_label: "Coyote Creek Valley" } }
+   - "take me to Mines" / "let's play Dale Hollow" -> { intent_type: "open_course", parameters: { course_label: "Dale Hollow" } }
 
 CATCH-ALL RULE — VERY IMPORTANT. If the utterance is not in commands 1-6, it is ALMOST CERTAINLY a social_greeting (#8) or conversational (#9). Pick one of those. Use "unknown" (#7) ONLY when the user issued a COMMAND that's genuinely ambiguous and needs disambiguation. Never default to "unknown" for ordinary speech.
 

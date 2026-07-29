@@ -1302,7 +1302,7 @@ check('Final QA: start-a-round + tool-open + course-imagery + scoring-math corre
     const qr = resolveSpokenCourse('Pembroke');
     const okQuickRound =
       qr?.previewId === 'local:pembroke-pines' &&
-      /import \{ resolveSpokenCourse \} from '\.\.\/courseNameResolver'/.test(read('services/intents/quickRoundHandler.ts')) &&
+      /import \{[^}]*\bresolveSpokenCourse\b[^}]*\} from '\.\.\/courseNameResolver'/.test(read('services/intents/quickRoundHandler.ts')) &&
       /return spoken \? \{ id: spoken\.previewId, displayName: spoken\.label \} : null/.test(read('services/intents/quickRoundHandler.ts'));
     // (b) the three headline SwingLab tools are voice-openable, swingsim is DISTINCT from sim_round,
     //     and the "Opening undefined" fallback guard is in place.

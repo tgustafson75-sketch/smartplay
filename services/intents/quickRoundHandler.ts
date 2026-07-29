@@ -22,9 +22,9 @@ import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../..
 import { useRoundStore } from '../../store/roundStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { searchCourses } from '../golfCourseApi';
-import { resolveSpokenCourse } from '../courseNameResolver';
+import { resolveSpokenCourse, resolveSpokenCourseCandidates } from '../courseNameResolver';
 import { setPendingCourseChoices } from '../pendingDisambiguation';
-import { getBundledHoles } from '../../data/courses';
+import { getBundledHoles, COURSES } from '../../data/courses';
 
 // 2026-07-24 (final QA — "start a round at <course>"). This handler used to keep its OWN
 // stale 9-course slug list, so "start a round at Highland / Miccosukee / Pembroke / Doral /
@@ -113,6 +113,31 @@ export const quickRoundHandler: IntentHandler = {
     let courseLocationSpoken: string | null = null; // set only for API hits, to voice back for auditability
 
     if (courseHint) {
+      // 2026-07-29 (audit — VOICE-F2) — LOCAL ambiguity (bare "Coyote Creek" → both the Tournament and
+      // Valley 18s; also "Menifee Lakes" → Palms/Lakes, "Gleneagles" → Kings/Queens). Mirror the API-
+      // ambiguity path below: HOLD both bundled courses and ask which, instead of silently starting the
+      // first array match. The answer ("valley" / "the second one") resolves in the follow-up loop via
+      // pendingDisambiguation.matchCourseChoice — the distinctive name word disambiguates.
+      const localCands = resolveSpokenCourseCandidates(courseHint);
+      if (localCands.length > 1) {
+        const parseLoc = (fullName: string) => {
+          const m = [...(fullName ?? '').matchAll(/([A-Za-z][A-Za-z .'-]*?),?\s+([A-Z]{2})\b/g)].pop();
+          return m ? `${m[1].trim()}, ${m[2]}` : '';
+        };
+        const choices = localCands.map(c => {
+          const slug = c.previewId.replace(/^local:/, '');
+          const entry = COURSES.find(x => x.id === slug);
+          return { id: c.previewId, name: c.label, location: entry ? parseLoc(entry.fullName) : '' };
+        });
+        setPendingCourseChoices(choices, { nineHole: holeCount === 9, guestNames });
+        const opts = localCands.map(c => c.label.replace(/[()]/g, '').replace(/\s+/g, ' ').trim());
+        return {
+          success: false,
+          voice_response: `${courseHint.trim()} has two courses — ${listJoin(opts)}. Which one?`,
+          side_effects: ['quick_round:local_ambiguous'],
+          follow_up_needed: true,
+        };
+      }
       const local = resolveLocalCourse(courseHint);
       if (local) {
         courseId = local.id;
