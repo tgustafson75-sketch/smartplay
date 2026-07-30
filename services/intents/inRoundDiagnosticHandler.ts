@@ -176,6 +176,10 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         is_proactive: false,
         voiceGender,
         persona,
+        // 2026-07-30 (audit A4) — carry the custom caddie's base persona + name, or a custom caddie's
+        // in-round "why am I slicing" answer is composed in Kevin's character/phrasing.
+        customCaddieBasePersona: (() => { try { return require('../../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin'; } catch { return 'kevin'; } })(),
+        customCaddieName: (() => { try { return require('../../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieName ?? null; } catch { return null; } })(),
         personaIntensity,
         tankSoftIntro,
         unified_context_block,
@@ -184,6 +188,8 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        // 2026-07-30 (audit A4) — bound the wait so a stalled server can't hang the diagnostic turn forever.
+        signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) {
         return {

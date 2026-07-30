@@ -220,6 +220,22 @@ export class VoiceCommandRouter {
       };
     }
 
+    // 2026-07-30 (audit A3) — DISRUPTIVE-open confidence gate must run BEFORE execute. navigateHandler
+    // (setCurrentHole) and mediaHandlers (router.push + autoRecord) act SYNCHRONOUSLY inside execute() and
+    // return no tool_action, so the mic path's post-execute tool_action gate was a no-op for them — a
+    // medium-confidence misread of "next hole" / "go home" / "watch my swing" yanked the hole/nav/camera
+    // with no gate. Gate on intent_type + confidence here (mirrors listeningSession's pre-execute gate) so
+    // any route()/dispatch() caller is protected; at less-than-high confidence, OFFER instead of acting.
+    const DISRUPTIVE_INTENTS = new Set(['navigate', 'media_capture', 'open_tool', ...OPEN_TOOL_ALIAS_INTENTS]);
+    if (DISRUPTIVE_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
+      return {
+        success: true,
+        voice_response: 'Want me to open that? Just say it again and I will.',
+        side_effects: ['disruptive_gate:' + intent.intent_type],
+        follow_up_needed: true,
+      };
+    }
+
     try {
       // 2026-05-24 — Thread classifier-detected utterance language into
       // AppContext so handlers can localize voice_response without a

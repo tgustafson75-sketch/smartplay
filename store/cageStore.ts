@@ -838,6 +838,35 @@ function roundContextStamp(): { roundId: string | null; roundCourseId: string | 
 
 // ─── STORE ────────────────────────────────
 
+// 2026-07-30 (audit A2 — swing-library WIPE protection). cage-store-v1 holds the entire swing library +
+// club profiles + insights and has a documented oversized-row/SQLITE_FULL history. If a read returns a
+// blob that fails to parse, zustand keeps the EMPTY initial state and the very next set() (boot purge, any
+// ingest) persists [] OVER the recoverable blob — one transient bad read destroys everything. Mirror
+// swingDatabase's lastReadFailed guard at the storage layer: on a corrupt read, BLOCK writes so we never
+// clobber data that might still be recoverable (or salvageable by a future migration/repair).
+let cageReadCorrupt = false;
+function guardedCageStorage() {
+  const base = getPersistStorage();
+  return {
+    getItem: async (name: string): Promise<string | null> => {
+      const raw = await base.getItem(name);
+      if (typeof raw === 'string' && raw.length > 0) {
+        try { JSON.parse(raw); }
+        catch {
+          cageReadCorrupt = true;
+          console.warn('[cageStore] persisted blob failed to parse — BLOCKING writes to avoid clobbering recoverable library data');
+        }
+      }
+      return raw ?? null;
+    },
+    setItem: async (name: string, value: string): Promise<void> => {
+      if (cageReadCorrupt) { console.warn('[cageStore] write blocked (prior read corrupt) — not overwriting'); return; }
+      await base.setItem(name, value);
+    },
+    removeItem: (name: string) => base.removeItem(name),
+  };
+}
+
 export const useCageStore = create<CageState>()(
   persist(
     (set, get) => ({
@@ -1698,7 +1727,7 @@ export const useCageStore = create<CageState>()(
     }),
     {
       name: 'cage-store-v1',
-      storage: createJSONStorage(() => getPersistStorage()),
+      storage: createJSONStorage(guardedCageStorage), // A2: corrupt-read guard blocks a wipe-over-write
       // Audit follow-up — explicit version + migrate added defensively.
       // Cage session schemas have evolved (clubSegments, primary_issue,
       // analysis_status added across phases) without bumping the persist

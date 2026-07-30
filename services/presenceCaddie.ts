@@ -139,6 +139,10 @@ async function fetchPresenceFromBrain(
         message,
         register: 'presence',
         persona: context.persona ?? undefined,
+        // 2026-07-30 (audit A5) — carry the custom caddie's base persona + name so presence beats
+        // (gps_unready / analysis_failed / mic_blocked) are phrased in the user's caddie, not Kevin's.
+        customCaddieBasePersona: (() => { try { return require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin'; } catch { return 'kevin'; } })(),
+        customCaddieName: (() => { try { return require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieName ?? null; } catch { return null; } })(),
       }),
       signal: AbortSignal.timeout(8_000),
     });
