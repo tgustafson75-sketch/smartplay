@@ -97,6 +97,8 @@ export type OutboundPayload =
       backswingMs: number;
       downswingMs: number;
       flushed: boolean;
+      wrist: 'lead' | 'trail';
+      faultHint: string | null;        // hedged, directional (trail-wrist casting etc.), or null
     };
 
 /** The shape sendSwingFeedback accepts (kind is added internally). */
@@ -108,6 +110,8 @@ export interface SwingFeedbackInput {
   backswingMs: number;
   downswingMs: number;
   flushed: boolean;
+  wrist: 'lead' | 'trail';
+  faultHint: string | null;
 }
 
 let activeSender: Sender | null = null;

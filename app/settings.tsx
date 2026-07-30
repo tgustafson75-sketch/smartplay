@@ -130,6 +130,8 @@ export default function Settings() {
   // module is linked (latest build); on an older binary it stays disabled with a clear note.
   const watchSwingEnabled = useSettingsStore((s) => s.watchSwingEnabled);
   const setWatchSwingEnabled = useSettingsStore((s) => s.setWatchSwingEnabled);
+  const watchWrist = useSettingsStore((s) => s.watchWrist);
+  const setWatchWrist = useSettingsStore((s) => s.setWatchWrist);
   const watchBridgeAvailable = isWatchSwingBridgeAvailable();
   const watchHealthSnapshot = useWatchStore((s) => s.lastHealthSnapshot);
   const watchHealthSyncAt = useWatchStore((s) => s.lastHealthSyncAt);
@@ -1457,6 +1459,25 @@ export default function Settings() {
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.text_primary}
               disabled={!watchBridgeAvailable}
+            />
+          </View>
+          {/* 2026-07-29 (Tim — "trail vs lead arm; my faults are on my trail arm"). Default LEAD (the
+              steering wrist → cleaner club-speed); toggle to TRAIL (the release wrist → the better read
+              on casting / early release). Set it once — it just tags every swing. */}
+          <View style={rowDivStyle}>
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>Watch on trail arm</Text>
+              <Text style={subStyle}>
+                {watchWrist === 'trail'
+                  ? 'Trail wrist (your release side) — best for spotting casting / early release. Club speed is a rougher estimate from here.'
+                  : 'Lead wrist (default) — the steering side, cleaner club-speed read. Toggle on if you wear the watch on your trail arm to target release faults.'}
+              </Text>
+            </View>
+            <Switch
+              value={watchWrist === 'trail'}
+              onValueChange={(v) => setWatchWrist(v ? 'trail' : 'lead')}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.text_primary}
             />
           </View>
           <View style={rowDivStyle}>

@@ -218,6 +218,11 @@ interface SettingsState {
   healthDataEnabled: boolean;
   // 2026-06-30 (Tim) — enable the Galaxy Watch swing-IMU bridge (tempo/club-speed → Smart Motion).
   watchSwingEnabled: boolean;
+  // 2026-07-29 (Tim — "trail vs lead arm logic; my faults are on my trail arm"). Which wrist the watch
+  // is on. LEAD = the steering wrist → cleaner club-speed proxy; TRAIL = the release wrist → the better
+  // sensor for casting / early-release faults. Tags every watch swing so lead/trail data never pools
+  // and the interpretation branches. Default 'lead' (the classic tempo-trainer placement).
+  watchWrist: 'lead' | 'trail';
   distance_unit: 'yards' | 'meters';
 
   tutorialsSeen: Record<string, boolean>;
@@ -357,6 +362,7 @@ interface SettingsState {
   setHasAskedHealthPermission: (v: boolean) => void;
   setHealthDataEnabled: (v: boolean) => void;
   setWatchSwingEnabled: (v: boolean) => void;
+  setWatchWrist: (w: 'lead' | 'trail') => void;
   setSkipBriefings: (v: boolean) => void;
   setProactiveKevinEnabled: (v: boolean) => void;
   setDistanceUnit: (u: 'yards' | 'meters') => void;
@@ -481,6 +487,7 @@ export const useSettingsStore = create<SettingsState>()(
       hasAskedHealthPermission: false,
       healthDataEnabled: true,
       watchSwingEnabled: false,
+      watchWrist: 'lead' as const,
       skip_briefings: false,
       proactive_kevin_enabled: true,
       distance_unit: 'yards' as const,
@@ -678,6 +685,7 @@ export const useSettingsStore = create<SettingsState>()(
       setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
       setHealthDataEnabled: (v) => set({ healthDataEnabled: v }),
       setWatchSwingEnabled: (v) => set({ watchSwingEnabled: v }),
+      setWatchWrist: (w) => set({ watchWrist: w }),
       setSkipBriefings: (v) => set({ skip_briefings: v }),
       setProactiveKevinEnabled: (v) => set({ proactive_kevin_enabled: v }),
       setDistanceUnit: (u) => set({ distance_unit: u }),
@@ -973,6 +981,7 @@ export const useSettingsStore = create<SettingsState>()(
         hasAskedHealthPermission: s.hasAskedHealthPermission,
         healthDataEnabled: s.healthDataEnabled,
         watchSwingEnabled: s.watchSwingEnabled,
+        watchWrist: s.watchWrist,
         skip_briefings: s.skip_briefings,
         proactive_kevin_enabled: s.proactive_kevin_enabled,
         distance_unit: s.distance_unit,

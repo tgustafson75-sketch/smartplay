@@ -18,6 +18,10 @@ export interface SwingMetrics {
   clubHeadSpeedEst: number;
   timestamp: number;
   club: string;
+  // 2026-07-29 — which wrist the watch was on when this swing was captured. Lead = steering wrist
+  // (cleaner club-speed proxy); trail = release wrist (better casting/early-release signal). Tagged so
+  // lead/trail data is never pooled and the interpretation can branch. Defaults 'lead'.
+  wrist?: 'lead' | 'trail';
 }
 
 export interface WatchSession {

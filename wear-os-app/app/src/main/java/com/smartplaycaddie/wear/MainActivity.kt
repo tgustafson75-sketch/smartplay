@@ -266,6 +266,8 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         val back = json.optInt("backswingMs", 0)
         val down = json.optInt("downswingMs", 0)
         val flushed = json.optBoolean("flushed", false)
+        val wrist = json.optString("wrist", "lead")
+        val faultHint = if (json.isNull("faultHint")) "" else json.optString("faultHint", "")
 
         feedbackRow.removeAllViews()
         feedbackRow.addView(metricCard("🏌", if (club.isBlank() || club == "unknown") "—" else club, "CLUB", false))
@@ -278,12 +280,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         feedbackRow.addView(metricCard("⬆", if (back > 0) "$back" else "—", "BACK ms", false))
         feedbackRow.addView(metricCard("⬇", if (down > 0) "$down" else "—", "DOWN ms", false))
 
-        holeLabel.text = "LAST SWING"
+        holeLabel.text = "LAST SWING · ${if (wrist == "trail") "TRAIL" else "LEAD"}"
         yardageBig.visibility = View.GONE
         fbRow.visibility = View.GONE
         feedbackScroll.visibility = View.VISIBLE
         feedbackScroll.scrollTo(0, 0)
-        status.text = if (flushed) "Flushed it" else "Logged"
+        // Prefer the hedged lead/trail coaching hint; fall back to a simple flushed/logged line.
+        status.text = if (faultHint.isNotEmpty()) faultHint else if (flushed) "Flushed it" else "Logged"
     }
 
     /** Leave drill-feedback mode → restore the on-course yardage hero. */

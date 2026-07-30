@@ -22,6 +22,8 @@ import { useClubSelectionStore } from '../store/clubSelectionStore';
 import { useCageStore } from '../store/cageStore';
 import { normalizeClub } from './clubNormalize';
 import { sendSwingFeedback } from './watchBridge';
+import { useSettingsStore } from '../store/settingsStore';
+import { interpretWristSwing } from './watchWristInterpretation';
 
 /**
  * 2026-07-29 (Tim — "it should all tie to the app so the current selected-club logic is baked in;
@@ -103,6 +105,9 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       // club → last tagged club), normalized to the canonical name so watch speed/tempo lands on the
       // SAME per-club profile the bag + Arccos import build. 'unknown' only when nothing is selected.
       const club = resolveSelectedClub();
+      // Which wrist the watch is on (persistent setting, default 'lead', toggled in Settings). Tags the
+      // swing so lead/trail data never pools + drives the per-wrist interpretation below.
+      const wrist = useSettingsStore.getState().watchWrist ?? 'lead';
       useWatchStore.getState().recordSwing({
         backswingMs: Math.round(e.backswingMs ?? 0),
         downswingMs: Math.round(e.downswingMs ?? 0),
@@ -115,13 +120,22 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         tempoGood: !!e.tempoGood,
         clubHeadSpeedEst: e.clubHeadSpeedEst ?? 0,
         club,
+        wrist,
       });
 
       // 2026-07-29 (Tim — drill feedback on the wrist: swipeable metric cards). Push the just-captured
       // swing straight back to the watch so it shows a per-swing readout during a drill. Club-tagged +
-      // normalized here, so what the wrist shows matches what the phone logs against the bag.
+      // normalized here, so what the wrist shows matches what the phone logs against the bag. The
+      // lead/trail INTERPRETATION is computed here (phone-side) and sent as a hedged hint — the watch
+      // just displays it (no lead/trail logic on the watch).
       const transition: 'smooth' | 'quick' | 'early' | 'unknown' =
         e.earlyTransition ? 'early' : e.transitionDetected ? (e.tempoGood ? 'smooth' : 'quick') : 'unknown';
+      const interp = interpretWristSwing({
+        wrist,
+        tempoGood: !!e.tempoGood,
+        transitionDetected: !!e.transitionDetected,
+        earlyTransition: !!e.earlyTransition,
+      });
       void sendSwingFeedback({
         club,
         tempoRatio: Math.round((e.tempoRatio ?? 0) * 10) / 10,
@@ -130,6 +144,8 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         backswingMs: Math.round(e.backswingMs ?? 0),
         downswingMs: Math.round(e.downswingMs ?? 0),
         flushed: !!e.tempoGood,
+        wrist,
+        faultHint: interp.faultHint,
       }).catch(() => { /* best-effort — never affects capture */ });
     });
 

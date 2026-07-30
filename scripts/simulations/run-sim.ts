@@ -78,6 +78,7 @@ import { GOLF_KNOWLEDGE } from '../../services/knowledgeBase/modules';
 import { APP_FEATURES, lookupFeature } from '../../services/knowledgeBase/appCatalog';
 import { isAppHelpQuery } from '../../services/knowledgeBase/capabilities';
 import { WHATS_NEW } from '../../services/knowledgeBase/whatsNew';
+import { interpretWristSwing } from '../../services/watchWristInterpretation';
 import type { KBHonesty, KBLayer } from '../../services/knowledgeBase/schema';
 import { assessDiagnosticEvidence, evidenceGateQuestion } from '../../services/intents/inRoundDiagnosticHandler';
 import { GROW_MOSTLY_KEYS } from '../../services/cloudSync/growMostlyKeys';
@@ -5417,6 +5418,23 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /kind: 'swing_feedback'/.test(bridge) && /export async function sendSwingFeedback/.test(bridge) &&
       /sendSwingFeedback\(/.test(swingBr),
     'watchBridge exposes sendSwingFeedback and watchSwingBridge fires it after each captured swing (tempo/clubSpeed/transition/back-down/club)');
+
+  // Lead/trail: a persistent wrist setting (default lead, toggle to trail) tags every swing + drives a
+  // per-wrist interpretation. The wrist tag flows into recordSwing + the feedback push.
+  check('Watch: wrist setting exists (default lead) + tags every swing',
+    /watchWrist: 'lead' as const/.test(settingsSrc) && /wrist\?: 'lead' \| 'trail'/.test(fs.readFileSync(path.resolve(__dirname, '../../store/watchStore.ts'), 'utf-8')) &&
+      /watchWrist \?\? 'lead'/.test(swingBr) && /\bwrist,/.test(swingBr),
+    'settingsStore.watchWrist defaults lead; watchStore SwingMetrics carries wrist; watchSwingBridge tags each swing + feedback with it');
+  // Interpretation is honest + wrist-aware: TRAIL wrist surfaces casting/early-release; club-speed
+  // confidence is lower on the trail wrist (rougher proxy).
+  const trailEarly = interpretWristSwing({ wrist: 'trail', tempoGood: false, transitionDetected: true, earlyTransition: true });
+  const leadSmooth = interpretWristSwing({ wrist: 'lead', tempoGood: true, transitionDetected: true, earlyTransition: false });
+  check('Watch lead/trail: trail-wrist early transition reads as an early release / cast (hedged)',
+    trailEarly.faultHint != null && /release|lag/i.test(trailEarly.faultHint) && trailEarly.clubSpeedConfidence === 'rough',
+    `trail+early → "${trailEarly.faultHint}" (confidence ${trailEarly.clubSpeedConfidence})`);
+  check('Watch lead/trail: lead wrist is the cleaner club-speed proxy',
+    leadSmooth.clubSpeedConfidence === 'estimate',
+    `lead confidence = ${leadSmooth.clubSpeedConfidence} (vs trail 'rough')`);
 }
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
