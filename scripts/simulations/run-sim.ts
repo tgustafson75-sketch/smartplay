@@ -2534,8 +2534,10 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
   // chain hot while foregrounded so no session goes fully cold; the caddie tab warms
   // on focus (not just tap).
   // 2026-07-20 (BETA — Tim: "Caddie is cutting me off") — the silence endpoint is now
-  // ADAPTIVE: a quick command still snaps (SHORT 900ms), but once the user is mid-sentence
-  // it waits out a natural pause (LONG 1800ms) so it never clips a real thought.
+  // ADAPTIVE: a quick command still snaps (SHORT window), but once the user is mid-sentence
+  // it waits out a natural pause (LONG window) so it never clips a real thought.
+  // 2026-07-30 (Tim — "on iOS Kevin listens too long; calibrate the mic to close sooner"):
+  // tightened SHORT 900→650 / LONG 1800→1400 — snappier close, still ≥ a word-search pause.
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
     const caddie = read('app/(tabs)/caddie.tsx');
@@ -2545,13 +2547,40 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
       /else stopHeartbeat\(\)/.test(vc) &&
       /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(caddie) &&
-      /const SILENCE_TIMEOUT_SHORT_MS = 900;/.test(vs) &&
-      /const SILENCE_TIMEOUT_LONG_MS = 1800;/.test(vs) &&
+      /const SILENCE_TIMEOUT_SHORT_MS = 650;/.test(vs) &&
+      /const SILENCE_TIMEOUT_LONG_MS = 1400;/.test(vs) &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
       /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs)
     );
   })(),
-  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; ADAPTIVE silence endpoint (900ms quick command / 1800ms mid-sentence) so it never cuts the user off');
+  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; ADAPTIVE silence endpoint (650ms quick command / 1400ms mid-sentence) — tightened 07-30 so Kevin closes the mic sooner without cutting the user off');
+
+check('Voice: get-to-know interview never opens a tool (fault = info, not a command)',
+  // 2026-07-30 (Tim — "in tell-your-caddie mode caddie keeps opening SwingLab while I list my
+  // faults; the conversation is to gather info and build the profile by voice"). BOTH dispatch
+  // paths (the tab handleToolAction + the hands-free dispatcher) hard-drop every navigational /
+  // tool-opening action while the 'getting to know the golfer' screen context is active, and the
+  // pipecat brain is told to LISTEN & GATHER, never open/navigate/record or SPEAK as if it did.
+  (() => {
+    const dispatch = read('services/voice/conversationalToolDispatch.ts');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const brain = read('api/pipecat-turn.ts');
+    return (
+      // shared guard: get-to-know screen + a nav/open action set that includes open_swinglab
+      /getting to know the golfer/.test(dispatch) &&
+      /export function isSuppressedInGetToKnow/.test(dispatch) &&
+      /'open_swinglab'/.test(dispatch) &&
+      /'record_swing', 'configure_drill', 'set_angle', 'close_swinglab'/.test(dispatch) &&
+      // hands-free dispatcher applies the guard before dispatchOne
+      /isSuppressedInGetToKnow\(t\)\)\s*\{[\s\S]*?continue;/.test(dispatch) &&
+      // tab dispatcher applies the same guard at the top of handleToolAction
+      /isSuppressedInGetToKnow\(action\.type\)\)\s*\{\s*\n\s*return;/.test(caddie) &&
+      // brain-prompt honesty layer: don't open AND don't say you opened
+      /GET-TO-KNOW INTERVIEW MODE/.test(brain) &&
+      /do NOT say you are opening or pulling up anything/.test(brain)
+    );
+  })(),
+  'the get-to-know voice interview builds the profile from what the golfer says — describing a fault is absorbed, never routed to a drill; navigation/open tools are suppressed on the client AND the brain is told not to open or claim it opened anything');
 
 check('Voice: one-voice-at-a-time across cloud + device subsystems (no racing)',
   // 2026-06-16 (Tim — "two voices racing" + robotic backup at the same time) — the

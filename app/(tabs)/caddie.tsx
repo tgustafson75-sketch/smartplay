@@ -1356,6 +1356,14 @@ export default function CaddieTab() {
 
   // ── Tool action handler ──────────────────
   const handleToolAction = useCallback((action: ToolAction) => {
+    // 2026-07-30 (Tim — "in tell-your-caddie mode, stop opening SwingLab while I list my faults").
+    // The get-to-know interview is a pure voice profile-build; a described fault is INFO, not a
+    // command to open a drill. Deterministic guard (shared with the hands-free dispatcher) drops
+    // every navigational/tool-opening action while that context is active.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    if ((require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch')).isSuppressedInGetToKnow(action.type)) {
+      return;
+    }
     switch (action.type) {
       case 'open_smartvision':
         if (!canAccess('smartvision', subscription_status)) {

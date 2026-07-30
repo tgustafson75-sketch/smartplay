@@ -148,10 +148,12 @@ export function endsAsQuestion(raw: string | null | undefined): boolean {
 }
 // 2026-06-26 (Tim — "12s is way too long, needs to be ~3s") — drop the
 // stop-on-silence gap 4s → 1.2s so the mic closes ~1s after you finish talking
-// (when metering is reported). Natural mid-sentence pauses are < 0.8s, so 1.2s
-// won't clip a normal question. NOTE: this only helps on devices that report
-// status.metering; metering-less OEMs still fall back to the MAX_RECORD_MS cap.
-const MIC_SILENCE_TIMEOUT_MS = 1200;
+// (when metering is reported). 2026-07-30 (Tim — "on iOS the mic listens too long; calibrate it to
+// close sooner after the user finishes") — tightened 1.2s → 0.85s. Natural mid-sentence pauses are
+// < 0.8s, so 0.85s still won't clip a normal question but the mic feels noticeably snappier. NOTE:
+// this only helps on devices that report status.metering (iOS always does); metering-less OEMs still
+// fall back to the MAX_RECORD_MS cap.
+const MIC_SILENCE_TIMEOUT_MS = 850;
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but

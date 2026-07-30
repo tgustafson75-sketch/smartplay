@@ -453,10 +453,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   // Parity with api/kevin.ts — ephemeral "current screen/drill" so a question
   // asked from inside a drill is answered about THAT drill. Capped for safety.
-  const _screenContext: string | null =
+  let _screenContext: string | null =
     typeof screen_context === 'string' && screen_context.trim()
       ? screen_context.slice(0, 600)
       : null;
+
+  // 2026-07-30 (Tim — "in the tell-your-caddie mode caddie keeps opening SwingLab while I'm
+  // telling it my faults; the conversation is to gather info and build the profile by voice").
+  // When this turn is the get-to-know interview, HARD-mute every navigational/tool-opening
+  // intent AND the "I'm opening it" talk — the player naming a swing fault is information to
+  // ingest, not a request to open a drill. (The client also drops these actions, but this keeps
+  // the caddie from SPEAKING as if it navigated — the honesty rule.)
+  if (_screenContext && /getting to know the golfer/i.test(_screenContext)) {
+    _screenContext +=
+      '\n\nGET-TO-KNOW INTERVIEW MODE — LISTEN & GATHER, DO NOT OPEN ANYTHING. This is a pure ' +
+      'profile-building conversation to learn the golfer. When the player describes a swing ' +
+      'fault, a weakness, a club they struggle with, or something they want to work on ("I come ' +
+      'over the top", "I slice my driver", "my chipping is bad"), that is INFORMATION to absorb ' +
+      'and ask about — NEVER a command to open SwingLab, a drill, Smart Motion, record, or ' +
+      'navigate anywhere. Do NOT call navigate / open_swinglab / record_swing / configure_drill / ' +
+      'set_angle, and do NOT say you are opening or pulling up anything. Just keep the ' +
+      'conversation going: reflect back what you heard and ask ONE natural follow-up question ' +
+      '(end with a question mark so the mic stays open). Only exception: the player EXPLICITLY ' +
+      'says to stop the interview and open something ("okay, take me to the tempo drill now").';
+  }
 
   if (!text?.trim()) return res.status(400).json({ error: 'text is required' });
 

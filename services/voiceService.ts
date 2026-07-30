@@ -150,8 +150,14 @@ const SILENCE_DB_THRESHOLD = -40;
 //   • LONG window once the user is clearly mid-sentence (has been speaking > SPEECH_LONG_MS)
 //     → patient, so a conversational pause never clips a real thought.
 // This resolves BOTH asks (fast commands + no cut-off on sentences) instead of trading them.
-const SILENCE_TIMEOUT_SHORT_MS = 900;   // quick command: end promptly after a short pause
-const SILENCE_TIMEOUT_LONG_MS = 1800;   // mid-sentence: wait out a natural word-search pause
+// 2026-07-30 (Tim — "on iOS Kevin still listens too long; calibrate the mic to close sooner"):
+// tightened both windows. SHORT 900→650 (quick on-course commands — "what's my distance",
+// "punch out", "driver" — are 1–2 words and dominate Kevin usage, so this is the felt win).
+// LONG 1800→1400 (still ≥ a typical 0.8–1.2s word-search pause, so this does NOT re-introduce
+// the 07-20 "cutting me off" regression — the adaptive design keeps dictation patient while
+// the common short command feels immediate).
+const SILENCE_TIMEOUT_SHORT_MS = 650;   // quick command: end promptly after a short pause
+const SILENCE_TIMEOUT_LONG_MS = 1400;   // mid-sentence: wait out a natural word-search pause
 const SPEECH_LONG_MS = 1400;            // once speech has run this long, treat it as a sentence
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 

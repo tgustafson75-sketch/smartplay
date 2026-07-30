@@ -20,8 +20,37 @@
 import { router } from 'expo-router';
 import { Linking } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
+import { getScreenContext } from '../screenContext';
 
 const PERSONAS = ['kevin', 'serena', 'harry', 'tank', 'custom'] as const;
+
+// 2026-07-30 (Tim — "in the tell-your-caddie mode, caddie keeps opening SwingLab while I'm
+// telling it my faults; the conversation is meant to gather info and build the profile by
+// voice"). The get-to-know conversation is a PURE profile-building interview — describing a
+// swing fault ("I come over the top", "I slice it") is INFORMATION, not a command to open a
+// drill. The brain sometimes maps a named fault → its fault-drill → navigate, yanking the
+// player out of the interview. This is a deterministic client-side guard so it can NEVER
+// happen while the get-to-know context is active, regardless of what the LLM emits — we drop
+// every navigational / tool-opening action and keep only the profile-building ones
+// (log_issue, set_reminder, log_emotional_state, set_golfer, switch_caddie stay useful).
+const GET_TO_KNOW_SCREEN = 'getting to know the golfer';
+const NAV_OPEN_ACTIONS = new Set([
+  'navigate', 'navigate_replace',
+  'open_smartvision', 'open_smartfinder', 'open_swinglab',
+  'record_swing', 'configure_drill', 'set_angle', 'close_swinglab',
+]);
+/** True while the voice conversation is the get-to-know profile interview. */
+export function isGetToKnowMode(): boolean {
+  try {
+    return getScreenContext()?.screen === GET_TO_KNOW_SCREEN;
+  } catch {
+    return false;
+  }
+}
+/** In get-to-know mode, a navigational/tool-opening action must be suppressed. */
+export function isSuppressedInGetToKnow(actionType: string | undefined): boolean {
+  return isGetToKnowMode() && !!actionType && NAV_OPEN_ACTIONS.has(actionType);
+}
 
 // The ONE external-URL allowlist for voice-driven open_url actions (moved here
 // from listeningSession when tool dispatch was centralized). HTTPS-only + these
@@ -342,6 +371,11 @@ export function dispatchConversationalToolActions(actions: unknown[]): void {
   if (!Array.isArray(actions) || actions.length === 0) return;
   for (const raw of actions) {
     try {
+      const t = (raw as AnyAction)?.type;
+      if (isSuppressedInGetToKnow(t)) {
+        console.log('[toolDispatch] suppressed in get-to-know mode:', t);
+        continue;
+      }
       dispatchOne(raw as AnyAction);
     } catch (e) {
       console.log('[toolDispatch] action failed (non-fatal):', (raw as AnyAction)?.type, e);
