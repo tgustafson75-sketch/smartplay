@@ -1116,14 +1116,60 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
 
     if (myId !== currentSpeechId) return;
 
-    const { sound, status } = await Audio.Sound.createAsync(
-      { uri },
-      { shouldPlay: true, volume: currentPlaybackVolume() },
-    );
+    let sound: Audio.Sound;
+    let status: Awaited<ReturnType<typeof Audio.Sound.createAsync>>['status'];
+    {
+      const first = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, volume: currentPlaybackVolume() },
+      );
+      sound = first.sound;
+      status = first.status;
+    }
 
     if (myId !== currentSpeechId) {
       await sound.unloadAsync().catch(() => {});
       return;
+    }
+
+    // 2026-07-30 (full-app audit) — PARITY with speak(): the OS audio session can accept a load but
+    // refuse to play (the post-mic-record "text shows, 'speaking' on, no audio" hangover) — isLoaded
+    // true, durationMillis 0. speakFromBase64 (the path the brain's INLINE audio uses) had NO recovery,
+    // so it played nothing, never fired didJustFinish, waited out the full timeout, and the caddie went
+    // SILENT (caption only). Now mirror speak(): on a dead load, force the audio session back to speech
+    // mode + retry once; if still dead, fall back to device TTS speaking the reply text (opts.caption)
+    // rather than going mute. [[feels-like-a-real-caddie]] — a silent caddie is a defect.
+    {
+      const loaded = (status as { isLoaded?: boolean }).isLoaded === true;
+      const dur = (status as { durationMillis?: number }).durationMillis ?? 0;
+      if (!loaded || dur === 0) {
+        console.log('[voice] speakFromBase64 first load looked dead — reset + retry', { loaded, dur });
+        try { await sound.unloadAsync().catch(() => {}); } catch { /* no-op */ }
+        currentAudioMode = null;
+        await configureAudioForSpeech();
+        if (myId !== currentSpeechId) { notifyCaption(null); notifySpeaking(false); return; }
+        const second = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: currentPlaybackVolume() });
+        sound = second.sound;
+        status = second.status;
+        const loaded2 = (status as { isLoaded?: boolean }).isLoaded === true;
+        const dur2 = (status as { durationMillis?: number }).durationMillis ?? 0;
+        if (!loaded2 || dur2 === 0) {
+          console.log('[voice] speakFromBase64 retry STILL dead — device-TTS fallback instead of mute');
+          logVoiceSilentFail('base64_dead_load_giving_up', { speechId: myId, isLoaded: loaded2, durationMillis: dur2 });
+          try { await sound.unloadAsync().catch(() => {}); } catch { /* no-op */ }
+          void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
+          notifyCaption(null);
+          notifySpeaking(false);
+          const fbText = opts?.caption ?? null;
+          if (fbText) {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const st = (require('../store/settingsStore') as typeof import('../store/settingsStore')).useSettingsStore.getState();
+            const lang = (['en', 'es', 'zh'] as const).includes(st.language as 'en' | 'es' | 'zh') ? (st.language as 'en' | 'es' | 'zh') : 'en';
+            await deviceSpeakFallback(fbText, lang, myId, (st.voiceGender as 'male' | 'female') ?? 'male');
+          }
+          return;
+        }
+      }
     }
 
     currentSound = sound;

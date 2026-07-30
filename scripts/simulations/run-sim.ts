@@ -2718,6 +2718,20 @@ check('Voice: cold transcribe fails FAST on a proven-unreachable host (no 25s ha
   })(),
   'a proven-unreachable host (both probes actively refuse in ~3s) aborts the transcribe fast so the caddie degrades in ~3s, not after a 25s dead wait — while a slow-but-reachable cold turn keeps its full budget');
 
+check('Voice: speakFromBase64 never goes silent on a dead audio load (device-TTS fallback, parity with speak)',
+  // 2026-07-30 (audit MED) — the brain's INLINE-audio path (speakFromBase64) had no dead-load recovery,
+  // so an OS audio-session hangover (isLoaded true, durationMillis 0) played nothing and the caddie went
+  // silent. Now it resets + retries once, then speaks the reply text (opts.caption) via device TTS.
+  (() => {
+    const vs = read('services/voiceService.ts');
+    return (
+      /speakFromBase64 first load looked dead/.test(vs) &&
+      /base64_dead_load_giving_up/.test(vs) &&
+      /await deviceSpeakFallback\(fbText,/.test(vs)
+    );
+  })(),
+  'the inline-audio speak path recovers from a dead OS audio load (reset+retry) and falls back to device TTS speaking the reply instead of leaving the caddie mute');
+
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the
