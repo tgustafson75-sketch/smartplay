@@ -21,6 +21,7 @@ import { useWatchStore } from '../store/watchStore';
 import { useClubSelectionStore } from '../store/clubSelectionStore';
 import { useCageStore } from '../store/cageStore';
 import { normalizeClub } from './clubNormalize';
+import { sendSwingFeedback } from './watchBridge';
 
 /**
  * 2026-07-29 (Tim — "it should all tie to the app so the current selected-club logic is baked in;
@@ -101,6 +102,7 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       // Map 1:1 into the existing store, tagged with the app's currently-selected club (cage's live
       // club → last tagged club), normalized to the canonical name so watch speed/tempo lands on the
       // SAME per-club profile the bag + Arccos import build. 'unknown' only when nothing is selected.
+      const club = resolveSelectedClub();
       useWatchStore.getState().recordSwing({
         backswingMs: Math.round(e.backswingMs ?? 0),
         downswingMs: Math.round(e.downswingMs ?? 0),
@@ -112,8 +114,23 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         earlyTransition: !!e.earlyTransition,
         tempoGood: !!e.tempoGood,
         clubHeadSpeedEst: e.clubHeadSpeedEst ?? 0,
-        club: resolveSelectedClub(),
+        club,
       });
+
+      // 2026-07-29 (Tim — drill feedback on the wrist: swipeable metric cards). Push the just-captured
+      // swing straight back to the watch so it shows a per-swing readout during a drill. Club-tagged +
+      // normalized here, so what the wrist shows matches what the phone logs against the bag.
+      const transition: 'smooth' | 'quick' | 'early' | 'unknown' =
+        e.earlyTransition ? 'early' : e.transitionDetected ? (e.tempoGood ? 'smooth' : 'quick') : 'unknown';
+      void sendSwingFeedback({
+        club,
+        tempoRatio: Math.round((e.tempoRatio ?? 0) * 10) / 10,
+        clubSpeed: Math.round(e.clubHeadSpeedEst ?? 0),
+        transition,
+        backswingMs: Math.round(e.backswingMs ?? 0),
+        downswingMs: Math.round(e.downswingMs ?? 0),
+        flushed: !!e.tempoGood,
+      }).catch(() => { /* best-effort — never affects capture */ });
     });
 
     connSub = emitter.addListener('onWatchConnection', (e: WatchConnectionEvent) => {

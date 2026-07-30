@@ -84,7 +84,31 @@ export type OutboundPayload =
   | { kind: 'notification'; text: string; subtitle?: string | null }
   | { kind: 'score'; vsPar: number; hole: number; totalScore: number }
   | { kind: 'voice_prompt'; text: string }
-  | { kind: 'state'; round_active: boolean; current_hole: number | null };
+  | { kind: 'state'; round_active: boolean; current_hole: number | null }
+  // 2026-07-29 (Tim — drill feedback on the watch: swipeable metric cards). Per-swing readout pushed
+  // back to the wrist after the watch captures a swing, so you get glanceable feedback without the
+  // phone. Values are already club-tagged + normalized on the phone (ties to the Arccos-fed bag).
+  | {
+      kind: 'swing_feedback';
+      club: string;
+      tempoRatio: number;
+      clubSpeed: number;               // mph, 0 = not estimable
+      transition: 'smooth' | 'quick' | 'early' | 'unknown';
+      backswingMs: number;
+      downswingMs: number;
+      flushed: boolean;
+    };
+
+/** The shape sendSwingFeedback accepts (kind is added internally). */
+export interface SwingFeedbackInput {
+  club: string;
+  tempoRatio: number;
+  clubSpeed: number;
+  transition: 'smooth' | 'quick' | 'early' | 'unknown';
+  backswingMs: number;
+  downswingMs: number;
+  flushed: boolean;
+}
 
 let activeSender: Sender | null = null;
 
@@ -140,6 +164,20 @@ export async function sendVoicePrompt(text: string): Promise<void> {
     await activeSender({ kind: 'voice_prompt', text });
   } catch (e) {
     devLog('[watchBridge] voice prompt failed: ' + String(e));
+  }
+}
+
+/** Push a per-swing drill readout to the watch (swipeable metric cards: tempo, club speed,
+ *  transition, back/down, club). Fired after the watch captures a swing. No-op without a sender. */
+export async function sendSwingFeedback(input: SwingFeedbackInput): Promise<void> {
+  if (!activeSender) {
+    devLog(`[watchBridge] swing feedback (no sender): ${input.club} tempo ${input.tempoRatio}`);
+    return;
+  }
+  try {
+    await activeSender({ kind: 'swing_feedback', ...input });
+  } catch (e) {
+    devLog('[watchBridge] swing feedback send failed: ' + String(e));
   }
 }
 

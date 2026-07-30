@@ -5401,13 +5401,22 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // Club tagging: a watch swing is tagged with the app's SELECTED club (cage live club → last tagged),
   // normalized to the canonical name so it merges with the Arccos-fed bag — NOT hardcoded 'unknown'.
   check('Watch: swings tag the selected club (normalized), not a hardcoded unknown',
-    /resolveSelectedClub\(\)/.test(swingBr) &&
+    /const club = resolveSelectedClub\(\)/.test(swingBr) &&
       /useClubSelectionStore/.test(swingBr) && /useCageStore/.test(swingBr) && /normalizeClub\(/.test(swingBr) &&
-      /club: resolveSelectedClub\(\)/.test(swingBr) && !/club: 'unknown',/.test(swingBr),
+      /\bclub,/.test(swingBr) && !/club: 'unknown',/.test(swingBr),
     'onWatchSwing tags club via resolveSelectedClub (cage currentClub → clubSelectionStore.lastClub → normalized), so watch speed/tempo lands on the same per-club profile as Arccos carries');
   check("Watch: club speed from the watch is a truth-grade 'watch' source",
     /source: 'watch'/.test(metrics) && /'watch'/.test(metrics),
     'swingMetricsService promotes the Galaxy Watch IMU peak-wrist-speed to the truth-grade watch tier (not a guess)');
+
+  // Drill feedback: after a captured swing, the phone pushes a per-swing readout back to the watch
+  // (swipeable metric cards). Payload is club-tagged + normalized here so the wrist shows what the
+  // phone logs.
+  const bridge = fs.readFileSync(path.resolve(__dirname, '../../services/watchBridge.ts'), 'utf-8');
+  check('Watch: drill swing-feedback push exists (phone → watch)',
+    /kind: 'swing_feedback'/.test(bridge) && /export async function sendSwingFeedback/.test(bridge) &&
+      /sendSwingFeedback\(/.test(swingBr),
+    'watchBridge exposes sendSwingFeedback and watchSwingBridge fires it after each captured swing (tempo/clubSpeed/transition/back-down/club)');
 }
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────

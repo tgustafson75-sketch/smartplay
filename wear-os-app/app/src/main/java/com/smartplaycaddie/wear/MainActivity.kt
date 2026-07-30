@@ -49,6 +49,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.ActivityCompat
@@ -80,6 +81,9 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
     private lateinit var status: TextView
     private lateinit var micBtn: Button
     private lateinit var captureBtn: Button
+    // Drill-feedback strip — a horizontally scrollable row of per-swing metric cards (2026-07-29).
+    private lateinit var feedbackScroll: HorizontalScrollView
+    private lateinit var feedbackRow: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,6 +159,25 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         fbRow.addView(frontTv)
         fbRow.addView(backTv)
 
+        // Drill-feedback strip: swipe side-to-side through per-swing metric cards. Hidden until a
+        // swing_feedback message arrives; takes the hero slot (yardage) while a drill is in progress.
+        feedbackRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        feedbackScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            visibility = View.GONE
+            // Side padding so the first/last card can center on a round face.
+            setPadding(dp(24), 0, dp(24), 0)
+            clipToPadding = false
+            addView(feedbackRow)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+        }
+
         // Prominent mic button — the primary action.
         micBtn = Button(this).apply {
             text = "Ask caddie"
@@ -194,10 +217,82 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         root.addView(holeLabel)
         root.addView(yardageBig)
         root.addView(fbRow)
+        root.addView(feedbackScroll)
         root.addView(micBtn)
         root.addView(status)
         root.addView(captureBtn)
         return root
+    }
+
+    /** One metric card for the drill strip: icon glyph · big value · dim label. */
+    private fun metricCard(icon: String, value: String, label: String, accent: Boolean): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(6), dp(8), dp(6), dp(8))
+            setBackgroundColor(Color.parseColor("#141414"))
+            layoutParams = LinearLayout.LayoutParams(dp(92), ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { marginEnd = dp(6) }
+        }
+        card.addView(TextView(this).apply {
+            text = icon
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            gravity = Gravity.CENTER
+        })
+        card.addView(TextView(this).apply {
+            text = value
+            setTextColor(if (accent) GREEN else Color.WHITE)
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            includeFontPadding = false
+            gravity = Gravity.CENTER
+        })
+        card.addView(TextView(this).apply {
+            text = label
+            setTextColor(DIM)
+            letterSpacing = 0.08f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
+            gravity = Gravity.CENTER
+        })
+        return card
+    }
+
+    /** Enter drill-feedback mode: build the metric cards for this swing + show the strip. */
+    private fun showSwingFeedback(json: JSONObject) {
+        val club = json.optString("club", "—")
+        val tempo = json.optDouble("tempoRatio", 0.0)
+        val speed = json.optInt("clubSpeed", 0)
+        val transition = json.optString("transition", "unknown")
+        val back = json.optInt("backswingMs", 0)
+        val down = json.optInt("downswingMs", 0)
+        val flushed = json.optBoolean("flushed", false)
+
+        feedbackRow.removeAllViews()
+        feedbackRow.addView(metricCard("🏌", if (club.isBlank() || club == "unknown") "—" else club, "CLUB", false))
+        feedbackRow.addView(metricCard("⏱", if (tempo > 0) String.format(Locale.US, "%.1f:1", tempo) else "—", "TEMPO", flushed))
+        feedbackRow.addView(metricCard("⚡", if (speed > 0) "$speed" else "—", "MPH", false))
+        val transLabel = when (transition) {
+            "smooth" -> "Smooth"; "quick" -> "Quick"; "early" -> "Early"; else -> "—"
+        }
+        feedbackRow.addView(metricCard("🔄", transLabel, "TRANS", transition == "smooth"))
+        feedbackRow.addView(metricCard("⬆", if (back > 0) "$back" else "—", "BACK ms", false))
+        feedbackRow.addView(metricCard("⬇", if (down > 0) "$down" else "—", "DOWN ms", false))
+
+        holeLabel.text = "LAST SWING"
+        yardageBig.visibility = View.GONE
+        fbRow.visibility = View.GONE
+        feedbackScroll.visibility = View.VISIBLE
+        feedbackScroll.scrollTo(0, 0)
+        status.text = if (flushed) "Flushed it" else "Logged"
+    }
+
+    /** Leave drill-feedback mode → restore the on-course yardage hero. */
+    private fun exitFeedbackMode() {
+        if (feedbackScroll.visibility == View.VISIBLE) {
+            feedbackScroll.visibility = View.GONE
+            yardageBig.visibility = View.VISIBLE
+            fbRow.visibility = View.VISIBLE
+        }
     }
 
     override fun onResume() {
@@ -225,7 +320,9 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
 
     private fun handleCaddie(json: JSONObject) {
         when (json.optString("kind")) {
+            "swing_feedback" -> showSwingFeedback(json)
             "yardage" -> {
+                exitFeedbackMode() // a fresh yardage push means we're back on the course
                 val mid = if (json.isNull("middle")) null else json.optInt("middle")
                 val front = if (json.isNull("front")) null else json.optInt("front")
                 val back = if (json.isNull("back")) null else json.optInt("back")
@@ -254,7 +351,9 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
                 status.text = "Score ${if (vs >= 0) "+$vs" else "$vs"}"
             }
             "state" -> {
-                if (!json.optBoolean("round_active")) {
+                if (json.optBoolean("round_active")) {
+                    exitFeedbackMode() // round resumed → yardage view
+                } else {
                     yardageBig.text = "—"
                     holeLabel.text = "—"
                     frontTv.text = ""
