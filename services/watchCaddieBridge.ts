@@ -26,7 +26,19 @@ import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { registerWatchSender, notifyWatchVoice, notifyWatchTap, type OutboundPayload } from './watchBridge';
 import { getGreenYardagesSync } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
+import { useWatchStore } from '../store/watchStore';
 import { devLog } from './devLog';
+
+// 2026-07-29 (Tim — "don't see if the app is saying watch connected, but they work perfectly").
+// The native module only emits onWatchConnection when it RECEIVES the watch's launch-time
+// `/smartplay/hello`; if the watch app was already running when the phone started listening, that
+// hello never arrives and the Settings "Galaxy Watch" row stays "Not wired" even though voice/tap/
+// yardage all flow. Fix: treat ANY inbound watch message as live proof-of-connection (it demonstrably
+// round-trips), refreshing the connected flag + heartbeat. (The fully-passive ideal is a native
+// CapabilityClient listener, but that needs a rebuild; this is the OTA-safe, message-driven signal.)
+function markWatchAlive(): void {
+  try { useWatchStore.getState().setConnected(true, 'Galaxy Watch'); } catch { /* non-fatal */ }
+}
 
 const CADDIE_PATH = '/smartplay/caddie';
 // Live-yardage refresh cadence while a round is active. 18s balances "updates as
@@ -97,10 +109,12 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
     // Inbound: watch mic → the regular caddie pipeline (handsFreeOrchestrator
     // already subscribes to subscribeWatchVoice → handleTranscribedUtterance).
     voiceSub = emitter.addListener('onWatchVoice', (e: { text?: string }) => {
+      markWatchAlive(); // any inbound message ⇒ the watch is connected right now
       const text = (e?.text ?? '').trim();
       if (text) notifyWatchVoice(text);
     });
     tapSub = emitter.addListener('onWatchTap', (e: { pattern?: string }) => {
+      markWatchAlive();
       const p = e?.pattern;
       notifyWatchTap(p === 'double' || p === 'triple' || p === 'long_press' ? p : 'single');
     });

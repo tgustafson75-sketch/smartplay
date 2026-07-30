@@ -5374,6 +5374,34 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'setSessionStateMirror fires a Medium impact when opening to listening — one chokepoint covers earbud/glasses tap + mic badge');
 }
 
+// ─── Watch companion wiring (Tim 2026-07-29: watch WORKS; "wired optimally?" + connected indicator) ──
+{
+  const swingBr = fs.readFileSync(path.resolve(__dirname, '../../services/watchSwingBridge.ts'), 'utf-8');
+  const caddieBr = fs.readFileSync(path.resolve(__dirname, '../../services/watchCaddieBridge.ts'), 'utf-8');
+  const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+  const metrics = fs.readFileSync(path.resolve(__dirname, '../../services/swingMetricsService.ts'), 'utf-8');
+
+  // Both bridges start at boot (not only from the Settings toggle) so the watch works out of the box.
+  check('Watch: both bridges initialize at app boot',
+    /initWatchSwingBridge\(\)/.test(layout) && /initWatchCaddieBridge\(\)/.test(layout),
+    'app/_layout.tsx starts the swing + caddie bridges on launch (gated on native availability)');
+
+  // Connected indicator no longer depends solely on the watch's launch-time hello: ANY inbound
+  // message (swing/voice/tap) refreshes the connected flag, so the Settings row reflects reality.
+  check('Watch: connected flag refreshes on any inbound message (not just launch hello)',
+    /setConnected\(true, 'Galaxy Watch'\)/.test(swingBr) &&
+      /markWatchAlive\(\)/.test(caddieBr) && /setConnected\(true, 'Galaxy Watch'\)/.test(caddieBr),
+    'onWatchSwing + onWatchVoice/onWatchTap all mark the watch connected — an already-running watch (missed hello) still shows connected once any message flows');
+
+  // Swing CALIBRATION: the wrist IMU summary feeds real metrics at truth-grade 'watch'.
+  check('Watch: swing IMU maps into recordSwing (tempo + club-head speed)',
+    /onWatchSwing/.test(swingBr) && /recordSwing\(/.test(swingBr) && /clubHeadSpeedEst/.test(swingBr) && /tempoRatio/.test(swingBr),
+    'each watch swing (backswing/downswing/tempoRatio/peakWristSpeed/clubHeadSpeedEst) maps into watchStore.recordSwing');
+  check("Watch: club speed from the watch is a truth-grade 'watch' source",
+    /source: 'watch'/.test(metrics) && /'watch'/.test(metrics),
+    'swingMetricsService promotes the Galaxy Watch IMU peak-wrist-speed to the truth-grade watch tier (not a guess)');
+}
+
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');

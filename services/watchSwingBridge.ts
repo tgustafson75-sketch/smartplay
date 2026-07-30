@@ -74,6 +74,9 @@ export async function initWatchSwingBridge(): Promise<boolean> {
     emitter = new NativeEventEmitter(NativeMod as any);
 
     swingSub = emitter.addListener('onWatchSwing', (e: WatchSwingEvent) => {
+      // 2026-07-29 — an inbound swing is live proof the watch is connected, even if the launch-time
+      // `/smartplay/hello` (the only thing that fires onWatchConnection) was missed. Refresh the flag.
+      useWatchStore.getState().setConnected(true, 'Galaxy Watch');
       // Map 1:1 into the existing store. club is unknown from the wrist —
       // the analysis hookup supplies the selected club when it lands; until
       // then 'unknown' is honest (no fabricated club label).
