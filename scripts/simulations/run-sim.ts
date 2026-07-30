@@ -6257,13 +6257,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // STRUCTURAL decoupling: copy the clip, extract frames from the COPY (workUri), never videoUri.
       /FileSystem\.copyAsync\(\{ from: videoUri, to: dest \}\)/.test(read('services/swing/clubPath.ts')) &&
       /const f = await frameAt\(workUri, o\)/.test(read('services/swing/clubPath.ts')) &&
-      /if \(isPlaying\) return;/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
-      /shouldAbort: \(\) => cancelled \|\| isPlayingRef\.current/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
-      // grab-frame pauses before extracting; extraction routed through the queue wrapper
+      // 2026-07-30 (Tim: "analysis isn't watching the whole swing; playback + analysis tied together") —
+      // the club-arc extraction NO LONGER bails on playback: the PRIVATE COPY (above) is the structural
+      // crash guard, so it's safe to extract while ExoPlayer loops the original. Abort ONLY on genuine
+      // cancellation (unmount / swing change), and the rationale comment must be present so this isn't
+      // silently reverted to the analysis-truncating isPlaying gate.
+      /shouldAbort: \(\) => cancelled \}\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      /PRIVATE COPY \(distinct file handle\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // grab-frame still pauses before extracting; extraction routed through the queue wrapper
       /await videoRef\.current\?\.pauseAsync\(\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /from '\.\.\/\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /from '\.\.\/\.\.\/utils\/videoThumbnail'/.test(read('components/swinglab/SwingStillComposite.tsx')),
-    'clubhead-arc frame extraction is gated off during playback + aborts between frames + extracts from a PRIVATE COPY (never the file ExoPlayer holds) — structurally closes the native SIGSEGV/white-screen on replay');
+    'clubhead-arc extraction is SAFE concurrent with playback via a PRIVATE COPY (distinct file handle, never the file ExoPlayer holds) — closes the SIGSEGV structurally AND lets analysis watch the whole swing during autoplay (aborts only on real cancellation)');
 
   check('Universal ask: caddie finds/opens the user\'s OWN data (rounds + swings)',
     // 2026-07-25 (Tim — the whole point of the app: "ask the caddie to find ANY of my data"). The
