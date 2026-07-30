@@ -1724,6 +1724,21 @@ export default function Settings() {
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}
         <CollapsibleSection title="Help & About" icon="help-circle-outline">
+          {/* 2026-08-01 (tester — first-run tour). Replay the guided icon-by-icon tour on demand. */}
+          <TouchableOpacity
+            style={styles.aboutRow}
+            onPress={() => {
+              try { require('../store/onboardingTourStore').useOnboardingTourStore.getState().relaunchTour(); } catch { /* non-fatal */ }
+              router.push('/(tabs)/caddie' as never);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Replay the guided tour"
+          >
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Show Me Around</Text>
+            <Text style={[styles.aboutValue, { color: colors.accent }]}>
+              Replay the tour →
+            </Text>
+          </TouchableOpacity>
           {/* Phase 411 — Quick Start Guide. Same content as the PDF
               tester guide, available in-app so testers can refer back
               during use without hunting for the email attachment. */}

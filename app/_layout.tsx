@@ -9,6 +9,7 @@ import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/playerProfileStore';
+import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { useSettingsStore } from '../store/settingsStore';
@@ -301,6 +302,23 @@ function AppNavigator() {
   // undefined, etc.) — when SUBSCRIPTIONS_ENABLED flips true the unguarded
   // read would call initTrial() unconstitionally, resetting trial_started_at.
   // Pattern mirrors the migration/backfill effects above (lines 194-235).
+  // 2026-08-01 (tester — first-run tour). Count this launch ONCE, after the tour store rehydrates so
+  // the persisted open-count isn't clobbered. onboardingTourStore.shouldAutoShow() then decides whether
+  // the caddie tab shows the guided tour (first few opens, until finished/skipped).
+  useEffect(() => {
+    let done = false;
+    const noteOpen = (): boolean => {
+      if (done) return true;
+      if (!useOnboardingTourStore.persist.hasHydrated()) return false;
+      done = true;
+      try { useOnboardingTourStore.getState().noteAppOpen(); } catch { /* non-fatal */ }
+      return true;
+    };
+    if (noteOpen()) return;
+    const unsub = useOnboardingTourStore.persist.onFinishHydration(() => { noteOpen(); });
+    return () => { try { unsub?.(); } catch { /* no-op */ } };
+  }, []);
+
   useEffect(() => {
     let done = false;
     const runTrialLifecycle = (): boolean => {

@@ -81,6 +81,39 @@ import { Asset } from 'expo-asset';
 import { generateProactiveOpener } from '../../services/conversationalBrain';
 import { awaitGreetingComplete } from '../greeting';
 import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
+import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
+import { useOnboardingTourStore } from '../../store/onboardingTourStore';
+
+// 2026-08-01 (tester — "first 3 uses: a skippable icon-by-icon highlight of the tools + how to talk").
+// The caddie tab is the home surface, so the first-run tour lives here. Full guided pass: meet the
+// caddie → how to talk/ask for anything → the tools → getting around → go.
+const ONBOARDING_TOUR_STEPS: TourStep[] = [
+  {
+    key: 'welcome', anchor: 'center', icon: 'golf-outline',
+    title: 'Meet your caddie',
+    body: "It's a real caddie in your pocket — reads your yardage, calls your club, watches your swing, and keeps your head in the game. Quick tour so you know where everything is.",
+  },
+  {
+    key: 'talk', anchor: 'micBottomLeft', icon: 'mic',
+    title: 'Just talk to it',
+    body: 'Tap the mic to talk, or type in the bar — and ask for ANYTHING: "what\'s my yardage?", "what club here?", "open SmartVision", "start a lesson", or just chat. No menus to hunt through.',
+  },
+  {
+    key: 'tools', anchor: 'toolsTopRight', icon: 'apps-outline',
+    title: 'Your tools',
+    body: 'Your tools live up here — SmartVision (GPS + aim your shot), SmartFinder, and SwingLab for your swing. Tap to open any of them, or just ask your caddie to.',
+  },
+  {
+    key: 'around', anchor: 'bottomBar', icon: 'chevron-forward',
+    title: 'Get around',
+    body: 'This bar is always with you on every screen — the mic to talk, and the arrows to move back and forward. The caddie is one tap away, wherever you are.',
+  },
+  {
+    key: 'go', anchor: 'center', icon: 'checkmark-circle-outline',
+    title: "You're set",
+    body: "That's it — talk to your caddie like a person and it'll help on every screen. You can replay this anytime from Settings. Let's play.",
+  },
+];
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
@@ -833,6 +866,12 @@ export default function CaddieTab() {
   const [caddieResponse, setCaddieResponse] = useState('');
   // 2026-06-27 (A2 offline degrade) — when voice can't reach the backend, offer
   // a typed question routed to the on-device offline caddie (services/offlineCaddie).
+  // 2026-08-01 (tester — first-run tour). Show the guided tour on the first few opens (until finished
+  // or skipped). Decided once on mount so it doesn't pop back up mid-session after completeTour().
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    try { if (useOnboardingTourStore.getState().shouldAutoShow()) setShowTour(true); } catch { /* non-fatal */ }
+  }, []);
   const [offlineFallbackOpen, setOfflineFallbackOpen] = useState(false);
   const [offlineFallbackText, setOfflineFallbackText] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
@@ -3783,16 +3822,30 @@ export default function CaddieTab() {
       {/* Phase 109-followup — Quick Log Shot tap UI. */}
       <QuickLogShotSheet visible={quickLogOpen} onClose={() => setQuickLogOpen(false)} />
 
-      <QuickTutorial
-        slug="caddie_intro"
-        title="Caddie"
-        lines={[
-          "This is your round home — start a round, see live yardages, log shots.",
-          "Tap the mic badge or call my name to ask anything during the round.",
-          "I'll surface honest distances, watch your swings, and call the play.",
-        ]}
-        spokenText="Your caddie home. Tap the mic or call my name during the round."
-      />
+      {/* The comprehensive first-run tour supersedes the small caddie_intro blurb — don't show both. */}
+      {!showTour && (
+        <QuickTutorial
+          slug="caddie_intro"
+          title="Caddie"
+          lines={[
+            "This is your round home — start a round, see live yardages, log shots.",
+            "Tap the mic badge or call my name to ask anything during the round.",
+            "I'll surface honest distances, watch your swings, and call the play.",
+          ]}
+          spokenText="Your caddie home. Tap the mic or call my name during the round."
+        />
+      )}
+
+      {/* 2026-08-01 (tester) — first-run guided tour (first few opens, skippable). */}
+      {showTour && (
+        <TourOverlay
+          steps={ONBOARDING_TOUR_STEPS}
+          onDone={() => {
+            setShowTour(false);
+            try { useOnboardingTourStore.getState().completeTour(); } catch { /* non-fatal */ }
+          }}
+        />
+      )}
 
     </View>
   );

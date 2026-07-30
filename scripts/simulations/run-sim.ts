@@ -2851,6 +2851,28 @@ check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not sel
   })(),
   'a typed question always shows a visible answer (even muted); the keyboard can be minimized from the input bar; Harry (dormant) is not selectable as a custom base persona; and the shot-shape drill name fades after 5s so it stops covering the metric cards');
 
+check('First-run tour: auto on the first few opens, skippable, replayable from Settings',
+  // 2026-08-01 (tester — "on first 3 uses a skippable icon-by-icon highlight of the tools + how to
+  // talk"). A guided TourOverlay (mic/talk → tools → bottom bar → go) auto-shows on the caddie tab for
+  // the first few opens until finished/skipped; _layout counts the open; Settings replays it.
+  (() => {
+    const store = read('store/onboardingTourStore.ts');
+    const overlay = read('components/onboarding/TourOverlay.tsx');
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const layout = read('app/_layout.tsx');
+    const settings = read('app/settings.tsx');
+    return (
+      /shouldAutoShow: \(\) =>/.test(store) && /noteAppOpen:/.test(store) && /completeTour:/.test(store) &&
+      /MAX_AUTO_OPENS = 3/.test(store) &&
+      /export function TourOverlay/.test(overlay) &&
+      /useOnboardingTourStore\.getState\(\)\.noteAppOpen\(\)/.test(layout) &&
+      /if \(useOnboardingTourStore\.getState\(\)\.shouldAutoShow\(\)\) setShowTour\(true\)/.test(caddie) &&
+      /steps=\{ONBOARDING_TOUR_STEPS\}/.test(caddie) && /completeTour\(\)/.test(caddie) &&
+      /relaunchTour\(\)/.test(settings) && /Show Me Around/.test(settings)
+    );
+  })(),
+  'the first-run guided tour explains how to talk to the caddie + where the tools + navigation are, auto-shows for the first 3 opens (skippable, never re-nags once done), and can be replayed anytime from Settings → Help & About → Show Me Around');
+
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the
