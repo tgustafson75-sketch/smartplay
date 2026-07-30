@@ -864,6 +864,45 @@ check('Ball-departure verdict is honest (departed = before && !after)',
   /departed = before && !after/.test(read('api/ball-departure.ts')),
   'no departure claimed unless a ball was visible then gone');
 
+check('Analysis self-corrects a mislabeled camera angle (geometry beats the toggle)',
+  // 2026-07-30 (Tim — "my videos recorded DTL but were face-on; couldn't see the toggle in
+  // daylight. Did that affect analysis?"). YES — the biomech metrics branch on angle. The angle
+  // toggle is a UI hint the user can get wrong; the pose geometry is ground truth. So even an
+  // EXPLICIT down_the_line/face_on label is cross-checked against the CONSERVATIVE inferCameraAngle,
+  // and a confident disagreement self-corrects to the frames. glasses_pov is never overridden.
+  (() => {
+    const pa = read('services/poseAnalysisApi.ts');
+    return (
+      /else if \(angle === 'down_the_line' \|\| angle === 'face_on'\)/.test(pa) &&
+      /const inferred = inferCameraAngle\(frames\);/.test(pa) &&
+      /if \(inferred && inferred !== angle\) angle = inferred;/.test(pa)
+    );
+  })(),
+  'a face-on swing filmed with the DTL toggle set is re-read from the pose geometry, so the angle-specific metrics are computed correctly');
+
+check('BODY ANALYSIS tiles + biomechanics narrative read ONE source (icons carry the numbers)',
+  // 2026-07-30 (Tim — screenshot: "those icons and data are supposed to be together"). The tiles
+  // were reading a shot_map SNAPSHOT that persisted only {key,label,tone,icon} — the measured
+  // `value` was stripped, so Sway/Tilt/Posture/Weight showed "—" while the narrative above had the
+  // numbers. deriveBodyItems now lives in the shared HUD module and the swing-detail screen derives
+  // the row FRESH from session.biomechanics (same source as the narrative), falling back to the
+  // snapshot only for older swings without biomechanics.
+  (() => {
+    const hud = read('components/smartmotion/SmartMotionHud.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /export function deriveBodyItems/.test(hud) &&
+      /export const ICON_BIOMECH/.test(hud) &&
+      // detail screen prefers a fresh derive from session.biomechanics
+      /session\.biomechanics\s*\n?\s*\?\s*deriveBodyItems\(bodyAnalysis, session\.biomechanics\)/.test(detail) &&
+      // capture screen no longer defines its own copy — imports the shared one
+      /deriveBodyItems,/.test(sm) &&
+      !/function deriveBodyItems\(/.test(sm)
+    );
+  })(),
+  'the swing-detail BODY ANALYSIS row is derived from the live biomechanics (not the value-stripped snapshot), so the icons always carry the same measured numbers as the narrative');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed
@@ -2293,7 +2332,7 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
     const resolver = read('services/swingerHandedness.ts');
     return (
       // computeBiomechanics infers the angle when the caller passes none.
-      /if \(angle == null\) angle = inferCameraAngle\(frames\)/.test(pose) &&
+      /if \(angle == null\) \{\s*\n\s*angle = inferCameraAngle\(frames\);/.test(pose) &&
       // the detector keys off shoulder-width vs torso-height and is conservative
       // (only asserts DTL/face-on at unambiguous ratios, else null = compute as-is).
       /maxRatio < 0\.35\) return 'down_the_line'/.test(infer) &&

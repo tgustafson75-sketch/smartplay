@@ -64,7 +64,8 @@ import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
-import { BodyAnalysisRow, TempoBar, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
+import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
+import type { SwingAnalysis } from '../../../services/poseDetection';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
 import ComparisonResultSheet from '../../../components/swinglab/ComparisonResultSheet';
@@ -2837,9 +2838,24 @@ export default function SwingDetail() {
                   library swing mirrors what you saw: the BODY ANALYSIS icon card, the
                   tempo bar, and the shot map (effort / carry / launch). Saved data, no
                   recompute. */}
-              {session.smart_motion_shot_map?.bodyItems && session.smart_motion_shot_map.bodyItems.length > 0 ? (
-                <BodyAnalysisRow items={session.smart_motion_shot_map.bodyItems as BodyItem[]} style={{ marginTop: 12 }} />
-              ) : null}
+              {/* 2026-07-30 (Tim — "those icons and data are supposed to be together"): the tiles
+                  used to read the shot_map SNAPSHOT, which persisted only {key,label,tone,icon} —
+                  the measured `value` was stripped, so Sway/Tilt/Posture/Weight all showed "—" while
+                  the BIOMECHANICS narrative right above had the numbers. Now derive the row FRESH
+                  from the SAME source as that narrative (session.biomechanics + primary_issue) so the
+                  icons carry the measured values and always agree with the text. Falls back to the
+                  saved snapshot for older swings that have a report but no biomechanics. */}
+              {(() => {
+                const bodyAnalysis = session.primary_issue
+                  ? ({ primary_fault: session.primary_issue.primary_fault, detected_issue: session.primary_issue.issue_id } as unknown as SwingAnalysis)
+                  : null;
+                const items: BodyItem[] = session.biomechanics
+                  ? deriveBodyItems(bodyAnalysis, session.biomechanics)
+                  : ((session.smart_motion_shot_map?.bodyItems as BodyItem[] | undefined) ?? []);
+                return items.length > 0
+                  ? <BodyAnalysisRow items={items} style={{ marginTop: 12 }} />
+                  : null;
+              })()}
               {session.smart_motion_shot_map?.tempo?.ratio != null ? (
                 <View style={{ marginTop: 12 }}>
                   <TempoBar ratio={session.smart_motion_shot_map.tempo.ratio} />

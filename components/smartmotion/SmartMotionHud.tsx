@@ -35,6 +35,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { ThemeColors } from '../../theme/tokens';
+// Type-only (erased at compile — no runtime dep on the heavy pose/analysis modules).
+import type { SwingAnalysis } from '../../services/poseDetection';
+import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
 
 // 2026-06-12 — acoustic status badges (Tim's set) for the pickup card header.
 const ICON_ACOUSTIC = {
@@ -43,6 +46,22 @@ const ICON_ACOUSTIC = {
   silent: require('../../assets/icons/smartmotion/acoustic-silent.png'),
   confirmed: require('../../assets/icons/smartmotion/acoustic-confirmed.png'),
 };
+
+// 2026-07-30 (Tim — "those icons and data are supposed to be together"): the body-analysis
+// tiles showed "—" on the swing-detail screen while the BIOMECHANICS narrative above them had
+// real numbers. Root cause: the tiles were reading a shot_map SNAPSHOT that persisted only
+// {key,label,tone,icon} — the measured `value` was stripped. Fix = both the live capture screen
+// and the detail screen now derive the row FRESH from the SAME source (session.biomechanics)
+// via deriveBodyItems below, so the icons always carry the numbers. Moved here (with the badge
+// asset map) from smartmotion.tsx so it's the ONE shared definition.
+export const ICON_BIOMECH = {
+  sway: require('../../assets/icons/smartmotion/biomech-sway.png'),
+  tilt: require('../../assets/icons/smartmotion/biomech-tilt.png'),
+  posture: require('../../assets/icons/smartmotion/biomech-posture.png'),
+  weight: require('../../assets/icons/smartmotion/biomech-weight.png'),
+  shoulder: require('../../assets/icons/smartmotion/biomech-shoulder.png'),
+  hip: require('../../assets/icons/smartmotion/biomech-hip.png'),
+} as const;
 
 export type Angle = 'down_the_line' | 'face_on';
 export type SmTone = 'good' | 'warn' | 'bad' | 'neutral';
@@ -287,6 +306,41 @@ export interface BodyItem {
    *  A leading "~" marks a low-confidence read (metric_confidence < 0.5). Omitted when
    *  there's no measured value (honest — no fabricated number). */
   value?: string;
+}
+
+/**
+ * Build the four BODY ANALYSIS tiles (Sway / Tilt / Posture / Weight) from the swing's
+ * analysis + biomechanics. Moved here 2026-07-30 (from smartmotion.tsx) so the live capture
+ * screen AND the swing-detail screen derive them from the SAME source — see ICON_BIOMECH note.
+ * tone = qualitative (mapped from AI fault categories); value = the MEASURED number when present
+ * (else omitted → tile shows "—", never a fabricated number).
+ */
+export function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null): BodyItem[] {
+  const fault = a?.primary_fault;
+  const issue = a?.detected_issue;
+  const n = !a;
+  const sway: SmTone = n ? 'neutral' : fault === 'sway' || fault === 'head_movement' ? 'bad' : 'good';
+  const tilt: SmTone = n ? 'neutral' : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn' : 'good';
+  const posture: SmTone = n ? 'neutral' : fault === 'early_extension' || fault === 'spine_angle_loss' || issue === 'early_extension' ? 'bad' : 'good';
+  // 2026-06-11 (audit) — only claim "good" weight shift when it was actually MEASURED
+  // (bio.weightShiftPct present); a null metric is neutral ("—"), not a baseless green.
+  const weight: SmTone = n ? 'neutral'
+    : fault === 'reverse_pivot' ? 'bad'
+    : bio?.weightShiftPct == null ? 'neutral'
+    : bio.weightShiftPct < 30 ? 'warn' : 'good';
+  // 2026-06-30 (audit C5/C7) — surface the MEASURED number on each tile. "~" marks a
+  // low-confidence read (metric_confidence < 0.5). Sway has no intuitive scalar (head-drift
+  // is normalized pixels), so it stays qualitative — honest, no fabricated number.
+  const conf = bio?.metric_confidence as Record<string, number | undefined> | undefined;
+  const hedge = (k: string): string => (conf && typeof conf[k] === 'number' && conf[k]! < 0.5 ? '~' : '');
+  const degVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}°`);
+  const pctVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}%`);
+  return [
+    { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline', image: ICON_BIOMECH.sway },
+    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt, value: degVal(bio?.shoulderTiltDeg, 'shoulderTilt') },
+    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline', image: ICON_BIOMECH.posture, value: degVal(bio?.spineAngleDeltaDeg, 'spineAngleDelta') },
+    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline', image: ICON_BIOMECH.weight, value: pctVal(bio?.weightShiftPct, 'weightShift') },
+  ];
 }
 
 const TONE_VERDICT: Record<SmTone, string> = {

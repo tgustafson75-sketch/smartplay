@@ -114,6 +114,8 @@ import {
   FooterChips,
   type Angle,
   type MetricSpec,
+  ICON_BIOMECH,
+  deriveBodyItems,
   type BodyItem,
   type SmTone,
 } from '../../components/smartmotion/SmartMotionHud';
@@ -187,15 +189,8 @@ const ICON_METRIC = {
   smash: require('../../assets/icons/smartmotion/metric-smash.png'),
   clubpath: require('../../assets/icons/smartmotion/metric-clubpath.png'),
 } as const;
-// Biomech RESULT badges (Tim — the dashed-line set for the body-analysis row).
-const ICON_BIOMECH = {
-  sway: require('../../assets/icons/smartmotion/biomech-sway.png'),
-  tilt: require('../../assets/icons/smartmotion/biomech-tilt.png'),
-  posture: require('../../assets/icons/smartmotion/biomech-posture.png'),
-  weight: require('../../assets/icons/smartmotion/biomech-weight.png'),
-  shoulder: require('../../assets/icons/smartmotion/biomech-shoulder.png'),
-  hip: require('../../assets/icons/smartmotion/biomech-hip.png'),
-} as const;
+// ICON_BIOMECH + deriveBodyItems moved to components/smartmotion/SmartMotionHud.tsx (imported
+// below) — the body-analysis badges + tile derivation are now shared with the swing-detail screen.
 // 2026-06-12 — the rest of the rail as matching green-circle badges (Tim's art), so
 // every rail button uses its OWN circle (our button border dropped — no double circle).
 const ICON_RAIL = {
@@ -250,35 +245,8 @@ function clubPathSpec(a: SwingAnalysis | null): MetricSpec {
 const SESSION_DONE_FOCUS =
   'choosing whether to go again. If the player says YES / "another round" / "run it back" / "again" / "let\'s go", ACT immediately — call record_swing to start the next set (their last set auto-saves; same club and setup) and tell them it\'s rolling. If they name a club, angle, or drill ("driver full swing", "face on", "nine iron easy"), ACT immediately — call configure_drill and/or set_angle to set it up, then record_swing so it\'s rolling. Do NOT merely offer, do NOT ask again — they are standing at the ball, not at the phone.';
 
-function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics | null): BodyItem[] {
-  const fault = a?.primary_fault;
-  const issue = a?.detected_issue;
-  const n = !a;
-  const sway: SmTone = n ? 'neutral' : fault === 'sway' || fault === 'head_movement' ? 'bad' : 'good';
-  const tilt: SmTone = n ? 'neutral' : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn' : 'good';
-  const posture: SmTone = n ? 'neutral' : fault === 'early_extension' || fault === 'spine_angle_loss' || issue === 'early_extension' ? 'bad' : 'good';
-  // 2026-06-11 (audit) — only claim "good" weight shift when it was actually
-  // MEASURED (bio.weightShiftPct present); a null metric is neutral ("—"), not a
-  // baseless green. (sway/tilt/posture map to real AI fault categories, so their
-  // "good = not flagged by the analysis" reads stay qualitative-honest.)
-  const weight: SmTone = n ? 'neutral'
-    : fault === 'reverse_pivot' ? 'bad'
-    : bio?.weightShiftPct == null ? 'neutral'
-    : bio.weightShiftPct < 30 ? 'warn' : 'good';
-  // 2026-06-30 (audit C5/C7) — surface the MEASURED number on each tile (was tone-only).
-  // "~" marks a low-confidence read (metric_confidence < 0.5). Sway has no intuitive scalar
-  // (head-drift is normalized pixels), so it stays qualitative — honest, no fabricated number.
-  const conf = bio?.metric_confidence as Record<string, number | undefined> | undefined;
-  const hedge = (k: string): string => (conf && typeof conf[k] === 'number' && conf[k]! < 0.5 ? '~' : '');
-  const degVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}°`);
-  const pctVal = (v: number | null | undefined, k: string) => (v == null ? undefined : `${hedge(k)}${Math.round(v)}%`);
-  return [
-    { key: 'sway', label: 'Sway', tone: sway, icon: 'swap-horizontal-outline', image: ICON_BIOMECH.sway },
-    { key: 'tilt', label: 'Tilt', tone: tilt, icon: 'contract-outline', image: ICON_BIOMECH.tilt, value: degVal(bio?.shoulderTiltDeg, 'shoulderTilt') },
-    { key: 'posture', label: 'Posture', tone: posture, icon: 'body-outline', image: ICON_BIOMECH.posture, value: degVal(bio?.spineAngleDeltaDeg, 'spineAngleDelta') },
-    { key: 'weight', label: 'Weight', tone: weight, icon: 'scale-outline', image: ICON_BIOMECH.weight, value: pctVal(bio?.weightShiftPct, 'weightShift') },
-  ];
-}
+// deriveBodyItems now lives in components/smartmotion/SmartMotionHud.tsx (imported below) so the
+// live capture screen and the swing-detail screen build the BODY ANALYSIS row from one source.
 
 // Contact/strike signals the BODY-MOTION analysis can't see. The vision model
 // judges motion from a handful of frames — it does NOT measure whether the club

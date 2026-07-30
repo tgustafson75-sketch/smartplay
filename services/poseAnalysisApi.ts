@@ -350,9 +350,22 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   // 2026-07-24 (full-app audit, root D) — when the caller doesn't KNOW the angle
   // (null/undefined — Coach lesson, library uploads), infer it from the pose
   // geometry so the honesty gate below fires everywhere, not just where a caller
-  // happened to thread it. An EXPLICIT angle (SmartMotion's user override,
-  // glasses_pov) always wins over inference.
-  if (angle == null) angle = inferCameraAngle(frames);
+  // happened to thread it.
+  // 2026-07-30 (Tim — "my videos recorded DTL but were face-on; I couldn't see the
+  // toggle in daylight. Did that affect analysis?") — YES it did: the metrics below
+  // branch on angle, so a face-on swing scored with the DTL geometry is wrong. The
+  // angle toggle is a UI HINT the user can get wrong (glare, rushed setup); the pose
+  // geometry is ground truth. So even with an EXPLICIT down_the_line/face_on label,
+  // cross-check against inferCameraAngle — which is CONSERVATIVE (returns non-null only
+  // when the read is UNAMBIGUOUS) — and if it confidently DISAGREES, self-correct to the
+  // frames. A null/ambiguous inference keeps the user's label. glasses_pov (a first-person
+  // source the frames can't reveal) is never overridden — inference can't produce it.
+  if (angle == null) {
+    angle = inferCameraAngle(frames);
+  } else if (angle === 'down_the_line' || angle === 'face_on') {
+    const inferred = inferCameraAngle(frames);
+    if (inferred && inferred !== angle) angle = inferred;
+  }
   const address = frames.find(f => f.position === 'P1_address');
   const top = frames.find(f => f.position === 'P4_top');
   const impact = frames.find(f => f.position === 'P6_impact');
