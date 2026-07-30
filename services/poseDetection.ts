@@ -555,7 +555,13 @@ const LOCATE_MIN_CLIP_MS = 6_000;
 // cold /api/swing-analysis Lambda returned. The locate pass is cheap (small
 // frames) but cold-start + inference can exceed 15s; 25s clears it while still
 // failing fast enough to fall back to wide-spread sampling if the server is dead.
-const LOCATE_TIMEOUT_MS = 25_000;
+// 2026-07-29 (Tim — consistent "swing_locate — Aborted"). The SERVER never hard-fails locate: on any
+// Gemini error/timeout it still returns a 200 best-guess window (see api/swing-analysis.ts). But its
+// Gemini call has a 20s server-side timeout, and on a cold Lambda 20s + cold-start + response can
+// exceed the OLD 25s client abort — so the client was killing a response that was still on its way,
+// every time. 35s clears the server's worst case so the guaranteed 200 always lands; with the frame
+// count now halved the common case is far faster, so this ceiling is only ever hit on a cold miss.
+const LOCATE_TIMEOUT_MS = 35_000;
 
 // Small, many, evenly-spread frames tagged with timestamps. Cheap to extract
 // and tiny on the wire — used only to ASK "where's the swing", not to read it.
