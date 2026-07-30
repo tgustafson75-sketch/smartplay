@@ -105,7 +105,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'No AI provider configured' });
   }
 
-  const body = (typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})) as { frames?: unknown };
+  // 2026-07-30 (audit #27) — parse defensively; a non-JSON string body threw an UNHANDLED exception → 500.
+  let body: { frames?: unknown };
+  try { body = (typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})) as { frames?: unknown }; }
+  catch { return res.status(400).json({ error: 'invalid JSON body' }); }
   if (!Array.isArray(body.frames) || body.frames.length === 0) {
     return res.status(400).json({ error: 'frames (array of {b64}) required' });
   }
