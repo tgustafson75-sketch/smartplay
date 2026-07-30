@@ -13,7 +13,9 @@ export function historyPromptBlock(): string {
   const parts: string[] = [];
 
   try {
-    const rounds = useRoundStore.getState().roundHistory;
+    // 2026-07-30 (audit #6 — SIM CONTAMINATION) — exclude simulated rounds so the caddie never recites a
+    // narrated demo round as the player's real recent play ("how was my last round?").
+    const rounds = useRoundStore.getState().roundHistory.filter((r) => !r.simulated);
     if (rounds.length > 0) {
       const recent = [...rounds]
         .slice(-4)

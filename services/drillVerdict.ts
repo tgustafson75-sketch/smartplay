@@ -57,6 +57,12 @@ export function deriveDrillVerdict(input: {
   ballLaunched?: boolean | null;
 }): DrillVerdict | null {
   if (!input.drillId) return null;
+  // 2026-07-30 (audit #7 — HONESTY) — this verdict grades against a DETECTABLE swing FAULT (the session's
+  // rolled-up primary_issue). Non-fault drills (tempo, chipping, shot-shape) target something the fault
+  // classifier never emits, so `stillPresent` was ALWAYS false → a fabricated GREEN "got it" on every rep
+  // regardless of the actual swing. We can't verify those from this signal, so return NO fault-based
+  // verdict rather than a false green. (north-star: green = confirmed only.)
+  if (/^(tempo|chipping|shot_)/.test(input.drillId)) return null;
   const drill = input.drillName && input.drillName.trim() ? input.drillName.trim() : 'drill';
   const targets = targetsForDrill(input.drillId);
   const stillPresent = input.issueId != null && targets.includes(input.issueId);

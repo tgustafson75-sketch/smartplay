@@ -233,6 +233,11 @@ export async function startMetaWearablesStreaming(
 /** Tear down the stream. Idempotent; safe to call multiple times. */
 export async function stopMetaWearablesStreaming(): Promise<void> {
   if (!NativeMod) return;
+  // 2026-07-30 (audit #8) — an EXPLICIT stop must cancel any pending voice-coordination RESUME, or a
+  // stream the user just turned off silently restarts VOICE_RESUME_DELAY_MS later (and leaves pausedByVoice
+  // stuck true, blocking the stale-probe). Clear the timer + reset the flag on every stop.
+  if (resumeTimer) { clearTimeout(resumeTimer); resumeTimer = null; }
+  pausedByVoice = false;
   try {
     await NativeMod.stopStreaming();
     devLog('[mwdat-bridge] streaming stopped');

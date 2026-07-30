@@ -38,7 +38,8 @@ export async function generateKevinRead(): Promise<void> {
     }
 
     const round = useRoundStore.getState();
-    const recent = round.roundHistory.slice(-MAX_ROUNDS);
+    // 2026-07-30 (audit #15 — SIM CONTAMINATION) — the dashboard Read must not reflect simulated rounds.
+    const recent = round.roundHistory.filter(r => !r.simulated).slice(-MAX_ROUNDS);
     const recentRounds = recent.map(r => ({
       totalScore: r.totalScore,
       scoreVsPar: r.scoreVsPar,

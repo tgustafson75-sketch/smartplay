@@ -1024,7 +1024,10 @@ export default function SmartMotion() {
   const meteringRef = useRef<MeteringHandle | null>(null);
   const audioUriRef = useRef<string | null>(null);
 
-  const measuredBallSpeedMph = ballSpeed?.ball_speed_mph ?? null;
+  // 2026-07-30 (audit #12) — ball speed is measured ONCE (the primary swing, index 0); it was shown as
+  // EVERY selected swing's value. Only surface it for the swing it was actually measured on; others read
+  // "—" rather than a borrowed number. (selectedSwing===0 is the same primary-swing gate used elsewhere.)
+  const measuredBallSpeedMph = (selectedSwing === 0 ? ballSpeed?.ball_speed_mph : null) ?? null;
 
   // Cage targeting — subscribe to the ingested session so ball/target
   // overlays render live, plus the persisted setters. Reuses the same

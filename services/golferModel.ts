@@ -159,7 +159,10 @@ export function buildGolferModel(force = false): GolferModel {
   const cage = useCageStore.getState();
   const profile = usePlayerProfileStore.getState();
 
-  const recentRounds = round.roundHistory.slice(-RECENT_ROUNDS);
+  // 2026-07-30 (audit #5 — SIM CONTAMINATION) — exclude simulated rounds; their narrated shots would
+  // bias the real tendency/club-distance model that feeds the live caddie brain. (Dashboard/scorecard/
+  // handicap already filter !simulated; this path didn't.)
+  const recentRounds = round.roundHistory.filter(r => !r.simulated).slice(-RECENT_ROUNDS);
   const recentSessions = cage.sessionHistory.slice(-RECENT_CAGE_SESSIONS);
   const recentAnalyses = getRecentAnalyses(20);
 

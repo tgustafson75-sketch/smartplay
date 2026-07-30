@@ -192,6 +192,20 @@ export class VoiceCommandRouter {
       }
     }
     if (!handler) {
+      // 2026-07-30 (audit #2) — social_greeting is DELIBERATELY unregistered so it routes to the brain
+      // (we removed the canned greeting). Logging it as a no_handler "miss" spammed the now-auto-sending
+      // issue log with false errors and evicted real beta issues from the 100-cap log. For these, don't
+      // log a miss and signal route_to_brain so the caller answers conversationally, not the canned line.
+      const BRAIN_ROUTED_INTENTS = new Set(['social_greeting']);
+      if (BRAIN_ROUTED_INTENTS.has(intent.intent_type)) {
+        return {
+          success: true,
+          voice_response: null,
+          route_to_brain: true,
+          side_effects: ['route_to_brain:' + intent.intent_type],
+          follow_up_needed: false,
+        };
+      }
       logVoiceMiss({
         transcript: intent.raw_text,
         missType: 'no_handler',
