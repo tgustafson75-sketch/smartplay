@@ -83,6 +83,7 @@ import { awaitGreetingComplete } from '../greeting';
 import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
 import { useOnboardingTourStore } from '../../store/onboardingTourStore';
+import { useTourTarget } from '../../hooks/useTourTarget';
 
 // 2026-08-01 (tester — "first 3 uses: a skippable icon-by-icon highlight of the tools + how to talk").
 // The caddie tab is the home surface, so the first-run tour lives here. Full guided pass: meet the
@@ -94,17 +95,17 @@ const ONBOARDING_TOUR_STEPS: TourStep[] = [
     body: "It's a real caddie in your pocket — reads your yardage, calls your club, watches your swing, and keeps your head in the game. Quick tour so you know where everything is.",
   },
   {
-    key: 'talk', anchor: 'micBottomLeft', icon: 'mic',
+    key: 'talk', anchor: 'micBottomLeft', targetId: 'caddie.mic', icon: 'mic',
     title: 'Just talk to it',
     body: 'Tap the mic to talk, or type in the bar — and ask for ANYTHING: "what\'s my yardage?", "what club here?", "open SmartVision", "start a lesson", or just chat. No menus to hunt through.',
   },
   {
-    key: 'tools', anchor: 'toolsTopRight', icon: 'apps-outline',
+    key: 'tools', anchor: 'toolsTopRight', targetId: 'caddie.tools', icon: 'apps-outline',
     title: 'Your tools',
-    body: 'Your tools live up here — SmartVision (GPS + aim your shot), SmartFinder, and SwingLab for your swing. Tap to open any of them, or just ask your caddie to.',
+    body: 'This ••• opens your tools — SmartVision (GPS + aim your shot), SmartFinder, and SwingLab for your swing. Tap it any time, or just ask your caddie to open one.',
   },
   {
-    key: 'around', anchor: 'bottomBar', icon: 'chevron-forward',
+    key: 'around', anchor: 'bottomBar', targetId: 'caddie.bar', icon: 'chevron-forward',
     title: 'Get around',
     body: 'This bar is always with you on every screen — the mic to talk, and the arrows to move back and forward. The caddie is one tap away, wherever you are.',
   },
@@ -872,6 +873,9 @@ export default function CaddieTab() {
   useEffect(() => {
     try { if (useOnboardingTourStore.getState().shouldAutoShow()) setShowTour(true); } catch { /* non-fatal */ }
   }, []);
+  // 2026-08-01 (tester — clean spotlights) — the caddie-tab tools button registers its bounds so the
+  // tour spotlights the real ••• pill precisely.
+  const toolsTarget = useTourTarget('caddie.tools');
   const [offlineFallbackOpen, setOfflineFallbackOpen] = useState(false);
   const [offlineFallbackText, setOfflineFallbackText] = useState('');
   const [showShotCard, setShowShotCard] = useState(false);
@@ -3060,6 +3064,8 @@ export default function CaddieTab() {
               Just the accented three-dot circle — no label needed, people know the
               dots; the accent ring keeps it from getting lost on small screens. */}
           <TouchableOpacity
+            ref={toolsTarget.ref}
+            onLayout={toolsTarget.onLayout}
             style={{
               width: 30, height: 30, borderRadius: 15,
               alignItems: 'center', justifyContent: 'center',

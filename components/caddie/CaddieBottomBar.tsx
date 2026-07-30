@@ -28,6 +28,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
 import { toggle as toggleListening } from '../../services/listeningSession';
 import { handleTranscribedUtterance } from '../../services/listeningSession';
+import { useTourTarget } from '../../hooks/useTourTarget';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import {
   markChevronNav, consumeChevronNav, pushForward, popForward, hasForward, clearForward,
@@ -52,6 +53,10 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
   // empty, the right slot becomes a keyboard-dismiss button (returnKey is "send", so there was no way
   // to just close the keyboard without sending).
   const [focused, setFocused] = useState(false);
+  // 2026-08-01 (tester — clean spotlights) — register the bar + mic bounds so the first-run tour can
+  // spotlight the actual on-screen elements.
+  const barTarget = useTourTarget('caddie.bar');
+  const micTarget = useTourTarget('caddie.mic');
   const s = makeStyles(colors);
 
   // Browser-style forward stack: a NORMAL navigation (not chevron-driven) clears forward.
@@ -92,7 +97,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
   }, []);
 
   return (
-    <View style={s.bar}>
+    <View style={s.bar} ref={barTarget.ref} onLayout={barTarget.onLayout}>
       {/* ‹ universal page back */}
       <TouchableOpacity onPress={goBack} style={s.chevron} accessibilityRole="button" accessibilityLabel="Back"
         hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
@@ -101,6 +106,8 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
 
       {/* The neon caddie SPEAKING = tap to talk (same listeningSession as everywhere) */}
       <TouchableOpacity
+        ref={micTarget.ref}
+        onLayout={micTarget.onLayout}
         onPress={onMic}
         style={[s.mic, isListening && s.micActive]}
         accessibilityRole="button"

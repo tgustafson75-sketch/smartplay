@@ -8,11 +8,12 @@
  * element measurement — robust across screens with no per-target instrumentation. `center` steps
  * (welcome / closer) draw no ring.
  */
-import React, { useState } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getTourTarget, subscribeTourTargets, getTourTargetsVersion, type TourRect } from '../../store/tourTargets';
 
 export type TourAnchor = 'center' | 'bottomBar' | 'micBottomLeft' | 'toolsTopRight';
 
@@ -21,6 +22,9 @@ export interface TourStep {
   title: string;
   body: string;
   anchor: TourAnchor;
+  /** Preferred: an id registered via useTourTarget — spotlights the element's MEASURED bounds.
+   *  Falls back to the geometry `anchor` until the element has measured (or if it's unmounted). */
+  targetId?: string;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
 }
 
@@ -31,10 +35,12 @@ export function TourOverlay({ steps, onDone }: { steps: TourStep[]; onDone: () =
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [i, setI] = useState(0);
+  // Re-render when a measured target lands (an element may register its bounds after we mount).
+  useSyncExternalStore(subscribeTourTargets, getTourTargetsVersion, getTourTargetsVersion);
   const step = steps[i];
   if (!step) return null;
 
-  // Known-geometry spotlight rects. The bottom bar sits just above the bottom inset; tools top-right.
+  // Known-geometry spotlight rects (fallback). The bottom bar sits just above the bottom inset.
   const barH = 60;
   const barY = height - insets.bottom - barH - 8;
   const rectFor = (a: TourAnchor): Rect | null => {
@@ -45,7 +51,12 @@ export function TourOverlay({ steps, onDone }: { steps: TourStep[]; onDone: () =
       default:              return null;
     }
   };
-  const rect = rectFor(step.anchor);
+  // Prefer the element's MEASURED bounds (with a little breathing room); fall back to geometry.
+  const measured: TourRect | null = step.targetId ? getTourTarget(step.targetId) : null;
+  const PAD = 8;
+  const rect: Rect | null = measured
+    ? { x: measured.x - PAD, y: measured.y - PAD, w: measured.w + PAD * 2, h: measured.h + PAD * 2 }
+    : rectFor(step.anchor);
 
   // Place the tooltip on the opposite half of the screen from the ring so it never covers it.
   const tooltipTop = rect ? (rect.y > height * 0.5) : true; // ring low → card high, and vice-versa
@@ -55,22 +66,32 @@ export function TourOverlay({ steps, onDone }: { steps: TourStep[]; onDone: () =
 
   return (
     <Modal transparent animationType="fade" onRequestClose={onDone} statusBarTranslucent>
-      <View style={styles.fill} pointerEvents="box-none">
-        {/* Scrim */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(3,7,5,0.82)' }]} />
-
-        {/* Highlight ring over the step's region */}
-        {rect && (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: rect.x, top: rect.y, width: rect.w, height: rect.h,
-              borderRadius: 16, borderWidth: 2.5, borderColor: colors.accent,
-              backgroundColor: 'rgba(136,247,0,0.08)',
-              shadowColor: colors.accent, shadowOpacity: 0.9, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
-            }}
-          />
+      <View style={styles.fill}>
+        {/* SPOTLIGHT. With a rect, four dark panels frame a transparent HOLE so the real icon shows
+            crisply through the transparent modal; otherwise a full scrim (center welcome/closer). */}
+        {rect ? (
+          <>
+            {/* top */}
+            <View style={[s.scrim, { left: 0, right: 0, top: 0, height: Math.max(0, rect.y) }]} />
+            {/* bottom */}
+            <View style={[s.scrim, { left: 0, right: 0, top: rect.y + rect.h, bottom: 0 }]} />
+            {/* left */}
+            <View style={[s.scrim, { left: 0, top: rect.y, width: Math.max(0, rect.x), height: rect.h }]} />
+            {/* right */}
+            <View style={[s.scrim, { left: rect.x + rect.w, right: 0, top: rect.y, height: rect.h }]} />
+            {/* glowing ring around the hole */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: rect.x, top: rect.y, width: rect.w, height: rect.h,
+                borderRadius: 14, borderWidth: 2.5, borderColor: colors.accent,
+                shadowColor: colors.accent, shadowOpacity: 0.9, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+              }}
+            />
+          </>
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(3,7,5,0.86)' }]} />
         )}
 
         {/* Tooltip card */}
@@ -127,6 +148,7 @@ const styles = StyleSheet.create({ fill: { flex: 1 } });
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
+    scrim: { position: 'absolute', backgroundColor: 'rgba(3,7,5,0.86)' },
     card: {
       position: 'absolute', left: 18, right: 18,
       backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border,

@@ -2868,10 +2868,19 @@ check('First-run tour: auto on the first few opens, skippable, replayable from S
       /useOnboardingTourStore\.getState\(\)\.noteAppOpen\(\)/.test(layout) &&
       /if \(useOnboardingTourStore\.getState\(\)\.shouldAutoShow\(\)\) setShowTour\(true\)/.test(caddie) &&
       /steps=\{ONBOARDING_TOUR_STEPS\}/.test(caddie) && /completeTour\(\)/.test(caddie) &&
-      /relaunchTour\(\)/.test(settings) && /Show Me Around/.test(settings)
+      /relaunchTour\(\)/.test(settings) && /Show Me Around/.test(settings) &&
+      // MEASURED spotlights: a target registry + a measure hook, real elements instrumented, and the
+      // overlay cuts a hole over the measured bounds (with a geometry fallback).
+      /export function setTourTarget/.test(read('store/tourTargets.ts')) &&
+      /measureInWindow/.test(read('hooks/useTourTarget.ts')) &&
+      /const barTarget = useTourTarget\('caddie\.bar'\)/.test(read('components/caddie/CaddieBottomBar.tsx')) &&
+      /useTourTarget\('caddie\.mic'\)/.test(read('components/caddie/CaddieBottomBar.tsx')) &&
+      /const toolsTarget = useTourTarget\('caddie\.tools'\)/.test(caddie) &&
+      /targetId: 'caddie\.mic'/.test(caddie) && /targetId: 'caddie\.tools'/.test(caddie) &&
+      /step\.targetId \? getTourTarget\(step\.targetId\)/.test(overlay)
     );
   })(),
-  'the first-run guided tour explains how to talk to the caddie + where the tools + navigation are, auto-shows for the first 3 opens (skippable, never re-nags once done), and can be replayed anytime from Settings → Help & About → Show Me Around');
+  'the first-run guided tour explains how to talk to the caddie + where the tools + navigation are, auto-shows for the first 3 opens (skippable, replayable from Settings), and spotlights the REAL on-screen mic / tools / bar by their measured bounds (clean cut-out), not just a region box');
 
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
