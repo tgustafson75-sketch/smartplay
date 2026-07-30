@@ -793,7 +793,15 @@ export default function SmartMotion() {
     setDraftTarget({ x: rig.target.x, y: Math.max(EFFORT_TOP_CAP, rig.target.y) });
     dtlDefaultAppliedRef.current = true;
   }, [angle, swingerHandedness, isPutt]);
-  const [videoPaused, setVideoPaused] = useState(false); // review play/pause
+  // 2026-07-30 (Tim — "autoplay + showing the body lines on open is contributing to the crash"). Start the
+  // review PAUSED so the clip is NOT being decoded by ExoPlayer while the pose/body-line extraction runs a
+  // native retriever on the same file — the auto-play-plus-simultaneous-analysis race. Analysis still runs;
+  // the user taps play (or a swing in the reel) when ready. Removes the concurrency at the source.
+  const [videoPaused, setVideoPaused] = useState(true); // review play/pause — starts PAUSED (no autoplay on open)
+  // 2026-07-30 (Tim — crash repro) — force PAUSE on EVERY entry into review (upload + live), so ExoPlayer
+  // is never decoding the clip while the pose/ball/club extractors run a native retriever on the same file
+  // (the auto-play + simultaneous-analysis SIGSEGV). Fires once per review entry; the user plays when ready.
+  useEffect(() => { if (phase === 'review') setVideoPaused(true); }, [phase]);
   // 2026-06-14 — guards the windowed-loop re-seek so a burst of playback-status
   // ticks past a swing's endMs only fires one setPositionAsync (no seek spam/stutter).
   const loopSeekGuardRef = useRef(false);

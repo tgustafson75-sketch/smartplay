@@ -3922,6 +3922,16 @@ check('Detection: swings FOUND + segmented right (root-cause fixes)',
   })(),
   '#1 a flat-topped/clipped loud strike is no longer silently dropped (missed swing); #3 a real fast 2nd swing 1.6s apart survives the rebound filter; #2 phantom-recovery gap widened to the locator accuracy; #4 long-clip merge capped at 3.5s; #5 the segment window favors the backswing so the takeaway isn\'t clipped');
 
+check('SmartMotion review opens PAUSED (no autoplay-vs-analysis crash)',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // Tim's crash repro: the review clip auto-played while the pose/ball/club extractors ran a native
+    // retriever on the SAME file → SIGSEGV. Review now starts paused + re-pauses on every entry into review.
+    return /useState\(true\); \/\/ review play\/pause — starts PAUSED/.test(sm) &&
+      /if \(phase === 'review'\) setVideoPaused\(true\);/.test(sm);
+  })(),
+  'the SmartMotion review video starts PAUSED and re-pauses on every entry into review, so ExoPlayer never decodes the clip while the pose/ball/club extractors run a native retriever on it (the auto-play + simultaneous-analysis crash Tim reproduced)');
+
 check('Multi-swing: EVERY swing gets its own persisted diagnosis + range recovers a cold locate',
   // 2026-08-01 (marquee-feature audit). Carve finding 1: the multi-swing narration loop analyzed
   // swings 1..N in memory but only swing 0 was persisted per-shot, so the saved reel showed swing 1
