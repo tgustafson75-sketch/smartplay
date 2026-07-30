@@ -2732,6 +2732,32 @@ check('Voice: speakFromBase64 never goes silent on a dead audio load (device-TTS
   })(),
   'the inline-audio speak path recovers from a dead OS audio load (reset+retry) and falls back to device TTS speaking the reply instead of leaving the caddie mute');
 
+check('Persona switch: ONE unified handoff (no double-speak, no racing opener, no cold dead-end)',
+  // 2026-07-30 (Tim — switching to Serena: "two speaking things racing" [the new handoff + the old
+  // "here when you're ready, tap to chat"] and "starts a fresh session that tells me I'm off the
+  // course"). Unified: (1) the local-intent route no longer speaks its own ack (setCaddiePersonality's
+  // bundled opener is the single handoff for every caddie); (2) a switch claims the one-per-process
+  // opener slot so the app-open proactive opener stands down; (3) a switch never auto re-listens (which,
+  // cold, dead-ended into the off-course line).
+  (() => {
+    const csh = read('services/intents/changeSettingHandler.ts');
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const ss = read('store/settingsStore.ts');
+    const cad = read('app/(tabs)/caddie.tsx');
+    const guard = read('services/openerGuard.ts');
+    return (
+      // (1) persona switch returns no spoken ack
+      /case 'persona': \{[\s\S]*?voice_response: null, side_effects: \['caddie_persona:'/.test(csh) &&
+      // (2) shared opener-slot guard: switch claims it, caddie opener honors it
+      /export function claimOpenerSlot/.test(guard) && /export function isOpenerClaimed/.test(guard) &&
+      /claimOpenerSlot\(\)/.test(ss) &&
+      /openerPlayedThisProcess \|\| isOpenerClaimed\(\)/.test(cad) &&
+      // (3) a caddie switch never spawns a follow-up mic turn
+      /const switchedCaddie = /.test(vc) && /let shouldRecurse = !switchedCaddie && kevinAskedFollowUp/.test(vc)
+    );
+  })(),
+  'every persona switch (kevin/serena/harry/tank) produces exactly ONE handoff — the bundled opener — with no redundant ack, no app-open opener stacking on top, and no cold follow-up turn dead-ending into the off-course line');
+
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the

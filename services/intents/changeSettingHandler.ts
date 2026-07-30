@@ -4,7 +4,6 @@ import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import type { RoundMode } from '../../types/patterns';
-import { getCaddieName } from '../../lib/persona';
 
 function asBool(v: unknown): boolean | null {
   if (typeof v === 'boolean') return v;
@@ -185,9 +184,13 @@ export const changeSettingHandler: IntentHandler = {
         if (!valid.includes(v as Persona)) {
           return clarify('Kevin, Tank, Serena, or Harry?');
         }
+        // 2026-07-30 (Tim — "Serena has two speaking things racing… the old 'here when you're ready'
+        // needs to go for all caddies, same flow for all"). setCaddiePersonality already fires the ONE
+        // unified handoff (the per-persona bundled opener clip, in-character + zero-network). Speaking a
+        // second ack here made it double-speak on the local-intent route. Return NO voice_response so the
+        // bundled opener is the single handoff for every caddie.
         settings.setCaddiePersonality(v as Persona);
-        const newName = getCaddieName(v as Persona);
-        return ack(`${newName} here. I've got you.`, ['caddie_persona:' + v]);
+        return { success: true, voice_response: null, side_effects: ['caddie_persona:' + v], follow_up_needed: false };
       }
 
       // 2026-07-24 (final QA — "ask for settings"). Handedness was settable in Settings +

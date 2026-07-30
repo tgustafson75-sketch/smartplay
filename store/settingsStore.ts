@@ -603,6 +603,16 @@ export const useSettingsStore = create<SettingsState>()(
         // and no intro line, so it would announce the user's custom caddie in
         // KEVIN's voice and flash a literal "custom stepping in." The custom
         // caddie has its own recorded clips; don't override with Kevin's.
+        // 2026-07-30 (Tim — "the old 'here when you're ready, just tap to chat' needs to go for all
+        // caddies"). A persona switch IS the handoff moment, so claim the one-per-process opener slot:
+        // a not-yet-spoken app-open proactive opener (caddie.tsx) stands down instead of stacking after
+        // this handoff and reading as two greetings racing. Applies to EVERY persona (incl. custom).
+        if (prev !== p) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../services/openerGuard') as typeof import('../services/openerGuard')).claimOpenerSlot();
+          } catch { /* best-effort */ }
+        }
         if (prev !== p && p !== 'custom') {
           const intros: Record<string, string> = {
             kevin: "Hey, Kevin back on the bag. Let's go.",

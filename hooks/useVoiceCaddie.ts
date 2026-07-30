@@ -1482,9 +1482,15 @@ export const useVoiceCaddie = ({
         // still terminates naturally on close-intent (handled above)
         // or on silence-twice (handled in the calling loop body).
         const kevinAskedFollowUp = endsAsQuestion(checked.text);
+        // 2026-07-30 (Tim — "switching to Serena starts a fresh session that tells me I'm off the
+        // course"). A persona SWITCH is a terminal command, not a question — it must NOT spawn a
+        // follow-up mic turn, which (cold, on the first interaction after opening the app) fails into
+        // the off-course dead-end line. Never auto re-listen when this turn switched the caddie.
+        const switchedCaddie = ([...(checked.toolActions ?? []), ...(checked.toolAction ? [checked.toolAction] : [])])
+          .some((a) => (a as { type?: string })?.type === 'switch_caddie');
         const continuous = useSettingsStore.getState().continuousConversationMode;
-        let shouldRecurse = kevinAskedFollowUp;
-        if (continuous && !kevinAskedFollowUp) {
+        let shouldRecurse = !switchedCaddie && kevinAskedFollowUp;
+        if (!switchedCaddie && continuous && !kevinAskedFollowUp) {
           const turnsSoFar = continuousTurnCountRef.current;
           const elapsedMs = continuousSessionStartedAtRef.current === 0
             ? 0

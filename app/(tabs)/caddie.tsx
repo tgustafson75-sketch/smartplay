@@ -80,6 +80,7 @@ import { Asset } from 'expo-asset';
 // (bundled-mp3 opener) is no longer used.
 import { generateProactiveOpener } from '../../services/conversationalBrain';
 import { awaitGreetingComplete } from '../greeting';
+import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
@@ -800,6 +801,7 @@ export default function CaddieTab() {
       // get-to-know card fired BOTH → double-speak, or the persona opener barged in after the
       // interview mic already opened, cutting off the player's captured answer.
       openerPlayedThisProcess = true;
+      claimOpenerSlot();
       const opener =
         "Alright — let's actually get to know your game. No wrong answers, just us talking. " +
         "To start: how'd you get into golf, and how much time do you really have to play and practice these days?";
@@ -1282,7 +1284,7 @@ export default function CaddieTab() {
     setOpeningPrompt('Tap to talk.');
 
     void (async () => {
-      if (openerPlayedThisProcess) return;
+      if (openerPlayedThisProcess || isOpenerClaimed()) return;
       // Wait for greeting to actually finish (or 10s safety net in
       // case greeting never resolved — force-quit mid-splash, etc.)
       await Promise.race([
@@ -1291,7 +1293,7 @@ export default function CaddieTab() {
       ]);
       // Re-check guard in case a concurrent mount won the race (hot
       // reload, tab cycle).
-      if (openerPlayedThisProcess) return;
+      if (openerPlayedThisProcess || isOpenerClaimed()) return;
       // Live-read settings from store — post-hydration values, not
       // stale closure captures from first render.
       const liveSettings = useSettingsStore.getState();
@@ -1325,6 +1327,7 @@ export default function CaddieTab() {
           // Set the flag ONLY after a real opener landed. A failure leaves it false so the next
           // launch / hot-reload retries cleanly (same guarantee the mp3 path had).
           openerPlayedThisProcess = true;
+      claimOpenerSlot();
         } else {
           console.log('[caddie] opener skipped: brain returned no text (staying silent, not canned)');
         }
