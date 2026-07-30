@@ -18,6 +18,27 @@
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { useWatchStore } from '../store/watchStore';
+import { useClubSelectionStore } from '../store/clubSelectionStore';
+import { useCageStore } from '../store/cageStore';
+import { normalizeClub } from './clubNormalize';
+
+/**
+ * 2026-07-29 (Tim — "it should all tie to the app so the current selected-club logic is baked in;
+ * ties with the Arccos data"). The wrist can't know which club you swung, so a watch swing used to
+ * log as 'unknown'. Resolve the app's currently-selected club instead — a live cage session's
+ * currentClub wins (you're actively hitting it), else the last club tagged on any capture surface
+ * (clubSelectionStore). Normalized to the SAME canonical ClubName the bag + Arccos import key on, so
+ * the watch's speed/tempo and Arccos's carry/total distances accumulate on ONE per-club profile.
+ */
+function resolveSelectedClub(): string {
+  try {
+    const cageClub = useCageStore.getState().activeSession?.currentClub;
+    const raw = cageClub ?? useClubSelectionStore.getState().lastClub ?? null;
+    return normalizeClub(raw ? String(raw) : null) ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 interface WearSwingNativeModule {
   start(): Promise<{ listening: boolean }>;
@@ -77,9 +98,9 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       // 2026-07-29 — an inbound swing is live proof the watch is connected, even if the launch-time
       // `/smartplay/hello` (the only thing that fires onWatchConnection) was missed. Refresh the flag.
       useWatchStore.getState().setConnected(true, 'Galaxy Watch');
-      // Map 1:1 into the existing store. club is unknown from the wrist —
-      // the analysis hookup supplies the selected club when it lands; until
-      // then 'unknown' is honest (no fabricated club label).
+      // Map 1:1 into the existing store, tagged with the app's currently-selected club (cage's live
+      // club → last tagged club), normalized to the canonical name so watch speed/tempo lands on the
+      // SAME per-club profile the bag + Arccos import build. 'unknown' only when nothing is selected.
       useWatchStore.getState().recordSwing({
         backswingMs: Math.round(e.backswingMs ?? 0),
         downswingMs: Math.round(e.downswingMs ?? 0),
@@ -91,7 +112,7 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         earlyTransition: !!e.earlyTransition,
         tempoGood: !!e.tempoGood,
         clubHeadSpeedEst: e.clubHeadSpeedEst ?? 0,
-        club: 'unknown',
+        club: resolveSelectedClub(),
       });
     });
 

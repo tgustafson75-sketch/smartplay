@@ -5397,6 +5397,14 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Watch: swing IMU maps into recordSwing (tempo + club-head speed)',
     /onWatchSwing/.test(swingBr) && /recordSwing\(/.test(swingBr) && /clubHeadSpeedEst/.test(swingBr) && /tempoRatio/.test(swingBr),
     'each watch swing (backswing/downswing/tempoRatio/peakWristSpeed/clubHeadSpeedEst) maps into watchStore.recordSwing');
+
+  // Club tagging: a watch swing is tagged with the app's SELECTED club (cage live club → last tagged),
+  // normalized to the canonical name so it merges with the Arccos-fed bag — NOT hardcoded 'unknown'.
+  check('Watch: swings tag the selected club (normalized), not a hardcoded unknown',
+    /resolveSelectedClub\(\)/.test(swingBr) &&
+      /useClubSelectionStore/.test(swingBr) && /useCageStore/.test(swingBr) && /normalizeClub\(/.test(swingBr) &&
+      /club: resolveSelectedClub\(\)/.test(swingBr) && !/club: 'unknown',/.test(swingBr),
+    'onWatchSwing tags club via resolveSelectedClub (cage currentClub → clubSelectionStore.lastClub → normalized), so watch speed/tempo lands on the same per-club profile as Arccos carries');
   check("Watch: club speed from the watch is a truth-grade 'watch' source",
     /source: 'watch'/.test(metrics) && /'watch'/.test(metrics),
     'swingMetricsService promotes the Galaxy Watch IMU peak-wrist-speed to the truth-grade watch tier (not a guess)');
