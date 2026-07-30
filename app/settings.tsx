@@ -230,8 +230,21 @@ export default function Settings() {
   useEffect(() => onGlassesStatusChange(setGlasses), []);
   const onToggleGlasses = useCallback((v: boolean) => {
     if (v) {
-      startMetaWearablesStreaming('medium', 24).catch(() => {
-        useToastStore.getState().show('Couldn’t reach your glasses — pair them in the Meta AI app first.');
+      startMetaWearablesStreaming('medium', 24).catch((e: unknown) => {
+        // 2026-07-30 (Tim — "our toggle is blocking, glasses ARE connected in the Meta app"). The old
+        // catch swallowed the REAL DAT error and always said "pair in the Meta app first" — misleading
+        // once the glasses are actually paired. Surface the actual native failure code + message (e.g.
+        // DAT_SESSION_FAILED / "missing application id") so the true cause is visible WITHOUT a rebuild,
+        // and record it to the issue log (which now auto-sends) so we capture it off-device.
+        const err = e as { code?: unknown; message?: unknown } | null;
+        const code = typeof err?.code === 'string' ? err.code : '';
+        const msg = typeof err?.message === 'string' ? err.message : String(e ?? 'unknown error');
+        useToastStore.getState().show(`Glasses: ${code || 'error'} — ${msg}`.slice(0, 160));
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))
+            .useIssueLogStore.getState().addAppEvent('glasses_connect_failed', { code, message: msg }, 'app_error');
+        } catch { /* non-fatal */ }
       });
     } else {
       stopMetaWearablesStreaming().catch(() => {});
