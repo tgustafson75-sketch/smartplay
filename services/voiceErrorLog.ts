@@ -33,8 +33,10 @@ function snapshotContext(): IssueLogEntry['context'] {
     const round = require('../store/roundStore').useRoundStore.getState();
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settings = require('../store/settingsStore').useSettingsStore.getState();
+    let route: string | null = null;
+    try { route = require('./routeBreadcrumb').getRoute() ?? null; } catch { /* tracker absent */ }
     return {
-      route: null,
+      route,
       persona: settings.caddiePersonality ?? null,
       isRoundActive: !!round.isRoundActive,
       courseId: round.activeCourseId ?? null,

@@ -27,12 +27,25 @@ export function logCrash(
   try {
     const err = error as { message?: string; stack?: string } | null | undefined;
     const message = err?.message ?? (typeof error === 'string' ? error : String(error));
+    // 2026-07-29 (Tim — "show the crash log ROUTE"). Attach the active route + the breadcrumb trail
+    // (route changes + key actions) so a crash entry says WHERE it happened + the last steps into it,
+    // instead of just a minified stack. Best-effort — a missing tracker must never block the crash log.
+    let route: string | null = null;
+    let trail: string[] = [];
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const rb = require('./routeBreadcrumb');
+      route = rb.getRoute?.() ?? null;
+      trail = rb.getTrail?.() ?? [];
+    } catch { /* no tracker — fall back to stack only */ }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(
       stage,
       {
         error: message?.slice(0, 300),
-        stack: (err?.stack ?? '').slice(0, 1500),
+        route: route ?? undefined,
+        trail: trail.length ? trail.join(' | ').slice(0, 700) : undefined,
+        stack: (err?.stack ?? '').slice(0, 1200),
         ...extra,
       },
       'app_error',

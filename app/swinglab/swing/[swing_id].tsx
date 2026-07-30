@@ -1422,6 +1422,7 @@ export default function SwingDetail() {
     // old primary_issue between the ref clear and the first runPhaseK status
     // transition. Also stop any in-flight TTS from a prior auto-narration.
     uploadLog('reanalyze-start', { from_status: analysisStatus }, swing_id);
+    try { require('../../../services/routeBreadcrumb').breadcrumb('analyze:reanalyze', { swing_id, from: analysisStatus }); } catch { /* non-fatal */ }
     void stopSpeaking().catch(() => {});
     void (async () => {
       // 2026-06-10 — Honest guard: re-analysis re-extracts frames FROM THE

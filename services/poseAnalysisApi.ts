@@ -655,6 +655,7 @@ export async function extractPoseFramesFromVideo(
   // surface loops the clip; a retriever decoding the file ExoPlayer is playing = native SIGSEGV.
   shouldAbort?: () => boolean,
 ): Promise<PoseFrame[] | null> {
+  try { require('./routeBreadcrumb').breadcrumb('pose:extract:start', { durMs: Math.round(durationMs), windowed: !!window }); } catch { /* non-fatal */ }
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
 
   // 2026-07-07 (biomech audit #2) — STRIKE-ANCHORED sampling. The fixed window

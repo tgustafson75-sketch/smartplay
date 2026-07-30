@@ -157,7 +157,11 @@ function selfContext(route: string): IssueLogEntry['context'] {
     courseId = round?.activeCourseId ?? null;
     currentHole = round?.currentHole ?? null;
   } catch { /* best-effort */ }
-  return { route, persona, isRoundActive, courseId, currentHole, appVersion };
+  // 2026-07-29 (Tim — "show the crash log route") — prefer the LIVE navigation route from the
+  // breadcrumb tracker so every entry shows the actual screen; the passed label is a coarse fallback.
+  let liveRoute: string | null = null;
+  try { liveRoute = require('../services/routeBreadcrumb').getRoute() ?? null; } catch { /* tracker absent */ }
+  return { route: liveRoute ?? route, persona, isRoundActive, courseId, currentHole, appVersion };
 }
 
 export const useIssueLogStore = create<IssueLogState>()(

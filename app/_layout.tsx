@@ -177,6 +177,12 @@ function AppNavigator() {
   // covers all 11 routes — no per-screen check required.
   const pathname = usePathname();
   const ownerEmail = usePlayerProfileStore(s => s.email);
+  // 2026-07-29 (Tim — "show the crash log route") — record every navigation into the breadcrumb tracker
+  // so a crash/issue-log entry reports the active screen + the last steps into it (context.route was
+  // always null before this). Best-effort; the tracker never throws.
+  useEffect(() => {
+    try { require('../services/routeBreadcrumb').setRoute(pathname); } catch { /* non-fatal */ }
+  }, [pathname]);
   useEffect(() => {
     if (!pathname) return;
     if (!DEBUG_ROUTES.has(pathname)) return;

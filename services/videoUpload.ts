@@ -89,7 +89,20 @@ export async function pickVideo(): Promise<PickResult> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    uploadLog('capture-end', { status: 'failed', reason: 'exception', message: msg });
+    // 2026-07-29 (Tim's iPad: "PHPhotosErrorDomain error 3164"). That code = the video lives in iCloud
+    // (Optimize iPhone/iPad Storage) and isn't downloaded to this device, so iOS can't export/copy it —
+    // it's not a bug in our code, but the raw Apple error is useless to the user. Detect it and return a
+    // clear, actionable message. (Auto-fetching from iCloud would need a native expo-media-library
+    // download pass — a build; this OTA-safe fix at least tells the user exactly what to do.)
+    const isICloud = /PHPhotos|3164|operation could ?n.t be completed|operation could not be completed/i.test(msg);
+    uploadLog('capture-end', { status: 'failed', reason: isICloud ? 'icloud_not_downloaded' : 'exception', message: msg.slice(0, 160) });
+    try { require('./routeBreadcrumb').breadcrumb('upload:pick:error', { icloud: isICloud }); } catch { /* non-fatal */ }
+    if (isICloud) {
+      return {
+        kind: 'error',
+        message: "That video is stored in iCloud and hasn't fully downloaded to this device yet. Open it once in the Photos app so it downloads, then try the upload again.",
+      };
+    }
     return { kind: 'error', message: msg };
   }
 }
