@@ -22,6 +22,16 @@ export interface SwingMetrics {
   // (cleaner club-speed proxy); trail = release wrist (better casting/early-release signal). Tagged so
   // lead/trail data is never pooled and the interpretation can branch. Defaults 'lead'.
   wrist?: 'lead' | 'trail';
+  // 2026-07-29 — RAW per-axis capture (rad/s gyro, m/s² accel) for a FUTURE calibrated casting/face
+  // model. Captured, never interpreted yet (no fabricated fault). Lives only in the in-memory session
+  // (partialize persists deviceName only), so it never bloats durable storage. Absent on older watch
+  // builds. peakGyro = release-signature axes at max downswing speed; impactAccel = strike direction;
+  // downswing = ≤24 gyro-axis frames top→impact.
+  axisCapture?: {
+    peakGyro: { x: number; y: number; z: number };
+    impactAccel: { x: number; y: number; z: number };
+    downswing: Array<{ t: number; x: number; y: number; z: number }>;
+  };
 }
 
 export interface WatchSession {

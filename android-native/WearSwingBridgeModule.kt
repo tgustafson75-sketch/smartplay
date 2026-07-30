@@ -169,11 +169,35 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
             putBoolean("tempoGood", json.optBoolean("tempoGood"))
             putDouble("clubHeadSpeedEst", json.optDouble("clubHeadSpeedEst"))
             putDouble("capturedAtMs", json.optDouble("capturedAtMs"))
+            // Per-axis capture — forward raw so the phone can store it for a future calibrated
+            // lead/trail casting-&-face model. Absent on older watch builds → left null (graceful).
+            json.optJSONObject("peakGyro")?.let { putMap("peakGyro", axesToMap(it)) }
+            json.optJSONObject("impactAccelAxes")?.let { putMap("impactAccelAxes", axesToMap(it)) }
+            json.optJSONArray("downswingProfile")?.let { arr ->
+                val out = Arguments.createArray()
+                for (i in 0 until arr.length()) {
+                    val f = arr.optJSONObject(i) ?: continue
+                    out.pushMap(Arguments.createMap().apply {
+                        putInt("t", f.optInt("t"))
+                        putDouble("x", f.optDouble("x"))
+                        putDouble("y", f.optDouble("y"))
+                        putDouble("z", f.optDouble("z"))
+                    })
+                }
+                putArray("downswingProfile", out)
+            }
         }
         emit("onWatchSwing", payload)
         // A swing implies a live connection — surface that too.
         emitConnection(true, event.sourceNodeId)
     }
+
+    private fun axesToMap(o: JSONObject): com.facebook.react.bridge.WritableMap =
+        Arguments.createMap().apply {
+            putDouble("x", o.optDouble("x"))
+            putDouble("y", o.optDouble("y"))
+            putDouble("z", o.optDouble("z"))
+        }
 
     private fun emitConnection(connected: Boolean, node: String) {
         val payload = Arguments.createMap().apply {

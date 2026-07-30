@@ -30,6 +30,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.wearable.Wearable
+import org.json.JSONArray
 import org.json.JSONObject
 
 class SwingSensorService : Service(), SensorEventListener {
@@ -100,6 +101,14 @@ class SwingSensorService : Service(), SensorEventListener {
             put("earlyTransition", swing.earlyTransition)
             put("tempoGood", swing.tempoGood)
             put("clubHeadSpeedEst", swing.clubHeadSpeedEstMph)
+            // Per-axis capture (raw; the phone stores it for a future calibrated lead/trail model).
+            put("peakGyro", JSONObject().put("x", swing.peakGyro.x).put("y", swing.peakGyro.y).put("z", swing.peakGyro.z))
+            put("impactAccelAxes", JSONObject().put("x", swing.impactAccelAxes.x).put("y", swing.impactAccelAxes.y).put("z", swing.impactAccelAxes.z))
+            put("downswingProfile", JSONArray().apply {
+                for (f in swing.downswingProfile) {
+                    put(JSONObject().put("t", f.tRelMs).put("x", f.x).put("y", f.y).put("z", f.z))
+                }
+            })
             put("capturedAtMs", System.currentTimeMillis())
         }
         broadcastToNodes(SWING_PATH, json.toString().toByteArray())

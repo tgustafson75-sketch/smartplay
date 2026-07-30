@@ -29,15 +29,29 @@ package com.smartplaycaddie.wear
 
 import kotlin.math.sqrt
 
-/** One IMU sample (gyro magnitude + linear accel magnitude) at a time. */
+/** One IMU sample — magnitude (drives the state machine) + the RAW per-axis vectors
+ *  (retained for the honest per-axis capture; not interpreted on-watch). */
 private data class Sample(
     val tMs: Long,
     val gyroMag: Double,   // rad/s
     val accelMag: Double,  // m/s², gravity-removed (nominal)
+    val gx: Double, val gy: Double, val gz: Double,  // raw gyro axes (rad/s)
+    val ax: Double, val ay: Double, val az: Double,   // raw accel axes (m/s², incl gravity)
 )
 
-/** Completed-swing summary. Mirrors the phone's watchStore SwingMetrics
- *  shape so the JS bridge is a 1:1 map (minus the auto-stamped timestamp). */
+/** A 3-axis vector (rad/s or m/s²). */
+data class Axes(val x: Double, val y: Double, val z: Double)
+
+/** One downsampled downswing frame: gyro axes at tRelMs after the top-of-backswing. */
+data class AxisFrame(val tRelMs: Int, val x: Double, val y: Double, val z: Double)
+
+/**
+ * Completed-swing summary. The MAGNITUDE-based fields are the truth-grade signals the phone
+ * already uses. The AXIS-CAPTURE fields (peakGyro / impactAccelAxes / downswingProfile) are RAW
+ * sensor data retained for a future, CALIBRATED lead/trail casting-&-face model — captured, never
+ * interpreted on the watch, so nothing here fabricates a fault. See the file header + phone-side
+ * services/watchWristInterpretation.
+ */
 data class Swing(
     val backswingMs: Int,
     val downswingMs: Int,
@@ -49,6 +63,10 @@ data class Swing(
     val earlyTransition: Boolean,
     val tempoGood: Boolean,
     val clubHeadSpeedEstMph: Double, // derived estimate (see file header)
+    // ── Per-axis capture (raw; for future calibrated modeling) ──
+    val peakGyro: Axes,              // gyro axes at the peak-speed sample of the downswing (release signature)
+    val impactAccelAxes: Axes,       // accel axes at the impact spike (strike direction)
+    val downswingProfile: List<AxisFrame>, // ≤24 downsampled gyro-axis frames, top → impact
 )
 
 class SwingDetector(
@@ -79,6 +97,12 @@ class SwingDetector(
     private var topGyroMin = Double.MAX_VALUE
     private var settleStart = 0L
 
+    // ── Per-axis capture state (raw; reset per swing) ──
+    private var peakGx = 0.0; private var peakGy = 0.0; private var peakGz = 0.0
+    private var impAx = 0.0; private var impAy = 0.0; private var impAz = 0.0
+    private val downProfile = ArrayList<AxisFrame>(128)
+    private val maxProfileSamples = 200 // bound memory; downsampled to ≤24 on finalize
+
     // Latest raw vectors, merged on each gyro tick (sensors arrive separately).
     @Volatile private var ax = 0.0
     @Volatile private var ay = 0.0
@@ -91,10 +115,11 @@ class SwingDetector(
 
     /** Feed a gyroscope sample (rad/s). Drives the state machine. */
     fun onGyro(x: Float, y: Float, z: Float, tMs: Long) {
-        val gyroMag = sqrt(x * x + y * y + z * z.toDouble())
+        val gx = x.toDouble(); val gy = y.toDouble(); val gz = z.toDouble()
+        val gyroMag = sqrt(gx * gx + gy * gy + gz * gz)
         val accelRaw = sqrt(ax * ax + ay * ay + az * az)
         val accelMag = kotlin.math.abs(accelRaw - gravity)
-        step(Sample(tMs, gyroMag, accelMag))
+        step(Sample(tMs, gyroMag, accelMag, gx, gy, gz, ax, ay, az))
     }
 
     private fun step(s: Sample) {
@@ -122,12 +147,20 @@ class SwingDetector(
 
             State.DOWNSWING -> {
                 if (tooLong(s.tMs)) { reset(); return }
-                if (s.gyroMag > peakGyroDown) peakGyroDown = s.gyroMag
+                if (s.gyroMag > peakGyroDown) {
+                    peakGyroDown = s.gyroMag
+                    peakGx = s.gx; peakGy = s.gy; peakGz = s.gz // release signature at max speed
+                }
                 if (s.accelMag > peakAccelDown) peakAccelDown = s.accelMag
-                // Impact = sharp accel spike. Capture its time + magnitude.
+                // Raw gyro-axis profile through the downswing (top → impact), bounded.
+                if (downProfile.size < maxProfileSamples) {
+                    downProfile.add(AxisFrame((s.tMs - tTop).toInt(), s.gx, s.gy, s.gz))
+                }
+                // Impact = sharp accel spike. Capture its time + magnitude + axes.
                 if (s.accelMag >= impactAccel && tImpact == 0L) {
                     tImpact = s.tMs
                     impactAccelVal = s.accelMag
+                    impAx = s.ax; impAy = s.ay; impAz = s.az
                     state = State.FOLLOWTHROUGH
                     settleStart = 0L
                 }
@@ -177,8 +210,27 @@ class SwingDetector(
                 earlyTransition = earlyTransition,
                 tempoGood = tempoGood,
                 clubHeadSpeedEstMph = round2(clubMph),
+                peakGyro = Axes(round2(peakGx), round2(peakGy), round2(peakGz)),
+                impactAccelAxes = Axes(round2(impAx), round2(impAy), round2(impAz)),
+                downswingProfile = downsample(downProfile, 24),
             )
         )
+    }
+
+    /** Evenly downsample the raw downswing profile to at most [target] frames (rounded), so the
+     *  Data Layer payload stays small while preserving the shape of the release. */
+    private fun downsample(src: List<AxisFrame>, target: Int): List<AxisFrame> {
+        if (src.isEmpty()) return emptyList()
+        if (src.size <= target) return src.map { AxisFrame(it.tRelMs, round2(it.x), round2(it.y), round2(it.z)) }
+        val out = ArrayList<AxisFrame>(target)
+        val stride = src.size.toDouble() / target
+        var i = 0.0
+        while (out.size < target) {
+            val f = src[i.toInt().coerceIn(0, src.size - 1)]
+            out.add(AxisFrame(f.tRelMs, round2(f.x), round2(f.y), round2(f.z)))
+            i += stride
+        }
+        return out
     }
 
     private fun reset() {
@@ -187,6 +239,9 @@ class SwingDetector(
         peakGyroDown = 0.0; peakAccelDown = 0.0
         impactAccelVal = 0.0; topGyroMin = Double.MAX_VALUE
         settleStart = 0L
+        peakGx = 0.0; peakGy = 0.0; peakGz = 0.0
+        impAx = 0.0; impAy = 0.0; impAz = 0.0
+        downProfile.clear()
     }
 
     private fun round2(v: Double) = Math.round(v * 100.0) / 100.0

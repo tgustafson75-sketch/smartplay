@@ -64,6 +64,10 @@ interface WatchSwingEvent {
   tempoGood: boolean;
   clubHeadSpeedEst: number;
   capturedAtMs: number;
+  // Per-axis capture (present only on watch builds ≥ 2026-07-29 + a matching phone native module).
+  peakGyro?: { x: number; y: number; z: number };
+  impactAccelAxes?: { x: number; y: number; z: number };
+  downswingProfile?: Array<{ t: number; x: number; y: number; z: number }>;
 }
 
 interface WatchConnectionEvent {
@@ -121,6 +125,11 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         clubHeadSpeedEst: e.clubHeadSpeedEst ?? 0,
         club,
         wrist,
+        // Attach the raw per-axis capture when the watch + native module provide it (older builds omit
+        // it → undefined). Stored in-memory only; feeds the future calibrated casting/face model.
+        axisCapture: e.peakGyro && e.impactAccelAxes
+          ? { peakGyro: e.peakGyro, impactAccel: e.impactAccelAxes, downswing: e.downswingProfile ?? [] }
+          : undefined,
       });
 
       // 2026-07-29 (Tim — drill feedback on the wrist: swipeable metric cards). Push the just-captured

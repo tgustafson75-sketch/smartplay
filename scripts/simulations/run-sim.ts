@@ -5435,6 +5435,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Watch lead/trail: lead wrist is the cleaner club-speed proxy',
     leadSmooth.clubSpeedConfidence === 'estimate',
     `lead confidence = ${leadSmooth.clubSpeedConfidence} (vs trail 'rough')`);
+
+  // Per-axis RAW capture (for a future calibrated casting/face model — captured, NOT interpreted).
+  const watchStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/watchStore.ts'), 'utf-8');
+  const nativeMod = fs.readFileSync(path.resolve(__dirname, '../../android-native/WearSwingBridgeModule.kt'), 'utf-8');
+  check('Watch per-axis: capture flows watch → native → JS store (raw, in-memory only)',
+    /axisCapture\?:/.test(watchStoreSrc) && /peakGyro/.test(watchStoreSrc) &&        // store field
+      /peakGyro\?:/.test(swingBr) && /axisCapture:/.test(swingBr) &&                  // bridge maps it
+      /putMap\("peakGyro"/.test(nativeMod) && /downswingProfile/.test(nativeMod),    // native forwards it
+    'the raw per-axis release signature (peakGyro/impactAccel/downswing profile) is captured on the watch, forwarded by the native module, and stored in the in-memory session — never interpreted (no fabricated fault)');
 }
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
