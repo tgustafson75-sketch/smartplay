@@ -1,15 +1,16 @@
 /**
- * components/OwnerIssueLogPrompt.tsx — owner-only "you've got N issues, send them"
- * nudge. 2026-06-28 (Tim) — mostly for Tank, who won't dig into Owner Tools to
- * export. When 5+ FAILURES pile up since the last export, an owner sees a banner
- * with a one-tap "Send now" that opens the pre-filled support email. Owner-gated,
- * dismissable, re-arms only after another batch accrues (no nagging).
+ * components/OwnerIssueLogPrompt.tsx — "you've got N issues, send them" nudge.
+ * 2026-06-28 (Tim) — originally owner-only (for Tank). 2026-08-01 (Tim — beta: "make sure users' apps
+ * are recording AND prompting to send issue logs") — un-gated to EVERY user. When 5+ real FAILURES pile
+ * up since the last export, ANY tester sees a banner with a one-tap "Send now" that opens the pre-filled
+ * support email (mailto → share-sheet fallback). Dismissable, re-arms only after another full batch
+ * accrues (no nagging). The consented auto-send (services/issueLogExport) still runs silently alongside;
+ * this is the explicit, visible prompt so a tester's issues actually reach the team.
  */
 
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useIssueLogStore, type IssueLogKind } from '../store/issueLogStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { exportAllIssues } from '../services/issueLogExport';
 
 const THRESHOLD = 5;
@@ -20,20 +21,19 @@ const FAILURE_KINDS: ReadonlySet<IssueLogKind> = new Set<IssueLogKind>([
 ]);
 
 export function OwnerIssueLogPrompt(): React.ReactElement | null {
-  const email = usePlayerProfileStore(s => s.email);
   const entries = useIssueLogStore(s => s.entries);
   const lastExportedAt = useIssueLogStore(s => s.lastExportedAt);
   const [dismissedAtCount, setDismissedAtCount] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
 
-  const isOwner = useMemo(() => isOwnerEmail(email), [email]);
   const unsent = useMemo(
     () => entries.filter(e => e.timestamp > (lastExportedAt ?? 0) && e.kind != null && FAILURE_KINDS.has(e.kind)).length,
     [entries, lastExportedAt],
   );
 
-  // Show at the threshold; after "Later", stay hidden until another full batch accrues.
-  const show = isOwner && unsent >= THRESHOLD &&
+  // 2026-08-01 — EVERY tester is prompted (no longer owner-gated). Show at the threshold; after "Later",
+  // stay hidden until another full batch accrues (no nagging).
+  const show = unsent >= THRESHOLD &&
     (dismissedAtCount == null || unsent >= dismissedAtCount + THRESHOLD);
   if (!show) return null;
 

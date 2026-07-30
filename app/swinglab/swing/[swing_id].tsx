@@ -452,6 +452,12 @@ export default function SwingDetail() {
   const [userScrubbed, setUserScrubbed] = useState(false);
   // Reset on swing change so a freshly-opened swing autoplays/loops again.
   useEffect(() => { setUserScrubbed(false); }, [swing_id]);
+  // 2026-07-30 (regression audit #1) — this screen can receive a NEW swing_id WITHOUT remounting
+  // (the file resets many pieces of state on [swing_id] for exactly that reason). selectedShotIdx was
+  // left out, so opening a different session while a non-primary swing was selected kept the stale
+  // index → activeBiomech/club-arc fall back to null (both gated on idx===0) and the skeleton/numbers/
+  // trace go blank on a swing that should show them. Reset to the primary swing on every swing_id change.
+  useEffect(() => { setSelectedShotIdx(0); }, [swing_id]);
 
   const poseFrames = activeBiomech?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
@@ -759,7 +765,11 @@ export default function SwingDetail() {
         useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
         try {
           const { detectClubPath } = await import('../../../services/swing/clubPath');
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => false });
+          // 2026-07-30 (regression audit #3) — abort if the ExoPlayer is decoding the same mp4: a
+          // MediaMetadataRetriever + active playback on one file SIGSEGVs (the documented replay crash).
+          // Matches every other extraction site here. (Whole effect is gated off via LIBRARY_AUTO_PROCESS,
+          // but keep the guard correct so flipping that flag can't re-introduce the crash.)
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => isPlayingRef.current });
           if (arc && arc.points.length >= 4) {
             useCageStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
           } else {

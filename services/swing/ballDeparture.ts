@@ -112,8 +112,28 @@ export async function detectBallDeparture(args: {
   if (!base) return null;
   if (args.impactMs == null || !args.ballArea) return null;
 
-  const before = await frameAt(args.videoUri, args.impactMs - PRE_MS);
-  const after = await frameAt(args.videoUri, args.impactMs + POST_MS);
+  // 2026-07-30 (analysis audit C3) — extract from a PRIVATE COPY so a native retriever never decodes the
+  // clip ExoPlayer is looping (SIGSEGV). Copy-or-bail; source copy only needed through extraction.
+  let depWorkUri = args.videoUri;
+  let depTempCopy: string | null = null;
+  try {
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}balldep-src-${args.impactMs}.mp4`;
+      await FileSystem.copyAsync({ from: args.videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { depTempCopy = dest; depWorkUri = dest; }
+    }
+  } catch { /* copy failed */ }
+  if (!depTempCopy) { console.warn('[ballDeparture] private copy failed — skipping to avoid a native crash'); return null; }
+  let before: { uri: string; width: number; height: number } | null;
+  let after: { uri: string; width: number; height: number } | null;
+  try {
+    before = await frameAt(depWorkUri, args.impactMs - PRE_MS);
+    after = await frameAt(depWorkUri, args.impactMs + POST_MS);
+  } finally {
+    try { await FileSystem.deleteAsync(depTempCopy, { idempotent: true }); } catch { /* best-effort */ }
+  }
   if (!before || !after) return null;
 
   const [beforeRoi, afterRoi, afterWide] = await Promise.all([

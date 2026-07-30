@@ -7184,6 +7184,68 @@ check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catc
   })(),
   'navigating between swing-library files aborts the prior swing\'s in-flight/queued narration (stopSpeaking bumps the speak generation + aborts the TTS fetch) so voices don\'t stack and catch up late');
 
+// ─── Beta-wrap deep-audit LOCK guards (2026-07-30) ─────────────────────────────
+// Regression guards for the full-app adversarial audit fixes. Each locks a fix that
+// is invisible to jest (grep on source) so it can't silently revert before the App
+// Store cut. Grouped by the audit that found it.
+console.log('\n=== Beta-wrap deep-audit LOCK ===');
+{
+  // ISSUE-LOG (Tim: "make sure users' apps are RECORDING and PROMPTING to send issue logs")
+  const promptSrc = read('components/OwnerIssueLogPrompt.tsx');
+  check('Issue-log prompt reaches EVERY tester (not owner-gated)',
+    !/isOwner\s*&&/.test(promptSrc) && !/isOwnerEmail/.test(promptSrc) && /unsent\s*>=\s*THRESHOLD/.test(promptSrc),
+    'SEV-1: the "N issues → Send now" banner is no longer gated on isOwner; any tester at 5+ failures is prompted');
+
+  const issueStoreSrc = read('store/issueLogStore.ts');
+  check('Issue-log: passive failures schedule the consented auto-send',
+    (issueStoreSrc.match(/scheduleAutoSend\(\)/g) ?? []).length >= 5,
+    'SEV-2: addVoiceEvent/addGpsEvent/addAppEvent/addVoiceMiss/addUserIssue all schedule auto-send so a crash reaches the team without a voiced report');
+  check('Issue-log: addUserIssue is UN-gated (tester bug reports persist)',
+    /addUserIssue:\s*\(text\)\s*=>\s*\{[\s\S]*?\}/.test(issueStoreSrc) &&
+      !/addUserIssue:[\s\S]*?isOwnerEmail/.test(issueStoreSrc.slice(issueStoreSrc.indexOf('addUserIssue'), issueStoreSrc.indexOf('addVoiceMiss'))),
+    'SEV-3: a beta tester\'s spoken "log an issue" is recorded, not silently dropped');
+  check('Issue-log: boot flush sends prior-session crashes',
+    /void autoSendIssues\(\);/.test(read('app/_layout.tsx')),
+    'SEV-2/4: autoSendIssues() runs at launch so a crash that killed the process before its debounced send still reaches the team');
+
+  // ANALYSIS/SMARTMOTION crash + persistence
+  const cageSrc = read('store/cageStore.ts');
+  check('cageStore: per-shot pose frames are compacted on persist (SQLITE_FULL)',
+    /biomechanics:\s*compactBio\(sh\.biomechanics\)/.test(cageSrc) && /biomechanics:\s*compactBio\(sess\.biomechanics\)/.test(cageSrc),
+    'P1: partialize compacts BOTH session- and shot-level biomechanics.frames so per-swing analysis can\'t re-bloat the row past Android\'s ~2MB limit');
+  check('deriveSwingTempo extracts from a PRIVATE COPY (no SIGSEGV on review)',
+    /tempCopy/.test(read('services/poseAnalysisApi.ts').slice(read('services/poseAnalysisApi.ts').indexOf('export async function deriveSwingTempo'))),
+    'C1: the default headline tempo read no longer decodes the looping original clip');
+  check('Pose extraction routes through the single-flight queue',
+    /from '\.\.\/utils\/videoThumbnail'/.test(read('services/poseAnalysisApi.ts')),
+    'C4: poseAnalysisApi imports the serialized wrapper, not raw expo-video-thumbnails');
+  check('swingDatabase: a failed read degrades read-only (no destructive wipe)',
+    /lastReadFailed/.test(read('services/swingDatabase.ts')),
+    'P2: a bad reference-DB read can no longer feed an empty baseline into a write that wipes the user\'s library');
+
+  // ON-COURSE GPS leak
+  const simRoundSrc = read('services/simRound.ts');
+  check('stopVoiceSimRound does NOT restart GPS (no idle-watch leak)',
+    /export function stopVoiceSimRound/.test(simRoundSrc) &&
+      !/startGpsManager/.test(simRoundSrc.slice(simRoundSrc.indexOf('export function stopVoiceSimRound'))),
+    'SEV-1 #1: sim teardown no longer races endRound by starting a live location watch + foreground service with no round');
+  check('discardRound tears the sim round down (symmetry with endRound)',
+    (read('store/roundStore.ts').match(/stopVoiceSimRound\(\)/g) ?? []).length >= 2,
+    'SEV-1 #2: discarding a sim round clears simActive/simPos/holeUnsub (stopVoiceSimRound is now called from BOTH endRound and discardRound)');
+
+  // VOICE-OFF text + custom caddie
+  const listenSrc = read('services/listeningSession.ts');
+  check('Hands-free surfaces text when voice is muted (H1)',
+    (listenSrc.match(/flashCaption\?\.\(/g) ?? []).length >= 4,
+    'H1: openSession + handleTranscribedUtterance caption the reply when voice is off so a hands-free turn is never silently dead');
+  check('Custom caddie inherits base persona on the kevin fallback (H2)',
+    /customCaddieBasePersona/.test(read('api/kevin.ts')) && /customCaddieBasePersona/.test(read('hooks/useKevin.ts')),
+    'H2: /api/kevin resolves a custom caddie to its chosen base persona for spec + voice (was Kevin/onyx on follow-ups)');
+  check('open_course only navigates at HIGH confidence (H3)',
+    /intent\.confidence !== 'high'/.test(read('services/intents/openCourseHandler.ts')),
+    'H3: a conversational course MENTION (medium confidence) offers instead of yanking the user to the Play tab');
+}
+
 // ─── Scenario 13: critical-path diagnostic markers present (2026-06-16) ─────────
 //
 // Path 2 (ROUND) and Path 4 (VOICE) MIN VERIFY works by grepping logcat for the

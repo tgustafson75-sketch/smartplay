@@ -1461,33 +1461,62 @@ export const useCageStore = create<CageState>()(
         })),
 
       setSessionClubArc: (sessionId, arc, frame) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null }
-          ),
-        })),
+        set(s => {
+          const apply = (session: CageSession): CageSession => {
+            if (session.id !== sessionId) return session;
+            // 2026-07-30 (analysis audit P6) — a failed re-run yields <4 points; never overwrite a
+            // previously-good arc (≥4 pts) with an empty/short one. Keep the good arc + its frame.
+            const incomingLen = Array.isArray(arc) ? arc.length : 0;
+            const existingLen = Array.isArray(session.club_arc) ? session.club_arc.length : 0;
+            if (incomingLen < 4 && existingLen >= 4) return session;
+            return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null };
+          };
+          // 2026-07-30 (analysis audit P4) — dual-patch activeSession so a write that lands before
+          // endSession isn't lost.
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       // 2026-08-01 (Tim — per-swing breakdown) — store biomech / clubhead arc on a SPECIFIC shot so a
       // multi-swing reel shows each swing's own skeleton + numbers + blue club in the library.
+      // 2026-07-30 (analysis audit P4) — dual-patch activeSession so a per-shot write during an in-flight
+      // (not-yet-endSession'd) session matches a shot id and isn't silently dropped.
       setShotBiomechanics: (sessionId, shotId, biomechanics) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
             session.id !== sessionId ? session : {
               ...session,
               shots: session.shots.map(sh => sh.id !== shotId ? sh : { ...sh, biomechanics }),
-            }
-          ),
-        })),
+            };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       setShotClubArc: (sessionId, shotId, arc, frame) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : {
+        set(s => {
+          const apply = (session: CageSession): CageSession => {
+            if (session.id !== sessionId) return session;
+            return {
               ...session,
-              shots: session.shots.map(sh => sh.id !== shotId ? sh : { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null }),
-            }
-          ),
-        })),
+              shots: session.shots.map(sh => {
+                if (sh.id !== shotId) return sh;
+                // P6 — same "don't downgrade good→empty" guard as the session-level arc.
+                const incomingLen = Array.isArray(arc) ? arc.length : 0;
+                const existingLen = Array.isArray(sh.club_arc) ? sh.club_arc.length : 0;
+                if (incomingLen < 4 && existingLen >= 4) return sh;
+                return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null };
+              }),
+            };
+          };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       // 2026-06-16 — dual-update like setSessionAnalysis: status (analyzing /
       // error / pending) is set while the session is still IN-FLIGHT, so the
@@ -1669,11 +1698,23 @@ export const useCageStore = create<CageState>()(
         // 2026-07-01 (audit H1) — was `frames: []`, which killed the swing overlay
         // (skeleton + tempo arc) on every reload. Downsample instead: keep a compact,
         // overlay-only subset that survives persist without re-triggering SQLITE_FULL.
+        // 2026-07-30 (analysis audit P1 — SQLITE_FULL REGRESSION) — the 2026-08-01 per-swing work added
+        // `shot.biomechanics.frames` (raw 33-keypoint × N pose arrays) written per viewed swing. The
+        // compaction below originally walked ONLY `sess.biomechanics.frames`, so per-shot frames persisted
+        // UNCOMPACTED — re-accumulating exactly the bulk the 2026-06-30 Greenhill fix stripped and pushing
+        // the row back past Android's ~2MB limit → SQLITE_FULL → unreadable store → dashboard crash / lost
+        // sessions. Compact BOTH the session-level and every shot's frames in the same pass.
         sessionHistory: s.sessionHistory.map((sess) => {
-          if (!(sess.biomechanics && Array.isArray(sess.biomechanics.frames) && sess.biomechanics.frames.length > 0)) return sess;
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { compactPoseFramesForPersist } = require('../services/poseAnalysisApi') as typeof import('../services/poseAnalysisApi');
-          return { ...sess, biomechanics: { ...sess.biomechanics, frames: compactPoseFramesForPersist(sess.biomechanics.frames) } };
+          const compactBio = (bio: typeof sess.biomechanics) =>
+            (bio && Array.isArray(bio.frames) && bio.frames.length > 0)
+              ? { ...bio, frames: compactPoseFramesForPersist(bio.frames) }
+              : bio;
+          const shots = Array.isArray(sess.shots)
+            ? sess.shots.map((sh) => (sh?.biomechanics ? { ...sh, biomechanics: compactBio(sh.biomechanics) } : sh))
+            : sess.shots;
+          return { ...sess, shots, biomechanics: compactBio(sess.biomechanics) };
         }),
         clubProfiles: s.clubProfiles,
         cameraAlignment: s.cameraAlignment,

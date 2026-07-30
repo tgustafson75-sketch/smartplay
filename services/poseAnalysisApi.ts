@@ -15,7 +15,11 @@
  * 502-flaky in our experience; never block the upload pipeline on it.
  */
 
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-07-30 (analysis audit C4) — route through the app-wide single-flight queue (utils/videoThumbnail),
+// NOT raw expo-video-thumbnails. Pose extraction was the only bypass left, so it could run a native
+// retriever concurrently with any wrapped extractor (clubPath/ballPath/…) → the multi-instance
+// MediaMetadataRetriever OOM/SIGSEGV the queue exists to prevent. Drop-in: identical getThumbnailAsync.
+import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
 import { inferCameraAngle } from './cameraAngleInference';
@@ -972,75 +976,101 @@ export async function deriveSwingTempo(
     times.push(Math.round(startMs + ((endMs - startMs) * i) / (samples - 1)));
   }
 
-  // Sample pose at each time; keep the frame so we can read sequencing
-  // from the real top later.
-  const series: { t: number; y: number; frame: PoseFrame }[] = [];
-  for (const t of times) {
-    try {
-      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: t, quality: 0.6 });
-      const frame = await analyzePoseFromUri(uri, t);
-      if (!frame) continue;
-      const lw = getKp(frame, 'left_wrist');
-      const rw = getKp(frame, 'right_wrist');
-      const ys = [lw?.y, rw?.y].filter((v): v is number => typeof v === 'number');
-      if (ys.length === 0) continue;
-      series.push({ t, y: ys.reduce((a, b) => a + b, 0) / ys.length, frame });
-    } catch {
-      // a few gaps are fine
-    }
-  }
-  if (series.length < 6) return NO_TEMPO;
-
-  // Top of backswing = hands highest = minimum y. Must be interior
-  // (not first/last sample) to count as a real reversal.
-  let topIdx = 0;
-  for (let i = 1; i < series.length; i++) {
-    if (series[i].y < series[topIdx].y) topIdx = i;
-  }
-  if (topIdx === 0 || topIdx === series.length - 1) return NO_TEMPO;
-
-  // Takeaway = first sample where the hands have risen meaningfully from
-  // address (first-sample) height. Threshold scales to observed travel
-  // so it's robust to normalized-vs-pixel coordinates.
-  const addressY = series[0].y;
-  const travel = addressY - series[topIdx].y; // positive: hands went up
-  if (travel <= 0) return NO_TEMPO;
-  const onsetDelta = travel * 0.2;
-  let takeIdx = 0;
-  for (let i = 0; i <= topIdx; i++) {
-    if (addressY - series[i].y >= onsetDelta) { takeIdx = i; break; }
-  }
-
-  const topMs = series[topIdx].t;
-  const backswingMs = topMs - series[takeIdx].t;
-  const downswingMs = impactMs - topMs;
-
-  // Sanity windows for a real full/partial swing.
-  if (downswingMs < 80 || downswingMs > 700) return NO_TEMPO;
-  if (backswingMs < 250 || backswingMs > 1600) return NO_TEMPO;
-  const ratio = backswingMs / downswingMs;
-  if (!(ratio >= 1.0 && ratio <= 6.0)) return NO_TEMPO;
-
-  // Transition/sequencing from the REAL top + REAL impact frame. One more
-  // pose call (only when tempo itself is valid, so we never pay it for a
-  // throwaway read).
-  let sequencingScore: number | null = null;
+  // 2026-07-30 (analysis audit C1 — HIGHEST-freq crash) — tempo is the DEFAULT headline metric, so this
+  // fires the instant review opens while <Video> is looping the SAME clip. Decoding the original with a
+  // native retriever while ExoPlayer plays it → SIGSEGV to the launcher (the exact vector poseFrames /
+  // clubPath were hardened against; the fix hadn't reached here). Mirror them EXACTLY: sample from a
+  // PRIVATE COPY (distinct file handle → the crash condition can't occur), never touch the playing
+  // original, and delete the copy when done. Copy failure → NO_TEMPO (a missing tempo beats a crash).
+  let workUri = videoUri;
+  let tempCopy: string | null = null;
   try {
-    const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: impactMs, quality: 0.6 });
-    const impactFrame = await analyzePoseFromUri(uri, impactMs);
-    if (impactFrame) sequencingScore = sequencingFromFrames(series[topIdx].frame, impactFrame);
-  } catch {
-    // sequencing is optional — tempo still stands without it
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}tempo-src-${impactMs}.mp4`;
+      await FileSystem.copyAsync({ from: videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+    }
+  } catch { /* copy failed */ }
+  if (!tempCopy) {
+    console.warn('[tempo] private copy failed — skipping tempo read to avoid a native crash');
+    return NO_TEMPO;
   }
 
-  const clean = series.length >= 8 && takeIdx > 0;
-  return {
-    ratio: Math.round(ratio * 10) / 10,
-    backswingMs,
-    downswingMs,
-    topMs,
-    sequencingScore,
-    source: opts?.impactSource === 'video' ? 'video_pose' : 'acoustic_pose',
-    confidence: clean ? 'med' : 'low',
-  };
+  try {
+    // Sample pose at each time; keep the frame so we can read sequencing
+    // from the real top later.
+    const series: { t: number; y: number; frame: PoseFrame }[] = [];
+    for (const t of times) {
+      try {
+        const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: t, quality: 0.6 });
+        const frame = await analyzePoseFromUri(uri, t);
+        if (!frame) continue;
+        const lw = getKp(frame, 'left_wrist');
+        const rw = getKp(frame, 'right_wrist');
+        const ys = [lw?.y, rw?.y].filter((v): v is number => typeof v === 'number');
+        if (ys.length === 0) continue;
+        series.push({ t, y: ys.reduce((a, b) => a + b, 0) / ys.length, frame });
+      } catch {
+        // a few gaps are fine
+      }
+    }
+    if (series.length < 6) return NO_TEMPO;
+
+    // Top of backswing = hands highest = minimum y. Must be interior
+    // (not first/last sample) to count as a real reversal.
+    let topIdx = 0;
+    for (let i = 1; i < series.length; i++) {
+      if (series[i].y < series[topIdx].y) topIdx = i;
+    }
+    if (topIdx === 0 || topIdx === series.length - 1) return NO_TEMPO;
+
+    // Takeaway = first sample where the hands have risen meaningfully from
+    // address (first-sample) height. Threshold scales to observed travel
+    // so it's robust to normalized-vs-pixel coordinates.
+    const addressY = series[0].y;
+    const travel = addressY - series[topIdx].y; // positive: hands went up
+    if (travel <= 0) return NO_TEMPO;
+    const onsetDelta = travel * 0.2;
+    let takeIdx = 0;
+    for (let i = 0; i <= topIdx; i++) {
+      if (addressY - series[i].y >= onsetDelta) { takeIdx = i; break; }
+    }
+
+    const topMs = series[topIdx].t;
+    const backswingMs = topMs - series[takeIdx].t;
+    const downswingMs = impactMs - topMs;
+
+    // Sanity windows for a real full/partial swing.
+    if (downswingMs < 80 || downswingMs > 700) return NO_TEMPO;
+    if (backswingMs < 250 || backswingMs > 1600) return NO_TEMPO;
+    const ratio = backswingMs / downswingMs;
+    if (!(ratio >= 1.0 && ratio <= 6.0)) return NO_TEMPO;
+
+    // Transition/sequencing from the REAL top + REAL impact frame. One more
+    // pose call (only when tempo itself is valid, so we never pay it for a
+    // throwaway read).
+    let sequencingScore: number | null = null;
+    try {
+      const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: impactMs, quality: 0.6 });
+      const impactFrame = await analyzePoseFromUri(uri, impactMs);
+      if (impactFrame) sequencingScore = sequencingFromFrames(series[topIdx].frame, impactFrame);
+    } catch {
+      // sequencing is optional — tempo still stands without it
+    }
+
+    const clean = series.length >= 8 && takeIdx > 0;
+    return {
+      ratio: Math.round(ratio * 10) / 10,
+      backswingMs,
+      downswingMs,
+      topMs,
+      sequencingScore,
+      source: opts?.impactSource === 'video' ? 'video_pose' : 'acoustic_pose',
+      confidence: clean ? 'med' : 'low',
+    };
+  } finally {
+    try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
+  }
 }

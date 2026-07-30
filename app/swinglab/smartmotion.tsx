@@ -67,7 +67,9 @@ import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../stor
 import type { SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-07-30 (analysis audit C2/C4) — single-flight queue wrapper, not raw expo-video-thumbnails, so the
+// address-still grab can't run a native retriever concurrently with another extractor. Drop-in re-export.
+import * as VideoThumbnails from '../../utils/videoThumbnail';
 import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -2084,12 +2086,31 @@ export default function SmartMotion() {
     const addressMs = seg ? Math.max(0, seg.startMs) : Math.round((videoDurationMs ?? 3000) * 0.12);
     let cancelled = false;
     void (async () => {
+      // 2026-07-30 (analysis audit C2) — this grabs on review open while <Video> loops the SAME clip.
+      // A native retriever on the file ExoPlayer is decoding SIGSEGVs to the launcher. Extract from a
+      // PRIVATE COPY (distinct file handle) so the crash condition can't arise; degrade to no still on
+      // copy failure rather than touch the playing original.
+      let tempCopy: string | null = null;
       try {
-        const { uri } = await VideoThumbnails.getThumbnailAsync(clipUri, { time: addressMs, quality: 0.8 });
+        const FS = await import('expo-file-system/legacy');
+        const dir = FS.cacheDirectory;
+        let workUri = clipUri;
+        if (dir) {
+          const dest = `${dir}address-src-${addressMs}.mp4`;
+          try {
+            await FS.copyAsync({ from: clipUri, to: dest });
+            const info = await FS.getInfoAsync(dest);
+            if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+          } catch { /* copy failed */ }
+        }
+        if (!tempCopy) { if (!cancelled) setTargetFrameUri(null); return; }
+        const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: addressMs, quality: 0.8 });
         if (!cancelled) setTargetFrameUri(uri);
       } catch (e) {
         console.log('[smartmotion] address-frame extract failed (non-fatal):', e);
         if (!cancelled) setTargetFrameUri(null);
+      } finally {
+        if (tempCopy) { try { const FS = await import('expo-file-system/legacy'); await FS.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ } }
       }
     })();
     return () => { cancelled = true; };

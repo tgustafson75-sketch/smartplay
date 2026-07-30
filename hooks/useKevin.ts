@@ -187,6 +187,11 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           practice_context: buildFullPracticeContext(),
           // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
           persona: useSettingsStore.getState().caddiePersonality,
+          // 2026-07-30 (voice/brain audit H2) — a custom caddie must carry its chosen BASE persona +
+          // its own NAME so /api/kevin answers in the right character/voice on the follow-up path (this
+          // was already sent to pipecat; the kevin fallback got Kevin's spec + male voice without them).
+          customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
+          customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
           // 2026-07-24 (full-app audit) — typed Caddie chat was dropping Response Style + Kids Mode, so

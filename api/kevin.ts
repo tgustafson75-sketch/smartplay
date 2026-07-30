@@ -556,6 +556,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
       persona = null,
+      // 2026-07-30 (voice/brain audit H2) — a custom caddie inherits its CHOSEN base persona's character +
+      // server-TTS voice (its own recorded clips play locally). Without these, this fallback path spoke a
+      // Serena-based custom caddie as Kevin in a male voice on every follow-up turn. Mirrors pipecat-turn.
+      customCaddieBasePersona = null,
+      customCaddieName = null,
       // 2026-05-19 — top user phrases from the client-side vocabulary
       // profile. The caddie has been silently logging what the user
       // says to him; surfacing those phrases here lets him pick up the
@@ -590,8 +595,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _unifiedContextBlock: string | null = capOrNull(unified_context_block, 2000);
 
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
-    const caddieName = getCaddieName(personaInput);
+    const rawPersona = (typeof persona === 'string' ? persona : voiceGender);
+    // 2026-07-30 (voice/brain audit H2) — resolve a CUSTOM caddie to its chosen base persona for the
+    // character spec + server-TTS voice (both derive from personaInput below), but keep the custom NAME.
+    const customBase = ['kevin', 'serena', 'harry', 'tank'].includes(String(customCaddieBasePersona))
+      ? String(customCaddieBasePersona) : 'kevin';
+    const personaInput = rawPersona === 'custom' ? customBase : rawPersona;
+    const caddieName = (rawPersona === 'custom' && typeof customCaddieName === 'string' && customCaddieName.trim())
+      ? customCaddieName.trim()
+      : getCaddieName(personaInput);
     const characterSpec = getCharacterSpec(personaInput);
 
     const _kevinContext: string | null = capOrNull(kevinContext, 2000);

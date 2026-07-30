@@ -24,6 +24,7 @@ import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
 import { runLibraryDataMigration } from '../services/libraryDataMigration';
 import { initCrashCapture } from '../services/crashCapture';
+import { autoSendIssues } from '../services/issueLogExport';
 import { initListeningSession } from '../services/listeningSession';
 import { hydrateCourseTruthCache } from '../services/courseTruth';
 import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/voiceTriggers';
@@ -393,6 +394,12 @@ function AppNavigator() {
   // uncaught-JS-error handler ASAP so async / event-handler crashes (which React error boundaries
   // can't catch) funnel into the Issue Log. Idempotent; runs before the heavier boot effects below.
   useEffect(() => { initCrashCapture(); }, []);
+
+  // 2026-07-30 (issue-log audit SEV-2/SEV-4 — Tim: "make sure users' apps are RECORDING and
+  // sending issue logs") — flush any issues recorded in a PRIOR session on next launch. A hard
+  // crash can kill the process before its debounced auto-send fires; this catch-up flush (consent-
+  // gated + server-idempotent inside autoSendIssues) guarantees a recorded crash reaches the team.
+  useEffect(() => { void autoSendIssues(); }, []);
 
   // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen
   // in the background; the bundle applies on the *next* cold launch (we

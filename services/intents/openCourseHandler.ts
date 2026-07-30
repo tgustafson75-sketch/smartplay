@@ -41,6 +41,16 @@ export const openCourseHandler: IntentHandler = {
       return { success: false, voice_response: "Which course? I've got the ones in your list.", side_effects: ['open_course:no_id'], follow_up_needed: true };
     }
 
+    // 2026-07-30 (voice/brain audit H3) — open_course does a DISRUPTIVE tab switch INSIDE execute() and
+    // returns no tool_action, so the mic + hands-free disruptive-open gates (which inspect tool_action)
+    // can't catch it. The precheck path is confidence:'high' (a direct "pull up Highland Links"); the
+    // CLOUD classifier emits open_course at MEDIUM for a conversational MENTION ("have you ever played
+    // Pebble Beach?"). Only NAVIGATE at high confidence; at medium, OFFER instead of yanking the user off
+    // their current screen. (course_id is already resolved, so the offer names the real course.)
+    if (intent.confidence !== 'high') {
+      return { success: true, voice_response: `Want me to pull up ${label}?`, side_effects: ['open_course:confirm'], follow_up_needed: true };
+    }
+
     // Preview selection so the Play tab surfaces this course (card + SmartVision preview) before the
     // user taps Start Round. Guarded — a store hiccup must not swallow the navigation.
     try { useRoundStore.getState().setPreviewCourse(courseId); } catch { /* non-fatal */ }

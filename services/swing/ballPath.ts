@@ -125,7 +125,27 @@ export async function detectBallPath(args: {
     offsets.push(Math.round(t));
   }
 
-  const frames = await Promise.all(offsets.map((o) => frameAt(args.videoUri, args.impactMs! + o)));
+  // 2026-07-30 (analysis audit C3) — extract from a PRIVATE COPY so a native retriever never decodes the
+  // clip ExoPlayer is looping in the Motion overlay (SIGSEGV to launcher). Copy-or-bail (honest no-trace
+  // beats a crash); the source copy is only needed through frame extraction, so delete it right after.
+  let ballWorkUri = args.videoUri;
+  let ballTempCopy: string | null = null;
+  try {
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}ballpath-src-${args.impactMs}.mp4`;
+      await FileSystem.copyAsync({ from: args.videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { ballTempCopy = dest; ballWorkUri = dest; }
+    }
+  } catch { /* copy failed */ }
+  if (!ballTempCopy) { console.warn('[ballPath] private copy failed — skipping to avoid a native crash'); return null; }
+  let frames: (Frame | null)[];
+  try {
+    frames = await Promise.all(offsets.map((o) => frameAt(ballWorkUri, args.impactMs! + o)));
+  } finally {
+    try { await FileSystem.deleteAsync(ballTempCopy, { idempotent: true }); } catch { /* best-effort */ }
+  }
   const crops = await Promise.all(
     frames.map((f) => (f ? cropWide(f, args.ballArea!, WIDE_SCALE) : Promise.resolve(null))),
   );

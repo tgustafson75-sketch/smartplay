@@ -1,5 +1,5 @@
 /**
- * Owner-only issue log.
+ * Issue log — on-device diagnostics for EVERY tester (was owner-only through 2026-07).
  *
  * 2026-05-17 — Tim asked: "is it possible with only my login that I
  * can talk to Kevin about issues with the app and then they are
@@ -13,12 +13,17 @@
  *
  * Entries are written by the voice intent `log_issue` (handler picks up
  * "Kevin, log this..." / "log an issue..." / "I have feedback..." and
- * captures the rest of the utterance as the note). Settings exposes
+ * captures the rest of the utterance as the note) AND by every failure
+ * path (voice/GPS/analysis/app errors + voice misses). Settings exposes
  * an "Owner Logs" surface for Tim to review + copy + clear.
  *
- * Gated to the owner email via isOwnerEmail() in the voice intent
- * registration step — non-owner installs don't see the surface and
- * the intent silently no-ops.
+ * 2026-07-30 (beta wrap — Tim: "make sure users' apps are RECORDING and PROMPTING
+ * to send issue logs") — the log is no longer owner-only. A recorded FAILURE now
+ * schedules the consented auto-send itself (see scheduleAutoSend below), so a
+ * tester's crash/voice/GPS error reaches the team without them voicing "log an
+ * issue"; and addUserIssue is un-gated so a tester's spoken bug report persists.
+ * Only high-volume owner traces (voice_turn conversation logging, sim_round) stay
+ * owner-scoped / excluded from auto-send to avoid flooding a tester's 100-entry log.
  */
 
 import { create } from 'zustand';
@@ -120,8 +125,8 @@ interface IssueLogState {
     details?: Record<string, unknown>,
     kind?: 'analysis_error' | 'app_error' | 'sim_round',
   ) => void;
-  /** Voice "log this issue" → a real, owner-only user entry. Self-builds context
-   *  and owner-gates internally so the brain tool handler can call it directly. */
+  /** Voice "log this issue" → a real user entry (ANY tester; un-gated 2026-07-30). Self-builds
+   *  context + schedules the consented auto-send so the brain tool handler can call it directly. */
   addUserIssue: (text: string) => void;
   /** Voice command miss (classifier_unknown / no_handler / handler_error) mirrored
    *  into the issue log as an error. Self-builds context. */
@@ -134,6 +139,18 @@ interface IssueLogState {
 }
 
 const MAX_ENTRIES = 100;
+
+/** 2026-07-30 (issue-log audit SEV-2) — schedule the consented auto-send after a FAILURE is
+ *  recorded, so a tester's crash/voice/GPS/analysis error reaches /api/issue-report WITHOUT
+ *  them having to voice "log an issue". Debounced + consent-gated (shareDiagnostics) inside
+ *  scheduleIssueAutoSend → autoSendIssues. Lazy require breaks the import cycle (issueLogExport
+ *  imports this store). Best-effort; never throws. */
+function scheduleAutoSend(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../services/issueLogExport') as typeof import('../services/issueLogExport')).scheduleIssueAutoSend();
+  } catch { /* auto-send is optional */ }
+}
 
 /** Best-effort context snapshot via lazy requires (mirrors addGpsEvent/addAppEvent)
  *  so callers don't thread route/persona/round and we avoid module-eval cycles. */
@@ -183,12 +200,7 @@ export const useIssueLogStore = create<IssueLogState>()(
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] new entry:', trimmed.slice(0, 80));
         // 2026-07-23 — consented auto-send of USER-reported issues (not diagnostic traces).
-        // Lazy require avoids a circular import (issueLogExport imports this store). No-op
-        // when the community-data toggle is off.
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          (require('../services/issueLogExport') as typeof import('../services/issueLogExport')).scheduleIssueAutoSend();
-        } catch { /* auto-send is optional */ }
+        scheduleAutoSend();
       },
       addVoiceEvent: (kind, stage, context, details) => {
         const errorMessage =
@@ -211,6 +223,7 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] voice event:', summary);
+        scheduleAutoSend(); // voice_error / voice_silent_fail / transcribe_error are all real failures
       },
       addGpsEvent: (stage, details) => {
         // Build a context snapshot defensively via lazy requires so a
@@ -254,6 +267,7 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] gps event:', summary);
+        scheduleAutoSend();
       },
       addBootEvent: (stage, details) => {
         // TEMPORARY boot-timing breadcrumb. Mirrors addGpsEvent's defensive
@@ -320,6 +334,8 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] app event:', summary);
+        // Real failures (analysis_error/app_error) auto-send; sim_round is an owner-only trace → skip.
+        if (kind !== 'sim_round') scheduleAutoSend();
       },
       addVoiceTurn: (transcript, response, meta) => {
         const t = (transcript ?? '').trim();
@@ -346,19 +362,17 @@ export const useIssueLogStore = create<IssueLogState>()(
       addUserIssue: (text) => {
         const trimmed = text.trim();
         if (!trimmed) return;
-        // Owner-gate (mirrors logIssueHandler) so only the owner's spoken issues
-        // persist. The brain `log_issue` tool is ungated; the gate lives here.
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { isOwnerEmail, usePlayerProfileStore } = require('./playerProfileStore');
-          if (!isOwnerEmail(usePlayerProfileStore.getState().email)) return;
-        } catch { /* profile unavailable — best-effort, fall through */ }
+        // 2026-07-30 (issue-log audit SEV-3) — UN-GATED. This was owner-only, which silently
+        // DROPPED a beta tester's spoken "log an issue" (the brain tool-path routes here, not
+        // through logIssueHandler's ungated addEntry). A tester's bug report must persist AND
+        // reach the team — so record it and schedule the consented auto-send, same as addEntry.
         const entry: IssueLogEntry = {
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           timestamp: Date.now(), text: trimmed, kind: 'user', context: selfContext('caddie'),
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] user issue (voice):', trimmed.slice(0, 80));
+        scheduleAutoSend();
       },
       addVoiceMiss: (missType, details) => {
         const transcript = typeof details?.transcript === 'string' ? details.transcript : '';
@@ -370,6 +384,7 @@ export const useIssueLogStore = create<IssueLogState>()(
         };
         set(s => ({ entries: [entry, ...s.entries].slice(0, MAX_ENTRIES) }));
         console.log('[issueLog] voice miss:', summary);
+        scheduleAutoSend();
       },
       clearAll: () => set({ entries: [] }),
       remove: (id) => set(s => ({ entries: s.entries.filter(e => e.id !== id) })),

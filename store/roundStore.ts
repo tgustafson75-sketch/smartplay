@@ -1336,6 +1336,17 @@ export const useRoundStore = create<RoundState>()(
           const toast = require('./toastStore');
           toast.useToastStore.getState().show('Round discarded — nothing saved.');
         } catch { /* non-fatal */ }
+        // 2026-07-30 (on-course audit SEV-1 #2) — discard was ASYMMETRIC with endRound: it never tore the
+        // sim round down, so simRound.ts module state (simActive / simPos / the holeUnsub store
+        // subscription) dangled — isVoiceSimRoundActive() stayed true indefinitely and the leaked
+        // subscription fired on every store mutation until the next startVoiceSimRound(). Mirror endRound.
+        // Uses the pre-reset `s.isSimRound` snapshot (set() above already cleared the live flag).
+        if (s.isSimRound) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../services/simRound') as typeof import('../services/simRound')).stopVoiceSimRound();
+          } catch { /* best-effort */ }
+        }
         // Same orchestrated teardown as endRound (GPS / shot detection /
         // hole detection + walking-activity ticker). Fire-and-forget.
         void (async () => {

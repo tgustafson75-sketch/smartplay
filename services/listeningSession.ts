@@ -1,6 +1,6 @@
 import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, flashCaption } from './voiceService';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
@@ -964,6 +964,11 @@ async function openSession() {
               if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch((e) => console.log('[listeningSession] route_to_brain speakFromBase64 failed', e));
               else await speak(r.text, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speak failed', e));
             }
+          } else if (r.text && !responseAllowed) {
+            // 2026-07-30 (voice/brain audit H1 — Tim: "user should be able to voice off and still get
+            // ALL the text responses"). Earbud/hands-free path: voice muted (or phone-speaker gate) → still
+            // SHOW the brain's reply so a hands-free turn is never a silent dead turn.
+            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
           } else if (!r.text && responseAllowed && getSessionState() === 'responding') {
             const offLang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
             const off = require('./offlineCaddie').answerOffline(utterance, offLang) as { text?: string } | null;
@@ -1000,6 +1005,11 @@ async function openSession() {
         // when the classifier didn't emit one (older Vercel route,
         // English transcript, or no triggers matched).
         await speak(result.voice_response, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true });
+      } else if (result.voice_response && !responseAllowed) {
+        // 2026-07-30 (voice/brain audit H1 — Tim: "voice off and still get ALL the text responses").
+        // Earbud/hands-free with voice muted (or phone-speaker gated) → SHOW the handler's reply so the
+        // turn isn't silently dead. tool_action (below) still dispatches regardless.
+        try { flashCaption?.(result.voice_response, 7000); } catch { /* non-fatal */ }
       } else if (!result.voice_response && responseAllowed) {
         // 2026-05-21 — Fix I shape A: handler returned no voice_response
         // (e.g. an internal failure path with no fallback string). Don't
@@ -1191,6 +1201,11 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
             // question always gets a visible answer instead of silence.
             try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
           }
+        } else {
+          // 2026-07-30 (voice/brain audit H5) — brain returned EMPTY (timeout / flaky signal). Don't leave
+          // a dead turn on the watch/earbud: speak the honest "trouble connecting" line, or caption it muted.
+          if (ttsAllowed) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
+          else { try { flashCaption?.('Having trouble connecting — try again in a moment.', 6000); } catch { /* non-fatal */ } }
         }
       } catch (e) {
         console.log('[handsFree-route] conversational fallback failed:', e);
@@ -1237,6 +1252,13 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
             // 2026-08-01 (tester) — show the reply for a TYPED turn even when voice is muted.
             try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
           }
+        } else {
+          // 2026-07-30 (voice/brain audit H5) — empty brain reply → honest line, don't leave dead air.
+          const route2 = getCurrentRoute();
+          const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+          const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
+          if (ttsAllowed2) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
+          else { try { flashCaption?.('Having trouble connecting — try again in a moment.', 6000); } catch { /* non-fatal */ } }
         }
       } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }
       return;

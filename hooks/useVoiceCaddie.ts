@@ -677,8 +677,19 @@ export const useVoiceCaddie = ({
   // while a recording is active (e.g. navigating away mid-utterance), both
   // silenceVadTimer and autoStopTimer would fire on a stale closure and call
   // stopAndUnloadAsync() on a destroyed Audio.Recording object. Clear them now.
+  // 2026-07-30 (voice/brain audit H6) — clearing the timers alone ORPHANS a live
+  // recording: the mic stays engaged indefinitely (the 18s cap lives inside the
+  // now-cleared VAD interval), and the next createAsync races the orphan → "Only one
+  // Recording object can be active" crash / lost turn. So also stop+unload the active
+  // recording and null the ref. Best-effort; a double-stop on an already-stopping
+  // recording is swallowed.
   useEffect(() => {
-    return () => { clearAutoStop(); };
+    return () => {
+      clearAutoStop();
+      const rec = recordingRef.current;
+      recordingRef.current = null;
+      if (rec) { void rec.stopAndUnloadAsync().catch(() => undefined); }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

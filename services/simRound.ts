@@ -169,16 +169,23 @@ export function simAdvanceTowardGreen(distanceYds: number): void {
   simLog(`moved ${Math.round(step)}y toward green (hole ${round.currentHole}, ~${Math.round(remaining - step)}y left)`, { hole: round.currentHole, stated_yds: Math.round(distanceYds), moved_yds: Math.round(step), remaining_yds: Math.round(remaining - step) });
 }
 
-/** End the sim round cleanly: restore real GPS. Round teardown is endRound's job. */
+/**
+ * End the sim round cleanly: drop the simulated-fix flag + the hole subscription.
+ *
+ * 2026-07-30 (on-course audit SEV-1 #1) — this used to call startGpsManager() to "restore real GPS."
+ * But its ONLY caller is roundStore.endRound()/discardRound(), which is simultaneously TEARING GPS DOWN
+ * (shotDetectionService.stop() → stopGpsManager()). startGpsManager() awaits native permission +
+ * watchPositionAsync (slow), so it finished AFTER stopGpsManager() and installed a live location watch +
+ * eval timer + foreground "using your location" service with NO round active — draining the battery and
+ * showing a persistent notification until the next round. Sim and real rounds are mutually exclusive and
+ * this only fires on round teardown, so GPS must go OFF here, not restart. Clearing the simulated fix is
+ * enough; the round's own teardown handles the GPS watch.
+ */
 export function stopVoiceSimRound(): void {
   simActive = false;
   simPos = null;
   holeUnsub?.();
   holeUnsub = null;
   clearSimulatedFix();
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    void (require('./gpsManager') as typeof import('./gpsManager')).startGpsManager();
-  } catch { /* non-fatal */ }
-  simLog('ended — real GPS restored');
+  simLog('ended — simulated fix cleared (GPS teardown is the round\'s job)');
 }

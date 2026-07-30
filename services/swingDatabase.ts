@@ -148,6 +148,12 @@ const STORE_KEY = 'swing-database-v1';
 const MAX_ENTRIES = 50;
 
 let memoCache: ReferenceSwing[] | null = null;
+// 2026-07-30 (analysis audit P2) — set when the last readAll couldn't read/parse storage. A read
+// failure yields seeds-only; if we then let a write persist that seeds-only baseline it OVERWRITES the
+// user's real reference library with [] (touchReference fires on any similarity compare, so one transient
+// corrupt read → destroyed library on the next write). While this is set, writes degrade to READ-ONLY
+// (in-memory only, no persist), and reads are NOT memoized so the next call retries storage.
+let lastReadFailed = false;
 
 async function readAll(): Promise<ReferenceSwing[]> {
   if (memoCache) return memoCache;
@@ -158,15 +164,25 @@ async function readAll(): Promise<ReferenceSwing[]> {
     // first-launch users have something to compare against immediately.
     const merged = mergeSeeds(parsed);
     memoCache = merged;
+    lastReadFailed = false;
     return merged;
   } catch (e) {
-    devLog('[swingDB] readAll failed (non-fatal): ' + String(e));
-    memoCache = mergeSeeds([]);
-    return memoCache;
+    devLog('[swingDB] readAll failed (non-fatal, degrading to read-only): ' + String(e));
+    // Do NOT memoize the seeds-only result — leave memoCache null so the next read retries storage,
+    // and flag the failure so writeAll refuses to clobber real (but currently-unreadable) data.
+    lastReadFailed = true;
+    return mergeSeeds([]);
   }
 }
 
 async function writeAll(entries: ReferenceSwing[]): Promise<void> {
+  if (lastReadFailed) {
+    // The baseline we'd persist came from a failed read (seeds only) — persisting it would wipe the
+    // user's real references. Skip persistence; keep memoCache null so the next read retries storage.
+    devLog('[swingDB] writeAll skipped — last read failed; not overwriting unreadable data');
+    memoCache = null;
+    return;
+  }
   // Strip archetypes from the persisted set — they're seeded at read.
   const persistable = entries.filter((e) => e.source !== 'archetype');
   const capped = enforceCap(persistable);
