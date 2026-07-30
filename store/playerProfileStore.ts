@@ -131,6 +131,14 @@ interface PlayerProfileState {
   // or picked manually. Null → the gender default. One of the OpenAI gpt-4o-mini-tts voices.
   customCaddieVoice: string | null;
 
+  // 2026-07-30 (Tim — "tie my persona and tendencies to Tank or Kevin or Serena"). The custom caddie
+  // keeps its own NAME + FACE + (optional) recorded clips, but INHERITS an existing persona's brain
+  // personality AND default voice. This gives the custom caddie a real, working persona under the hood
+  // instead of a name-only shell (which behaved oddly / "stuck in logic" — no personality spec to run,
+  // no mapped voice). customCaddieVoice (photo-matched) still overrides the inherited voice when set.
+  // Default 'kevin'. One of the four real personas.
+  customCaddieBasePersona: 'kevin' | 'serena' | 'harry' | 'tank';
+
   // 2026-05-26 — Fix DY: Personal-caddie user-recorded voice clips.
   // Keyed by phrase id from services/customCaddieClips.ts (NOT by the
   // text — text can be re-worded later without orphaning recordings).
@@ -224,6 +232,7 @@ interface PlayerProfileState {
   setPreRoundRoutine: (r: string | null) => void;
   setCustomCaddieName: (name: string | null) => void;
   setCustomCaddieVoice: (voice: string | null) => void;
+  setCustomCaddieBasePersona: (p: 'kevin' | 'serena' | 'harry' | 'tank') => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
   clearAllCustomCaddieClips: () => void;
@@ -291,6 +300,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // "My Caddie" until the user names theirs.
       customCaddieName: null,
       customCaddieVoice: null,
+      customCaddieBasePersona: 'kevin',
       // 2026-05-22 — Launch-prep T&C acceptance default.
       termsAcceptedAt: null,
       // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
@@ -362,6 +372,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
       setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
       setCustomCaddieVoice: (voice) => set({ customCaddieVoice: voice }),
+      setCustomCaddieBasePersona: (p) => set({ customCaddieBasePersona: (['kevin', 'serena', 'harry', 'tank'] as const).includes(p) ? p : 'kevin' }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });

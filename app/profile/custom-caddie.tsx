@@ -68,6 +68,8 @@ export default function CustomCaddieScreen() {
     setCustomCaddieGender,
     customCaddieVoice,
     setCustomCaddieVoice,
+    customCaddieBasePersona,
+    setCustomCaddieBasePersona,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
     // 2026-05-27 — Fix ED: default to {} so users hydrating from a
     // persist snapshot that pre-dates Fix DY can't crash this UI on
@@ -729,6 +731,34 @@ export default function CustomCaddieScreen() {
               your recording for any phrase you record and the AI voice
               for everything else. {recordedCount > 0 ? `${recordedCount} recorded.` : 'None recorded yet.'}
             </Text>
+          </View>
+
+          {/* 2026-07-30 (Tim — "tie my persona and tendencies to Tank or Kevin or Serena"). The custom
+              caddie keeps its own name + face but INHERITS a real persona's personality + speaking voice,
+              so it always behaves like a fully-built caddie. A matched/picked voice below still overrides. */}
+          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Base personality</Text>
+          <Text style={styles.recorderHelp}>Your caddie takes on this persona&apos;s style + voice — keep your own name and face on top.</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 4 }}>
+            {([
+              { id: 'kevin' as const, label: 'Kevin', sub: 'warm, steady' },
+              { id: 'serena' as const, label: 'Serena', sub: 'calm, pro' },
+              { id: 'harry' as const, label: 'Harry', sub: 'wise mentor' },
+              { id: 'tank' as const, label: 'Tank', sub: 'intense, direct' },
+            ]).map(p => {
+              const on = (customCaddieBasePersona ?? 'kevin') === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  onPress={() => setCustomCaddieBasePersona(p.id)}
+                  style={{ flexGrow: 1, minWidth: '46%', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: on ? '#00C896' : '#374151', backgroundColor: on ? 'rgba(0,200,150,0.14)' : 'transparent' }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={{ color: on ? '#00C896' : '#e5e7eb', fontWeight: '800', fontSize: 14 }}>{p.label}</Text>
+                  <Text style={{ color: on ? '#00C896' : '#9ca3af', fontSize: 11, marginTop: 2 }}>{p.sub}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {/* 2026-06-12 (Tim) — default AI voice for any UNRECORDED line. Custom keeps its

@@ -965,6 +965,25 @@ check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation fai
   })(),
   'no unsupported `speed` param reaches gpt-4o-mini-tts (so cloud voice generates instead of 500ing), and a genuine failure now reports the real upstream reason instead of a generic string');
 
+check('Custom caddie inherits a chosen base persona voice (Kevin/Serena/Harry/Tank)',
+  // 2026-07-30 (Tim — "tie my persona and tendencies to Tank or Kevin or Serena"). The custom caddie
+  // keeps its name + face but inherits a real persona's speaking voice (+ gender), so it always has an
+  // on-character voice instead of a generic default. A photo-matched customCaddieVoice still overrides.
+  (() => {
+    const store = read('store/playerProfileStore.ts');
+    const vs = read('services/voiceService.ts');
+    const ui = read('app/profile/custom-caddie.tsx');
+    return (
+      /customCaddieBasePersona:/.test(store) && /setCustomCaddieBasePersona:/.test(store) &&
+      /customCaddieBasePersona: 'kevin'/.test(store) &&
+      // voice path inherits the base persona's mapped voice unless a custom voice is set
+      /const base = .*customCaddieBasePersona/.test(vs) && /BASE_VOICE\[base\]/.test(vs) &&
+      // the setup screen exposes the picker
+      /setCustomCaddieBasePersona\(p\.id\)/.test(ui)
+    );
+  })(),
+  'the custom caddie ties to a real persona under the hood — inherits that persona\'s voice + gender (photo-matched voice still wins), selectable in the My Caddie setup, so it is never a voiceless name-only shell');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed

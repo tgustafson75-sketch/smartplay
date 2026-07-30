@@ -1358,8 +1358,14 @@ export const speak = async (
     else if (persona === 'custom') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
-      if (pp.customCaddieGender === 'male' || pp.customCaddieGender === 'female') effectiveGender = pp.customCaddieGender;
+      // 2026-07-30 (Tim — "tie my custom persona to Tank/Kevin/Serena"). The custom caddie INHERITS its
+      // base persona's voice + gender, so it always has a real, on-character voice instead of a generic
+      // gender default. A photo-matched customCaddieVoice still wins when the user set one.
+      const base = (['kevin', 'serena', 'harry', 'tank'] as const).includes(pp.customCaddieBasePersona) ? pp.customCaddieBasePersona : 'kevin';
+      const BASE_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', tank: 'ash', harry: 'fable' };
+      effectiveGender = base === 'serena' ? 'female' : 'male';
       if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) customVoice = pp.customCaddieVoice;
+      else customVoice = BASE_VOICE[base];
     }
   } catch { /* ignore */ }
 
