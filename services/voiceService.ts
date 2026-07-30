@@ -156,9 +156,14 @@ const SILENCE_DB_THRESHOLD = -40;
 // LONG 1800→1400 (still ≥ a typical 0.8–1.2s word-search pause, so this does NOT re-introduce
 // the 07-20 "cutting me off" regression — the adaptive design keeps dictation patient while
 // the common short command feels immediate).
-const SILENCE_TIMEOUT_SHORT_MS = 650;   // quick command: end promptly after a short pause
-const SILENCE_TIMEOUT_LONG_MS = 1400;   // mid-sentence: wait out a natural word-search pause
-const SPEECH_LONG_MS = 1400;            // once speech has run this long, treat it as a sentence
+// 2026-07-30 (Tim — "we tightened up the listening too much, it keeps cutting me off"). The 07-30
+// tighten (650/1400) clipped mid-sentence pauses. Re-balanced toward NOT cutting off: a quick 1-2 word
+// command still ends fast (SHORT 800ms), but the moment the user is into a sentence (>1.1s of speech)
+// the window opens to a patient LONG 2000ms that comfortably rides out a 1.5s word-search pause. Snappy
+// where it can be, patient where it must be — resolves both "listens too long" AND "cuts me off".
+const SILENCE_TIMEOUT_SHORT_MS = 800;   // quick command: end promptly after a short pause
+const SILENCE_TIMEOUT_LONG_MS = 2000;   // mid-sentence: wait out a natural word-search pause (never clip)
+const SPEECH_LONG_MS = 1100;            // once speech has run this long, treat it as a sentence → LONG window
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 // 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive

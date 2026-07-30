@@ -2690,13 +2690,47 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
       /else stopHeartbeat\(\)/.test(vc) &&
       /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(caddie) &&
-      /const SILENCE_TIMEOUT_SHORT_MS = 650;/.test(vs) &&
-      /const SILENCE_TIMEOUT_LONG_MS = 1400;/.test(vs) &&
+      /const SILENCE_TIMEOUT_SHORT_MS = 800;/.test(vs) &&
+      /const SILENCE_TIMEOUT_LONG_MS = 2000;/.test(vs) &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
-      /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs)
+      /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs) &&
+      // the FIRST-turn mic path also runs the adaptive window (was a single fixed gap that clipped)
+      /const MIC_SILENCE_SHORT_MS = 800;/.test(vc) &&
+      /const MIC_SILENCE_LONG_MS = 2000;/.test(vc) &&
+      /speakingForMs >= MIC_SPEECH_LONG_MS \? MIC_SILENCE_LONG_MS : MIC_SILENCE_SHORT_MS/.test(vc)
     );
   })(),
-  'a 4-min heartbeat keeps endpoints warm (no cold session); caddie warms on focus; ADAPTIVE silence endpoint (650ms quick command / 1400ms mid-sentence) — tightened 07-30 so Kevin closes the mic sooner without cutting the user off');
+  'a 4-min heartbeat keeps endpoints warm; caddie warms on focus; ADAPTIVE silence endpoint on BOTH the follow-up loop AND the first-turn mic (800ms quick command / 2000ms mid-sentence) — 07-30 rebalanced so it is snappy on commands but never clips a sentence ("cuts me off")');
+
+check('Voice: cold transcribe fails FAST on a proven-unreachable host (no 25s hang → canned line)',
+  // 2026-07-30 (Tim field log: elapsedMs 25030, pingMs 3012 — a 25s hang then the off-course line). The
+  // old min<2500ms fast-abort missed Tim's ~3s active refusal (sat in the "slow handshake, keep waiting"
+  // band). Now: both probes failing by ACTIVELY erroring before the probe budget → abort the doomed
+  // transcribe immediately; a reachable-but-slow cold handshake (both time out near the budget) keeps
+  // its full patience.
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      /const PROBE_BUDGET_MS = 5000;/.test(vc) &&
+      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < PROBE_BUDGET_MS - 500;/.test(vc) &&
+      /if \(bothActivelyFailed\)/.test(vc)
+    );
+  })(),
+  'a proven-unreachable host (both probes actively refuse in ~3s) aborts the transcribe fast so the caddie degrades in ~3s, not after a 25s dead wait — while a slow-but-reachable cold turn keeps its full budget');
+
+check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
+  // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
+  // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the
+  // read to the static hole distance; and the sim launcher prewarmed nothing so the first turn was cold.
+  (() => {
+    const yr = read('services/yardageResolver.ts');
+    const sr = read('services/simRound.ts');
+    return (
+      /isSimulatedActive/.test(yr) && /\(isSimulatedActive\(\) \|\| fixAge < 10_000\)/.test(yr) &&
+      /prewarmBriefing/.test(sr) && /prewarmVoice\(true\)/.test(sr) && /warmBackendConnection/.test(sr)
+    );
+  })(),
+  'a narrated sim shot moves the position and the yardage HOLDS its countdown (the simulated fix is not aged out to the static hole distance), and starting a sim round prewarms the briefing + TTS + connection so the first brief is not a 3-minute cold wait');
 
 check('Voice: get-to-know interview never opens a tool (fault = info, not a command)',
   // 2026-07-30 (Tim — "in tell-your-caddie mode caddie keeps opening SwingLab while I list my
@@ -5525,10 +5559,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('LOCK voice: cold first-turn gets the long transcribe budget (22s)',
     /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isConnectionWarmed\(\)/.test(vcSrc),
     'a cold (unwarmed) first turn uses the 22s transcribe budget so a slow cold handshake still lands a real transcript');
-  check('LOCK voice: cold abort ONLY on a confident-fast failure (never a slow timeout)',
-    /FAST_UNREACHABLE_MS = 2500/.test(vcSrc) &&
-      /if \(!ping\.ok && !get\.ok && Math\.min\(ping\.ms, get\.ms\) < FAST_UNREACHABLE_MS\)/.test(vcSrc),
-    'the concurrent probe aborts the first transcribe only when BOTH probes fail FAST (<2.5s = real refusal/DNS block) — a slow cold handshake is never misjudged as offline (the first-turn-failure root cause)');
+  check('LOCK voice: cold abort ONLY when both probes ACTIVELY fail before the budget (never a slow timeout)',
+    // 2026-07-30 — the discriminator moved from min<2500 (missed Tim's ~3s active refusal → 25s hang) to
+    // "both failed AND both erdored before the probe budget" (max < budget-500). A slow cold handshake
+    // times out AT the budget → max≈budget → NOT aborted → keeps full cold patience.
+    /const PROBE_BUDGET_MS = 5000;/.test(vcSrc) &&
+      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < PROBE_BUDGET_MS - 500;/.test(vcSrc),
+    'the concurrent probe aborts the first transcribe when BOTH probes ACTIVELY fail before the budget (a real refusal/DNS block returns in ~3s), while a slow-but-reachable cold handshake (times out at the budget) is never misjudged as offline');
   check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
     /markConnectionWarmed\(\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');

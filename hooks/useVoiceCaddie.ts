@@ -67,7 +67,12 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 // minutes and ballooned the file. 8s wall-clock, enforced directly on the
 // recording object, guarantees a small, uploadable capture on every device.
 // (Replaces the old 45s AUTO_STOP_MS backstop, which is gone.)
-const MAX_RECORD_MS = 8_000;
+// 2026-07-30 (audit + Tim "it keeps cutting me off") — 8s → 18s. 8s truncated a longer FIRST
+// utterance (describing your game, a get-to-know answer) — the follow-up loop already allows 30s, so
+// the first turn was the artificially-constrained one. On metering devices the adaptive silence-VAD
+// below ends a normal question far sooner; this is only the wandered-away backstop / the cap on
+// metering-less OEMs. 18s of m4a is still comfortably under the 3.5MB upload guard.
+const MAX_RECORD_MS = 18_000;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
 // launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
@@ -146,14 +151,19 @@ export function endsAsQuestion(raw: string | null | undefined): boolean {
   // an answer: "How are you feeling today? Take your time." / "...today? 🙂".
   return t.slice(lastQ + 1).trim().length <= 30;
 }
-// 2026-06-26 (Tim — "12s is way too long, needs to be ~3s") — drop the
-// stop-on-silence gap 4s → 1.2s so the mic closes ~1s after you finish talking
-// (when metering is reported). 2026-07-30 (Tim — "on iOS the mic listens too long; calibrate it to
-// close sooner after the user finishes") — tightened 1.2s → 0.85s. Natural mid-sentence pauses are
-// < 0.8s, so 0.85s still won't clip a normal question but the mic feels noticeably snappier. NOTE:
-// this only helps on devices that report status.metering (iOS always does); metering-less OEMs still
-// fall back to the MAX_RECORD_MS cap.
-const MIC_SILENCE_TIMEOUT_MS = 850;
+// 2026-06-26 (Tim — "12s is way too long, needs to be ~3s") — dropped the stop-on-silence gap so the
+// mic closes shortly after you finish. 2026-07-30 — the FIRST-turn path (this file) had only a SINGLE
+// FIXED gap, while the follow-up loop (captureUtterance) uses an ADAPTIVE short/long window. A fixed
+// gap can't tell a quick command from a mid-sentence pause, so tightening it for snappiness (0.85s)
+// CLIPPED longer answers ("it keeps cutting me off"). Port the adaptive model here, matching
+// voiceService: SHORT while the utterance is still a 1-2 word command → snappy; LONG once the user is
+// clearly into a sentence (spoken > MIC_SPEECH_LONG_MS) → patient, so a 1.5s word-search pause never
+// clips a real thought. Resolves both "listens too long" (short commands snap) and "cuts me off"
+// (sentences get 2s of patience). Metering-only (iOS always reports it); metering-less OEMs fall back
+// to the MAX_RECORD_MS cap.
+const MIC_SILENCE_SHORT_MS = 800;   // quick command: end promptly after a short pause
+const MIC_SILENCE_LONG_MS = 2000;   // mid-sentence: ride out a natural word-search pause (never clip)
+const MIC_SPEECH_LONG_MS = 1100;    // once speech has run this long, treat it as a sentence → LONG window
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but
@@ -1799,8 +1809,17 @@ export const useVoiceCaddie = ({
           // CONFIDENT-FAST failure: a genuine connection refusal / DNS block / no-network throws in
           // <2.5s. A slow timeout (ms ≈ the 5s budget) means "reachable, still handshaking" → do NOT
           // abort; let the cold transcribe run its full budget and land a real transcript.
-          const FAST_UNREACHABLE_MS = 2500;
-          if (!ping.ok && !get.ok && Math.min(ping.ms, get.ms) < FAST_UNREACHABLE_MS) {
+          // 2026-07-30 (Tim field log: elapsedMs 25030, pingMs 3012, getMs 3011 — a 25-SECOND hang then
+          // the canned off-course line). The old `min(ms) < 2500` never fired for Tim: his network
+          // REFUSES both probes at ~3s (not a timeout — an active DNS/proxy block that returns fast),
+          // which sat in the 2.5s–5s "slow handshake, keep waiting" band → the transcribe burned the full
+          // 25s. Better discriminator: BOTH probes failed AND BOTH did so by ACTIVELY erroring BEFORE the
+          // probe budget (a genuine block returns fast; a reachable-but-slow host TIMES OUT near the full
+          // budget). So `max(ms) < budget - margin` = both actively refused = truly offline → abort NOW.
+          // A slow cold handshake (both ~5s timeouts) keeps its full budget — cold patience preserved.
+          const PROBE_BUDGET_MS = 5000;
+          const bothActivelyFailed = !ping.ok && !get.ok && Math.max(ping.ms, get.ms) < PROBE_BUDGET_MS - 500;
+          if (bothActivelyFailed) {
             coldUnreachable = { ping, get };
             try { coldAbort.abort(); } catch { /* no-op */ }
           }
@@ -2505,13 +2524,19 @@ export const useVoiceCaddie = ({
       // backstop.
       let micHasSpoken = false;
       let micLastLoudAt = Date.now();
+      // 2026-07-30 — when the user FIRST crossed the speech threshold, so the poll below can tell a
+      // quick command (short silence window) from a mid-sentence pause (long window) — the adaptive VAD.
+      let micSpeechStartAt = 0;
       const { recording } = await Audio.Recording.createAsync(
         { ...RECORDING_OPTIONS, isMeteringEnabled: true },
         (status) => {
           if (!status.isRecording) return;
           const metering = (status as { metering?: number }).metering;
           if (typeof metering !== 'number') return;
-          if (metering > MIC_SPEECH_DETECT_DB) micHasSpoken = true;
+          if (metering > MIC_SPEECH_DETECT_DB) {
+            if (!micHasSpoken) micSpeechStartAt = Date.now();
+            micHasSpoken = true;
+          }
           if (metering > MIC_SILENCE_DB_THRESHOLD) micLastLoudAt = Date.now();
         },
         100,
@@ -2563,8 +2588,15 @@ export const useVoiceCaddie = ({
           void hardStopAndProcess().catch(() => undefined);
           return;
         }
-        if (micHasSpoken && Date.now() - micLastLoudAt >= MIC_SILENCE_TIMEOUT_MS) {
-          void hardStopAndProcess().catch(() => undefined);
+        if (micHasSpoken) {
+          // Adaptive endpoint: a 1-2 word command (spoken < MIC_SPEECH_LONG_MS) closes on the SHORT
+          // gap (snappy); once the user is into a sentence, the LONG gap rides out a word-search pause
+          // so it never clips. speakingForMs = first-speech → most-recent-loud.
+          const speakingForMs = micSpeechStartAt > 0 ? micLastLoudAt - micSpeechStartAt : 0;
+          const gap = speakingForMs >= MIC_SPEECH_LONG_MS ? MIC_SILENCE_LONG_MS : MIC_SILENCE_SHORT_MS;
+          if (Date.now() - micLastLoudAt >= gap) {
+            void hardStopAndProcess().catch(() => undefined);
+          }
         }
       }, 200);
 

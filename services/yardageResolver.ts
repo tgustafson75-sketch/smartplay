@@ -31,7 +31,7 @@
  */
 
 import { useRoundStore } from '../store/roundStore';
-import { getGreenYardagesSync, getLastFix, classifyAccuracy } from './smartFinderService';
+import { getGreenYardagesSync, getLastFix, classifyAccuracy, isSimulatedActive } from './smartFinderService';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -94,9 +94,16 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   // where they are. Treat a recent null-accuracy fix as a valid
   // user-asserted position with 'med' confidence.
   const isUserMarkedFix = fix != null && accuracy == null && fixAge < 30_000;
+  // 2026-07-30 (Tim — voice sim round: "the yardage updated for a second, then went back to the whole
+  // hole yardage"). ROOT CAUSE: a simulated fix's timestamp is FROZEN at the shot moment (the real GPS
+  // watcher is torn down during a sim round, so nothing re-emits it). ~10s later this age gate crossed
+  // 10_000ms → the live tier was skipped → it fell back to the static scorecard distance = the full
+  // hole. A simulated fix legitimately never ticks, so treating it as "stale" is the defect. Bypass the
+  // age gate when the simulator owns the fix — mirrors gpsManager.getGpsHealth()'s own simulated
+  // short-circuit — so the narrated countdown holds.
   const gpsHealthy =
     fix != null &&
-    fixAge < 10_000 &&
+    (isSimulatedActive() || fixAge < 10_000) &&
     quality.level !== 'weak' &&
     quality.level !== 'none';
 

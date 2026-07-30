@@ -83,6 +83,22 @@ export function startVoiceSimRound(opts?: { courseId?: string; nineHoles?: boole
   }
   const courseName = getCourse(courseId.replace(/^local:/, ''))?.name ?? 'Sim Course';
 
+  // 2026-07-30 (Tim — sim round took ~3 min to give the course brief). The normal round-start path
+  // (app/(tabs)/play.tsx) prewarms the briefing Lambda + the TTS endpoint + the backend connection
+  // BEFORE the round fires, so the first spoken turn is hot. The sim launcher bypassed all of it, so
+  // the sim's first turn paid the full cold DNS+TLS+Lambda+SDK path on the custom domain, compounded
+  // by the cold-boot patience budget. Prewarm the same things the moment a sim round starts.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./apiBase') as typeof import('./apiBase')).warmBackendConnection().catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const apiBase = (require('./apiBase') as typeof import('./apiBase')).getApiBaseUrl();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./briefingGenerator') as typeof import('./briefingGenerator')).prewarmBriefing(apiBase);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./voiceWarmup') as typeof import('./voiceWarmup')).prewarmVoice(true);
+  } catch { /* prewarm is best-effort */ }
+
   // 1. The simulator owns the fix — suppress the real watcher first so a real
   //    GPS fix can't fight the simulated position mid-round.
   try {
