@@ -651,6 +651,9 @@ export async function extractPoseFramesFromVideo(
   trustDuration = false,
   window?: { startMs: number; endMs: number } | null,
   impactMs?: number | null,
+  // 2026-07-29 — optional "stop if the video is playing" guard (e.g. () => !videoPaused). The review
+  // surface loops the clip; a retriever decoding the file ExoPlayer is playing = native SIGSEGV.
+  shouldAbort?: () => boolean,
 ): Promise<PoseFrame[] | null> {
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
 
@@ -773,12 +776,39 @@ export async function extractPoseFramesFromVideo(
     }
   } catch { /* native module absent — keep anchors only */ }
 
-  // Sequential — on-device runs one detector instance; cloud is polite to the
-  // rate limit (RapidAPI throttles bursts).
+  // 2026-07-29 (Tim — recurring WHITE SCREEN on analyze). The frame grab (poseAtTime →
+  // MediaMetadataRetriever) was hitting the ORIGINAL clip while ExoPlayer decodes the same file for
+  // the looping review → native SIGSEGV that bypasses the JS ErrorBoundary = blank white screen (the
+  // last extractor not brought under the club-path hardening). Mirror it exactly: extract from a
+  // PRIVATE COPY (different file handle → the crash condition cannot occur), NEVER fall back to the
+  // playing original, bail between frames if playback (re)starts, and delete the copy after.
+  let workUri = videoUri;
+  let tempCopy: string | null = null;
+  try {
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}pose-src-${Date.now()}.mp4`;
+      await FileSystem.copyAsync({ from: videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+    }
+  } catch { /* copy failed */ }
+  if (!tempCopy) {
+    // No private copy → do NOT decode the (possibly-playing) original. Skeleton-only degrade is fine;
+    // a crash-to-launcher is not. (Same hard rule as clubPath for the always-looping review surface.)
+    console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
+    return null;
+  }
+  // Sequential — on-device runs one detector instance; cloud is polite to the rate limit.
   const frames: PoseFrame[] = [];
-  for (const { key, timeMs } of sampleTimes) {
-    const f = await poseAtTime(videoUri, timeMs, key);
-    if (f) frames.push(f);
+  try {
+    for (const { key, timeMs } of sampleTimes) {
+      if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
+      const f = await poseAtTime(workUri, timeMs, key);
+      if (f) frames.push(f);
+    }
+  } finally {
+    try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
   }
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) return null;

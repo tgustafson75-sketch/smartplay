@@ -1437,8 +1437,30 @@ export default function SwingDetail() {
         }
       } catch { /* fall through — let analysis try */ }
       useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
-      void runPhaseKOnSession(swing_id);
       spokenForRef.current = null; // cleared after analysis commits, not before
+      // 2026-07-29 (Tim — "analyze twice then it's dead") — the in-flight lock was released ONLY by the
+      // terminal-status effect, so a locate that STALLED or was Aborted (device log: swing_locate —
+      // Aborted) left analyzeInFlightRef latched `true` forever → every later Analyze was a silent
+      // no-op until the 150s watchdog. AWAIT the run and release the lock in a finally so ANY outcome
+      // (success / abort / throw / early-return) frees it immediately; on a non-ok end, surface a
+      // retryable failure instead of a stuck 'pending'. The terminal-status effect still clears it too
+      // (belt + suspenders).
+      try {
+        await runPhaseKOnSession(swing_id);
+      } catch (e) {
+        uploadLog('reanalyze-error', { error: String(e) }, swing_id);
+        // The run threw (e.g. an aborted/timed-out locate) — surface a RETRYABLE failure instead of a
+        // stuck spinner. Never clobber a result that already committed 'ok' (don't harm a good analysis).
+        const st = useCageStore.getState().sessionHistory.find((s) => s.id === swing_id)?.analysis_status;
+        if (st !== 'ok') {
+          useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis hit a snag — tap Analyze to try again.");
+        }
+      } finally {
+        // ALWAYS release the lock — success, abort, throw, or early-return — so Analyze never dies
+        // after N tries. (The terminal-status effect still clears it too; this guarantees a stalled
+        // run frees it immediately instead of waiting on the 150s watchdog.)
+        analyzeInFlightRef.current = false;
+      }
     })();
   };
 
