@@ -37,6 +37,10 @@ export function CaddieInputBar({ placeholder = 'Ask or tell your caddie…', mic
   const listeningState = useListeningSessionStore((s) => s.state);
   const busy = listeningState === 'thinking' || listeningState === 'responding';
   const [text, setText] = useState('');
+  // 2026-08-01 (tester — "need to be able to minimize the keyboard"). Track focus so a chevron-down
+  // dismiss button appears while the keyboard is up (returnKey is "send", so there was no way to just
+  // close the keyboard without sending).
+  const [focused, setFocused] = useState(false);
   const s = makeStyles(colors);
 
   const submit = useCallback(() => {
@@ -53,8 +57,21 @@ export function CaddieInputBar({ placeholder = 'Ask or tell your caddie…', mic
 
   return (
     <View style={s.bar}>
-      {/* Mic — the exact same tap-to-talk as everywhere else (listeningSession.toggle via the badge). */}
-      <CaddieMicBadge size={micSize} accessibilityLabel="Tap to talk to your caddie" />
+      {/* While typing, the mic slot becomes a keyboard-dismiss button so you can minimize the keyboard
+          without sending (tester request). Off-focus it's the tap-to-talk mic as everywhere else. */}
+      {focused ? (
+        <TouchableOpacity
+          onPress={() => Keyboard.dismiss()}
+          style={s.send}
+          accessibilityRole="button"
+          accessibilityLabel="Hide keyboard"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="chevron-down" size={20} color="#0d1a0d" />
+        </TouchableOpacity>
+      ) : (
+        <CaddieMicBadge size={micSize} accessibilityLabel="Tap to talk to your caddie" />
+      )}
       <TextInput
         style={s.input}
         value={text}
@@ -63,6 +80,8 @@ export function CaddieInputBar({ placeholder = 'Ask or tell your caddie…', mic
         placeholderTextColor={colors.text_muted}
         returnKeyType="send"
         onSubmitEditing={submit}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         blurOnSubmit={false}
         editable={!busy}
         accessibilityLabel="Type a question or command for your caddie"

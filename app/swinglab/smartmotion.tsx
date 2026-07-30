@@ -1089,6 +1089,18 @@ export default function SmartMotion() {
   useEffect(() => {
     targetingOpacity.setValue(targetingVisible ? 1 : 0);
   }, [targetingVisible, targetingOpacity]);
+
+  // 2026-08-01 (tester — "on shot shape drills the name of the drill overlaps other elements; it should
+  // fade out in 5 seconds"). The drill banner shows on entry to setup/recording, then fades so it stops
+  // covering the metric cards. Re-shows briefly on each phase entry (a light reminder), then fades again.
+  const drillBannerOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isDrill || (phase !== 'setup' && phase !== 'recording')) return;
+    drillBannerOpacity.setValue(1);
+    const anim = Animated.timing(drillBannerOpacity, { toValue: 0, duration: 700, delay: 5000, useNativeDriver: true });
+    anim.start();
+    return () => anim.stop();
+  }, [isDrill, phase, drillBannerOpacity]);
   // 2026-06-12 — LIVE ball/target: the SETUP draft in setup, the session marks in
   // review. So the aim direction + effort readout update as the DTL target is dragged
   // (interactive geometry ↔ tempo — Tim "the target's not moveable + no readout").
@@ -3917,12 +3929,12 @@ export default function SmartMotion() {
             pill sits for non-drills (free in drill mode), above the tab bar. Shows
             through setup + recording so a capture reads as "this is the X drill". */}
         {isDrill && (phase === 'setup' || phase === 'recording') ? (
-          <View style={[styles.drillBanner, { bottom: insets.bottom + (isNarrow ? 138 : 64) }]} pointerEvents="none">
+          <Animated.View style={[styles.drillBanner, { bottom: insets.bottom + (isNarrow ? 138 : 64), opacity: drillBannerOpacity }]} pointerEvents="none">
             <Text style={styles.drillBannerKicker}>{`DRILL${drillShotCount ? ` · ${drillShotCount} SWINGS` : ''}`}</Text>
             <Text style={styles.drillBannerName} numberOfLines={1}>
               {(typeof drillName === 'string' && drillName.trim() ? drillName.trim() : 'Practice').toUpperCase()}
             </Text>
-          </View>
+          </Animated.View>
         ) : null}
 
         {/* DRILL CHECK — 2026-07-06 (MOAT Phase 2, the judge): after a drill set the

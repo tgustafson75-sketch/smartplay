@@ -2827,6 +2827,29 @@ check('Voice: canned-speech sweep — strategy/conversation reads route to the b
   })(),
   'the flagship "what\'s the play here", a passing "it\'s windy", "how am I doing", a hole-strategy ask, a vague status question, "help me read this putt", and "okay so what should I do" all reach the AI brain now — every canned local intercept on ordinary conversation was closed');
 
+check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not selectable, drill name fades',
+  // 2026-08-01 (tester feedback batch).
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    const inbar = read('components/caddie/CaddieInputBar.tsx');
+    const cc = read('app/profile/custom-caddie.tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      // 1 — a TYPED turn shows the brain reply even when voice is muted (regression from removing the
+      //     canned greeting handler: "I type hi now and nothing happens")
+      /try \{ flashCaption\?\.\(r\.text, 7000\); \}/.test(ls) &&
+      // 2 — the unified input bar can minimize the keyboard while typing
+      /accessibilityLabel="Hide keyboard"/.test(inbar) && /Keyboard\.dismiss\(\)/.test(inbar) &&
+      // 3 — Harry is NOT a selectable base persona for the custom caddie
+      !/id: 'harry'/.test(cc) &&
+      // 4 — the drill-name banner fades out after 5s instead of overlapping the cards
+      /const drillBannerOpacity = useRef\(new Animated\.Value\(1\)\)/.test(sm) &&
+      /Animated\.timing\(drillBannerOpacity, \{ toValue: 0, duration: 700, delay: 5000/.test(sm) &&
+      /opacity: drillBannerOpacity/.test(sm)
+    );
+  })(),
+  'a typed question always shows a visible answer (even muted); the keyboard can be minimized from the input bar; Harry (dormant) is not selectable as a custom base persona; and the shot-shape drill name fades after 5s so it stops covering the metric cards');
+
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the

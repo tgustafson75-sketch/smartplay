@@ -1176,13 +1176,20 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         const route = getCurrentRoute();
         const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
         const ttsAllowed = (settings.voiceEnabled ?? true) && (route !== 'phone_speaker' || allowPhoneSpeaker);
-        if (r.text && ttsAllowed) {
-          const { speak, speakFromBase64 } = await import('./voiceService');
-          if (r.audioBase64) {
-            await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
+        if (r.text) {
+          const { speak, speakFromBase64, flashCaption } = await import('./voiceService');
+          if (ttsAllowed) {
+            if (r.audioBase64) {
+              await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
+            } else {
+              await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
+                ?.catch?.(() => undefined);
+            }
           } else {
-            await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
-              ?.catch?.(() => undefined);
+            // 2026-08-01 (tester — "took out canned greetings, now I type 'hi' and nothing happens").
+            // With voice OFF (or the phone-speaker gate), still SHOW the brain's reply so a TYPED
+            // question always gets a visible answer instead of silence.
+            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
           }
         }
       } catch (e) {
@@ -1219,9 +1226,17 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           dispatchConversationalToolActions(r.toolActions);
         }
         if (r.text) {
-          const { speak, speakFromBase64 } = await import('./voiceService');
-          if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
-          else await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+          const route2 = getCurrentRoute();
+          const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+          const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
+          const { speak, speakFromBase64, flashCaption } = await import('./voiceService');
+          if (ttsAllowed2) {
+            if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
+            else await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+          } else {
+            // 2026-08-01 (tester) — show the reply for a TYPED turn even when voice is muted.
+            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
+          }
         }
       } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }
       return;

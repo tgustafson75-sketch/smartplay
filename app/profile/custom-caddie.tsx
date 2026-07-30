@@ -739,10 +739,12 @@ export default function CustomCaddieScreen() {
           <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Base personality</Text>
           <Text style={styles.recorderHelp}>Your caddie takes on this persona&apos;s style + voice — keep your own name and face on top.</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 4 }}>
+            {/* 2026-08-01 (tester — "he can select Harry, this should not be possible"). Harry is a
+                DORMANT persona (not in ACTIVE_PERSONAS); it leaked back in here as a base-persona option.
+                Removed — only the shipped personas (Kevin/Serena/Tank) can back a custom caddie. */}
             {([
               { id: 'kevin' as const, label: 'Kevin', sub: 'warm, steady' },
               { id: 'serena' as const, label: 'Serena', sub: 'calm, pro' },
-              { id: 'harry' as const, label: 'Harry', sub: 'wise mentor' },
               { id: 'tank' as const, label: 'Tank', sub: 'intense, direct' },
             ]).map(p => {
               const on = (customCaddieBasePersona ?? 'kevin') === p.id;
