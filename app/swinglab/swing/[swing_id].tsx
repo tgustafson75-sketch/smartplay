@@ -351,6 +351,9 @@ export default function SwingDetail() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Synchronous "last emitted" tracker so onPlaybackStatusUpdate commits only REAL changes (kills the
+  // 25×/s redundant-setState cascade behind the "Maximum update depth" white screen). See the callback.
+  const playbackEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null }>({ pos: -1, dur: -1, playing: null });
   // 2026-07-24 (Tim — universal screen timeout) — never let the idle rest-dim engage while a clip is
   // actually playing (the user is watching, not touching). Resumes eligibility the moment it pauses.
   useRestSuppress(isPlaying);
@@ -837,9 +840,25 @@ export default function SwingDetail() {
   const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;
-    if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
-    if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
-    setIsPlaying(s.isPlaying === true);
+    // 2026-07-29 (Tim — recurring FATAL "Maximum update depth exceeded" at onPlaybackStatusUpdate). This
+    // callback fires ~25×/s and used to setState position/duration/isPlaying EVERY tick unconditionally.
+    // A value that churns tick-to-tick (expo-av can re-report a slightly different durationMillis while
+    // buffering/seeking) re-triggers every effect that depends on it → a synchronous re-render cascade
+    // React kills as a white screen. Fix: only setState on a MEANINGFUL change. position still updates
+    // smoothly (20ms threshold) for the pose overlay; duration commits once (±50ms); isPlaying only flips
+    // on a real transition. Nothing downstream sees a redundant change, so the cascade can't spin up.
+    if (s.positionMillis != null) {
+      const p = s.positionMillis / 1000;
+      if (Math.abs(p - playbackEmitRef.current.pos) >= 0.02) { playbackEmitRef.current.pos = p; setPosition(p); }
+    }
+    if (s.durationMillis != null) {
+      const d = s.durationMillis / 1000;
+      if (playbackEmitRef.current.dur < 0 || Math.abs(d - playbackEmitRef.current.dur) > 0.05) {
+        playbackEmitRef.current.dur = d; setDuration(d);
+      }
+    }
+    const playing = s.isPlaying === true;
+    if (playbackEmitRef.current.playing !== playing) { playbackEmitRef.current.playing = playing; setIsPlaying(playing); }
     // 2026-06-15 (Tim) — NO autoplay on open. The library swing sits STATIC on
     // the first frame; the user taps to play (togglePlayPause restarts from the
     // top when at end). Autoplay was also what left the controls dead — it ran

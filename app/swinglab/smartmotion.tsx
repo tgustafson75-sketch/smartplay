@@ -966,6 +966,8 @@ export default function SmartMotion() {
     finally { setCaddieListening(false); }
   }, [caddieListening]);
   const [playbackMs, setPlaybackMs] = useState(0);
+  // Last-committed playback ms (synchronous) so the 25×/s status callback only setStates on a real move.
+  const playbackMsEmitRef = useRef(-1);
   // 2026-06-09 — "Motion overlay" is now a SEPARATE on-demand step (off by
   // default). Default review = watch the swing + Kevin's feedback only, with a
   // clean video. Turning Motion on computes + shows the skeletal overlay, body
@@ -3610,7 +3612,13 @@ export default function SmartMotion() {
             onPlaybackStatusUpdate={(s) => {
               // Track position ALWAYS (not just when the motion overlay is on) so the
               // review scrubber can show + seek by time even on a clean video.
-              if ('positionMillis' in s && typeof s.positionMillis === 'number') setPlaybackMs(s.positionMillis);
+              // 2026-07-29 (Tim — "Maximum update depth" white screen). Only commit a MEANINGFUL move
+              // (≥20ms) so this 25×/s callback can't drive a redundant-setState re-render cascade.
+              if ('positionMillis' in s && typeof s.positionMillis === 'number'
+                  && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
+                playbackMsEmitRef.current = s.positionMillis;
+                setPlaybackMs(s.positionMillis);
+              }
               // 2026-06-14 (Tim) — WINDOW the loop to the selected swing so it stops
               // replaying the whole clip (the setup the user reported). isLooping loops
               // the entire file; when this swing is a real sub-window (endMs < clip end)
