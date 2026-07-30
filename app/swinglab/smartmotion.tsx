@@ -526,7 +526,7 @@ export default function SmartMotion() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // 2026-06-29 (Tim) — narrow cover screens (e.g. closed Z Fold ~360pt) crowd the
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
@@ -4127,9 +4127,21 @@ export default function SmartMotion() {
             style={StyleSheet.absoluteFill}
             pointerEvents="none"
           />
-          {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign) */}
+          {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign).
+              2026-07-29 (Tim — "data doesn't show over the video, those can be scrollable") — the stats
+              stack (swing breakdown + speed/tempo/body) grew tall enough to cover the clip. Bound it to
+              a fraction of the screen + make it its OWN vertical scroll, so it never grows past its box
+              and you swipe through the numbers instead. The video reads clean above it; the controls
+              (scrubber, verdict, action, footer chips) stay pinned BELOW this scroll, untouched. Only
+              the review stats moved — live capture + the tracked skeleton/trace overlays are unchanged.
+              nestedScrollEnabled so the vertical swipe doesn't fight the horizontal page pager. */}
           {isReview ? (
-            <>
+            <ScrollView
+              style={{ maxHeight: Math.round((rootSize.h > 0 ? rootSize.h : windowHeight) * 0.36) }}
+              contentContainerStyle={{ gap: 8 }}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+            >
               {engaged ? (
                 <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
                   <Ionicons name="locate" size={13} color={colors.accent} />
@@ -4209,7 +4221,7 @@ export default function SmartMotion() {
                   <BodyAnalysisRow items={bodyItems} />
                 </>
               ) : null}
-            </>
+            </ScrollView>
           ) : null}
 
           {reel}
