@@ -4115,10 +4115,10 @@ check('Analysis honesty: kids\' progress delta only when both scores are real',
   'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
-  // refreshed: store is at version 20 now (…v19 single-provider, v20 consent-split shareDiagnostics
-  // carry-forward); the one-time version<12 localMode clear is still present (migrations are
-  // cumulative), which is what this guards.
-  /version: 20/.test(read('store/settingsStore.ts')) &&
+  // refreshed: store is at version 21 now (…v20 consent-split shareDiagnostics carry-forward, v21
+  // default dark + high-contrast theme migration); the one-time version<12 localMode clear is still
+  // present (migrations are cumulative), which is what this guards.
+  /version: 21/.test(read('store/settingsStore.ts')) &&
     /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
@@ -5321,6 +5321,57 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Arccos import: api + service + screen + catalog entry all present',
     arccosFiles.length === 0 && hasArccosFeature,
     arccosFiles.length === 0 ? 'api/arccos-import + services/arccosImport + app/arccos-import + catalog entry' : `MISSING: ${arccosFiles.join(', ')}`);
+}
+
+// ─── LOCKED STATE (Tim 2026-07-29 — "layout is BEAUTIFUL, lock positions/theme, no regressions;
+// first voice must fire; keep the tap haptic") — these guard the invariants Tim signed off on so a
+// future edit trips the harness instead of silently regressing the look or the first-turn voice.
+{
+  // 1) DEFAULT THEME = dark + high contrast, with the v21 migration for existing testers.
+  const settingsSrc = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
+  check('LOCK theme: default is dark + high contrast',
+    /theme_preference:\s*'dark' as const/.test(settingsSrc) && /highContrast:\s*true/.test(settingsSrc),
+    'settingsStore ships theme_preference=dark + highContrast=true as the default state');
+  check('LOCK theme: v21 migrates existing "system" testers to dark + high contrast',
+    /version:\s*21/.test(settingsSrc) && /version < 21/.test(settingsSrc) && /p\.theme_preference = 'dark'/.test(settingsSrc),
+    'persist bumped to v21 and migrates a never-customized (system-default) install to dark + high contrast');
+  const themeCtxSrc = fs.readFileSync(path.resolve(__dirname, '../../contexts/ThemeContext.tsx'), 'utf-8');
+  check('LOCK theme: dark is the resolved fallback in ThemeContext',
+    /darkTheme/.test(themeCtxSrc) && /highContrast/.test(themeCtxSrc),
+    'ThemeContext resolves darkTheme by default and wires highContrast through');
+
+  // 2) TOOLS PILL pinned to the upper-right corner on the Caddie tab (was dropped into the data zone).
+  const caddieSrc = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
+  check('LOCK layout: Caddie tools pill sits in the upper-right corner (marginTop 0, not dropped)',
+    /just inside the upper-right corner/.test(caddieSrc) &&
+      /flexDirection: 'row', gap: 6, marginTop: 0 \}\}>/.test(caddieSrc),
+    'the tools-pill row is flush with the back chevron (marginTop: 0) so it never overlaps the SmartVision data');
+
+  // 3) FIRST-VOICE cold invariants — the first turn must land, never fast-fail on a slow cold handshake.
+  const vcSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf-8');
+  check('LOCK voice: cold first-turn gets the long transcribe budget (22s)',
+    /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isConnectionWarmed\(\)/.test(vcSrc),
+    'a cold (unwarmed) first turn uses the 22s transcribe budget so a slow cold handshake still lands a real transcript');
+  check('LOCK voice: cold abort ONLY on a confident-fast failure (never a slow timeout)',
+    /FAST_UNREACHABLE_MS = 2500/.test(vcSrc) &&
+      /if \(!ping\.ok && !get\.ok && Math\.min\(ping\.ms, get\.ms\) < FAST_UNREACHABLE_MS\)/.test(vcSrc),
+    'the concurrent probe aborts the first transcribe only when BOTH probes fail FAST (<2.5s = real refusal/DNS block) — a slow cold handshake is never misjudged as offline (the first-turn-failure root cause)');
+  check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
+    /markConnectionWarmed\(\)/.test(vcSrc),
+    'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
+  const lsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
+  check('LOCK voice: earbud/hands-free classify is cold-aware (22s)',
+    /COLD_INTENT_FETCH_TIMEOUT_MS = 22_000/.test(lsSrc) && /isConnectionWarmed\(\)/.test(lsSrc),
+    'the earbud/hands-free intent classify uses a 22s cold budget so the first hands-free ask lands too');
+  const vsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
+  check('LOCK voice: earbud transcribe budget is cold-safe (25s first try)',
+    /doFetch\(25_000\)/.test(vsSrc),
+    'captureUtterance gives the transcribe a 25s first attempt — enough for a cold Lambda on the first hands-free turn');
+
+  // 4) TRIGGER HAPTIC — every talk trigger (earbud/glasses tap, mic badge) buzzes on open (feel it's on).
+  check('LOCK haptic: a talk trigger fires a haptic at the open chokepoint',
+    /next === 'listening' && prev !== 'listening'/.test(lsSrc) && /impactAsync\(H\.ImpactFeedbackStyle\.Medium\)/.test(lsSrc),
+    'setSessionStateMirror fires a Medium impact when opening to listening — one chokepoint covers earbud/glasses tap + mic badge');
 }
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────

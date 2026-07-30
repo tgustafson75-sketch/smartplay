@@ -429,8 +429,11 @@ export const useSettingsStore = create<SettingsState>()(
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       caddieSuggestions: 'on' as const,
       gpsQualityDebugOverlay: false,
-      theme_preference: 'system' as const,
-      highContrast: false,
+      // 2026-07-29 (Tim — "make default display theme dark, high contrast"). The app's signature look
+      // is the dark, high-contrast theme; that's the default for a fresh install. Existing testers are
+      // migrated to it in v21 below (only if they never picked a different appearance).
+      theme_preference: 'dark' as const,
+      highContrast: true,
       largeText: false,
       ttsCaptions: true,
       ttsCaptionsBluetoothPrompt: 'unasked' as const,
@@ -749,7 +752,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 20,
+      version: 21,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -916,6 +919,18 @@ export const useSettingsStore = create<SettingsState>()(
         // diagnostics off too. (Someone who left it ON keeps ON, unchanged.)
         if (version < 20) {
           if (p.shareCommunityData === false && p.shareDiagnostics == null) p.shareDiagnostics = false;
+        }
+        // v21 — 2026-07-29 (Tim — "make default display theme dark, high contrast"). The signature look
+        // is now dark + high contrast. Migrate existing testers who never picked a different appearance:
+        // 'system' was the old default, so 'system' → 'dark'. Anyone who EXPLICITLY chose 'light' or
+        // 'dark' is left alone. High contrast switches on for anyone who was still on the system default
+        // (proxy for "never customized appearance") and hadn't already enabled it.
+        if (version < 21) {
+          const wasSystemDefault = p.theme_preference === 'system' || p.theme_preference == null;
+          if (wasSystemDefault) {
+            p.theme_preference = 'dark';
+            if (p.highContrast !== true) p.highContrast = true;
+          }
         }
         return p as SettingsState;
       },
