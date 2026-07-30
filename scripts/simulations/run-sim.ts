@@ -926,6 +926,27 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
   })(),
   'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');
 
+check('Swing-detail transport is CROPPED to the located swing window (bar + stages line up)',
+  // 2026-07-30 (Tim — "the buttons for the swing points and the video points are not lining up" +
+  // "can it crop out the not swing part of the video?"). VIRTUAL crop: the scrub bars, clock, jog and
+  // playback loop all rebase to [clipStartSeconds, clipEndSeconds] so the swing fills the bar and the
+  // stage chips (absolute frame times) align. No native trim — logic-only; legacy no-window clips fall
+  // back to the full clip.
+  (() => {
+    const d = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /const winStartSec =/.test(d) && /const winEndSec =/.test(d) && /const winSpanSec =/.test(d) &&
+      /const winFrac = /.test(d) && /const winSeek = /.test(d) &&
+      // both bars use the windowed fraction/seek
+      /winFrac\(position\)/.test(d) && /scrubTo\(winSeek\(frac\)\)/.test(d) &&
+      // clock shows window-relative time
+      /fmtClock\(Math\.max\(0, position - winStartSec\)\)/.test(d) &&
+      // playback tail-crop loops back to the swing start (guarded, no setState storm)
+      /tailLoopRef/.test(d) && /posSec >= winEndRef\.current/.test(d)
+    );
+  })(),
+  'the swing-detail player presents ONLY the located swing — walk-up/waggle/post-swing dead air are cropped from the timeline and from playback, and the jump-to-stage chips line up with the bar');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed
@@ -6558,8 +6579,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /Gesture\.Exclusive\(doubleTap, singleTap, composed\)/.test(read('components/swinglab/ZoomableView.tsx')) &&
       /onSingleTap=\{togglePlayPause\}/.test(swingDetailSrc2) &&
       /useNativeControls=\{false\}/.test(swingDetailSrc2) &&
-      /void scrubTo\(frac \* duration\)/.test(swingDetailSrc2),
-    'ZoomableView gains an optional single-tap (Exclusive: double-tap-reset wins, then single-tap, then pinch/pan), wired to play/pause; native controls off + a tap-to-seek bar replaces the scrubber so the tap-to-pause never fights native tap handling, and pinch-zoom + annotation are untouched');
+      /void scrubTo\(winSeek\(frac\)\)/.test(swingDetailSrc2),
+    'ZoomableView gains an optional single-tap (Exclusive: double-tap-reset wins, then single-tap, then pinch/pan), wired to play/pause; native controls off + a tap-to-seek bar (now rebased to the swing window) replaces the scrubber so the tap-to-pause never fights native tap handling, and pinch-zoom + annotation are untouched');
 
   check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
     /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc2),

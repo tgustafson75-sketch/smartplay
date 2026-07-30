@@ -383,7 +383,14 @@ export default function SwingDetail() {
         const pos = st.positionMillis ?? 0;
         const dur = st.durationMillis ?? 0;
         const swingStartMs = (shot?.clipStartSeconds ?? 0) > 0.05 ? (shot!.clipStartSeconds as number) * 1000 : 0;
-        if (dur > 0 && pos >= dur - 80) await v.setPositionAsync(swingStartMs);
+        const swingEndMs = winEndRef.current > 0 ? winEndRef.current * 1000 : dur;
+        // 2026-07-30 (Tim — "crop out the not swing part") — start playback AT the located swing, not
+        // in the pre-swing walk-up, and restart there when replaying from the (cropped) end. So a play
+        // tap always begins on the swing itself.
+        if (dur > 0 && (pos >= dur - 80 || pos >= swingEndMs - 40 || pos < swingStartMs - 50)) {
+          await v.setPositionAsync(swingStartMs);
+        }
+        tailLoopRef.current = false;
         await v.playAsync();
       } else {
         isPlayingRef.current = true;
@@ -871,6 +878,19 @@ export default function SwingDetail() {
     }
     const playing = s.isPlaying === true;
     if (playbackEmitRef.current.playing !== playing) { playbackEmitRef.current.playing = playing; setIsPlaying(playing); }
+    // 2026-07-30 (Tim — "crop out the not swing part") — while PLAYING, loop straight back to the swing
+    // start the instant we reach the located swing END, so the post-swing dead air never plays. One
+    // seek per crossing (tailLoopRef guard) — a bare setPositionAsync, no setState, so it can't feed
+    // the ~25×/s "Maximum update depth" cascade. Only when a real window actually crops the clip.
+    if (s.positionMillis != null && playing) {
+      const posSec = s.positionMillis / 1000;
+      const hasCrop = winEndRef.current > winStartRef.current + 0.1 && winEndRef.current < (durationRef.current ?? 1e9) - 0.05;
+      if (hasCrop && posSec >= winEndRef.current - 0.02) {
+        if (!tailLoopRef.current) { tailLoopRef.current = true; void videoRef.current?.setPositionAsync(winStartRef.current * 1000); }
+      } else if (posSec < winEndRef.current - 0.15) {
+        tailLoopRef.current = false;
+      }
+    }
     // 2026-06-15 (Tim) — NO autoplay on open. The library swing sits STATIC on
     // the first frame; the user taps to play (togglePlayPause restarts from the
     // top when at end). Autoplay was also what left the controls dead — it ran
@@ -908,6 +928,31 @@ export default function SwingDetail() {
     await videoRef.current?.pauseAsync();
   };
 
+  // 2026-07-30 (Tim — "the buttons for the swing points and the video points are not lining up" +
+  // "can it crop out the not swing part of the video?"). VIRTUAL crop: present the transport deck,
+  // both scrub bars, and the clock as the LOCATED SWING WINDOW [clipStartSeconds, clipEndSeconds]
+  // instead of the whole clip (which carries the walk-up, waggle and post-swing dead air). The file
+  // is NOT re-encoded (no native trimmer on the device) — every scrub/seek/fill/clock just rebases
+  // to the window, so the swing fills the whole bar and the stage chips (which seek to ABSOLUTE
+  // frame times) line up with it. When there's no valid window (legacy clips) this collapses to the
+  // full clip (winStart 0 / winEnd duration), so those behave EXACTLY as before — zero regression.
+  const winStartSec = (shot?.clipStartSeconds ?? 0) > 0.05 ? (shot!.clipStartSeconds as number) : 0;
+  const winEndSec = (shot?.clipEndSeconds != null && (shot.clipEndSeconds as number) > winStartSec + 0.1)
+    ? (shot.clipEndSeconds as number)
+    : ((duration && duration > 0) ? duration : winStartSec + 0.05);
+  const winSpanSec = Math.max(0.05, winEndSec - winStartSec);
+  /** Clip position (sec) → 0..1 fraction ACROSS THE SWING WINDOW (for the scrub-bar fill). */
+  const winFrac = (pos: number) => Math.max(0, Math.min(1, (pos - winStartSec) / winSpanSec));
+  /** Window fraction (0..1) → absolute clip seconds (for a tap/drag on the rebased bar). */
+  const winSeek = (frac: number) => winStartSec + Math.max(0, Math.min(1, frac)) * winSpanSec;
+  // Live refs so the once-created PanResponder + the ~25×/s status callback read current bounds.
+  const winStartRef = useRef(0);
+  const winEndRef = useRef(0);
+  const winSpanRef = useRef(0);
+  useEffect(() => { winStartRef.current = winStartSec; winEndRef.current = winEndSec; winSpanRef.current = winSpanSec; }, [winStartSec, winEndSec, winSpanSec]);
+  // One-shot guard so the tail-crop loop fires a single seek per crossing (never a setState storm).
+  const tailLoopRef = useRef(false);
+
   // 2026-07-10 (Tim — "missing play rewind and forward and slider controls in swing
   // library") — a real transport deck below the frame: jog ±2s, single-frame step
   // (~1/30s), restart, and a DRAGGABLE scrubber. All seek helpers hold the frame
@@ -916,7 +961,11 @@ export default function SwingDetail() {
   const seekBy = useCallback((deltaSec: number) => {
     const d = durationRef.current;
     if (!d || d <= 0) return;
-    const target = Math.max(0, Math.min(d, positionRef.current + deltaSec));
+    // 2026-07-30 — jog stays WITHIN the located swing window (the virtual crop), so stepping
+    // forward/back never wanders into the pre-swing walk-up or the post-swing dead air.
+    const lo = winStartRef.current > 0 ? winStartRef.current : 0;
+    const hi = winEndRef.current > lo ? Math.min(d, winEndRef.current) : d;
+    const target = Math.max(lo, Math.min(hi, positionRef.current + deltaSec));
     void scrubTo(target);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -939,7 +988,11 @@ export default function SwingDetail() {
     const d = durationRef.current;
     if (!w || w <= 0 || !d || d <= 0) return;
     const frac = Math.max(0, Math.min(1, locationX / w));
-    void scrubTo(frac * d);
+    // 2026-07-30 — the drag scrubber spans the SWING WINDOW, not the whole clip, so a drag maps
+    // into [winStart, winEnd] (the virtual crop). Legacy no-window clips fall back to the full clip.
+    const span = winSpanRef.current > 0.05 ? winSpanRef.current : d;
+    const start = winSpanRef.current > 0.05 ? winStartRef.current : 0;
+    void scrubTo(start + frac * span);
   };
   const scrubPanResponder = useRef(
     PanResponder.create({
@@ -2072,7 +2125,7 @@ export default function SwingDetail() {
                 onPress={(e) => {
                   if (!duration || duration <= 0 || seekBarW <= 0) return;
                   const frac = Math.max(0, Math.min(1, e.nativeEvent.locationX / seekBarW));
-                  void scrubTo(frac * duration);
+                  void scrubTo(winSeek(frac));
                 }}
                 onLayout={(e) => setSeekBarW(e.nativeEvent.layout.width)}
                 style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 26, justifyContent: 'flex-end' }}
@@ -2080,7 +2133,7 @@ export default function SwingDetail() {
                 accessibilityLabel="Seek bar — tap to jump to a point in the swing"
               >
                 <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.25)' }}>
-                  <View style={{ height: 4, width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%`, backgroundColor: '#88F700' }} />
+                  <View style={{ height: 4, width: `${duration && duration > 0 ? winFrac(position) * 100 : 0}%`, backgroundColor: '#88F700' }} />
                 </View>
               </Pressable>
               </Animated.View>
@@ -2100,7 +2153,7 @@ export default function SwingDetail() {
                 >
                   <View style={{ height: 5, borderRadius: 3, backgroundColor: 'rgba(148,163,184,0.28)', overflow: 'visible' }}>
                     {(() => {
-                      const frac = duration && duration > 0 ? Math.max(0, Math.min(1, position / duration)) : 0;
+                      const frac = duration && duration > 0 ? winFrac(position) : 0;
                       return (
                         <>
                           <View style={{ height: 5, borderRadius: 3, width: `${frac * 100}%`, backgroundColor: '#88F700' }} />
@@ -2137,10 +2190,10 @@ export default function SwingDetail() {
                 {/* Time + transport */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
                   <Text style={{ color: colors.text_muted, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'], minWidth: 78 }}>
-                    {fmtClock(position)} / {fmtClock(duration ?? 0)}
+                    {fmtClock(Math.max(0, position - winStartSec))} / {fmtClock(winSpanSec)}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                    <TouchableOpacity onPress={() => void scrubTo(0)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Restart">
+                    <TouchableOpacity onPress={() => void scrubTo(winStartSec)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Restart">
                       <Ionicons name="play-skip-back" size={19} color={colors.text_primary} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={() => seekBy(-2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Back 2 seconds">
