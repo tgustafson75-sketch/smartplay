@@ -71,6 +71,10 @@ export default function CloudBackupCard() {
   const { backupKey, secret, autoOn, lastBackupAt: serverLastAt, setBackupKey, setSecret, setAutoOn } = useServerBackupStore();
   const [keyInput, setKeyInput] = useState(backupKey);
   const [secretInput, setSecretInput] = useState(secret);
+  // 2026-07-29 (Tim — "let me SEE the passphrase so I can match it on my iPad to restore"). Show/hide
+  // toggle on the passphrase field; default hidden. Restore needs the EXACT same passphrase, so being
+  // able to eyeball it removes the "did I type it right?" guesswork.
+  const [showSecret, setShowSecret] = useState(false);
   const [serverBusy, setServerBusy] = useState(false);
 
   /** Validate + commit the Backup ID + passphrase; returns them or null with an alert. */
@@ -145,16 +149,26 @@ export default function CloudBackupCard() {
         keyboardType="email-address"
         autoCorrect={false}
       />
-      <TextInput
-        style={s.input}
-        placeholder="Passphrase (keep it safe)"
-        placeholderTextColor={colors.text_muted}
-        value={secretInput}
-        onChangeText={setSecretInput}
-        autoCapitalize="none"
-        secureTextEntry
-        autoCorrect={false}
-      />
+      <View style={[s.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }]}>
+        <TextInput
+          style={{ flex: 1, color: colors.text_primary, fontSize: 15, paddingVertical: 10 }}
+          placeholder="Passphrase (keep it safe)"
+          placeholderTextColor={colors.text_muted}
+          value={secretInput}
+          onChangeText={setSecretInput}
+          autoCapitalize="none"
+          secureTextEntry={!showSecret}
+          autoCorrect={false}
+        />
+        <TouchableOpacity
+          onPress={() => setShowSecret((v) => !v)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel={showSecret ? 'Hide passphrase' : 'Show passphrase'}
+        >
+          <Ionicons name={showSecret ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.text_muted} />
+        </TouchableOpacity>
+      </View>
       <Text style={s.muted}>Last cloud backup: {timeAgo(serverLastAt)}</Text>
       <View style={s.toggleRow}>
         <Text style={s.body}>Auto-backup</Text>
