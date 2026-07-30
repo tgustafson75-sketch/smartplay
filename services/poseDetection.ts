@@ -563,24 +563,29 @@ async function extractCoarseFrames(clipUri: string, durationMs: number, count: n
   const lo = 0.04;
   const hi = 0.97;
   const fracs = Array.from({ length: count }, (_, i) => lo + ((hi - lo) * i) / (count - 1));
-  const out = await Promise.all(
-    fracs.map(async (frac) => {
-      const timeMs = Math.round(durationMs * frac);
-      try {
-        const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.5 });
-        const m = await ImageManipulator.manipulateAsync(
-          r.uri,
-          [{ resize: { width: LOCATE_FRAME_WIDTH } }],
-          { compress: LOCATE_FRAME_COMPRESS, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-        );
-        if (!m.base64) return null;
-        return { b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 } as Frame;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return out.filter((f): f is Frame => f !== null);
+  // 2026-07-29 (Tim — "60s to analyze, then a failure"). This used to fire ALL `count` (10-16)
+  // getThumbnailAsync calls CONCURRENTLY via Promise.all. On a 4K phone clip that spins up 16 native
+  // MediaMetadataRetriever instances decoding the SAME file at once — the documented slow/OOM/SIGSEGV
+  // vector (see services/swing/clubPath.ts) — which is exactly why locate crawled for ~a minute and
+  // then aborted/failed on real uploads. Extract SEQUENTIALLY: one retriever at a time is dramatically
+  // faster on a 4K source (no thrash) and can't crash. The frames are tiny + this is background, so the
+  // sequential cost is invisible next to the concurrent thrash it replaces.
+  const out: Frame[] = [];
+  for (const frac of fracs) {
+    const timeMs = Math.round(durationMs * frac);
+    try {
+      const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.5 });
+      const m = await ImageManipulator.manipulateAsync(
+        r.uri,
+        [{ resize: { width: LOCATE_FRAME_WIDTH } }],
+        { compress: LOCATE_FRAME_COMPRESS, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (m.base64) out.push({ b64: m.base64, media_type: 'image/jpeg', time_sec: timeMs / 1000 } as Frame);
+    } catch {
+      /* skip this frame; locate tolerates gaps */
+    }
+  }
+  return out;
 }
 
 // 2026-06-10 — Field telemetry for the auto swing-finder. Logged to /owner-logs
