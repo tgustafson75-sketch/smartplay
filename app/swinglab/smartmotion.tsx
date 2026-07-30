@@ -1011,6 +1011,8 @@ export default function SmartMotion() {
   const recordWindowSecRef = useRef(RECORDING_MAX_SECONDS);
   const autoStopAtLimitRef = useRef(false);
   const ingestedSessionIdRef = useRef<string | null>(null);
+  // 2026-07-30 — one-shot guard so the analysis-time clubhead-arc persist runs once per session.
+  const clubArcSessionRef = useRef<string | null>(null);
   const stoppingRef = useRef(false);
   const meteringRef = useRef<MeteringHandle | null>(null);
   const audioUriRef = useRef<string | null>(null);
@@ -1979,6 +1981,26 @@ export default function SmartMotion() {
           // review UI still updates via setBiomech(bio) above.
           if (sessionId && selectedSwing === 0) {
             try { useCageStore.getState().setSessionBiomechanics(sessionId, bio); } catch { /* non-fatal */ }
+            // 2026-07-30 (Tim — "no clubhead arc path" + "video auto-plays on open"): persist the
+            // clubhead arc HERE, at analysis time, so the swing-detail screen draws the stored points
+            // instead of re-extracting frames against an autoplaying clip (that race is why the arc
+            // never showed). detectClubPath extracts from a PRIVATE COPY, so it's safe even while the
+            // review loops. One-shot per session; fire-and-forget so it never blocks the review.
+            if (poseWindow && (frames?.length ?? 0) >= 2 && clubArcSessionRef.current !== sessionId) {
+              clubArcSessionRef.current = sessionId;
+              void (async () => {
+                try {
+                  const { detectClubPath } = await import('../../services/swing/clubPath');
+                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, shouldAbort: () => false });
+                  const store = useCageStore.getState();
+                  if (arc && arc.points.length >= 4) {
+                    store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
+                  } else {
+                    store.setSessionClubArc(sessionId, [], null);
+                  }
+                } catch { /* non-fatal — the view screen still live-extracts as a fallback */ }
+              })();
+            }
           }
         }
       } catch (e) {

@@ -248,6 +248,18 @@ export interface CageSession {
    *  or returned no usable frames. UI hides the biomechanics card
    *  when null — zero regression for non-configured installs. */
   biomechanics?: import('../services/poseAnalysisApi').SwingBiomechanics | null;
+  /** 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"):
+   *  the clubhead arc computed ONCE during the analysis pass and PERSISTED, so the
+   *  swing-detail screen draws stored points instead of re-extracting frames at view
+   *  time. That old view-time extraction opened a native retriever that raced the
+   *  autoplaying ExoPlayer (SIGSEGV guard = abort-while-playing) — so on an autoplaying
+   *  clip the arc never computed. Computed at analysis time nothing is playing, so it's
+   *  safe AND always available. tMs is absolute (rebased to the clip, not window-relative).
+   *  Empty array = analyzed but the clubhead wasn't trackable (honest — draw nothing).
+   *  undefined = older swing analyzed before this field (view screen live-extracts as before). */
+  club_arc?: import('../services/swing/clubPath').ClubPathPoint[] | null;
+  /** SOURCE frame dims the club_arc points are normalized against (for aspect mapping). */
+  club_arc_frame?: { w: number | null; h: number | null } | null;
   /** 2026-05-22 — PuttingLab result attached to this session when the
    *  session was classified as putting (analyzer-router routed glasses
    *  POV / putt/chip tag through puttingAnalysisService instead of
@@ -628,6 +640,8 @@ interface CageState {
   /** Pose-API biomechanics result. Fire-and-forget after Phase K, so
    *  this commits independently from setSessionAnalysis. */
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
+  /** Persist the clubhead arc detected during the analysis pass (see CageSession.club_arc). */
+  setSessionClubArc: (sessionId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
   /** Phase BZ-v1 — user annotation mutators. Each updates the named shot
    *  in-place; no-op if shot id not found. */
   updateShotTags: (sessionId: string, shotId: string, tags: {
@@ -1431,6 +1445,13 @@ export const useCageStore = create<CageState>()(
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, biomechanics }
+          ),
+        })),
+
+      setSessionClubArc: (sessionId, arc, frame) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null }
           ),
         })),
 

@@ -903,6 +903,29 @@ check('BODY ANALYSIS tiles + biomechanics narrative read ONE source (icons carry
   })(),
   'the swing-detail BODY ANALYSIS row is derived from the live biomechanics (not the value-stripped snapshot), so the icons always carry the same measured numbers as the narrative');
 
+check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted on an autoplaying clip)',
+  // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"). Root cause: the
+  // arc was re-extracted at VIEW time via a native retriever that raced the autoplaying ExoPlayer, so
+  // it was gated abort-while-playing → on an autoplaying clip it never computed. Fix = compute it ONCE
+  // during the analysis pass (nothing playing) and PERSIST it on the session; the view screen draws the
+  // stored points (works even while the clip plays), live-extracting only for legacy swings (club_arc
+  // undefined).
+  (() => {
+    const store = read('store/cageStore.ts');
+    const upload = read('services/videoUpload.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /club_arc\?:/.test(store) && /setSessionClubArc:/.test(store) &&
+      // both analysis paths (upload runPhaseK + cage/SmartMotion) persist the arc
+      /setSessionClubArc\(/.test(upload) && /detectClubPath\(/.test(upload) &&
+      /setSessionClubArc\(/.test(sm) &&
+      // view screen prefers the persisted arc before any live extraction
+      /session\?\.club_arc !== undefined/.test(detail)
+    );
+  })(),
+  'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed

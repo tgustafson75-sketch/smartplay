@@ -474,6 +474,17 @@ export default function SwingDetail() {
     // any swing is honest — it's the clubhead's PATH, not a claim about contact. The crash guards below
     // (never extract while playing) are independent of this and unchanged.
     if (!hasPose || !shot?.clipUri || !showTrace) { setClubArcPoints(null); return; }
+    // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open") — PREFER the
+    // arc PERSISTED during the analysis pass. That path computed it while nothing was playing, so it
+    // sidesteps the view-time retriever-vs-ExoPlayer race entirely and draws immediately on open —
+    // even while the clip autoplays. `undefined` = a legacy swing analyzed before this field existed,
+    // so fall through to the (paused-gated) live extraction below. `null`/`[]` = analyzed, clubhead
+    // not trackable → draw nothing (honest).
+    if (session?.club_arc !== undefined) {
+      const stored = session.club_arc;
+      setClubArcPoints(stored && stored.length >= 4 ? stored : null);
+      return;
+    }
     // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
     // clip is playing. detectClubPath opens a native MediaMetadataRetriever on the file, and a
     // retriever decoding the SAME mp4 that ExoPlayer is decoding for playback SIGSEGVs the app to
@@ -517,7 +528,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying, session?.club_arc]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay

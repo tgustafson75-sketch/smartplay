@@ -1208,6 +1208,38 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, null, resolveSwingerHandedness());
           useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
+
+          // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"): detect
+          // the clubhead arc HERE, in the analysis pass, and PERSIST it. Old design re-extracted
+          // frames at VIEW time, which raced the autoplaying ExoPlayer → guarded with abort-while-
+          // playing → so on an autoplaying clip the arc never computed. During analysis nothing is
+          // playing, so it's safe (shouldAbort:false) AND the stored points draw immediately on open
+          // (even while the clip plays — no view-time retriever). Only when there's a real swing
+          // window. Empty [] = analyzed, clubhead not trackable (honest — the view draws nothing).
+          if (poseWindow && (biomech?.frames?.length ?? 0) >= 2) {
+            try {
+              const { detectClubPath } = await import('./swing/clubPath');
+              const arc = await detectClubPath({
+                videoUri: firstClipSwing.clipUri!,
+                startMs: poseWindow.startMs,
+                endMs: poseWindow.endMs,
+                shouldAbort: () => false,
+              });
+              if (arc && arc.points.length >= 4) {
+                // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
+                useCageStore.getState().setSessionClubArc(
+                  sessionId,
+                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })),
+                  { w: arc.frameW ?? null, h: arc.frameH ?? null },
+                );
+              } else {
+                useCageStore.getState().setSessionClubArc(sessionId, [], null);
+              }
+              uploadLog('club-arc', { points: arc?.points.length ?? 0 }, sessionId);
+            } catch (arcErr) {
+              console.log('[club-arc] analysis-pass detection failed', arcErr);
+            }
+          }
         } catch (poseErr) {
           // Non-fatal — Phase K result already shown. Pose API is opt-in.
           console.log('[pose] background analysis failed', poseErr);
