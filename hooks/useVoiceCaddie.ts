@@ -2585,7 +2585,7 @@ export const useVoiceCaddie = ({
         else { wrappedOnVoiceStateChange('idle'); }
       };
 
-      // Poll every 200ms. The 8s wall-clock cap is metering-INDEPENDENT (so it
+      // Poll every 200ms. The MAX_RECORD_MS wall-clock cap (18s) is metering-INDEPENDENT (so it
       // fires on Samsung et al. where status.metering never arrives); the
       // silence-VAD is the faster early-stop when metering IS reported.
       silenceVadTimer.current = setInterval(() => {
