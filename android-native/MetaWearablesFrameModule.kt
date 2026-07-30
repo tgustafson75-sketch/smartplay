@@ -68,7 +68,24 @@ class MetaWearablesFrameModule(private val reactContext: ReactApplicationContext
   private var scope: CoroutineScope? = null
   private var collectJob: Job? = null
   @Volatile private var streaming: Boolean = false
+  @Volatile private var initialized: Boolean = false
   private val deviceName: String = "Ray-Ban Meta"
+
+  /**
+   * 2026-07-30 (Tim — "the app sees the toggle but the glasses never show up in the Meta AI app").
+   * DAT requires a ONE-TIME SDK init BEFORE createSession — it reads the attestation meta-data
+   * (com.meta.wearable.mwdat.APPLICATION_ID / CLIENT_TOKEN from the manifest) and performs the
+   * Meta-AI-app authorization handshake that REGISTERS this app so it can be authorized/consented
+   * in the Meta AI app. The iOS module already does this (Wearables.configure() in ensureInitialized);
+   * Android was jumping straight to createSession, so the app was never registered → no consent
+   * surfaced and createSession failed with DAT_SESSION_FAILED. Mirror iOS. Ref:
+   * android-native/META_WEARABLES_DAT_SDK_REFERENCE.md step 5 ("App startup: Wearables.initialize(context)").
+   */
+  private fun ensureInitialized() {
+    if (initialized) return
+    Wearables.initialize(reactContext)
+    initialized = true
+  }
 
   // NativeEventEmitter on the JS side calls these; provide no-op impls so RN
   // doesn't warn. Frame fan-out uses RCTDeviceEventEmitter directly below.
@@ -99,6 +116,10 @@ class MetaWearablesFrameModule(private val reactContext: ReactApplicationContext
         promise.resolve(map)
         return
       }
+
+      // 0) One-time DAT SDK init (registers the app with the Meta AI app for authorization). Must run
+      //    before createSession, exactly like the iOS module's ensureInitialized()/Wearables.configure().
+      ensureInitialized()
 
       // 1) Session against the first available paired wearable.
       var created: DeviceSession? = null
