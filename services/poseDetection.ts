@@ -738,8 +738,12 @@ export async function locateSwings(
     // frames → 5s spacing, exactly the geometry the 2026-06-11 note says over-
     // detected (adjacent-frame phantoms sit ~5s apart and survived a 2.5s merge).
     // Scale the separation to the ACTUAL frame interval so the merge keeps up.
+    // 2026-07-30 (detection root-cause #4 — long-clip UNDER-count). The coarse frames cap at 24, so a
+    // 120s clip yields frameIntervalSec≈5s → a 5s merge floor that collapsed two REAL swings hit ~4s apart
+    // (normal range cadence) into one. Cap the adaptive separation at a plausible two-swing gap so a long
+    // clip can't merge distinct swings; the floor still scales up from 2.5s for genuinely sparse frames.
     const frameIntervalSec = durationMs / 1000 / Math.max(1, frames.length);
-    const out = mergeSwingDetections(raw, Math.max(2.5, frameIntervalSec));
+    const out = mergeSwingDetections(raw, Math.min(3.5, Math.max(2.5, frameIntervalSec)));
     logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length });
     return out;
   } catch (e) {

@@ -88,7 +88,12 @@ export interface SegmentOptions {
  * LOUDER, higher-confidence peak. Applied at the CAGE call sites only — never inside
  * detectStrikes (calibration legitimately runs tighter debounces).
  */
-export function filterReboundStrikes(strikes: DetectedStrike[], minGapMs = 2000): DetectedStrike[] {
+// 2026-07-30 (detection root-cause #3 — real fast 2nd swing SWALLOWED). 2000ms was above a genuine
+// rapid rake-and-hit cadence, so a real 2nd swing ~1.8s after the first was dropped as a "rebound." The
+// immediate net/floor decay tail that this filter targets lands within ~1.5s of impact; two real swings
+// are ≥1.5s apart. Lower the floor to 1500ms so a fast 2nd swing survives while the immediate rebound is
+// still collapsed. (Bias toward FINDING the swing — Tim: "the swing needs to be found.")
+export function filterReboundStrikes(strikes: DetectedStrike[], minGapMs = 1500): DetectedStrike[] {
   const ordered = [...strikes].sort((a, b) => a.timeMs - b.timeMs);
   const kept: DetectedStrike[] = [];
   // 2026-08-01 (marquee-feature audit, findings 1 & 2) — KEEP THE EARLIEST member of a rebound group,
@@ -130,10 +135,14 @@ export function segmentsFromStrikes(
   return ordered.map((s, i) => {
     const prevStrike = ordered[i - 1];
     const nextStrike = ordered[i + 1];
-    // Don't reach earlier than the midpoint to the previous strike, or
-    // later than the midpoint to the next — keeps windows disjoint.
-    const floorMs = prevStrike ? (prevStrike.timeMs + s.timeMs) / 2 : 0;
-    const ceilMs = nextStrike ? (s.timeMs + nextStrike.timeMs) / 2 : durationMs;
+    // 2026-07-30 (detection root-cause #5 — takeaway truncated on close swings). Splitting the gap at the
+    // MIDPOINT gave each swing only ±half the gap, clipping the address/takeaway of the backswing (which
+    // needs far more room than the follow-through). Bias the shared boundary toward the EARLIER swing
+    // (35% follow-through / 65% backswing) so a swing keeps more of the space BEFORE its impact — the part
+    // the frame sampler reads as address→top. Boundaries are still shared, so windows stay disjoint.
+    const BACKSWING_BIAS = 0.35; // fraction of the gap the earlier swing keeps as follow-through
+    const floorMs = prevStrike ? prevStrike.timeMs + (s.timeMs - prevStrike.timeMs) * BACKSWING_BIAS : 0;
+    const ceilMs = nextStrike ? s.timeMs + (nextStrike.timeMs - s.timeMs) * BACKSWING_BIAS : durationMs;
     const startMs = clamp(Math.max(s.timeMs - pre, floorMs));
     const endMs = clamp(Math.min(s.timeMs + post, ceilMs));
     return {
@@ -227,10 +236,17 @@ export function correlateStrikesWithVideo(
   // low/medium — those stay dropped as neighbours/noise), so a partial vision read never undercounts
   // below what was unambiguously heard. Opt-in (range only); cage is acoustic-authoritative already.
   if (opts?.recoverUnmatchedHighConf) {
+    // 2026-07-30 (detection root-cause #2 — REGRESSION from this feature). "Unmatched" must be judged
+    // against the video locator's REAL accuracy (~±1s; see smartmotion.tsx flyover-time note), NOT the
+    // 600ms correlation tolerance. Using `tol` here recovered a HIGH-confidence acoustic impact that was
+    // 0.6–1.0s off its own (correctly located) video swing as a PHANTOM second segment → inflated count +
+    // two truncated windows on normal range sessions. Only recover when the strike is genuinely far from
+    // EVERY video swing (beyond the locate error), i.e. a swing the locator actually missed.
+    const RECOVER_MIN_GAP_MS = 1500;
     const videoMs = videoSwings.map((sw) => Math.round(sw.timeSec * 1000));
     for (const s of strikes) {
       if (s.confidence !== 'high') continue;
-      const nearAnyVideo = videoMs.some((v) => Math.abs(v - s.timeMs) <= tol);
+      const nearAnyVideo = videoMs.some((v) => Math.abs(v - s.timeMs) <= RECOVER_MIN_GAP_MS);
       if (!nearAnyVideo) pseudo.push({ timeMs: s.timeMs, peakDb: s.peakDb, attackMs: s.attackMs, confidence: 'high' });
     }
   }

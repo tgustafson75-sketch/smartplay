@@ -3873,8 +3873,9 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
     const reboundHardOk =
       louderNet.length === 1 && louderNet[0].timeMs === 1000 &&               // impact kept, not the loud net
       cascade.length === 2 && cascade[0].timeMs === 1000 && cascade[1].timeMs === 3400; // 2nd swing survives
-    // (b) merge separation scales with the coarse frame interval on long clips.
-    const scaled = /mergeSwingDetections\(raw, Math\.max\(2\.5, frameIntervalSec\)\)/.test(read('services/poseDetection.ts'));
+    // (b) merge separation scales with the coarse frame interval on long clips, but is CAPPED at 3.5s
+    //     (detection root-cause #4) so a 120s clip's ~5s interval can't collapse two real ~4s-apart swings.
+    const scaled = /mergeSwingDetections\(raw, Math\.min\(3\.5, Math\.max\(2\.5, frameIntervalSec\)\)\)/.test(read('services/poseDetection.ts'));
     // (c) session token + in-flight dedupe on the per-swing analysis cache.
     const sm = read('app/swinglab/smartmotion.tsx');
     const tokenOk = /sessionRunRef\.current !== myRun\) return null/.test(sm) &&
@@ -3888,6 +3889,38 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
     return reboundsOk && reboundHardOk && scaled && tokenOk && anchorsOk && earliestOk;
   })(),
   'a net/floor rebound 0.5-2.5s after impact never becomes a phantom swing (even when the net hit is LOUDER than the strike), and a loud rebound never cascades to swallow the next real swing; long-clip locate merges at the real frame interval; an in-flight read can\'t poison the next session\'s cache (token + dedupe); the cage video fallback keeps the real acoustic strike; debounce keeps the earliest (impact) peak');
+
+// ─── Detection root-cause LOCK (2026-07-30) — "swing needs to be found + segmented" ─────────────
+check('Detection: swings FOUND + segmented right (root-cause fixes)',
+  (() => {
+    const mk = (timeMs: number, peakDb: number, confidence: 'high' | 'medium' | 'low') => ({ timeMs, peakDb, confidence, attackMs: 40 } as never);
+    // #1 — a loud strike that PEGS the meter for 2 equal-dB samples still yields exactly one candidate
+    //      (was silently dropped by the strict local-max). Functional check via detectStrikes.
+    const STEP = 50, N = 60;
+    const plateau: { timeMs: number; dB: number }[] = [];
+    for (let i = 0; i < N; i++) {
+      const t = i * STEP;
+      let dB = -58;
+      if (t === 1500 || t === 1550) dB = -10; // flat-topped peak: two equal-dB samples
+      else if (t === 1600) dB = -50;
+      plateau.push({ timeMs: t, dB });
+    }
+    const plateauRes = detectStrikes(plateau);
+    const plateauOk = plateauRes.kind === 'ok' && plateauRes.strikes.length >= 1;
+    // #3 — a real fast 2nd swing 1.6s after the first SURVIVES (was dropped by the 2000ms rebound window).
+    const fast = filterReboundStrikes([mk(1000, -8, 'high'), mk(2600, -8, 'high')]);
+    const fastOk = fast.length === 2;
+    // source guards for #1 (flat-top allowed), #2 (recover gap widened), #4 (merge cap), #5 (backswing bias)
+    const detSrc = read('services/swing/strikeDetector.ts');
+    const segSrc = read('services/swing/swingSegmentation.ts');
+    const srcOk =
+      /if \(s\.dB < next\.dB\) continue;/.test(detSrc) &&              // #1 flat-top allowed
+      /RECOVER_MIN_GAP_MS = 1500/.test(segSrc) &&                     // #2 recover gap = locate accuracy
+      /minGapMs = 1500/.test(segSrc) &&                              // #3 fast-swing floor
+      /BACKSWING_BIAS = 0\.35/.test(segSrc);                         // #5 window favors the backswing
+    return plateauOk && fastOk && srcOk;
+  })(),
+  '#1 a flat-topped/clipped loud strike is no longer silently dropped (missed swing); #3 a real fast 2nd swing 1.6s apart survives the rebound filter; #2 phantom-recovery gap widened to the locator accuracy; #4 long-clip merge capped at 3.5s; #5 the segment window favors the backswing so the takeaway isn\'t clipped');
 
 check('Multi-swing: EVERY swing gets its own persisted diagnosis + range recovers a cold locate',
   // 2026-08-01 (marquee-feature audit). Carve finding 1: the multi-swing narration loop analyzed

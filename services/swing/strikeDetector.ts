@@ -140,8 +140,15 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
     const relTime = s.timeMs - startMs;
     if (relTime < REJECT_HEAD_MS) continue;
     if (endMs - s.timeMs < REJECT_TAIL_MS) continue;
-    if (s.dB <= prev.dB) continue;
-    if (s.dB <= next.dB) continue;
+    // 2026-07-30 (detection root-cause #1 — silently MISSED strikes). The peak test required a STRICTLY
+    // greater sample than BOTH neighbours, so a flat-topped peak — a loud strike that PEGS/clips the meter
+    // at its ceiling for ≥2 consecutive 50ms samples (the loudest, cleanest strikes are the most likely to
+    // plateau) — had every plateau sample rejected (each equals a neighbour) and the whole strike vanished
+    // with no candidate. Keep the rising edge strict (`<=` vs prev) but allow a flat top (`<` vs next): the
+    // FIRST plateau sample passes (prev lower, next equal), later plateau samples drop (prev equal) → exactly
+    // one candidate per strike, and the keep-earliest debounce downstream is unaffected.
+    if (s.dB <= prev.dB) continue;   // strict rising edge into the peak
+    if (s.dB < next.dB) continue;    // allow a flat top; drop only a true up-slope
     const lf = localFloorDb(samples, s.timeMs, FLOOR_WINDOW_MS, floorDb);
     if (s.dB < lf + thresholdDb) continue;
     candidates.push({ idx: i, timeMs: s.timeMs, peakDb: s.dB, localFloor: lf });
