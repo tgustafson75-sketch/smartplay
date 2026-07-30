@@ -48,6 +48,10 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
   const busy = listeningState === 'thinking' || listeningState === 'responding';
   const [text, setText] = useState('');
   const [canForward, setCanForward] = useState(false);
+  // 2026-08-01 (tester — "need to be able to minimize the keyboard"). When the field is focused and
+  // empty, the right slot becomes a keyboard-dismiss button (returnKey is "send", so there was no way
+  // to just close the keyboard without sending).
+  const [focused, setFocused] = useState(false);
   const s = makeStyles(colors);
 
   // Browser-style forward stack: a NORMAL navigation (not chevron-driven) clears forward.
@@ -113,6 +117,8 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         placeholderTextColor={colors.text_muted}
         returnKeyType="send"
         onSubmitEditing={submit}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         blurOnSubmit={false}
         editable={!busy}
         accessibilityLabel="Type a question or command for your caddie"
@@ -121,6 +127,13 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
       {text.trim() ? (
         <TouchableOpacity onPress={submit} style={s.send} accessibilityRole="button" accessibilityLabel="Send to caddie">
           <Ionicons name="arrow-up" size={18} color="#0d1a0d" />
+        </TouchableOpacity>
+      ) : focused ? (
+        // Keyboard is up with an empty field → tap to minimize it (tester request).
+        <TouchableOpacity onPress={() => Keyboard.dismiss()} style={s.chevron}
+          accessibilityRole="button" accessibilityLabel="Hide keyboard"
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+          <Ionicons name="chevron-down" size={24} color={colors.text_primary} />
         </TouchableOpacity>
       ) : (
         // › universal page forward (disabled/dim when there's nowhere forward)

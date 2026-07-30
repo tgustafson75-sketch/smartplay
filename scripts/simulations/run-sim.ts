@@ -2831,15 +2831,16 @@ check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not sel
   // 2026-08-01 (tester feedback batch).
   (() => {
     const ls = read('services/listeningSession.ts');
-    const inbar = read('components/caddie/CaddieInputBar.tsx');
+    const bottombar = read('components/caddie/CaddieBottomBar.tsx'); // the bar actually mounted on every screen
     const cc = read('app/profile/custom-caddie.tsx');
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       // 1 — a TYPED turn shows the brain reply even when voice is muted (regression from removing the
-      //     canned greeting handler: "I type hi now and nothing happens")
+      //     canned greeting handler: "I type hi now and nothing happens"). speak() already flashes the
+      //     caption when muted, so handler/command replies show too — this covers the brain branch.
       /try \{ flashCaption\?\.\(r\.text, 7000\); \}/.test(ls) &&
-      // 2 — the unified input bar can minimize the keyboard while typing
-      /accessibilityLabel="Hide keyboard"/.test(inbar) && /Keyboard\.dismiss\(\)/.test(inbar) &&
+      // 2 — the on-screen input bar can minimize the keyboard while typing
+      /accessibilityLabel="Hide keyboard"/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
       // 3 — Harry is NOT a selectable base persona for the custom caddie
       !/id: 'harry'/.test(cc) &&
       // 4 — the drill-name banner fades out after 5s instead of overlapping the cards
