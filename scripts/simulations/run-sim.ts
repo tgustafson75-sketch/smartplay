@@ -913,8 +913,8 @@ check('BODY ANALYSIS tiles + biomechanics narrative read ONE source (icons carry
     return (
       /export function deriveBodyItems/.test(hud) &&
       /export const ICON_BIOMECH/.test(hud) &&
-      // detail screen prefers a fresh derive from session.biomechanics
-      /session\.biomechanics\s*\n?\s*\?\s*deriveBodyItems\(bodyAnalysis, session\.biomechanics\)/.test(detail) &&
+      // detail screen derives fresh from the ACTIVE (per-selected-swing) biomechanics
+      /activeBiomech\s*\n?\s*\?\s*deriveBodyItems\(bodyAnalysis, activeBiomech\)/.test(detail) &&
       // capture screen no longer defines its own copy — imports the shared one
       /deriveBodyItems,/.test(sm) &&
       !/function deriveBodyItems\(/.test(sm)
@@ -939,8 +939,8 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
       // both analysis paths (upload runPhaseK + cage/SmartMotion) persist the arc
       /setSessionClubArc\(/.test(upload) && /detectClubPath\(/.test(upload) &&
       /setSessionClubArc\(/.test(sm) &&
-      // view screen prefers the persisted arc before any live extraction
-      /session\?\.club_arc !== undefined/.test(detail)
+      // view screen prefers the persisted arc (this shot's own, or the session's for shot 0) before any live extraction
+      /const storedArc = shotArc !== undefined \? shotArc/.test(detail) && /if \(storedArc !== undefined\)/.test(detail)
     );
   })(),
   'the clubhead arc is detected during analysis (retriever runs while nothing plays) and stored, so it draws immediately on open regardless of autoplay — no view-time re-extraction race');
@@ -3929,6 +3929,33 @@ check('SmartMotion: foam/no-ball mode (video-only) + range recovers a cleanly-he
     );
   })(),
   'foam/no-ball mode reads swings from video alone (no metered audio, no strike required) across smartmotion + drills + shot shapes; and range recovers a cleanly-heard (high-confidence) swing the video locator missed, so it never undercounts below what was unambiguously heard while still rejecting quieter neighbours');
+
+check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + numbers + arc)',
+  // 2026-08-01 (Tim — per-swing breakdown follow-up). Per-shot biomech + clubhead arc are stored on the
+  // SHOT (setShotBiomechanics/setShotClubArc), written per-swing at capture, and the library detail lets
+  // you tap a swing in the reel to select it — the video window, skeleton, blue-club arc, and BODY
+  // ANALYSIS numbers all follow. Non-primary swings backfill their biomech LAZILY (bounded to the swing
+  // window). Shot 0 / single-swing view is unchanged (activeBiomech falls back to session-level).
+  (() => {
+    const store = read('store/cageStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      // per-shot storage + setters
+      /biomechanics\?: import\('\.\.\/services\/poseAnalysisApi'\)\.SwingBiomechanics/.test(store) &&
+      /setShotBiomechanics:/.test(store) && /setShotClubArc:/.test(store) &&
+      // capture stores this swing's biomech on its shot
+      /useCageStore\.getState\(\)\.setShotBiomechanics\(sessionId, shotId, bio\)/.test(sm) &&
+      // detail: selection + active biomech + shot follows selection + lazy backfill (bounded window)
+      /const \[selectedShotIdx, setSelectedShotIdx\] = useState\(0\)/.test(detail) &&
+      /const shot = session\?\.shots\[selectedShotIdx\]/.test(detail) &&
+      /const activeBiomech =/.test(detail) &&
+      /if \(idx >= 0\) setSelectedShotIdx\(idx\)/.test(detail) &&
+      /setShotBiomechanics\(swing_id, selShot\.id, biomech\)/.test(detail) &&
+      /startMs: wStart, endMs: wEnd/.test(detail)
+    );
+  })(),
+  'a multi-swing library reel is now reviewable one swing at a time — tap a swing and its own window, skeleton, blue-club arc, and Sway/Tilt/Posture/Weight numbers all show (computed lazily, bounded to that swing); the single-swing/primary view is unchanged');
 
 // 2026-07-08 (cage acoustic audit) — calibration must be able to make the cage MORE
 // sensitive (not only stricter) and must NOT silently under-detect at a different venue.

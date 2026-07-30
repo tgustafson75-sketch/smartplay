@@ -79,6 +79,15 @@ export interface CageShot {
     contact_read?: 'clean' | 'fat' | 'thin' | 'topped' | 'unknown';
   } | null;
 
+  // 2026-08-01 (Tim — per-swing breakdown). Pose biomechanics + clubhead arc for THIS specific swing,
+  // so a multi-swing reel shows each swing's OWN skeleton, numbers, and blue-club arc in the library —
+  // not just the primary (session-level) swing. Computed LAZILY: the library detail extracts pose for a
+  // swing's window only when the user selects it (never all N eagerly at capture — keeps the session
+  // fast). undefined = not yet computed for this shot; null/[] = computed, none available.
+  biomechanics?: import('../services/poseAnalysisApi').SwingBiomechanics | null;
+  club_arc?: import('../services/swing/clubPath').ClubPathPoint[] | null;
+  club_arc_frame?: { w: number | null; h: number | null } | null;
+
   // Phase BZ-v1 — user annotations on a captured swing. All optional; absence
   // = no opinion logged. `isGoodRep` true marks the swing as a keeper for
   // future reference / drill comparison; false means actively flagged as
@@ -642,6 +651,9 @@ interface CageState {
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
   /** Persist the clubhead arc detected during the analysis pass (see CageSession.club_arc). */
   setSessionClubArc: (sessionId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
+  /** Per-SHOT biomech + clubhead arc (lazy per-swing review in the library). */
+  setShotBiomechanics: (sessionId: string, shotId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
+  setShotClubArc: (sessionId: string, shotId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
   /** Phase BZ-v1 — user annotation mutators. Each updates the named shot
    *  in-place; no-op if shot id not found. */
   updateShotTags: (sessionId: string, shotId: string, tags: {
@@ -1452,6 +1464,28 @@ export const useCageStore = create<CageState>()(
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null }
+          ),
+        })),
+
+      // 2026-08-01 (Tim — per-swing breakdown) — store biomech / clubhead arc on a SPECIFIC shot so a
+      // multi-swing reel shows each swing's own skeleton + numbers + blue club in the library.
+      setShotBiomechanics: (sessionId, shotId, biomechanics) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(sh => sh.id !== shotId ? sh : { ...sh, biomechanics }),
+            }
+          ),
+        })),
+
+      setShotClubArc: (sessionId, shotId, arc, frame) =>
+        set(s => ({
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : {
+              ...session,
+              shots: session.shots.map(sh => sh.id !== shotId ? sh : { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null }),
+            }
           ),
         })),
 

@@ -2019,6 +2019,17 @@ export default function SmartMotion() {
               })();
             }
           }
+          // 2026-08-01 (Tim — per-swing breakdown) — ALSO store THIS swing's biomech on ITS OWN shot
+          // (not only the session/primary), so a multi-swing library reel can show each swing's own
+          // skeleton + numbers. Cheap — `bio` was just computed for the viewed swing. (Per-shot clubhead
+          // arc is left to a LAZY library backfill so capture stays fast — no N extra detectClubPath runs.)
+          if (sessionId) {
+            try {
+              const sess = useCageStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
+              const shotId = sess?.shots[selectedSwing]?.id ?? null;
+              if (shotId) useCageStore.getState().setShotBiomechanics(sessionId, shotId, bio);
+            } catch { /* per-shot biomech is best-effort */ }
+          }
         }
       } catch (e) {
         console.log('[smartmotion] pose/biomech failed (non-fatal):', e);

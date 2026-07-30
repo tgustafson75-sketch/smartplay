@@ -141,7 +141,19 @@ export default function SwingDetail() {
   // renders "Swing not found." even though the data IS in storage.
   // Library hydration race fix — same pattern as app/swinglab/library.tsx.
   const hasHydrated = useCageStore(s => s.hasHydrated);
-  const shot = session?.shots[0];
+  // 2026-08-01 (Tim — per-swing breakdown). A multi-swing reel can now be reviewed swing-by-swing:
+  // tapping a shot in the per-shot reel selects it, and the video window + skeleton + arc + numbers all
+  // follow. Defaults to 0, so the single-swing / primary experience is UNCHANGED (activeBiomech falls
+  // back to the session-level read for shot 0). Non-primary swings show their OWN per-shot biomech
+  // (persisted at capture / lazily backfilled below).
+  const [selectedShotIdx, setSelectedShotIdx] = useState(0);
+  const shot = session?.shots[selectedShotIdx] ?? session?.shots[0];
+  const shotBio = shot?.biomechanics;
+  // The biomech to render: this shot's own if present; for shot 0 fall back to the session-level read
+  // (legacy sessions + the primary write). Non-primary with nothing yet → null (until backfilled).
+  const activeBiomech = shotBio !== undefined
+    ? shotBio
+    : (selectedShotIdx === 0 ? (session?.biomechanics ?? null) : null);
 
   // 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
   // — golfer attribution editor. The session.player_id resolves to a display
@@ -441,7 +453,7 @@ export default function SwingDetail() {
   // Reset on swing change so a freshly-opened swing autoplays/loops again.
   useEffect(() => { setUserScrubbed(false); }, [swing_id]);
 
-  const poseFrames = session?.biomechanics?.frames ?? [];
+  const poseFrames = activeBiomech?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
   // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
@@ -487,9 +499,13 @@ export default function SwingDetail() {
     // even while the clip autoplays. `undefined` = a legacy swing analyzed before this field existed,
     // so fall through to the (paused-gated) live extraction below. `null`/`[]` = analyzed, clubhead
     // not trackable → draw nothing (honest).
-    if (session?.club_arc !== undefined) {
-      const stored = session.club_arc;
-      setClubArcPoints(stored && stored.length >= 4 ? stored : null);
+    // 2026-08-01 (per-swing) — prefer THIS shot's own arc; for shot 0 fall back to the session-level
+    // arc (legacy + primary write). undefined on a non-primary shot → fall through to live extraction
+    // (which uses this shot's clip window), so a selected swing still gets its real clubhead arc.
+    const shotArc = shot?.club_arc;
+    const storedArc = shotArc !== undefined ? shotArc : (selectedShotIdx === 0 ? session?.club_arc : undefined);
+    if (storedArc !== undefined) {
+      setClubArcPoints(storedArc && storedArc.length >= 4 ? storedArc : null);
       return;
     }
     // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
@@ -535,7 +551,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying, session?.club_arc]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay
@@ -663,6 +679,7 @@ export default function SwingDetail() {
   // shipped. Fires once per swing_id; failure is silent (pose API is opt-in
   // and known to be flaky — same posture as the upload pipeline's branch).
   const poseBackfillRef = useRef<string | null>(null);
+  const shotBackfillRef = useRef<string | null>(null);
   useEffect(() => {
     // 2026-06-15 (Tim — mechanics manual) — no auto-biomech on open; the user runs
     // it via Analyze. Static library until the user acts.
@@ -713,6 +730,49 @@ export default function SwingDetail() {
       }
     })();
   }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
+
+  // 2026-08-01 (Tim — per-swing breakdown). LAZY per-SHOT biomech + clubhead arc: when the user selects
+  // a swing in the reel that has no per-shot read yet, extract pose for JUST that swing's WINDOW (bounded
+  // — never the whole multi-swing clip) and store it on the shot, so its skeleton + numbers + blue club
+  // render. On-demand (only for swings you actually open), so capture stays fast — no N eager extractions.
+  // Shot 0 keeps using the session-level read (skipped here).
+  useEffect(() => {
+    if (!LIBRARY_AUTO_PROCESS || !swing_id) return;
+    const selShot = session?.shots[selectedShotIdx];
+    if (!selShot?.clipUri || selShot.biomechanics !== undefined) return;             // already has / computing
+    if (selectedShotIdx === 0 && session?.biomechanics !== undefined) return;        // shot 0 uses session-level
+    const wStart = selShot.clipStartSeconds != null ? selShot.clipStartSeconds * 1000 : null;
+    const wEnd = selShot.clipEndSeconds != null ? selShot.clipEndSeconds * 1000 : null;
+    if (wStart == null || wEnd == null || wEnd - wStart < 500) return;               // need a real window
+    const key = `${swing_id}:${selShot.id}`;
+    if (shotBackfillRef.current === key) return;
+    shotBackfillRef.current = key;
+    void (async () => {
+      try {
+        const poseMod = await import('../../../services/poseAnalysisApi');
+        const analyzeUri = (await resolveClipUri(selShot.clipUri!).catch(() => null)) || selShot.clipUri!;
+        const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
+        const clipDurMs = Math.max(wEnd + 1000, (session?.upload?.duration_sec ?? 0) * 1000);
+        const biomech = await poseMod.analyzeSwingFromVideo(
+          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, null, resolveSwingerHandedness(),
+        );
+        useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
+        try {
+          const { detectClubPath } = await import('../../../services/swing/clubPath');
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => false });
+          if (arc && arc.points.length >= 4) {
+            useCageStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
+          } else {
+            useCageStore.getState().setShotClubArc(swing_id, selShot.id, [], null);
+          }
+        } catch { /* arc best-effort */ }
+      } catch (e) {
+        console.log('[swing-detail] per-shot backfill failed', e);
+        try { useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, null); } catch { /* non-fatal */ }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedShotIdx, swing_id, session?.shots, session?.biomechanics, session?.upload?.angleOverride]);
 
   // 2026-06-13 — Prewarm the TTS function WHILE the analysis is still running, so
   // the "Okay, I watched it…" read fires hot instead of paying cold-start on top
@@ -1091,6 +1151,10 @@ export default function SwingDetail() {
       setRightCompareShotId(s.id);
       return;
     }
+    // 2026-08-01 (per-swing) — SELECT this swing: the video crop window, skeleton, clubhead arc, and
+    // BODY ANALYSIS numbers all switch to it (lazy per-shot biomech backfills below if not present).
+    const idx = session?.shots.findIndex((sh) => sh.id === s.id) ?? -1;
+    if (idx >= 0) setSelectedShotIdx(idx);
     await scrubTo(s.clipStartSeconds ?? 0);
   };
 
@@ -2474,7 +2538,7 @@ export default function SwingDetail() {
                 const faultUri = a?.visual_reference_path ?? null;
                 const observation = a?.observation ?? '';
                 return (
-                  <View key={s.id} style={[styles.shotRow, { borderColor: colors.border, opacity: isPickingCompareTarget && isLeftPick ? 0.4 : 1 }]}>
+                  <View key={s.id} style={[styles.shotRow, { borderColor: !isPickingCompareTarget && idx === selectedShotIdx ? colors.accent : colors.border, backgroundColor: !isPickingCompareTarget && idx === selectedShotIdx ? 'rgba(136,247,0,0.06)' : 'transparent', opacity: isPickingCompareTarget && isLeftPick ? 0.4 : 1 }]}>
                     <TouchableOpacity
                       onPress={() => void handleRowTap(s)}
                       style={styles.shotRowTap}
@@ -2867,33 +2931,33 @@ export default function SwingDetail() {
                   pose API was configured AND returned at least one
                   usable frame, AND this is NOT a putting session
                   (those use PuttingAnalysisCard above). */}
-              {session.biomechanics && !session.putting_analysis && (
+              {activeBiomech && !session.putting_analysis && (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS</Text>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS{session.shots.length > 1 ? ` · SWING ${selectedShotIdx + 1}` : ''}</Text>
                   <Text style={[styles.biomechSub, { color: colors.text_muted }]}>
-                    {session.biomechanics.frames.length > 0
-                      ? `Measured from ${session.biomechanics.frames.length} swing keyframes`
+                    {activeBiomech.frames.length > 0
+                      ? `Measured from ${activeBiomech.frames.length} swing keyframes`
                       : 'Measured from on-device pose'}
                   </Text>
-                  {session.biomechanics.verdicts.hipTurn && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.hipTurn}</Text>
+                  {activeBiomech.verdicts.hipTurn && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.hipTurn}</Text>
                   )}
-                  {session.biomechanics.verdicts.shoulderTurn && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.shoulderTurn}</Text>
+                  {activeBiomech.verdicts.shoulderTurn && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.shoulderTurn}</Text>
                   )}
-                  {session.biomechanics.verdicts.weightShift && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.weightShift}</Text>
+                  {activeBiomech.verdicts.weightShift && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.weightShift}</Text>
                   )}
-                  {session.biomechanics.verdicts.posture && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.posture}</Text>
+                  {activeBiomech.verdicts.posture && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.posture}</Text>
                   )}
                   {/* 2026-06-30 (audit C6) — shoulderTilt + sequencing verdicts were
                       computed (poseAnalysisApi) and persisted but never rendered here. */}
-                  {session.biomechanics.verdicts.shoulderTilt && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.shoulderTilt}</Text>
+                  {activeBiomech.verdicts.shoulderTilt && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.shoulderTilt}</Text>
                   )}
-                  {session.biomechanics.verdicts.sequencing && (
-                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {session.biomechanics.verdicts.sequencing}</Text>
+                  {activeBiomech.verdicts.sequencing && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.sequencing}</Text>
                   )}
                 </View>
               )}
@@ -2910,11 +2974,16 @@ export default function SwingDetail() {
                   icons carry the measured values and always agree with the text. Falls back to the
                   saved snapshot for older swings that have a report but no biomechanics. */}
               {(() => {
-                const bodyAnalysis = session.primary_issue
-                  ? ({ primary_fault: session.primary_issue.primary_fault, detected_issue: session.primary_issue.issue_id } as unknown as SwingAnalysis)
-                  : null;
-                const items: BodyItem[] = session.biomechanics
-                  ? deriveBodyItems(bodyAnalysis, session.biomechanics)
+                // 2026-08-01 (per-swing) — derive from THIS swing: its own fault (per-shot analysis) +
+                // its own biomech. Falls back to the session primary read for shot 0 / legacy.
+                const psa = shot?.perShotAnalysis;
+                const bodyAnalysis = psa
+                  ? ({ primary_fault: psa.primary_fault ?? null, detected_issue: psa.detected_issue } as unknown as SwingAnalysis)
+                  : session.primary_issue
+                    ? ({ primary_fault: session.primary_issue.primary_fault, detected_issue: session.primary_issue.issue_id } as unknown as SwingAnalysis)
+                    : null;
+                const items: BodyItem[] = activeBiomech
+                  ? deriveBodyItems(bodyAnalysis, activeBiomech)
                   : ((session.smart_motion_shot_map?.bodyItems as BodyItem[] | undefined) ?? []);
                 return items.length > 0
                   ? <BodyAnalysisRow items={items} style={{ marginTop: 12 }} />
