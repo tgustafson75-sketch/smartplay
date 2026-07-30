@@ -292,6 +292,13 @@ interface SettingsState {
   // Trades a few more false candidates for not missing the shot — fine in the cage.
   chipSensitivity: boolean;
 
+  // 2026-08-01 (Tim — "turn off acoustic detection so you can analyze with no ball strike or foam
+  // balls"). When ON, SmartMotion (and drills / shot shapes, which route through it) runs the
+  // VIDEO-only swing pipeline: no metered audio track, swings are detected + segmented from the pose
+  // locator, and the acoustic-only steps (ball speed / departure) stay honestly off. Makes indoor /
+  // foam-ball / air-swing practice detect + break down cleanly with no audible strike. Off by default.
+  foamBallMode: boolean;
+
   // 2026-05-22 — Ghost Rounds as first-class. When true (DEFAULT), startRound
   // auto-activates the most-recent prior round on the same course so the
   // player gets a "vs last time" comparison without needing to touch the
@@ -383,6 +390,7 @@ interface SettingsState {
   setCageCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
   setChipSensitivity: (on: boolean) => void;
+  setFoamBallMode: (on: boolean) => void;
   // 2026-05-22 — Ghost Rounds.
   setGhostAutoActivate: (v: boolean) => void;
   // 2026-06-21 — AI provider toggle.
@@ -510,6 +518,7 @@ export const useSettingsStore = create<SettingsState>()(
       cageCanvasFeet: 14,
       cameraBehindFeet: 7,
       chipSensitivity: false,
+      foamBallMode: false,
       cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
@@ -735,6 +744,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCageCanvasFeet: (feet) => set({ cageCanvasFeet: Math.max(1, Math.round(feet)) }),
       setCameraBehindFeet: (feet) => set({ cameraBehindFeet: Math.max(0, Math.round(feet)) }),
       setChipSensitivity: (on) => set({ chipSensitivity: on }),
+      setFoamBallMode: (on) => set({ foamBallMode: on }),
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
@@ -1010,6 +1020,7 @@ export const useSettingsStore = create<SettingsState>()(
         cageCanvasFeet: s.cageCanvasFeet,
         cameraBehindFeet: s.cameraBehindFeet,
         chipSensitivity: s.chipSensitivity,
+        foamBallMode: s.foamBallMode,
         cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         aiProvider: s.aiProvider,

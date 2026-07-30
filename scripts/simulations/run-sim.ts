@@ -3907,6 +3907,29 @@ check('Multi-swing: EVERY swing gets its own persisted diagnosis + range recover
   })(),
   'a multi-swing OPEN reel lands in the library with EACH swing carrying its own fault read (not just swing 1), and a cold swing-locate no longer collapses a whole range session to a single whole-clip swing — it retries once');
 
+check('SmartMotion: foam/no-ball mode (video-only) + range recovers a cleanly-heard missed swing',
+  // 2026-08-01 (Tim — "turn off acoustic detection so you can analyze with no ball strike or foam
+  // balls" + range under-count). Foam mode disables the metered audio track and segments off the video
+  // locator (no strike needed), for smartmotion/drills/shot-shapes. Range recovers a HIGH-confidence
+  // acoustic strike the video locator missed in your own frame so a partial vision read never
+  // undercounts what was cleanly heard.
+  (() => {
+    const store = read('store/settingsStore.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const seg = read('services/swing/swingSegmentation.ts');
+    return (
+      /foamBallMode: boolean/.test(store) && /setFoamBallMode:/.test(store) && /foamBallMode: false/.test(store) &&
+      // metering forced off + segmentation forced to the video path when foam mode is on (off-round)
+      /const foamOnStart = useSettingsStore\.getState\(\)\.foamBallMode && !roundActive/.test(sm) &&
+      /const useMetering = foamOnStart\s*\n\s*\? false/.test(sm) &&
+      /const stopMode = foamOnStop \? 'range' : rawStopMode/.test(sm) &&
+      // range recovery of high-confidence unmatched strikes
+      /recoverUnmatchedHighConf/.test(seg) && /if \(s\.confidence !== 'high'\) continue;/.test(seg) &&
+      /recoverUnmatchedHighConf: true/.test(sm)
+    );
+  })(),
+  'foam/no-ball mode reads swings from video alone (no metered audio, no strike required) across smartmotion + drills + shot shapes; and range recovers a cleanly-heard (high-confidence) swing the video locator missed, so it never undercounts below what was unambiguously heard while still rejecting quieter neighbours');
+
 // 2026-07-08 (cage acoustic audit) — calibration must be able to make the cage MORE
 // sensitive (not only stricter) and must NOT silently under-detect at a different venue.
 check('Cage calibration: env-gated + can lower the bar, not just raise it',
@@ -5315,7 +5338,7 @@ check('Environment mode phase 2: range acoustic↔video correlation (propose/dis
 check('Environment mode phase 3: course is acoustics-off single-shot; a live round forces course',
   /const effectiveMode.*isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) &&           // round forces course (reactive)
     /isRoundActive[\s\S]{0,30}\? 'course'[\s\S]{0,60}environmentMode/.test(smEnvSrc) &&           // and at capture time
-    /const useMetering = chipOnStart/.test(smEnvSrc) &&                                            // metering is mode+chip-aware; course off by default
+    /const useMetering = foamOnStart\s*\n\s*\? false\s*\n\s*: chipOnStart/.test(smEnvSrc) &&        // metering is foam/mode/chip-aware; course off by default, foam forces off
     /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
   'course mode disables acoustics (wind) and is single-shot (skips multi-segmentation → single-swing localization); metering runs for cage+range but NOT course; a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
 

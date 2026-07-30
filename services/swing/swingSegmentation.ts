@@ -199,7 +199,7 @@ export function correlateStrikesWithVideo(
   strikes: DetectedStrike[],
   videoSwings: Array<{ timeSec: number; confidence: 'high' | 'medium' | 'low' }>,
   durationMs: number,
-  opts?: SegmentOptions & { toleranceMs?: number },
+  opts?: SegmentOptions & { toleranceMs?: number; recoverUnmatchedHighConf?: boolean },
 ): SwingSegment[] {
   const tol = opts?.toleranceMs ?? STRIKE_VIDEO_TOLERANCE_MS;
   const pseudo: DetectedStrike[] = videoSwings.map((sw) => {
@@ -220,5 +220,19 @@ export function correlateStrikesWithVideo(
     }
     return { timeMs: tMs, peakDb: 0, attackMs: 0, confidence: sw.confidence };
   });
+  // 2026-08-01 (marquee-feature audit — range under-count / Severity 2). Video is the spine so a
+  // NEIGHBOUR'S strike can't inflate the count. But if the mic CLEANLY heard a strike (HIGH confidence)
+  // far from every video swing, the video locator most likely MISSED one of YOUR OWN swings — a distant
+  // neighbour rarely reads high-confidence through your mic's adaptive floor. Recover ONLY those (never
+  // low/medium — those stay dropped as neighbours/noise), so a partial vision read never undercounts
+  // below what was unambiguously heard. Opt-in (range only); cage is acoustic-authoritative already.
+  if (opts?.recoverUnmatchedHighConf) {
+    const videoMs = videoSwings.map((sw) => Math.round(sw.timeSec * 1000));
+    for (const s of strikes) {
+      if (s.confidence !== 'high') continue;
+      const nearAnyVideo = videoMs.some((v) => Math.abs(v - s.timeMs) <= tol);
+      if (!nearAnyVideo) pseudo.push({ timeMs: s.timeMs, peakDb: s.peakDb, attackMs: s.attackMs, confidence: 'high' });
+    }
+  }
   return segmentsFromStrikes(pseudo, durationMs, opts);
 }

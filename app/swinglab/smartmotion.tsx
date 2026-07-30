@@ -585,6 +585,8 @@ export default function SmartMotion() {
   const setCameraBehindFeet = useSettingsStore((s) => s.setCameraBehindFeet);
   const chipSensitivity = useSettingsStore((s) => s.chipSensitivity);
   const setChipSensitivity = useSettingsStore((s) => s.setChipSensitivity);
+  const foamBallMode = useSettingsStore((s) => s.foamBallMode);
+  const setFoamBallMode = useSettingsStore((s) => s.setFoamBallMode);
   // 2026-06-10 (phase 3) — a live round forces COURSE sensing (acoustics off,
   // single shot) regardless of the practice toggle: you don't want neighbor/
   // wind acoustic detection on the course. Off-round, the toggle wins.
@@ -2633,9 +2635,15 @@ export default function SmartMotion() {
     // the mic belongs to voice listening, so course stays silent then). Default (no
     // chip): cage (acoustic multi-swing) + range (acoustic candidates + vision).
     const chipOnStart = useSettingsStore.getState().chipSensitivity;
-    const useMetering = chipOnStart
-      ? (captureMode === 'cage' || (captureMode === 'course' && !roundActive))
-      : (captureMode === 'cage' || captureMode === 'range');
+    // 2026-08-01 (Tim — foam/no-ball mode). No audible strike to hear → don't run the metered audio
+    // track at all; swings come from the VIDEO locator instead (see the segmentation branch below).
+    // On-course always hits real balls, so foam mode only applies off-round.
+    const foamOnStart = useSettingsStore.getState().foamBallMode && !roundActive;
+    const useMetering = foamOnStart
+      ? false
+      : chipOnStart
+        ? (captureMode === 'cage' || (captureMode === 'course' && !roundActive))
+        : (captureMode === 'cage' || captureMode === 'range');
     if (useMetering) {
       // Parallel metered audio track for multi-strike detection.
       try {
@@ -2854,9 +2862,15 @@ export default function SmartMotion() {
       // CAGE: trust the acoustic segments, but cross-check the video locator when
       // ≤1 strike (audit C1 — a loud/open bay zeroes the detector; don't collapse a
       // 6-swing reel to "1 of 1"). That fallback only ADDS missed swings, never reduces.
-      const stopMode = useRoundStore.getState().isRoundActive
+      const rawStopMode = useRoundStore.getState().isRoundActive
         ? 'course'
         : useSettingsStore.getState().environmentMode;
+      // 2026-08-01 (Tim — foam/no-ball). With no audible strike, segment off the VIDEO locator: route
+      // through the RANGE branch (video-first, acoustic-optional). Metering was already off (foamOnStart),
+      // so acousticStrikes is empty and it lands on segmentsFromVideoSwings — clean multi-swing from pose
+      // alone, no strike required. Only off-round.
+      const foamOnStop = useSettingsStore.getState().foamBallMode && !useRoundStore.getState().isRoundActive;
+      const stopMode = foamOnStop ? 'range' : rawStopMode;
       let segsForAnalysis = detectedSegments;
       if (stopMode === 'range') {
         try {
@@ -2877,7 +2891,11 @@ export default function SmartMotion() {
             swings = await pose.locateSwings(recorded.uri, durMs).catch(() => []);
           }
           if (swings.length > 0 && acousticStrikes.length > 0) {
-            segsForAnalysis = correlateStrikesWithVideo(acousticStrikes, swings, durMs);
+            // 2026-08-01 (marquee audit — range under-count). Video is the spine (neighbour-proof), but
+            // recover a HIGH-confidence strike the locator missed in your own frame so a partial vision
+            // read never undercounts below what was cleanly heard. Rebound-filter first so a net thud
+            // can't be falsely rescued.
+            segsForAnalysis = correlateStrikesWithVideo(filterReboundStrikes(acousticStrikes), swings, durMs, { recoverUnmatchedHighConf: true });
           } else if (swings.length > 0) {
             segsForAnalysis = segmentsFromVideoSwings(swings, durMs); // nothing heard cleanly
           } else if (acousticStrikes.length > 0) {
@@ -4049,6 +4067,18 @@ export default function SmartMotion() {
                     const next = !chipSensitivity;
                     setChipSensitivity(next);
                     useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
+                  }}
+                />
+                {/* 2026-08-01 (Tim) — Foam / no-ball: analyze from the video swing alone, no strike needed. */}
+                <ToolCardRow
+                  icon={<Image source={ICON_RAIL.ballbox} style={styles.toolCardIcon} resizeMode="contain" />}
+                  title={foamBallMode ? 'Foam / no ball on' : 'Foam / no ball'}
+                  desc="No strike needed — read the swing on video"
+                  active={foamBallMode}
+                  onPress={() => {
+                    const next = !foamBallMode;
+                    setFoamBallMode(next);
+                    useToastStore.getState().show(next ? 'Foam / no-ball ON — reading swings on video (no strike needed)' : 'Foam / no-ball off');
                   }}
                 />
               </View>
