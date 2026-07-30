@@ -346,6 +346,19 @@ function failureFallbackFor(lang: string | null | undefined): string {
  * fetch errors, handler throws, outer catch). Cheap and idempotent —
  * the speak() call already serializes with stopSpeaking().
  */
+/**
+ * 2026-07-30 (voice audit #1) — a CUSTOM caddie must ship its chosen base persona + name on EVERY
+ * /api/kevin body (this file's speculative, in-round-diagnostic, and small-talk fallbacks), or the
+ * server defaults custom → Kevin's spec + onyx voice. Spread this into each kevin body. Best-effort.
+ */
+function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const p = require('../store/playerProfileStore').usePlayerProfileStore.getState();
+    return { customCaddieBasePersona: p.customCaddieBasePersona ?? 'kevin', customCaddieName: p.customCaddieName ?? null };
+  } catch { return { customCaddieBasePersona: 'kevin', customCaddieName: null }; }
+}
+
 export async function speakHonestFailure(
   language: 'en' | 'es' | 'zh' | null | undefined,
   voiceGender: 'male' | 'female',
@@ -577,6 +590,7 @@ async function openSession() {
           isRoundActive: round.isRoundActive,
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
+          ...customCaddieFields(),
         }),
       }, kevinTimeout()).catch(() => null);
 
@@ -590,6 +604,7 @@ async function openSession() {
           text: utterance,
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
+          ...customCaddieFields(),
         }),
       }, intentTimeout());
       if (!parseRes.ok) {
@@ -727,6 +742,7 @@ async function openSession() {
           voiceGender: settingsStore.voiceGender ?? 'male',
           // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
           persona: settingsStore.caddiePersonality,
+          ...customCaddieFields(),
           personaIntensity: settingsStore.personaIntensity?.[settingsStore.caddiePersonality] ?? 100,
           tankSoftIntro: settingsStore.tankSoftIntro,
         };
@@ -860,6 +876,7 @@ async function openSession() {
                 // to "hey Tank, how are you" were coming back as Kevin.
                 voiceGender: settings.voiceGender ?? 'male',
                 persona: settings.caddiePersonality,
+          ...customCaddieFields(),
               }),
             }, kevinTimeout());
             if (chatRes.ok) {
@@ -1149,6 +1166,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           text,
           voiceGender: settings.voiceGender ?? 'male',
           persona: settings.caddiePersonality,
+          ...customCaddieFields(),
         }),
       }, intentTimeout());
       if (!parseRes.ok) {
@@ -1209,6 +1227,20 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         }
       } catch (e) {
         console.log('[handsFree-route] conversational fallback failed:', e);
+      }
+      return;
+    }
+    // 2026-07-30 (voice audit #3) — the watch/typed path had NO disruptive-open confidence gate (the mic
+    // + earbud paths both require confidence==='high' for open_tool/media_capture/navigate). A medium-
+    // confidence watch-STT misread of ordinary speech could yank a tool open or advance the hole. Mirror
+    // the gate: at less-than-high confidence, OFFER instead of acting (open_course already self-gates).
+    const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
+    if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
+      const offer = 'Want me to open that? Just say it again and I will.';
+      if (settings.voiceEnabled ?? true) {
+        await speak(offer, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+      } else {
+        try { flashCaption?.(offer, 6000); } catch { /* non-fatal */ }
       }
       return;
     }

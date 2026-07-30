@@ -86,6 +86,7 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
           name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
           missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
+          customCaddieBasePersona?: string; customCaddieName?: string | null;
         };
       } catch { return {} as Record<string, never>; }
     })();
@@ -105,6 +106,10 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         isRoundActive: round.isRoundActive,
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
+        // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
+        // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
+        customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
+        customCaddieName: profile.customCaddieName ?? null,
         // 2026-07-24 (full-app audit) — the earbud→kevin FALLBACK was dropping the brain-steering
         // toggles, so Kids Mode / Response Style / intensity / Tank soft-intro silently defaulted the
         // moment pipecat degraded. Send them so the fallback caddie honors the SAME settings the
@@ -173,6 +178,7 @@ export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Pr
         return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
           name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
           missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
+          customCaddieBasePersona?: string; customCaddieName?: string | null;
         };
       } catch { return {} as Record<string, never>; }
     })();
@@ -190,6 +196,10 @@ export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Pr
         isRoundActive: false,
         voiceGender: settings.voiceGender ?? 'male',
         persona: settings.caddiePersonality,
+        // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
+        // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
+        customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
+        customCaddieName: profile.customCaddieName ?? null,
         personaIntensity: settings.personaIntensity?.[settings.caddiePersonality] ?? 100,
         tankSoftIntro: settings.tankSoftIntro ?? false,
         responseMode: settings.responseMode ?? 'neutral',

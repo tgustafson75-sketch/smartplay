@@ -1174,6 +1174,10 @@ export const useVoiceCaddie = ({
           // dial, and Tank soft-intro flag. Read fresh at call time so
           // settings changes apply to the next utterance without restart.
           persona: useSettingsStore.getState().caddiePersonality,
+          // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
+          // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
+          customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
+          customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
           // 2026-05-30 — Fix FY: Local Mode → pin brain to TACTICAL
@@ -1271,6 +1275,10 @@ export const useVoiceCaddie = ({
             firstName,
             handicap,
             persona: useSettingsStore.getState().caddiePersonality,
+          // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
+          // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
+          customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
+          customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
           }),
         }).finally(() => clearTimeout(rt));
         if (retryRes.ok) {

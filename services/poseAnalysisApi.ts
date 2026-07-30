@@ -987,7 +987,7 @@ export async function deriveSwingTempo(
   try {
     const dir = FileSystem.cacheDirectory;
     if (dir) {
-      const dest = `${dir}tempo-src-${impactMs}.mp4`;
+      const dest = `${dir}tempo-src-${impactMs}-${Date.now()}.mp4`; // unique per invocation — re-entry must not share a temp file (audit C-1)
       await FileSystem.copyAsync({ from: videoUri, to: dest });
       const info = await FileSystem.getInfoAsync(dest);
       if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }

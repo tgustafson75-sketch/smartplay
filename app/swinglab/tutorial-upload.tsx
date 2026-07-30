@@ -20,7 +20,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as VT from 'expo-video-thumbnails';
+// 2026-07-30 (analysis audit C-3) — route through the single-flight queue, not raw expo-video-thumbnails,
+// so this pick-time grab can't run a native retriever concurrently with an analysis extraction. Drop-in.
+import * as VT from '../../utils/videoThumbnail';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTutorialStore } from '../../store/tutorialStore';

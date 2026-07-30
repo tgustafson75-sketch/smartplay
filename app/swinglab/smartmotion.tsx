@@ -2096,7 +2096,7 @@ export default function SmartMotion() {
         const dir = FS.cacheDirectory;
         let workUri = clipUri;
         if (dir) {
-          const dest = `${dir}address-src-${addressMs}.mp4`;
+          const dest = `${dir}address-src-${addressMs}-${Date.now()}.mp4`; // unique per invocation (audit C-1)
           try {
             await FS.copyAsync({ from: clipUri, to: dest });
             const info = await FS.getInfoAsync(dest);

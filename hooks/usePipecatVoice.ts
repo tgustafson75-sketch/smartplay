@@ -352,7 +352,11 @@ export function usePipecatVoice({
         }
       }
 
-      const text = data.response_text ?? '';
+      let text = data.response_text ?? '';
+      // 2026-07-30 (voice audit #2) — a tool-only turn (HTTP 200, not degraded, empty response_text)
+      // left the caddie-tab mic silent with no caption → a dead turn on the 96%-iOS primary surface.
+      // Mirror conversationalBrain.tryPipecat: acknowledge the action so the turn is never silent.
+      if (!text.trim() && Array.isArray(data.tool_actions) && data.tool_actions.length > 0) text = 'Done.';
 
       // 2026-06-30 (Tim — "a log for the WHOLE voice") — record this turn (his words → the
       // caddie's reply, or null) + which tool(s) fired, in the owner issue log. Lets him SEE

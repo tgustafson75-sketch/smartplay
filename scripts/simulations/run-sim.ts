@@ -7244,6 +7244,19 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
   check('open_course only navigates at HIGH confidence (H3)',
     /intent\.confidence !== 'high'/.test(read('services/intents/openCourseHandler.ts')),
     'H3: a conversational course MENTION (medium confidence) offers instead of yanking the user to the Play tab');
+
+  // VOICE follow-up audit (2026-07-30 final pass)
+  check('Custom caddie base persona carried on ALL kevin fallback/follow-up sites (voice #1)',
+    /customCaddieBasePersona/.test(read('services/conversationalBrain.ts')) &&
+      /customCaddieBasePersona/.test(read('hooks/useVoiceCaddie.ts')) &&
+      /customCaddieFields/.test(listenSrc),
+    'voice#1: conversationalBrain (pipecat-down fallback), useVoiceCaddie (follow-up loop) + listeningSession (speculative/diagnostic/small-talk) all send the custom base persona — no revert to Kevin/onyx off the primary path');
+  check('pipecat tool-only turn is never a silent dead turn (voice #2)',
+    /Array\.isArray\(data\.tool_actions\)[\s\S]{0,40}text = 'Done\.'/.test(read('hooks/usePipecatVoice.ts')),
+    'voice#2: an empty-response_text 200 with tool actions acknowledges instead of going silent on the primary mic surface');
+  check('watch/typed path gates disruptive-open on HIGH confidence (voice #3)',
+    (listenSrc.match(/DISRUPTIVE_OPEN_INTENTS/g) ?? []).length >= 2,
+    'voice#3: handleTranscribedUtterance offers instead of yanking a tool open on a medium-confidence watch-STT misread (mirrors the mic + earbud gates)');
 }
 
 // ─── Scenario 13: critical-path diagnostic markers present (2026-06-16) ─────────

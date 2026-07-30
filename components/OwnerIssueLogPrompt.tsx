@@ -63,7 +63,13 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
           style={{ flex: 1.4, paddingVertical: 11, borderRadius: 10, alignItems: 'center', backgroundColor: '#f59e0b' }}
           onPress={async () => {
             setSending(true);
-            try { await exportAllIssues(); } finally { setSending(false); }
+            try {
+              await exportAllIssues();
+              // 2026-07-30 (regression sweep) — a successful send resets lastExportedAt → unsent drops to 0;
+              // clear the local dismiss count too, else a prior "Later" leaves a stale threshold that delays
+              // the NEXT prompt until failures hit dismissedAtCount+5 instead of 5.
+              setDismissedAtCount(null);
+            } finally { setSending(false); }
           }}
           disabled={sending}
         >

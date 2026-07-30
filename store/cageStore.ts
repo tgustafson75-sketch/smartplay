@@ -1454,11 +1454,16 @@ export const useCageStore = create<CageState>()(
         })),
 
       setSessionBiomechanics: (sessionId, biomechanics) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : { ...session, biomechanics }
-          ),
-        })),
+        // 2026-07-30 (analysis audit S-1) — dual-patch activeSession like its P4 siblings, so a biomech
+        // write during an in-flight (not-yet-endSession'd) session isn't silently dropped.
+        set(s => {
+          const apply = (session: CageSession): CageSession =>
+            session.id !== sessionId ? session : { ...session, biomechanics };
+          return {
+            activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
+            sessionHistory: s.sessionHistory.map(apply),
+          };
+        }),
 
       setSessionClubArc: (sessionId, arc, frame) =>
         set(s => {

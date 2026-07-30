@@ -119,7 +119,7 @@ export async function detectBallDeparture(args: {
   try {
     const dir = FileSystem.cacheDirectory;
     if (dir) {
-      const dest = `${dir}balldep-src-${args.impactMs}.mp4`;
+      const dest = `${dir}balldep-src-${args.impactMs}-${Date.now()}.mp4`; // unique per invocation (audit C-1)
       await FileSystem.copyAsync({ from: args.videoUri, to: dest });
       const info = await FileSystem.getInfoAsync(dest);
       if (info.exists && (info.size ?? 0) > 0) { depTempCopy = dest; depWorkUri = dest; }
