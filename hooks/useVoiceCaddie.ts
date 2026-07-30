@@ -26,7 +26,7 @@ import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
-import { isSessionInFlight } from '../services/listeningSession';
+import { isSessionInFlight, forceCloseSession } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
@@ -2301,7 +2301,15 @@ export const useVoiceCaddie = ({
     // so the toggle-level sessionInFlight check doesn't apply here.
     // KevinBadge dims while locked (visual block) AND this guard
     // blocks functionally so a taps that beats the dim still no-ops.
-    if (isSessionInFlight()) return;
+    // 2026-07-30 (Tim — iPad "stuck listening, and tapping to stop won't stop"). A tap while a
+    // hands-free/VAD listening session is in flight (or hung on a cold transcribe) means STOP — force-
+    // close it so the mic can NEVER get stuck with no way out. Was a bare `return` that trapped the user.
+    if (isSessionInFlight()) {
+      try { forceCloseSession(); } catch { /* best-effort */ }
+      isProcessingRef.current = false;
+      wrappedOnVoiceStateChange('idle');
+      return;
+    }
 
     // 2026-07-06 (voice-lifecycle audit #5/#6) — while SmartMotion is mounted, the
     // CAMERA owns the mic. This handler is also reached by auto-listen

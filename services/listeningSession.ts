@@ -1074,6 +1074,16 @@ function closeSession() {
  * reports later: 'dormancy_timeout' vs 'user_close' is the line you
  * want in logcat).
  */
+/**
+ * 2026-07-30 (Tim — iPad "stuck listening, and tapping to stop won't stop"). Public force-close so the
+ * on-screen mic (useVoiceCaddie.handleMicPress) can ALWAYS cancel a hands-free/VAD session that's in
+ * flight or hung on a cold transcribe — instead of no-oping and leaving the user trapped. Idempotent,
+ * never throws (cancelling must never crash).
+ */
+export function forceCloseSession(): void {
+  try { closeSessionInternal('user_close'); } catch { /* never throw from a force-close */ }
+}
+
 function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
   console.log(`[path4:voice] close (reason=${reason})`);
   // Phase BM — always stopSpeaking (drops the isSpeaking() guard). The guard
