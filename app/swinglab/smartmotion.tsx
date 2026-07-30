@@ -2435,6 +2435,34 @@ export default function SmartMotion() {
         if (cancelled()) return;
         resolvedAnalyses.push(a);
         if (!a) continue;
+        // 2026-08-01 (marquee-feature audit — per-swing breakdown). Persist THIS swing's analysis to
+        // its own per-shot row, so the saved library reel shows EVERY swing's diagnosis — not just
+        // swing 0 (which runAnalysis wrote). Before this fix, a 4-swing OPEN reel landed with swing 1
+        // read and swings 2-4 blank ("—"), even though all were analyzed here in memory. Swing 0 is
+        // already persisted by runAnalysis; map each later segment's index → its session shot id
+        // (skip if it doesn't map — never stamp onto the wrong shot). Mirrors the upload path.
+        if (idx > 0) {
+          try {
+            const sessionId = ingestedSessionIdRef.current;
+            if (sessionId) {
+              const sess = useCageStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
+              const shotIdx = Math.max(0, (segs[idx]?.index ?? idx + 1) - 1);
+              const shotId = sess?.shots[shotIdx]?.id ?? null;
+              if (shotId) {
+                useCageStore.getState().setShotAnalysis(sessionId, shotId, {
+                  detected_issue: a.detected_issue,
+                  primary_fault: a.primary_fault ?? null,
+                  severity: a.severity,
+                  confidence: a.confidence,
+                  observation: a.observation,
+                  fault_frame_index: a.fault_frame_index ?? -1,
+                  visual_reference_path: null,
+                  contact_read: a.contact_read ?? 'unknown',
+                });
+              }
+            }
+          } catch { /* per-shot persist is best-effort */ }
+        }
         await speakLine(swingNarrationLine(idx + 1, a));
       }
       // 2026-07-07 (F2) — the SAVED report was persisted after SWING 0 only. Now that
@@ -2838,7 +2866,16 @@ export default function SmartMotion() {
           // thumbnail call, and RANGE was paying it on every swing despite having the
           // number already (the cage branch below already reuses meteredDurationMs).
           const durMs = meteredDurationMs ?? await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
-          const swings = await pose.locateSwings(recorded.uri, durMs);
+          let swings = await pose.locateSwings(recorded.uri, durMs);
+          // 2026-08-01 (marquee-feature audit — Severity 1). A COLD locate-Lambda (502 / 30s abort)
+          // returns [] on the first call, and with a quiet/muted mic (no acoustic fallback) RANGE then
+          // collapsed a whole multi-swing session to ONE synthesized whole-clip swing — the most likely
+          // "only one swing on Open" report. Cage has protective re-runs; range had none. Retry the
+          // locate ONCE when the first call came up empty AND there are no acoustic strikes to fall back
+          // on — the second call hits a now-warm Lambda and recovers the real swings.
+          if (swings.length === 0 && acousticStrikes.length === 0) {
+            swings = await pose.locateSwings(recorded.uri, durMs).catch(() => []);
+          }
           if (swings.length > 0 && acousticStrikes.length > 0) {
             segsForAnalysis = correlateStrikesWithVideo(acousticStrikes, swings, durMs);
           } else if (swings.length > 0) {

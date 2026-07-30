@@ -3865,6 +3865,14 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
     const withRebound = filterReboundStrikes([mk(1000, -8, 'high'), mk(2200, -12, 'low'), mk(8000, -9, 'high')]);
     const clean3 = filterReboundStrikes([mk(1000, -8, 'high'), mk(7000, -9, 'high'), mk(13000, -7, 'medium')]);
     const reboundsOk = withRebound.length === 2 && withRebound[0].timeMs === 1000 && clean3.length === 3;
+    // (a2) 2026-08-01 (marquee audit findings 1 & 2) — the rebound is usually LOUDER (the net hit) and
+    //      higher-confidence than the impact. Keep the EARLIEST (impact) time, not the louder net; and a
+    //      loud rebound must NOT cascade and swallow the next real swing.
+    const louderNet = filterReboundStrikes([mk(1000, -8, 'medium'), mk(1700, -4, 'high')]);
+    const cascade = filterReboundStrikes([mk(1000, -8, 'medium'), mk(1800, -4, 'high'), mk(3400, -8, 'medium')]);
+    const reboundHardOk =
+      louderNet.length === 1 && louderNet[0].timeMs === 1000 &&               // impact kept, not the loud net
+      cascade.length === 2 && cascade[0].timeMs === 1000 && cascade[1].timeMs === 3400; // 2nd swing survives
     // (b) merge separation scales with the coarse frame interval on long clips.
     const scaled = /mergeSwingDetections\(raw, Math\.max\(2\.5, frameIntervalSec\)\)/.test(read('services/poseDetection.ts'));
     // (c) session token + in-flight dedupe on the per-swing analysis cache.
@@ -3877,9 +3885,27 @@ check('Segmentation: rebounds filtered, sessions can\'t cross-poison, anchors ke
       /filterReboundStrikes\(res\.strikes\)/.test(sm);
     // (e) detector debounce keeps the EARLIEST peak (impact, not the louder net hit).
     const earliestOk = /same strike group — the earlier peak \(impact\) already kept/.test(read('services/swing/strikeDetector.ts'));
-    return reboundsOk && scaled && tokenOk && anchorsOk && earliestOk;
+    return reboundsOk && reboundHardOk && scaled && tokenOk && anchorsOk && earliestOk;
   })(),
-  'a net/floor rebound 0.5-2.5s after impact never becomes a phantom swing; long-clip locate merges at the real frame interval; an in-flight read can\'t poison the next session\'s cache (token + dedupe); the cage video fallback keeps the real acoustic strike; debounce keeps the earliest (impact) peak');
+  'a net/floor rebound 0.5-2.5s after impact never becomes a phantom swing (even when the net hit is LOUDER than the strike), and a loud rebound never cascades to swallow the next real swing; long-clip locate merges at the real frame interval; an in-flight read can\'t poison the next session\'s cache (token + dedupe); the cage video fallback keeps the real acoustic strike; debounce keeps the earliest (impact) peak');
+
+check('Multi-swing: EVERY swing gets its own persisted diagnosis + range recovers a cold locate',
+  // 2026-08-01 (marquee-feature audit). Carve finding 1: the multi-swing narration loop analyzed
+  // swings 1..N in memory but only swing 0 was persisted per-shot, so the saved reel showed swing 1
+  // read and 2..N blank. Now each swing's analysis is written to ITS shot row. Severity 1: a cold
+  // locate-Lambda returned [] and RANGE collapsed the whole session to one whole-clip swing — now it
+  // retries the locate once when the first came up empty with no acoustic fallback.
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      // per-swing persist inside the narration loop (idx>0), mapping segment→shot, mirroring swing 0
+      /if \(idx > 0\) \{[\s\S]*?setShotAnalysis\(sessionId, shotId, \{/.test(sm) &&
+      /const shotIdx = Math\.max\(0, \(segs\[idx\]\?\.index \?\? idx \+ 1\) - 1\)/.test(sm) &&
+      // range locate retry on a cold-Lambda empty return with no acoustic fallback
+      /if \(swings\.length === 0 && acousticStrikes\.length === 0\) \{\s*\n\s*swings = await pose\.locateSwings/.test(sm)
+    );
+  })(),
+  'a multi-swing OPEN reel lands in the library with EACH swing carrying its own fault read (not just swing 1), and a cold swing-locate no longer collapses a whole range session to a single whole-clip swing — it retries once');
 
 // 2026-07-08 (cage acoustic audit) — calibration must be able to make the cage MORE
 // sensitive (not only stricter) and must NOT silently under-detect at a different venue.

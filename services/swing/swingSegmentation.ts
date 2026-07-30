@@ -91,17 +91,21 @@ export interface SegmentOptions {
 export function filterReboundStrikes(strikes: DetectedStrike[], minGapMs = 2000): DetectedStrike[] {
   const ordered = [...strikes].sort((a, b) => a.timeMs - b.timeMs);
   const kept: DetectedStrike[] = [];
-  const confRank = (c: DetectedStrike['confidence']) => (c === 'high' ? 2 : c === 'medium' ? 1 : 0);
+  // 2026-08-01 (marquee-feature audit, findings 1 & 2) — KEEP THE EARLIEST member of a rebound group,
+  // and measure the gap from that first IMPACT time, not from whatever we last kept.
+  //   Finding 1: physics is impact-THEN-rebound; the ball hitting the net/floor lands 0.5–2.5s AFTER
+  //   the strike and routinely meters LOUDER. The old "keep the louder/stronger" rule therefore snapped
+  //   strikeMs to the NET hit — inflating tempo's downswing by the flight time and sliding the ball-
+  //   departure window + clubhead trace past the true impact. This is the exact bug strikeDetector's
+  //   keep-earliest debounce was written to avoid; we must not undo it one stage downstream.
+  //   Finding 2: the old code advanced the anchor to the replaced (later) event, so a loud rebound could
+  //   CASCADE — a real 2nd swing within minGapMs of the REBOUND (but well past the real impact) got
+  //   swallowed, collapsing two swings into one. Anchoring to the group's impact time prevents that.
+  let groupImpactMs = -Infinity;
   for (const s of ordered) {
-    const last = kept[kept.length - 1];
-    if (last && s.timeMs - last.timeMs < minGapMs) {
-      // Same swing: keep the stronger read (confidence first, then loudness).
-      const better = confRank(s.confidence) > confRank(last.confidence)
-        || (confRank(s.confidence) === confRank(last.confidence) && s.peakDb > last.peakDb);
-      if (better) kept[kept.length - 1] = s;
-      continue;
-    }
+    if (s.timeMs - groupImpactMs < minGapMs) continue; // a rebound after this group's impact → drop it
     kept.push(s);
+    groupImpactMs = s.timeMs;
   }
   return kept;
 }
