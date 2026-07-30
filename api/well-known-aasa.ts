@@ -16,10 +16,18 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 export default function handler(_req: VercelRequest, res: VercelResponse): void {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'public, max-age=3600');
+  // Include BOTH the modern (appIDs/components) and legacy (appID/paths) shapes so any verifier —
+  // Apple's, Meta's DAT registration, older crawlers — accepts it. `apps: []` is required by Apple.
   res.status(200).send(JSON.stringify({
     applinks: {
+      apps: [],
       details: [
-        { appIDs: ['B6KTPCWF7A.com.smartplaycaddie.app'], components: [{ '/': '/glasses*' }] },
+        {
+          appID: 'B6KTPCWF7A.com.smartplaycaddie.app',
+          appIDs: ['B6KTPCWF7A.com.smartplaycaddie.app'],
+          paths: ['/glasses', '/glasses/*'],
+          components: [{ '/': '/glasses' }, { '/': '/glasses/*' }],
+        },
       ],
     },
     webcredentials: { apps: ['B6KTPCWF7A.com.smartplaycaddie.app'] },
