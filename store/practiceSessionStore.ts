@@ -106,7 +106,12 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
       active: null,
       history: [],
       startSession: (kind, opts) =>
-        set({
+        // 2026-07-30 (audit #20) — don't silently discard an in-progress session's swings. If one is
+        // active with logged swings, archive it to history (finalized) before starting the new one.
+        set((s) => ({
+          history: (s.active && s.active.swings.length > 0)
+            ? [...s.history, { ...s.active, endedAt: s.active.endedAt ?? Date.now() }].slice(-100)
+            : s.history,
           active: {
             id: newId('ps'),
             kind,
@@ -117,7 +122,7 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
             endedAt: null,
             swings: [],
           },
-        }),
+        })),
       recordSwing: (sample) => {
         const active = get().active;
         if (!active) return; // not in a practice session → nothing to stamp

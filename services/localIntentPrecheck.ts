@@ -305,7 +305,10 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // the Mines course). Fires only when the ask names a data noun (round/scorecard/recap/swing) — a bare
   // "pull up Highland Links" has none, so it falls through to the course-open path. → findMyDataHandler.
   {
-    const dm = t.match(/\b(?:pull up|bring up|find|show|open|get|see|look up)\s+(?:me\s+)?(?:my\s+)?(.*\b(?:round|rounds|scorecard|score\s*card|recap|swing|swings)\b.*)/i);
+    // 2026-07-30 (audit #11) — the (?!\s*lab) negative lookahead stops "open swing lab" / "open my swing
+    // lab" from matching the `swing` data-noun and shadowing the SwingLab open_tool path. A real data ask
+    // ("pull up my last swing") still matches; "swing lab" falls through to the tool/course open.
+    const dm = t.match(/\b(?:pull up|bring up|find|show|open|get|see|look up)\s+(?:me\s+)?(?:my\s+)?(.*\b(?:round|rounds|scorecard|score\s*card|recap|swings?)\b(?!\s*lab).*)/i);
     if (dm) return intent(t, 'find_my_data', { query: dm[1].trim(), raw_utterance: t });
   }
 

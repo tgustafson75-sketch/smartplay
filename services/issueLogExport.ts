@@ -16,8 +16,14 @@ import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 const AUTOSEND_DEBOUNCE_MS = 4000;
+// 2026-07-30 (audit #17) — cap how long the debounce can keep deferring. A SUSTAINED sub-4s failure
+// cadence (e.g. glasses DAT_START_FAILED firing every ~1s — see Tim's issue log) re-armed the 4s timer
+// forever, so issues NEVER auto-sent while the failures continued. Once a send has been pending this long,
+// fire immediately instead of re-arming.
+const AUTOSEND_MAX_WAIT_MS = 20000;
 const sentIds = new Set<string>();
 let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
+let autoSendFirstArmedAt = 0;
 
 function fmtTs(ms: number): string {
   const d = new Date(ms);
@@ -55,8 +61,16 @@ export function buildIssueLogBody(): { subject: string; body: string; count: num
  */
 export function scheduleIssueAutoSend(): void {
   if (useSettingsStore.getState().shareDiagnostics === false) return;
+  const now = Date.now();
+  if (!autoSendTimer) autoSendFirstArmedAt = now;
+  // Been deferring under a sustained failure cadence past the cap → flush now instead of re-arming.
+  if (autoSendTimer && now - autoSendFirstArmedAt >= AUTOSEND_MAX_WAIT_MS) {
+    clearTimeout(autoSendTimer); autoSendTimer = null; autoSendFirstArmedAt = 0;
+    void autoSendIssues();
+    return;
+  }
   if (autoSendTimer) clearTimeout(autoSendTimer);
-  autoSendTimer = setTimeout(() => { void autoSendIssues(); }, AUTOSEND_DEBOUNCE_MS);
+  autoSendTimer = setTimeout(() => { autoSendTimer = null; autoSendFirstArmedAt = 0; void autoSendIssues(); }, AUTOSEND_DEBOUNCE_MS);
 }
 
 export async function autoSendIssues(): Promise<boolean> {

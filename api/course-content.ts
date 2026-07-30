@@ -139,7 +139,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const yardage = typeof body.yardage === 'number' ? body.yardage : 0;
     const rating = typeof body.rating === 'number' ? body.rating : null;
     const slope = typeof body.slope === 'number' ? body.slope : null;
-    const holesInput = (body.holes ?? []) as HoleInput[];
+    // 2026-07-30 (audit #29) — cap holes before they expand into the LLM prompt; an oversized array is a
+    // cost/DoS + prompt-bloat vector. No real course exceeds 27 holes of content here.
+    const holesInput = ((body.holes ?? []) as HoleInput[]).slice(0, 27);
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
     // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
     const personaInput: Persona | VoiceGender =

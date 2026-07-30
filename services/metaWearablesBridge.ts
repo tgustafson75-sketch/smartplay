@@ -378,7 +378,9 @@ function effectiveStreamConfig(): { quality: QualityPreset; fps: number } {
 }
 
 async function applyStreamConfig(): Promise<void> {
-  if (!NativeMod || !currentStatus.streaming) return;
+  // 2026-07-30 (audit #21) — skip while paused for caddie audio: currentStatus.streaming stays true
+  // during a voice pause, so a background transition would stop+start the stream and fight the pause.
+  if (!NativeMod || !currentStatus.streaming || pausedByVoice) return;
   const cfg = effectiveStreamConfig();
   if (cfg.fps === currentStatus.effectiveFps) return;
   devLog(`[mwdat-bridge] reconfiguring stream → quality=${cfg.quality} fps=${cfg.fps}`);
