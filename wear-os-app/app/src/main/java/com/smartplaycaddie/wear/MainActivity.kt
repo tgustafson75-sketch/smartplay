@@ -84,6 +84,7 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
     // Drill-feedback strip — a horizontally scrollable row of per-swing metric cards (2026-07-29).
     private lateinit var feedbackScroll: HorizontalScrollView
     private lateinit var feedbackRow: LinearLayout
+    private lateinit var fbRow: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -137,7 +138,7 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         }
 
         // Front / back flanking the hero number, classic rangefinder layout.
-        val fbRow = LinearLayout(this).apply {
+        fbRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(0, dp(2), 0, dp(8))
