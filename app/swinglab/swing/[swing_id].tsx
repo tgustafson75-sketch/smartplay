@@ -533,11 +533,15 @@ export default function SwingDetail() {
       // reinstall/native build; the raw stored path 404s). The main player self-heals via
       // resolveClipUri; the arc detector was using the raw path and silently never drawing.
       const uri = (await resolveClipUri(shot.clipUri!).catch(() => null)) || shot.clipUri!;
-      if (cancelled || isPlayingRef.current) return;
+      if (cancelled) return;
       try {
-        // shouldAbort bails between frames the instant playback starts (isPlayingRef is set
-        // eagerly in togglePlayPause, before ExoPlayer spins up).
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled || isPlayingRef.current });
+        // 2026-07-30 (Tim — "analysis isn't watching the whole swing; playback and analysis are tied
+        // together"). detectClubPath now extracts from a PRIVATE COPY (distinct file handle), so a native
+        // retriever can NO LONGER collide with ExoPlayer looping the original — the old "bail the instant
+        // playback starts" guard was the crash-era workaround and, since the review surface auto-plays, it
+        // aborted the arc mid-swing on every open (→ no club trace / partial read). Only abort on genuine
+        // cancellation (unmount / swing change) now; the private copy makes concurrent playback safe.
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled });
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a real arc (>= 4 validated points from detectClubPath, which
         // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
