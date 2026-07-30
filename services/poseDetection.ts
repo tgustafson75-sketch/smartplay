@@ -615,9 +615,12 @@ export async function locateSwingWindow(
     logLocate('swing_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_under_12s' : 'no_api_url', dur_ms: durationMs });
     return null;
   }
-  // 2026-07-20 (BETA) — denser sampling (~1 frame / 3s, clamped 10-16) so a fast swing in a
-  // long clip is more likely to land IN a frame for the locator to catch. Server cap is 16.
-  const count = Math.max(10, Math.min(16, Math.round(durationMs / 1000 / 3)));
+  // 2026-07-29 (Tim — "60s to analyze then a failure"). Root cause: locate sent up to 16 frames to a
+  // Gemini vision call; 16 images is a HEAVY multimodal inference that regularly ran past the 25s
+  // client timeout (server budget is 60s, so the client abandoned a call that was still running →
+  // consistent "swing_locate — Aborted"). A COARSE "which ~5s window has the swing" question doesn't
+  // need 16 images — 8-10 is plenty and the inference is far faster, so it lands well inside the window.
+  const count = Math.max(8, Math.min(10, Math.round(durationMs / 1000 / 5)));
   const frames = await extractCoarseFrames(clipUri, durationMs, count);
   if (frames.length < 3) {
     logLocate('swing_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
