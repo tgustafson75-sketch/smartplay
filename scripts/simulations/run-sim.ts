@@ -984,6 +984,29 @@ check('Custom caddie inherits a chosen base persona voice (Kevin/Serena/Harry/Ta
   })(),
   'the custom caddie ties to a real persona under the hood — inherits that persona\'s voice + gender (photo-matched voice still wins), selectable in the My Caddie setup, so it is never a voiceless name-only shell');
 
+check('Custom caddie inherits the base persona\'s BRAIN character (not hardcoded Kevin)',
+  // 2026-07-30 (Tim). lib/persona hardcodes custom → Kevin's character spec. Now the chosen base persona
+  // flows through buildPipecatContext → pipecat-turn, which builds the character spec from it (keeping the
+  // custom NAME). So a custom caddie tied to Tank actually TALKS like Tank.
+  (() => {
+    const ctx = read('services/pipecatContext.ts');
+    const brain = read('api/pipecat-turn.ts');
+    return (
+      /customCaddieBasePersona: profile\.customCaddieBasePersona/.test(ctx) &&
+      /const specPersona = caddie === 'custom' \? customBase : caddie/.test(brain) &&
+      /getCharacterSpec\(specPersona\)/.test(brain)
+    );
+  })(),
+  'the custom caddie\'s brain personality is the CHOSEN base persona (Tank/Serena/Harry/Kevin), not always Kevin — name stays custom, character is inherited');
+
+check('Mental-game tone reading is explicitly ALWAYS-ON (on and off round)',
+  // 2026-07-30 (Tim — "make sure the caddie when listening processes the tone and emotions of the golfer…
+  // original intent, track user state and help the mental game"). The MENTAL GAME block already reads
+  // emotional subtext + logs state; now it's explicitly always-on, including off-round conversation.
+  /ALWAYS-ON, on the course AND off it/.test(read('api/pipecat-turn.ts')) &&
+    /read the TONE and emotional state underneath the words/.test(read('api/pipecat-turn.ts')),
+  'the caddie reads the golfer\'s tone/emotional state on EVERY turn — course, practice, get-to-know, casual — and lets it shape the response, per the app\'s core mental-game intent');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed

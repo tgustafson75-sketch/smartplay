@@ -32,6 +32,9 @@ export function buildPipecatContext() {
       // 2026-07-04 (clean-audit) — so the server prompt can speak AS the user's
       // custom caddie by its real name instead of defaulting to "Kevin".
       customCaddieName: profile.customCaddieName ?? undefined,
+      // 2026-07-30 (Tim — "tie my persona to Tank/Kevin/Serena") — so the server can give the custom
+      // caddie the CHOSEN persona's character spec (was hardcoded to Kevin's) while keeping its name.
+      customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
       caddiePersonality: settings.caddiePersonality,
       trustLevel,
     },
