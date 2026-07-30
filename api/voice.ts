@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import OpenAI from 'openai';
-import { KEVIN_TTS_INSTRUCTIONS, KEVIN_TTS_SPEED } from './_kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 });
 
@@ -118,7 +118,7 @@ export default async function handler(
       voice,
       input: String(text),
       instructions: KEVIN_TTS_INSTRUCTIONS,
-      speed: KEVIN_TTS_SPEED,
+      // NOTE: no `speed` — gpt-4o-mini-tts rejects it (500). Pace lives in the instructions.
     });
 
     const audioBuffer = await mp3.arrayBuffer();
@@ -129,7 +129,10 @@ export default async function handler(
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.log('[voice] error:', msg);
-    return res.status(500).json({ error: 'Voice generation failed' });
+    // 2026-07-30 (Tim — "voice_silent_fail 500" was a black box) — surface the REAL reason so the
+    // client issue log shows WHY (OpenAI rejection / timeout / rate) instead of a generic string.
+    const status = (err as { status?: number } | undefined)?.status;
+    console.log('[voice] error:', status ?? '', msg);
+    return res.status(500).json({ error: 'Voice generation failed', detail: msg.slice(0, 300), upstream_status: status ?? null });
   }
 }

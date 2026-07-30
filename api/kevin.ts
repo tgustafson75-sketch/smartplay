@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
-import { KEVIN_TTS_INSTRUCTIONS, KEVIN_TTS_SPEED } from './_kevinVoice';
+import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
@@ -1590,7 +1590,7 @@ ${onCourseContextBlock}${baseMessage}`
         voice: ttsVoice,
         input: text,
         instructions: KEVIN_TTS_INSTRUCTIONS,
-        speed: KEVIN_TTS_SPEED,
+        // NOTE: no `speed` — gpt-4o-mini-tts rejects it (500). Pace lives in the instructions.
       });
       const arrayBuffer = await ttsResponse.arrayBuffer();
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');

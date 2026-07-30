@@ -947,6 +947,24 @@ check('Swing-detail transport is CROPPED to the located swing window (bar + stag
   })(),
   'the swing-detail player presents ONLY the located swing — walk-up/waggle/post-swing dead air are cropped from the timeline and from playback, and the jump-to-stage chips line up with the bar');
 
+check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
+  // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
+  // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every
+  // REAL speech.create that passed it (the warmup calls, which never sent speed, kept succeeding —
+  // exactly the boot logs). speed is removed everywhere; pace lives in the instructions.
+  (() => {
+    const voice = read('api/voice.ts');
+    const kevin = read('api/kevin.ts');
+    const kv = read('api/_kevinVoice.ts');
+    return (
+      !/KEVIN_TTS_SPEED/.test(kv) &&        // the export is gone
+      !/speed:\s*KEVIN_TTS_SPEED/.test(voice) && !/speed:\s*KEVIN_TTS_SPEED/.test(kevin) &&
+      // and the failure is no longer a black box — the real reason is surfaced
+      /detail: msg\.slice/.test(voice) && /upstream_status/.test(voice)
+    );
+  })(),
+  'no unsupported `speed` param reaches gpt-4o-mini-tts (so cloud voice generates instead of 500ing), and a genuine failure now reports the real upstream reason instead of a generic string');
+
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed
