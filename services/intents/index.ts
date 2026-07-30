@@ -73,7 +73,14 @@ voiceCommandRouter.registerHandler(positionDeclareHandler);
 voiceCommandRouter.registerHandler(inRoundDiagnosticHandler);
 voiceCommandRouter.registerHandler(confirmPositionHandler);
 voiceCommandRouter.registerHandler(setHoleNoteHandler);
-voiceCommandRouter.registerHandler(socialGreetingHandler);
+// 2026-07-31 (Tim — "make sure no preprogrammed voice is blocking; process everything optimally
+// through the AI"). socialGreetingHandler returned a CANNED per-persona pool line for any greeting /
+// check-in ("how are you", "hey Serena", even "nothing, just testing") — so the caddie deflected and
+// repeated instead of actually answering, a robotic wall in front of the AI. UNREGISTERED so every
+// greeting routes to the BRAIN (both the caddie-tab and hands-free paths fall through to the brain
+// when there is no handler for the intent) → real, in-character, varied replies. The handler + its
+// clip pools are left in the tree (unused) in case a cost-gated greeting shortcut is ever wanted back.
+// voiceCommandRouter.registerHandler(socialGreetingHandler);
 voiceCommandRouter.registerHandler(undoHandler);
 
 export {

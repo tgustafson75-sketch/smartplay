@@ -2181,9 +2181,17 @@ export const useVoiceCaddie = ({
         const isDisruptiveOpen = typeof actionType === 'string' && DISRUPTIVE_OPEN_ACTIONS.has(actionType);
         const openGatePassed = !isDisruptiveOpen || intent.confidence === 'high';
 
+        // 2026-07-31 (Tim — "make sure no preprogrammed voice is blocking; process everything
+        // optimally through the AI"). A greeting / check-in ("how are you", "hey Serena", even
+        // "nothing, just testing") was short-circuited to a CANNED per-persona pool line + bundled
+        // greeting clip — so the caddie deflected ("I'm here, what are you thinking?") and repeated it
+        // instead of actually answering. That is a robotic wall in front of the AI. Route social_greeting
+        // to the BRAIN like `conversational`, so the caddie gives a real, in-character, varied response.
+        // (The brain is kept warm by the heartbeat, so the latency cost is negligible.) [[feels-like-a-real-caddie]]
         const isCommandHit =
           intent.intent_type !== 'unknown' &&
           intent.intent_type !== 'conversational' &&
+          intent.intent_type !== 'social_greeting' &&
           intent.confidence !== 'low' &&
           openGatePassed &&
           (result.success || result.follow_up_needed);

@@ -2758,6 +2758,23 @@ check('Persona switch: ONE unified handoff (no double-speak, no racing opener, n
   })(),
   'every persona switch (kevin/serena/harry/tank) produces exactly ONE handoff — the bundled opener — with no redundant ack, no app-open opener stacking on top, and no cold follow-up turn dead-ending into the off-course line');
 
+check('Voice: greetings/check-ins route to the BRAIN (no canned pool line blocking the AI)',
+  // 2026-07-31 (Tim — "no preprogrammed voice blocking; process everything through the AI"). A greeting
+  // ("how are you", "hey Serena") was short-circuited to a canned per-persona pool line + bundled clip,
+  // so the caddie deflected ("I'm here, what are you thinking?") and repeated it. socialGreetingHandler
+  // is UNREGISTERED → both the caddie-tab and hands-free paths fall through to the brain for a real reply.
+  (() => {
+    const idx = read('services/intents/index.ts');
+    const vc = read('hooks/useVoiceCaddie.ts');
+    return (
+      // the handler is no longer registered (line commented with the rationale)
+      /\/\/ voiceCommandRouter\.registerHandler\(socialGreetingHandler\);/.test(idx) &&
+      // and the caddie-tab command-hit gate also excludes social_greeting (defensive)
+      /intent\.intent_type !== 'social_greeting'/.test(vc)
+    );
+  })(),
+  'a greeting or check-in is answered by the real brain (in-character, varied) instead of a canned pool line — no preprogrammed voice sits in front of the AI on either voice path');
+
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the
