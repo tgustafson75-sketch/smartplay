@@ -1454,11 +1454,19 @@ export const useCageStore = create<CageState>()(
         })),
 
       setSessionBiomechanics: (sessionId, biomechanics) =>
-        // 2026-07-30 (analysis audit S-1) — dual-patch activeSession like its P4 siblings, so a biomech
-        // write during an in-flight (not-yet-endSession'd) session isn't silently dropped.
+        // 2026-07-30 (analysis audit S-1) — dual-patch activeSession like its P4 siblings.
+        // 2026-07-30 (audit #3 — Re-analyze WIPE) — never overwrite a present biomech read with a
+        // null/empty-frames one. A flaky Re-analyze (pose API opt-out, no usable frames, network) returns
+        // null, and the backfill effect is gated on `biomechanics !== undefined`, so a null overwrite
+        // PERMANENTLY wiped the skeleton + numbers (while the arc, guarded, survived — an ugly partial
+        // wipe). Same "don't downgrade good→empty" rule the arc setters already carry.
         set(s => {
-          const apply = (session: CageSession): CageSession =>
-            session.id !== sessionId ? session : { ...session, biomechanics };
+          const hasFrames = (b: typeof biomechanics | undefined) => !!(b && Array.isArray(b.frames) && b.frames.length > 0);
+          const apply = (session: CageSession): CageSession => {
+            if (session.id !== sessionId) return session;
+            if (!hasFrames(biomechanics) && hasFrames(session.biomechanics)) return session; // keep the good read
+            return { ...session, biomechanics };
+          };
           return {
             activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,
             sessionHistory: s.sessionHistory.map(apply),
@@ -1490,10 +1498,16 @@ export const useCageStore = create<CageState>()(
       // (not-yet-endSession'd) session matches a shot id and isn't silently dropped.
       setShotBiomechanics: (sessionId, shotId, biomechanics) =>
         set(s => {
+          // 2026-07-30 (audit #3) — don't overwrite a present per-shot biomech with a null/empty re-run.
+          const hasFrames = (b: typeof biomechanics | undefined) => !!(b && Array.isArray(b.frames) && b.frames.length > 0);
           const apply = (session: CageSession): CageSession =>
             session.id !== sessionId ? session : {
               ...session,
-              shots: session.shots.map(sh => sh.id !== shotId ? sh : { ...sh, biomechanics }),
+              shots: session.shots.map(sh => {
+                if (sh.id !== shotId) return sh;
+                if (!hasFrames(biomechanics) && hasFrames(sh.biomechanics)) return sh;
+                return { ...sh, biomechanics };
+              }),
             };
           return {
             activeSession: s.activeSession && s.activeSession.id === sessionId ? apply(s.activeSession) : s.activeSession,

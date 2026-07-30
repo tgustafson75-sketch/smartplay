@@ -274,11 +274,15 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         return brainFallbackReply(message, language);
       }
 
-      const raw = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null };
+      const raw = await res.json() as { text: string; audioBase64: string | null; toolAction: ToolAction | null; toolActions?: ToolAction[] };
       const { text, audioBase64 } = checkContent(raw.text, raw.audioBase64);
 
-      if (raw.toolAction && callbacks.onToolAction) {
-        callbacks.onToolAction(raw.toolAction);
+      // 2026-07-30 (audit #1) — dispatch the FULL toolActions array (kevin.ts emits it for multi-action
+      // turns); reading only the single `toolAction` dropped every action but the last. Fall back to the
+      // single field for older responses.
+      const acts = Array.isArray(raw.toolActions) && raw.toolActions.length ? raw.toolActions : (raw.toolAction ? [raw.toolAction] : []);
+      if (acts.length && callbacks.onToolAction) {
+        for (const a of acts) callbacks.onToolAction(a);
       }
 
       setIsThinking(false);

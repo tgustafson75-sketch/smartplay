@@ -130,11 +130,16 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
       }),
     }).finally(() => clearTimeout(t));
     if (!resp.ok) return null;
-    const j = (await resp.json()) as { text?: string; audioBase64?: string | null; toolAction?: unknown };
+    const j = (await resp.json()) as { text?: string; audioBase64?: string | null; toolAction?: unknown; toolActions?: unknown };
+    // 2026-07-30 (audit #1 — SILENT DATA LOSS) — kevin.ts returns BOTH a single `toolAction` (the last
+    // action) and the full `toolActions` array. Reading only `toolAction` dropped every action but the
+    // last on a multi-action turn ("log my 5 and record my next swing" → the score write was lost).
+    // Prefer the array; fall back to the single field for older server responses.
+    const acts = Array.isArray(j.toolActions) && j.toolActions.length ? j.toolActions : (j.toolAction ? [j.toolAction] : []);
     return {
       text: typeof j.text === 'string' ? j.text : null,
       audioBase64: typeof j.audioBase64 === 'string' ? j.audioBase64 : null,
-      toolActions: j.toolAction ? [j.toolAction] : [],
+      toolActions: acts,
       source: 'kevin',
     };
   } catch {

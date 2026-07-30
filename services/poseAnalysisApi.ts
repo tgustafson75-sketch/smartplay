@@ -673,6 +673,28 @@ export async function extractPoseFramesFromVideo(
   shouldAbort?: () => boolean,
 ): Promise<PoseFrame[] | null> {
   try { require('./routeBreadcrumb').breadcrumb('pose:extract:start', { durMs: Math.round(durationMs), windowed: !!window }); } catch { /* non-fatal */ }
+
+  // 2026-07-30 (audit #13 — "analysis stuck, works on the 3rd try") — make the PRIVATE COPY FIRST, before
+  // ANY native retriever runs (the duration probe below AND the frame extraction). Previously the copy
+  // was created only after the probe, so probeDurationMs decoded the ORIGINAL clip while ExoPlayer looped
+  // it on the review surface → native SIGSEGV/hang that cleared only on a retry. Everything native now
+  // reads workUri (the copy); copy failure → skeleton-only degrade, never a crash. Deleted on every exit.
+  let workUri = videoUri;
+  let tempCopy: string | null = null;
+  try {
+    const dir = FileSystem.cacheDirectory;
+    if (dir) {
+      const dest = `${dir}pose-src-${Date.now()}.mp4`;
+      await FileSystem.copyAsync({ from: videoUri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+    }
+  } catch { /* copy failed */ }
+  if (!tempCopy) {
+    console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
+    return null;
+  }
+
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
 
   // 2026-07-07 (biomech audit #2) — STRIKE-ANCHORED sampling. The fixed window
@@ -716,7 +738,11 @@ export async function extractPoseFramesFromVideo(
       try {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
-        const probed = await probeDurationMs(videoUri);
+        // 2026-07-30 (audit #13 — "analysis stuck, works on the 3rd try") — probe the PRIVATE COPY, never
+        // the original: probeDurationMs runs a native MediaMetadataRetriever, and on the always-looping
+        // review the original is being decoded by ExoPlayer → SIGSEGV/hang until a retry. workUri is the
+        // copy (made just above, before this probe).
+        const probed = await probeDurationMs(workUri);
         if (probed && probed >= 500) {
           // Trust the probe when caller-supplied was the suspicious
           // 3000ms default OR when the probe disagrees by > 50%.
@@ -732,6 +758,7 @@ export async function extractPoseFramesFromVideo(
 
     if (effectiveDurationMs < 500) {
       console.warn('[pose] video too short to sample', { duration_ms: effectiveDurationMs });
+      try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
       return null;
     }
 
@@ -794,30 +821,8 @@ export async function extractPoseFramesFromVideo(
     }
   } catch { /* native module absent — keep anchors only */ }
 
-  // 2026-07-29 (Tim — recurring WHITE SCREEN on analyze). The frame grab (poseAtTime →
-  // MediaMetadataRetriever) was hitting the ORIGINAL clip while ExoPlayer decodes the same file for
-  // the looping review → native SIGSEGV that bypasses the JS ErrorBoundary = blank white screen (the
-  // last extractor not brought under the club-path hardening). Mirror it exactly: extract from a
-  // PRIVATE COPY (different file handle → the crash condition cannot occur), NEVER fall back to the
-  // playing original, bail between frames if playback (re)starts, and delete the copy after.
-  let workUri = videoUri;
-  let tempCopy: string | null = null;
-  try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}pose-src-${Date.now()}.mp4`;
-      await FileSystem.copyAsync({ from: videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
-    }
-  } catch { /* copy failed */ }
-  if (!tempCopy) {
-    // No private copy → do NOT decode the (possibly-playing) original. Skeleton-only degrade is fine;
-    // a crash-to-launcher is not. (Same hard rule as clubPath for the always-looping review surface.)
-    console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
-    return null;
-  }
   // Sequential — on-device runs one detector instance; cloud is polite to the rate limit.
+  // (workUri = the private copy made at the top of this function; NEVER the playing original.)
   const frames: PoseFrame[] = [];
   try {
     for (const { key, timeMs } of sampleTimes) {

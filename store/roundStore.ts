@@ -1076,6 +1076,13 @@ export const useRoundStore = create<RoundState>()(
         // ride along automatically with the isRoundActive=true set
         // above.
         void (async () => {
+          // 2026-07-30 (audit #4/#14 — DEVICE-CONFIRMED GPS leak) — a SIM round must NOT start the real
+          // GPS watch + Android foreground-service notification; simRound feeds SIMULATED fixes. This
+          // orchestration ran unconditionally, so a live watchPositionAsync + "tracking your round"
+          // notification + eval timer leaked for the WHOLE sim round (proven in Tim's issue log:
+          // gps_error stale_hard_clear with lastSource:live DURING a sim round), and on permission-denied
+          // it even discardRound()'d the sim round out from under the user. Sim GPS is simRound's job.
+          if (options.simulated === true) return;
           try {
             const Location = await import('expo-location');
             const perm = await Location.requestForegroundPermissionsAsync();
