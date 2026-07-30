@@ -109,8 +109,11 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
         // 2026-07-30 (audit #20) — don't silently discard an in-progress session's swings. If one is
         // active with logged swings, archive it to history (finalized) before starting the new one.
         set((s) => ({
+          // 2026-07-30 (verify) — PREPEND (newest-first) + slice(0,50) to match endSession/
+          // recordCompletedSession; the dashboard reads history.slice(0,6) assuming newest-first, and a
+          // sibling slice(0,50) at cap would otherwise evict a tail-appended archive.
           history: (s.active && s.active.swings.length > 0)
-            ? [...s.history, { ...s.active, endedAt: s.active.endedAt ?? Date.now() }].slice(-100)
+            ? [{ ...s.active, endedAt: s.active.endedAt ?? Date.now() }, ...s.history].slice(0, 50)
             : s.history,
           active: {
             id: newId('ps'),
