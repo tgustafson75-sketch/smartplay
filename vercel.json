@@ -587,6 +587,26 @@
       "dest": "/api/course-places.ts"
     },
     {
+      "src": "/.well-known/apple-app-site-association",
+      "dest": "/api/well-known-aasa.ts"
+    },
+    {
+      "src": "/apple-app-site-association",
+      "dest": "/api/well-known-aasa.ts"
+    },
+    {
+      "src": "/.well-known/assetlinks.json",
+      "dest": "/api/well-known-assetlinks.ts"
+    },
+    {
+      "src": "/glasses",
+      "dest": "/api/glasses-return.ts"
+    },
+    {
+      "src": "/glasses/(.*)",
+      "dest": "/api/glasses-return.ts"
+    },
+    {
       "handle": "filesystem"
     },
     {
