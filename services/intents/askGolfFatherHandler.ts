@@ -138,12 +138,17 @@ export const askGolfFatherHandler: IntentHandler = {
     use_context: 'boolean — whether to weave in current location/distance. Defaults true.',
   },
 
+  // 2026-07-31 (Tim — "no preprogrammed voice blocking; process everything through the AI"). REMOVED
+  // the generic conversational strategy phrases ("what's the play here", "tell me what to do") — those
+  // are THE flagship AI-caddie question and must reach the brain, not this hardcoded (no-LLM) Tank rule
+  // cascade (which also spoke a "Tank:" line even when another persona was active). Only an EXPLICIT
+  // Golf-Father / Tank invocation should trigger the deterministic rule set.
   examples: [
     'what would Tank do here',
-    "what's the play here",
-    'tell me what to do',
+    'ask the golf father',
     'Golf Father help',
     'Tank advice',
+    'Tank what do you think',
   ],
 
   async execute(intent, context): Promise<IntentResult> {

@@ -1319,11 +1319,15 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       default:
+        // 2026-07-31 (Tim — "no canned voice blocking the AI"). An unmapped status topic (a vague
+        // "how's it looking out there?") used to get a canned re-prompt with follow_up_needed:true,
+        // which fired as a command hit instead of the brain. Defer to the brain: null voice_response +
+        // no follow-up → not a command hit → the AI answers naturally.
         return {
           success: false,
-          voice_response: 'What about it — score, hole, the ghost, your pattern?',
-          side_effects: ['query:unknown_topic'],
-          follow_up_needed: true,
+          voice_response: null,
+          side_effects: ['query:unknown_topic:route_to_brain'],
+          follow_up_needed: false,
         };
     }
   },

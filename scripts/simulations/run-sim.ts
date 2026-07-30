@@ -1840,15 +1840,17 @@ check('Offline caddie: the MOAT read (plays-like + club) answers LOCALLY, no net
   'plays-like composes the club + wind-adjusted distance locally (composeShotRead + cached weather); routed before raw yardage; offline-safe');
 
 check('Offline caddie: wind status answers locally (head/tail/cross from cached weather)',
-  // 2026-06-13 — another offline-mute fix: "what's the wind / how's the wind / windy"
-  // answers locally from cached weather, described relative to the shot (into your
+  // 2026-06-13 — another offline-mute fix: a wind QUESTION ("what's the wind / how's the
+  // wind") answers locally from cached weather, described relative to the shot (into your
   // face / at your back / cross) via the playsLike wind decomposition. Routed AFTER
   // plays-like so "with the wind" still goes to the distance read. Honest no-reading.
+  // 2026-07-31 (Tim — "no canned voice blocking the AI") — the matcher now requires QUESTION
+  // phrasing (a bare "it's windy" converses with the brain instead of a canned wind read).
   (() => {
     const src = read('services/localStatusResponder.ts');
     return (
       /import \{ playsLikeDistance \} from '\.\.\/utils\/playsLike'/.test(src) &&
-      /wind:\s*\/\\b\(wind\|windy/.test(src) &&                 // the wind matcher
+      /wind:\s*\/\\b\(how\(\?:'s\|s\)\?\\s\+\(\?:the\\s\+\)\?wind/.test(src) && // wind QUESTION matcher
       /if \(RX\.wind\.test\(t\)\) \{\s*\n\s*return windReply\(lang\);/.test(src) &&
       /function windReply/.test(src) &&
       /along_wind_mph/.test(src) && /cross_wind_mph/.test(src) && // relative components
@@ -2774,6 +2776,33 @@ check('Voice: greetings/check-ins route to the BRAIN (no canned pool line blocki
     );
   })(),
   'a greeting or check-in is answered by the real brain (in-character, varied) instead of a canned pool line — no preprogrammed voice sits in front of the AI on either voice path');
+
+check('Voice: canned-speech sweep — strategy/conversation reads route to the brain, not local templates',
+  // 2026-07-31 (Tim — full-app canned-speech audit). Seven local intercepts that spoke a hardcoded
+  // line on ORDINARY conversation now defer to the brain: the golf-father cascade no longer claims
+  // "what's the play here"; wind needs question phrasing; "how am I doing" isn't a scoreboard read;
+  // hole-info strategy is AI-led online; unmapped query_status defers; "help me X" + acks-with-a-request
+  // route to the brain.
+  (() => {
+    const gf = read('services/intents/askGolfFatherHandler.ts');
+    const lsr = read('services/localStatusResponder.ts');
+    const qs = read('services/intents/queryStatusHandler.ts');
+    const help = read('services/intents/helpHandler.ts');
+    const ack = read('services/intents/acknowledgeHandler.ts');
+    return (
+      // 1 — golf-father reduced to EXPLICIT invocations (generic strategy phrases removed from examples)
+      /'ask the golf father'/.test(gf) &&
+      // 7 — hole strategy is AI-led online (added to the exclusion set)
+      /'club_recommend', 'plays_like', 'reach', 'hole_info'/.test(lsr) &&
+      // 3 — unmapped query_status defers to the brain
+      /query:unknown_topic:route_to_brain/.test(qs) &&
+      // 5 — "help me X" routes to the brain
+      /help:coaching:route_to_brain/.test(help) &&
+      // 6 — an ack carrying a request routes to the brain instead of a silent swallow
+      /acknowledge:has_request:route_to_brain/.test(ack)
+    );
+  })(),
+  'the flagship "what\'s the play here", a passing "it\'s windy", "how am I doing", a hole-strategy ask, a vague status question, "help me read this putt", and "okay so what should I do" all reach the AI brain now — every canned local intercept on ordinary conversation was closed');
 
 check('Sim round: narrated yardage holds (simulated fix not treated as stale) + prewarms on start',
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min

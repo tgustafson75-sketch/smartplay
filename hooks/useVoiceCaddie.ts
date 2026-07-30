@@ -2155,14 +2155,12 @@ export const useVoiceCaddie = ({
           }
         }
 
-        // 2026-06-06 — `social_greeting` is NO LONGER excluded here.
-        // It was excluded when the dispatch path routed social_greeting
-        // to the brain (returning success:false). Now that
-        // socialGreetingHandler is registered and returns
-        // success:true + voice_response, treating it as a non-hit was
-        // making the greeting clips dead code AND paying the full
-        // brain round-trip on every "hey kevin". Including it here
-        // makes the local handler reply fire + the greeting clip play.
+        // 2026-07-31 (Tim — "no preprogrammed voice blocking the AI"). `social_greeting` IS excluded
+        // from isCommandHit again (below) AND socialGreetingHandler is UNREGISTERED (services/intents/
+        // index.ts), so a greeting/check-in routes to the BRAIN for a real reply — the canned per-persona
+        // pool line + greeting-clip shortcut (the "I'm here, what are you thinking?" loop) are gone. (The
+        // 2026-06-06 cost optimization that made greetings local was reverted: a robotic wall in front of
+        // the AI is a defect, and the brain is kept warm so the latency cost is negligible.)
         // 2026-07-06 (Tim — "less predictive, more explicit; don't open tools when
         // I'm just narrating") — a DISRUPTIVE tool-open (record, open a screen,
         // navigate, start a drill) fired from the FAST classifier bypasses the

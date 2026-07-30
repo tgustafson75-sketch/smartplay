@@ -66,7 +66,12 @@ export type LocalReplyLanguage = 'en' | 'es' | 'zh';
  * course/routine memory) stay INSTANT + local — the AI adds nothing but lag there.
  */
 export const AI_LED_QUERY_TYPES: ReadonlySet<string> = new Set<string>([
-  'club_recommend', 'plays_like', 'reach',
+  // 2026-07-31 (Tim — "process everything through the AI") — added 'hole_info'. A "what's this hole
+  // like / what do I watch for" is a JUDGMENT read the brain narrates far richer than the static course
+  // book; the on-screen mic path was answering it locally (the earbud path already excluded it, so the
+  // two disagreed). Now both route hole strategy to the brain ONLINE; the local template stays the
+  // OFFLINE safety net via answerOffline().
+  'club_recommend', 'plays_like', 'reach', 'hole_info',
 ]);
 
 export type LocalReplyResult = {
@@ -328,7 +333,10 @@ const RX = {
   // 'my score' is the query form. 'score me' is the LOG-action form
   // (handled by logScoreHandler in the open-mic intent path); we don't
   // match it here. Same for 'score it for me'.
-  score:      /\b(my\s+score|what(?:'s|s)?\s+my\s+score|how\s+am\s+i\s+doing|vs\.?\s+par|under\s+par|over\s+par)\b/i,
+  // 2026-07-31 (Tim) — dropped "how am i doing": it's usually an emotional check-in, not a scoreboard
+  // request, and it was short-circuiting to a canned score read instead of the brain. Keep explicit
+  // score phrasings.
+  score:      /\b(my\s+score|what(?:'s|s)?\s+my\s+score|vs\.?\s+par|under\s+par|over\s+par)\b/i,
   holesLeft:  /\b(holes?\s+left|holes?\s+remaining|how\s+many\s+(?:more|holes?)\s+(?:to\s+go|left)|holes?\s+to\s+go)\b/i,
   tee:        /\b(what\s+tee|which\s+tee|tee\s+box|what\s+tees?\s+(?:am\s+i|i'm)\s+playing)\b/i,
   course:     /\b(what\s+course|which\s+course|where\s+am\s+i\s+playing|what\s+(?:'s|s)?\s+the\s+course)\b/i,
@@ -343,7 +351,10 @@ const RX = {
   playsLike:  /\b(plays?\s+like|playing\s+(?:distance|like)|how\s+far\s+does\s+it\s+play|with\s+the\s+wind|into\s+the\s+wind|adjusted?\s+(?:for\s+)?(?:wind|elevation)|effective\s+(?:distance|yardage))\b/i,
   // WIND status ("what's the wind / how's the wind / windy / breeze"). Checked AFTER
   // plays-like so "with/into the wind" routes to the distance read, not here.
-  wind:       /\b(wind|windy|breeze|breezy|gust(?:s|ing|y)?|how(?:'s|s)?\s+(?:the\s+)?wind)\b/i,
+  // 2026-07-31 (Tim — "no canned voice blocking the AI"). Was `\b(wind|windy|breeze|...)\b` — a bare
+  // "man it's windy" / "love this breeze" got a canned wind read instead of the brain. Require QUESTION
+  // / read phrasing so only an actual wind QUERY is answered locally; a comment about the wind converses.
+  wind:       /\b(how(?:'s|s)?\s+(?:the\s+)?wind|what(?:'s|s)?\s+(?:the\s+)?wind|wind\s+(?:check|direction|read|doing|like)|which\s+way(?:'s|s)?\s+(?:the\s+)?wind)\b/i,
   // REACH feasibility — "can I reach / get there / get home / carry it / enough club".
   reach:      /\b(can\s+i\s+(?:reach|get\s+(?:there|home|to\s+the\s+green))|(?:will|can)\s+i\s+(?:make|carry)\s+(?:it|the\s+green)|do\s+i\s+have\s+(?:enough\s+club|the\s+club)|enough\s+club|reach\s+(?:the\s+green|it|in))\b/i,
   handicap:   /\b(my\s+handicap|what(?:'s|s)?\s+my\s+handicap)\b/i,
@@ -351,7 +362,11 @@ const RX = {
   // "what do I watch for", "any hazards/trouble/water here", "describe this hole",
   // "what's the play here"). Distinct from RX.hole ("what hole am I on") — routed
   // BEFORE it. Answered offline from the anchored static course book.
-  holeInfo:   /\b(what(?:'s|s)?\s+(?:this|the)\s+hole\s+(?:like|play|about)|how\s+does\s+this\s+hole\s+play|what\s+(?:do|should)\s+i\s+(?:watch|look)\s+(?:out\s+)?for|(?:any\s+)?(?:hazards?|trouble|water|bunkers?)\s+(?:here|on\s+this(?:\s+hole)?)|describe\s+(?:this\s+)?hole|tell\s+me\s+about\s+(?:this\s+)?hole|what(?:'s|s)?\s+the\s+play\s+(?:here|on\s+this))\b/i,
+  // 2026-07-31 (Tim) — dropped the "what's the play here" alternative: that's a strategy ASK that must
+  // go to the brain (the AI caddie), not the static course-book template. Genuine hole-characteristic
+  // questions (what's this hole like, hazards, what to watch for) still match — and are AI-led online too
+  // (see the hole_info exclusion on the mic path).
+  holeInfo:   /\b(what(?:'s|s)?\s+(?:this|the)\s+hole\s+(?:like|play|about)|how\s+does\s+this\s+hole\s+play|what\s+(?:do|should)\s+i\s+(?:watch|look)\s+(?:out\s+)?for|(?:any\s+)?(?:hazards?|trouble|water|bunkers?)\s+(?:here|on\s+this(?:\s+hole)?)|describe\s+(?:this\s+)?hole|tell\s+me\s+about\s+(?:this\s+)?hole)\b/i,
   // 2026-06-13 — pre-round routine (round-INDEPENDENT; handled before the round
   // gate). Save = the stretches the caddie just gave (from the conversation log);
   // recall = read them back. "save those stretches as my routine" / "what's my

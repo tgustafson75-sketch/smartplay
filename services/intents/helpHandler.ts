@@ -27,6 +27,14 @@ export const helpHandler: IntentHandler = {
   ],
 
   async execute(_intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
+    // 2026-07-31 (Tim — "no canned voice blocking the AI"). "help me read this putt" / "help me with my
+    // slice" is a COACHING request, not a capabilities query — it must reach the brain, not the fixed
+    // command menu. Only a bare "what can I say / help / what are my options" gets the menu; "help me
+    // <do X>" (or "help with X") defers to the brain.
+    const raw = String((_intent as { raw_text?: unknown }).raw_text ?? '').toLowerCase().trim();
+    if (/\bhelp\s+me\b/.test(raw) || /\bhelp\s+with\b/.test(raw)) {
+      return { success: false, voice_response: null, side_effects: ['help:coaching:route_to_brain'], follow_up_needed: false };
+    }
     const surfaceActions = voiceHandlerRegistry.forSurface(context.active_screen);
     const screenSpecific = surfaceActions.map(a => a.description).filter(Boolean);
 

@@ -79,11 +79,10 @@ export class VoiceCommandRouter {
   async dispatch(intent: VoiceIntent, context: AppContext): Promise<IntentResult> {
     // 2026-06-04 — `conversational` falls through to the brain (free-form
     // questions need the LLM). Does not log to voice-miss (intentional).
-    // 2026-06-06 — `social_greeting` NO LONGER routes to brain; it falls
-    // through to the new socialGreetingHandler below. The handler picks a
-    // canned per-persona line and returns it as a normal IntentResult.
-    // Brain is never called for greetings — saves the most expensive
-    // round-trip on the most predictable utterance.
+    // 2026-07-31 — `social_greeting` ROUTES TO THE BRAIN again: socialGreetingHandler is unregistered
+    // (services/intents/index.ts), so with no handler for the intent both the mic and hands-free paths
+    // fall through to the brain for a real, in-character reply. (The 2026-06-06 canned-greeting cost
+    // optimization was a robotic wall in front of the AI — reverted per Tim.)
     if (intent.intent_type === 'conversational') {
       return {
         success: false,
