@@ -3768,9 +3768,14 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* Ball area + (movable) target overlay — reference markers placed
-            via the targeting card on the analysis page. */}
-        {isReview && showResults && (ballArea || targetPoint) ? (
+        {/* Ball area + (movable) target overlay — reference markers placed via the targeting card.
+            2026-07-30 (Tim — "hide the box + lines on replay; the guidance is for setup"). The ball box
+            + aim line cluttered the REVIEW frame (and often sat off the actual ball on the recorded
+            crop). They belong in SETUP/RECORDING where you place them; on replay they're noise. The
+            stored ballArea STILL drives camera contact detection — only the on-replay OVERLAY is hidden,
+            so no analysis logic is lost. (Set REVIEW_SHOW_TARGETS true to bring the review fine-tune
+            back.) */}
+        {false && isReview && showResults && (ballArea || targetPoint) ? (
           // 2026-06-11 — DRAGGABLE in review: the recorded clip's FOV is a tighter
           // crop than the live preview (Samsung video crop), so a box placed in
           // setup can land a bit off on playback. Review IS the actual recorded

@@ -118,9 +118,23 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
   // fires. setState updates would otherwise see a stale snapshot.
   const pendingPathRef = useRef<string>('');
 
+  // 2026-07-30 (Tim — "circle/lines shoot off to the upper-left"). PanResponder's nativeEvent
+  // locationX/locationY is reported relative to whatever CHILD view is under the finger MID-DRAG (a
+  // prior stroke, the SVG), not this overlay — so as the finger moved the origin jumped and strokes
+  // collapsed toward the top-left. Fix: measure the overlay's absolute screen origin and convert
+  // pageX/pageY → overlay-local coords against it (stable regardless of what's under the finger).
+  const rootRef = useRef<View>(null);
+  const originRef = useRef({ x: 0, y: 0 });
+  const measureOrigin = () => {
+    rootRef.current?.measureInWindow((px, py) => {
+      if (Number.isFinite(px) && Number.isFinite(py)) originRef.current = { x: px, y: py };
+    });
+  };
+
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setSize({ w: width, h: height });
+    measureOrigin();
   };
 
   const onTapTwoPoint = (x: number, y: number) => {
@@ -279,7 +293,9 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
       onPanResponderTerminationRequest: () => !enabledRef.current,
       onPanResponderGrant: (e: GestureResponderEvent) => {
         if (!enabledRef.current) return;
-        const { locationX, locationY } = e.nativeEvent;
+        measureOrigin(); // re-measure at gesture start in case the overlay moved (scroll/rotate)
+        const locationX = e.nativeEvent.pageX - originRef.current.x;
+        const locationY = e.nativeEvent.pageY - originRef.current.y;
         const t = toolRef.current;
         if (t === 'select') {
           // Tap-to-select the closest existing mark (direct manipulation → Delete).
@@ -305,7 +321,10 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
       onPanResponderMove: (e: GestureResponderEvent) => {
         if (!enabledRef.current) return;
         const t = toolRef.current;
-        const { locationX, locationY } = e.nativeEvent;
+        // pageX/pageY → overlay-local (see measureOrigin) so the stroke tracks the finger instead of
+        // shooting toward the top-left when the finger passes over a child view mid-drag.
+        const locationX = e.nativeEvent.pageX - originRef.current.x;
+        const locationY = e.nativeEvent.pageY - originRef.current.y;
         if (t === 'freehand') {
           const next = `${pendingPathRef.current} L ${locationX.toFixed(1)} ${locationY.toFixed(1)}`;
           pendingPathRef.current = next;
@@ -478,6 +497,7 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
           Renders the SVG overlay always (when visible) so toggling
           enabled doesn't make annotations disappear. */}
       <View
+        ref={rootRef}
         style={StyleSheet.absoluteFill}
         onLayout={onLayout}
         pointerEvents={enabled ? 'auto' : 'box-none'}
