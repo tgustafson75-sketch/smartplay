@@ -48,6 +48,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // screen — so the user records their own greetings right where they
 // took the selfie + generated the caddie image.
 import { phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
+import { matchCaddieVoiceFromPhoto, CADDIE_VOICES } from '../../services/caddieVoiceMatch';
 import { getApiBaseUrl, appKeyHeaders } from '../../services/apiBase';
 
 const DEFAULT_PROMPT =
@@ -65,6 +66,8 @@ export default function CustomCaddieScreen() {
     setCustomCaddieName,
     customCaddieGender,
     setCustomCaddieGender,
+    customCaddieVoice,
+    setCustomCaddieVoice,
     // 2026-05-26 — Fix DY: recorded-greeting clips.
     // 2026-05-27 — Fix ED: default to {} so users hydrating from a
     // persist snapshot that pre-dates Fix DY can't crash this UI on
@@ -126,6 +129,9 @@ export default function CustomCaddieScreen() {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const [busy, setBusy] = useState<'capture' | 'generate' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 2026-07-30 — photo→voice match UI state.
+  const [matchingVoice, setMatchingVoice] = useState(false);
+  const [voiceMatchNote, setVoiceMatchNote] = useState<string | null>(null);
 
   // 2026-05-26 — Fix DY: per-phrase recording state.
   // `recordingPhraseId` = id of the phrase currently being recorded
@@ -747,6 +753,47 @@ export default function CustomCaddieScreen() {
               );
             })}
           </View>
+
+          {/* 2026-07-30 (Tim — "analyze the photo for my caddie and assign a fitting OpenAI voice").
+              Auto-match a speaking voice to the caddie portrait, or pick one. Applies to any line the
+              caddie speaks that you haven't recorded yourself. "Auto" = the male/female default above. */}
+          <Text style={[styles.recorderHelp, { marginTop: 12 }]}>Speaking voice:</Text>
+          <TouchableOpacity
+            onPress={async () => {
+              setMatchingVoice(true); setVoiceMatchNote(null);
+              const r = await matchCaddieVoiceFromPhoto();
+              setMatchingVoice(false);
+              setVoiceMatchNote(
+                r.ok ? `Matched: ${r.voice}${r.reason ? ` — ${r.reason}` : ''}`
+                : r.error === 'no_photo' ? 'Generate your caddie portrait first, then match.'
+                : 'Couldn’t match right now — pick one below.',
+              );
+            }}
+            disabled={matchingVoice}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.14)', marginTop: 6 }}
+            accessibilityRole="button"
+            accessibilityLabel="Match voice to my caddie's look"
+          >
+            {matchingVoice ? <ActivityIndicator color="#00C896" size="small" /> : <Ionicons name="sparkles-outline" size={16} color="#00C896" />}
+            <Text style={{ color: '#00C896', fontWeight: '800', fontSize: 13 }}>{matchingVoice ? 'Matching…' : 'Match voice to my caddie’s look'}</Text>
+          </TouchableOpacity>
+          {voiceMatchNote ? <Text style={[styles.recorderHelp, { marginTop: 4 }]}>{voiceMatchNote}</Text> : null}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
+            {([{ id: null as string | null, label: 'Auto' }, ...CADDIE_VOICES]).map(v => {
+              const on = (customCaddieVoice ?? null) === v.id;
+              return (
+                <TouchableOpacity
+                  key={v.id ?? 'auto'}
+                  onPress={() => setCustomCaddieVoice(v.id)}
+                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: on ? '#00C896' : '#374151', backgroundColor: on ? 'rgba(0,200,150,0.14)' : 'transparent' }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={{ color: on ? '#00C896' : '#9ca3af', fontWeight: '700', fontSize: 12 }}>{v.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
           {(['greeting', 'reaction', 'encouragement', 'closing'] as const).map(cat => {
             const phrases = phrasesByCategory()[cat];

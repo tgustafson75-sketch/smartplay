@@ -79,7 +79,7 @@ export default async function handler(
   }
 
   try {
-    const { text, gender = 'male', language = 'en', persona = null, model_id: clientModelId = null } = req.body;
+    const { text, gender = 'male', language = 'en', persona = null, model_id: clientModelId = null, voice: clientVoice = null } = req.body;
 
     // Audit 101 / B3 — validate text before passing to OpenAI TTS.
     // Non-strings throw inside the SDK; oversized strings burn cost
@@ -104,7 +104,13 @@ export default async function handler(
     // Falls back to gender-based default for unrecognized personas.
     const personaKeyTts = typeof persona === 'string' ? persona.toLowerCase() : '';
     const personaVoice = OPENAI_VOICES_BY_PERSONA[personaKeyTts];
-    const voice = personaVoice
+    // 2026-07-30 (Tim — custom-caddie voice). An explicit, VALIDATED voice from the client wins (the
+    // custom caddie's photo-matched / hand-picked OpenAI voice). Falls back to the persona map, then
+    // the gender default. Validated against the known voice set so a bad value can't reach the SDK.
+    const VALID_OPENAI_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'];
+    const requestedVoice = typeof clientVoice === 'string' && VALID_OPENAI_VOICES.includes(clientVoice) ? clientVoice : null;
+    const voice = requestedVoice
+      ?? personaVoice
       ?? (gender === 'female' ? OPENAI_VOICES.female : OPENAI_VOICES.male);
 
     const mp3 = await openai.audio.speech.create({

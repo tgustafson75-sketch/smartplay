@@ -31,6 +31,13 @@
       }
     },
     {
+      "src": "api/caddie-voice.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 25
+      }
+    },
+    {
       "src": "api/swing-question.ts",
       "use": "@vercel/node",
       "config": {
@@ -446,6 +453,10 @@
     {
       "src": "/api/swing-analysis",
       "dest": "/api/swing-analysis.ts"
+    },
+    {
+      "src": "/api/caddie-voice",
+      "dest": "/api/caddie-voice.ts"
     },
     {
       "src": "/api/swing-question",

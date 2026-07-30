@@ -1341,14 +1341,19 @@ export const speak = async (
   // persona-derived gender (not the stale caller param) on a network failure.
   let persona: string | null = null;
   let effectiveGender = gender;
+  // 2026-07-30 (Tim — custom-caddie voice). The photo-matched / hand-picked OpenAI voice for the custom
+  // caddie; passed to /api/voice so the caddie SPEAKS in it (only for non-recorded-clip text). Null for
+  // built-in personas → the server's persona map wins.
+  let customVoice: string | null = null;
   try {
     persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
     if (persona === 'serena') effectiveGender = 'female';
     else if (persona === 'kevin' || persona === 'harry' || persona === 'tank') effectiveGender = 'male';
     else if (persona === 'custom') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const g = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieGender;
-      if (g === 'male' || g === 'female') effectiveGender = g;
+      const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
+      if (pp.customCaddieGender === 'male' || pp.customCaddieGender === 'female') effectiveGender = pp.customCaddieGender;
+      if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) customVoice = pp.customCaddieVoice;
     }
   } catch { /* ignore */ }
 
@@ -1395,7 +1400,7 @@ export const speak = async (
     const response = await fetch(apiUrl + '/api/voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel }),
+      body: JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel, voice: customVoice }),
       signal: abortController.signal,
     }).finally(() => clearTimeout(voiceTimeout));
 

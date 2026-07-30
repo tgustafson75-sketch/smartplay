@@ -125,6 +125,12 @@ interface PlayerProfileState {
   // name input.
   customCaddieName: string | null;
 
+  // 2026-07-30 (Tim — "analyze the caddie photo and assign a fitting OpenAI voice"). The OpenAI TTS
+  // voice used when the custom caddie SPEAKS text it has no recorded clip for (previously fell back to
+  // a generic gender voice). Auto-suggested by matching the caddie's portrait (services/caddieVoiceMatch)
+  // or picked manually. Null → the gender default. One of the OpenAI gpt-4o-mini-tts voices.
+  customCaddieVoice: string | null;
+
   // 2026-05-26 — Fix DY: Personal-caddie user-recorded voice clips.
   // Keyed by phrase id from services/customCaddieClips.ts (NOT by the
   // text — text can be re-worded later without orphaning recordings).
@@ -217,6 +223,7 @@ interface PlayerProfileState {
   setCustomCaddieGender: (g: 'male' | 'female') => void;
   setPreRoundRoutine: (r: string | null) => void;
   setCustomCaddieName: (name: string | null) => void;
+  setCustomCaddieVoice: (voice: string | null) => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
   clearAllCustomCaddieClips: () => void;
@@ -283,6 +290,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // 2026-06-06 — Custom caddie name default null → UI falls back to
       // "My Caddie" until the user names theirs.
       customCaddieName: null,
+      customCaddieVoice: null,
       // 2026-05-22 — Launch-prep T&C acceptance default.
       termsAcceptedAt: null,
       // 2026-05-26 — Fix AB Phase 1: GHIN # default null until captured.
@@ -353,6 +361,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
       setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
       setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
+      setCustomCaddieVoice: (voice) => set({ customCaddieVoice: voice }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });

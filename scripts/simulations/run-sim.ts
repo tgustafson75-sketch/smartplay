@@ -5446,6 +5446,27 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the raw per-axis release signature (peakGyro/impactAccel/downswing profile) is captured on the watch, forwarded by the native module, and stored in the in-memory session — never interpreted (no fabricated fault)');
 }
 
+// ─── Custom caddie: photo → OpenAI voice (Tim 2026-07-30) ───────────────────────
+{
+  const profileSrc = fs.readFileSync(path.resolve(__dirname, '../../store/playerProfileStore.ts'), 'utf-8');
+  const voiceApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/voice.ts'), 'utf-8');
+  const voiceSvcSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
+  const vercelSrc = fs.readFileSync(path.resolve(__dirname, '../../vercel.json'), 'utf-8');
+  const endpointExists = fs.existsSync(path.resolve(__dirname, '../../api/caddie-voice.ts'));
+  const matchExists = fs.existsSync(path.resolve(__dirname, '../../services/caddieVoiceMatch.ts'));
+
+  check('Custom caddie voice: stored + settable on the profile',
+    /customCaddieVoice: string \| null/.test(profileSrc) && /setCustomCaddieVoice:/.test(profileSrc),
+    'playerProfileStore carries customCaddieVoice + setCustomCaddieVoice');
+  check('Custom caddie voice: the caddie SPEAKS in it (voiceService → /api/voice voice override, validated)',
+    /customVoice/.test(voiceSvcSrc) && /voice: customVoice/.test(voiceSvcSrc) &&
+      /VALID_OPENAI_VOICES/.test(voiceApiSrc) && /requestedVoice/.test(voiceApiSrc),
+    'voiceService passes the custom voice; /api/voice honors it only if it is a valid OpenAI voice');
+  check('Custom caddie voice: photo→voice endpoint exists + is allowlisted in vercel.json',
+    endpointExists && matchExists && /api\/caddie-voice\.ts/.test(vercelSrc) && /\/api\/caddie-voice/.test(vercelSrc),
+    'api/caddie-voice + services/caddieVoiceMatch exist and the route is in the vercel.json build + routes allowlist');
+}
+
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
