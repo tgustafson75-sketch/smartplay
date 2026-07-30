@@ -126,10 +126,14 @@ export default function SmartPlanScreen() {
             <Text style={[styles.note, { color: colors.text_secondary }]}>{plan.notes[plan.notes.length - 1]}</Text>
           ) : (
             plan.sessions.map((s) => {
-              const done = !!completed[s.focusKey];
+              // 2026-07-30 (audit #19) — key completion by DAY (+focus), not focusKey alone: weekly plans
+              // repeat the same focusKey on multiple days, so keying by focusKey marked every day with
+              // that focus done off a single check.
+              const dayKey = `${s.day}_${s.focusKey}`;
+              const done = !!completed[dayKey];
               return (
                 <View key={s.day} style={[styles.dayRow, { borderBottomColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => toggleComplete(s.focusKey)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Mark day ${s.day} ${done ? 'not done' : 'done'}`}>
+                  <TouchableOpacity onPress={() => toggleComplete(dayKey)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} accessibilityLabel={`Mark day ${s.day} ${done ? 'not done' : 'done'}`}>
                     <Ionicons name={done ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={done ? colors.accent : colors.text_muted} />
                   </TouchableOpacity>
                   <Text style={[styles.dayNum, { color: colors.text_muted }]}>D{s.day}</Text>
