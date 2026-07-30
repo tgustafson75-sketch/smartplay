@@ -1002,6 +1002,9 @@ export default function SmartMotion() {
   }, [useVisionCamera]);
   const videoRef = useRef<Video>(null);
   const pagerRef = useRef<ScrollView>(null);
+  // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
+  // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
+  const [targetsDragging, setTargetsDragging] = useState(false);
   const recordingPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3815,6 +3818,9 @@ export default function SmartMotion() {
               targetKind={isPutt ? 'cup' : 'aim'}
               onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
               onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
+              // 2026-08-01 (tester — "moving the ball box scrolls to another card"): freeze the card
+              // pager while a ball/target drag is in flight so the horizontal ScrollView can't steal it.
+              onDragActiveChange={setTargetsDragging}
             />
           </Animated.View>
         ) : phase === 'recording' && draftBall ? (
@@ -4694,7 +4700,8 @@ export default function SmartMotion() {
         ref={pagerRef}
         horizontal
         pagingEnabled
-        scrollEnabled={phase !== 'recording'}
+        // 2026-08-01 (tester) — freeze paging during a ball/target drag so the box moves, not the page.
+        scrollEnabled={phase !== 'recording' && !targetsDragging}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onPagerScroll}
         keyboardShouldPersistTaps="handled"

@@ -2262,18 +2262,17 @@ export default function SmartVisionScreen() {
             at their final positions once the image + geometry load. */}
         {!loading && (
           <>
-            {/* 2026-06-13 (Tim #6) — the T clears once you CAPTURE your spot
-                (place/drag the Y target). Before capture it's draggable to
-                re-anchor the tee; after, the view is just your line(s) + pin. */}
-            {!targetOverride && (
-              <Marker
-                kind="T"
-                x={teeCanvas.x}
-                y={teeCanvas.y}
-                draggable
-                onDragEnd={onTeeDragEnd}
-              />
-            )}
+            {/* 2026-08-01 (tester feedback — "we should ALWAYS be able to move the tee dot; it goes
+                away as soon as you move the cart"). REVERSED the 2026-06-13 "clear the T after you
+                capture your spot" behavior: the tee marker now renders ALWAYS (draggable at all times),
+                so it never disappears when a target override is set / the cart moves down the hole. */}
+            <Marker
+              kind="T"
+              x={teeCanvas.x}
+              y={teeCanvas.y}
+              draggable
+              onDragEnd={onTeeDragEnd}
+            />
             <Marker
               kind="P"
               x={pinCanvas.x}

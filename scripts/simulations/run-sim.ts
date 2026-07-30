@@ -855,6 +855,25 @@ check('Ball-departure verifier endpoint + client wired',
     /export async function detectBallDeparture/.test(read('services/swing/ballDeparture.ts')),
   'server endpoint + client service present');
 
+check('SmartMotion: dragging the ball/target box does not page the card carousel',
+  // 2026-08-01 (tester — "when he tries to move the ball box in SmartMotion the screen tries to scroll
+  // to another card"). The setup ball/target rig lives in a horizontal PAGER ScrollView; RN's native
+  // horizontal recognizer was stealing the drag. Fix: the drag PanResponders claim the gesture in the
+  // CAPTURE phase AND signal onDragActiveChange(true) so the pager freezes (scrollEnabled off) mid-drag.
+  (() => {
+    const card = read('components/swinglab/CageTargetingCard.tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /onDragActiveChange\?: \(active: boolean\) => void/.test(card) &&
+      /onStartShouldSetPanResponderCapture: \(\) => !lockedRef\.current/.test(card) &&
+      /onMoveShouldSetPanResponderCapture: \(_e, g\) => !lockedRef\.current/.test(card) &&
+      /cbRef\.current\.onDragActiveChange\?\.\(true\)/.test(card) &&
+      /onDragActiveChange=\{setTargetsDragging\}/.test(sm) &&
+      /scrollEnabled=\{phase !== 'recording' && !targetsDragging\}/.test(sm)
+    );
+  })(),
+  'the ball/target box moves under the finger instead of paging the carousel — the drag captures the gesture and freezes the pager while it is in flight');
+
 check('SmartMotion runs + surfaces the ball-departure cross-check',
   /detectBallDeparture/.test(smSrc) && /ballDeparture/.test(smSrc) &&
     /Sound only/.test(smSrc) && /Ball strike confirmed/.test(smSrc),
@@ -1251,9 +1270,11 @@ check('Layup planning: planAimLines is direct <200y, layup at 200y+ (#6)',
   'distance-driven aim lines: par-5s lay up, short approaches go direct, junk inputs stay safe');
 
 check('Layup planning wired into the hole view (smartvision) (#6)',
-  // The planner drives an additive layup waypoint + leave label, and the T
-  // marker clears once the player captures (places the Y target). Existing
+  // The planner drives an additive layup waypoint + leave label. Existing
   // tee→target→pin lines + projection math are untouched.
+  // 2026-08-01 (tester — "we should ALWAYS be able to move the tee dot; it goes away when the cart
+  // moves"): the 2026-06-13 "clear the T on capture" behavior was REVERSED — the tee marker now
+  // renders ALWAYS (draggable at all times), never hidden by a target override.
   (() => {
     const s = read('app/smartvision.tsx');
     return /import \{ planAimLines, layupFraction \} from '\.\.\/utils\/layupPlan'/.test(s) &&
@@ -1261,9 +1282,11 @@ check('Layup planning wired into the hole view (smartvision) (#6)',
       /const layupCanvas = useMemo/.test(s) &&
       /layupCanvas && aimPlan\.mode === 'layup'/.test(s) &&
       /cx=\{layupCanvas\.x\}/.test(s) && // layup waypoint marker (the "LAY UP · Ny in" SvgText was removed 2026-06-23; marker + panel carry it)
-      /\{!targetOverride && \(\s*\n\s*<Marker\s*\n\s*kind="T"/.test(s); // T clears on capture
+      // T marker renders ALWAYS now (draggable), NOT gated behind !targetOverride
+      /<Marker\s*\n\s*kind="T"\s*\n\s*x=\{teeCanvas\.x\}[\s\S]*?draggable\s*\n\s*onDragEnd=\{onTeeDragEnd\}/.test(s) &&
+      !/\{!targetOverride && \(\s*\n\s*<Marker\s*\n\s*kind="T"/.test(s);
   })(),
-  'hole view shows the two-line layup plan at 200y+ and drops the T once you capture');
+  'hole view shows the two-line layup plan at 200y+; the tee (T) marker is ALWAYS visible + draggable (no longer cleared when the cart moves / a target is captured)');
 
 check('Round Rest mode: store toggles + OLED-black overlay wired globally (#8)',
   // 2026-06-13 — Tim keeps auto-lock off so GPS never sleeps, leaving the OLED at

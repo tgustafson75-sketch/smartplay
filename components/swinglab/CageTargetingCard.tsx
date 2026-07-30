@@ -701,7 +701,7 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
  * thrash the persisted store every frame.
  */
 export function EditableCageTargets({
-  ballArea, target, onChangeBallArea, onChangeTarget, targetKind = 'aim',
+  ballArea, target, onChangeBallArea, onChangeTarget, targetKind = 'aim', onDragActiveChange,
 }: {
   ballArea: BallArea | null;
   target: TargetPoint | null;
@@ -709,6 +709,10 @@ export function EditableCageTargets({
   onChangeTarget: (t: TargetPoint) => void;
   /** 'cup' renders the movable target as a putt FLAG/cup (Tim). Default 'aim'. */
   targetKind?: 'aim' | 'cup';
+  /** 2026-08-01 (tester — "moving the ball box scrolls to another card"). Fires true while a
+   *  ball/target drag is in flight so the parent horizontal pager can DISABLE scroll and stop
+   *  stealing the gesture; false on release/terminate. */
+  onDragActiveChange?: (active: boolean) => void;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const sizeRef = useRef(size);
@@ -720,8 +724,8 @@ export function EditableCageTargets({
   const targetRef = useRef(target);
   useEffect(() => { ballRef.current = ballArea; }, [ballArea]);
   useEffect(() => { targetRef.current = target; }, [target]);
-  const cbRef = useRef({ onChangeBallArea, onChangeTarget });
-  useEffect(() => { cbRef.current = { onChangeBallArea, onChangeTarget }; }, [onChangeBallArea, onChangeTarget]);
+  const cbRef = useRef({ onChangeBallArea, onChangeTarget, onDragActiveChange });
+  useEffect(() => { cbRef.current = { onChangeBallArea, onChangeTarget, onDragActiveChange }; }, [onChangeBallArea, onChangeTarget, onDragActiveChange]);
 
   // Lock/unlock — EXPLICIT (Tim): setup opens UNLOCKED so you can grab and place
   // the rig immediately; lock freezes it so it can't be nudged ("Locked in").
@@ -742,7 +746,13 @@ export function EditableCageTargets({
   const ballPan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => !lockedRef.current,
     onMoveShouldSetPanResponder: () => !lockedRef.current,
-    onPanResponderGrant: () => { ballStart.current = ballRef.current; targetStart.current = targetRef.current; },
+    // 2026-08-01 (tester — "moving the ball box scrolls to another card"). CLAIM the gesture in the
+    // CAPTURE phase so the parent horizontal pager ScrollView's native recognizer can't steal a
+    // horizontal drag mid-move. Combined with the parent disabling scroll on onDragActiveChange(true),
+    // the box moves instead of paging.
+    onStartShouldSetPanResponderCapture: () => !lockedRef.current,
+    onMoveShouldSetPanResponderCapture: (_e, g) => !lockedRef.current && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+    onPanResponderGrant: () => { ballStart.current = ballRef.current; targetStart.current = targetRef.current; cbRef.current.onDragActiveChange?.(true); },
     onPanResponderMove: (_e, g) => {
       const s = ballStart.current; const { w, h } = sizeRef.current;
       if (!s || w === 0 || h === 0) return;
@@ -755,19 +765,24 @@ export function EditableCageTargets({
       setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
       setLiveTarget((t) => { if (t && hadTarget) cbRef.current.onChangeTarget(t); return null; });
       ballStart.current = null; targetStart.current = null;
+      cbRef.current.onDragActiveChange?.(false);
     },
     onPanResponderTerminate: () => {
       const hadTarget = !!targetStart.current;
       setLiveBall((b) => { if (b) cbRef.current.onChangeBallArea(b); return null; });
       setLiveTarget((t) => { if (t && hadTarget) cbRef.current.onChangeTarget(t); return null; });
       ballStart.current = null; targetStart.current = null;
+      cbRef.current.onDragActiveChange?.(false);
     },
   })).current;
 
   const targetPan = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => !lockedRef.current,
     onMoveShouldSetPanResponder: () => !lockedRef.current,
-    onPanResponderGrant: () => { targetStart.current = targetRef.current; },
+    // 2026-08-01 (tester) — same capture claim as the ball rig so a target drag doesn't page the carousel.
+    onStartShouldSetPanResponderCapture: () => !lockedRef.current,
+    onMoveShouldSetPanResponderCapture: (_e, g) => !lockedRef.current && (Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2),
+    onPanResponderGrant: () => { targetStart.current = targetRef.current; cbRef.current.onDragActiveChange?.(true); },
     onPanResponderMove: (_e, g) => {
       const s = targetStart.current; const { w, h } = sizeRef.current;
       if (!s || w === 0 || h === 0) return;
@@ -776,10 +791,12 @@ export function EditableCageTargets({
     onPanResponderRelease: () => {
       setLiveTarget((t) => { if (t) cbRef.current.onChangeTarget(t); return null; });
       targetStart.current = null;
+      cbRef.current.onDragActiveChange?.(false);
     },
     onPanResponderTerminate: () => {
       setLiveTarget((t) => { if (t) cbRef.current.onChangeTarget(t); return null; });
       targetStart.current = null;
+      cbRef.current.onDragActiveChange?.(false);
     },
   })).current;
 
