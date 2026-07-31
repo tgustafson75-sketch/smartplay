@@ -180,10 +180,19 @@ export const changeSettingHandler: IntentHandler = {
       case 'caddie':
       case 'persona': {
         const v = String(rawValue ?? '').toLowerCase();
-        const valid: Persona[] = ['kevin', 'tank', 'serena', 'harry'];
+        const valid: Persona[] = ['kevin', 'tank', 'serena', 'harry', 'custom'];
         if (!valid.includes(v as Persona)) {
-          return clarify('Kevin, Tank, Serena, or Harry?');
+          return clarify('Kevin, Tank, Serena, Harry, or your custom caddie?');
         }
+        // 2026-07-30 (Tim — "if you name the caddie you should be able to call them by that name").
+        // Activating the CUSTOM caddie must ALSO flip useCustomCaddie (that flag drives the portrait +
+        // the custom voice/name everywhere); switching to a base persona turns it off. Without this, a
+        // "switch to <custom name>" set the persona but left the custom caddie dormant.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const prof = require('../../store/playerProfileStore').usePlayerProfileStore.getState();
+          prof.setUseCustomCaddie?.(v === 'custom');
+        } catch { /* non-fatal */ }
         // 2026-07-30 (Tim — "Serena has two speaking things racing… the old 'here when you're ready'
         // needs to go for all caddies, same flow for all"). setCaddiePersonality already fires the ONE
         // unified handoff (the per-persona bundled opener clip, in-character + zero-network). Speaking a

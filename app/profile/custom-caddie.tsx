@@ -231,7 +231,24 @@ export default function CustomCaddieScreen() {
         setError(msg);
         return;
       }
-      setCustomCaddiePortraitB64(data.b64);
+      // 2026-07-30 (Tim — "adding my caddie doesn't persist / shows intermittently") — the AI portrait's
+      // FULL-SIZE base64 is large, and persisting a big blob to AsyncStorage is unreliable (write can fail
+      // / hydrate slowly), so the avatar vanished on restart or flickered. Store a COMPACT avatar-sized
+      // copy so the portrait persists reliably and hydrates fast. Falls back to the full image on any error.
+      let portraitToStore = data.b64 as string;
+      try {
+        const FS = await import('expo-file-system/legacy');
+        const tmp = `${FS.cacheDirectory}caddie-portrait-src-${Date.now()}.jpg`;
+        await FS.writeAsStringAsync(tmp, data.b64, { encoding: FS.EncodingType.Base64 });
+        const small = await ImageManipulator.manipulateAsync(
+          tmp,
+          [{ resize: { width: 384 } }],
+          { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+        );
+        if (small.base64) portraitToStore = small.base64;
+        try { await FS.deleteAsync(tmp, { idempotent: true }); } catch { /* best-effort */ }
+      } catch { /* keep full-size on any failure */ }
+      setCustomCaddiePortraitB64(portraitToStore);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
       console.log('[customCaddie] generate error', e);
