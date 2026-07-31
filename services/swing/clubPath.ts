@@ -167,7 +167,7 @@ export async function detectClubPath(args: {
   try {
     const dir = FileSystem.cacheDirectory;
     if (dir) {
-      const dest = `${dir}clubpath-src-${Date.now()}.mp4`;
+      const dest = `${dir}clubpath-src-${Date.now()}-${Math.round(Math.random() * 1e6)}.mp4`; // per-invocation unique — two calls in the same ms must not share a temp file (audit #25)
       await FileSystem.copyAsync({ from: videoUri, to: dest });
       const info = await FileSystem.getInfoAsync(dest);
       if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
