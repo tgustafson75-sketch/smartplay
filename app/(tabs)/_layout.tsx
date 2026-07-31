@@ -1,8 +1,29 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { View, Image, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
+import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
+import { DASHBOARD_TOUR_STEPS, PLAY_TOUR_STEPS, SCORECARD_TOUR_STEPS, SWINGLAB_TOUR_STEPS } from '../../constants/tabTours';
+import { useTabTour } from '../../hooks/useTabTour';
+
+// 2026-07-30 (Tim — "Show me around on SwingLab + basics on all main tabs"). One host that shows the
+// FOCUSED tab's short basics tour (the caddie tab runs its own richer tour on its screen). Reuses the same
+// TourOverlay; shows once per tab on first visit + on demand via Settings → "Show me around".
+const TAB_STEPS: Record<string, TourStep[]> = {
+  swinglab: SWINGLAB_TOUR_STEPS,
+  dashboard: DASHBOARD_TOUR_STEPS,
+  play: PLAY_TOUR_STEPS,
+  scorecard: SCORECARD_TOUR_STEPS,
+};
+function TabToursHost() {
+  const pathname = usePathname();
+  const tab = (['swinglab', 'dashboard', 'play', 'scorecard'] as const).find((t) => (pathname ?? '').includes(t)) ?? '';
+  const { showTour, endTour } = useTabTour(tab || 'none'); // hook called unconditionally (stable order)
+  const steps = TAB_STEPS[tab];
+  if (!tab || !steps || !showTour) return null;
+  return <TourOverlay steps={steps} onDone={endTour} />;
+}
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -64,6 +85,7 @@ export default function TabLayout() {
   };
 
   return (
+    <>
     <Tabs
       // Phase AE — bottom tab bar restored on every route, including
       // Caddie home. Previously the tabBarStyle for route 'caddie' was
@@ -135,6 +157,8 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    <TabToursHost />
+    </>
   );
 }
 
