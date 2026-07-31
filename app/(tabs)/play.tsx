@@ -1254,9 +1254,11 @@ export default function PlayTab() {
             never see it (no pollution); when it fires, it's strongly
             indicative the player is on-site and should use that course.
             Tap to load. */}
-        {atCourse && atCourse.sibling && (
+        {atCourse && !isRoundActive && atCourse.sibling && (
           // 2026-07-24 (final QA) — co-located courses (Menifee Palms/Lakes): GPS can't tell which
           // nine you're on, so ASK instead of one-tap-starting the wrong par/yardages.
+          // 2026-07-30 (audit #1 — DATA LOSS) — hidden while a round is ACTIVE; startRound wipes the
+          // in-progress round, so a one-tap "start a round" mid-round must not be offered.
           <View style={styles.atCourseBanner}>
             <AppIcon name="golf" size={14} color="#00C896" />
             <Text style={styles.atCourseBannerText} numberOfLines={2}>
@@ -1276,7 +1278,7 @@ export default function PlayTab() {
             ))}
           </View>
         )}
-        {atCourse && !atCourse.sibling && selected?.id !== atCourse.course.id && (
+        {atCourse && !isRoundActive && !atCourse.sibling && selected?.id !== atCourse.course.id && (
           <TouchableOpacity
             style={styles.atCourseBanner}
             onPress={() => startRoundAtCourse(atCourse.course)}

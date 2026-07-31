@@ -675,6 +675,24 @@ function AppNavigator() {
     }
   }), []);
 
+  // 2026-07-30 (audit #2 — GPS DEATH ON RESUME). On a full process kill mid-round the round rehydrates
+  // active, but startRound never re-runs, so the live GPS watch is never restarted — the _layout
+  // shot-detection subscriber only starts GPS when autoShotDetection is ON (off by default). Every
+  // GPS-derived number then silently freezes to the static tee yardage. Restart the GPS manager for a
+  // VALID resumed REAL round (the phantom guard above already discarded broken/aged ones; sim rounds use
+  // simulated fixes, not real GPS). Runs once at boot — a fresh round started later starts its own GPS.
+  useEffect(() => whenRoundStoreHydrated(() => {
+    const s = useRoundStore.getState();
+    if (!s.isRoundActive || s.isSimRound || !s.currentRoundId || !s.activeCourse) return;
+    void (async () => {
+      try {
+        const { startGpsManager } = await import('../services/gpsManager');
+        await startGpsManager();
+        console.log('[boot] resumed active round — restarted GPS watch (was not tied to isRoundActive)');
+      } catch (e) { console.log('[boot] resume GPS start failed (non-fatal):', e); }
+    })();
+  }), []);
+
   // 2026-06-02 — Fix GN: orphan-analysis cleanup. Audit found that
   // cage / library swings where AI analysis was in-flight at force-
   // close stayed at 'pending' or 'analyzing_*' forever — no auto-

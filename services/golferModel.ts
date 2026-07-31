@@ -167,7 +167,10 @@ export function buildGolferModel(force = false): GolferModel {
   const recentAnalyses = getRecentAnalyses(20);
 
   const allShots: ShotResult[] = [
-    ...round.shots, // current round
+    // 2026-07-30 (audit C2 — SIM CONTAMINATION, part 2). The earlier fix excluded simulated ROUND HISTORY
+    // but not the LIVE round: during a voice sim round its narrated shots land in round.shots and would
+    // skew the derived tendency/club-distance model fed to the brain. Exclude the active round when it's sim.
+    ...(round.isSimRound ? [] : round.shots), // current round (never a sim round's narrated shots)
     ...recentRounds.flatMap(r => r.shots ?? []),
   ];
   const cageShots = recentSessions.flatMap(s => s.shots ?? []);

@@ -871,6 +871,39 @@ export const useRoundStore = create<RoundState>()(
               par: h.par,
             }))
           : null;
+        // 2026-07-30 (audit #1 — DATA LOSS). startRound unconditionally zeroed scores/putts/shots. If a
+        // round was ALREADY active with real scores, a one-tap "start a round" (or a voice/deep-link start)
+        // wiped it with NO RoundRecord saved. The Play banners are now gated on !isRoundActive; this is the
+        // defense for EVERY caller — preserve the in-progress round to history before the reset. Never
+        // preserve a sim round; skip if this call is re-starting the SAME round id.
+        if (prev.isRoundActive && !prev.isSimRound && prev.currentRoundId !== roundId) {
+          const scored = Object.entries(prev.scores).filter(([, sc]) => (sc as number) > 0);
+          if (scored.length > 0) {
+            try {
+              const preserved: RoundRecord = {
+                id: prev.currentRoundId ?? `${Date.now()}_preserved`,
+                roundNumber: prev.roundNumber,
+                courseName: prev.activeCourse,
+                courseId: prev.activeCourseId,
+                startedAt: prev.roundStartTime ?? Date.now(),
+                endedAt: Date.now(),
+                holesPlayed: scored.length,
+                totalScore: scored.reduce((a, [, sc]) => a + (sc as number), 0),
+                scoreVsPar: null,
+                isCompetition: prev.isCompetition,
+                nineHoleMode: prev.nineHoleMode,
+                mode: prev.mode,
+                scores: { ...prev.scores },
+                putts: { ...prev.putts },
+                shots: [...prev.shots],
+                selectedTee: prev.selectedTee,
+                transportMode: prev.transportMode,
+              };
+              set(s => ({ roundHistory: capHistory([...s.roundHistory, preserved]) }));
+              console.warn('[roundStore] startRound over an active round — preserved the prior round to history (no data loss)');
+            } catch (e) { console.log('[roundStore] preserve-on-startRound failed (non-fatal):', e); }
+          }
+        }
         set({
           isRoundActive: true,
           isSimRound: options.simulated === true,

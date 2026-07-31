@@ -16,6 +16,7 @@ import { getLastFix } from './gpsManager';
 import { bagDistances } from './shotStrategy';
 import { getGreenYardagesSync } from './smartFinderService';
 import { getCaddieContext } from './caddieMemoryRetrieval';
+import { getActiveCaddie } from './caddieResolver';
 
 export function buildPipecatContext() {
   const round = useRoundStore.getState();
@@ -35,7 +36,11 @@ export function buildPipecatContext() {
       // 2026-07-30 (Tim — "tie my persona to Tank/Kevin/Serena") — so the server can give the custom
       // caddie the CHOSEN persona's character spec (was hardcoded to Kevin's) while keeping its name.
       customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
-      caddiePersonality: settings.caddiePersonality,
+      // 2026-07-30 (audit C1 — per-pillar persona bleed). Send the ACTIVE caddie for the current surface
+      // (per-pillar override), not the raw global — else setting the Round pillar to Serena while global is
+      // Kevin made the brain speak/sound as Kevin while the app attributed everything to Serena. Global
+      // selection sets all pillars to the same persona, so the common case is unchanged.
+      caddiePersonality: getActiveCaddie(),
       trustLevel,
     },
     round: {

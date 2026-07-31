@@ -11,6 +11,7 @@
 
 import { getApiBaseUrl } from './apiBase';
 import { useSettingsStore } from '../store/settingsStore';
+import { getActiveCaddie } from './caddieResolver';
 import { useRoundStore } from '../store/roundStore';
 import { buildPipecatContext } from './pipecatContext';
 import { screenContextForPrompt } from './screenContext';
@@ -105,7 +106,7 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         holeNotes: round.holeNotes,
         isRoundActive: round.isRoundActive,
         voiceGender: settings.voiceGender ?? 'male',
-        persona: settings.caddiePersonality,
+        persona: getActiveCaddie(), // audit C1 — per-pillar active caddie (falls back to global; see pipecatContext)
         // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
         // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
         customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
@@ -200,7 +201,7 @@ export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Pr
         language: settings.language,
         isRoundActive: false,
         voiceGender: settings.voiceGender ?? 'male',
-        persona: settings.caddiePersonality,
+        persona: getActiveCaddie(), // audit C1 — per-pillar active caddie (falls back to global; see pipecatContext)
         // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
         // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
         customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',

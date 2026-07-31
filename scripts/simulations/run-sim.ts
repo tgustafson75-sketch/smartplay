@@ -1619,8 +1619,10 @@ check('Final QA: co-located courses ask which nine; search matches bundled cours
     const okChooser =
       /const sibling = within\.slice\(1\)\.find\(o =>/.test(play) &&
       /family\(o\.course\.club_name\) === family\(best\.course\.club_name\)/.test(play) &&
-      /atCourse && atCourse\.sibling &&/.test(play) &&
-      /atCourse && !atCourse\.sibling && selected\?\.id !== atCourse\.course\.id/.test(play);
+      // 2026-07-30 (audit #1 — DATA LOSS) — both "start a round" banners are now also gated on
+      // !isRoundActive so a one-tap start can't wipe an in-progress round.
+      /atCourse && !isRoundActive && atCourse\.sibling &&/.test(play) &&
+      /atCourse && !isRoundActive && !atCourse\.sibling && selected\?\.id !== atCourse\.course\.id/.test(play);
     // (b) C5 — search matches BUNDLED courses locally first (offline-safe) and only shows the
     //     connectivity error when there's nothing (local OR remote) to show.
     const okSearch =
@@ -3921,6 +3923,27 @@ check('Detection: swings FOUND + segmented right (root-cause fixes)',
     return plateauOk && fastOk && srcOk;
   })(),
   '#1 a flat-topped/clipped loud strike is no longer silently dropped (missed swing); #3 a real fast 2nd swing 1.6s apart survives the rebound filter; #2 phantom-recovery gap widened to the locator accuracy; #4 long-clip merge capped at 3.5s; #5 the segment window favors the backswing so the takeaway isn\'t clipped');
+
+check('Round data-loss + GPS-resume + per-pillar persona (audit)',
+  (() => {
+    const rs = read('store/roundStore.ts');
+    const layout = read('app/_layout.tsx');
+    const play = read('app/(tabs)/play.tsx');
+    return (
+      // #1 — startRound preserves an active round to history before the reset (no silent wipe), and both
+      //      Play "start a round" banners are gated on !isRoundActive.
+      /prev\.isRoundActive && !prev\.isSimRound && prev\.currentRoundId !== roundId/.test(rs) &&
+      /roundHistory: capHistory\(\[\.\.\.s\.roundHistory, preserved\]\)/.test(rs) &&
+      (play.match(/!isRoundActive/g) ?? []).length >= 2 &&
+      // #2 — a resumed real round restarts the GPS watch at boot (not tied to autoShotDetection).
+      /resumed active round — restarted GPS watch/.test(layout) &&
+      // C1 — the brain uses the ACTIVE (per-pillar) caddie, not the raw global.
+      /caddiePersonality: getActiveCaddie\(\)/.test(read('services/pipecatContext.ts')) &&
+      // C2 — the live round's shots are excluded from the golfer model when it's a sim round.
+      /round\.isSimRound \? \[\] : round\.shots/.test(read('services/golferModel.ts'))
+    );
+  })(),
+  '#1 startRound preserves an in-progress round instead of wiping it + Play banners hidden mid-round (one-tap data loss); #2 a resumed real round restarts GPS at boot (was silent GPS-death when autoShotDetection off); C1 the brain speaks/sounds as the per-pillar active caddie; C2 a live sim round no longer contaminates the golfer model');
 
 check('SmartMotion review opens PAUSED (no autoplay-vs-analysis crash)',
   (() => {
