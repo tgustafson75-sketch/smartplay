@@ -994,7 +994,10 @@ export default function SmartVisionScreen() {
       if (r.middle) return r.middle;
     } catch { /* fall through to raw geometry */ }
     return geometry?.green ?? null;
-  }, [geometry, holeIndex]);
+    // 2026-07-30 (audit #16) — recompute when the marked fix changes (markBumpTick bumps on
+    // subscribeFixChange, incl. a voice "mark the green"/setMarkedFix); without it the resolver returned
+    // the new green but the memo stayed stale, so the overlay green + aim line didn't move.
+  }, [geometry, holeIndex, markBumpTick]);
 
   const projection = useMemo(() => {
     if (!teeCoord || !greenCoord) return null;

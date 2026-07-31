@@ -207,6 +207,17 @@ function enforceCap(entries: ReferenceSwing[]): ReferenceSwing[] {
 
 // ─── Public API ──────────────────────────────────────────────────────────
 
+// 2026-07-30 (audit A6 — lost-update race). Every mutator is a read-modify-write with an await gap over a
+// shared memoCache; two concurrent ops (e.g. a YouTube add while a background compare calls touchReference)
+// both capture the pre-write snapshot and the second's writeAll silently drops the first's change. Serialize
+// all mutations through a single-flight chain so read→modify→write is atomic per operation.
+let writeChain: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(() => fn());
+  writeChain = run.then(() => undefined, () => undefined); // keep the chain alive on success OR failure
+  return run;
+}
+
 /** Add a reference swing. UI MUST confirm with the user before calling
  *  this — privacy gate. Returns the assigned id. */
 export async function addReferenceSwing(input: AddReferenceInput): Promise<string> {
@@ -229,8 +240,10 @@ export async function addReferenceSwing(input: AddReferenceInput): Promise<strin
     created_at: Date.now(),
     last_used_at: null,
   };
-  const all = await readAll();
-  await writeAll([...all, entry]);
+  await withWriteLock(async () => {
+    const all = await readAll();
+    await writeAll([...all, entry]);
+  });
   devLog(`[swingDB] added ${entry.label} source=${entry.source} club=${entry.club ?? '?'} arch=${entry.archetype ?? '?'}`);
   return id;
 }
@@ -238,13 +251,15 @@ export async function addReferenceSwing(input: AddReferenceInput): Promise<strin
 /** Remove a reference by id. Archetypes can't be removed (returns false
  *  silently). */
 export async function removeReferenceSwing(id: string): Promise<boolean> {
-  const all = await readAll();
-  const before = all.length;
-  const next = all.filter((e) => e.id !== id || e.source === 'archetype');
-  if (next.length === before) return false;
-  await writeAll(next);
-  devLog(`[swingDB] removed ${id}`);
-  return true;
+  return withWriteLock(async () => {
+    const all = await readAll();
+    const before = all.length;
+    const next = all.filter((e) => e.id !== id || e.source === 'archetype');
+    if (next.length === before) return false;
+    await writeAll(next);
+    devLog(`[swingDB] removed ${id}`);
+    return true;
+  });
 }
 
 /** List references, optionally filtered. */
@@ -350,11 +365,13 @@ export async function searchSimilarSwings(
 /** Mark a reference as just-used. Updates last_used_at so the UI's
  *  recently-referenced list stays fresh. */
 export async function touchReference(id: string): Promise<void> {
-  const all = await readAll();
-  const idx = all.findIndex((e) => e.id === id);
-  if (idx < 0 || all[idx].source === 'archetype') return;
-  all[idx] = { ...all[idx], last_used_at: Date.now() };
-  await writeAll(all);
+  await withWriteLock(async () => {
+    const all = await readAll();
+    const idx = all.findIndex((e) => e.id === id);
+    if (idx < 0 || all[idx].source === 'archetype') return;
+    all[idx] = { ...all[idx], last_used_at: Date.now() };
+    await writeAll(all);
+  });
 }
 
 // ─── Seed archetypes ────────────────────────────────────────────────────

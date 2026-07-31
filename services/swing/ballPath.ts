@@ -86,6 +86,7 @@ async function cropWide(frame: Frame, ball: BallAreaNorm, scale: number): Promis
       [{ crop: { originX, originY, width: cw, height: ch } }],
       { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
+    if (manip.uri) void FileSystem.deleteAsync(manip.uri, { idempotent: true }).catch(() => undefined); // A7 — don't leak the crop temp
     if (!manip.base64) return null;
     return { base64: manip.base64, box: { originX, originY, cw, ch, W, H } };
   } catch {

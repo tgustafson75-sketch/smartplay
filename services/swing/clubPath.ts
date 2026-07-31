@@ -96,6 +96,9 @@ async function downscaled(frame: Frame): Promise<string | null> {
       frame.width > DOWNSCALE_W ? [{ resize: { width: DOWNSCALE_W } }] : [],
       { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
+    // 2026-07-30 (audit A7) — delete the manipulator's temp output; we only use the base64, so the .uri
+    // file (one per sampled frame, ~14/swing) would otherwise leak into the cache dir.
+    if (manip.uri) void FileSystem.deleteAsync(manip.uri, { idempotent: true }).catch(() => undefined);
     return manip.base64 ?? null;
   } catch {
     return null;

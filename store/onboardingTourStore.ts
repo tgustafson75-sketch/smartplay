@@ -19,6 +19,10 @@ interface OnboardingTourState {
   tourDone: boolean;
   /** Guards noteAppOpen against double-counting within a single launch. */
   countedThisLaunch: boolean;
+  /** 2026-07-30 (audit #18) — bumps on every relaunchTour() so an ALREADY-MOUNTED caddie tab (a tab never
+   *  re-mounts) can react and re-show the tour. A mount-only shouldAutoShow() check made the "Show me
+   *  around" button a dead no-op. Session-only (not persisted). */
+  relaunchNonce: number;
 
   noteAppOpen: () => void;
   completeTour: () => void;
@@ -34,13 +38,14 @@ export const useOnboardingTourStore = create<OnboardingTourState>()(
       appOpens: 0,
       tourDone: false,
       countedThisLaunch: false,
+      relaunchNonce: 0,
 
       noteAppOpen: () => {
         if (get().countedThisLaunch) return;
         set((s) => ({ appOpens: s.appOpens + 1, countedThisLaunch: true }));
       },
       completeTour: () => set({ tourDone: true }),
-      relaunchTour: () => set({ tourDone: false, appOpens: 1 }),
+      relaunchTour: () => set((s) => ({ tourDone: false, appOpens: 1, relaunchNonce: s.relaunchNonce + 1 })),
       shouldAutoShow: () => {
         const s = get();
         return !s.tourDone && s.appOpens > 0 && s.appOpens <= MAX_AUTO_OPENS;

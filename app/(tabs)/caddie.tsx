@@ -873,6 +873,11 @@ export default function CaddieTab() {
   useEffect(() => {
     try { if (useOnboardingTourStore.getState().shouldAutoShow()) setShowTour(true); } catch { /* non-fatal */ }
   }, []);
+  // 2026-07-30 (audit #18 — "Show me around" was a dead button). This tab never re-mounts, so the mount-only
+  // check above can't replay the tour. React to relaunchNonce (bumped by relaunchTour) so the Settings
+  // "Show me around" button actually re-opens the tour on an already-mounted tab.
+  const tourRelaunchNonce = useOnboardingTourStore(s => s.relaunchNonce);
+  useEffect(() => { if (tourRelaunchNonce > 0) setShowTour(true); }, [tourRelaunchNonce]);
   // 2026-08-01 (tester — clean spotlights) — the caddie-tab tools button registers its bounds so the
   // tour spotlights the real ••• pill precisely.
   const toolsTarget = useTourTarget('caddie.tools');
