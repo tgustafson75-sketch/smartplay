@@ -49,6 +49,14 @@ const intent = (
   raw_text: raw,
 });
 
+// Optional explicit hole for a spoken score ("...on hole 7"); otherwise the handler uses the current
+// hole. The stroke count itself is parsed from raw_text by logScoreHandler.
+const scoreHoleParam = (raw: string): Record<string, unknown> => {
+  const m = raw.match(/\bon\s+hole\s+(\d{1,2})\b/i) ?? raw.match(/\bhole\s+(\d{1,2})\b/i);
+  if (m) { const h = parseInt(m[1], 10); if (h >= 1 && h <= 18) return { hole_number: h }; }
+  return {};
+};
+
 // Ordered list — first match wins. Yardage patterns come before
 // generic "what" patterns so "yardage to front" → green_front,
 // not query_status:hole.
@@ -88,6 +96,21 @@ const PATTERNS: Pattern[] = [
   {
     rx: /\b(what(?:'s|s)?\s+my\s+score|how\s+am\s+i\s+doing|my\s+score|score\s+(?:today|so\s+far)|vs\.?\s+par|under\s+par|over\s+par)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'score' }),
+  },
+  // 2026-08-05 (Tim — CORE: "I told the caddie my score and he didn't log it or ask putts"). Scoring had
+  // NO local precheck, so the most core round action relied ENTIRELY on the network classifier — a
+  // cold/slow classifier (or a drift to the chat brain) meant the score silently never logged. Route
+  // clear score REPORTS straight to log_score. logScoreHandler parses the stroke count from raw_text and
+  // asks "How many putts?" when none was said inline. Verb-anchored; a club/putt/distance/hole negative
+  // lookahead keeps false positives out ("5 iron", "3 putt(ed)", "5 degrees", "5 holes left" never match).
+  // The score QUERY rule above wins for "what's my score".
+  {
+    rx: /\b(?:(?:i\s+)?(?:got|made|shot|had|carded|scored|took)|put\s+me\s+down\s+for|score\s+me|mark\s+me(?:\s+down)?\s+for|card\s+me)\s+(?:myself\s+)?(?:a\s+|an\s+)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|par|bogey|birdie|eagle|double\s*bogey|triple\s*bogey)\b(?!\s*(?:iron|woods?|hybrid|wedge|driver|putter|putts?|putted|degrees?|footer|feet|foot|yards?|holes?))/i,
+    build: (raw) => intent(raw, 'log_score', scoreHoleParam(raw)),
+  },
+  {
+    rx: /\b(?:i\s+)?(?:bogeyed|birdied|eagled|parred|double[\s-]*bogeyed|triple[\s-]*bogeyed)\b/i,
+    build: (raw) => intent(raw, 'log_score', scoreHoleParam(raw)),
   },
   {
     rx: /\b(what\s+hole|which\s+hole|hole\s+am\s+i\s+on|what\s+hole\s+is\s+this)\b/i,

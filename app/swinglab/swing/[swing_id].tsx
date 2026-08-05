@@ -462,6 +462,10 @@ export default function SwingDetail() {
   // The trace is clubhead-OR-NOTHING, so defaulting it on never fabricates anything. The old
   // `shotConfirmed` gate was removed — it silently killed the trace on uploaded/unconfirmed swings.
   const [showTrace, setShowTrace] = useState(false);
+  // 2026-08-05 (Tim — "ball box and direction line still show on replay, should not — default off/hidden").
+  // The cage targeting overlay (ball area + aim/direction line) is a CAPTURE-time framing aid; on replay
+  // it's clutter over the swing. Default HIDDEN; a "Targets" toggle re-enables it for anyone who wants it.
+  const [showTargets, setShowTargets] = useState(false);
   // 2026-07-06 (Tim: "remove the golfer and just move the overlay in a
   // separate view") — MOTION ONLY: video keeps playing (it drives the
   // clock) but renders invisible under a dark backdrop, leaving skeleton +
@@ -2151,10 +2155,12 @@ export default function SwingDetail() {
                 />
                 );
               })()}
-              <CageTargetingOverlay
-                ballArea={session?.ball_area_norm ?? null}
-                target={session?.target_norm ?? null}
-              />
+              {showTargets && (
+                <CageTargetingOverlay
+                  ballArea={session?.ball_area_norm ?? null}
+                  target={session?.target_norm ?? null}
+                />
+              )}
               </ZoomableView>
               {/* 2026-06-23 (Tim) — visible failure state instead of a black frame. */}
               {videoError && (
@@ -2347,6 +2353,17 @@ export default function SwingDetail() {
                   <Ionicons name="analytics-outline" size={14} color={showTrace ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
                   <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>Swing Trace</Text>
                 </TouchableOpacity>
+                {(session?.ball_area_norm || session?.target_norm) && (
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, { flexDirection: 'row' }, showTargets && { backgroundColor: colors.accent }]}
+                    onPress={() => setShowTargets(v => !v)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle ball box and aim line"
+                  >
+                    <Ionicons name="locate-outline" size={14} color={showTargets ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
+                    <Text style={[styles.toggleText, showTargets && { color: '#fff' }]}>Targets</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, motionOnly && { backgroundColor: colors.accent }]}
                   onPress={() => setMotionOnly(v => !v)}
