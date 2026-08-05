@@ -349,6 +349,30 @@ export default function SwingDetail() {
   const rightCompareSource = useMemo(() => ({ uri: rightPlaybackUri ?? rightShot?.clipUri ?? '' }), [rightPlaybackUri, rightShot?.clipUri]);
 
   const videoRef = useRef<Video>(null);
+  // 2026-08-05 (Tim — NATIVE fatal in prod: `IllegalStateException: Player accessed on the wrong
+  // thread` via expo-av AVManager.onHostDestroy → SimpleExoPlayerData.release off `pool-5-thread-1`).
+  // When you leave a swing while background analysis (pose / clubhead) is still in flight, expo-av
+  // releases the ExoPlayer off the MAIN thread and crashes the app to the launcher. React nulls
+  // `videoRef.current` in the mutation phase BEFORE our useEffect cleanup runs, so we keep a second
+  // ref that survives teardown and unload the player from JS on unmount — that routes release()
+  // through the main thread, pre-empting expo-av's off-main host-destroy path. (Interim; the durable
+  // fix is migrating swing playback to expo-video.)
+  const playerRef = useRef<Video | null>(null);
+  const attachVideoRef = useCallback((v: Video | null) => {
+    (videoRef as React.MutableRefObject<Video | null>).current = v;
+    if (v) playerRef.current = v;
+  }, []);
+  useEffect(() => {
+    return () => {
+      const p = playerRef.current;
+      if (!p) return;
+      void (async () => {
+        try { await p.pauseAsync(); } catch { /* best-effort */ }
+        try { await p.unloadAsync(); } catch { /* best-effort */ }
+      })();
+      playerRef.current = null;
+    };
+  }, []);
   // 2026-06-11 (Tim: no slow-mo controls in the library) — declarative slow-mo
   // for swing review. The `rate` prop survives native play/pause; the corner
   // button cycles ½× → ¼× → 1× → ½×.
@@ -2035,7 +2059,7 @@ export default function SwingDetail() {
                   when zoomed, the pan gesture takes over. */}
               <ZoomableView style={StyleSheet.absoluteFill} onSingleTap={togglePlayPause}>
               <Video
-                ref={videoRef}
+                ref={attachVideoRef}
                 source={videoSource}
                 style={[styles.video, motionOnly && { opacity: 0 }]}
                 resizeMode={ResizeMode.CONTAIN}

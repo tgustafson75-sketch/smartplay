@@ -1013,6 +1013,30 @@ export default function SmartMotion() {
     }
   }, [useVisionCamera]);
   const videoRef = useRef<Video>(null);
+  // 2026-08-05 (Tim — NATIVE fatal: expo-av ExoPlayer released off-main in AVManager.onHostDestroy →
+  // "Player accessed on the wrong thread" crash-to-launcher when leaving a swing while background
+  // analysis is still running). React nulls videoRef in the mutation phase before our effect cleanup,
+  // so we keep a surviving ref and unload the player from JS on unmount — release() then runs on the
+  // main thread, pre-empting expo-av's off-main host-destroy path. Interim; durable fix = expo-video.
+  const playerRef = useRef<Video | null>(null);
+  const attachVideoRef = useCallback((v: Video | null) => {
+    (videoRef as React.MutableRefObject<Video | null>).current = v;
+    if (v) playerRef.current = v;
+  }, []);
+  useEffect(() => {
+    return () => {
+      const p = playerRef.current;
+      if (!p) return;
+      void (async () => {
+        try { await p.pauseAsync(); } catch { /* best-effort */ }
+        try { await p.unloadAsync(); } catch { /* best-effort */ }
+      })();
+      playerRef.current = null;
+    };
+  }, []);
+  // Caches the last pose extraction so an angle-only effect re-run reuses frames instead of re-decoding
+  // the clip (see the pose/biomech effect — kills the double pose:extract:start per open).
+  const poseExtractCacheRef = useRef<{ key: string; frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>> } | null>(null);
   const pagerRef = useRef<ScrollView>(null);
   // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
@@ -1963,6 +1987,12 @@ export default function SmartMotion() {
   useEffect(() => {
     if (!clipUri || videoDurationMs == null || phase !== 'review') return;
     let cancelled = false;
+    // 2026-08-05 (Tim — "analysis does everything / takes too long"; log showed pose:extract:start
+    // firing TWICE per open). This effect SETS `angle` (auto-detect, below) and `angle` is in its own
+    // dep array → it re-runs and extracts pose frames a SECOND time. Cache the extracted frames keyed
+    // by the REAL extraction inputs (clip/window/selected swing/handedness — NOT angle); an angle-only
+    // re-run reuses the frames instead of re-decoding the clip. Biomech still recomputes for the new
+    // angle (cheap), so manual angle toggles stay correct.
     // 2026-07-06 (SmartMotion audit H3 — "skeleton barely moves / doesn't match my
     // swing") — WINDOW the pose extraction to the SELECTED swing. A SmartMotion
     // session records ONE clip with multiple swings; this used to sample the 5 pose
@@ -1989,7 +2019,16 @@ export default function SmartMotion() {
         // 2026-07-07 (biomech audit #8) — extract ONCE and compute biomech from the
         // SAME frames (was two independent extraction runs → ~2× pose inferences and
         // a skeleton that could diverge from the numbers).
-        const frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
+        // 2026-08-05 — reuse cached frames when only `angle` changed (kills the double extraction).
+        const extractKey = `${clipUri}|${videoDurationMs}|${poseWindow ? `${poseWindow.startMs}-${poseWindow.endMs}` : 'full'}|${selectedSwing}|${swingerHandedness}|${acousticImpactMs ?? ''}`;
+        let frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>>;
+        if (poseExtractCacheRef.current?.key === extractKey) {
+          frames = poseExtractCacheRef.current.frames;
+        } else {
+          frames = await extractPoseFramesFromVideo(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs);
+          if (cancelled) return;
+          poseExtractCacheRef.current = { key: extractKey, frames };
+        }
         if (cancelled) return;
         setPoseFrames(frames);
         // 2026-07-27 (Tim — AI auto-detect) — when the user hasn't explicitly chosen the angle, pass null
@@ -3676,7 +3715,7 @@ export default function SmartMotion() {
       >
         {isReview && clipUri ? (
           <Video
-            ref={videoRef}
+            ref={attachVideoRef}
             source={clipSource}
             style={StyleSheet.absoluteFill}
             resizeMode={ResizeMode.COVER}
