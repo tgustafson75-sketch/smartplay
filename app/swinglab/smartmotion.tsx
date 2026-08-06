@@ -1505,7 +1505,7 @@ export default function SmartMotion() {
         // clustered mis-detection) so we never draw a wrong "club". Below that → skeleton only.
         // 2026-07-27 (audit) — rebase window-relative tMs to ABSOLUTE (+segStart) so the live blue clubTip
         // tracks correctly on the 2nd/3rd split swing (was pinning to the finish point).
-        const pts = r && r.points.length >= 4 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
+        const pts = r && r.points.length >= 3 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
         clubPathCacheRef.current[selectedSwing] = pts;
         setClubArcPoints(pts);
       })
@@ -2091,7 +2091,7 @@ export default function SmartMotion() {
                   const { detectClubPath } = await import('../../services/swing/clubPath');
                   const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, shouldAbort: () => false });
                   const store = useCageStore.getState();
-                  if (arc && arc.points.length >= 4) {
+                  if (arc && arc.points.length >= 3) {
                     store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
                   } else {
                     store.setSessionClubArc(sessionId, [], null);

@@ -538,8 +538,13 @@ export default function SwingDetail() {
     // (which uses this shot's clip window), so a selected swing still gets its real clubhead arc.
     const shotArc = shot?.club_arc;
     const storedArc = shotArc !== undefined ? shotArc : (selectedShotIdx === 0 ? session?.club_arc : undefined);
-    if (storedArc !== undefined) {
-      setClubArcPoints(storedArc && storedArc.length >= 4 ? storedArc : null);
+    // 2026-08-06 (Tim — the blue club was STUCK BLANK forever): only short-circuit on a REAL stored arc.
+    // A stored empty [] (analyzed, clubhead not tracked) used to hard-return null and PERMANENTLY block the
+    // live re-extraction below — so once a swing failed detection it never retried. Now empty/undefined
+    // falls through to the paused-gated live extraction, which (with the loosened detection gates) can pick
+    // up the club on a later paused pass instead of showing nothing forever.
+    if (storedArc && storedArc.length >= 3) {
+      setClubArcPoints(storedArc);
       return;
     }
     // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
@@ -574,7 +579,7 @@ export default function SwingDetail() {
         // 2026-07-22 (Tim) — require a real arc (>= 4 validated points from detectClubPath, which
         // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
         // set falls through to the honest hand trace instead of a wrong "club".
-        if (r && r.points.length >= 4) {
+        if (r && r.points.length >= 3) {
           clubArcRunKeyRef.current = runKey; // mark THIS window done only on a real result
           // 2026-07-27 (full-app audit) — detectClubPath returns WINDOW-RELATIVE tMs (0-based from swing
           // start), but the overlay's live clubTip compares against ABSOLUTE playback position. Rebase to

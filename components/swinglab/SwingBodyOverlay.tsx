@@ -105,7 +105,9 @@ type Props = {
 };
 
 /** Minimum detected clubhead points before we draw the club arc (vs the wrist proxy). */
-const MIN_CLUB_POINTS = 4;
+// 2026-08-06 (Tim — blue club never shows): 4→3 to match the loosened detection gate (services/swing/
+// clubPath.ts + api/club-path.ts). A 3-point partial sweep still renders a real club instead of nothing.
+const MIN_CLUB_POINTS = 3;
 
 /** Detect whether keypoint coords are normalized 0–1 vs pixel-absolute by
  *  the largest coordinate seen. Pixel coords are in the 100s; normalized

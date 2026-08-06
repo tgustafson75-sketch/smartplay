@@ -1266,7 +1266,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
                 endMs: pw.endMs,
                 shouldAbort: () => false,
               });
-              if (arc && arc.points.length >= 4) {
+              if (arc && arc.points.length >= 3) {
                 // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
                 useCageStore.getState().setSessionClubArc(
                   sessionId,

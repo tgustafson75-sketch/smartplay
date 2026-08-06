@@ -36,8 +36,11 @@ type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 
 const MAX_FRAMES = 16;
 
-/** Minimum clearly-detected points before the set can be a real arc. */
-const MIN_ARC_POINTS = 4;
+/** Minimum clearly-detected points before the set can be a real arc.
+ *  2026-08-06 (Tim — the blue club never showed): lowered 4→3. Sonnet returns null through the blurred
+ *  downswing, so a valid partial sweep frequently has only 3 confident points; the old 4-gate here PLUS the
+ *  client gate double-rejected them into all-null. Still blob-guarded by the span test below. */
+const MIN_ARC_POINTS = 3;
 
 /**
  * 2026-07-22 (Tim — "the club is consistently off; trace it correctly") — validate that the
@@ -60,8 +63,8 @@ function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
   const spanX = maxX - minX, spanY = maxY - minY;
   // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
   // chunk of the frame in at least one axis, and not collapse to near a single point.
-  if (Math.max(spanX, spanY) < 0.15) return false;
-  if (spanX + spanY < 0.2) return false;
+  if (Math.max(spanX, spanY) < 0.10) return false;
+  if (spanX + spanY < 0.13) return false;
   return true;
 }
 
@@ -128,8 +131,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as { frames?: string[]; media_type?: string };
   const frames = Array.isArray(body.frames) ? body.frames.filter((f): f is string => typeof f === 'string' && f.length > 0) : [];
-  if (frames.length < 4) {
-    return res.status(400).json({ error: 'frames (base64 image array, >=4) required' });
+  if (frames.length < 3) {
+    return res.status(400).json({ error: 'frames (base64 image array, >=3) required' });
   }
   if (frames.length > MAX_FRAMES) {
     return res.status(400).json({ error: `too many frames (max ${MAX_FRAMES})` });

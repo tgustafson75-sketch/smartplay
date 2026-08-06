@@ -50,7 +50,11 @@ export interface ClubPathResult {
 }
 
 /** Minimum detected points that must survive before we'll call it a real arc. */
-const MIN_ARC_POINTS = 4;
+// 2026-08-06 (Tim — "the blue club has NEVER once shown up; it needs to be THERE, slightly off is fine").
+// The old 4-point + wide-span gates rejected most real swings (Sonnet returns null through the blurred
+// downswing, so a valid partial arc often has only 3 confident points). Lowered so a genuine partial sweep
+// draws instead of vanishing — still rejects a clustered blob (the "off club at address").
+const MIN_ARC_POINTS = 3;
 
 /**
  * 2026-07-22 (Tim — "the club is consistently off; trace it correctly or not at all") — validate
@@ -71,8 +75,8 @@ function looksLikeClubArc(pts: ClubPathPoint[]): boolean {
   const spanX = maxX - minX, spanY = maxY - minY;
   // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
   // chunk of the frame in at least one axis, and not collapse to near a single point.
-  if (Math.max(spanX, spanY) < 0.15) return false;
-  if (spanX + spanY < 0.2) return false;
+  if (Math.max(spanX, spanY) < 0.10) return false;
+  if (spanX + spanY < 0.13) return false;
   return true;
 }
 
@@ -202,7 +206,7 @@ export async function detectClubPath(args: {
   b64s.forEach((b, i) => {
     if (b) usable.push({ idx: i, base64: b, tMs: offsets[i] - offsets[0] });
   });
-  if (usable.length < 4) {
+  if (usable.length < 3) {
     await cleanup(frames, tempCopy);
     return null; // not enough frames to attempt an arc
   }
