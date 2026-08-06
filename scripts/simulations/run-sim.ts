@@ -4268,8 +4268,12 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
       // Shared contact helper reused everywhere (single source of truth).
       /function deriveContact\(/.test(smSrc) &&
       /function contactIssue\(/.test(smSrc) &&
-      // Saved report: a contact mishit / no-launch OVERRIDES the motion classification.
-      /const primaryIssue: PrimaryIssue = contactIssue\(contact\)/.test(smSrc) &&
+      // Saved report: a contact mishit / no-launch OVERRIDES the motion classification. 2026-08-05 — the
+      // on-device pose read can commit the verdict first (fast/offline), so a contact mishit must STILL
+      // force the overwrite even when the pose verdict already landed (chunk honesty wins over pose).
+      /const contactPi = contactIssue\(contact\);/.test(smSrc) &&
+      /const primaryIssue: PrimaryIssue = contactPi/.test(smSrc) &&
+      /if \(contactPi \|\| poseVerdictSessionRef\.current !== sessionId\)/.test(smSrc) &&
       // CNS learns the evidence-gated / contact fault, NOT the 'none'-biased detected_issue.
       /recordSwingFault\(\{ fault: learnedFault/.test(smSrc) &&
       /contactMishitFaultId\(contact\.reportedMishit\)/.test(smSrc) &&

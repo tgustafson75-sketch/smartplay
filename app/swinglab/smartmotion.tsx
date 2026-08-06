@@ -75,7 +75,7 @@ import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
 import { evaluateSwingValidity } from '../../services/swingValidity';
-import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
+import { buildPoseSwingRead, type PoseSwingRead, type PoseFault } from '../../services/swing/poseSwingRead';
 import {
   synthesizeSwingMetrics,
   isTruthGrade,
@@ -398,6 +398,55 @@ function contactIssue(contact: SmContact): PrimaryIssue | null {
     };
   }
   return null;
+}
+
+// 2026-08-05 (Tim — "analysis takes 3 tries / the first cloud read fails cold"). Map the on-device pose
+// read (buildPoseSwingRead — measured from biomech+tempo, deterministic, offline, never "no swing") into a
+// PrimaryIssue so it can be the SAVED verdict the instant biomech lands, without waiting on the cold cloud
+// vision call. Returns null when the read isn't usable (no measurable dimensions) so the cloud/observation
+// path still owns that case. [[pose-first-analysis-rearchitecture]]
+const POSE_FAULT_CATEGORY: Record<PoseFault['key'], PrimaryIssue['category']> = {
+  early_extension: 'attack_angle', sway: 'setup', reverse_pivot: 'setup',
+  over_the_top: 'swing_path', under_coil: 'setup', quick_tempo: 'tempo', slow_tempo: 'tempo',
+};
+const POSE_FAULT_TO_PRIMARY: Partial<Record<PoseFault['key'], NonNullable<PrimaryIssue['primary_fault']>>> = {
+  early_extension: 'early_extension', sway: 'sway', reverse_pivot: 'reverse_pivot', over_the_top: 'over_the_top',
+};
+function poseReadToPrimaryIssue(read: PoseSwingRead): PrimaryIssue | null {
+  if (!read.usable) return null;
+  const top = read.faults[0] ?? null;
+  if (!top) {
+    // A clean measured swing — name the standout strength honestly instead of a fault.
+    return {
+      issue_id: 'pose_clean',
+      name: 'Solid, balanced motion',
+      category: 'other',
+      severity: 'minor',
+      occurrence_count: 1,
+      visual_reference_path: null,
+      mechanical_breakdown: read.headline,
+      feel_cue: read.strengths[0] ?? 'Repeat that motion — the measured fundamentals are in a good window.',
+      detected_in_shots: [],
+      confidence: 'medium',
+      primary_fault: 'no_dominant_fault',
+      strengths: read.strengths,
+    };
+  }
+  return {
+    issue_id: `pose_${top.key}`,
+    name: top.label,
+    category: POSE_FAULT_CATEGORY[top.key] ?? 'other',
+    severity: top.severity,
+    occurrence_count: 1,
+    visual_reference_path: null,
+    mechanical_breakdown: read.headline,
+    feel_cue: top.evidence,
+    detected_in_shots: [],
+    confidence: 'medium',
+    primary_fault: POSE_FAULT_TO_PRIMARY[top.key] ?? 'no_dominant_fault',
+    evidence: top.evidence,
+    strengths: read.strengths,
+  };
 }
 
 // 2026-06-15 (Tim — pipelined per-swing narration) — a short spoken headline for
@@ -1037,6 +1086,9 @@ export default function SmartMotion() {
   // Caches the last pose extraction so an angle-only effect re-run reuses frames instead of re-decoding
   // the clip (see the pose/biomech effect — kills the double pose:extract:start per open).
   const poseExtractCacheRef = useRef<{ key: string; frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>> } | null>(null);
+  // Tracks the session whose verdict was already committed from the on-device pose read, so the fast
+  // offline verdict is written exactly once per session (see the pose-verdict effect below).
+  const poseVerdictSessionRef = useRef<string | null>(null);
   const pagerRef = useRef<ScrollView>(null);
   // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
@@ -1901,7 +1953,8 @@ export default function SmartMotion() {
               // overrides it so the library card + the Drill Check that reads it never
               // celebrate a chunk. `rolled` was computed once above. Falls back to a
               // light observation when there's no fault and no mishit.
-              const primaryIssue: PrimaryIssue = contactIssue(contact)
+              const contactPi = contactIssue(contact);
+              const primaryIssue: PrimaryIssue = contactPi
                 ?? rolled ?? {
                     issue_id: 'smartmotion_observation',
                     name: 'Smart Motion observation',
@@ -1914,7 +1967,13 @@ export default function SmartMotion() {
                     detected_in_shots: [],
                     confidence: (a.confidence ?? 'low') as PrimaryIssue['confidence'],
                   };
-              useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+              // 2026-08-05 — the on-device pose read may have ALREADY committed the verdict (fast/offline
+              // path). Only OVERWRITE it for a real contact mishit (chunk honesty — a fat/thin the pose
+              // read can't see); otherwise keep the measured read as the headline and let the cloud enrich
+              // per-shot below. When pose hasn't committed, the cloud verdict lands as before.
+              if (contactPi || poseVerdictSessionRef.current !== sessionId) {
+                useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+              }
               useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
               // 2026-07-09 (audit BACKLOG #1) — LIVE capture previously wrote only the
               // SESSION analysis, never the PER-SHOT row, so a live-recorded swing showed an
@@ -1953,17 +2012,32 @@ export default function SmartMotion() {
             }
           }
         } else {
-          const msg = `Analysis ${result.kind.replace('_', ' ')}`;
-          setAnalysisError(msg);
-          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+          // 2026-08-05 — a COLD cloud read that fails must NOT strand the screen anymore: if the
+          // on-device pose verdict already committed 'ok' (fast/offline path), swallow the cloud failure
+          // silently instead of downgrading to 'failed' + flashing an error. (If pose hasn't landed yet,
+          // the pose-verdict effect will still upgrade 'failed'→'ok' when biomech arrives.)
+          const sid = ingestedSessionIdRef.current;
+          const alreadyOk = !!sid && (poseVerdictSessionRef.current === sid
+            || useCageStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
+          if (!alreadyOk) {
+            const msg = `Analysis ${result.kind.replace('_', ' ')}`;
+            setAnalysisError(msg);
+            try { if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+          }
         }
       } catch (e) {
         // Only surface the failure if this is still the current session (a superseded
-        // late error must not clobber the new session's state).
+        // late error must not clobber the new session's state) AND the on-device pose verdict hasn't
+        // already committed 'ok' (2026-08-05 — cold cloud failure no longer strands the screen).
         if (sessionRunRef.current === myRun) {
-          const msg = e instanceof Error ? e.message : String(e);
-          setAnalysisError(msg);
-          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+          const sid = ingestedSessionIdRef.current;
+          const alreadyOk = !!sid && (poseVerdictSessionRef.current === sid
+            || useCageStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
+          if (!alreadyOk) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setAnalysisError(msg);
+            try { if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+          }
         }
       }
 
@@ -2089,6 +2163,32 @@ export default function SmartMotion() {
     })();
     return () => { cancelled = true; };
   }, [clipUri, videoDurationMs, phase, angle, segments, selectedSwing, swingerHandedness]);
+
+  // 2026-08-05 (Tim — "analysis takes 3 tries; the first cloud read fails cold, then works after re-analyze
+  // from the library"). ROOT CAUSE: the SAVED verdict landed ONLY when the cloud vision read
+  // (analyzeSwing → Gemini) resolved 'ok'; a cold first call raced the client abort and failed →
+  // analysis_status 'failed' → nothing shown → the player re-analyzed 2-3× until the Lambda warmed. But the
+  // app ALREADY measures the swing on-device (biomech + tempo → buildPoseSwingRead — deterministic, offline,
+  // never "no swing"). Commit THAT as the verdict the instant biomech lands: instant, offline-proof,
+  // first-try. The cloud read still runs and (a) OVERRIDES on a real contact mishit (chunk honesty) and
+  // (b) otherwise enriches per-shot; a cloud FAILURE no longer strands the screen (see the analysisP branch).
+  useEffect(() => {
+    if (phase !== 'review' || !biomech) return;
+    const sessionId = ingestedSessionIdRef.current;
+    if (!sessionId || poseVerdictSessionRef.current === sessionId) return;
+    try {
+      const store = useCageStore.getState();
+      const sess = store.sessionHistory.find((s) => s.id === sessionId);
+      if (!sess) return;
+      if (sess.analysis_status === 'ok') { poseVerdictSessionRef.current = sessionId; return; } // cloud already landed — don't override
+      const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));
+      if (!pi) return; // not measurable from this angle — leave it to the cloud/observation path
+      store.setSessionAnalysis(sessionId, pi, null);
+      store.setSessionAnalysisStatus(sessionId, 'ok');
+      poseVerdictSessionRef.current = sessionId;
+      setAnalysisError(null); // clear any transient cold-cloud error; the measured read is the answer
+    } catch { /* non-fatal — the cloud path still runs */ }
+  }, [phase, biomech, tempo]);
 
   // Pose-anchored tempo + transition for the selected swing. Impact time comes from the
   // segment's strikeMs; top-of-backswing is read from pose. Cached per (clip, strike) so
