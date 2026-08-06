@@ -1235,7 +1235,7 @@ export default function SwingDetail() {
     await playBoth();
   };
 
-  const handleSessionShare = async () => {
+  const shareSessionVideo = async () => {
     if (!shot?.clipUri) {
       Alert.alert('Nothing to share', 'This session has no video file.');
       return;
@@ -1257,6 +1257,32 @@ export default function SwingDetail() {
       console.log('[swing-detail] session share failed', e);
       Alert.alert('Share failed', 'Could not share the video. The file may no longer be on this device.');
     }
+  };
+
+  const handleSessionShare = async () => {
+    if (!shot?.clipUri) {
+      Alert.alert('Nothing to share', 'This session has no video file.');
+      return;
+    }
+    // 2026-08-06 (Tim — "when I export a recorded swing to someone there's NO report with it even though it
+    // already analyzed — a major missed opportunity"). When the swing has a finished analysis, offer the
+    // full ANALYSIS REPORT (a PDF: fault frame + breakdown + fix + drill + tempo + club) — the generator
+    // already exists (handleExportReport → exportCoachReport) but was gated to instructors. It's available
+    // to EVERYONE from the Share button now. No analysis yet → just share the clip as before.
+    const hasReport = (session?.analysis_status ?? 'pending') === 'ok' && !!session?.primary_issue;
+    if (hasReport) {
+      Alert.alert(
+        'Share swing',
+        'Send the full analysis report, or just the video?',
+        [
+          { text: 'Analysis report', onPress: () => { void handleExportReport(); } },
+          { text: 'Video only', onPress: () => { void shareSessionVideo(); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+    await shareSessionVideo();
   };
 
   // 2026-06-29 (Tim) — SAVE THE CLIP TO PHONE PHOTOS (with permission) so the player
