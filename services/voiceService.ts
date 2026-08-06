@@ -199,6 +199,15 @@ let currentRecording: Audio.Recording | null = null;
 // immediately. Reset in a finally so every exit path clears it.
 let captureInProgress = false;
 let captureCancelled = false;
+// 2026-08-06 (Tim device log: voice_error capture_utterance — "Only one Recording object can be prepared
+// at a given time"). captureInProgress guards captureUtterance vs itself, and the tap path checks
+// isCapturing() before starting — but the REVERSE was unguarded: captureUtterance didn't know the tap
+// path's own recording (useVoiceCaddie recordingRef) was live, so a follow-up capture firing while a tap
+// recording was active raced the audio session and threw. useVoiceCaddie registers a live check here so
+// captureUtterance bails when the mic is already held by the tap path. Reads the ref live (no flag to sync).
+let externalMicCheck: (() => boolean) | null = null;
+export const registerExternalMicCheck = (fn: (() => boolean) | null): void => { externalMicCheck = fn; };
+const isExternalMicActive = (): boolean => { try { return externalMicCheck?.() === true; } catch { return false; } };
 // 2026-06-06 — Distinct from captureCancelled: this means "user
 // explicitly ended the capture (tap during a follow-up listen) — DO
 // transcribe what was recorded." captureCancelled discards the audio;
@@ -246,8 +255,8 @@ export const captureUtterance = async (
   // 2026-06-15 (Tim) — atomic re-entry guard (see captureInProgress decl). A
   // second concurrent capture would crash the audio session ("Only one Recording
   // object"); bail quietly so the in-flight capture owns the mic.
-  if (captureInProgress) {
-    console.log('[voice] captureUtterance ignored — a capture is already in progress');
+  if (captureInProgress || isExternalMicActive()) {
+    console.log('[voice] captureUtterance ignored — mic busy (capture in progress or tap recording active)');
     return null;
   }
   captureInProgress = true;

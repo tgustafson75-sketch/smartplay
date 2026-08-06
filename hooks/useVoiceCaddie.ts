@@ -15,6 +15,7 @@ import {
   captureUtterance,
   isCapturing,
   endCaptureEarly,
+  registerExternalMicCheck,
   RECORDING_OPTIONS,
   speakDeviceNotice,
 } from '../services/voiceService';
@@ -490,6 +491,12 @@ export const useVoiceCaddie = ({
 
   const currentPathname = usePathname();
   const recordingRef    = useRef<Audio.Recording | null>(null);
+  // 2026-08-06 (Tim — "Only one Recording object" mic collision): let voiceService.captureUtterance see
+  // whether THIS tap path is holding the mic, so a follow-up capture bails instead of racing the session.
+  useEffect(() => {
+    registerExternalMicCheck(() => recordingRef.current !== null);
+    return () => registerExternalMicCheck(null);
+  }, []);
   const isProcessingRef = useRef(false);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 2026-06-06 — Silence-VAD polling timer for handleMicPress.
