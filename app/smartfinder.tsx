@@ -29,6 +29,7 @@ import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo
 import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
+import { useGreenReadStore } from '../store/greenReadStore';
 import { composeShotRead } from '../services/cnsShotRead';
 import { bagDistances } from '../services/shotStrategy';
 // SF fix #2 — learned-bag club lookup (inferClub) + the canonical club ladder so
@@ -1782,6 +1783,31 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
     }
     return `${breakTxt}, ${pace}.`;
   })() : null;
+
+  // 2026-08-06 (Tim — "the putting read worked fantastic but it doesn't go anywhere; it doesn't get saved,
+  // you don't see it"). PERSIST each completed read to the durable green-read store so it's no longer
+  // discarded on unmount — keyed to the current hole/course when a round is active. Saved ONCE per distinct
+  // read (not on every tilt tick). (Recap/dashboard surfacing of saved reads is the fast-follow.)
+  const lastSavedReadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!puttRead || distanceFeet == null || slopePct == null) return;
+    const key = `${distanceFeet}|${slopePct}|${rollAtMeasure ?? 0}`;
+    if (lastSavedReadRef.current === key) return;
+    lastSavedReadRef.current = key;
+    try {
+      const rs = useRoundStore.getState();
+      useGreenReadStore.getState().logRead({
+        at: Date.now(),
+        courseId: rs.isRoundActive ? rs.activeCourseId : null,
+        courseName: null,
+        hole: rs.isRoundActive ? rs.currentHole : null,
+        feetEst: distanceFeet,
+        slopePct,
+        text: puttRead,
+      });
+      useToastStore.getState().show('Green read saved.');
+    } catch { /* non-fatal */ }
+  }, [puttRead, distanceFeet, slopePct, rollAtMeasure]);
 
   return (
     <>
