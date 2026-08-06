@@ -107,13 +107,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // 2026-07-18 (audit) — resolve par from REAL sources only; do NOT fall back to a fabricated 72.
     // A differential computed off par-72/slope-113 neutrals would be wrong on a par-70/71 course, so
     // if no real par is available we return null (the card renders its honest "no impact" state).
-    const par =
-      (round.holePars ? Object.values(round.holePars).reduce((a, b) => a + b, 0) : 0) ||
-      (bundled.length ? bundled.reduce((a, h) => a + h.par, 0) : 0) ||
-      courseHoles.reduce((a, h) => a + h.par, 0);
-    if (!(par > 0)) return null;
-    const rating = tee?.course_rating ?? par;
-    const slope = tee?.slope_rating ?? 113;
+    const tee2 = tee; // keep rating/slope source
 
     // 2026-07-01 (re-audit — M3) — gate to scored holes (score>0). A stray
     // unfinalized 0-score in round.scores otherwise adds a phantom hole to the
@@ -127,10 +121,21 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
         hole_stroke_index: Number(h),
       }));
     // Any scored hole with unknown par → don't fabricate; render the honest "no impact" state.
-    if (holeEntries.some(e => e.par == null)) return null;
+    if (holeEntries.length === 0 || holeEntries.some(e => e.par == null)) return null;
     const holes = holeEntries as { hole_number: number; par: number; score: number; hole_stroke_index: number }[];
 
+    // 2026-08-06 (audit — 9-on-18): par of the SCORED holes ONLY. The old code summed ALL 18 holePars (72)
+    // for a 9-hole round, then is9Hole doubled it to 144 → a wrong AGS/differential on the card (bit the new
+    // front/back-nine feature exactly). Now par = the 9 played holes' pars (~36) and equivalentPar doubles
+    // that back to a full-round-equivalent (~72). A full round: par=72, equivalentPar=72 (unchanged).
+    const par = holes.reduce((a, h) => a + h.par, 0);
+    if (!(par > 0)) return null;
+    // equivalentPar = the FULL-round-equivalent par (a 9-hole round doubles its scored par to ~72). Course
+    // handicap is computed off this + AGS is doubled below, so the rating fallback must be the full-equiv
+    // par, not the 9-hole par — otherwise the differential neutral is halved for a 9-hole round.
     const equivalentPar = is9Hole ? par * 2 : par;
+    const rating = tee2?.course_rating ?? equivalentPar;
+    const slope = tee2?.slope_rating ?? 113;
     const out = computeRoundHandicap({
       handicapIndex,
       courseRating: rating,

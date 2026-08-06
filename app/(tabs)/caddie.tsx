@@ -762,7 +762,9 @@ export default function CaddieTab() {
         settingsNow.proactive_kevin_enabled &&
         !settingsNow.localMode && // Local Mode = conservation: no proactive speech (#10 conflict fix)
         storeNow.isRoundActive &&
-        storeNow.currentHole === 1 &&
+        // 2026-08-06 (audit — back nine): fire the opening handoff on the round's FIRST hole (10 for a back
+        // nine), not a hardcoded 1 — a back-nine round used to open with no intro.
+        storeNow.currentHole === roundFirstHole(storeNow) &&
         Object.keys(storeNow.scores).length === 0
       ) {
         const t = setTimeout(() => {
@@ -2510,9 +2512,13 @@ export default function CaddieTab() {
     setSelectedGhostId(null);
 
     if (skip_briefings) {
-      const hole1 = useRoundStore.getState().courseHoles.find(h => h.hole === 1);
-      if (hole1) {
-        const msg = 'Hole 1. Par ' + hole1.par + '. ' + hole1.distance + ' yards. Let\'s go.';
+      // 2026-08-06 (audit — back nine): announce the round's ACTUAL starting hole, not a hardcoded hole 1.
+      // A back-nine round starts on hole 10 — the old code said "Hole 1. Par X..." while standing on the 10th.
+      const rs0 = useRoundStore.getState();
+      const startH = rs0.currentHole || roundFirstHole(rs0);
+      const startHoleData = rs0.courseHoles.find(h => h.hole === startH);
+      if (startHoleData) {
+        const msg = `Hole ${startH}. Par ${startHoleData.par}. ${startHoleData.distance} yards. Let's go.`;
         setCaddieResponse(msg);
         // Phase V.7+ — Quiet (L1) is text-only. Voice only fires at L2+.
         // Closes the leak where skip-briefings spoke "Hole 1, Par X" even
