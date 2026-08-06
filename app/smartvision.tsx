@@ -1214,23 +1214,33 @@ export default function SmartVisionScreen() {
   // Prior rounds' shots ON THIS HOLE, grouped per round, most-recent first, color-coded — the raw
   // material for the shot map. Only rounds with GPS-located shots on this hole; capped at 4 so the
   // canvas stays readable. Each shot persists start/end lat-lng (roundStore ShotResult).
+  // 2026-08-06 (Tim — "I should still see a shot map"). Recompute the map when the ACTIVE round logs a shot,
+  // so it fills in as you play (not just from prior rounds). Keyed on the active round, NOT the practice-mode
+  // toggle — being in range mode never suppresses the map; it just means there's no round yet.
+  const activeShotCount = useRoundStore(s => (s.isRoundActive ? s.shots.length : 0));
   const shotHistory = useMemo(() => {
-    if (!courseId) return [] as { id: string; endedAt: number; color: string; label: string; shots: import('../store/roundStore').ShotResult[] }[];
-    const currentRoundId = useRoundStore.getState().currentRoundId;
+    type MapGroup = { id: string; endedAt: number; color: string; label: string; shots: import('../store/roundStore').ShotResult[] };
+    if (!courseId) return [] as MapGroup[];
+    const rs = useRoundStore.getState();
+    const currentRoundId = rs.currentRoundId;
     const COLORS = ['#00E5FF', '#FFB300', '#FF4FD8', '#7CFF6B'];
-    return (useRoundStore.getState().roundHistory || [])
+    const onHole = (s: import('../store/roundStore').ShotResult) =>
+      ((s.hole ?? s.hole_number) === holeIndex) && !!s.start_location && Number.isFinite(s.start_location.lat);
+    const prior: MapGroup[] = (rs.roundHistory || [])
       .filter(r => r.courseId === courseId && r.id !== currentRoundId && Array.isArray(r.shots))
-      .map(r => ({
-        id: r.id,
-        endedAt: r.endedAt,
-        shots: (r.shots as import('../store/roundStore').ShotResult[]).filter(s =>
-          ((s.hole ?? s.hole_number) === holeIndex) && !!s.start_location && Number.isFinite(s.start_location.lat)),
-      }))
+      .map(r => ({ id: r.id, endedAt: r.endedAt, shots: (r.shots as import('../store/roundStore').ShotResult[]).filter(onHole) }))
       .filter(r => r.shots.length > 0)
       .sort((a, b) => b.endedAt - a.endedAt)
-      .slice(0, 4)
+      .slice(0, 3) // leave a slot for the current round
       .map((r, i) => ({ ...r, color: COLORS[i % COLORS.length], label: i === 0 ? 'Last round' : `${i + 1} rounds ago` }));
-  }, [courseId, holeIndex, markBumpTick]);
+    // The active round lives in STATE, not roundHistory — plot its own shots so the map isn't empty on a
+    // brand-new course (e.g. Green Hill) and builds live as you play the hole.
+    if (rs.isRoundActive) {
+      const cur = (rs.shots || []).filter(onHole);
+      if (cur.length > 0) prior.unshift({ id: currentRoundId ?? 'current', endedAt: Date.now(), color: '#FFFFFF', label: 'This round', shots: cur });
+    }
+    return prior.slice(0, 4);
+  }, [courseId, holeIndex, markBumpTick, activeShotCount]);
   const [showShotMap, setShowShotMap] = useState(true);
 
   // Bounds clamper used in drag handlers — keep markers visible.
