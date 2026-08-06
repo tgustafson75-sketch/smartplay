@@ -29,7 +29,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G } from 'react-native-svg';
 import type { PoseFrame, Keypoint } from '../../services/poseAnalysisApi';
-import { cleanArc, catmullRomBezier, type ArcPoint } from '../../services/swing/smoothArc';
+import { cleanArc, catmullRomBezier, catmullRomPoint, type ArcPoint } from '../../services/swing/smoothArc';
 
 const SKELETON_EDGES: [string, string][] = [
   ['left_shoulder', 'right_shoulder'],
@@ -165,20 +165,19 @@ function interpolateFrame(frames: PoseFrame[], timeMs: number): PoseFrame | null
       // instead of sliding in a straight line. Endpoints clamp (degrade to ~linear).
       const p0 = sorted[i - 1] ?? a;
       const p3 = sorted[i + 2] ?? b;
-      const t2 = t * t, t3 = t2 * t;
-      const cr = (v0: number, v1: number, v2: number, v3: number) =>
-        0.5 * (2 * v1 + (-v0 + v2) * t + (2 * v0 - 5 * v1 + 4 * v2 - v3) * t2 + (-v0 + 3 * v1 - 3 * v2 + v3) * t3);
       const blended: Keypoint[] = a.keypoints.map(ka => {
         const kb = b.keypoints.find(p => p.name === ka.name);
         if (!kb) return ka;
         const k0 = p0.keypoints.find(p => p.name === ka.name) ?? ka;
         const k3 = p3.keypoints.find(p => p.name === ka.name) ?? kb;
-        return {
-          name: ka.name,
-          x: cr(k0.x, ka.x, kb.x, k3.x),
-          y: cr(k0.y, ka.y, kb.y, k3.y),
-          score: Math.min(ka.score, kb.score),
-        };
+        // 2026-08-06 (analysis audit) — CENTRIPETAL eval (was uniform CR, which overshoots the true top of
+        // the swing between sparse anchors — flinging the joint above the real position). Same curve family
+        // as the drawn trace, so the grip end of the blue shaft stays consistent with the clubhead marker.
+        const pt = catmullRomPoint(
+          { x: k0.x, y: k0.y, t: 0 }, { x: ka.x, y: ka.y, t: 0 },
+          { x: kb.x, y: kb.y, t: 0 }, { x: k3.x, y: k3.y, t: 0 }, t,
+        );
+        return { name: ka.name, x: pt.x, y: pt.y, score: Math.min(ka.score, kb.score) };
       });
       return { timestampMs: timeMs, keypoints: blended };
     }
@@ -326,10 +325,11 @@ export default function SwingBodyOverlay({
         // sat inside/off the true arc; the spline follows the curve so the blue head tracks the real
         // clubhead between detections. Endpoints clamp to the segment (degrades to ~linear at the ends).
         const p0 = P[i - 1] ?? a, p3 = P[i + 2] ?? b;
-        const s2 = s * s, s3 = s2 * s;
-        const cr = (v0: number, v1: number, v2: number, v3: number) =>
-          0.5 * (2 * v1 + (-v0 + v2) * s + (2 * v0 - 5 * v1 + 4 * v2 - v3) * s2 + (-v0 + 3 * v1 - 3 * v2 + v3) * s3);
-        return { x: cr(p0.x, a.x, b.x, p3.x), y: cr(p0.y, a.y, b.y, p3.y) };
+        // 2026-08-06 (analysis audit) — evaluate the SAME centripetal Catmull-Rom Bézier the trace draws
+        // (catmullRomPoint) instead of a UNIFORM CR eval. Uniform traced a different curve than the drawn
+        // (centripetal) line AND overshot the reversal, so the blue head floated off its own arc. Now the
+        // marker sits exactly on the rendered trace.
+        return catmullRomPoint(p0, a, b, p3, s);
       }
     }
     return { x: P[P.length - 1].x, y: P[P.length - 1].y };

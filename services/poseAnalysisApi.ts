@@ -399,7 +399,12 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   }
   const address = robustAnchor(frames, frames.find(f => f.position === 'P1_address'));
   const top = robustAnchor(frames, frames.find(f => f.position === 'P4_top'));
-  const impact = robustAnchor(frames, frames.find(f => f.position === 'P6_impact'));
+  // 2026-08-06 (analysis audit) — impact sits in the FASTEST motion of the swing; a 90ms keypoint borrow
+  // there can composite in a hip/ankle from a materially different body position and skew weightShift /
+  // spineAngle. Address + top are at/near the transition (near-zero velocity), so their wider window only
+  // denoises. Tighten impact's window (~one frame each side at 30fps) so it still rejects a single bad
+  // frame without teleporting a joint across fast motion.
+  const impact = robustAnchor(frames, frames.find(f => f.position === 'P6_impact'), 45);
 
   // Hip turn: shoulder/hip width "shrinks" as the body rotates away
   // from the camera. Ratio of width(top)/width(address) → degrees via
@@ -962,6 +967,34 @@ function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null 
   const diff = (hipImpactW - hipTopW) / hipTopW - (shImpactW - shTopW) / shTopW;
   const clamped = Math.max(-0.30, Math.min(0.30, diff));
   return Math.round(((clamped + 0.30) / 0.60) * 100);
+}
+
+/**
+ * 2026-08-06 (analysis audit) — derive tempo DIRECTLY from an already-computed biomech's phase anchors,
+ * with no extra pose calls. The UPLOAD on-device-verdict fallback used to pass tempo=null, so an uploaded
+ * swing could NEVER surface a rushed/slow-transition fault (a real gap vs the live path). The biomech
+ * already carries the real P1_address / P4_top / P6_impact frames; tempo is just backswing:downswing
+ * between them. Honest — the anchors are measured positions, and we return NO_TEMPO (all-null → no fault)
+ * whenever they aren't cleanly present. `video_pose` because the impact came from the video segmenter.
+ */
+export function tempoFromBiomechanics(bio: SwingBiomechanics | null): SwingTempo {
+  const fr = bio?.frames ?? [];
+  const p1 = fr.find(f => f.position === 'P1_address');
+  const p4 = fr.find(f => f.position === 'P4_top');
+  const p6 = fr.find(f => f.position === 'P6_impact');
+  if (!p1 || !p4 || !p6) return NO_TEMPO;
+  const backswingMs = p4.timestampMs - p1.timestampMs;
+  const downswingMs = p6.timestampMs - p4.timestampMs;
+  if (!(backswingMs > 0) || !(downswingMs > 0)) return NO_TEMPO;
+  return {
+    ratio: backswingMs / downswingMs,
+    backswingMs,
+    downswingMs,
+    topMs: p4.timestampMs,
+    sequencingScore: sequencingFromFrames(p4, p6),
+    source: 'video_pose',
+    confidence: 'low',
+  };
 }
 
 /**

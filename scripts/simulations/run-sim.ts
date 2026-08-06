@@ -6265,19 +6265,29 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { buildPoseSwingRead } = require('../../services/swing/poseSwingRead');
     const mkTempo = (ratio: number) => ({ ratio, backswingMs: 900, downswingMs: 300, topMs: 900, sequencingScore: null, source: 'video_pose', confidence: 'med' });
+    // 2026-08-06 (analysis audit) — the fault gate now only escalates a scold when the pose was CONFIDENT
+    // about the metric (trust ≥ 0.4, unknown → untrusted). Real biomech always carries metric_confidence
+    // (poseAnalysisApi.computeBiomechanics), so faulty swings supply it here to represent real data.
+    const CONF_HI = { hipTurn: 0.9, shoulderTurn: 0.9, shoulderTilt: 0.9, weightShift: 0.9, spineAngleDelta: 0.9, headDrift: 0.9, hipSlide: 0.9, sequencing: 0.9 };
     // Clean swing: strong numbers → strengths, no faults, usable.
-    const clean = buildPoseSwingRead({ hipTurnDeg: 46, shoulderTurnDeg: 92, weightShiftPct: 20, spineAngleDeltaDeg: 4, hipSlideRatio: 1.0, sequencingScore: 72, frames: [], verdicts: {} }, mkTempo(3.0));
+    const clean = buildPoseSwingRead({ hipTurnDeg: 46, shoulderTurnDeg: 92, weightShiftPct: 20, spineAngleDeltaDeg: 4, hipSlideRatio: 1.0, sequencingScore: 72, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
     const cleanOk = clean.usable && clean.faults.length === 0 && clean.strengths.length > 0 && clean.dimensions.length >= 6;
-    // Faulty swing: early extension + sway + hanging back + over the top → all detected from thresholds.
-    const faulty = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {} }, mkTempo(3.0));
+    // Faulty swing: early extension + sway + hanging back + over the top → all detected from thresholds (confident).
+    const faulty = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
     const fk = faulty.faults.map((f: { key: string }) => f.key);
     const faultyOk = fk.includes('early_extension') && fk.includes('sway') && fk.includes('reverse_pivot') && fk.includes('over_the_top') && faulty.faults[0].severity === 'significant';
+    // 2026-08-06 (analysis audit, finding #5) — the SAME faulty numbers but LOW confidence must NOT lead with
+    // those scolds (unknown/low pose confidence → hedged dimension, no headline fault). Locks the honesty gate.
+    const CONF_LO = { hipTurn: 0.2, shoulderTurn: 0.2, shoulderTilt: 0.2, weightShift: 0.2, spineAngleDelta: 0.2, headDrift: 0.2, hipSlide: 0.2, sequencing: 0.2 };
+    const faultyLowConf = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_LO }, mkTempo(3.0));
+    const gatedKeys = ['early_extension', 'sway', 'reverse_pivot', 'over_the_top'];
+    const lowConfGated = !faultyLowConf.faults.some((f: { key: string }) => gatedKeys.includes(f.key));
     // Unmeasurable (e.g. bad angle): every dimension null → omitted, NO fabricated fault, not usable — never "no swing" as a fault.
     const empty = buildPoseSwingRead({ hipTurnDeg: null, shoulderTurnDeg: null, weightShiftPct: null, spineAngleDeltaDeg: null, hipSlideRatio: null, sequencingScore: null, frames: [], verdicts: {} }, null);
     const emptyOk = empty.dimensions.length === 0 && empty.faults.length === 0 && empty.usable === false;
-    return cleanOk && faultyOk && emptyOk;
+    return cleanOk && faultyOk && lowConfGated && emptyOk;
   })(),
-  'pose-first engine: measured kinematics → per-dimension honest verdicts + threshold-detected faults (early-extension/sway/reverse-pivot/over-the-top from real numbers), and unmeasurable dimensions are omitted not fabricated');
+  'pose-first engine: measured kinematics → per-dimension honest verdicts + threshold-detected faults (confident) — a LOW-confidence swing keeps the same faults OUT of the headline (honesty gate), and unmeasurable dimensions are omitted not fabricated');
 
   check('Analysis: a stuck upload never spins forever — pending is watchdog-recovered + early retry',
     // 2026-07-21 (BETA analysis P0). An uploaded clip whose auto-analyze never fired (no <Video>

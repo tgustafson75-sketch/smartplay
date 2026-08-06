@@ -92,7 +92,11 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
   // was actually confident about it. A low-confidence read still shows as a (hedged) dimension, but we don't
   // lead with a scold we're not sure of — the top-line verdict stays trustworthy. (0.4 ≈ usable-but-soft.)
   const conf = bio?.metric_confidence ?? {};
-  const trust = (v?: number) => (v ?? 1) >= 0.4;
+  // 2026-08-06 (analysis audit) — default UNKNOWN confidence to 0 (untrusted), not 1 (trusted). A missing/
+  // null metric_confidence (legacy biomech, or avgScore returned null because the joints weren't clearly
+  // seen) must NOT let a fault jump to the headline scold ungated — that's exactly the false-confidence Tim
+  // said to kill. Unknown → show the hedged dimension, don't lead with the fault. (0.4 ≈ usable-but-soft.)
+  const trust = (v?: number | null) => (v ?? 0) >= 0.4;
 
   const tRead = tempoRead(tempo);
   if (tRead) {

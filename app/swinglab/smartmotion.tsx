@@ -1040,6 +1040,14 @@ export default function SmartMotion() {
   // Tracks the session whose verdict was already committed from the on-device pose read, so the fast
   // offline verdict is written exactly once per session (see the pose-verdict effect below).
   const poseVerdictSessionRef = useRef<string | null>(null);
+  // 2026-08-06 (analysis audit) — the pose verdict commits the instant biomech lands, but TEMPO is produced
+  // by a slower, separate effect. If biomech won the race the saved verdict was built with tempo=null and
+  // then locked, silently dropping a "rushed transition" fault from the SAVED/library read. These refs let
+  // the verdict RE-COMMIT once tempo arrives (poseVerdictTempoRef = committed WITH tempo → final), while
+  // never clobbering a cloud CONTACT-MISHIT override (cloudMishitRef) which is the one thing the on-device
+  // read can't see.
+  const poseVerdictTempoRef = useRef<string | null>(null);
+  const cloudMishitRef = useRef<string | null>(null);
   const pagerRef = useRef<ScrollView>(null);
   // 2026-08-01 (tester — "moving the ball box scrolls to another card") — true while a ball/target
   // drag is in flight, so the horizontal card pager freezes and can't steal the drag gesture.
@@ -1928,6 +1936,9 @@ export default function SmartMotion() {
               // per-shot below. When pose hasn't committed, the cloud verdict lands as before.
               if (contactPi || poseVerdictSessionRef.current !== sessionId) {
                 useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+                // 2026-08-06 (analysis audit) — a real contact mishit is the ONE cloud read the on-device
+                // pose can't see; lock it so the tempo re-commit (pose-verdict effect) never overwrites it.
+                if (contactPi) cloudMishitRef.current = sessionId;
               }
               useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
               // 2026-07-09 (audit BACKLOG #1) — LIVE capture previously wrote only the
@@ -2130,17 +2141,26 @@ export default function SmartMotion() {
   useEffect(() => {
     if (phase !== 'review' || !biomech) return;
     const sessionId = ingestedSessionIdRef.current;
-    if (!sessionId || poseVerdictSessionRef.current === sessionId) return;
+    if (!sessionId) return;
+    // Final states: already committed WITH tempo (nothing better coming from on-device), or a cloud
+    // contact-mishit read has taken over (chunk honesty — never overwrite it with a tempo re-commit).
+    if (poseVerdictTempoRef.current === sessionId || cloudMishitRef.current === sessionId) return;
+    // Committed once already but tempo STILL isn't here → wait for it (or the cloud); don't re-run pointlessly.
+    if (poseVerdictSessionRef.current === sessionId && !tempo) return;
     try {
       const store = useCageStore.getState();
       const sess = store.sessionHistory.find((s) => s.id === sessionId);
       if (!sess) return;
-      if (sess.analysis_status === 'ok') { poseVerdictSessionRef.current = sessionId; return; } // cloud already landed — don't override
+      // Cloud landed 'ok' independently (we never committed a pose verdict) — it's richer; don't override.
+      if (sess.analysis_status === 'ok' && poseVerdictSessionRef.current !== sessionId) {
+        poseVerdictSessionRef.current = sessionId; poseVerdictTempoRef.current = sessionId; return;
+      }
       const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));
       if (!pi) return; // not measurable from this angle — leave it to the cloud/observation path
       store.setSessionAnalysis(sessionId, pi, null);
       store.setSessionAnalysisStatus(sessionId, 'ok');
       poseVerdictSessionRef.current = sessionId;
+      if (tempo) poseVerdictTempoRef.current = sessionId; // committed with tempo → this is the final on-device read
       setAnalysisError(null); // clear any transient cold-cloud error; the measured read is the answer
     } catch { /* non-fatal — the cloud path still runs */ }
   }, [phase, biomech, tempo]);

@@ -65,6 +65,17 @@ function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
   // chunk of the frame in at least one axis, and not collapse to near a single point.
   if (Math.max(spanX, spanY) < 0.10) return false;
   if (spanX + spanY < 0.13) return false;
+  // 2026-08-06 (analysis audit) — span alone (a wide box) is fooled by 3 UNRELATED confident detections
+  // (grip + ball + a background object) that box-span wide but zig-zag. Gate on path EFFICIENCY (net
+  // first→last distance ÷ total path length): a real quarter-to-half-circle sweep scores ~0.57–0.64, a
+  // scatter ~0.26. Mirrors the client gate so both the app and SmartPlay Light reject garbage identically.
+  let pathLen = 0;
+  for (let i = 1; i < pts.length; i++) {
+    pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  if (pathLen <= 1e-6) return false;
+  const netSpan = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y);
+  if (netSpan / pathLen < 0.45) return false;
   return true;
 }
 

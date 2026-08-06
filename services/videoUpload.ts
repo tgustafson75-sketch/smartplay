@@ -1239,7 +1239,10 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
               if (sess && sess.analysis_status !== 'ok') {
                 const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
                 const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
-                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, null));
+                // 2026-08-06 (analysis audit) — derive tempo from the biomech anchors (no extra pose calls)
+                // so an uploaded swing can surface a rushed/slow-transition fault too, at parity with the
+                // live path (was hardcoded null → uploads never flagged tempo).
+                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromBiomechanics(biomech)));
                 if (pi) {
                   store.setSessionAnalysis(sessionId, pi, null);
                   store.setSessionAnalysisStatus(sessionId, 'ok');

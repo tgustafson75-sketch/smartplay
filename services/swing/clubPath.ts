@@ -77,6 +77,20 @@ function looksLikeClubArc(pts: ClubPathPoint[]): boolean {
   // chunk of the frame in at least one axis, and not collapse to near a single point.
   if (Math.max(spanX, spanY) < 0.10) return false;
   if (spanX + spanY < 0.13) return false;
+  // 2026-08-06 (analysis audit) — span ALONE (a wide bounding box) is not enough: 3 UNRELATED confident
+  // detections (address grip + the ball + a bright background object) span a wide box and used to pass,
+  // drawing a blue shaft through garbage — exactly the "worse than nothing" Tim drew the line on. A real
+  // clubhead SWEEP progresses; a scatter zig-zags/doubles back. Gate on path EFFICIENCY = straight-line
+  // distance from first→last detection ÷ total point-to-point path length. A quarter-to-half-circle arc
+  // scores ~0.57–0.64; the grip/ball/background scatter scores ~0.26. 0.45 keeps real (partial) arcs with
+  // margin and rejects the scatter. Points are time-ordered, so this reads the actual swept progression.
+  let pathLen = 0;
+  for (let i = 1; i < pts.length; i++) {
+    pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  if (pathLen <= 1e-6) return false;
+  const netSpan = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y);
+  if (netSpan / pathLen < 0.45) return false;
   return true;
 }
 

@@ -135,3 +135,25 @@ export function catmullRomBezier(
   }
   return { cp1x, cp1y, cp2x, cp2y };
 }
+
+/**
+ * 2026-08-06 (analysis audit) — evaluate a POINT on the SAME centripetal Catmull-Rom segment the trace
+ * draws (catmullRomBezier control points → cubic Bézier at parameter s∈[0,1] along p1→p2). Callers that
+ * place a marker on the arc (the blue clubhead) or smooth a joint between sparse anchors (the skeleton)
+ * MUST use this instead of UNIFORM Catmull-Rom: uniform overshoots at the swing's reversal and traces a
+ * DIFFERENT curve than the drawn (centripetal) trace, so the head floated off its own line. This puts the
+ * marker exactly on the rendered curve, overshoot-free. `s` is the time fraction (an approximation of the
+ * true arc-length parameter — fine for placement; the point stays ON the curve either way).
+ */
+export function catmullRomPoint(
+  p0: ArcPoint, p1: ArcPoint, p2: ArcPoint, p3: ArcPoint, s: number,
+): { x: number; y: number } {
+  const u = Math.max(0, Math.min(1, s));
+  const { cp1x, cp1y, cp2x, cp2y } = catmullRomBezier(p0, p1, p2, p3);
+  const iu = 1 - u;
+  const w0 = iu * iu * iu, w1 = 3 * iu * iu * u, w2 = 3 * iu * u * u, w3 = u * u * u;
+  return {
+    x: w0 * p1.x + w1 * cp1x + w2 * cp2x + w3 * p2.x,
+    y: w0 * p1.y + w1 * cp1y + w2 * cp2y + w3 * p2.y,
+  };
+}
