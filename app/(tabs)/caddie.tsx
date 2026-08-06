@@ -230,6 +230,7 @@ export default function CaddieTab() {
     courseHoles,
     scores: _scores,
     nineHoleMode,
+    roundStartHole,
     startRound,
     endRound,
     logScore,
@@ -258,6 +259,7 @@ export default function CaddieTab() {
     courseHoles: s.courseHoles,
     scores: s.scores,
     nineHoleMode: s.nineHoleMode,
+    roundStartHole: s.roundStartHole,
     startRound: s.startRound,
     endRound: s.endRound,
     logScore: s.logScore,
@@ -898,6 +900,8 @@ export default function CaddieTab() {
     { id: 'local:palms', name: 'Palms', fullName: 'Palms Golf Course', isLocal: true },
   );
   const [nineHole, setNineHole] = useState(false);
+  // 2026-08-06 (tester Matt Abid) — which nine when playing 9 holes: false = front (1-9), true = back (10-18).
+  const [backNine, setBackNine] = useState(false);
   const [isCompetition, setIsCompetition] = useState(false);
   const [roundNotes, setRoundNotes] = useState('');
   const [notesDictating, setNotesDictating] = useState(false);
@@ -2221,6 +2225,7 @@ export default function CaddieTab() {
     picked: PickedCourse,
     opts: {
       nineHole: boolean;
+      startHole?: number;
       isCompetition: boolean;
       notes: string;
       mode: RoundMode;
@@ -2357,6 +2362,7 @@ export default function CaddieTab() {
 
     startRound(courseName, holes, {
       nineHole: opts.nineHole,
+      startHole: opts.startHole ?? 1,
       isCompetition: opts.isCompetition,
       notes: opts.notes,
       goal: null,
@@ -2540,6 +2546,8 @@ export default function CaddieTab() {
     if (!selectedPickedCourse) return;
     await runStartRound(selectedPickedCourse, {
       nineHole, isCompetition, notes: roundNotes,
+      // 2026-08-06 (tester Matt Abid) — back nine starts on hole 10 (only meaningful for a 9-hole round).
+      startHole: (nineHole && backNine) ? 10 : 1,
       mode: selectedMode, ghostRoundId: selectedGhostId,
     });
   };
@@ -2566,7 +2574,8 @@ export default function CaddieTab() {
     const par = getCurrentPar();
     // 2026-06-04 — Bundled-aware end-of-round detection so 9-hole
     // executive courses (Echo Hills, Mariners Point) end at 9, not 18.
-    const maxHole = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
+    // 2026-08-06 (tester Matt Abid) — a 9-hole round ends at roundStartHole + 8 (front: 9, back: 18).
+    const maxHole = nineHoleMode ? ((roundStartHole || 1) + 8) : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
 
     if (!alreadyScored) useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
 
@@ -3434,6 +3443,30 @@ export default function CaddieTab() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            {/* 2026-08-06 (tester Matt Abid — "9-hole format only shows the front nine; need to pick the
+                nine"). When 9 holes is selected, choose Front (1-9) or Back (10-18). */}
+            {nineHole && (
+              <>
+                <Text style={styles.sheetLabel}>Which nine</Text>
+                <View style={styles.pillRow}>
+                  {([
+                    { label: 'Front (1-9)',  value: false },
+                    { label: 'Back (10-18)', value: true },
+                  ] as const).map(opt => (
+                    <TouchableOpacity
+                      key={opt.label}
+                      style={[styles.pill, backNine === opt.value && styles.pillActive]}
+                      onPress={() => setBackNine(opt.value)}
+                    >
+                      <Text style={[styles.pillText, backNine === opt.value && styles.pillTextActive]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             <Text style={styles.sheetLabel}>Format</Text>
             <View style={styles.pillRow}>

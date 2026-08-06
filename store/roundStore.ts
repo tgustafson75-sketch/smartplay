@@ -337,6 +337,9 @@ interface RoundState {
   recentCourseIds: string[]; // last 5 API course IDs played
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
+  // 2026-08-06 (tester Matt Abid) — the hole this round STARTED on (1 = front nine, 10 = back nine). For a
+  // 9-hole round the final hole is roundStartHole + 8, so a back nine plays 10-18 and ends at 18.
+  roundStartHole: number;
   isCompetition: boolean;
   roundNotes: string;
   goal: string | null;
@@ -469,6 +472,9 @@ interface RoundState {
     holes: CourseHole[],
     options: {
       nineHole: boolean;
+      // 2026-08-06 (tester Matt Abid — "9-hole only shows the front nine") — which hole the round STARTS on.
+      // Front nine = 1, back nine = 10. Defaults to 1. For a 9-hole round the last hole is startHole + 8.
+      startHole?: number;
       isCompetition: boolean;
       notes: string;
       goal: string | null;
@@ -717,6 +723,7 @@ export const useRoundStore = create<RoundState>()(
       recentCourseIds: [],
       courseHoles: [],
       nineHoleMode: false,
+      roundStartHole: 1,
       isCompetition: false,
       roundNotes: '',
       goal: null,
@@ -840,6 +847,9 @@ export const useRoundStore = create<RoundState>()(
       startRound: (course, holes, options) => {
         const courseId = options.courseId ?? null;
         const courseLocation = options.courseLocation ?? null;
+        // 2026-08-06 (tester Matt Abid) — resolve the starting hole (front nine = 1, back nine = 10),
+        // clamped to a real hole in the loaded set.
+        const startHoleResolved = Math.max(1, Math.min(options.startHole ?? 1, holes.length || 1));
         // 2026-07-01 (audit — MIC CONVERGENCE) — a new round is a fresh conversation:
         // wipe the shared pipecat history so last round's chat can't leak context into
         // this one. Best-effort; never blocks the round from starting.
@@ -923,9 +933,12 @@ export const useRoundStore = create<RoundState>()(
           // transportMode are always sourced from opts, not ambient store state.
           selectedTee: resolvedTee,
           transportMode: resolvedTransport,
-          currentHole: 1,
+          // 2026-08-06 (tester Matt Abid) — start on the chosen nine (back nine = hole 10). Clamped to a
+          // real hole in the loaded set so an out-of-range start can't strand the round.
+          currentHole: startHoleResolved,
+          roundStartHole: startHoleResolved,
           holeNotes: {},
-          currentYardage: holes[0]?.distance ?? null,
+          currentYardage: holes[startHoleResolved - 1]?.distance ?? null,
           scores: {},
           putts: {},
           penalties: {},
@@ -1357,6 +1370,7 @@ export const useRoundStore = create<RoundState>()(
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
+          roundStartHole: 1,
           isCompetition: false,
           roundNotes: '',
           goal: null,
@@ -1671,6 +1685,7 @@ export const useRoundStore = create<RoundState>()(
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
+          roundStartHole: 1,
           isCompetition: false,
           roundNotes: '',
           goal: null,
@@ -2663,6 +2678,7 @@ export const useRoundStore = create<RoundState>()(
         previewCourseId: s.previewCourseId,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
+        roundStartHole: s.roundStartHole ?? 1,
         isCompetition: s.isCompetition,
         roundNotes: s.roundNotes,
         goal: s.goal,
