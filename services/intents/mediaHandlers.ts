@@ -23,11 +23,18 @@ import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecor
 import { getActiveSurface } from '../activeSurfaceRegistry';
 import { useCageStore } from '../../store/cageStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { speak } from '../voiceService';
+import { speak, playLocalFile } from '../voiceService';
 import { usePracticeStore } from '../../store/practiceStore';
 import { getApiBaseUrl } from '../apiBase';
 
 const ANALYSIS_WATCHDOG_MS = 20_000;
+
+// 2026-08-06 (voice audit) — a brief non-verbal "got your swing" earcon for VOICE-triggered capture, so an
+// earbud user (phone 40y away) hears that it recorded even if the analysis read is slow/never lands. Reuses
+// the bundled tempo tick (no new asset). The on-screen SmartMotion path confirms capture with a haptic; this
+// is the audio-route equivalent for the hands-free/earbud path.
+const SWING_CAPTURE_EARCON: number = require('../../assets/audio/tempo/tick.mp3');
+const SWING_CAPTURE_EARCON_MS = 180;
 
 // 2026-05-24 — Background watcher: subscribes to cageStore for the
 // active session's shots; when the latest shot's perShotAnalysis goes
@@ -235,11 +242,17 @@ export const mediaCaptureHandler: IntentHandler = {
       if (kind === 'swing') {
         try {
           watchAndSpeakNextSwingAnalysis();
+          // 2026-08-06 (voice audit) — confirm the CAPTURE with a brief non-verbal earcon, not silence.
+          // The armed listener speaks the real read when analysis lands, but if the pipeline stalls (the
+          // 20s watchdog unsubscribes) the earbud user — phone 40y away, no reel in view — would otherwise
+          // get ZERO feedback and not know it recorded. A haptic is useless at that range; the tick plays
+          // through the audio route (earbud). Fire-and-forget so it can't block the success return.
+          void playLocalFile(SWING_CAPTURE_EARCON, SWING_CAPTURE_EARCON_MS, { userInitiated: true }).catch(() => {});
           return {
             success: true,
             // 2026-08-06 (Tim — no pre-canned speech): no canned "Swing captured. Analyzing..." line.
             // The armed listener above speaks the REAL AI read when it lands (now fast); the caddie stays
-            // silent until it has something real to say. Capture itself is confirmed visually (camera/reel).
+            // silent until it has something real to say. Capture is confirmed by the earcon above + the reel.
             voice_response: null,
             side_effects: ['swing_captured', 'analysis_started'],
             follow_up_needed: false,

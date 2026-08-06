@@ -14,6 +14,8 @@ describe('tool-open precheck is not over-sensitive (offline)', () => {
     expect(tool('smart vision')).toBe('smartvision');
     expect(tool('open smartfinder')).toBe('smartfinder');
     expect(tool('swing lab')).toBe('swinglab');
+    expect(tool("what's the smart play")).toBe('smartplay');
+    expect(tool('the smart play')).toBe('smartplay');
   });
 
   it('does NOT open when the utterance is about logging an issue / bug / crash', () => {
@@ -24,9 +26,13 @@ describe('tool-open precheck is not over-sensitive (offline)', () => {
       "smart vision isn't working",
       'give feedback on smart vision',
       'log an issue with swing lab',
+      // 2026-08-06 (voice audit) — smartplay had a bare `the smart play` alt with no tool-guard.
+      'log an issue with the smart play',
+      'the smart play feature is broken',
     ]) {
       expect(tool(t)).not.toBe('smartvision');
       expect(tool(t)).not.toBe('swinglab');
+      expect(tool(t)).not.toBe('smartplay');
     }
   });
 });

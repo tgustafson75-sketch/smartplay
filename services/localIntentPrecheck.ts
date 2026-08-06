@@ -251,7 +251,10 @@ const PATTERNS: Pattern[] = [
   // "what's the play" (no "smart") hits shot_strategy, while "what's the
   // SMART play" falls through to here.
   {
-    rx: /\b(?:what(?:'s|s)?\s+the\s+smart\s+play|give\s+me\s+the\s+smart\s+play|the\s+smart\s+play|open\s+smart\s*play|smartplay\s+here)\b/i,
+    // 2026-08-06 (voice audit) — NOT_ABOUT_TOOL guard, same as smartfinder/vision/swinglab below, so
+    // "log an issue with the smart play" / "the smart play feature is broken" DON'T open SmartFinder.
+    // The bare `the smart play` alternative (no verb anchor) was the exposure the others were spared.
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?=.*\\b(?:what(?:'s|s)?\\s+the\\s+smart\\s+play|give\\s+me\\s+the\\s+smart\\s+play|the\\s+smart\\s+play|open\\s+smart\\s*play|smartplay\\s+here)\\b)", 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
   },
   {

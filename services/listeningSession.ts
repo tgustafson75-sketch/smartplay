@@ -435,6 +435,11 @@ async function openSession() {
   if (settings.voiceEnabled) {
     try { await playLocalFile(LISTENING_EARCON, LISTENING_EARCON_MS, { userInitiated: true }); } catch { /* non-fatal */ }
   }
+  // 2026-08-06 (voice audit) — the earcon is awaited (~200ms), during which cancelMic is still null. If the
+  // user cancels (a second tap → closeSession → state 'idle') DURING the earcon, stopCapture would be a
+  // no-op and we'd open a phantom 12s recording after the session already closed. Re-check state here so a
+  // cancel-during-earcon never opens the mic at all.
+  if (state !== 'listening') return;
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
   let utterance: string | null = null;
