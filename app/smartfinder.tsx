@@ -1791,11 +1791,13 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   const lastSavedReadRef = useRef<string | null>(null);
   useEffect(() => {
     if (!puttRead || distanceFeet == null || slopePct == null) return;
-    const key = `${distanceFeet}|${slopePct}|${rollAtMeasure ?? 0}`;
+    const rs = useRoundStore.getState();
+    // Include the hole in the dedup key: an identical feet/slope/roll read on a DIFFERENT hole (within one
+    // continuous putt-mode session) is a distinct read and must still save (review F1).
+    const key = `${rs.isRoundActive ? rs.currentHole : 'x'}|${distanceFeet}|${slopePct}|${rollAtMeasure ?? 0}`;
     if (lastSavedReadRef.current === key) return;
     lastSavedReadRef.current = key;
     try {
-      const rs = useRoundStore.getState();
       useGreenReadStore.getState().logRead({
         at: Date.now(),
         courseId: rs.isRoundActive ? rs.activeCourseId : null,
