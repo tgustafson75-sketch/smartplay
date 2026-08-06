@@ -31,7 +31,7 @@ import { useShallow } from 'zustand/react/shallow';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useRoundStore, type ShotResult } from '../../store/roundStore';
+import { useRoundStore, roundLastHole, type ShotResult } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -132,7 +132,9 @@ export default function CockpitCaddieScreen({
   // 2026-07-24 (full-app audit) — 9-hole-aware total, matching roundStore + caddie.tsx. courseHoles.length
   // is the PHYSICAL count (18 when playing the front-9 of an 18-hole course), so use nineHoleMode instead
   // — else the Cockpit showed "Hole X/18" and an un-capped stepper on a 9-hole round.
-  const totalHolesCockpit = nineHoleMode ? 9 : (courseHoles.length || 18);
+  // 2026-08-06 (audit — back nine): the round's real last hole (front 9 / back 18 / full N) so the Cockpit
+  // stepper reaches the end and doesn't drag a back-nine round back to hole 9.
+  const totalHolesCockpit = roundLastHole(useRoundStore.getState());
   // Action refs — stable; pulled separately.
   // 2026-05-21 — Fix O: replaced `setScore` / `setPutts` (non-existent on
   // the Pro store; the prior code's `?.` optional chaining was silently

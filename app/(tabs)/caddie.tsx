@@ -30,7 +30,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
-import { useRoundStore } from '../../store/roundStore';
+import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
@@ -2673,7 +2673,10 @@ export default function CaddieTab() {
   // 2026-06-04 — nineHoleMode override stays (user-stated 9-hole play);
   // otherwise use the bundled-aware count so Echo Hills + Mariners Point
   // don't default to 18 when their bundled scorecard says 9.
-  const totalHoles = nineHoleMode ? 9 : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
+  // 2026-08-06 (audit — back nine): the stepper's "total" is the round's LAST hole (front 9 / back 18 /
+  // full N) so navigation reaches the real end; roundFirstHole is the low bound (back nine floors at 10).
+  const totalHoles = roundLastHole(useRoundStore.getState());
+  const firstHole = roundFirstHole(useRoundStore.getState());
   // targetDirection: there is no aim engine computing a real LEFT/CENTER/RIGHT
   // target yet, so show "—" rather than a hardcoded "CENTER" that reads like a
   // live value. Wire to a real aim recommendation before showing a direction.
@@ -3302,7 +3305,7 @@ export default function CaddieTab() {
           // it (uphill/into-wind +, downhill/downwind −). Shown as "(+3)" beside PLAYS so it's clear
           // the number is ADJUSTED, not the raw distance (the portrait strip dropped the yards cell).
           playsLikeDelta={playsLikeYardage != null && displayYardage != null ? playsLikeYardage - displayYardage : null}
-          hole={{ current: currentHole, total: totalHoles }}
+          hole={{ current: currentHole, total: totalHoles, first: firstHole }}
           targetDirection={targetDirection}
           stroke={currentStroke}
           visible={true}

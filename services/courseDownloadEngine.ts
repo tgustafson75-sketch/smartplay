@@ -65,10 +65,18 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
     const b = COURSES.find((c) => c.id === explicitCourseId);
     if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
   }
-  // 2) Bundled catalog by fuzzy name (offline-first — a course we already ship is instant).
+  // 2) Bundled catalog by name (offline-first — a course we already ship is instant). 2026-08-06 (audit):
+  // exact normalized match first; a substring match ONLY when BOTH names are reasonably long (>=5), so a
+  // short bundled name (e.g. "Mines") can't claim every located course, and an empty-normalized name can
+  // never match everything.
   const key = norm(name);
-  if (key) {
-    const b = COURSES.find((c) => norm(c.name) === key || norm(c.fullName) === key || norm(c.name).includes(key) || key.includes(norm(c.name)));
+  if (key.length >= 3) {
+    const b = COURSES.find((c) => {
+      const cn = norm(c.name), cf = norm(c.fullName);
+      if (!cn && !cf) return false;
+      if (cn === key || cf === key) return true;
+      return key.length >= 5 && cn.length >= 5 && (cn.includes(key) || key.includes(cn));
+    });
     if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
   }
   // 3) golfcourseapi search → getCourse → holes.

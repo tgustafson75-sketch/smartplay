@@ -710,6 +710,23 @@ const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
   });
 };
 
+// 2026-08-06 (audit — back nine fix). The round's true hole RANGE, respecting nineHoleMode + roundStartHole
+// so front (1-9), back (10-18), and full (1-N) rounds all navigate/end within their own bounds. Single
+// source of truth for every stepper / clamp / end-detection so they can't desync.
+export function roundFirstHole(s: { nineHoleMode: boolean; roundStartHole: number }): number {
+  return s.nineHoleMode ? Math.max(1, s.roundStartHole || 1) : 1;
+}
+export function roundLastHole(s: { nineHoleMode: boolean; roundStartHole: number; activeCourseId: string | null; courseHoles: CourseHole[] }): number {
+  if (s.nineHoleMode) return Math.max(1, s.roundStartHole || 1) + 8;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+    return getCourseHoleCount(s.activeCourseId, s.courseHoles.length);
+  } catch {
+    return s.courseHoles.length > 0 ? s.courseHoles.length : 18;
+  }
+}
+
 export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({
@@ -2082,17 +2099,13 @@ export const useRoundStore = create<RoundState>()(
         // caddie's end-of-round check uses (getCourseHoleCount: bundled
         // metadata → live length → 18) so the two can't desync (round
         // ending early or never auto-ending). Respects nineHoleMode.
-        const maxHole = (() => {
-          if (state.nineHoleMode) return 9;
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
-            return getCourseHoleCount(state.activeCourseId, state.courseHoles.length);
-          } catch {
-            return state.courseHoles.length > 0 ? state.courseHoles.length : 18;
-          }
-        })();
-        const clamped = Math.max(1, Math.min(hole, maxHole));
+        // 2026-08-06 (audit — back nine fix). Clamp to the round's ACTUAL hole range, not a hardcoded 1..9.
+        // A back-nine 9-hole round plays holes 10..18, so the floor is roundStartHole (10) and the ceiling
+        // is roundStartHole+8 (18) — the old `nineHoleMode ? 9` floored/capped every navigation at 9 and
+        // dragged the round back to the front nine. Front nine + full rounds are unchanged.
+        const minHole = roundFirstHole(state);
+        const maxHole = roundLastHole(state);
+        const clamped = Math.max(minHole, Math.min(hole, maxHole));
         if (clamped !== hole) {
           devLog(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);
         }
@@ -2208,7 +2221,9 @@ export const useRoundStore = create<RoundState>()(
             // bypassed closeHoleEndLocation (dropping the just-finished hole's GPS
             // drive distance), the nineHole clamp, and the yardage/stated-number
             // reset. setCurrentHole is the canonical advance seam.
-            const holesN = st.nineHoleMode ? 9 : (st.courseHoles.length ? Math.max(...st.courseHoles.map(h => h.hole)) : 18);
+            // 2026-08-06 (audit — back nine fix). Use the round's real last hole (back nine ends at 18), so
+            // first-score auto-advance fires through holes 10-17→18 instead of never (10 < 9 was always false).
+            const holesN = roundLastHole(st);
             if (autoAdvance && st.isRoundActive && hole === st.currentHole && hole < holesN) {
               get().setCurrentHole(hole + 1);
               console.log(`[roundStore] auto-advanced ${hole} → ${hole + 1} on first score (autoHoleAdvance)`);

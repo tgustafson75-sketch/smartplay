@@ -363,13 +363,16 @@ function robustAnchor(frames: PoseFrame[], anchor: PoseFrame | undefined, window
   const sample = anchor.keypoints;
   const composite: typeof sample = [];
   for (let i = 0; i < sample.length; i++) {
-    let best: (typeof sample)[number] | null = null;
+    // 2026-08-06 (audit) — match each joint by NAME across the neighborhood, not by array index. A neighbor
+    // frame with a different-length/reordered keypoints array (the rest of the pipeline never assumes index
+    // alignment) would otherwise mix joints (a high-score shoulder landing in the hip slot) → wrong angles.
+    const name = sample[i].name;
+    let best = sample[i];
     for (const f of near) {
-      const k = f.keypoints[i];
-      if (!k) continue;
-      if (!best || k.score > best.score) best = k;
+      const k = f.keypoints.find((p) => p.name === name);
+      if (k && k.score > best.score) best = k;
     }
-    composite.push(best ?? sample[i]);
+    composite.push(best);
   }
   return { ...anchor, keypoints: composite };
 }

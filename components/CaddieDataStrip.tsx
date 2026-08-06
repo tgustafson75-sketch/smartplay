@@ -30,7 +30,7 @@ export interface CaddieDataStripProps {
    *  small "(+3)" beside PLAYS so the adjustment is VISIBLE — otherwise PLAYS looks like the raw
    *  number (the portrait strip dropped the separate yards cell). null/0 = no adjustment shown. */
   playsLikeDelta?: number | null;
-  hole: { current: number; total: number };
+  hole: { current: number; total: number; first?: number };
   targetDirection: string;
   stroke: number;
   visible: boolean;
@@ -77,9 +77,9 @@ export default function CaddieDataStrip({
   // store on every press.
   const setCurrentHole = useRoundStore((s) => s.setCurrentHole);
   const handleHolePrev = () => {
-    if (hole.current <= 1) return;
+    if (hole.current <= (hole.first ?? 1)) return;
     void Haptics.selectionAsync().catch(() => undefined);
-    setCurrentHole(Math.max(1, hole.current - 1));
+    setCurrentHole(Math.max(hole.first ?? 1, hole.current - 1));
   };
   const handleHoleNext = () => {
     if (hole.current >= hole.total) return;
@@ -252,7 +252,7 @@ export default function CaddieDataStrip({
               <View style={styles.holeNavRow}>
                 <Pressable
                   onPress={handleHolePrev}
-                  disabled={hole.current <= 1}
+                  disabled={hole.current <= (hole.first ?? 1)}
                   hitSlop={14}
                   accessibilityRole="button"
                   accessibilityLabel="Previous hole"
@@ -261,7 +261,7 @@ export default function CaddieDataStrip({
                   <Ionicons
                     name="chevron-back"
                     size={24}
-                    color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                    color={hole.current <= (hole.first ?? 1) ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                   />
                 </Pressable>
                 <Text style={[styles.cellValue, styles.holeValue, { fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{`${hole.current}/${hole.total}`}</Text>
@@ -370,7 +370,7 @@ export default function CaddieDataStrip({
             <View style={styles.holeNavRow}>
               <Pressable
                 onPress={handleHolePrev}
-                disabled={hole.current <= 1}
+                disabled={hole.current <= (hole.first ?? 1)}
                 hitSlop={14}
                 accessibilityRole="button"
                 accessibilityLabel="Previous hole"
@@ -379,7 +379,7 @@ export default function CaddieDataStrip({
                 <Ionicons
                   name="chevron-back"
                   size={22}
-                  color={hole.current <= 1 ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
+                  color={hole.current <= (hole.first ?? 1) ? 'rgba(107,125,114,0.35)' : 'rgba(0,200,150,0.85)'}
                 />
               </Pressable>
               <Text style={[styles.cellValue, styles.holeValue, { fontSize: 22 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{`${hole.current}/${hole.total}`}</Text>
