@@ -587,6 +587,10 @@
       "dest": "/api/course-places.ts"
     },
     {
+      "src": "/api/course-locate",
+      "dest": "/api/course-locate.ts"
+    },
+    {
       "src": "/.well-known/apple-app-site-association",
       "dest": "/api/well-known-aasa.ts"
     },
