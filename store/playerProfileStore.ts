@@ -19,9 +19,8 @@ export const OWNER_EMAILS: readonly string[] = [
   't.gustafson75@gmail.com',
   // 2026-06-09 — Tim's iOS test device email.
   't.gustafson@hotmail.com',
-  // 2026-05-23 — Tank (Marc Ward), real golf instructor testing the
-  // app on his own device. Owner tools access for the testing surfaces.
-  'marc.ward3533@gmail.com',
+  // 2026-08-06 (Tim) — Tank / Marc Ward REMOVED as an owner. He stays a beta tester (records + auto-sends
+  // his issue log like everyone else) but no longer has Owner Tools / owner-gated debug surfaces.
 ];
 
 export function isOwnerEmail(email: string | null | undefined): boolean {

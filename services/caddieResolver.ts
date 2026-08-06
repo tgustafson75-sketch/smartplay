@@ -50,8 +50,16 @@ export function mapSurfaceToPillar(surface: ActiveSurface): CaddiePillar {
 // pillar's default if assignment missing (defensive — shouldn't happen
 // after migration, but cheap to handle).
 export function getCaddieForPillar(pillar: CaddiePillar): Persona {
-  const assignments = useSettingsStore.getState().caddieAssignments;
-  return assignments?.[pillar] ?? DEFAULT_CADDIE_ASSIGNMENTS[pillar];
+  const state = useSettingsStore.getState();
+  const assigned = state.caddieAssignments?.[pillar] ?? DEFAULT_CADDIE_ASSIGNMENTS[pillar];
+  // 2026-08-06 (Tim — Tank is opt-in via Owner Tools; default Serena/Kevin). When Tank is disabled, a
+  // 'tank' assignment (persisted from before, or from the single caddiePersonality mirror) resolves to the
+  // pillar's non-tank default so the app never actually runs Tank unless the owner enabled him.
+  if (assigned === 'tank' && !state.tankEnabled) {
+    const fallback = DEFAULT_CADDIE_ASSIGNMENTS[pillar];
+    return fallback === 'tank' ? 'kevin' : fallback;
+  }
+  return assigned;
 }
 
 // Active caddie for the current surface. Convenience wrapper that

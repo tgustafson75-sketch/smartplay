@@ -21,7 +21,9 @@ export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
 // Defaults reflect each caddie's natural fit.
 export const DEFAULT_CADDIE_ASSIGNMENTS: Record<CaddiePillar, Persona> = {
   round: 'kevin',   // steady conversational companion on the course
-  cage: 'tank',     // intensity + standards in cage practice
+  // 2026-08-06 (Tim — clean up to Serena/Kevin; Tank is opt-in via Owner Tools) — cage default was Tank;
+  // now Serena (measured professional). Tank returns as a choice only when tankEnabled is on.
+  cage: 'serena',   // measured professional for cage practice (was Tank, now opt-in)
   drills: 'serena', // measured professional for technical drill work
   play: 'kevin',    // balanced companion for Arena / fun gameplay
 };
@@ -124,6 +126,11 @@ interface SettingsState {
   // launch; existing users with only caddiePersonality migrate at hydrate
   // (see persist `migrate` callback below).
   caddieAssignments: CaddieAssignments;
+  // 2026-08-06 (Tim — "don't remove Tank; hide him behind a toggle in Owner Tools; I can turn Tank on/off,
+  // but clean up to Serena and Kevin"). Tank is OFF by default: he's hidden from the persona pickers and a
+  // 'tank' assignment resolves to the pillar's non-tank default (see services/caddieResolver). Owners flip
+  // this on in Owner Tools to bring Tank back.
+  tankEnabled: boolean;
   // Phase 106 — caddie team handoff suggestions.
   // 'on'   = caddies offer suggestions verbally + visually (default)
   // 'soft' = visual card only, no voice interruption
@@ -348,6 +355,7 @@ interface SettingsState {
   // one pillar; resetCaddieAssignments restores defaults.
   setCaddieForPillar: (pillar: CaddiePillar, p: Persona) => void;
   resetCaddieAssignments: () => void;
+  setTankEnabled: (v: boolean) => void;
   setCaddieSuggestions: (mode: 'on' | 'soft' | 'off') => void;
   setGpsQualityDebugOverlay: (v: boolean) => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
@@ -441,6 +449,7 @@ export const useSettingsStore = create<SettingsState>()(
       coachModeEnabled: false,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
+      tankEnabled: false, // Tank is opt-in via Owner Tools (Tim) — default Serena/Kevin
       caddieSuggestions: 'on' as const,
       gpsQualityDebugOverlay: false,
       // 2026-07-29 (Tim — "make default display theme dark, high contrast"). The app's signature look
@@ -750,6 +759,22 @@ export const useSettingsStore = create<SettingsState>()(
       setCaddieForPillar: (pillar, p) => set((s) => ({
         caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
       })),
+      setTankEnabled: (v) => set((s) => {
+        if (v) return { tankEnabled: true };
+        // Turning Tank OFF: scrub any 'tank' pillar assignment back to its pillar default so nothing keeps
+        // running Tank (also covers the single caddiePersonality that mirrors into all pillars).
+        const a = s.caddieAssignments;
+        return {
+          tankEnabled: false,
+          caddiePersonality: s.caddiePersonality === 'tank' ? 'kevin' : s.caddiePersonality,
+          caddieAssignments: {
+            round: a.round === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.round : a.round,
+            cage: a.cage === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.cage : a.cage,
+            drills: a.drills === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.drills : a.drills,
+            play: a.play === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.play : a.play,
+          },
+        };
+      }),
       resetCaddieAssignments: () => set({
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),
@@ -977,6 +1002,7 @@ export const useSettingsStore = create<SettingsState>()(
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,
+        tankEnabled: s.tankEnabled,
         caddieSuggestions: s.caddieSuggestions,
         gpsQualityDebugOverlay: s.gpsQualityDebugOverlay,
         theme_preference: s.theme_preference,

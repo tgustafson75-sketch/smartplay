@@ -145,6 +145,17 @@ export default function Settings() {
   const caddieAssignments = useSettingsStore(s => s.caddieAssignments);
   const setCaddieForPillar = useSettingsStore(s => s.setCaddieForPillar);
   const resetCaddieAssignments = useSettingsStore(s => s.resetCaddieAssignments);
+  // 2026-08-06 (Tim) — Tank is opt-in via Owner Tools; the persona pickers show him only when enabled.
+  const tankEnabled = useSettingsStore(s => s.tankEnabled);
+  const setTankEnabled = useSettingsStore(s => s.setTankEnabled);
+  const personaChoices = (base: { label: string; value: string }[]) =>
+    tankEnabled ? base : base.filter(o => o.value !== 'tank');
+  // Show the EFFECTIVE persona in the picker: a persisted 'tank' with Tank disabled displays its pillar
+  // default (mirrors the resolver gate in services/caddieResolver) so the picker never shows a blank
+  // selection for testers whose old default was Tank.
+  const PILLAR_DEFAULT_PERSONA: Record<string, string> = { round: 'kevin', cage: 'serena', drills: 'serena', play: 'kevin' };
+  const gatedPersona = (pillar: 'round' | 'cage' | 'drills' | 'play', v: string) =>
+    (v === 'tank' && !tankEnabled ? PILLAR_DEFAULT_PERSONA[pillar] : v);
   // Phase 106 — team handoff suggestions suppression.
   const caddieSuggestions = useSettingsStore(s => s.caddieSuggestions);
   const setCaddieSuggestions = useSettingsStore(s => s.setCaddieSuggestions);
@@ -1002,45 +1013,45 @@ export default function Settings() {
 
           <PillRow
             label="Round (on-course)  ·  default Kevin"
-            options={[
+            options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               { label: 'Tank', value: 'tank' },
-            ]}
-            value={caddieAssignments.round}
+            ])}
+            value={gatedPersona('round', caddieAssignments.round)}
             onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry' | 'tank')}
           />
 
           <PillRow
-            label="Cage Mode  ·  default Tank"
-            options={[
-              { label: 'Tank', value: 'tank' },
-              { label: 'Kevin', value: 'kevin' },
+            label="Cage Mode  ·  default Serena"
+            options={personaChoices([
               { label: 'Serena', value: 'serena' },
-            ]}
-            value={caddieAssignments.cage}
+              { label: 'Kevin', value: 'kevin' },
+              { label: 'Tank', value: 'tank' },
+            ])}
+            value={gatedPersona('cage', caddieAssignments.cage)}
             onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry' | 'tank')}
           />
 
           <PillRow
             label="Drills (SwingLab)  ·  default Serena"
-            options={[
+            options={personaChoices([
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
               { label: 'Tank', value: 'tank' },
-            ]}
-            value={caddieAssignments.drills}
+            ])}
+            value={gatedPersona('drills', caddieAssignments.drills)}
             onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry' | 'tank')}
           />
 
           <PillRow
             label="Play / Arena  ·  default Kevin"
-            options={[
+            options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               { label: 'Tank', value: 'tank' },
-            ]}
-            value={caddieAssignments.play}
+            ])}
+            value={gatedPersona('play', caddieAssignments.play)}
             onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry' | 'tank')}
           />
 
@@ -2038,6 +2049,24 @@ export default function Settings() {
                       production users. Review tuples at /cage-debug. */}
                   <FeelCaptureRow colors={colors} />
                   <VoiceHitRateRow colors={colors} />
+
+                  {/* 2026-08-06 (Tim) — Tank persona is opt-in. OFF by default (personas clean up to
+                      Serena + Kevin); flip ON to bring Tank back as a choice in the caddie pickers above.
+                      Turning it OFF also scrubs any existing Tank assignment back to its default. */}
+                  <View style={styles.resetRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Enable Tank</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Off by default — the caddie pickers show Serena and Kevin. Turn on to make Tank selectable again.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={tankEnabled}
+                      onValueChange={setTankEnabled}
+                      trackColor={{ false: colors.border, true: colors.accent }}
+                      accessibilityLabel="Enable the Tank caddie persona"
+                    />
+                  </View>
 
                   {/* 2026-06-16 (Tim — "issue log + harness should be in owner
                       tools") — Issue Log restored HERE in Owner Tools (it also
