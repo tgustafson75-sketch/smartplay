@@ -49,6 +49,12 @@ const intent = (
   raw_text: raw,
 });
 
+// 2026-08-06 (Tim — "if I say 'log an issue with smart vision' it OPENS smart vision; we're still too
+// sensitive — saying a tool name shouldn't fire it"). A leading negative lookahead for the bare-tool-name
+// opens: when the utterance is clearly ABOUT the tool (logging/reporting an issue, a bug, a crash, feedback)
+// the tool name is an OBJECT, not a command — so don't auto-open; let it fall through to the brain.
+const NOT_ABOUT_TOOL = '(?!.*\\b(?:issue|issues|log|logged|logging|report|reporting|bug|bugs|problem|problems|feedback|complain|complaint|broke|broken|glitch|crash(?:ed|ing)?|not\\s+working|doesn\'?t\\s+work|isn\'?t\\s+working)\\b)';
+
 // Optional explicit hole for a spoken score ("...on hole 7"); otherwise the handler uses the current
 // hole. The stroke count itself is parsed from raw_text by logScoreHandler.
 const scoreHoleParam = (raw: string): Record<string, unknown> => {
@@ -249,11 +255,11 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
   },
   {
-    rx: /\b(open\s+smart\s*finder|smart\s*finder|rangefinder|range\s+finder|lock\s+(?:the\s+)?distance)\b/i,
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open\\s+smart\\s*finder|smart\\s*finder|rangefinder|range\\s+finder|lock\\s+(?:the\\s+)?distance)\\b)', 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),
   },
   {
-    rx: /\b(open\s+smart\s*vision|smart\s*vision|show\s+(?:me\s+)?the\s+(?:hole|layout|map)|pull\s+up\s+the\s+map)\b/i,
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open\\s+smart\\s*vision|smart\\s*vision|show\\s+(?:me\\s+)?the\\s+(?:hole|layout|map)|pull\\s+up\\s+the\\s+map)\\b)', 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartvision' }),
   },
   {
@@ -261,7 +267,8 @@ const PATTERNS: Pattern[] = [
     // practice wish ("let's practice", "I want to practice") must NOT auto-navigate
     // — the caddie asks what to work on first (handled by the brain). The
     // "practice" phrasings were removed from this deterministic open.
-    rx: /\b(open\s+swing\s*lab|swing\s*lab)\b/i,
+    // 2026-08-06 — plus the NOT_ABOUT_TOOL guard so "log an issue with swing lab" doesn't open it.
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open\\s+swing\\s*lab|swing\\s*lab)\\b)', 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'swinglab' }),
   },
 
