@@ -4436,7 +4436,11 @@ export default function SmartMotion() {
                       {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
                     </Text>
                   ) : null}
-                  <BodyAnalysisRow items={bodyItems} />
+                  {/* 2026-08-06 (Tim — HUD declutter) — the body read was drawn TWICE when the skeleton was
+                      on: the richer measured SWING BREAKDOWN (poseRead.dimensions) above AND this
+                      BodyAnalysisRow. Show this row only as a FALLBACK when the pose read isn't usable, so
+                      they never duplicate. */}
+                  {!poseRead.usable ? <BodyAnalysisRow items={bodyItems} /> : null}
                 </>
               ) : null}
             </ScrollView>
