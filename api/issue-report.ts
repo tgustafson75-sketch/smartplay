@@ -74,11 +74,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (rows.length === 0) return res.status(400).json({ ok: false, error: 'no_valid_entries' });
 
   try {
+    // 2026-08-06 (Tim — "I have not seen an issue log from anyone else"). Detect which entries are NEW
+    // (not already stored) BEFORE the idempotent upsert, so we email only genuinely-new issues. Without
+    // this, a tester re-opening the app re-sends its whole (already-stored) log and would re-email it every
+    // boot. Best-effort: on a select failure, treat all as new (email once is better than never).
+    let newRows = rows;
+    try {
+      const ids = rows.map((r) => r.id);
+      const { data: existing } = await db.from(TABLE).select('id').in('id', ids);
+      const seen = new Set((existing ?? []).map((e: { id: string }) => e.id));
+      newRows = rows.filter((r) => !seen.has(r.id));
+    } catch { /* treat all as new */ }
+
     const { error } = await db.from(TABLE).upsert(rows, { onConflict: 'id' });
     if (error) return res.status(200).json({ ok: false, error: error.message });
-    return res.status(200).json({ ok: true, stored: rows.length });
+
+    // Email the owner the NEW entries (Tim's chosen delivery). Gated on RESEND_API_KEY: until it's set on
+    // Vercel this is a no-op and the rows still live in Supabase. Best-effort, never fails the request.
+    let emailed = false;
+    if (newRows.length > 0) emailed = await emailIssuesToOwner(newRows).catch(() => false);
+
+    return res.status(200).json({ ok: true, stored: rows.length, new: newRows.length, emailed });
   } catch (e) {
     console.error('[issue-report] failed:', e instanceof Error ? e.message : e);
     return res.status(200).json({ ok: false, error: 'write_failed' });
   }
+}
+
+type StoredRow = {
+  id: string; reporter: string | null; platform: string | null; text: string;
+  context: unknown; details: unknown; reported_at: string | null;
+};
+
+/**
+ * 2026-08-06 — Owner delivery of tester issues via Resend (HTTP API, no SDK). Sends only when
+ * RESEND_API_KEY is configured; otherwise a no-op (rows already stored in Supabase). Recipient/sender are
+ * env-overridable. Short timeout so it can't hang the serverless invocation.
+ *   RESEND_API_KEY            — Resend API key (required to enable email)
+ *   ISSUE_REPORT_EMAIL_TO     — recipient (default t.gustafson75@gmail.com)
+ *   ISSUE_REPORT_EMAIL_FROM   — sender (default onboarding@resend.dev for quick start; use a verified domain in prod)
+ */
+async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return false;
+  const to = process.env.ISSUE_REPORT_EMAIL_TO || 't.gustafson75@gmail.com';
+  const from = process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>';
+  const reporter = rows[0]?.reporter || 'beta tester';
+  const subject = `SmartPlay issue log — ${reporter} (${rows.length} new)`;
+  const block = (r: StoredRow) => {
+    const ctx = (r.context ?? {}) as { route?: string; persona?: string; isRoundActive?: boolean; currentHole?: number; courseId?: string };
+    const where = ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round';
+    const det = r.details && typeof r.details === 'object' && Object.keys(r.details).length
+      ? '\n  ' + Object.entries(r.details as Record<string, unknown>).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')
+      : '';
+    return `• ${r.text}\n  [${r.reported_at ?? ''} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${where}]${det}`;
+  };
+  const text = `Reporter: ${reporter}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to, subject, text }),
+      signal: ctrl.signal,
+    });
+    return r.ok;
+  } catch { return false; } finally { clearTimeout(t); }
 }

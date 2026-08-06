@@ -453,7 +453,9 @@ export const openToolHandler: IntentHandler = {
         const act: ToolAction = GATED_ROUTE_ACTION[feature.route] ?? { type: 'navigate', path: feature.route };
         return {
           success: true,
-          voice_response: 'Opening ' + feature.name + '.',
+          // 2026-08-06 (Tim — no canned speech; "silent, just open it"): the screen transition IS the
+          // feedback. No spoken "Opening X." template; the tool_action drives the navigation.
+          voice_response: null,
           side_effects: ['navigate:' + feature.route, 'catalog_match:' + feature.id],
           follow_up_needed: false,
           tool_action: act,
@@ -642,7 +644,8 @@ export const openToolHandler: IntentHandler = {
 
     return {
       success: true,
-      voice_response: 'Opening ' + TOOL_LABEL[toolName] + '.',
+      // 2026-08-06 (Tim — silent tool-open, no canned "Opening X."): the screen transition is the feedback.
+      voice_response: null,
       side_effects: ['tool_action:' + action.type],
       follow_up_needed: false,
       tool_action: action,
