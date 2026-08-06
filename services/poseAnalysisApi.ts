@@ -350,6 +350,30 @@ export function computeBiomechanicsFromFrames(frames: PoseFrame[], angle?: 'down
   return computeBiomechanics(frames, angle, handedness);
 }
 
+// 2026-08-06 (Tim — "body mechanics SUPER tight"). Make each phase anchor robust to a single bad pose
+// frame: instead of reading the lone tagged frame, composite the BEST-scoring keypoint per joint across a
+// small time neighborhood around the anchor. (Same idea as mediaPipePoseService.smoothPoseFrames, inlined
+// here to stay synchronous + avoid the dynamic-import cycle.) Kills the "one mis-detected hip at 'top' →
+// wrong turn number" failure that made the reads jumpy. On sparse frame sets the window collapses to the
+// anchor itself (no-op), so it only ever tightens, never fabricates.
+function robustAnchor(frames: PoseFrame[], anchor: PoseFrame | undefined, windowMs = 90): PoseFrame | undefined {
+  if (!anchor) return undefined;
+  const near = frames.filter(f => Math.abs(f.timestampMs - anchor.timestampMs) <= windowMs);
+  if (near.length <= 1) return anchor;
+  const sample = anchor.keypoints;
+  const composite: typeof sample = [];
+  for (let i = 0; i < sample.length; i++) {
+    let best: (typeof sample)[number] | null = null;
+    for (const f of near) {
+      const k = f.keypoints[i];
+      if (!k) continue;
+      if (!best || k.score > best.score) best = k;
+    }
+    composite.push(best ?? sample[i]);
+  }
+  return { ...anchor, keypoints: composite };
+}
+
 function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'face_on' | 'glasses_pov' | null, handedness: 'right' | 'left' | null = 'right'): SwingBiomechanics {
   // 2026-07-24 (full-app audit, root D) — when the caller doesn't KNOW the angle
   // (null/undefined — Coach lesson, library uploads), infer it from the pose
@@ -370,20 +394,25 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     const inferred = inferCameraAngle(frames);
     if (inferred && inferred !== angle) angle = inferred;
   }
-  const address = frames.find(f => f.position === 'P1_address');
-  const top = frames.find(f => f.position === 'P4_top');
-  const impact = frames.find(f => f.position === 'P6_impact');
+  const address = robustAnchor(frames, frames.find(f => f.position === 'P1_address'));
+  const top = robustAnchor(frames, frames.find(f => f.position === 'P4_top'));
+  const impact = robustAnchor(frames, frames.find(f => f.position === 'P6_impact'));
 
   // Hip turn: shoulder/hip width "shrinks" as the body rotates away
   // from the camera. Ratio of width(top)/width(address) → degrees via
   // arccos. Crude but illustrative for a single-camera setup.
+  // 2026-08-06 (Tim — kill the "0°" ghost reads). A top width >= address width means we could NOT measure a
+  // real turn (pose noise, or the 'top' frame landed near address / mid-downswing) — a genuine backswing
+  // always turns. Return null (unmeasured → shows "—") instead of a fake, confident "0°" that the verdict
+  // then scolds you for. Threshold 0.985 ≈ under ~11° of apparent turn = not a trustworthy read.
+  const TURN_UNMEASURABLE_RATIO = 0.985;
   let hipTurnDeg: number | null = null;
   if (address && top) {
     const wA = pairWidthX(address, 'left_hip', 'right_hip');
     const wT = pairWidthX(top, 'left_hip', 'right_hip');
     if (wA && wT && wA > 0) {
-      const ratio = Math.min(1, Math.max(0, wT / wA));
-      hipTurnDeg = Math.round((Math.acos(ratio) * 180) / Math.PI);
+      const ratio = wT / wA;
+      hipTurnDeg = ratio >= TURN_UNMEASURABLE_RATIO ? null : Math.round((Math.acos(Math.max(0, ratio)) * 180) / Math.PI);
     }
   }
   let shoulderTurnDeg: number | null = null;
@@ -391,8 +420,8 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     const wA = pairWidthX(address, 'left_shoulder', 'right_shoulder');
     const wT = pairWidthX(top, 'left_shoulder', 'right_shoulder');
     if (wA && wT && wA > 0) {
-      const ratio = Math.min(1, Math.max(0, wT / wA));
-      shoulderTurnDeg = Math.round((Math.acos(ratio) * 180) / Math.PI);
+      const ratio = wT / wA;
+      shoulderTurnDeg = ratio >= TURN_UNMEASURABLE_RATIO ? null : Math.round((Math.acos(Math.max(0, ratio)) * 180) / Math.PI);
     }
   }
 
