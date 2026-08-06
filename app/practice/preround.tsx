@@ -8,15 +8,19 @@
  * complete (honest), never a fabricated score ([[time-constrained-golfer-lens]],
  * [[simplified-sophistication]]).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { composePreroundPlan, preroundReadiness, type PreroundFocus, type PreroundStep } from '../../services/practice/preroundPlan';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { usePracticePointsStore } from '../../store/practicePointsStore';
+import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { useToastStore } from '../../store/toastStore';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { safeBack } from '../../services/safeBack';
@@ -53,6 +57,31 @@ export default function PreroundWarmUp() {
 
   const readiness = preroundReadiness(plan.steps.length, completed.size);
   const allDone = completed.size >= plan.steps.length && plan.steps.length > 0;
+
+  // 2026-08-06 (Tim — "I did the pre-round warm-up and it doesn't go anywhere, no credit, doesn't hit the
+  // dashboard"; also "we need a data point: three rounds, warm up, and stretch"). Completing the warm-up now
+  // RECORDS credit: points/tier (usePracticePointsStore → dashboard headline) + a completed practice session
+  // (usePracticeSessionStore.history → dashboard practice list). Stretch is emitted as its OWN data point
+  // when the plan's stretch step was completed. Idempotent per mount so re-checking can't farm points.
+  const awardedRef = useRef(false);
+  useEffect(() => {
+    if (!allDone || awardedRef.current) return;
+    awardedRef.current = true;
+    try {
+      const now = Date.now();
+      const swings = completed.size;
+      usePracticePointsStore.getState().awardPracticePoints({ key: 'preround:warmup', label: 'Pre-Round Warm Up', swings, now });
+      usePracticeSessionStore.getState().recordCompletedSession({ kind: 'focus', focus: 'preround', label: 'Pre-Round Warm Up', swingCount: swings, environment: 'preround' });
+      const stretchStep = plan.steps.find((st) => st.kind === 'stretch');
+      if (stretchStep && completed.has(stretchStep.id)) {
+        usePracticePointsStore.getState().awardPracticePoints({ key: 'preround:stretch', label: 'Pre-Round Stretch', swings: 0, now });
+      }
+      try { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch { /* non-fatal */ }
+      useToastStore.getState().show('Warm-up logged — you\'re prepped.');
+    } catch (e) {
+      console.log('[preround] warm-up credit failed (non-fatal):', e);
+    }
+  }, [allDone, completed, plan.steps]);
 
   const toggleDone = useCallback((id: string) => {
     setCompleted((prev) => {
