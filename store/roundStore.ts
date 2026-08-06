@@ -2098,67 +2098,15 @@ export const useRoundStore = create<RoundState>()(
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
           console.log(`[audit:round-active] hole-transition prev=${prevHole} next=${clamped} yardage=${holeData?.distance ?? 'null'}`);
-          // 2026-05-21 — Fix S — per-hole caddie intro on transition. Fires
-          // for BOTH auto-detection (holeDetection subscriber) and manual
-          // nav (cockpit stepper, DataStrip ◀/▶, voice "I'm on hole 7").
-          // Brief: hole, par, yardage. Hole 1 at round-start does NOT pass
-          // through this branch (startRound uses direct set(), not
-          // setCurrentHole), so no double-fire with the briefing or the
-          // skip-briefings hole-1 announcement. Gating mirrors the
-          // skip-briefings speak: voice enabled AND trust level !== 1
-          // (Quiet). Active persona is implicitly honored — speak() reads
-          // caddiePersonality from the store at request time (Fix Q).
-          // userInitiated:true bypasses L1 Quiet's scripted-speech gate;
-          // we still suppress at trust=1 above so Quiet stays quiet.
-          if (state.isRoundActive) {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const trustMod = require('./trustLevelStore') as typeof import('./trustLevelStore');
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
-              const settings = settingsMod.useSettingsStore.getState();
-              const trustLevel = trustMod.useTrustLevelStore.getState().level;
-              if (settings.voiceEnabled && trustLevel !== 1) {
-                const par = holeData?.par;
-                const yards = holeData?.distance;
-                let text = `Hole ${clamped}.`;
-                if (par) text += ` Par ${par}.`;
-                if (yards) text += ` ${yards} yards.`;
-                const apiUrl = getApiBaseUrl();
-                void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
-                  ?.catch?.(() => {});
-              }
-              // FIX M12 — per-hole AI briefing for holes 2-18. If courseIntelligence
-              // is cached and contains a sentence referencing this hole, speak it as
-              // a one-sentence Kevin insight. No API call — reads from the
-              // getCachedCourseIntelligenceSync sync accessor (AsyncStorage-backed,
-              // warmed by roundPrefetch at round start). Guards: voice on, trust > 1,
-              // hole > 1, courseId known, intel cached. Lightweight: no network.
-              if (settings.voiceEnabled && trustLevel !== 1 && clamped > 1 && state.activeCourseId) {
-                try {
-                  // eslint-disable-next-line @typescript-eslint/no-require-imports
-                  const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
-                  const intel = intelMod.getCachedCourseIntelligenceSync(state.activeCourseId);
-                  if (intel) {
-                    const holeRef = new RegExp(`hole\\s+${clamped}\\b`, 'i');
-                    const sentences = intel.split(/(?<=[.!?])\s+/);
-                    const match = sentences.find(sen => holeRef.test(sen));
-                    if (match) {
-                      const apiUrl2 = getApiBaseUrl();
-                      void voiceMod.speak(match.trim(), settings.voiceGender, settings.language, apiUrl2, { userInitiated: true })
-                        ?.catch?.(() => {});
-                    }
-                  }
-                } catch (e) {
-                  console.log('[roundStore] per-hole intel insight failed (non-fatal):', e);
-                }
-              }
-            } catch (e) {
-              console.log('[roundStore] per-hole intro failed (non-fatal):', e);
-            }
-          }
+          // 2026-08-06 (Tim — "got double reads on a lot of holes; the user needs to ASK for the briefing,
+          // not have it auto-prompted"). Per-hole reads are now PULL-ONLY. Nothing is spoken on a hole
+          // change: this auto-intro + M12 briefing was the source of the double/again reads — it fired on
+          // BOTH the score-driven advance AND the GPS reconcile of the same transition, and the M12
+          // sentence-match regex ("hole N") could narrate the WRONG hole (a sentence naming two holes). The
+          // visible hole banner below still updates. The data (hole info + par/yardage + prior-shot memory +
+          // the course-intel sentence) is now assembled ON DEMAND when the player asks "what's the read /
+          // hole info / brief me" → query_status query_topic:'hole_read' (services/intents/queryStatusHandler.ts).
+          // No auto-speak here — the round stays quiet until the player asks.
           // 2026-06-06 — Phase 5 of on-course resilience sprint. Visible
           // banner on every real hole transition. Doubles up the audible
           // "Hole 7. Par 4..." announcement and works even when audio is

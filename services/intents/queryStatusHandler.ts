@@ -328,6 +328,31 @@ export const queryStatusHandler: IntentHandler = {
         };
       }
 
+      case 'hole_read': {
+        // 2026-08-06 (Tim — "the hole-by-hole was awesome but it's thrown at me; I want to ASK for the
+        // briefing — what's the read?"). PULL-only per-hole read: the auto-intro + M12 briefing were removed
+        // from roundStore.setCurrentHole, and this serves the same thing ON DEMAND. Route to the
+        // conversational brain (mirrors shot_strategy) so Kevin gives a NATURAL per-hole briefing from his
+        // live context — hole/par/yardage, the cached course-intel line, prior-shot memory, and the play —
+        // instead of a canned template ([[feels-like-a-real-caddie]], no pre-canned speech). Offline, the
+        // caddie's own fallback composes the local hole read (yardage + club).
+        if (!round.isRoundActive) {
+          return {
+            success: true,
+            voice_response: "Start a round and I'll walk you through each hole when you ask.",
+            side_effects: ['query:hole_read:no_round'],
+            follow_up_needed: false,
+          };
+        }
+        return {
+          success: false,
+          voice_response: null,
+          side_effects: ['query:hole_read:route_to_brain'],
+          follow_up_needed: false,
+          route_to_brain: true,
+        };
+      }
+
       case 'swing_compare': {
         // 2026-05-22 — Caddie Brain: compare current vs reference swing.
         // For voice-only (no video URI from voice), we describe the

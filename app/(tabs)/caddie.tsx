@@ -1175,19 +1175,17 @@ export default function CaddieTab() {
       mode: storeNow.mode,
       trustLevel: useTrustLevelStore.getState().level as 1 | 2 | 3,
     };
-    // front_9_summary fires exactly when currentHole advances to 10.
-    // hole_transition_pattern_aware fires on any hole change (holes 2+).
-    const triggerType = currentHole === 10 ? 'front_9_summary' : currentHole > 1 ? 'hole_transition_pattern_aware' : null;
+    // 2026-08-06 (Tim — "the hole-by-hole was awesome but it's thrown at me; I want to ASK for it").
+    // The per-hole nudge (hole_transition_pattern_aware) used to auto-fire on EVERY hole change (holes 2+)
+    // — part of the "thrown at me every hole" feel. It's now PULL-ONLY: the player asks "what's the read"
+    // and the on-demand hole_read handler serves it. We keep ONLY the front-nine summary, which fires ONCE
+    // at the turn (hole 10) as a milestone, not a per-hole interruption. (Streak triggers stay on the
+    // separate _scores effect above.)
+    const triggerType = currentHole === 10 ? 'front_9_summary' : null;
     if (!triggerType) return;
     const trigger = shouldFireProactive({ ...baseCtx });
-    // shouldFireProactive picks the highest-priority eligible trigger, which may
-    // be front_9_summary or hole_transition_pattern_aware. Only act if the
-    // returned trigger matches a hole-transition type so we don't double-fire
-    // streak triggers (those are handled by the _scores effect above).
-    if (
-      trigger &&
-      (trigger.id === 'front_9_summary' || trigger.id === 'hole_transition_pattern_aware')
-    ) {
+    // Only act on the front-nine milestone here (no per-hole transition auto-fire anymore).
+    if (trigger && trigger.id === 'front_9_summary') {
       markProactiveFired(trigger.id);
       setCaddieResponse(trigger.message);
       setVoiceState('proactive');

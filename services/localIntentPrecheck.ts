@@ -215,6 +215,18 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'query_status', { query_topic: 'shot_strategy' }),
   },
 
+  // ── HOLE READ / BRIEFING (2026-08-06, Tim — "we need the prompt: what's the read?") ──
+  // Per-hole reads are PULL-only now (the auto-intro/M12 briefing was removed — see roundStore
+  // setCurrentHole). The player ASKS and gets the hole read on demand: hole # + par + yardage + the
+  // course-intel sentence + shot strategy + prior-shot memory, assembled in queryStatusHandler
+  // (query_topic:'hole_read'). Leading negative lookahead excludes PUTT/GREEN reads (a separate flow) so
+  // "what's the read" on the green doesn't grab the hole briefing; "what's the play" already routed to
+  // shot_strategy above, and "smart play" (SmartFinder) has no read/briefing/rundown words.
+  {
+    rx: /^(?!.*\b(?:putts?|green)\b)(?=.*\b(?:what(?:'s|s)?\s+the\s+read|give\s+me\s+the\s+read|read\s+(?:me\s+)?(?:this|the)\s+hole|briefing|brief\s+me|hole\s+info|(?:the\s+)?rundown|break\s+down\s+(?:this|the)\s+hole|(?:tell\s+me\s+about|walk\s+me\s+through)\s+(?:this|the)\s+hole)\b)/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'hole_read' }),
+  },
+
   // ── SIM ROUND (2026-07-04, Tim — voice-narrated practice round) ──────────
   // Deterministic + offline: "start a sim round (at palms)" / "sim round" /
   // "start a simulated round" / "practice round simulation". Executed by
