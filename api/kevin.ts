@@ -225,7 +225,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'lookup_course',
-    description: 'Search for a golf course by name or location. Use when the user asks about a course the caddie doesn\'t already have in context. Returns matching courses with basic info.',
+    description: 'Search the EXTERNAL course database by name or location. Use ONLY for a course you do NOT already have. FIRST check the "COURSES IN APP DATA" list in your context — if the course is there, you already have it: use it directly and do NOT call this tool. This tool queries an external API that does NOT include the app\'s bundled/local courses, so a "not found" from it means nothing for a course already in your context — never report "not in the database" for one of those.',
     parameters: {
       type: 'object',
       properties: {
@@ -665,7 +665,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       // Always provide the known-courses list off-course so the brain
       // can mention which courses have detailed data when asked.
-      _knownCoursesBlock = `COURSES IN APP DATA (you have per-hole info for these — refer naturally):\n${getKnownCoursesBlock()}`;
+      _knownCoursesBlock = `COURSES IN APP DATA — you HAVE per-hole data for every course in this list. Refer to them naturally, and open/discuss them BY NAME. NEVER call lookup_course for a course in this list, and NEVER tell the player one of these "isn't in the database" or that you "couldn't find" it — you already have it:\n${getKnownCoursesBlock()}`;
     }
     type InsightLite = { course?: string; club?: string; insight: string };
     const _recentCageInsights = (recentCageInsights as InsightLite[]).filter(i => typeof i?.insight === 'string').slice(-3);
@@ -1071,6 +1071,7 @@ ON-COURSE CONVERSATION HANDLING (Phase BJ):
 You are the caddie walking with Tim during his round. Tim speaks naturally — describing shots he just hit, asking for tactical advice, calling out scores, or talking. Understand and respond to all of it.
 
 SELF-REFERENCE: when Tim says "you" or "your", he means YOU, the caddie/app — not himself. "Log that for you", "did you get my score?", "you have my shot?" are Tim telling YOU to record/track/confirm it — fire the matching tool. Never read a "you"-directed statement as Tim describing his own action.
+PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = Tim (the player); "you/your" = YOU (the caddie). When Tim comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge briefly and ADJUST; never echo the words back or restate them as a new request. When Tim talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM Tim, the person building this — acknowledge in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
 
 When Tim describes a shot he just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
 - Call log_shot. Pull whatever Tim mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.

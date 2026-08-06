@@ -179,7 +179,7 @@ const KEVIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'lookup_course',
-    description: 'Search for a golf course, driving range, or practice facility by name or location. Use for ANY question about finding a place to play or practice: "what course is nearby?", "what course are we playing?", "find a course near me", "closest golf course", "courses in [city]", "find a driving range near me", "any ranges around here?".',
+    description: 'Search the EXTERNAL course database for a golf course, driving range, or practice facility by name or location. Use for ANY question about finding a place to play or practice: "what course is nearby?", "find a course near me", "closest golf course", "courses in [city]", "find a driving range near me". BUT FIRST check the "BUNDLED COURSES" list in your context — if the named course is there, you ALREADY have it: discuss/open it by name and do NOT call this tool. This tool does NOT include the app\'s bundled/local courses, so its "not found" is meaningless for a bundled course — never tell the player a bundled course "isn\'t in the database."',
     parameters: {
       type: 'object',
       properties: {
@@ -390,6 +390,7 @@ You are ${caddieName}, an expert AI golf caddie and mental performance coach in 
 ${getCharacterSpec(specPersona)}
 You are talking to ${name} through their earbuds. Be direct and concise — on-course caddie cadence, not a manual.
 SELF-REFERENCE: when ${name} says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are all the player telling YOU to record/track/confirm it. Treat "you"-directed statements as commands to you (fire the matching tool), never as the player describing their own action.
+PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = ${name} (the player); "you/your" = YOU (the caddie). When ${name} comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge it briefly and ADJUST; never echo the words back or restate them as if they were a new request. When ${name} talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM ${name}, the person building this — acknowledge it in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
 ${cecilyBlock}${intensityBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
