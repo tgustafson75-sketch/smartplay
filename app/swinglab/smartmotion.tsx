@@ -3158,19 +3158,11 @@ export default function SmartMotion() {
           }
         }
       } catch { /* non-fatal */ }
-      // 2026-06-15 (Tim) — audible capture confirmation. After the strike session
-      // CLOSES (recording stopped + segmented) the caddie says it got the swing, so
-      // the user KNOWS it captured. Fired POST-stop so the TTS can't be metered as a
-      // false strike. Honest count — also surfaces a mis-count audibly (3 vs 10)
-      // while testing. Gated on voiceEnabled inside speak(); fire-and-forget.
-      try {
-        const n = segsForAnalysis.length || 1;
-        const st = useSettingsStore.getState();
-        void speak(
-          n === 1 ? 'Got your swing.' : `Got it — ${n} swings.`,
-          st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: true },
-        ).catch(() => undefined);
-      } catch { /* non-fatal */ }
+      // 2026-08-06 (Tim — "NO more pre-canned speech; 'I got your swing' is exactly what we don't want").
+      // Confirm the capture with a NON-VERBAL success haptic instead of a canned spoken line. The caddie
+      // only SPEAKS the real, AI-generated read (now fast + on-device) — never a template. The swing count
+      // is shown visually in the reel. [[feels-like-a-real-caddie]]
+      try { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch { /* non-fatal */ }
       // Analyze the FIRST detected swing windowed to its segment; other
       // swings analyze on-demand when selected in the reel.
       void runAnalysis(recorded.uri, firstSeg);

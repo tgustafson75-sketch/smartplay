@@ -237,7 +237,10 @@ export const mediaCaptureHandler: IntentHandler = {
           watchAndSpeakNextSwingAnalysis();
           return {
             success: true,
-            voice_response: 'Swing captured. Analyzing...',
+            // 2026-08-06 (Tim — no pre-canned speech): no canned "Swing captured. Analyzing..." line.
+            // The armed listener above speaks the REAL AI read when it lands (now fast); the caddie stays
+            // silent until it has something real to say. Capture itself is confirmed visually (camera/reel).
+            voice_response: null,
             side_effects: ['swing_captured', 'analysis_started'],
             follow_up_needed: false,
           };
