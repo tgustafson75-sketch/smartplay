@@ -159,13 +159,24 @@ function interpolateFrame(frames: PoseFrame[], timeMs: number): PoseFrame | null
     if (timeMs >= a.timestampMs && timeMs <= b.timestampMs) {
       const span = b.timestampMs - a.timestampMs;
       const t = span > 0 ? (timeMs - a.timestampMs) / span : 0;
+      // 2026-08-06 (Tim — mechanics "super tight", "the skeleton slides robotically"). Smooth the skeleton
+      // between sparse anchors with CATMULL-ROM (through the neighboring frames) instead of a straight
+      // chord, so the body — and the grip end of the blue shaft — tracks the real motion between anchors
+      // instead of sliding in a straight line. Endpoints clamp (degrade to ~linear).
+      const p0 = sorted[i - 1] ?? a;
+      const p3 = sorted[i + 2] ?? b;
+      const t2 = t * t, t3 = t2 * t;
+      const cr = (v0: number, v1: number, v2: number, v3: number) =>
+        0.5 * (2 * v1 + (-v0 + v2) * t + (2 * v0 - 5 * v1 + 4 * v2 - v3) * t2 + (-v0 + 3 * v1 - 3 * v2 + v3) * t3);
       const blended: Keypoint[] = a.keypoints.map(ka => {
         const kb = b.keypoints.find(p => p.name === ka.name);
         if (!kb) return ka;
+        const k0 = p0.keypoints.find(p => p.name === ka.name) ?? ka;
+        const k3 = p3.keypoints.find(p => p.name === ka.name) ?? kb;
         return {
           name: ka.name,
-          x: ka.x + (kb.x - ka.x) * t,
-          y: ka.y + (kb.y - ka.y) * t,
+          x: cr(k0.x, ka.x, kb.x, k3.x),
+          y: cr(k0.y, ka.y, kb.y, k3.y),
           score: Math.min(ka.score, kb.score),
         };
       });
@@ -309,7 +320,16 @@ export default function SwingBodyOverlay({
       const a = P[i], b = P[i + 1];
       if (t >= a.t && t <= b.t) {
         const s = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0;
-        return { x: a.x + (b.x - a.x) * s, y: a.y + (b.y - a.y) * s };
+        // 2026-08-06 (Tim — "the club shows but doesn't line up with the actual club"). Interpolate the
+        // head along a smooth CATMULL-ROM curve through the neighboring arc points instead of a straight
+        // CHORD between two sparse detections. A chord cuts across the real sweep, so mid-swing the head
+        // sat inside/off the true arc; the spline follows the curve so the blue head tracks the real
+        // clubhead between detections. Endpoints clamp to the segment (degrades to ~linear at the ends).
+        const p0 = P[i - 1] ?? a, p3 = P[i + 2] ?? b;
+        const s2 = s * s, s3 = s2 * s;
+        const cr = (v0: number, v1: number, v2: number, v3: number) =>
+          0.5 * (2 * v1 + (-v0 + v2) * s + (2 * v0 - 5 * v1 + 4 * v2 - v3) * s2 + (-v0 + 3 * v1 - 3 * v2 + v3) * s3);
+        return { x: cr(p0.x, a.x, b.x, p3.x), y: cr(p0.y, a.y, b.y, p3.y) };
       }
     }
     return { x: P[P.length - 1].x, y: P[P.length - 1].y };
