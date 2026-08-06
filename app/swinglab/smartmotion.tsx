@@ -50,7 +50,6 @@ import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
 import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
-import CaddiePresencePip from '../../components/swinglab/CaddiePresencePip';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
 import { defaultDtlRig } from '../../services/cage/targetRig';
@@ -4324,10 +4323,10 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
-        {/* 2026-06-29 (Tim) — CADDIE PRESENCE PiP. The selected caddie, in a draggable
-            corner tile, during review (the "coach reviewing your tape" feel). Honest:
-            a static avatar, no live video / no voice. Rides with the clean-view toggle. */}
-        {isReview && showResults ? <CaddiePresencePip /> : null}
+        {/* 2026-06-29 (Tim) — CADDIE PRESENCE PiP (static avatar during review).
+            2026-08-06 (Tim — SmartMotion redesign): the redesign mockup has NO floating portrait, and the
+            PiP overlapped the ACOUSTIC PICKUP card at the bottom. Removed from the results view to declutter
+            and match the mockup (the read/verdict stands on its own). */}
 
         {/* BOTTOM PANEL — floating data + controls. While placing the ball box
             it's hidden so the full floor is visible + tappable; otherwise it's
@@ -5011,7 +5010,9 @@ const styles = StyleSheet.create({
   // 2026-06-12 (Tim) — soft translucent shadow halo so the badges stay readable on
   // bright range/cage backgrounds WITHOUT an ugly hard box. Slightly deeper card fill
   // + a dark drop shadow (iOS) / elevation (Android) = clean lift off the video.
-  metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.72)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.28)', shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
+  // 2026-08-06 (Tim — SmartMotion redesign mockup: SOLID metric cards, not translucent chips bleeding over
+  // the video). Near-opaque so each metric reads as a contained card like the mockup's SWING ANALYSIS panel.
+  metricBadgeCard: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(6,15,9,0.94)', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 7, borderWidth: 1, borderColor: 'rgba(124,224,79,0.45)', shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 7, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
   metricBadgeImg: { width: 32, height: 32 },
   metricBadgeText: { flex: 1, minWidth: 0 },
   metricBadgeValue: { color: '#88F700', fontSize: 14, fontWeight: '900', letterSpacing: 0.2 },
