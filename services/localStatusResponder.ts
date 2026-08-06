@@ -581,10 +581,12 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
 // See [[self-growing-agent-architecture]].
 // Exported so the offline VOICE cache (services/offlineVoiceCache.ts) pre-renders the SAME fixed
 // off-course line in the persona voice — single source of truth, no drift.
+// 2026-08-06 (Tim — "revert 'we're off the course right now…'; it reads robotic"). A real caddie doesn't
+// announce your location back to you. Ground straight in what's useful — tempo/short game — and stay present.
 export const DEAD_END_PRACTICE: Record<LocalReplyLanguage, string> = {
-  en: "We're off the course right now — good time to sharpen your tempo or short game whenever you're ready.",
-  es: 'Ahora mismo estamos fuera del campo: buen momento para pulir tu tempo o tu juego corto cuando quieras.',
-  zh: '我们现在不在球场上——准备好的时候，正适合练习你的节奏或短杆。',
+  en: "Good moment to sharpen your tempo or short game — I'm right here whenever you want to dig in.",
+  es: 'Buen momento para pulir tu tempo o tu juego corto: aquí estoy cuando quieras ponerte a ello.',
+  zh: '正适合打磨你的节奏或短杆——想练的时候我随时都在。',
 };
 
 export function deadEndLine(language: LocalReplyLanguage = 'en'): string {
