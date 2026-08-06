@@ -1251,14 +1251,19 @@ export default function SmartMotion() {
   const rightMetrics = useMemo(() => {
     if (isPutt) return [];
     const path = clubPathSpec(analysis);
-    return [
+    // 2026-08-06 (Tim — "clean this jumbled shit up"; the HUD showed ghost "0°" and "—" chips). A
+    // shoulder/hip turn that rounds to 0° is a FAILED/absent pose read, not a real 0-degree turn — treat it
+    // as unmeasured. Then DROP any chip with no value so the rail shows only real numbers instead of a wall
+    // of placeholders. (Removing chips can't create new overlaps — it only declutters.)
+    const shoulderDeg = biomech?.shoulderTurnDeg != null ? Math.round(biomech.shoulderTurnDeg) : null;
+    const hipDeg = biomech?.hipTurnDeg != null ? Math.round(biomech.hipTurnDeg) : null;
+    const chips = [
       { key: 'club_path', img: ICON_METRIC.clubpath, value: path.value, unit: '', label: 'CLUB PATH' },
-      // 2026-07-06 (honesty audit) — hedge the monocular turn degrees with '~' when
-      // metric_confidence is low (same convention as deriveBodyItems), so a soft 2D
-      // read doesn't render as precise measured degrees.
-      { key: 'shoulder', img: ICON_BIOMECH.shoulder, value: biomech?.shoulderTurnDeg != null ? `${(biomech.metric_confidence?.shoulderTurn ?? 1) < 0.5 ? '~' : ''}${Math.round(biomech.shoulderTurnDeg)}` : null, unit: '°', label: 'SHOULDER' },
-      { key: 'hip', img: ICON_BIOMECH.hip, value: biomech?.hipTurnDeg != null ? `${(biomech.metric_confidence?.hipTurn ?? 1) < 0.5 ? '~' : ''}${Math.round(biomech.hipTurnDeg)}` : null, unit: '°', label: 'HIP TURN' },
+      // 2026-07-06 (honesty audit) — hedge the monocular turn degrees with '~' when metric_confidence is low.
+      { key: 'shoulder', img: ICON_BIOMECH.shoulder, value: shoulderDeg ? `${(biomech!.metric_confidence?.shoulderTurn ?? 1) < 0.5 ? '~' : ''}${shoulderDeg}` : null, unit: '°', label: 'SHOULDER' },
+      { key: 'hip', img: ICON_BIOMECH.hip, value: hipDeg ? `${(biomech!.metric_confidence?.hipTurn ?? 1) < 0.5 ? '~' : ''}${hipDeg}` : null, unit: '°', label: 'HIP TURN' },
     ];
+    return chips.filter((c) => c.value != null && c.value !== '' && c.value !== '—');
   }, [isPutt, analysis, biomech]);
   // 2026-06-12 — LEFT rail: the ball/result metrics as custom badges (Tim). Honest +
   // distinct: TEMPO (ratio), BALL SPEED, BALL RESULT (the DTL trace's start direction).
@@ -1289,17 +1294,16 @@ export default function SmartMotion() {
     // context itself implies these tighten over time; the honesty is preserved by only
     // showing a value when we have one (still "—" otherwise) and never fabricating.
     const sm = metrics.smash_factor;
-    return [
+    // 2026-08-06 (Tim — HUD declutter) — same as the right rail: only show chips that have a real value, so
+    // the left rail isn't a column of "—" placeholders. BALL SPEED/SMASH stay gated on isSwingDerived
+    // (honesty), and unmeasured chips simply don't render rather than showing a dash.
+    const chips = [
       { key: 'tempo', img: ICON_METRIC.tempo, value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}` : null, unit: ': 1', label: 'TEMPO' },
-      // 2026-07-20 (bug-hunt fix) — gate BALL SPEED on isSwingDerived, matching the page-2
-      // tile. Without it, a range/upload/video swing with no acoustic strike + no usable pose
-      // falls back to a handicap-table constant (club_speed × typical smash) and printed it as
-      // a clean measured "141 mph" — the SAME number for every swing of that club, zero rep
-      // signal. Now shows "—" unless the value is actually swing-derived (honesty invariant).
       { key: 'speed', img: ICON_METRIC.ballspeed, value: bs.value != null && isSwingDerived(bs.source) ? `${Math.round(bs.value)}` : null, unit: 'mph', label: 'BALL SPEED' },
       { key: 'smash', img: ICON_METRIC.smash, value: sm.value != null && isSwingDerived(sm.source) ? `${sm.value.toFixed(2)}` : null, unit: '', label: 'SMASH' },
       { key: 'result', img: ICON_METRIC.ballresult, value: dir, unit: '', label: 'BALL RESULT' },
     ];
+    return chips.filter((c) => c.value != null && c.value !== '' && c.value !== '—');
   }, [isPutt, tempo, metrics, smartTrace]);
 
   // Practice Engine — stamp this analyzed swing into the active practice session.
