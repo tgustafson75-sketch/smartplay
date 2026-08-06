@@ -7376,8 +7376,8 @@ console.log('\n=== Scenario 13: critical-path diagnostic markers ===');
   ];
   const PATH4_MARKERS = [
     '[path4:voice] tap_open', '[path4:voice] opener_done', '[path4:voice] capture_start',
-    '[path4:voice] capture_done', '[path4:voice] intent=', '[path4:voice] filler_start',
-    '[path4:voice] filler_end', '[path4:voice] response_start', '[path4:voice] response_end',
+    '[path4:voice] capture_done', '[path4:voice] intent=', '[path4:voice] earcon_start',
+    '[path4:voice] earcon_end', '[path4:voice] response_start', '[path4:voice] response_end',
     '[path4:voice] close',
   ];
   const missing2 = PATH2_MARKERS.filter((m) => !corpus.includes(m));

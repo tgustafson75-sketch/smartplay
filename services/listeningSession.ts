@@ -13,7 +13,13 @@ import { subscribeEarbudTap } from './earbudControl';
 import { isSmartMotionRecording, emitSmartMotionCommand } from './smartMotionRecordBus';
 import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
-import { getClipForCategory, getFallbackTextForCategory } from './fillerLibrary';
+// 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
+// "thinking" earcon: a soft NON-VERBAL tone played ONCE when a turn will take a beat, replacing the old
+// spoken filler words ("Let me see...", "Looking at those swings...") — the loudest canned-speech surface.
+// Reuses an already-bundled tone so it ships OTA (no new binary needed). [[feels-like-a-real-caddie]]
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const THINKING_EARCON: number = require('../assets/audio/tempo/tick.mp3');
+const THINKING_EARCON_MS = 180;
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
@@ -680,28 +686,16 @@ async function openSession() {
     let fillerP: Promise<void> = Promise.resolve();
     let t_filler_start: number | null = null;
     if (decision.filler && ttsAllowed) {
-      const clip = getClipForCategory(decision.filler);
-      if (clip) {
-        t_filler_start = Date.now();
-        const tStart = t_filler_start;
-        console.log(`[path4:voice] filler_start category=${decision.filler} cached=true`);
-        fillerP = playLocalFile(clip.audio_path, clip.duration_ms)
-          .then(() => { console.log(`[path4:voice] filler_end ms=${Date.now() - tStart}`); })
-          .catch(() => {});
-      } else {
-        // Phase V.7 — local audio cache not ready (e.g. just after a
-        // voiceHash bump). Fall through to live TTS so the user hears a
-        // bridge instead of dead silence between intent and response.
-        const fallbackText = getFallbackTextForCategory(decision.filler);
-        if (fallbackText) {
-          t_filler_start = Date.now();
-          const tStart = t_filler_start;
-          console.log(`[path4:voice] filler_start category=${decision.filler} cached=false`);
-          fillerP = speak(fallbackText, settings.voiceGender, settings.language, apiUrl)
-            .then(() => { console.log(`[path4:voice] filler_end ms=${Date.now() - tStart}`); })
-            .catch(() => {});
-        }
-      }
+      // 2026-08-06 (Tim — no pre-canned speech; earcon only). The router still decides WHEN a turn warrants
+      // a "hang on, thinking" signal (decision.filler), but instead of speaking a canned bridge word we play
+      // ONE soft non-verbal earcon. The caddie then SPEAKS only the real AI answer — never a template. Kept
+      // as fillerP (awaited before speak below) so the earcon never gets cut off mid-tone by the response.
+      t_filler_start = Date.now();
+      const tStart = t_filler_start;
+      console.log(`[path4:voice] earcon_start category=${decision.filler}`);
+      fillerP = playLocalFile(THINKING_EARCON, THINKING_EARCON_MS)
+        .then(() => { console.log(`[path4:voice] earcon_end ms=${Date.now() - tStart}`); })
+        .catch(() => {});
     }
 
     // Phase BH — in-round diagnostic Coach. When the user describes a
@@ -942,15 +936,12 @@ async function openSession() {
 
       if (ttsAllowed) {
         for (let i = 0; i < 2 && !resultReady && (state as SessionState) === 'responding'; i++) {
-          const ext = getClipForCategory('extension');
-          if (ext) {
-            await playLocalFile(ext.audio_path, ext.duration_ms).catch(() => {});
-          } else {
-            // Phase V.7 — same fallback as primary filler.
-            const extText = getFallbackTextForCategory('extension');
-            if (!extText) break;
-            await speak(extText, settings.voiceGender, settings.language, apiUrl).catch(() => {});
-          }
+          // 2026-08-06 (Tim — earcon only, no words): on a long wait (e.g. a ~13s vision read) play the same
+          // soft earcon again as a subtle "still working" pulse instead of a spoken extension filler
+          // ("Still working through this..."). Spaced so it's a gentle beat, not a rattle; the loop re-checks
+          // readiness between pulses.
+          await playLocalFile(THINKING_EARCON, THINKING_EARCON_MS).catch(() => {});
+          await new Promise((r) => setTimeout(r, 1800));
         }
       }
 
