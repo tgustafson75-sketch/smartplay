@@ -1818,32 +1818,25 @@ export const useVoiceCaddie = ({
       // guard runs concurrently and is only consulted if the transcribe itself throws).
       const coldAbort = new AbortController();
       let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null = null;
-      if (coldFirstTurn) {
+      // 2026-08-05 (Tim — "the on-course/off-course determination is part of the slow first response").
+      // Run this reachability guard on EVERY turn, not just the cold first one. The WARM on-course path
+      // had NO concurrent guard, so a failed turn on a weak course network burned the FULL 12s transcribe
+      // timeout before it even probed — ~15s before the caddie degraded (matches the field logs:
+      // elapsedMs 15036, pingMs ~3s). Now a PROVEN-unreachable host (both probes ACTIVELY refuse, fast)
+      // aborts the doomed transcribe in ~3s on warm turns too. A reachable-but-slow host is NEVER aborted
+      // (probes resolve ok, or time out near budget), so cold-boot patience is preserved
+      // ([[voice-first-try-failure-timeout-root-cause]]) and fast/reachable turns pay ZERO added latency.
+      {
+        // Cold first turn keeps the 5s budget to absorb a slow DNS/TLS handshake; warm turns probe at 3s.
+        const probeBudgetMs = coldFirstTurn ? 5000 : 3000;
         void (async () => {
-          // 5s budget (not 3.5s) so a slow-but-real cold DNS/TLS handshake — the exact weak-signal
-          // case the long transcribe budget exists to absorb — isn't misjudged as down. And we abort
-          // ONLY when BOTH probes fail: the lightweight GET /api/health is the reliable "is the host
-          // there" signal; if it answers, the host IS reachable (POST may just be slow/blocked) and we
-          // must NOT abort the transcribe — it gets its full budget. Both failing = genuinely offline.
-          const [ping, get] = await Promise.all([reachabilityPing(5000), healthGet(5000)]);
-          // 2026-07-29 (Tim field log: source=processAudioUri_fastfail, AbortError, elapsedMs 5022,
-          // pingOk:false getOk:false) — on the FIRST turn the probes hit the SAME cold DNS/TLS/Lambda
-          // penalty as the transcribe, so BOTH TIMED OUT at 5s on a REACHABLE host and the old
-          // "both !ok → abort" killed the first transcribe EVERY launch — defeating the whole 22s cold
-          // budget that exists to absorb exactly this slow first handshake. Now abort ONLY on a
-          // CONFIDENT-FAST failure: a genuine connection refusal / DNS block / no-network throws in
-          // <2.5s. A slow timeout (ms ≈ the 5s budget) means "reachable, still handshaking" → do NOT
-          // abort; let the cold transcribe run its full budget and land a real transcript.
-          // 2026-07-30 (Tim field log: elapsedMs 25030, pingMs 3012, getMs 3011 — a 25-SECOND hang then
-          // the canned off-course line). The old `min(ms) < 2500` never fired for Tim: his network
-          // REFUSES both probes at ~3s (not a timeout — an active DNS/proxy block that returns fast),
-          // which sat in the 2.5s–5s "slow handshake, keep waiting" band → the transcribe burned the full
-          // 25s. Better discriminator: BOTH probes failed AND BOTH did so by ACTIVELY erroring BEFORE the
-          // probe budget (a genuine block returns fast; a reachable-but-slow host TIMES OUT near the full
-          // budget). So `max(ms) < budget - margin` = both actively refused = truly offline → abort NOW.
-          // A slow cold handshake (both ~5s timeouts) keeps its full budget — cold patience preserved.
-          const PROBE_BUDGET_MS = 5000;
-          const bothActivelyFailed = !ping.ok && !get.ok && Math.max(ping.ms, get.ms) < PROBE_BUDGET_MS - 500;
+          // Abort ONLY on a CONFIDENT-FAST double failure: a genuine refusal / DNS block returns fast,
+          // while a reachable-but-slow host TIMES OUT near the full budget. GET /api/health answering =
+          // host reachable (POST may just be slow) → never abort. `max(ms) < budget - margin` = both
+          // actively refused = truly offline → abort now and degrade (was cold-only; the discriminator is
+          // the 2026-07-30 field fix for a network that REFUSES both probes at ~3s rather than timing out).
+          const [ping, get] = await Promise.all([reachabilityPing(probeBudgetMs), healthGet(probeBudgetMs)]);
+          const bothActivelyFailed = !ping.ok && !get.ok && Math.max(ping.ms, get.ms) < probeBudgetMs - 500;
           if (bothActivelyFailed) {
             coldUnreachable = { ping, get };
             try { coldAbort.abort(); } catch { /* no-op */ }

@@ -2735,15 +2735,18 @@ check('Voice: cold transcribe fails FAST on a proven-unreachable host (no 25s ha
   // band). Now: both probes failing by ACTIVELY erroring before the probe budget → abort the doomed
   // transcribe immediately; a reachable-but-slow cold handshake (both time out near the budget) keeps
   // its full patience.
+  // 2026-08-05 (Tim — "the on-course/off-course determination is part of the slow first response") — the
+  // guard now runs on EVERY turn (dynamic budget: 5s cold / 3s warm), so a warm on-course turn on a weak
+  // network also aborts a doomed transcribe in ~3s instead of burning the full 12s timeout first.
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
     return (
-      /const PROBE_BUDGET_MS = 5000;/.test(vc) &&
-      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < PROBE_BUDGET_MS - 500;/.test(vc) &&
+      /const probeBudgetMs = coldFirstTurn \? 5000 : 3000;/.test(vc) &&
+      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < probeBudgetMs - 500;/.test(vc) &&
       /if \(bothActivelyFailed\)/.test(vc)
     );
   })(),
-  'a proven-unreachable host (both probes actively refuse in ~3s) aborts the transcribe fast so the caddie degrades in ~3s, not after a 25s dead wait — while a slow-but-reachable cold turn keeps its full budget');
+  'a proven-unreachable host (both probes actively refuse in ~3s) aborts the transcribe fast so the caddie degrades in ~3s, not after a hang — now on WARM on-course turns too (dynamic 5s cold / 3s warm budget), not just the cold first turn');
 
 check('Voice: speakFromBase64 never goes silent on a dead audio load (device-TTS fallback, parity with speak)',
   // 2026-07-30 (audit MED) — the brain's INLINE-audio path (speakFromBase64) had no dead-load recovery,
@@ -5869,9 +5872,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // 2026-07-30 — the discriminator moved from min<2500 (missed Tim's ~3s active refusal → 25s hang) to
     // "both failed AND both erdored before the probe budget" (max < budget-500). A slow cold handshake
     // times out AT the budget → max≈budget → NOT aborted → keeps full cold patience.
-    /const PROBE_BUDGET_MS = 5000;/.test(vcSrc) &&
-      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < PROBE_BUDGET_MS - 500;/.test(vcSrc),
-    'the concurrent probe aborts the first transcribe when BOTH probes ACTIVELY fail before the budget (a real refusal/DNS block returns in ~3s), while a slow-but-reachable cold handshake (times out at the budget) is never misjudged as offline');
+    /const probeBudgetMs = coldFirstTurn \? 5000 : 3000;/.test(vcSrc) &&
+      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < probeBudgetMs - 500;/.test(vcSrc),
+    'the concurrent probe aborts the transcribe when BOTH probes ACTIVELY fail before the budget (a real refusal/DNS block returns in ~3s), while a slow-but-reachable cold handshake (times out at the budget) is never misjudged as offline — guard now runs on every turn (5s cold / 3s warm)');
   check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
     /markConnectionWarmed\(\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
