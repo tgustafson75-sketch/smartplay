@@ -20,6 +20,13 @@ import { routeQuery } from './responseRouter';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const THINKING_EARCON: number = require('../assets/audio/tempo/tick.mp3');
 const THINKING_EARCON_MS = 180;
+// 2026-08-06 (Tim — "when I tap the earbud there's no beep/haptic telling me the caddie is LISTENING; the
+// phone's 40 yards away in the cart so I can't see the indicator or feel the phone haptic — I just talk and
+// hope"). A distinct "I'm listening" earcon played THROUGH THE AUDIO ROUTE (the earbud, where his ears are)
+// the instant the mic opens — the audible go-ahead the phone haptic can't give when the phone is far away.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const LISTENING_EARCON: number = require('../assets/audio/tempo/tock.mp3');
+const LISTENING_EARCON_MS = 200;
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
@@ -421,6 +428,13 @@ async function openSession() {
   // Phase 2 — open mic for utterance
   setSessionStateMirror('listening');
   console.log('[audit:voice] listening engaged');
+  // 2026-08-06 (Tim — "when I tap the earbud there's no beep telling me the caddie is listening; the phone's
+  // 40y away in the cart"). Play the audible "I'm listening" earcon through the AUDIO ROUTE (the earbud)
+  // BEFORE the mic opens — so the user gets the go-ahead in their ears (not a phone haptic they can't feel),
+  // and it can't be self-recorded. userInitiated:true so it fires even at L1/Quiet (the user just tapped).
+  if (settings.voiceEnabled) {
+    try { await playLocalFile(LISTENING_EARCON, LISTENING_EARCON_MS, { userInitiated: true }); } catch { /* non-fatal */ }
+  }
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
   let utterance: string | null = null;
