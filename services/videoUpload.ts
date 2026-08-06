@@ -1193,13 +1193,30 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         typeof firstClipSwing.clipStartSeconds === 'number' &&
         typeof firstClipSwing.clipEndSeconds === 'number' &&
         firstClipSwing.clipEndSeconds > firstClipSwing.clipStartSeconds;
-      const poseWindow = hasWindow
+      let poseWindow = hasWindow
         ? { startMs: firstClipSwing.clipStartSeconds! * 1000, endMs: firstClipSwing.clipEndSeconds! * 1000 }
         : null;
       void (async () => {
         try {
           const poseMod = await import('./poseAnalysisApi');
           const { resolveSwingerHandedness } = await import('./swingerHandedness');
+          // 2026-08-06 (Tim — "analysis does everything / takes too long"; the mp4 run showed a single-swing
+          // upload with no manual trim ran pose over the ENTIRE clip — windowed:false — so a 53s clip sampled
+          // ~53s of frames across the whole file). The vision stage already LOCATED the swing but the window
+          // was never handed here. When there's no window, locate the swing ONCE and crop the pose pass to it
+          // (~2s around the swing) instead of smearing across the clip. Best-effort: a locate miss falls back
+          // to the full-clip sampling (unchanged), so this only ever speeds things up, never breaks them.
+          if (!poseWindow) {
+            try {
+              const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
+              const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
+              const loc = durMs && durMs > 0 ? await locateSwingWindow(firstClipSwing.clipUri!, durMs) : null;
+              if (loc && loc.endSec > loc.startSec) {
+                poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
+                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec) }, sessionId);
+              }
+            } catch { /* full-clip fallback — no regression */ }
+          }
           // 2026-07-07 (biomech audit #9) — pass the KNOWN camera angle (was null,
           // so a DTL-tagged upload got un-gated face-on turn/weight numbers the
           // live SmartMotion path would have nulled).
@@ -1209,6 +1226,29 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
 
+          // 2026-08-06 (Tim — "I can't get clean analysis the first time; it always takes going to the swing
+          // library and trying ~3 times") — on-device verdict fallback for UPLOADS, parity with live capture.
+          // If the cloud vision read didn't land a verdict (a cold Lambda fail = exactly the "re-analyze from
+          // the library" case), commit the MEASURED pose read so the upload shows a clean first-try result
+          // instead of an empty/failed one. UPGRADE-ONLY: never overwrites a cloud verdict that already
+          // resolved 'ok' (cloud enrichment still wins when it lands).
+          if (biomech) {
+            try {
+              const store = useCageStore.getState();
+              const sess = store.sessionHistory.find((s) => s.id === sessionId);
+              if (sess && sess.analysis_status !== 'ok') {
+                const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
+                const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
+                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, null));
+                if (pi) {
+                  store.setSessionAnalysis(sessionId, pi, null);
+                  store.setSessionAnalysisStatus(sessionId, 'ok');
+                  uploadLog('pose-verdict-committed', { issue: pi.issue_id }, sessionId);
+                }
+              }
+            } catch { /* non-fatal — cloud path still owns the verdict */ }
+          }
+
           // 2026-07-30 (Tim — "no clubhead arc path" + "the video is auto playing on open"): detect
           // the clubhead arc HERE, in the analysis pass, and PERSIST it. Old design re-extracted
           // frames at VIEW time, which raced the autoplaying ExoPlayer → guarded with abort-while-
@@ -1217,19 +1257,20 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           // (even while the clip plays — no view-time retriever). Only when there's a real swing
           // window. Empty [] = analyzed, clubhead not trackable (honest — the view draws nothing).
           if (poseWindow && (biomech?.frames?.length ?? 0) >= 2) {
+            const pw = poseWindow; // capture: poseWindow is `let` (may be located above), so pin it for the nested map()
             try {
               const { detectClubPath } = await import('./swing/clubPath');
               const arc = await detectClubPath({
                 videoUri: firstClipSwing.clipUri!,
-                startMs: poseWindow.startMs,
-                endMs: poseWindow.endMs,
+                startMs: pw.startMs,
+                endMs: pw.endMs,
                 shouldAbort: () => false,
               });
               if (arc && arc.points.length >= 4) {
                 // rebase window-relative tMs → absolute clip ms (parity with the view overlay)
                 useCageStore.getState().setSessionClubArc(
                   sessionId,
-                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })),
+                  arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + pw.startMs })),
                   { w: arc.frameW ?? null, h: arc.frameH ?? null },
                 );
               } else {
