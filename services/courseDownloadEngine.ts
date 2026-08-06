@@ -75,7 +75,15 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
       const cn = norm(c.name), cf = norm(c.fullName);
       if (!cn && !cf) return false;
       if (cn === key || cf === key) return true;
-      return key.length >= 5 && cn.length >= 5 && (cn.includes(key) || key.includes(cn));
+      // 2026-08-06 (audit cycle 5, #3b) — a loose substring match false-positived: bundled "Lakes"/"Mines"
+      // is a substring of located "Twin Lakes"/"Mines Road GC" → wrong course. Require the names be a
+      // SIMILAR LENGTH (short-name ÷ long-name ≥ 0.7) on top of the ≥5 gates, so a genuinely different,
+      // longer located name can't be claimed by a short bundled fragment. A real near-match (norm strips
+      // golf/club/course/cc, so "Menifee Lakes CC" → "menifeelakes") still resolves via the exact check.
+      if (!(key.length >= 5 && cn.length >= 5)) return false;
+      if (!(cn.includes(key) || key.includes(cn))) return false;
+      const ratio = Math.min(cn.length, key.length) / Math.max(cn.length, key.length);
+      return ratio >= 0.7;
     });
     if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
   }

@@ -1788,6 +1788,13 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   // you don't see it"). PERSIST each completed read to the durable green-read store so it's no longer
   // discarded on unmount — keyed to the current hole/course when a round is active. Saved ONCE per distinct
   // read (not on every tilt tick). (Recap/dashboard surfacing of saved reads is the fast-follow.)
+  // 2026-08-06 (audit cycle 5, #4 — Tim: "you don't see it"). Recall the last saved read for THIS hole from
+  // a PRIOR visit, so a persisted read is actually surfaced (not just written). Shown until a fresh read is
+  // taken this session — then the live card owns the current read.
+  const recallHole = useRoundStore((s) => (s.isRoundActive ? s.currentHole : null));
+  const recallCourseId = useRoundStore((s) => (s.isRoundActive ? s.activeCourseId : null));
+  const priorRead = useGreenReadStore((s) => s.lastForHole(recallCourseId, recallHole));
+
   const lastSavedReadRef = useRef<string | null>(null);
   useEffect(() => {
     if (!puttRead || distanceFeet == null || slopePct == null) return;
@@ -1832,6 +1839,20 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
           <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
         </View>
       </View>
+
+      {/* 2026-08-06 (audit cycle 5, #4) — a saved read from a PRIOR visit to this hole, surfaced on entry
+          (until a fresh read is taken). Closes Tim's "it doesn't go anywhere / you don't see it". */}
+      {!puttRead && priorRead && recallHole != null && (priorRead.feetEst != null || priorRead.slopePct != null) && (
+        <View style={{ position: 'absolute', top: insets.top + 108, left: 16, right: 16, alignItems: 'center' }} pointerEvents="none">
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 }}>
+              {`Last read · hole ${priorRead.hole ?? recallHole}`}
+              {priorRead.feetEst != null ? ` · ${Math.round(priorRead.feetEst)} ft` : ''}
+              {priorRead.slopePct != null ? ` · ${priorRead.slopePct > 0 ? 'uphill' : 'downhill'} ${Math.abs(Math.round(priorRead.slopePct))}%` : ''}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Overlay markers + connecting line */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">

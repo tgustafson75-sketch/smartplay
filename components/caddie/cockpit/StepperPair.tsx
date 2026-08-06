@@ -21,6 +21,9 @@ export interface StepperPairProps {
   shots: number | undefined;
   putts: number | undefined;
   totalHoles?: number;
+  /** Lowest playable hole of the round — the back nine starts at 10, so the minus stepper must floor
+   *  here, not at 1 (2026-08-06, audit cycle 5). Defaults to 1 for full/front rounds. */
+  firstHole?: number;
   onChangeHole: (next: number) => void;
   onChangeShots: (next: number) => void;
   onChangePutts: (next: number) => void;
@@ -32,6 +35,7 @@ export function StepperPair({
   shots,
   putts,
   totalHoles = 18,
+  firstHole = 1,
   onChangeHole,
   onChangeShots,
   onChangePutts,
@@ -67,7 +71,7 @@ export function StepperPair({
         value={String(holeNumber)}
         sub={`Par ${par}`}
         colors={colors}
-        onMinus={() => onChangeHole(Math.max(1, holeNumber - 1))}
+        onMinus={() => onChangeHole(Math.max(firstHole, holeNumber - 1))}
         onPlus={() => onChangeHole(Math.min(totalHoles, holeNumber + 1))}
       />
       <Cell

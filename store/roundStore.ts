@@ -866,7 +866,16 @@ export const useRoundStore = create<RoundState>()(
         const courseLocation = options.courseLocation ?? null;
         // 2026-08-06 (tester Matt Abid) — resolve the starting hole (front nine = 1, back nine = 10),
         // clamped to a real hole in the loaded set.
-        const startHoleResolved = Math.max(1, Math.min(options.startHole ?? 1, holes.length || 1));
+        const nHoles = holes.length || 1;
+        let startHoleResolved = Math.max(1, Math.min(options.startHole ?? 1, nHoles));
+        // 2026-08-06 (audit cycle 5, finding #1) — a back-nine start needs a FULL nine ahead of it. On a
+        // 9-hole course "back nine" (hole 10) would clamp to hole 9 and then believe the round runs 9→17,
+        // walking the player through phantom holes 10-17 with no par/geometry and saving garbage scores.
+        // When nineHole is set but the course can't fit a full nine from the requested start, fall back to
+        // the front nine. (Guards EVERY start entrypoint, not just the pill UI.)
+        if (options.nineHole && startHoleResolved > 1 && startHoleResolved + 8 > nHoles) {
+          startHoleResolved = 1;
+        }
         // 2026-07-01 (audit — MIC CONVERGENCE) — a new round is a fresh conversation:
         // wipe the shared pipecat history so last round's chat can't leak context into
         // this one. Best-effort; never blocks the round from starting.

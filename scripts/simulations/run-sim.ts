@@ -5676,6 +5676,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       Object.keys(persist.scores).length === 0,
     'list rounds persist with the gross + 9/18 flag and empty per-hole scores (handicap uses the total)');
 
+  // 2026-08-06 (audit cycle 5) — back-nine 9-hole rounds (tester Matt Abid). Lock the two anti-corruption
+  // guards: (1) startRound falls a back-nine start back to the front nine when the course can't fit a full
+  // nine from there (a 9-hole course has no back nine → phantom holes 10-17); (2) the "Which nine" pill is
+  // gated on an 18-hole course; (3) the cockpit minus stepper floors on the round's first hole, not 1.
+  const roundStoreSrcBN = fs.readFileSync(path.resolve(__dirname, '../../store/roundStore.ts'), 'utf-8');
+  const caddieTabSrcBN = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
+  const stepperSrcBN = fs.readFileSync(path.resolve(__dirname, '../../components/caddie/cockpit/StepperPair.tsx'), 'utf-8');
+  check('Back nine: a short course cannot start a corrupt phantom-hole round',
+    /options\.nineHole && startHoleResolved > 1 && startHoleResolved \+ 8 > nHoles/.test(roundStoreSrcBN) &&
+      /getCourseHoleCount\(selectedPickedCourse\?\.id, 18\) >= 18/.test(caddieTabSrcBN) &&
+      /onMinus=\{\(\) => onChangeHole\(Math\.max\(firstHole, holeNumber - 1\)\)\}/.test(stepperSrcBN),
+    'a back-nine start with no full nine ahead falls back to the front nine (data-layer guard), the nine-picker pill only shows on an 18-hole course, and the cockpit stepper floors on the round first hole');
+
   // The OCR endpoint actually supports the list mode this pipeline calls.
   const importApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/round-import.ts'), 'utf-8');
   check('Bulk import: round-import API has a list mode',

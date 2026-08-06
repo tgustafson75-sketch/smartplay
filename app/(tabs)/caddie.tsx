@@ -3454,8 +3454,12 @@ export default function CaddieTab() {
             </View>
 
             {/* 2026-08-06 (tester Matt Abid — "9-hole format only shows the front nine; need to pick the
-                nine"). When 9 holes is selected, choose Front (1-9) or Back (10-18). */}
-            {nineHole && (
+                nine"). When 9 holes is selected, choose Front (1-9) or Back (10-18). 2026-08-06 (audit
+                cycle 5): only offer this on a course that actually HAS 18 holes — a bundled 9-hole course
+                has no back nine, and offering it would start a corrupt round of phantom holes. Unknown
+                (unloaded API) courses default to 18 and show it; startRound's data-layer clamp still falls
+                back to the front nine if the loaded course turns out to be short. */}
+            {nineHole && getCourseHoleCount(selectedPickedCourse?.id, 18) >= 18 && (
               <>
                 <Text style={styles.sheetLabel}>Which nine</Text>
                 <View style={styles.pillRow}>
