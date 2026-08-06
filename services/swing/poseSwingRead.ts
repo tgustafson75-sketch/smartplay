@@ -88,6 +88,11 @@ function bandRead(
 export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTempo | null): PoseSwingRead {
   const dims: DimensionRead[] = [];
   const faults: PoseFault[] = [];
+  // 2026-08-06 (Tim — "super tight" mechanics). Only escalate a metric to a headline FAULT when the pose
+  // was actually confident about it. A low-confidence read still shows as a (hedged) dimension, but we don't
+  // lead with a scold we're not sure of — the top-line verdict stays trustworthy. (0.4 ≈ usable-but-soft.)
+  const conf = bio?.metric_confidence ?? {};
+  const trust = (v?: number) => (v ?? 1) >= 0.4;
 
   const tRead = tempoRead(tempo);
   if (tRead) {
@@ -101,7 +106,7 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
 
   const sh = bio ? bandRead('shoulder_turn', 'Shoulder turn', bio.shoulderTurnDeg, '°', 80, 105, 'under-coiled — a fuller shoulder turn adds width and speed.', 'a very full turn — fine if you stay in posture.', 'a full tour-length shoulder coil.') : null;
   if (sh) dims.push(sh);
-  if (bio?.shoulderTurnDeg != null && bio.shoulderTurnDeg < 65) faults.push({ key: 'under_coil', label: 'Under-coiled backswing', severity: sev(bio.shoulderTurnDeg < 55 ? 1 : 0), evidence: `Shoulder turn ${Math.round(bio.shoulderTurnDeg)}° (tour ~90°) — you're leaving coil (and speed) on the table.` });
+  if (bio?.shoulderTurnDeg != null && bio.shoulderTurnDeg < 65 && trust(conf.shoulderTurn)) faults.push({ key: 'under_coil', label: 'Under-coiled backswing', severity: sev(bio.shoulderTurnDeg < 55 ? 1 : 0), evidence: `Shoulder turn ${Math.round(bio.shoulderTurnDeg)}° (tour ~90°) — you're leaving coil (and speed) on the table.` });
 
   // Weight shift: positive % = weight moving to the lead side at impact (good). Near-zero / negative
   // = hanging back / reverse pivot.
@@ -112,7 +117,7 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
     else if (w >= 4) dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: 'solid', note: `${display} forward — moving in the right direction; a touch more drive adds compression.` });
     else {
       dims.push({ key: 'weight_shift', label: 'Weight shift', display, verdict: w < -4 ? 'needs_work' : 'watch', note: `${display} — your weight is hanging back through impact instead of driving forward.` });
-      faults.push({ key: 'reverse_pivot', label: 'Weight hanging back', severity: sev(w < -8 ? 2 : w < 0 ? 1 : 0), evidence: `Weight shift ${display} at impact — you're not getting onto your lead side (power + strike suffer).` });
+      if (trust(conf.weightShift)) faults.push({ key: 'reverse_pivot', label: 'Weight hanging back', severity: sev(w < -8 ? 2 : w < 0 ? 1 : 0), evidence: `Weight shift ${display} at impact — you're not getting onto your lead side (power + strike suffer).` });
     }
   }
 
@@ -124,7 +129,7 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
     if (s <= 8) dims.push({ key: 'posture', label: 'Posture', display, verdict: 'strength', note: `Spine angle held within ${display} through impact — you're keeping your posture.` });
     else {
       dims.push({ key: 'posture', label: 'Posture', display, verdict: s > 16 ? 'needs_work' : 'watch', note: `Spine angle changed ${display} from address to impact — you're standing up out of your posture.` });
-      faults.push({ key: 'early_extension', label: 'Early extension', severity: sev(s > 18 ? 2 : s > 12 ? 1 : 0), evidence: `Spine angle rose ${display} into impact — your hips push toward the ball and you lose your spine angle.` });
+      if (trust(conf.spineAngleDelta)) faults.push({ key: 'early_extension', label: 'Early extension', severity: sev(s > 18 ? 2 : s > 12 ? 1 : 0), evidence: `Spine angle rose ${display} into impact — your hips push toward the ball and you lose your spine angle.` });
     }
   }
 
@@ -135,7 +140,7 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
     if (r <= 1.05) dims.push({ key: 'sway', label: 'Hip stability', display: `${display}×`, verdict: 'strength', note: `Your hips rotate more than they slide (${display}×) — a stable, centered turn.` });
     else {
       dims.push({ key: 'sway', label: 'Hip stability', display: `${display}×`, verdict: r > 1.4 ? 'needs_work' : 'watch', note: `Your hips slide off the ball ${display}× more than they rotate in the backswing.` });
-      faults.push({ key: 'sway', label: 'Sway off the ball', severity: sev(r > 1.5 ? 2 : r > 1.25 ? 1 : 0), evidence: `Hip slide ${display}× rotation — you're swaying laterally instead of turning around a centered post.` });
+      if (trust(conf.hipSlide)) faults.push({ key: 'sway', label: 'Sway off the ball', severity: sev(r > 1.5 ? 2 : r > 1.25 ? 1 : 0), evidence: `Hip slide ${display}× rotation — you're swaying laterally instead of turning around a centered post.` });
     }
   }
 
@@ -147,7 +152,7 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
     if (q >= 60) dims.push({ key: 'sequencing', label: 'Sequence', display, verdict: 'strength', note: `Your hips lead the downswing (${display}/100) — the tour kinematic order.` });
     else {
       dims.push({ key: 'sequencing', label: 'Sequence', display, verdict: q < 40 ? 'needs_work' : 'watch', note: `Your upper body is starting the downswing (${display}/100) instead of the hips leading.` });
-      faults.push({ key: 'over_the_top', label: 'Over the top', severity: sev(q < 35 ? 2 : q < 50 ? 1 : 0), evidence: `Sequencing ${display}/100 — the shoulders fire first, throwing the club over the plane.` });
+      if (trust(conf.sequencing)) faults.push({ key: 'over_the_top', label: 'Over the top', severity: sev(q < 35 ? 2 : q < 50 ? 1 : 0), evidence: `Sequencing ${display}/100 — the shoulders fire first, throwing the club over the plane.` });
     }
   }
 
