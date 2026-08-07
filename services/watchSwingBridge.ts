@@ -84,6 +84,10 @@ let emitter: NativeEventEmitter | null = null;
 let swingSub: { remove: () => void } | null = null;
 let connSub: { remove: () => void } | null = null;
 let started = false;
+// 2026-08-07 (Tim — "use the watch to turn on swing detection in a live round"). Debounce so waggles /
+// rapid re-swings don't spam the live shot detector with duplicate shots.
+let lastLiveShotTriggerAt = 0;
+const LIVE_SHOT_TRIGGER_COOLDOWN_MS = 20_000;
 
 /** True when the native bridge is present on this build/platform. */
 export function isWatchSwingBridgeAvailable(): boolean {
@@ -131,6 +135,30 @@ export async function initWatchSwingBridge(): Promise<boolean> {
           ? { peakGyro: e.peakGyro, impactAccel: e.impactAccelAxes, downswing: e.downswingProfile ?? [] }
           : undefined,
       });
+
+      // 2026-08-07 (Tim — "how can we use the watch to turn on swing detection in a LIVE round?"). A
+      // watch-detected swing is a DEFINITIVE "a shot was just hit" signal — more reliable than the phone's
+      // GPS-displacement / acoustic inference. When a round is active, feed it to the live shot detector so
+      // the shot is tracked from the player's current position (the same seam a manual mark uses). Gated on
+      // a REAL swing (transition or real impact/speed, not a waggle) + a 20s debounce; the detector's own
+      // round-guard drops it pre-round. NOTE: the watch's own GPS is NOT in this event yet — the origin is
+      // still the phone's fix. Sending the watch's exact standing position needs a native watch-app change.
+      try {
+        const realSwing = !!e.transitionDetected
+          || (e.impactAcceleration ?? 0) > 0
+          || (e.clubHeadSpeedEst ?? 0) >= 30;
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const roundActive = (require('../store/roundStore') as typeof import('../store/roundStore'))
+          .useRoundStore.getState().isRoundActive;
+        const now = Date.now();
+        if (roundActive && realSwing && now - lastLiveShotTriggerAt > LIVE_SHOT_TRIGGER_COOLDOWN_MS) {
+          lastLiveShotTriggerAt = now;
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('./shotDetectionService') as typeof import('./shotDetectionService'))
+            .shotDetectionService.triggerManual();
+          console.log('[watchSwing] live round → shot detection triggered (club:', club, ')');
+        }
+      } catch (err) { console.log('[watchSwing] live-round shot trigger failed (non-fatal):', err); }
 
       // 2026-07-29 (Tim — drill feedback on the wrist: swipeable metric cards). Push the just-captured
       // swing straight back to the watch so it shows a per-swing readout during a drill. Club-tagged +

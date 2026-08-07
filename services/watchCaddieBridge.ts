@@ -23,7 +23,7 @@
  */
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-import { registerWatchSender, notifyWatchVoice, notifyWatchTap, type OutboundPayload } from './watchBridge';
+import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchCommand, type OutboundPayload } from './watchBridge';
 import { getGreenYardagesSync } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
@@ -60,6 +60,7 @@ const NativeMod: WearCaddieNativeModule | null =
 let emitter: NativeEventEmitter | null = null;
 let voiceSub: { remove: () => void } | null = null;
 let tapSub: { remove: () => void } | null = null;
+let commandSub: { remove: () => void } | null = null;
 let unsubRound: (() => void) | null = null;
 let yardageTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
@@ -118,6 +119,16 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
       const p = e?.pattern;
       notifyWatchTap(p === 'double' || p === 'triple' || p === 'long_press' ? p : 'single');
     });
+    // 2026-08-07 (Tim — "record button on the watch to control SmartMotion record + stop"). The watch
+    // Record button sends an onWatchCommand event; forward it to the command bus so handsFreeOrchestrator
+    // opens SmartMotion + starts/stops the camera. Unknown commands are ignored.
+    commandSub = emitter.addListener('onWatchCommand', (e: { command?: string }) => {
+      markWatchAlive();
+      const c = e?.command;
+      if (c === 'open_smartmotion' || c === 'smartmotion_record' || c === 'smartmotion_stop' || c === 'smartmotion_toggle') {
+        notifyWatchCommand(c);
+      }
+    });
 
     // Push yardage immediately, on every hole change, and on a slow tick.
     void pushYardageToWatch();
@@ -144,12 +155,13 @@ export async function stopWatchCaddieBridge(): Promise<void> {
   try {
     voiceSub?.remove();
     tapSub?.remove();
+    commandSub?.remove();
     unsubRound?.();
     if (yardageTimer) clearInterval(yardageTimer);
   } catch {
     /* no-op */
   } finally {
-    voiceSub = null; tapSub = null; unsubRound = null; yardageTimer = null; emitter = null;
+    voiceSub = null; tapSub = null; commandSub = null; unsubRound = null; yardageTimer = null; emitter = null;
     started = false;
   }
 }

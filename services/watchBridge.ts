@@ -76,6 +76,30 @@ export function notifyWatchVoice(utterance: string): void {
   });
 }
 
+// ─── Inbound: watch control commands (2026-08-07, Tim — "record button on the watch to control
+// SmartMotion record + stop") ────────────────────────────────────────────────────────────────
+// The watch sends a control command (its Record button, a SmartMotion open, etc.) over the Wear data
+// layer; the native bridge forwards it here and consumers (handsFreeOrchestrator) act on the phone —
+// open SmartMotion + start/stop the camera. NOTE: this is the PHONE side; the watch UI button that
+// SENDS these lives in the native Wear app.
+export type WatchCommand = 'open_smartmotion' | 'smartmotion_record' | 'smartmotion_stop' | 'smartmotion_toggle';
+type CommandListener = (command: WatchCommand) => void;
+const commandListeners: Set<CommandListener> = new Set();
+
+/** Subscribe to watch control commands. Returns cleanup. */
+export function subscribeWatchCommand(cb: CommandListener): () => void {
+  commandListeners.add(cb);
+  return () => { commandListeners.delete(cb); };
+}
+
+/** Called by the native bridge when the watch sends a control command. */
+export function notifyWatchCommand(command: WatchCommand): void {
+  devLog(`[watchBridge] command inbound: ${command}`);
+  commandListeners.forEach((cb) => {
+    try { cb(command); } catch (e) { devLog('[watchBridge] command listener err: ' + String(e)); }
+  });
+}
+
 // ─── Outbound: phone → watch ─────────────────────────────────────────────
 
 type Sender = (payload: OutboundPayload) => Promise<void>;

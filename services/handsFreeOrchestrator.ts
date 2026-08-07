@@ -32,9 +32,38 @@
 import {
   subscribeTapPattern, type TapPattern,
 } from './earbudControl';
-import { subscribeWatchTap, subscribeWatchVoice } from './watchBridge';
+import { subscribeWatchTap, subscribeWatchVoice, subscribeWatchCommand, type WatchCommand } from './watchBridge';
+import { emitSmartMotionCommand, isSmartMotionActive } from './smartMotionRecordBus';
 import { devLog } from './devLog';
 import { getApiBaseUrl } from './apiBase';
+
+// 2026-08-07 (Tim — "record button on the watch to control SmartMotion record + stop"). Act on a watch
+// control command from the phone: open SmartMotion + start/stop the camera. Uses the same record bus the
+// on-screen buttons + earbud tap use, so behavior is identical. When SmartMotion isn't open yet, a record/
+// toggle command opens it with ?autoRecord=1 so the camera rolls on arrival (the promise holds).
+function handleWatchCommand(command: WatchCommand): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { router } = require('expo-router') as typeof import('expo-router');
+    switch (command) {
+      case 'open_smartmotion':
+        if (!isSmartMotionActive()) router.push('/swinglab/smartmotion' as never);
+        break;
+      case 'smartmotion_record':
+        if (isSmartMotionActive()) emitSmartMotionCommand('start');
+        else router.push('/swinglab/smartmotion?autoRecord=1' as never);
+        break;
+      case 'smartmotion_stop':
+        emitSmartMotionCommand('stop');
+        break;
+      case 'smartmotion_toggle':
+        if (isSmartMotionActive()) emitSmartMotionCommand('toggle');
+        else router.push('/swinglab/smartmotion?autoRecord=1' as never);
+        break;
+    }
+    devLog(`[handsFree] watch command handled: ${command}`);
+  } catch (e) { devLog('[handsFree] watch command failed: ' + String(e)); }
+}
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────
 
@@ -52,6 +81,7 @@ export function startHandsFreeOrchestrator(): void {
   unsubs.push(subscribeTapPattern((p) => { void handleTap('earbud', p); }));
   unsubs.push(subscribeWatchTap((p) => { void handleTap('watch', p); }));
   unsubs.push(subscribeWatchVoice((utterance) => { void handleWatchVoice(utterance); }));
+  unsubs.push(subscribeWatchCommand(handleWatchCommand));
   devLog('[handsFree] orchestrator started');
 }
 

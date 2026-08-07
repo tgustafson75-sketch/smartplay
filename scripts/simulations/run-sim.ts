@@ -1129,6 +1129,38 @@ check('Caddie confirms the just-hit drive + remaining + play (live tee-to-player
   })(),
   'the caddie has the drive distance and confirms it → remaining → play, one flowing sentence');
 
+// 2026-08-07 (Tim — "how can we use the watch to turn on swing detection in a LIVE round?"). LOCK: a
+// watch-detected swing during an active round triggers the live shot detector (from the phone's current
+// position), gated on a real swing + a 20s debounce. Watch's own GPS is NOT in the event yet (native).
+check('Watch swing turns on live-round shot detection (debounced, round-gated)',
+  (() => {
+    const b = read('services/watchSwingBridge.ts');
+    return (
+      /shotDetectionService\.triggerManual\(\)/.test(b) &&
+      /isRoundActive/.test(b) &&
+      /LIVE_SHOT_TRIGGER_COOLDOWN_MS/.test(b) &&
+      /const realSwing =/.test(b)
+    );
+  })(),
+  'a watch swing in a live round fires shot detection (definitive swing signal), debounced + round-gated');
+
+// 2026-08-07 (Tim — "add a record button on the watch to control SmartMotion record + stop"). LOCK the
+// PHONE side: a watch control command opens SmartMotion + start/stops the camera via the shared record
+// bus. The watch UI button that SENDS the command lives in the native Wear app.
+check('Watch command controls SmartMotion record/stop on the phone (bus wired end-to-end)',
+  (() => {
+    const wb = read('services/watchBridge.ts');
+    const cb = read('services/watchCaddieBridge.ts');
+    const hf = read('services/handsFreeOrchestrator.ts');
+    return (
+      /export function notifyWatchCommand/.test(wb) && /export function subscribeWatchCommand/.test(wb) &&
+      /addListener\('onWatchCommand'/.test(cb) && /notifyWatchCommand\(c\)/.test(cb) &&
+      /subscribeWatchCommand\(handleWatchCommand\)/.test(hf) &&
+      /emitSmartMotionCommand\('start'\)/.test(hf) && /emitSmartMotionCommand\('stop'\)/.test(hf)
+    );
+  })(),
+  'watch → SmartMotion record/stop/open is wired on the phone (native Wear app supplies the button)');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every
