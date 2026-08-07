@@ -213,6 +213,14 @@ function setSessionStateMirror(next: SessionState): void {
       const H = require('expo-haptics');
       void H.impactAsync(H.ImpactFeedbackStyle.Medium).catch(() => {});
     } catch { /* haptics optional */ }
+    // 2026-08-07 (Tim — "tapping the earbud should WAKE the screen so functions aren't asleep/resting").
+    // A tap-to-talk flows through here from EVERY source (earbud/glasses/mic badge). Exit the app's rest/dim
+    // state and reset the idle clock so the pipeline isn't mid-doze when the user starts speaking (the cart
+    // case: phone dimmed 40y away). Best-effort — can never affect the voice flow.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('../store/restModeStore') as typeof import('../store/restModeStore')).useRestModeStore.getState().exitRest();
+    } catch { /* rest store optional */ }
   }
   // [path4:voice] response phase boundaries. Centralised here (not at the
   // ~5 scattered speak() sites) so every branch — diagnostic, small-talk,
