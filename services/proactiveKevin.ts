@@ -3,7 +3,6 @@ export type ProactiveTriggerType =
   | 'miss_streak_3'
   | 'good_streak_3'
   | 'rough_streak_3'
-  | 'hole_transition_pattern_aware'
   | 'ghost_lead_swing'
   | 'front_9_summary';
 
@@ -136,19 +135,11 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     }
   }
 
-  // hole_transition_pattern_aware — pattern miss note on new hole entry (holes 2+)
-  if (ctx.currentHole >= 2 && ctx.dominantMiss && ctx.holesPlayed >= 1) {
-    const cooldown = 12 * 60 * 1000;
-    if (!lastFiredAt.hole_transition_pattern_aware || now - (lastFiredAt.hole_transition_pattern_aware ?? 0) > cooldown) {
-      const missDir = ctx.dominantMiss === 'right' ? 'left side' : ctx.dominantMiss === 'left' ? 'right side' : 'center';
-      return {
-        id: 'hole_transition_pattern_aware',
-        message: `Favor the ${missDir} off the tee — plenty of room to work with.`,
-        is_proactive: true,
-      };
-    }
-  }
-
+  // 2026-08-07 (Tim — "hole rundown is PULL not pushed"; verifier caught this as still live). The
+  // hole_transition_pattern_aware auto-push (a "favor the {side} off the tee" note on every hole entry) was
+  // supposed to be removed in the PULL-not-push change but survived here — a player past the cooldown with a
+  // dominantMiss still got it auto-spoken leaving a hole. Removed: the on-course miss guidance now surfaces
+  // on DEMAND through the shot read (SmartFinder/localStatus favor the safe side), not as an unsolicited push.
   return null;
 }
 

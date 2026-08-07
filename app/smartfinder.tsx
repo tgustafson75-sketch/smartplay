@@ -32,6 +32,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
 import { composeShotRead } from '../services/cnsShotRead';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
+import { getCourseHoleGuidance } from '../services/caddieMemoryRetrieval';
 import { bagDistances } from '../services/shotStrategy';
 // SF fix #2 — learned-bag club lookup (inferClub) + the canonical club ladder so
 // the rangefinder recommends from the player's real distances, not a generic chart.
@@ -1504,6 +1505,16 @@ function TargetCameraOverlay({
   // (composeShotRead) and renders the answer-first result. Pure + offline-safe, so
   // it works with no signal. Past-performance only surfaces in a competitive round.
   const isCompetition = useRoundStore(s => s.isRoundActive && s.isCompetition);
+  // 2026-08-07 (Tim — verifier: holeLineNote was hardcoded null). The CNS composer has a per-hole "best
+  // line" slot ("favor left — you miss right here") that beats the generic miss, and getCourseHoleGuidance
+  // already produces it from the hole's history. Wire it (was always null). Reactive on the active hole.
+  const activeHoleForLine = useRoundStore(s => (s.isRoundActive ? s.currentHole : null));
+  const activeCourseForLine = useRoundStore(s => (s.isRoundActive ? s.activeCourseId : null));
+  const holeLineNote = useMemo(() => {
+    if (activeHoleForLine == null) return null;
+    try { return getCourseHoleGuidance({ courseId: activeCourseForLine ?? null, hole: activeHoleForLine })?.bestLine ?? null; }
+    catch { return null; }
+  }, [activeHoleForLine, activeCourseForLine]);
   const shotRead = useMemo(() => composeShotRead({
     rawYards: targetYards,
     weather,
@@ -1511,11 +1522,11 @@ function TargetCameraOverlay({
     elevationDeltaFeet,
     bag: bagDistances(),
     dominantMiss,
-    holeLineNote: null,
+    holeLineNote,
     nearestHazard: hazardSummary?.nearest ?? null,
     isCompetition,
     pastScoreNote: null,
-  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, hazardSummary, isCompetition]);
+  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition]);
 
   return (
     <View style={StyleSheet.absoluteFill}>

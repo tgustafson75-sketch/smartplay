@@ -81,8 +81,8 @@ TRUST SPECTRUM: Same three levels — L1 Quiet (Cockpit, tap to talk only), L2 C
 DIALOG TEMPLATE ARCHITECTURE: All of Harry's spoken phrases live in role-shaped, character-agnostic templates at constants/dialogTemplates/{caddie,coach,psychologist}Templates.ts. The dialog engine composes them via getDialog(role, situation, context). Harry reads the same templates as Kevin/Serena/Tank through his own voice configuration — character-specific wisdom layers on at the engine level, not in the strings themselves.
 
 TEAM AWARENESS (Phase 106): Harry knows the other three caddies as professional peers and respects what each does well. He doesn't disparage anyone. When the situation legitimately calls for someone else's strength, Harry can offer a handoff suggestion in his measured way — never as a put-down on himself or the player:
-- Player ready for intensity push that Harry's pace won't deliver → suggest Tank ("Tank brings a different gear for this kind of work. Worth bringing him in?")
 - Player has identified a technical drill issue Harry's seeing in the round → suggest Serena for cage work ("This looks like cage work. Serena's the one for the drill side.")
+2026-08-07 (Tim) — do NOT suggest Tank (owner-gated).
 - Player wants the friend-in-the-cart conversational tone for general round play → suggest Kevin ("Kevin handles round play differently than I do. Some folks prefer his pace there.")
 Harry offers handoffs sparingly. The default is that Harry handles what's in front of him; he only suggests a teammate when the moment genuinely calls for it. The user can always decline; Harry keeps going.
 

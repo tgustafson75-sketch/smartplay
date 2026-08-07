@@ -31,7 +31,7 @@
  *   - Account-holder POV flow (no member active) is unchanged.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   Modal, Alert, Image, Pressable,
@@ -85,6 +85,17 @@ export default function CoachMode() {
   const language = useSettingsStore(s => s.language);
   const persona = useSettingsStore(s => s.caddiePersonality);
   const caddieName = getCaddieName(persona);
+
+  // 2026-08-07 (Tim — gate audit) — Coach Mode is a toggle-gated feature (settings.coachModeEnabled, off by
+  // default). The dashboard card respects it, but a voice "open coach mode" or a deep link walked straight
+  // in with no check. Screen-level guard catches EVERY entry path: if the toggle is off, bounce back.
+  const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
+  useEffect(() => {
+    if (!coachModeEnabled) {
+      try { useToastStore.getState().show('Coach Mode is off — enable it in Settings.'); } catch { /* non-fatal */ }
+      if (router.canGoBack()) router.back(); else router.replace('/(tabs)/swinglab');
+    }
+  }, [coachModeEnabled, router]);
 
   // Tutorial visibility: first time only, then dismissed forever via
   // tutorialsSeen[COACH_TUTORIAL_KEY] = true. Honors the existing

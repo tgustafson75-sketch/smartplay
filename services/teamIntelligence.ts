@@ -126,7 +126,13 @@ function canOffer(trigger: SuggestionTrigger): boolean {
 }
 
 function offer(trigger: SuggestionTrigger, fromPersona: Persona, pillar: CaddiePillar): void {
-  const toPersona = pickTeammateForTrigger(trigger, fromPersona);
+  let toPersona = pickTeammateForTrigger(trigger, fromPersona);
+  // 2026-08-07 (Tim — "you can STILL toggle to Tank; how is that hidden?"). Tank is owner-gated: NEVER
+  // advertise a handoff to him when he's disabled (was popping a "Bring in Tank?" card to every tester and
+  // the accept dead-ended at the gated setter). Route to the non-Tank alternate instead.
+  if (toPersona === 'tank' && !useSettingsStore.getState().tankEnabled) {
+    toPersona = fromPersona === 'serena' ? 'kevin' : 'serena';
+  }
   if (toPersona === fromPersona) return;
   const s = buildSuggestion(trigger, fromPersona, toPersona, pillar);
   useTeamIntelligenceStore.getState().offerSuggestion(s);

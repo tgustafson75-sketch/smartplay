@@ -82,7 +82,8 @@ export default function DrillsIndex() {
           video links. Tap to dive in.
         </Text>
 
-        {/* 2-COL GRID — the fault catalog in pairs (Tank + Randy cards removed per Tim 2026-08-06). */}
+        {/* 2-COL GRID — the fault catalog in pairs. Tank's card is hidden (HIDDEN_DRILL_IDS); the chipping
+            card STAYS but is de-branded from Randy Chang into the Caddie's own lesson (2026-08-06). */}
         <View style={styles.grid}>
           {gridEntries.map((entry) => (
             <DrillCard

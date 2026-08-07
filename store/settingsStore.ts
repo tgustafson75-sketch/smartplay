@@ -766,7 +766,9 @@ export const useSettingsStore = create<SettingsState>()(
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
-        caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
+        // 2026-08-07 (Tim — gate audit) — mirror the setCaddiePersonality Tank guard here: a per-pillar
+        // assignment can't set Tank while he's owner-disabled either.
+        caddieAssignments: { ...s.caddieAssignments, [pillar]: (p === 'tank' && !s.tankEnabled) ? (s.caddieAssignments?.[pillar] ?? 'kevin') : p },
       })),
       setTankEnabled: (v) => set((s) => {
         if (v) return { tankEnabled: true };

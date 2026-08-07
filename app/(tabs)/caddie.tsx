@@ -1352,6 +1352,18 @@ export default function CaddieTab() {
         console.log('[caddie] opener skipped: voiceEnabled=false');
         return;
       }
+      // 2026-08-07 (Tim — gate audit) — the opener is PROACTIVE speech, so it must honor the same toggles
+      // the in-round proactive triggers do. It was skipping these and stamping userInitiated:true to slip
+      // past the central speech gate (whose own comment claims it suppresses "the opener"). Now if the user
+      // turned Proactive Caddie OFF, or is in Local Mode, we stay quiet on launch.
+      if (!liveSettings.proactive_kevin_enabled) {
+        console.log('[caddie] opener skipped: proactive_kevin_enabled=false');
+        return;
+      }
+      if (liveSettings.localMode) {
+        console.log('[caddie] opener skipped: localMode=true');
+        return;
+      }
       // If audio is already playing (greeting tail still finishing,
       // user already tapped to talk, brain reply mid-stream), skip
       // the opener — don't double-speak.

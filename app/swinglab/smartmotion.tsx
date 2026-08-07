@@ -49,7 +49,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
-import CageTargetingCard, { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
 import { defaultDtlRig } from '../../services/cage/targetRig';
@@ -1188,7 +1188,11 @@ export default function SmartMotion() {
     const cn = club ? clubIdToClubName(club) : null;
     const cs = useClubStatsStore.getState();
     const learned = cn && cs.hasDistance(cn) ? cs.carryFor(cn) : null;
-    return estimateCarryYards(club, effortRaw, profile.handicap, learned);
+    // 2026-08-07 (Tim — carry unify was incomplete) — with NO target placed, effortRaw is null and estCarry
+    // was null, so the card diverged (fell back to a ball-speed carry) while the map showed nothing. Treat a
+    // no-target swing as a FULL swing (100% effort) so a tagged club always has ONE carry number across the
+    // card, the persisted shot map, the library, and the caddie. Untagged club → null everywhere (honest).
+    return estimateCarryYards(club, effortRaw ?? 100, profile.handicap, learned);
   }, [club, effortRaw, profile.handicap]);
   // 2026-07-07 (Tim — "shot tracing that actually lines up on the user") — the CV points
   // (departure / ball-path) are FRAME-normalized; the ball box + target the user placed

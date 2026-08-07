@@ -192,19 +192,21 @@ export const INSTRUCTOR_VIDEO_KNOWLEDGE: KBEntry[] = [
     source: 'https://www.youtube.com/watch?v=l6E-uyQDfqU',
   },
 
-  // ── SHORT GAME — THE CHANG CHIP (Randy Chang · PGA) ───────────────────────
+  // ── SHORT GAME — CADDIE CHIPPING FUNDAMENTALS ─────────────────────────────
+  // 2026-08-07 (Tim — "remove Randy from chipping"). De-branded from Randy Chang into the Caddie's own
+  // chipping lesson, aligned with the drill card (weight-forward, hands-ahead, descending strike). No
+  // external instructor / YouTube link.
   {
-    id: 'video.chipping.chang_chip',
+    id: 'video.chipping.fundamentals',
     layer: 'short_game',
     module: MODULE,
-    topic: 'the Chang Chip — use the bounce (Randy Chang)',
-    aliases: ['chip', 'chipping', 'chang chip', 'chip it close', 'short game', 'around the green', 'bump and run'],
+    topic: 'chipping fundamentals — clean contact, controlled distance',
+    aliases: ['chip', 'chipping', 'chip it close', 'short game', 'around the green', 'bump and run'],
     principle:
-      "Randy Chang's Chang Chip (PGA): a putting-style chip that takes air time OUT and adds roll. Hands stay EVEN with the ball (not forward-pressed) so the wedge's BOUNCE works for you instead of digging, narrow stance, and rock the shoulders like a putting stroke with quiet wrists. One repeatable motion you can run with several different lofts to vary carry-vs-roll.",
+      "Clean, repeatable chipping: narrow stance, weight ~60% on the lead foot, ball back of center, and hands staying AHEAD of the clubhead through impact — no flip. That delivers a descending strike so you catch ball-then-turf instead of scooping. Vary carry-vs-roll with the length of the stroke, not with hand action.",
     honesty: 'coaching_only',
-    coachingCues: ['hands even with the ball — keep the bounce', 'rock the shoulders, quiet wrists', 'less air, more roll'],
+    coachingCues: ['weight forward, hands ahead of the ball', 'ball back of center, narrow stance', 'distance by stroke length, not a flip'],
     related: ['sg.chip.contact'],
-    source: 'https://www.youtube.com/watch?v=_iWzD-gSoa8',
   },
 
   // ── EARLY EXTENSION — TANK'S TAKE (Tank · SmartPlay Caddie) ───────────────

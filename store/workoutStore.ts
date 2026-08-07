@@ -90,6 +90,9 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
       clear: () => set({ history: [] }),
     }),
-    { name: 'workout-store-v1', storage: createJSONStorage(() => getPersistStorage()), version: 1 },
+    // 2026-08-07 (persistence audit) — passthrough migrate matching every sibling store. Without it, a
+    // future `version` bump would make zustand DISCARD the whole persisted blob → wipe imported SmartPump
+    // workout history (a backup-allowlisted crown-jewel store). The migrate makes a bump preserve data.
+    { name: 'workout-store-v1', storage: createJSONStorage(() => getPersistStorage()), version: 1, migrate: (s) => s as never },
   ),
 );

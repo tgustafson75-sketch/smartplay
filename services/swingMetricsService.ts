@@ -502,27 +502,12 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       confidence: 0.60,
       estimateNote: 'your typical for this club',
     });
-  } else if (ballSpeed.value != null) {
-    const ballLow = bucketize(ballSpeed.confidence) === 'low';
-    if (ballLow) {
-      // Compounding gate: derivative of a low parent is also low.
-      // Suppress the value rather than render a confident wrong yardage.
-      carryYards = nullMetric('yds');
-    } else {
-      const factor = ['driver', '3w', '5w', 'hybrid'].includes(clubKey) ? 1.65 : 1.4;
-      carryYards = finalize({
-        value: Math.round(ballSpeed.value * factor),
-        unit: 'yds',
-        // Carry from ball-speed × tour-avg factor is always 'pose'-
-        // class regardless of parent (the factor is an assumed
-        // constant, not measured). Truth-grade parents lift the
-        // confidence but not the source label.
-        source: isTruthGrade(ballSpeed.source) ? 'pose' : ballSpeed.source,
-        confidence: Math.min(ballSpeed.confidence, 0.35),
-        estimateNote: 'ball speed × tour-avg factor',
-      });
-    }
   } else {
+    // 2026-08-07 (Tim — "unify persisted carry", verifier caught the leak) — the old ball-speed × tour-avg
+    // fallback was REMOVED. It produced a DIFFERENT carry than the app's one carry (estimateCarryYds, which
+    // is what gets persisted + narrated), so the results card showed a number the shot map / library /
+    // caddie didn't. Now carry_yards is the estimate (above) or the player's profile carry, and NULL
+    // otherwise — exactly when the shot map is null. One carry everywhere, or none.
     carryYards = nullMetric('yds');
   }
 
