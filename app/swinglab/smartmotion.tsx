@@ -1582,6 +1582,25 @@ export default function SmartMotion() {
       if (puttAnalysis) return { text: 'PUTT READ', tone: 'good' as SmTone };
       return { text: phase === 'review' && analysisError ? 'NO READ' : 'READING…', tone: 'neutral' as SmTone };
     }
+    // 2026-08-06 (card inventory) — the badge read the CLOUD-only `analysis`, so a cold/failed cloud read
+    // showed "NO READ — RECORD AGAIN" even though the ON-DEVICE measured read (poseRead) had committed a
+    // full SWING BREAKDOWN directly below it (self-contradiction on the same screen). When cloud analysis is
+    // absent in REVIEW but the pose read is usable, show the MEASURED verdict, not a false "no read". A
+    // contact mishit (fat/thin) still wins — the pose read can't see strike.
+    if (!analysis && phase === 'review' && poseRead.usable) {
+      if (swingContact?.reportedMishit) {
+        const label = swingContact.reportedMishit === 'thin' ? 'THIN CONTACT'
+          : swingContact.reportedMishit === 'topped' ? 'TOPPED'
+          : 'HEAVY / FAT CONTACT';
+        return { text: label, tone: 'bad' as SmTone };
+      }
+      const top = poseRead.faults[0];
+      if (top) {
+        const tone: SmTone = top.severity === 'significant' ? 'bad' : top.severity === 'moderate' ? 'warn' : 'neutral';
+        return { text: top.label.toUpperCase(), tone };
+      }
+      return { text: 'SOLID SWING', tone: 'good' as SmTone };
+    }
     // 2026-06-11 — "NO READ — RECORD AGAIN" is a TERMINAL state, only in review.
     // The cage's first read often runs a bounded acoustic window, THEN falls back
     // to a whole-clip video re-scan + analysis; in that gap analysis is briefly
@@ -1589,7 +1608,7 @@ export default function SmartMotion() {
     // test) keeps every in-flight pass — including the re-scan — showing ANALYZING,
     // so the read no longer flashes a fail state before it lands (cage findings).
     return deriveVerdict(analysis, phase === 'analyzing', swingContact);
-  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact]);
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead]);
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;

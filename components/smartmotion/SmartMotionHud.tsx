@@ -319,9 +319,22 @@ export function deriveBodyItems(a: SwingAnalysis | null, bio: SwingBiomechanics 
   const fault = a?.primary_fault;
   const issue = a?.detected_issue;
   const n = !a;
-  const sway: SmTone = n ? 'neutral' : fault === 'sway' || fault === 'head_movement' ? 'bad' : 'good';
-  const tilt: SmTone = n ? 'neutral' : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn' : 'good';
-  const posture: SmTone = n ? 'neutral' : fault === 'early_extension' || fault === 'spine_angle_loss' || issue === 'early_extension' ? 'bad' : 'good';
+  // 2026-08-06 (card inventory, finding #5) — a green "Good" must be BACKED by a measurement, never asserted
+  // just because the AI named no fault. Weight already gated on bio.weightShiftPct; sway/tilt/posture now
+  // match: if the underlying metric wasn't measured, the tone is neutral ("—"), not a baseless green. A named
+  // fault still wins (it's a real signal even when the scalar is null).
+  const sway: SmTone = n ? 'neutral'
+    : fault === 'sway' || fault === 'head_movement' ? 'bad'
+    : (bio?.hipSlideRatio == null && bio?.headDriftPxNorm == null) ? 'neutral'
+    : 'good';
+  const tilt: SmTone = n ? 'neutral'
+    : fault === 'reverse_pivot' || fault === 'plane_too_flat' || fault === 'plane_too_steep' ? 'warn'
+    : bio?.shoulderTiltDeg == null ? 'neutral'
+    : 'good';
+  const posture: SmTone = n ? 'neutral'
+    : fault === 'early_extension' || fault === 'spine_angle_loss' || issue === 'early_extension' ? 'bad'
+    : bio?.spineAngleDeltaDeg == null ? 'neutral'
+    : 'good';
   // 2026-06-11 (audit) — only claim "good" weight shift when it was actually MEASURED
   // (bio.weightShiftPct present); a null metric is neutral ("—"), not a baseless green.
   const weight: SmTone = n ? 'neutral'
