@@ -43,6 +43,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
+import { locateNearbyCourses } from '../../services/courseDownloadEngine';
 import { getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
@@ -602,6 +603,11 @@ export default function PlayTab() {
   // regains focus. Null when permission denied or fix unavailable —
   // course list falls back to catalog order in that case.
   const [userPosition, setUserPosition] = useState<{ lat: number; lng: number } | null>(null);
+  // 2026-08-07 (Tim — "no GPS auto-detect location with the golfcourseapi section of the Play tab; this
+  // needs to be part of all this logic"). GPS → nearby courses from the course engine (/api/course-locate,
+  // Google Places golf courses), so ANY course near you auto-surfaces in the search section — not just the
+  // bundled catalog. Each resolves through the same selectSummary → golfcourseapi path when tapped.
+  const [nearbyApiCourses, setNearbyApiCourses] = useState<CourseSummary[]>([]);
 
   // Pre-beta — clear stale search error on every entry to the tab so a
   // failed search from a prior visit doesn't keep "Course search unavailable"
@@ -703,6 +709,38 @@ export default function PlayTab() {
     })),
     [customCoursesMap],
   );
+
+  // 2026-08-07 (Tim) — GPS auto-detect for the golfcourseapi/search section: when we have a fix, pull the
+  // golf courses physically near the player from the course engine and drop any that are already in the
+  // bundled/custom catalog (those show in "Courses near you" above). Best-effort; silent on failure/offline.
+  useEffect(() => {
+    if (!userPosition) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const near = await locateNearbyCourses(userPosition.lat, userPosition.lng, { limit: 8 });
+        if (cancelled || !near.length) return;
+        const bundledNames = new Set([
+          ...LOCAL_COURSES.map(c => c.club_name.toLowerCase()),
+          ...customSummaries.map(c => c.club_name.toLowerCase()),
+        ]);
+        const mapped: CourseSummary[] = near
+          .filter(n => n.name && !bundledNames.has(n.name.toLowerCase()))
+          .map(n => ({
+            id: n.place_id ? `place:${n.place_id}` : `near:${n.name}`,
+            club_name: n.name,
+            location: n.vicinity ?? '',
+            rating: null,
+            slope: null,
+            isLocal: false,
+            lat: n.lat,
+            lng: n.lng,
+          }));
+        if (!cancelled) setNearbyApiCourses(mapped);
+      } catch { /* best-effort — offline / no key just shows the manual search */ }
+    })();
+    return () => { cancelled = true; };
+  }, [userPosition, customSummaries]);
 
   const closestLocal: CourseSummary[] = useMemo(() => {
     const combined: CourseSummary[] = [
@@ -1402,6 +1440,33 @@ export default function PlayTab() {
         >
           <Text style={styles.addFromPhotoText}>＋  Course not listed? Add from a scorecard photo</Text>
         </TouchableOpacity>
+
+        {/* 2026-08-07 (Tim) — GPS auto-detected nearby courses (course engine → Google Places), shown when
+            the player hasn't typed a manual search. Each taps through selectSummary → golfcourseapi, same as
+            a typed result. Makes the search section location-aware instead of type-only. */}
+        {!hasSearched && !searching && nearbyApiCourses.length > 0 && (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Courses near you</Text>
+            {nearbyApiCourses.map(r => (
+              <TouchableOpacity
+                key={r.id}
+                style={[styles.localRow, { marginHorizontal: 16, marginTop: 6 }]}
+                onPress={() => void selectSummary(r)}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ${r.club_name}`}
+              >
+                <View style={[styles.localThumb, styles.thumbPlaceholder]}>
+                  <AppIcon name="location-outline" size={20} color="#00C896" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.localName} numberOfLines={1}>{r.club_name}</Text>
+                  <Text style={styles.localMeta} numberOfLines={1}>{r.location || 'Near you'}</Text>
+                </View>
+                <AppIcon name="chevron-forward" size={18} color="#00C896" />
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
 
         {searching && (
           <View style={styles.statusRow}>
