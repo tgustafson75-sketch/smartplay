@@ -808,6 +808,36 @@ export function resolvePlayerName(playerId: string | null | undefined, selfLabel
 }
 
 /**
+ * 2026-08-07 (Tim — "the upload picker isn't working to set the golfer"). Reverse of resolvePlayerName:
+ * map the upload screen's free-text swinger back to a canonical player_id, so an uploaded swing FILES
+ * under the golfer you picked (the library groups by player_id, NOT by the swinger text). Before this,
+ * upload always fell to derivePlayerId (familyStore active member / account holder) and the picker was
+ * cosmetic. Priority: blank/"Me"/account-holder name → self (derivePlayerId); a family member's
+ * firstName (case-insensitive) → that member's id; anything else (a named guest) → OTHER_PLAYER_ID.
+ * Returns null only if nothing resolves, so callers can leave the derived default untouched.
+ */
+export function resolveSwingerToPlayerId(swinger: string | null | undefined): string | null {
+  const name = (swinger ?? '').trim();
+  if (!name || name.toLowerCase() === 'me') return derivePlayerId();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fam = require('./familyStore') as typeof import('./familyStore');
+    const members = fam.useFamilyStore.getState().members ?? [];
+    const hit = members.find((m: { firstName?: string; id: string; archived?: boolean }) =>
+      !m.archived && (m.firstName ?? '').trim().toLowerCase() === name.toLowerCase());
+    if (hit) return hit.id;
+  } catch { /* familyStore unavailable */ }
+  // Match the account holder's own name → self, else it's a named guest.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const profile = require('./playerProfileStore') as typeof import('./playerProfileStore');
+    const self = (profile.usePlayerProfileStore.getState().name ?? '').trim();
+    if (self && self.toLowerCase() === name.toLowerCase()) return derivePlayerId();
+  } catch { /* profile unavailable */ }
+  return OTHER_PLAYER_ID;
+}
+
+/**
  * 2026-06-24 — Does a session's golfer match the library swinger filter?
  * filterId is the SAME player_id space setSessionPlayer writes ('all' =
  * Everyone passes through). Resolving the session's player_id and comparing

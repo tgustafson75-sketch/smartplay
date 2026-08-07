@@ -17,7 +17,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useCageStore, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/cageStore';
+import { useCageStore, resolveSwingerToPlayerId, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/cageStore';
 import { analyzeSwing, analyzeSwingTentative } from './poseDetection';
 import { classifySession } from './swingIssueClassifier';
 import { recommendDrill } from './drillRecommendation';
@@ -1428,6 +1428,14 @@ export async function ingestVideoFromPick(args: {
     club: args.club,
     upload,
   });
+  // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer"). ingestUploadedSwing derives
+  // player_id from the familyStore active member, ignoring the swinger the user picked on the upload
+  // screen — so the swing filed under the wrong golfer (the library groups by player_id). Resolve the
+  // picked swinger → player_id and stamp it, so a swing tagged "Matt" actually files under Matt.
+  try {
+    const resolvedPlayerId = resolveSwingerToPlayerId(upload.swinger);
+    if (resolvedPlayerId) useCageStore.getState().setSessionPlayer(sessionId, resolvedPlayerId);
+  } catch (e) { console.log('[upload] swinger→player_id resolve failed (non-fatal):', e); }
   uploadLog('storage-local', {
     status: 'ok',
     session_id: sessionId,

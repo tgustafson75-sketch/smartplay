@@ -164,6 +164,11 @@ export default function SwingDetail() {
   const profileEmail = usePlayerProfileStore(s => s.email);
   const familyAddMember = useFamilyStore(s => s.addMember);
   const [golferSheetOpen, setGolferSheetOpen] = useState(false);
+  // 2026-08-07 (Tim — "swing library entries need to be editable after the fact… who it is, the
+  // orientation"). Camera-angle (orientation) editor. Golfer is already editable via the chip below;
+  // this adds the second half — fixing a mis-tagged DTL/face-on after upload (the analyzer NULLS the
+  // wrong-angle metrics, so a wrong orientation silently drops sway/rotation reads).
+  const [angleSheetOpen, setAngleSheetOpen] = useState(false);
   const [addGolferOpen, setAddGolferOpen] = useState(false);
   const [newGolferName, setNewGolferName] = useState('');
   // The value derivePlayerId() yields for the account holder when no family
@@ -193,6 +198,18 @@ export default function SwingDetail() {
     setAddGolferOpen(false);
     setNewGolferName('');
   }, [swing_id]);
+  // 2026-08-07 (Tim) — set this swing's camera angle after the fact, then re-analyze so the correct
+  // metrics (face-on: sway/weight/rotation; DTL: plane/path) are computed instead of nulled. No-op if
+  // the angle is unchanged (don't burn a re-analysis for nothing).
+  const assignAngle = useCallback((angle: 'down_the_line' | 'face_on') => {
+    if (!swing_id) return;
+    setAngleSheetOpen(false);
+    if ((session?.upload?.angleOverride ?? null) === angle) return;
+    useCageStore.getState().patchSessionUpload(swing_id, { angleOverride: angle });
+    useToastStore.getState().show(angle === 'face_on' ? 'Face-on — re-reading…' : 'Down-the-line — re-reading…');
+    onReanalyze();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swing_id, session?.upload?.angleOverride]);
   const onAddGolferSubmit = useCallback(() => {
     const name = newGolferName.trim();
     if (!name) return;
@@ -1914,6 +1931,20 @@ export default function SwingDetail() {
                   {golferDisplayName}
                 </Text>
               </TouchableOpacity>
+              {/* 2026-08-07 (Tim) — ORIENTATION chip: always-editable camera angle. Tap to fix a
+                  mis-tagged DTL/face-on; changing it re-analyzes with the correct metric set. */}
+              <TouchableOpacity
+                onPress={() => setAngleSheetOpen(true)}
+                style={[styles.kindBadge, { borderColor: colors.accent, marginTop: 0 }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Camera angle: ${session.upload?.angleOverride === 'face_on' ? 'face-on' : session.upload?.angleOverride === 'down_the_line' ? 'down the line' : 'not set'}. Tap to change.`}
+              >
+                <Ionicons name="videocam-outline" size={12} color={colors.accent} />
+                <Text style={[styles.kindBadgeText, { color: colors.accent }]} numberOfLines={1}>
+                  {session.upload?.angleOverride === 'face_on' ? 'Face-on' : session.upload?.angleOverride === 'down_the_line' ? 'DTL' : 'Set angle'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
           <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>
@@ -2900,6 +2931,40 @@ export default function SwingDetail() {
                   </View>
                 </ScrollView>
                 <TouchableOpacity onPress={() => { setGolferSheetOpen(false); setAddGolferOpen(false); setNewGolferName(''); }} style={styles.linkCancel}>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* 2026-08-07 (Tim) — ORIENTATION editor sheet. Fix a mis-tagged camera angle after upload;
+              picking the other angle re-analyzes so the correct metric set is computed. */}
+          <Modal visible={angleSheetOpen} transparent animationType="slide" onRequestClose={() => setAngleSheetOpen(false)}>
+            <View style={styles.linkBackdrop}>
+              <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Camera angle</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>How was this swing filmed? Changing it re-reads the swing with the right metrics.</Text>
+                <TouchableOpacity
+                  style={[styles.linkRow, { borderColor: colors.border }]}
+                  onPress={() => assignAngle('down_the_line')}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]}>Down-the-line</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Behind the golfer, looking toward the target — reads swing plane / club path.</Text>
+                  </View>
+                  {session.upload?.angleOverride === 'down_the_line' ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.linkRow, { borderColor: colors.border }]}
+                  onPress={() => assignAngle('face_on')}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]}>Face-on</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Facing the golfer — reads weight shift / hip rotation / sway.</Text>
+                  </View>
+                  {session.upload?.angleOverride === 'face_on' ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setAngleSheetOpen(false)} style={styles.linkCancel}>
                   <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
                 </TouchableOpacity>
               </View>

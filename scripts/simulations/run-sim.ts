@@ -992,6 +992,38 @@ check('Swing-library video: every <Video> prop is STABLE (no re-subscribe loop) 
   })(),
   'the swing-library <Video> has fully referentially-stable props (memoized source/style + useCallback status/load/error) so a 25x/s re-render can never re-subscribe expo-av into the fatal update-depth loop; Motion overlay defaults OFF and a normal open does not auto-play');
 
+// 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
+// after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
+// player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);
+// (2) the swing-detail screen has an ORIENTATION editor (was golfer-only) that patches the camera angle
+// and re-analyzes with the correct metric set.
+check('Upload files the swing under the PICKED golfer (swinger→player_id), not always the account holder',
+  (() => {
+    const cs = read('store/cageStore.ts');
+    const vu = read('services/videoUpload.ts');
+    return (
+      /export function resolveSwingerToPlayerId/.test(cs) &&
+      /resolveSwingerToPlayerId\(upload\.swinger\)/.test(vu) &&
+      /setSessionPlayer\(sessionId, resolvedPlayerId\)/.test(vu)
+    );
+  })(),
+  'a swing uploaded as "Matt" files under Matt (swinger resolved to player_id + stamped), not the account holder');
+
+check('Swing entries are editable after the fact: golfer AND orientation (angle → re-analyze)',
+  (() => {
+    const d = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      // golfer editor (pre-existing) still present
+      /setGolferSheetOpen\(true\)/.test(d) && /setSessionPlayer\(/.test(d) &&
+      // NEW orientation editor: chip → sheet → assignAngle → patch angleOverride → re-analyze
+      /const \[angleSheetOpen, setAngleSheetOpen\] = useState\(false\)/.test(d) &&
+      /const assignAngle = useCallback\(/.test(d) &&
+      /patchSessionUpload\(swing_id, \{ angleOverride: angle \}\)/.test(d) &&
+      /assignAngle\('down_the_line'\)/.test(d) && /assignAngle\('face_on'\)/.test(d)
+    );
+  })(),
+  'swing detail lets you re-tag the golfer AND fix the camera orientation (which re-analyzes with the right metrics)');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every
