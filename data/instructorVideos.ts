@@ -150,20 +150,16 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       verified: true,
     },
   },
-  // 2026-05-26 — Randy Chang slot. Head pro at Journey @ Pechanga
-  // (Temecula CA), former PGA pro, prolific YouTube instructor with
-  // under-3-minute videos that inspired SmartPlay's video-length target.
-  // URLs empty until Tim provides the verified "Chang chip" link +
-  // any companion short-game videos. Until then, getInstructorVideo
-  // for this category returns the placeholder shape — the consuming UI
-  // should treat empty `url` as "no video yet, show title only."
+  // 2026-08-06 (Tim — "remove Randy from Chipping and find a better Caddie's Chipping lesson"). De-branded
+  // from Randy Chang to the SmartPlay Caddie's own chipping lesson. url empty → the UI shows the title +
+  // the drill's coaching steps (weight-forward, hands-ahead, descending strike, distance-by-length) as the
+  // lesson, no external instructor. Point this at a real Caddie video URL when one is recorded.
   chipping: {
     primary: {
-      title: 'Chang Chip — Randy Chang short-game technique',
-      instructor: 'Randy Chang · PGA · Journey at Pechanga',
-      // 2026-05-26 — Verified URL provided by Tim direct from Randy.
-      url: 'https://www.youtube.com/watch?v=_iWzD-gSoa8',
-      approxRuntimeSec: 180,
+      title: 'Caddie Chipping Fundamentals — clean contact, controlled distance',
+      instructor: 'SmartPlay Caddie',
+      url: '',
+      approxRuntimeSec: 0,
       verified: true,
     },
   },

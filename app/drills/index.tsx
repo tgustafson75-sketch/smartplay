@@ -23,14 +23,11 @@ import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 
-// 2026-05-27 — Fix EF: pin Tank's drill first, Randy's drill second.
-// Tank's first video covers early extension (the most common diagnosis
-// in the AI swing analyzer's output today), so it's the logical lead
-// drill. Randy's chip card follows for the short-game lane. Rest of
-// the catalog renders in its existing order behind them. Keeping the
-// pin set as a local constant — easy to expand if more featured drills
-// land later.
-const PINNED_DRILL_ORDER: readonly string[] = ['tank_caddie_practice', 'chipping_inconsistent'];
+// 2026-08-06 (Tim — "take out Tank's drill card"; "remove Randy from Chipping"). The Tank placeholder card
+// (tank_caddie_practice, no real content) is hidden from the Drills grid. The CHIPPING card STAYS — it's
+// just de-branded from Randy Chang into a Caddie chipping lesson (see data/drillCatalog.ts). Hidden, not
+// deleted: Tank keeps its knowledge-base/type entry; only the grid card is removed.
+const HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set(['tank_caddie_practice']);
 
 export default function DrillsIndex() {
   const router = useRouter();
@@ -47,24 +44,11 @@ export default function DrillsIndex() {
   const { width } = useDeviceLayout();
   const oneCol = width < 380;
 
-  // 2026-05-27 — Fix EF: render pinned drills first (Tank → Randy →
-  // rest in catalog order). Memoized so the sort only runs on catalog
-  // changes (effectively module-load) — the catalog is `readonly` so
-  // the reference is stable in practice.
-  const orderedEntries = useMemo(() => {
-    const pinnedSet = new Set(PINNED_DRILL_ORDER);
-    const pinned = PINNED_DRILL_ORDER
-      .map(id => DRILL_CATALOG.find(e => e.id === id))
-      .filter((e): e is DrillEntry => !!e);
-    const rest = DRILL_CATALOG.filter(e => !pinnedSet.has(e.id));
-    return [...pinned, ...rest];
-  }, []);
-
-  // 2026-06-13 (Tim) — Tank gets his own FULL-WIDTH hero card at the top, pulled
-  // out of the grid. That keeps the 2-col grid below in clean pairs (removing
-  // Tank, +adding the new Tempo card nets even) and gives Tank top billing.
-  const tankEntry = orderedEntries.find(e => e.id === 'tank_caddie_practice');
-  const gridEntries = orderedEntries.filter(e => e.id !== 'tank_caddie_practice');
+  // 2026-08-06 (Tim) — the Drills grid in catalog order, with Tank's + Randy's cards filtered out.
+  const gridEntries = useMemo(
+    () => DRILL_CATALOG.filter(e => !HIDDEN_DRILL_IDS.has(e.id)),
+    [],
+  );
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
@@ -98,20 +82,7 @@ export default function DrillsIndex() {
           video links. Tap to dive in.
         </Text>
 
-        {/* TANK HERO — full-width card at the top (Tim: "Tank gets his own
-            full-size card"), so the grid below stays in clean twos. */}
-        {tankEntry && (
-          <DrillCard
-            key={tankEntry.id}
-            entry={tankEntry}
-            colors={colors}
-            oneCol={true}
-            onPress={() => router.push(`/drills/${tankEntry.id}` as never)}
-          />
-        )}
-
-        {/* 2-COL GRID — the rest of the catalog in pairs (Randy → faults →
-            Tempo). Tank is the hero above; even count keeps clean rows. */}
+        {/* 2-COL GRID — the fault catalog in pairs (Tank + Randy cards removed per Tim 2026-08-06). */}
         <View style={styles.grid}>
           {gridEntries.map((entry) => (
             <DrillCard

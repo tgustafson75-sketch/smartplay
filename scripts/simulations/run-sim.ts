@@ -1357,12 +1357,13 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
       /`the \$\{drillName\.trim\(\)\} drill`/.test(sm) && // drill-mode session label (refactored from "DRILL · … · N shots")
       // shot cap: a drill keeps only its 3-5 swings (post-hoc carve cap, safe)
       /const segs = isDrill && drillShotCount \? allSegs\.slice\(0, drillShotCount\) : allSegs/.test(sm) &&
-      // library badge knows 'drill'; Tank is the full-width hero
+      // library badge knows 'drill'; 2026-08-06 (Tim) Tank + Randy cards removed from the grid
       /drill:\s*\{ label: 'Drill'/.test(lib) &&
-      /const tankEntry = orderedEntries\.find/.test(idx) && /const oneCol = width < 380/.test(idx) // Tank hero + responsive one-col (was literal oneCol={true})
+      /HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set\(\['tank_caddie_practice'\]\)/.test(idx) &&
+      /DRILL_CATALOG\.filter\(e => !HIDDEN_DRILL_IDS\.has\(e\.id\)\)/.test(idx) // Tank hidden from the grid
     );
   })(),
-  'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank is the hero, grid stays in twos');
+  'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank card removed, grid = filtered catalog');
 
 check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not APK)',
   // 2026-06-13 — Tim's Lakes round went MUTE (~18 speak_catch "Network request

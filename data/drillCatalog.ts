@@ -288,10 +288,10 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     videoCategory: 'weight_transfer',
     cardImage: CARD_WEIGHT_TRANSFER,
   },
-  // 2026-05-26 — Chipping drill that routes to Randy Chang's
-  // "Chang Chip" video. cardImage intentionally omitted (no
-  // chipping fundamentals image bundled yet); the Drills surface
-  // falls back to the title + video thumbnail.
+  // 2026-08-06 (Tim — "remove Randy from Chipping and find a better Caddie's Chipping lesson"). De-branded
+  // from Randy Chang into the Caddie's own chipping fundamentals: the drill steps ARE the lesson (weight-
+  // forward, hands-ahead, descending strike, distance-by-length). videoCategory left 'chipping' so the video
+  // slot resolves to the Caddie chipping lesson in data/instructorVideos.ts (Randy's clip removed there).
   {
     id: 'chipping_inconsistent',
     practice: { shotCount: 5, shotType: 'chip', focus: 'contact', angle: 'face_on' },
@@ -304,16 +304,12 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     ],
     missPattern: 'Bladed runners, chunky shorts, distance scatter inside 30 yards',
     drills: [
-      { name: 'Chang Chip setup', steps: 'Narrow stance, weight 60% on lead foot, ball back of center. Hands stay ahead of the clubhead through impact — no flip.' },
+      { name: 'Weight-forward chip setup', steps: 'Narrow stance, weight 60% on lead foot, ball back of center. Hands stay ahead of the clubhead through impact — no flip.' },
       { name: 'Towel drill',      steps: 'Place a towel 12 inches behind the ball. Chip without the club hitting the towel — forces a descending strike instead of a scoop.' },
       { name: '3-distance ladder',steps: 'Pick three landing spots (5 / 10 / 15 yards). Hit five chips to each, same club. Train carry distance through length-of-swing, not effort.' },
     ],
     videoCategory: 'chipping',
-    // 2026-05-26 — Fix DF: thumbnail pulled from the Chang Chip video's
-    // YouTube poster frame. Remote URI works in ImageSourcePropType
-    // without bundling an asset; renders the actual instructor frame
-    // so testers recognize Randy on the Drills grid.
-    cardImage: { uri: 'https://img.youtube.com/vi/_iWzD-gSoa8/maxresdefault.jpg' },
+    // 2026-08-06 — Randy's YouTube poster removed; the card renders on its title + the Caddie lesson.
   },
   // 2026-05-26 — Reserved 8th slot for Tank-narrated SmartPlay-branded
   // content. Drill entry exists so the slot appears on the Drills
