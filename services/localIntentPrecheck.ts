@@ -399,6 +399,20 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     }
   } catch { /* profile unavailable — fall through to the static patterns */ }
 
+  // 2026-08-07 (Tim — "I hit 3 hybrid for that last shot and shot info, location, brain, history,
+  // scorecard is updated"). CORRECT the already-logged previous shot's club (→ correct_last_shot),
+  // distinct from log_shot (adds a NEW shot) and club_change (sets the CURRENT club). Deterministic +
+  // OFFLINE. Fires ONLY when the utterance BOTH references the LAST shot AND names a club, so a plain
+  // "I hit driver 240" still logs a new shot and "that was tough" never hijacks. Checked before the
+  // PATTERNS loop so it wins over any generic match.
+  {
+    const refsLast = /\b(?:(?:for|on)\s+(?:my\s+|that\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|(?:that|the|my)\s+(?:last|previous|prior)\s+(?:one|shot|swing)\s+(?:was|were)|(?:change|correct|fix|update|make)\s+(?:my\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|actually\s+(?:that|it|the\s+last)\b)/i.test(t);
+    const namesClub = /\b(driver|wood|hybrid|rescue|iron|wedge|pitching|sand\s*wedge|lob|gap|approach|utility|putter|pw|sw|lw|gw|aw|\d\s?h(?:ybrid)?|\d\s?i(?:ron)?|\d\s?w(?:ood)?)\b/i.test(t);
+    if (refsLast && namesClub) {
+      return intent(t, 'correct_last_shot', { club_phrase: t, raw_utterance: t });
+    }
+  }
+
   for (const p of PATTERNS) {
     const m = t.match(p.rx);
     if (m) return p.build(t, m);

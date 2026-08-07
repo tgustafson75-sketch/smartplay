@@ -33,6 +33,7 @@ import { confirmPositionHandler } from './confirmPositionHandler';
 import { setHoleNoteHandler } from './setHoleNoteHandler';
 import { socialGreetingHandler } from './socialGreetingHandler';
 import { undoHandler } from './undoHandler';
+import { correctLastShotHandler } from './correctLastShotHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -82,6 +83,7 @@ voiceCommandRouter.registerHandler(setHoleNoteHandler);
 // clip pools are left in the tree (unused) in case a cost-gated greeting shortcut is ever wanted back.
 // voiceCommandRouter.registerHandler(socialGreetingHandler);
 voiceCommandRouter.registerHandler(undoHandler);
+voiceCommandRouter.registerHandler(correctLastShotHandler);
 
 export {
   openToolHandler,

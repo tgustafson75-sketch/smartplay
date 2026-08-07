@@ -3228,6 +3228,29 @@ check('Earbud tap-again ENDS + submits the utterance (not cancel), with a distin
   })(),
   'tap-again during listening = endpoint (endCaptureEarly submits) + got-it earcon; not a discard');
 
+// 2026-08-07 (Tim — "how the fuck can we call it a caddie if the brain can't update based on
+// conversation? … 'I hit 3 hybrid for that last shot' and shot info, brain, history, scorecard is
+// updated"). LOCK the conversational shot CORRECTION path: a "for that last shot" + club utterance
+// must AMEND the already-logged shot (editShot) — not append a duplicate (log_shot) and not just set
+// the next club (club_change). Deterministic + offline via the precheck; every derived surface reads
+// roundStore.shots so the single editShot updates scorecard/recap/bag/adherence.
+check('Conversational "…for that last shot" CORRECTS the logged shot (editShot), not a duplicate',
+  (() => {
+    const h = read('services/intents/correctLastShotHandler.ts');
+    const idx = read('services/intents/index.ts');
+    const pre = read('services/localIntentPrecheck.ts');
+    return (
+      /intent_type:\s*'correct_last_shot'/.test(h) &&
+      /round\.editShot\(/.test(h) &&
+      /kevin_adhered/.test(h) && // adherence recomputed after the correction
+      /registerHandler\(correctLastShotHandler\)/.test(idx) &&
+      // precheck routes it deterministically, gated on BOTH a last-shot reference AND a club token
+      /const refsLast =/.test(pre) && /const namesClub =/.test(pre) &&
+      /intent\(t, 'correct_last_shot'/.test(pre)
+    );
+  })(),
+  'brain updates the last shot from conversation (correct_last_shot → editShot); offline-deterministic');
+
 check('Round recap notes show the player\'s notes only, not the error log',
   // 2026-06-16 (Tim — recap was 3 pages of transcribe/voice errors) — "Notes from
   // this round" filters to kind==='user' (or legacy undefined), excluding the
