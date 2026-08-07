@@ -1,6 +1,6 @@
 import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, flashCaption } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption } from './voiceService';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
@@ -27,6 +27,13 @@ const THINKING_EARCON_MS = 180;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const LISTENING_EARCON: number = require('../assets/audio/tempo/tock.mp3');
 const LISTENING_EARCON_MS = 200;
+// 2026-08-07 (Tim — "then user will tap again with ANOTHER sound confirming"). A SECOND, DISTINCT tone
+// (a crisp tick vs the listening tock) played the instant a tap-again ENDS the utterance — the audible
+// "got it, I'm on it" the earbud user needs when the phone's in the cart. Pairs with the spoken capture
+// ack below (the caddie then confirms it heard). [[feels-like-a-real-caddie]]
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const GOTIT_EARCON: number = require('../assets/audio/tempo/tick.mp3');
+const GOTIT_EARCON_MS = 180;
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
@@ -312,6 +319,19 @@ export async function toggle(): Promise<void> {
   if (state === 'idle') {
     sessionInFlight = true;
     await openSession();
+  } else if (state === 'listening') {
+    // 2026-08-07 (Tim — "tap again with another sound confirming; caddie needs to confirm they heard").
+    // A second tap WHILE THE MIC IS OPEN is an ENDPOINT — "I'm done, go" — NOT a cancel. Play the distinct
+    // "got it" earcon in the earbud, then END the capture EARLY: endCaptureEarly() transcribes whatever was
+    // recorded (stopCapture, the old path, DISCARDED it → the utterance was thrown away and the caddie
+    // "didn't catch that"). State stays 'listening', so openSession's capture resolves with the transcript,
+    // speaks the "got it" ack (the caddie confirming it heard), then answers. This makes tap-to-stop a
+    // RELIABLE endpoint in cart/wind noise where the silence-VAD can't separate speech from ambient.
+    sessionCloseTapAt = Date.now(); // still dedupe the ~350ms double-fire of one physical tap
+    endCaptureEarly();
+    if (useSettingsStore.getState().voiceEnabled) {
+      void playLocalFile(GOTIT_EARCON, GOTIT_EARCON_MS, { userInitiated: true }).catch(() => {});
+    }
   } else {
     sessionCloseTapAt = Date.now();
     closeSession();

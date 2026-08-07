@@ -3206,6 +3206,28 @@ check('Earbud/glasses tap STOPS Smart Motion recording (mic stays the camera\'s)
   })(),
   'tap-while-recording emits stop (no listen-open → no crash); cooldown dedupes the double tap signal');
 
+// 2026-08-07 (Tim — "beep when I tap to listen, ANOTHER sound when I tap again to confirm; caddie confirms
+// it heard; tap-to-stop must be reliable in cart/wind noise"). LOCK the earbud endpoint semantics: a second
+// tap WHILE LISTENING must END the utterance and SUBMIT it (endCaptureEarly → transcribe what was recorded)
+// with a distinct "got it" earcon — NOT closeSession/stopCapture, which DISCARDED the audio ("didn't catch
+// that"). The distinct tone + the spoken capture ack are the two confirmations Tim asked for.
+check('Earbud tap-again ENDS + submits the utterance (not cancel), with a distinct confirm earcon',
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    return (
+      // two distinct earcons wired: listening tone (tap-to-open) + got-it tone (tap-to-end)
+      /LISTENING_EARCON[\s\S]*?tock\.mp3/.test(ls) &&
+      /GOTIT_EARCON[\s\S]*?tick\.mp3/.test(ls) &&
+      // the listening branch of toggle() endpoints via endCaptureEarly (submit) + plays the got-it earcon
+      /else if \(state === 'listening'\)/.test(ls) &&
+      /endCaptureEarly\(\);/.test(ls) &&
+      /playLocalFile\(GOTIT_EARCON/.test(ls) &&
+      // endCaptureEarly is imported (the finalize path, distinct from stopCapture/discard)
+      /import \{[^}]*endCaptureEarly[^}]*\} from '\.\/voiceService'/.test(ls)
+    );
+  })(),
+  'tap-again during listening = endpoint (endCaptureEarly submits) + got-it earcon; not a discard');
+
 check('Round recap notes show the player\'s notes only, not the error log',
   // 2026-06-16 (Tim — recap was 3 pages of transcribe/voice errors) — "Notes from
   // this round" filters to kind==='user' (or legacy undefined), excluding the
