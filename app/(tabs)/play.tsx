@@ -1216,6 +1216,25 @@ export default function PlayTab() {
     pushCourseGuarded(router, selected.id);
   };
 
+  // 2026-08-07 (Tim — "get the GolfNow functionality without the stupid ads, really full flow"). Step 1
+  // of the booking flow: an HONEST tee-time hand-off. We don't have a tee-time API partnership (GolfNow /
+  // TeeOff have no free public booking API), so this opens a tee-time search for THIS course in the
+  // browser — surfacing the course's own booking + aggregators without making the player browse the
+  // ad-heavy GolfNow app. Deliberately not labeled/claimed as in-app booking (that needs a partnership).
+  const handleBookTeeTime = () => {
+    if (!selected) return;
+    const name = (selected.club_name ?? selected.course_name ?? '').trim();
+    if (!name) return;
+    const city = selected.location?.city ?? '';
+    const state = selected.location?.state ?? '';
+    const loc = [city, state].filter(Boolean).join(' ').trim();
+    const q = encodeURIComponent(`${name}${loc ? ` ${loc}` : ''} tee times`);
+    const url = `https://www.google.com/search?q=${q}`;
+    Linking.openURL(url).catch((e) => {
+      console.log('[play] tee-time hand-off failed:', e);
+    });
+  };
+
   // 2026-07-01 (Tim) — the whole course at a glance (par/yardage per hole, out/in/total). Works
   // for local, API, and custom scorecard courses via the course-layout screen's own resolution.
   const handleCourseLayout = () => {
@@ -1712,6 +1731,10 @@ export default function PlayTab() {
                 <TouchableOpacity style={styles.actionBtn} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel="Course layout">
                   <AppIcon name="list-outline" size={14} color="#00C896" />
                   <Text style={styles.actionBtnText}>Layout</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={handleBookTeeTime} accessibilityRole="button" accessibilityLabel={`Find tee times at ${selected.club_name ?? selected.course_name ?? 'this course'}`}>
+                  <AppIcon name="calendar-outline" size={14} color="#00C896" />
+                  <Text style={styles.actionBtnText}>Tee Times</Text>
                 </TouchableOpacity>
               </View>
             </View>
