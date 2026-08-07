@@ -1098,6 +1098,20 @@ check('In-round club declaration routes to the brain for a CONTEXTUAL reply (not
   })(),
   'declaring a club on the tee correlates hole/yardage/wind via the brain instead of "got it, 5-wood"');
 
+// 2026-08-07 (Tim — "if I switch tabs it stops talking. I want TOTAL PRESENCE — look at the dashboard and
+// let it finish"). LOCK: the route-change stopSpeaking must NOT fire on a pure tab↔tab switch, so the
+// caddie finishes its response while the player browses other tabs.
+check('Caddie keeps talking across tab switches (total presence); only deep-tool moves stop stale speech',
+  (() => {
+    const l = read('app/_layout.tsx');
+    return (
+      /const isMainTab = /.test(l) &&
+      /caddie\|dashboard\|play\|scorecard\|swinglab/.test(l) &&
+      /if \(isMainTab\(prev\) && isMainTab\(pathname\)\) return;/.test(l)
+    );
+  })(),
+  'switching between the main tabs does NOT cut the caddie mid-sentence; deep-tool navigations still stop leaks');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every

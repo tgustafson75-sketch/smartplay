@@ -2,7 +2,7 @@ import '../services/polyfills';
 import { Stack , router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Text, View } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
@@ -194,14 +194,22 @@ function AppNavigator() {
     }
   }, [pathname, ownerEmail]);
 
-  // 2026-06-16 (Tim — "old voices leaking from prior steps") — on every route change,
-  // stop any caddie speech still playing/queued from the PREVIOUS screen so it can't
-  // carry over (stopSpeaking also flushes the queue via speakGeneration and clears the
-  // caption/error text). A 2s grace protects intentional speak-then-navigate (tool
-  // opens + SmartFinder fire a short line right before router.push) and the launch
-  // greeting→caddie handoff — only stale, still-running prior-step speech is stopped.
+  // 2026-06-16 (Tim — "old voices leaking from prior steps") — on route change, stop stale caddie speech
+  // from the PREVIOUS screen so it can't carry over. A 2s grace protects intentional speak-then-navigate.
+  // 2026-08-07 (Tim — "if I switch tabs it stops talking; I want TOTAL PRESENCE — I look at the dashboard
+  // and it can finish what it's fucking saying"). The caddie is a GLOBAL presence: switching BETWEEN the
+  // main tabs must NOT cut a response mid-sentence. So only stop when the move involves a DEEP tool (which
+  // auto-narrates and could leak) — a pure tab↔tab switch lets the caddie finish. A new speak() already
+  // cancels the old one via speakGeneration, so nothing double-talks.
+  const prevPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (!pathname) return;
+    const prev = prevPathRef.current;
+    prevPathRef.current = pathname;
+    const isMainTab = (p: string | null): boolean =>
+      p != null && (/\/(caddie|dashboard|play|scorecard|swinglab)$/.test(p) || p === '/');
+    // Pure tab↔tab navigation → keep the caddie talking (total presence).
+    if (isMainTab(prev) && isMainTab(pathname)) return;
     if (Date.now() - getLastSpeakStartedAt() > 2000) {
       void stopSpeaking().catch(() => {});
     }
