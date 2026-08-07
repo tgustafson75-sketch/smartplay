@@ -1024,6 +1024,22 @@ check('Swing entries are editable after the fact: golfer AND orientation (angle 
   })(),
   'swing detail lets you re-tag the golfer AND fix the camera orientation (which re-analyzes with the right metrics)');
 
+// 2026-08-07 (Tim — raw "NO_ELIGIBLE_DEVICE / DAT_SESSION_FAILED" glasses toast). North star: no robotic
+// error codes. The connect-failure now shows a HUMAN, actionable line via describeGlassesError, while the
+// raw code still lands in the issue log for diagnosis.
+check('Glasses connect errors show a human message (not a raw DAT_ code), raw code still logged',
+  (() => {
+    const b = read('services/metaWearablesBridge.ts');
+    const s = read('app/settings.tsx');
+    return (
+      /export function describeGlassesError/.test(b) &&
+      /NO_ELIGIBLE_DEVICE|ELIGIBLE/.test(b) && /DAT_SESSION_FAILED|SESSION/.test(b) &&
+      /show\(describeGlassesError\(code, msg\)\)/.test(s) &&        // human toast
+      /addAppEvent\('glasses_connect_failed', \{ code, message: msg \}/.test(s) // raw code still logged
+    );
+  })(),
+  'a glasses connect failure reads like a person (actionable guidance), raw DAT code kept in the issue log');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every

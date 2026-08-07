@@ -3,6 +3,7 @@ import {
   isMetaWearablesAvailable,
   startMetaWearablesStreaming,
   stopMetaWearablesStreaming,
+  describeGlassesError,
   onGlassesStatusChange,
   getGlassesStatusSync,
   type GlassesStatus,
@@ -252,7 +253,9 @@ export default function Settings() {
         const err = e as { code?: unknown; message?: unknown } | null;
         const code = typeof err?.code === 'string' ? err.code : '';
         const msg = typeof err?.message === 'string' ? err.message : String(e ?? 'unknown error');
-        useToastStore.getState().show(`Glasses: ${code || 'error'} — ${msg}`.slice(0, 160));
+        // 2026-08-07 (Tim — raw "NO_ELIGIBLE_DEVICE" toast). Show a HUMAN, actionable line (north star:
+        // no robotic error codes); the raw code + message still go to the issue log below for diagnosis.
+        useToastStore.getState().show(describeGlassesError(code, msg));
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))

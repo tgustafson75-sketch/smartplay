@@ -289,6 +289,18 @@ export default function CageDebug() {
         <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/landmark-curate' as never)}>
           <Text style={styles.apiDebugBtnText}>Landmarks</Text>
         </TouchableOpacity>
+        {/* 2026-08-07 (Tim — "dead code in owner tools"). These three debug screens existed but had NO
+            entry point anywhere (orphaned route registrations). Surface them here in the debug hub so
+            they're reachable instead of dead. */}
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/battery-debug' as never)}>
+          <Text style={styles.apiDebugBtnText}>Battery</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/subscription-debug' as never)}>
+          <Text style={styles.apiDebugBtnText}>Subscription</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/voice-debug' as never)}>
+          <Text style={styles.apiDebugBtnText}>Voice</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.synthBtn} onPress={handleSyntheticTest}>
           <Text style={styles.synthBtnText}>+ Synthetic test</Text>
         </TouchableOpacity>

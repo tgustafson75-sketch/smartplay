@@ -187,6 +187,35 @@ export async function getMetaWearablesStatus(): Promise<{
 }
 
 /**
+ * 2026-08-07 (Tim — got a raw "NO_ELIGIBLE_DEVICE / DAT_SESSION_FAILED" toast). Map the DAT SDK's
+ * machine error codes to an HONEST, actionable one-liner (the app's north star: never a robotic error
+ * code). Deliberately does NOT over-promise "just pair in the Meta app" for the eligibility gate — that
+ * was the misleading message Tim called out on 07-30 when the glasses were already paired. The raw code
+ * is still logged to the issue log for diagnosis; this is only what the human sees.
+ */
+export function describeGlassesError(code: string | null | undefined, message?: string | null): string {
+  const c = (code ?? '').toUpperCase();
+  const m = (message ?? '').toLowerCase();
+  if (c.includes('BLUETOOTH') || c.includes('NOT_PAIRED') || m.includes('not paired'))
+    return 'Your Ray-Bans aren’t paired. Open the Meta AI app, connect them there, then try again.';
+  if (c.includes('NO_GLASSES') || c.includes('NO_DEVICE') || c.includes('NOT_CONNECTED'))
+    return 'I can’t find your glasses. Make sure they’re connected in the Meta AI app, then try again.';
+  if (c.includes('NO_ELIGIBLE_DEVICE') || c.includes('ELIGIBLE'))
+    // Honest on both causes: not-connected OR this build isn’t on Meta’s glasses-preview allowlist yet.
+    return 'No eligible glasses found. Connect your Ray-Bans in the Meta AI app first — if they’re already connected, this build isn’t approved for the glasses preview yet.';
+  if (c.includes('APPLICATION_ID') || m.includes('application id') || m.includes('app id'))
+    return 'Glasses aren’t configured in this build yet (missing app registration). This one’s on us — it needs a new build.';
+  if (c.includes('PERMISSION') || m.includes('permission'))
+    return 'The Meta app hasn’t granted camera access to the glasses. Check permissions in the Meta AI app, then try again.';
+  if (c.includes('SESSION') || c.includes('START_FAILED') || c.includes('DAT_SESSION_FAILED'))
+    return 'Couldn’t start the glasses session. Open the Meta AI app so the glasses are active, then try the toggle again.';
+  if (c.includes('NOT_AVAILABLE') || m.includes('not available'))
+    return 'Glasses aren’t available on this build yet — using the phone/cloud features instead.';
+  // Unknown code — say something human, keep the code out of the user's face (it's in the log).
+  return 'I couldn’t connect to the glasses. Make sure the Meta AI app is open with them connected, then try again.';
+}
+
+/**
  * Start the camera frame stream from Ray-Ban Meta glasses. Default
  * quality is medium (504×896) and 24 FPS — balances bandwidth on
  * Bluetooth Classic against frame freshness. Resolves to the device
