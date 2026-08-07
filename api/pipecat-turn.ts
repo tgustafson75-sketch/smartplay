@@ -346,6 +346,11 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
           ? `NO LIVE GPS DISTANCE right now (GPS is reacquiring). If he asks "how far": say you're getting the GPS back and give him the tee yardage as a reference if you have it — NEVER ask him for the distance, that's YOUR job. Don't stall repeatedly; one honest "reacquiring GPS, one sec".`
           : '',
         rScore ? `Score so far: ${rScore.total} through ${rScore.holesPlayed}${rScore.vsPar != null ? ` (${rScore.vsPar >= 0 ? '+' : ''}${rScore.vsPar} vs par)` : ''}` : '',
+        // 2026-08-07 (Tim — "the FIRST time I play a course it says 'best score yet'. Of course it is — set a
+        // BASELINE, not make-believe congratulations"). priorRoundsAtCourse === 0 → nothing to compare to.
+        (round.priorRoundsAtCourse === 0)
+          ? `This is his FIRST round at this course — it sets a BASELINE. NEVER call his score a "best", "personal best", or "best yet"; there is nothing to compare it to. If you mention it at all, frame it as a baseline to build on next time.`
+          : '',
         (typeof round.mode === 'string' && round.mode !== 'free_play') ? `Round mode/goal: ${round.mode} — shape every call to it (e.g. break-100 = keep the big number off the card).` : '',
         round.isCompetition ? `COMPETITION round — bias conservative, protect against the blow-up.` : '',
         round.holeNote ? `His note on THIS hole: "${round.holeNote}" — factor it in.` : '',

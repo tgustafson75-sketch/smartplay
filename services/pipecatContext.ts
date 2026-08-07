@@ -97,6 +97,17 @@ export function buildPipecatContext() {
         return { total, holesPlayed, vsPar: parPlayed ? total - parPlayed : undefined };
       })(),
       mode: round.mode ?? undefined,
+      // 2026-08-07 (Tim — "if I end a round the FIRST time I play it, it says 'that's your best score yet'.
+      // It's the first time — of course it is. Set a BASELINE, not make-believe congratulations"). How many
+      // rounds the player has FINISHED at this course before today. 0 = first time → the caddie frames it as
+      // a baseline and never claims a "best".
+      priorRoundsAtCourse: (() => {
+        try {
+          const cid = round.activeCourseId;
+          if (!cid) return 0;
+          return (round.roundHistory ?? []).filter((r) => r.courseId === cid).length;
+        } catch { return 0; }
+      })(),
       // 2026-07-05 — sim awareness: the brain nudges for yardages so the sim moves.
       simRound: round.isSimRound || undefined,
       isCompetition: round.isCompetition ?? undefined,
