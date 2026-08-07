@@ -1596,8 +1596,15 @@ export const useRoundStore = create<RoundState>()(
             const courseHandicap = Math.round(typeof idx === 'number' && Number.isFinite(idx) ? idx : 18);
             const pars: Record<number, number> = {};
             for (const h of s.courseHoles) if (h.par > 0) pars[h.hole] = h.par;
+            // 2026-08-07 (audit — Berlin CC 9-hole): intendedHoles was `nineHoleMode ? 9 : 18`, but a
+            // natively-9-hole course is played with nineHoleMode=false, so this said 18. computeWhsPostingScore
+            // then loops holes 1-18, hits a null par at hole 10 (pars only cover 1-9), and returns null — so
+            // the round NEVER posted to the handicap index, even though WHS allows 9-hole posting. Derive the
+            // intended length from the REAL course hole count instead of the flag.
+            const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+            const intendedHoles = getCourseHoleCount(s.activeCourseId, s.courseHoles.length) === 9 ? 9 : 18;
             const post = calcMod.computeWhsPostingScore({
-              intendedHoles: s.nineHoleMode ? 9 : 18,
+              intendedHoles,
               courseHandicap,
               pars,
               scores: s.scores,

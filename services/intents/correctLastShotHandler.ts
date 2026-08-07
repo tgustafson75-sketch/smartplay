@@ -37,7 +37,10 @@ function noActiveRound(): IntentResult {
 // a club. Most-recent by timestamp so it's robust to any out-of-order append.
 function lastRealShot(shots: ShotResult[]): ShotResult | null {
   const real = shots.filter(
-    s => typeof s.id === 'string' && !s.id.startsWith('qs-'),
+    s => typeof s.id === 'string' && !s.id.startsWith('qs-') &&
+      // 2026-08-07 (regression audit) — don't let a club correction land on a putt row; a "3-hybrid
+      // for that last shot" means the last SWING, not a putt logged after it.
+      s.club !== 'Putter' && s.club !== 'PT',
   );
   if (real.length === 0) return null;
   return real.reduce((a, b) => (b.timestamp >= a.timestamp ? b : a));

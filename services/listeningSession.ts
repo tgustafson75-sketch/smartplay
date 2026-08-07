@@ -127,6 +127,13 @@ let recordingStopTapAt = 0;
 // 2026-07-06 (audit #2) — mirror cooldown for the CLOSE side of toggle().
 let sessionCloseTapAt = 0;
 const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
+// 2026-08-07 (regression audit) — timestamp of when the mic actually opened (state → 'listening').
+// The endpoint tap (tap-again-to-submit) must be handled BEFORE the sessionInFlight guard, so we need
+// a way to swallow the OPEN tap's OWN ~350ms second fire (legacy sub + pattern sub) which would
+// otherwise land in 'listening' and end the capture before the user says a word. Any tap within
+// LISTEN_ENDPOINT_MIN_MS of the mic opening is that echo, not a real "I'm done".
+let listeningStartedAt = 0;
+const LISTEN_ENDPOINT_MIN_MS = 800;
 export function isSessionInFlight(): boolean {
   return sessionInFlight;
 }
@@ -306,6 +313,22 @@ export async function toggle(): Promise<void> {
   // Swallow toggles for a short window after a tap-stop (covers the pattern
   // follow-up + the camera's audio-session release).
   if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
+  // 2026-08-07 (regression audit — the endpoint branch below was DEAD: sessionInFlight is true for the
+  // whole 'listening' window, so `if (sessionInFlight) return` swallowed the tap-again endpoint before it
+  // could run). Handle the endpoint HERE, before that guard. A tap while the mic is OPEN means "I'm done,
+  // submit" — end the capture early (transcribe what we have) + play the distinct got-it earcon.
+  if (state === 'listening') {
+    // Swallow the OPEN tap's own ~350ms echo (it lands in 'listening' but isn't a real "done" tap)...
+    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) return;
+    // ...and dedupe THIS endpoint tap's own double-fire.
+    if (Date.now() - sessionCloseTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
+    sessionCloseTapAt = Date.now();
+    endCaptureEarly();
+    if (useSettingsStore.getState().voiceEnabled) {
+      void playLocalFile(GOTIT_EARCON, GOTIT_EARCON_MS, { userInitiated: true }).catch(() => {});
+    }
+    return;
+  }
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
   // See sessionInFlight comment above for rationale.
   if (sessionInFlight) return;
@@ -319,20 +342,9 @@ export async function toggle(): Promise<void> {
   if (state === 'idle') {
     sessionInFlight = true;
     await openSession();
-  } else if (state === 'listening') {
-    // 2026-08-07 (Tim — "tap again with another sound confirming; caddie needs to confirm they heard").
-    // A second tap WHILE THE MIC IS OPEN is an ENDPOINT — "I'm done, go" — NOT a cancel. Play the distinct
-    // "got it" earcon in the earbud, then END the capture EARLY: endCaptureEarly() transcribes whatever was
-    // recorded (stopCapture, the old path, DISCARDED it → the utterance was thrown away and the caddie
-    // "didn't catch that"). State stays 'listening', so openSession's capture resolves with the transcript,
-    // speaks the "got it" ack (the caddie confirming it heard), then answers. This makes tap-to-stop a
-    // RELIABLE endpoint in cart/wind noise where the silence-VAD can't separate speech from ambient.
-    sessionCloseTapAt = Date.now(); // still dedupe the ~350ms double-fire of one physical tap
-    endCaptureEarly();
-    if (useSettingsStore.getState().voiceEnabled) {
-      void playLocalFile(GOTIT_EARCON, GOTIT_EARCON_MS, { userInitiated: true }).catch(() => {});
-    }
   } else {
+    // 'responding' (shush the caddie) or any other non-idle, non-listening state. The 'listening'
+    // endpoint is handled above, before the sessionInFlight guard.
     sessionCloseTapAt = Date.now();
     closeSession();
   }
@@ -455,6 +467,7 @@ async function openSession() {
 
   // Phase 2 — open mic for utterance
   setSessionStateMirror('listening');
+  listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
   console.log('[audit:voice] listening engaged');
   // 2026-08-06 (Tim — "when I tap the earbud there's no beep telling me the caddie is listening; the phone's
   // 40y away in the cart"). Play the audible "I'm listening" earcon through the AUDIO ROUTE (the earbud)

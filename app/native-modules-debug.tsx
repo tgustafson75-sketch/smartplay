@@ -15,7 +15,7 @@
  * re-probes the modules (some loaders are lazy).
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Share, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -47,6 +47,12 @@ export default function NativeModulesDebug() {
     recordNativeModuleHealth('MediaPipePose');
     setBump((n) => n + 1);
   };
+
+  // 2026-08-07 (Tim — "I refresh and MORE show; should they all be on already?"). Probe BOTH known
+  // native modules on mount so the full list renders immediately on open — no manual Refresh needed.
+  // The lazy loaders only register when their bridge is first imported (Glasses/SmartMotion), so cold
+  // this screen showed a partial/empty list until you tapped Refresh. Now it's complete on arrival.
+  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const shareDump = async () => {
     try {

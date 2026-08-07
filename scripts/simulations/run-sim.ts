@@ -3214,19 +3214,24 @@ check('Earbud/glasses tap STOPS Smart Motion recording (mic stays the camera\'s)
 check('Earbud tap-again ENDS + submits the utterance (not cancel), with a distinct confirm earcon',
   (() => {
     const ls = read('services/listeningSession.ts');
+    // 2026-08-07 (regression audit) — the FIRST version of this guard only checked that the strings
+    // existed; it could NOT see that the endpoint branch sat AFTER `if (sessionInFlight) return` and was
+    // therefore DEAD (sessionInFlight is true all through 'listening'). This guard now asserts REACHABILITY:
+    // the 'listening' endpoint handling must appear BEFORE the sessionInFlight guard, and be gated by the
+    // open-echo window so the OPEN tap's own ~350ms second fire can't prematurely end the capture.
+    const endpointIdx = ls.search(/if \(state === 'listening'\) \{[\s\S]*?endCaptureEarly\(\)/);
+    const inFlightGuardIdx = ls.search(/if \(sessionInFlight\) return;/);
     return (
-      // two distinct earcons wired: listening tone (tap-to-open) + got-it tone (tap-to-end)
       /LISTENING_EARCON[\s\S]*?tock\.mp3/.test(ls) &&
       /GOTIT_EARCON[\s\S]*?tick\.mp3/.test(ls) &&
-      // the listening branch of toggle() endpoints via endCaptureEarly (submit) + plays the got-it earcon
-      /else if \(state === 'listening'\)/.test(ls) &&
-      /endCaptureEarly\(\);/.test(ls) &&
+      endpointIdx !== -1 && inFlightGuardIdx !== -1 &&
+      endpointIdx < inFlightGuardIdx && // REACHABILITY: endpoint handled before the sessionInFlight bail
+      /Date\.now\(\) - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS/.test(ls) && // open-echo guard
       /playLocalFile\(GOTIT_EARCON/.test(ls) &&
-      // endCaptureEarly is imported (the finalize path, distinct from stopCapture/discard)
       /import \{[^}]*endCaptureEarly[^}]*\} from '\.\/voiceService'/.test(ls)
     );
   })(),
-  'tap-again during listening = endpoint (endCaptureEarly submits) + got-it earcon; not a discard');
+  'tap-again endpoint is REACHABLE (before sessionInFlight guard), echo-guarded, submits + got-it earcon');
 
 // 2026-08-07 (Tim — "how the fuck can we call it a caddie if the brain can't update based on
 // conversation? … 'I hit 3 hybrid for that last shot' and shot info, brain, history, scorecard is

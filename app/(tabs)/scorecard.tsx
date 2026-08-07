@@ -140,13 +140,17 @@ export default function Scorecard() {
           })))
     : (() => {
         if (!lastCompletedRound) return [];
-        const total = effectiveNineHoleMode ? 9 : 18;
         // 2026-07-01 (audit) — was a hardcoded par-4 for EVERY hole of a completed
         // round, so vs-par colors + totals were wrong. Resolve real par: the round's
         // own holePars snapshot first, then the bundled hole list for its courseId,
         // then par-4 only as a last resort.
         const snap = lastCompletedRound.holePars;
         const bundled = lastCompletedRound.courseId ? getBundledHoles(lastCompletedRound.courseId) : [];
+        // 2026-08-07 (audit — Berlin CC 9-hole): derive the row count from the REAL course, not the
+        // nineHoleMode flag. A natively-9-hole course is played with nineHoleMode=false (the whole
+        // course IS 9), so `? 9 : 18` rendered 9 real rows PLUS 9 phantom back-nine rows on the
+        // completed scorecard. Bundled length is authoritative when we have it.
+        const total = bundled.length > 0 ? bundled.length : (effectiveNineHoleMode ? 9 : 18);
         const parFor = (hole: number): number =>
           snap?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? 4;
         return Array.from({ length: total }, (_, i) => ({

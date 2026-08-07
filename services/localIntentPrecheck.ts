@@ -406,7 +406,11 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // "I hit driver 240" still logs a new shot and "that was tough" never hijacks. Checked before the
   // PATTERNS loop so it wins over any generic match.
   {
-    const refsLast = /\b(?:(?:for|on)\s+(?:my\s+|that\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|(?:that|the|my)\s+(?:last|previous|prior)\s+(?:one|shot|swing)\s+(?:was|were)|(?:change|correct|fix|update|make)\s+(?:my\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|actually\s+(?:that|it|the\s+last)\b)/i.test(t);
+    // 2026-08-07 (regression audit) — the `actually` branch was `actually (that|it|the last)`, which
+    // false-fired on plain narration like "actually that 7-iron was pure" and silently rewrote the last
+    // shot's club. Tighten it to the CORRECTION form only — "actually that/it WAS …" — where the club is
+    // the correction target (club follows "was"), never sitting between "that" and "was".
+    const refsLast = /\b(?:(?:for|on)\s+(?:my\s+|that\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|(?:that|the|my)\s+(?:last|previous|prior)\s+(?:one|shot|swing)\s+(?:was|were)|(?:change|correct|fix|update|make)\s+(?:my\s+)?(?:last|previous|prior)\s+(?:shot|one|swing)|actually\s+(?:that|it)\s+was\b)/i.test(t);
     const namesClub = /\b(driver|wood|hybrid|rescue|iron|wedge|pitching|sand\s*wedge|lob|gap|approach|utility|putter|pw|sw|lw|gw|aw|\d\s?h(?:ybrid)?|\d\s?i(?:ron)?|\d\s?w(?:ood)?)\b/i.test(t);
     if (refsLast && namesClub) {
       return intent(t, 'correct_last_shot', { club_phrase: t, raw_utterance: t });
