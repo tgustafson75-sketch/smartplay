@@ -16,8 +16,9 @@
 export interface PracticeImpactInput {
   /** Practice sessions with a start time + a ball/swing count. */
   sessions: { startedAt: number; balls: number }[];
-  /** Completed rounds with an end time + score relative to par. */
-  rounds: { endedAt: number; scoreVsPar: number }[];
+  /** Completed rounds with an end time + score relative to par. `startedAt` (optional) lets the warm-up
+   *  correlation pair a round to a warm-up that ran just before it. */
+  rounds: { endedAt: number; scoreVsPar: number; startedAt?: number }[];
   /** Clock injected for testability (defaults to now at the call site). */
   nowMs: number;
   /** 2026-08-06 (Tim — "show when the user warmed up before a round or practice as a data point on the
@@ -34,6 +35,10 @@ export interface PracticeImpact {
   /** Indices into practiceSeries (0 = oldest week) that had ≥1 warm-up/pre-round session — the chart marks
    *  these on the practice line so warm-ups read as real data points. */
   warmupWeekIndices: number[];
+  /** 2026-08-06 (Tim — "track stretching, warmup... as metrics to judge progress"). Warmed-vs-cold scoring
+   *  split: rounds that had a warm-up in the ~4h before them vs those that didn't. Null until there are ≥2
+   *  rounds in BOTH cohorts (honest — no claim from one round). deltaStrokes>0 = warming up scores better. */
+  warmupOutcome: { warmedAvg: number; coldAvg: number; warmedCount: number; coldCount: number; deltaStrokes: number } | null;
   practiceSessions: number;
   roundsCounted: number;
   /** True once there's enough on both sides to say anything honest. */
@@ -72,6 +77,24 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
   }
   const warmupWeekIndices = [...warmupWeeks].sort((a, b) => a - b);
 
+  // 2026-08-06 (Tim) — warmed-vs-cold scoring split. A round is "warmed" if a warm-up session STARTED within
+  // the 4h before the round's own start. Honest: only reported when there are ≥2 rounds in BOTH cohorts.
+  const WARMUP_WINDOW_MS = 4 * 60 * 60 * 1000;
+  const warmupStarts = (input.warmups ?? []).map((w) => w.startedAt).filter((t): t is number => typeof t === 'number');
+  const warmed: number[] = [];
+  const cold: number[] = [];
+  for (const r of rounds ?? []) {
+    if (typeof r.scoreVsPar !== 'number') continue;
+    const rStart = typeof r.startedAt === 'number' ? r.startedAt : r.endedAt;
+    if (typeof rStart !== 'number') continue;
+    const wasWarmed = warmupStarts.some((w) => w <= rStart && rStart - w <= WARMUP_WINDOW_MS);
+    (wasWarmed ? warmed : cold).push(r.scoreVsPar);
+  }
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const warmupOutcome = warmed.length >= 2 && cold.length >= 2
+    ? { warmedAvg: Math.round(avg(warmed) * 10) / 10, coldAvg: Math.round(avg(cold) * 10) / 10, warmedCount: warmed.length, coldCount: cold.length, deltaStrokes: Math.round((avg(cold) - avg(warmed)) * 10) / 10 }
+    : null;
+
   // Last ROUNDS rounds' score-vs-par, chronological (oldest→newest).
   const scoreSeries = (rounds ?? [])
     .filter((r) => typeof r.endedAt === 'number' && typeof r.scoreVsPar === 'number')
@@ -109,5 +132,5 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     }
   }
 
-  return { practiceSeries, scoreSeries, warmupWeekIndices, practiceSessions, roundsCounted, hasEnough, headline };
+  return { practiceSeries, scoreSeries, warmupWeekIndices, warmupOutcome, practiceSessions, roundsCounted, hasEnough, headline };
 }

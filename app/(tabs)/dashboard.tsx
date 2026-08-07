@@ -201,9 +201,9 @@ export default function Dashboard() {
   const practiceImpact = useMemo(
     () => computePracticeImpact({
       sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
-      rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
+      rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, startedAt: r.startedAt, scoreVsPar: r.scoreVsPar as number })),
       // 2026-08-06 (Tim) — warm-up / pre-round stretch sessions (recorded with focus/environment 'preround')
-      // → marked on the practice line as their own data point.
+      // → marked on the practice line as their own data point AND correlated to warmed-vs-cold scoring.
       warmups: practiceHistory
         .filter((s) => s.focus === 'preround' || s.environment === 'preround')
         .map((s) => ({ startedAt: s.startedAt })),
@@ -975,6 +975,21 @@ export default function Dashboard() {
                 higherIsBetter={false}
                 emptyText="—"
               />
+            )}
+            {/* 2026-08-06 (Tim — "track stretching, warmup... as metrics to judge progress"). Warmed-vs-cold
+                scoring split — a real progress metric, shown only on the Practice view once there are ≥2
+                rounds in both cohorts. */}
+            {activeProgress.key === 'practice' && practiceImpact.warmupOutcome && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <View style={{ width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: '#f9a8d4' }} />
+                <Text style={[styles.practiceLabel, { color: colors.text_secondary, letterSpacing: 0, flex: 1 }]}>
+                  {practiceImpact.warmupOutcome.deltaStrokes > 0.4
+                    ? `You average ${practiceImpact.warmupOutcome.deltaStrokes} strokes better when you warm up first (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold).`
+                    : practiceImpact.warmupOutcome.deltaStrokes < -0.4
+                      ? `Warmed rounds are averaging ${Math.abs(practiceImpact.warmupOutcome.deltaStrokes)} higher so far (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold) — small sample.`
+                      : `Warm-up vs cold scoring is even so far (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold).`}
+                </Text>
+              </View>
             )}
           </View>
         )}

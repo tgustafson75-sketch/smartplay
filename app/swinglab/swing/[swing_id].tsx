@@ -807,7 +807,10 @@ export default function SwingDetail() {
           // Matches every other extraction site here. (Whole effect is gated off via LIBRARY_AUTO_PROCESS,
           // but keep the guard correct so flipping that flag can't re-introduce the crash.)
           const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => isPlayingRef.current });
-          if (arc && arc.points.length >= 4) {
+          // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
+          // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
+          // keep it consistent so flipping that flag can't silently lose 3-point arcs.)
+          if (arc && arc.points.length >= 3) {
             useCageStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
           } else {
             useCageStore.getState().setShotClubArc(swing_id, selShot.id, [], null);
