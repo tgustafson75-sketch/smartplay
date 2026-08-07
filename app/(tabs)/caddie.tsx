@@ -2395,6 +2395,30 @@ export default function CaddieTab() {
     // 2026-07-27 — the geometry fetch (+ its player-facing "map ready / couldn't map" heads-up) is
     // handled in ONE place AFTER startRound (see below), so a non-listed API course reports honestly
     // instead of loading GPS silently. Here we just note the honest empty start.
+    // 2026-08-07 (Tim — Berlin CC had bundled geometry but the round loaded NONE of it: no yardage, no
+    // wind, no tee brief). ROOT CAUSE: bundled holes (real tee/green coords) were ONLY used when the
+    // courseId was exactly `local:<slug>`. Starting the SAME physical course via search / GPS-nearby /
+    // download produced a golfcourseapi record (scorecard yardages, NO coords) and my bundle was never
+    // consulted. Fix: resolve a bundled course by NAME no matter how the round was entered — if we have
+    // it bundled WITH coordinates and the loaded holes lack coordinates, use the bundle and route
+    // courseId through local: so geometry / hole-detection / SmartVision / yardage all use the real map.
+    {
+      const bundledMatch = getCourse(courseName);
+      const bundledHasCoords = !!bundledMatch?.holes?.some(h => h.middleLat !== 0 && h.middleLng !== 0);
+      const loadedHasCoords = holes.some(h => h.middleLat !== 0 && h.middleLng !== 0);
+      if (bundledMatch && bundledHasCoords && !loadedHasCoords) {
+        holes = bundledMatch.holes;
+        courseId = `local:${bundledMatch.id}`;
+        courseName = bundledMatch.name;
+        // Anchor the course location to hole 1 so offCourseDetector / geometry prewarm use the real spot.
+        const h1 = bundledMatch.holes.find(h => h.hole === 1) ?? bundledMatch.holes[0];
+        if (h1 && h1.middleLat !== 0 && h1.middleLng !== 0) {
+          courseLocation = { lat: h1.teeLat || h1.middleLat, lng: h1.teeLng || h1.middleLng };
+        }
+        console.log('[startRound] bundled-by-name override →', bundledMatch.id, holes.length, 'holes w/ coords (entry path had none)');
+      }
+    }
+
     const startedWithoutHoles = holes.length === 0;
     if (startedWithoutHoles) {
       console.log('[startRound] no holes loaded for', courseName, '— starting empty; geometry fetch will populate async');

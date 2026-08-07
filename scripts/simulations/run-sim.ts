@@ -1040,6 +1040,37 @@ check('Glasses connect errors show a human message (not a raw DAT_ code), raw co
   })(),
   'a glasses connect failure reads like a person (actionable guidance), raw DAT code kept in the issue log');
 
+// 2026-08-07 (Tim — Berlin CC had bundled geometry but the round loaded no yardage/wind/tee-brief).
+// ROOT: bundled holes (real coords) were only used when courseId === 'local:<slug>'. Any other entry
+// (search / GPS-nearby / download) to the same course got scorecard-only holes with no coords. LOCK the
+// name-based override so a bundled course's real geometry is used no matter how the round was started.
+check('Round start uses bundled hole GEOMETRY by name, not just for local: ids',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    return (
+      /const bundledMatch = getCourse\(courseName\)/.test(c) &&
+      /bundledHasCoords/.test(c) && /loadedHasCoords/.test(c) &&
+      /holes = bundledMatch\.holes/.test(c) &&
+      /courseId = `local:\$\{bundledMatch\.id\}`/.test(c)
+    );
+  })(),
+  'a bundled course (e.g. Berlin) loads its real tee/green coords for yardage+wind no matter the entry path');
+
+// 2026-08-07 (Tim — "NO more auto tool-opening. I ask for 'play' and it opens Tight Lie. Unless I say
+// OPEN/SHOW ME the tool by name, leave it conversational"). LOCK the gate: a navigation open without an
+// explicit open-verb routes to the brain (conversational) instead of yanking the user into a screen.
+check('Tool opens require an explicit open-verb; otherwise stay conversational',
+  (() => {
+    const h = read('services/intents/openToolHandler.ts');
+    return (
+      /EXPLICIT_OPEN\s*=\s*\/\\b\(open\|show me/.test(h) &&
+      /EXEMPT_ACTION_TOOLS/.test(h) &&
+      /route_to_brain: true/.test(h) &&
+      /!EXEMPT_ACTION_TOOLS\.has\(toolName\) && !EXPLICIT_OPEN\.test\(raw\)/.test(h)
+    );
+  })(),
+  'bare tool names / misclassified opens stay conversational; only an explicit "open/show me <tool>" navigates');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every

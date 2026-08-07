@@ -353,6 +353,35 @@ export const openToolHandler: IntentHandler = {
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
     const toolName = String(intent.parameters.tool_name ?? '').toLowerCase();
 
+    // 2026-08-07 (Tim — "NO more auto tool-opening. I ask for 'play' and it opens Tight Lie. Unless I
+    // say OPEN or SHOW ME the tool by name, leave it conversational. It was driving me fucking crazy").
+    // Gate every NAVIGATION open behind an EXPLICIT open/show/navigate verb in the user's actual words.
+    // Without one, the request stays conversational (route_to_brain) so a bare tool name or a
+    // misclassified utterance never yanks the player into a screen. EXEMPT: genuine ACTION commands that
+    // ARE the verb (mark tee/green, start a round, sim round, register club, coach <name>, add/import a
+    // scorecard, "tell me what you see", send/show issue log) — Tim didn't flag those.
+    {
+      const raw = (intent.raw_text ?? '').toLowerCase();
+      const EXPLICIT_OPEN = /\b(open|show me|show us|show the|pull up|bring up|go to|take me to|get me to|launch|jump to|switch to|navigate to|let me see|head to|pull open)\b/;
+      const EXEMPT_ACTION_TOOLS = new Set([
+        'mark_green', 'markgreen', 'mark_tee', 'marktee', 'mark_tee_box',
+        'sim_round', 'simround', 'sim', 'register_club',
+        'coach_mode', 'coachmode', 'cage_mode', 'cagemode',
+        'add_course', 'addcourse', 'import_round', 'importround',
+        'scene_read', 'look', 'what_you_see', 'play',
+        'issue_log', 'issuelog', 'issues_log', 'bug_log', 'buglog', 'owner_logs',
+      ]);
+      if (toolName && !EXEMPT_ACTION_TOOLS.has(toolName) && !EXPLICIT_OPEN.test(raw)) {
+        return {
+          success: false,
+          voice_response: null,
+          side_effects: [`open_tool:stay_conversational:${toolName}`],
+          follow_up_needed: false,
+          route_to_brain: true,
+        };
+      }
+    }
+
     // ── SIM ROUND (2026-07-04, Tim — "level one of the golf game") ────────────
     // "start a sim round (at palms)" — starts a voice-narrated simulated round on
     // the REAL round pipeline (simulated GPS, SIM-tagged record, learning gated).
