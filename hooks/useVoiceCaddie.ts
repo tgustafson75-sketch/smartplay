@@ -616,25 +616,16 @@ export const useVoiceCaddie = ({
     return () => { cancelled = true; };
   }, [activeCourseId, isRoundActive]);
 
-  // Load the filler library index into memory on first mount — fast, reads
-  // AsyncStorage only. Phase AB — also fire-and-forget generateLibrary so
-  // existing users whose cache is on a stale voiceHash (e.g. v2) actually
-  // upgrade to v3 on next boot. Without this, the V.6 extension fillers +
-  // context-aware variants only land for new onboarding users; everyone
-  // else keeps hearing the prior pool. generateLibrary internally checks
-  // the hash and no-ops if up to date, so it's safe to call every boot.
-  const _apiUrlForBoot = getApiBaseUrl();
-  const _personaForBoot = useSettingsStore.getState().caddiePersonality;
-  const _languageForBoot = useSettingsStore.getState().language;
+  // Load the filler library index into memory on first mount — fast, reads AsyncStorage only.
+  // 2026-08-07 (audit) — the per-boot generateLibrary REGEN (which TTS-renders the whole filler pool via
+  // /api/voice on every launch) was removed: the live voice path switched fillers → an earcon (tick.mp3),
+  // so nothing plays these clips on the main path anymore. Regenerating them every boot was wasted API +
+  // boot work for audio that never surfaces. initFillerLibrary stays (cheap; still serves the cage-debug
+  // dev screen). If a persona-voiced filler pool is ever brought back, restore the guarded regen here.
   useEffect(() => {
     void (async () => {
       try {
         await initFillerLibrary();
-        if (useSettingsStore.getState().voiceEnabled && _apiUrlForBoot) {
-          const { generateLibrary } = await import('../services/fillerLibrary');
-          void generateLibrary(_apiUrlForBoot, _personaForBoot, _languageForBoot)
-            .catch(e => console.log('[fillerLibrary] background regen failed', e));
-        }
       } catch (e) {
         console.log('[fillerLibrary] init failed', e);
       }

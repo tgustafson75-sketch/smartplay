@@ -1192,7 +1192,7 @@ export default function SmartMotion() {
   }, [club, effortRaw, profile.handicap]);
   // 2026-07-07 (Tim — "shot tracing that actually lines up on the user") — the CV points
   // (departure / ball-path) are FRAME-normalized; the ball box + target the user placed
-  // are CONTAINER-normalized. Over the full-bleed COVER review video those spaces DON'T
+  // are CONTAINER-normalized. Over the review video those spaces DON'T
   // coincide, so the trace drifted off the ball (and off the correctly-mapped skeleton).
   // Map every CV point into the SAME container space the anchors live in before the trace
   // math, so the line lands on the ball and the divergence isn't computed across two
