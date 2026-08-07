@@ -28,6 +28,21 @@ export interface TrendChartProps {
   /** "higher is better" → green when rising; set false to invert the trend color. */
   higherIsBetter?: boolean;
   emptyText?: string;
+  // 2026-08-06 (Tim — "the line graph has no labels, not sure which is score and which is practice; need a
+  // much smarter graph"). A clearer, self-explaining legend + optional warm-up markers.
+  /** Identity color for the legend dot — so the reader ties THIS line's color to its metric. Defaults to
+   *  `color`. (The line itself still colors by TREND: green improving / red declining / grey flat.) */
+  legendDotColor?: string;
+  /** Show a trend arrow (↑ improving / ↓ declining / → flat) + the delta beside the label. */
+  showTrend?: boolean;
+  /** Unit suffix for the trend delta (e.g. 'balls', 'vs par'). */
+  deltaUnit?: string;
+  /** Indices in `data` to mark with a distinct dot — used to plot WARM-UP weeks on the line. */
+  markerIndices?: number[];
+  /** Color of the marker dots (defaults to a sky accent). */
+  markerColor?: string;
+  /** Legend text for the markers, e.g. 'warm-up'. Shown with a marker swatch when markerIndices is set. */
+  markerLabel?: string;
 }
 
 const MIN_POINTS = 2;
@@ -56,6 +71,7 @@ function smoothLinePath(pts: Pt[]): string {
 export default function TrendChart({
   data, width, height, color = '#00C896', label, yMin, yMax,
   higherIsBetter = true, emptyText = 'Not enough data yet',
+  legendDotColor, showTrend = false, deltaUnit, markerIndices, markerColor = '#38bdf8', markerLabel,
 }: TrendChartProps) {
   const series = useMemo(
     () => data.filter((v) => typeof v === 'number' && Number.isFinite(v)),
@@ -80,7 +96,8 @@ export default function TrendChart({
   const delta = series[series.length - 1] - series[0];
 
   const PAD_X = 6;
-  const PAD_TOP = label ? 18 : 4;
+  const hasLegend = !!label;
+  const PAD_TOP = hasLegend ? 22 : 4;
   const PAD_BOT = 4;
   const chartW = width - PAD_X * 2;
   const chartH = height - PAD_TOP - PAD_BOT;
@@ -98,6 +115,15 @@ export default function TrendChart({
   const flat = Math.abs(delta) < 1e-9;
   const trendColor = flat ? '#cbd5e1' : improving ? color : '#f87171';
 
+  // 2026-08-06 — trend arrow + delta for the legend, so "which line, and is it improving" is unmistakable.
+  const arrow = flat ? '→' : improving ? '↑' : '↓';
+  const deltaAbs = Math.abs(delta);
+  const deltaStr = flat ? 'flat' : `${arrow} ${deltaAbs % 1 === 0 ? deltaAbs : deltaAbs.toFixed(1)}${deltaUnit ? ' ' + deltaUnit : ''}`;
+  // Warm-up (or other) markers: distinct dots ON the line at the given data indices.
+  const markerPts = (markerIndices ?? [])
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < points.length)
+    .map((i) => points[i]);
+
   const linePath = smoothLinePath(points);
   // Area = the smooth line, then down to the baseline and back to the start.
   const areaPath = `${linePath}L${last.x.toFixed(1)},${baseY.toFixed(1)}L${points[0].x.toFixed(1)},${baseY.toFixed(1)}Z`;
@@ -107,7 +133,21 @@ export default function TrendChart({
 
   return (
     <View style={{ width, height }}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {hasLegend ? (
+        <View style={styles.legendRow}>
+          <View style={[styles.legendDot, { backgroundColor: legendDotColor ?? color }]} />
+          <Text style={styles.legendLabel} numberOfLines={1}>{label}</Text>
+          {showTrend ? (
+            <Text style={[styles.legendTrend, { color: trendColor }]} numberOfLines={1}>{deltaStr}</Text>
+          ) : null}
+          {markerPts.length && markerLabel ? (
+            <>
+              <View style={[styles.legendMarker, { borderColor: markerColor }]} />
+              <Text style={[styles.legendMarkerLabel, { color: markerColor }]} numberOfLines={1}>{markerLabel}</Text>
+            </>
+          ) : null}
+        </View>
+      ) : null}
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -126,6 +166,11 @@ export default function TrendChart({
         />
         <Circle cx={last.x} cy={last.y} r={3.5} fill={trendColor} />
         <Circle cx={last.x} cy={last.y} r={6} fill={trendColor} fillOpacity={0.18} />
+        {/* 2026-08-06 (Tim) — WARM-UP markers on the line: a hollow ring at each flagged week/session, so a
+            warm-up before a round/practice reads as a real data point on the graph. */}
+        {markerPts.map((p, i) => (
+          <Circle key={`mk-${i}`} cx={p.x} cy={p.y} r={4} fill="#0b1220" stroke={markerColor} strokeWidth={2} />
+        ))}
       </Svg>
     </View>
   );
@@ -136,4 +181,11 @@ const styles = StyleSheet.create({
   emptyLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   emptyText: { color: '#6b7280', fontSize: 11, fontStyle: 'italic' },
   label: { color: '#9ca3af', fontSize: 9, fontWeight: '900', letterSpacing: 1.3, marginBottom: 2 },
+  // 2026-08-06 — a clear, self-explaining legend: colored dot ↔ line identity, bold label, trend arrow.
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2, height: 16 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendLabel: { color: '#e5e7eb', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  legendTrend: { fontSize: 10, fontWeight: '800', marginLeft: 2 },
+  legendMarker: { width: 9, height: 9, borderRadius: 5, borderWidth: 2, backgroundColor: 'transparent', marginLeft: 6 },
+  legendMarkerLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
 });

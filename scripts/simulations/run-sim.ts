@@ -4804,7 +4804,17 @@ check('Practice→performance: honest connection card (association, gated, no fa
       /data=\{practiceImpact\.scoreSeries\}/.test(dash) &&
       /higherIsBetter=\{false\}/.test(dash) &&
       /practiceHistory\.length > 0 && roundHistory\.length > 0/.test(dash);
-    return svcOk && dashOk;
+    // 2026-08-06 (Tim — "no labels, which is score vs practice; smarter graph; warm-ups as a data point").
+    // The graph now self-labels (distinct legend colors + trend) and marks warm-up weeks on the practice line.
+    const graphSmartOk =
+      /warmupWeekIndices: number\[\]/.test(svc) &&                    // service surfaces warm-up weeks
+      /warmupWeeks\.add\(WEEKS - 1 - ageWeeks\)/.test(svc) &&          // bucketed like practiceSeries
+      /warmups: practiceHistory/.test(dash) &&                        // dashboard feeds warm-up sessions
+      /markerIndices=\{practiceImpact\.warmupWeekIndices\}/.test(dash) && // marked on the practice line
+      /markerLabel="warm-up"/.test(dash) &&
+      /legendDotColor=/.test(dash) && /showTrend/.test(dash) &&        // self-labeling legend + trend
+      /legendDotColor\?: string/.test(read('components/charts/TrendChart.tsx'));
+    return svcOk && dashOk && graphSmartOk;
   })(),
   'the dashboard shows a practice→performance card pairing weekly practice volume against score-vs-par trend, described as an honest association (gated until ≥3 sessions + ≥4 rounds, "keep logging" before that), never claiming practice caused the result');
 

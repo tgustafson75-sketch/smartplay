@@ -202,6 +202,11 @@ export default function Dashboard() {
     () => computePracticeImpact({
       sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
       rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, scoreVsPar: r.scoreVsPar as number })),
+      // 2026-08-06 (Tim) — warm-up / pre-round stretch sessions (recorded with focus/environment 'preround')
+      // → marked on the practice line as their own data point.
+      warmups: practiceHistory
+        .filter((s) => s.focus === 'preround' || s.environment === 'preround')
+        .map((s) => ({ startedAt: s.startedAt })),
       nowMs: Date.now(),
     }),
     [practiceHistory, realRounds],
@@ -918,21 +923,34 @@ export default function Dashboard() {
             </Text>
             {practiceImpact.hasEnough && (
               <>
+                {/* 2026-08-06 (Tim — "no labels, can't tell which is score vs practice; a much smarter
+                    graph; show warm-ups as a data point"). Distinct identity colors + a self-explaining
+                    legend (dot ↔ line, metric name, trend arrow), and warm-up weeks marked on the practice
+                    line as their own data point. */}
                 <TrendChart
                   data={practiceImpact.practiceSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#22d3ee"
+                  legendDotColor="#22d3ee"
                   label="PRACTICE / WK"
+                  showTrend
+                  deltaUnit="balls"
+                  markerIndices={practiceImpact.warmupWeekIndices}
+                  markerColor="#f9a8d4"
+                  markerLabel="warm-up"
                   higherIsBetter
                   emptyText="—"
                 />
                 <TrendChart
                   data={practiceImpact.scoreSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#a3e635"
+                  legendDotColor="#a3e635"
                   label="SCORE VS PAR"
+                  showTrend
+                  deltaUnit="vs par"
                   higherIsBetter={false}
                   emptyText="—"
                 />
@@ -1007,18 +1025,24 @@ export default function Dashboard() {
                 <TrendChart
                   data={pointsPerf.pointsSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#22d3ee"
+                  legendDotColor="#22d3ee"
                   label="POINTS / WK"
+                  showTrend
+                  deltaUnit="pts"
                   higherIsBetter
                   emptyText="—"
                 />
                 <TrendChart
                   data={pointsPerf.scoreSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#a3e635"
+                  legendDotColor="#a3e635"
                   label="SCORE VS PAR"
+                  showTrend
+                  deltaUnit="vs par"
                   higherIsBetter={false}
                   emptyText="—"
                 />
@@ -1049,18 +1073,24 @@ export default function Dashboard() {
                 <TrendChart
                   data={workoutPerf.workoutSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#22d3ee"
+                  legendDotColor="#22d3ee"
                   label={workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK'}
+                  showTrend
+                  deltaUnit={workoutPerf.metric === 'minutes' ? 'min' : ''}
                   higherIsBetter
                   emptyText="—"
                 />
                 <TrendChart
                   data={workoutPerf.scoreSeries}
                   width={chartW}
-                  height={64}
-                  color={colors.accent}
+                  height={72}
+                  color="#a3e635"
+                  legendDotColor="#a3e635"
                   label="SCORE VS PAR"
+                  showTrend
+                  deltaUnit="vs par"
                   higherIsBetter={false}
                   emptyText="—"
                 />

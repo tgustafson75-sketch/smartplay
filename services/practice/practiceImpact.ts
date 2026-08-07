@@ -20,6 +20,10 @@ export interface PracticeImpactInput {
   rounds: { endedAt: number; scoreVsPar: number }[];
   /** Clock injected for testability (defaults to now at the call site). */
   nowMs: number;
+  /** 2026-08-06 (Tim — "show when the user warmed up before a round or practice as a data point on the
+   *  graph"). Warm-up / pre-round stretch sessions (startedAt only). Bucketed into the same weekly buckets
+   *  as practiceSeries and surfaced as `warmupWeekIndices` so the chart can mark those weeks. */
+  warmups?: { startedAt: number }[];
 }
 
 export interface PracticeImpact {
@@ -27,6 +31,9 @@ export interface PracticeImpact {
   practiceSeries: number[];
   /** score-vs-par per round, oldest→newest (last ROUNDS rounds). */
   scoreSeries: number[];
+  /** Indices into practiceSeries (0 = oldest week) that had ≥1 warm-up/pre-round session — the chart marks
+   *  these on the practice line so warm-ups read as real data points. */
+  warmupWeekIndices: number[];
   practiceSessions: number;
   roundsCounted: number;
   /** True once there's enough on both sides to say anything honest. */
@@ -53,6 +60,17 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     practiceSeries[WEEKS - 1 - ageWeeks] += Math.max(0, s.balls || 0);
     practiceSessions += 1;
   }
+
+  // 2026-08-06 (Tim) — which weekly buckets contained a warm-up / pre-round session (same bucketing as
+  // practiceSeries). Surfaced so the practice line can mark those weeks.
+  const warmupWeeks = new Set<number>();
+  for (const w of input.warmups ?? []) {
+    if (typeof w.startedAt !== 'number') continue;
+    const ageWeeks = Math.floor((nowMs - w.startedAt) / WEEK_MS);
+    if (ageWeeks < 0 || ageWeeks >= WEEKS) continue;
+    warmupWeeks.add(WEEKS - 1 - ageWeeks);
+  }
+  const warmupWeekIndices = [...warmupWeeks].sort((a, b) => a - b);
 
   // Last ROUNDS rounds' score-vs-par, chronological (oldest→newest).
   const scoreSeries = (rounds ?? [])
@@ -91,5 +109,5 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     }
   }
 
-  return { practiceSeries, scoreSeries, practiceSessions, roundsCounted, hasEnough, headline };
+  return { practiceSeries, scoreSeries, warmupWeekIndices, practiceSessions, roundsCounted, hasEnough, headline };
 }
