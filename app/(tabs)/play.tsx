@@ -114,6 +114,15 @@ const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
 const LOCAL_COURSES: CourseSummary[] = [
   // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two 18s + Pruneridge (Santa Clara, CA)
   // 9-hole par-30. OSM-built geometry (point-in-polygon split for Coyote's interleaved courses).
+  // 2026-08-07 (Tim — playing it in an hour). Berlin Country Club (Berlin, MA) 9-hole par 33.
+  // OSM golf=hole geometry (9/9 real, no estimated pars) → local:berlin-cc resolves to BERLIN_CC_HOLES.
+  {
+    id: 'local:berlin-cc',
+    club_name: 'Berlin Country Club',
+    location: 'Berlin, MA',
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(42.4078, -71.6290),
+    lat: 42.4078, lng: -71.6290,
+  },
   {
     id: 'local:coyote-creek-tournament',
     club_name: 'Coyote Creek (Tournament)',

@@ -2618,6 +2618,50 @@ const MANATEE_COVE_HOLES: CourseHole[] = [
     note: '', estimated: false },
 ];
 
+// 2026-08-07 (Tim — playing it in an hour; "I want to see our holes correctly when I download").
+// Berlin Country Club — Berlin, MA (9-hole, par 33). Built by scripts/build-course-holeways.mjs from
+// OSM golf=hole ways + golf=green polygons: 9/9 greens + 9/9 hole-ways resolved, EVERY par read from
+// the OSM tag (none estimated). Tee = far endpoint of the hole way; green = nearest green polygon;
+// F/M/B from that polygon. Real coordinates → SmartVision/GPS render the true holes on download.
+const BERLIN_CC_HOLES: CourseHole[] = [
+  { hole:  1, par: 4, distance: 304, front: 297, back: 314,
+    teeLat: 42.4076327, teeLng: -71.6298214, middleLat: 42.4051330, middleLng: -71.6296890,
+    frontLat: 42.4051908, frontLng: -71.6298022, backLat: 42.4050517, backLng: -71.6296588,
+    note: '', estimated: false },
+  { hole:  2, par: 4, distance: 324, front: 312, back: 338,
+    teeLat: 42.4048660, teeLng: -71.6291696, middleLat: 42.4075293, middleLng: -71.6289669,
+    frontLat: 42.4074253, frontLng: -71.6290013, backLat: 42.4076412, backLng: -71.6289624,
+    note: '', estimated: false },
+  { hole:  3, par: 4, distance: 341, front: 330, back: 351,
+    teeLat: 42.4085071, teeLng: -71.6290019, middleLat: 42.4058207, middleLng: -71.6279306,
+    frontLat: 42.4059063, frontLng: -71.6279358, backLat: 42.4057384, backLng: -71.6279096,
+    note: '', estimated: false },
+  { hole:  4, par: 3, distance: 135, front: 121, back: 151,
+    teeLat: 42.4056839, teeLng: -71.6281825, middleLat: 42.4046202, middleLng: -71.6277633,
+    frontLat: 42.4047254, frontLng: -71.6278218, backLat: 42.4044912, backLng: -71.6277118,
+    note: '', estimated: false },
+  { hole:  5, par: 4, distance: 258, front: 240, back: 273,
+    teeLat: 42.4043293, teeLng: -71.6272759, middleLat: 42.4064442, middleLng: -71.6270070,
+    frontLat: 42.4062860, frontLng: -71.6269722, backLat: 42.4065638, backLng: -71.6270272,
+    note: '', estimated: false },
+  { hole:  6, par: 4, distance: 353, front: 343, back: 361,
+    teeLat: 42.4062246, teeLng: -71.6276595, middleLat: 42.4090018, middleLng: -71.6287978,
+    frontLat: 42.4089269, frontLng: -71.6287418, backLat: 42.4090671, backLng: -71.6288175,
+    note: '', estimated: false },
+  { hole:  7, par: 3, distance: 118, front: 105, back: 129,
+    teeLat: 42.4091765, teeLng: -71.6284896, middleLat: 42.4101337, middleLng: -71.6283055,
+    frontLat: 42.4100360, frontLng: -71.6283478, backLat: 42.4102229, backLng: -71.6282720,
+    note: '', estimated: false },
+  { hole:  8, par: 4, distance: 286, front: 276, back: 297,
+    teeLat: 42.4108568, teeLng: -71.6284481, middleLat: 42.4086301, middleLng: -71.6294781,
+    frontLat: 42.4087091, frontLng: -71.6294586, backLat: 42.4085368, backLng: -71.6294767,
+    note: '', estimated: false },
+  { hole:  9, par: 3, distance: 137, front: 129, back: 145,
+    teeLat: 42.4091676, teeLng: -71.6298670, middleLat: 42.4080490, middleLng: -71.6299948,
+    frontLat: 42.4081145, frontLng: -71.6300212, backLat: 42.4079810, backLng: -71.6299645,
+    note: '', estimated: false },
+];
+
 export const COURSES: Course[] = [
   {
     id: 'crane-creek',
@@ -2674,6 +2718,13 @@ export const COURSES: Course[] = [
     fullName: 'Pruneridge Golf Club — Santa Clara, CA (9-hole par 30)',
     rating: '', slope: '', par: 30, totalYards: 1618,
     holes: PRUNERIDGE_HOLES,
+  },
+  {
+    id: 'berlin-cc',
+    name: 'Berlin Country Club',
+    fullName: 'Berlin Country Club — Berlin, MA (9-hole par 33)',
+    rating: '', slope: '', par: 33, totalYards: 2256,
+    holes: BERLIN_CC_HOLES,
   },
   {
     id: 'mines-gc',
