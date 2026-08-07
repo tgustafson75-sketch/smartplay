@@ -197,6 +197,10 @@ interface SettingsState {
    *  voice. Auto-advance was racing ahead on real Menifee Palms rounds
    *  (1→3→4 climbing on its own); manual is the safe default. */
   autoHoleAdvance: boolean;
+  // 2026-08-07 (Tim) — "interactive round": when ON, the caddie speaks a proactive read when you STOP
+  // (mid-hole shot strategy). OFF by default — by default the caddie only auto-briefs at the TEE BOX and
+  // otherwise waits to be ASKED (pull), so it's never thrown at you.
+  interactiveRound: boolean;
   /** 2026-05-22 — Fix T. When true, shotDetectionService runs during a
    *  round and auto-logs swings via GPS displacement signature. When
    *  false (DEFAULT), the player enters scores manually via stepper /
@@ -371,6 +375,7 @@ interface SettingsState {
   setCartMode: (v: boolean) => void;
   // 2026-05-22 — Fix T.
   setAutoHoleAdvance: (v: boolean) => void;
+  setInteractiveRound: (v: boolean) => void;
   setAutoShotDetection: (v: boolean) => void;
   setShareCommunityData: (v: boolean) => void;
   setShareDiagnostics: (v: boolean) => void;
@@ -498,6 +503,7 @@ export const useSettingsStore = create<SettingsState>()(
       // / "I made a 5"). Both default FALSE — auto features are opt-in
       // for the few users who actually want them.
       autoHoleAdvance: true, // FIX M5 — default true; GPS auto-advance is the expected behavior for new installs
+      interactiveRound: false, // 2026-08-07 (Tim) — speak-when-you-stop is OFF by default; auto-brief is tee-box only
       autoShotDetection: false,
       shareCommunityData: true, // default ON for beta — helps build the shared course DB (coords only)
       shareDiagnostics: true, // beta issue triage (includes your email) — now a SEPARATE, honestly-labeled toggle
@@ -716,6 +722,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCartMode: (v) => set({ cartMode: v }),
       // 2026-05-22 — Fix T setters.
       setAutoHoleAdvance: (v) => set({ autoHoleAdvance: v }),
+      setInteractiveRound: (v) => set({ interactiveRound: v }),
       setAutoShotDetection: (v) => set({ autoShotDetection: v }),
       setShareCommunityData: (v) => set({ shareCommunityData: v }),
       setShareDiagnostics: (v) => set({ shareDiagnostics: v }),
@@ -1028,6 +1035,7 @@ export const useSettingsStore = create<SettingsState>()(
         autoListenEnabled: s.autoListenEnabled,
         cartMode: s.cartMode,
         autoHoleAdvance: s.autoHoleAdvance,
+        interactiveRound: s.interactiveRound,
         autoShotDetection: s.autoShotDetection,
         shareCommunityData: s.shareCommunityData,
         shareDiagnostics: s.shareDiagnostics,

@@ -2292,8 +2292,11 @@ check('Review video plays: shouldPlay/imperative desync fixed (Tim — frozen on
   (() => {
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
-      // explicit kick on load when not paused (now async so the swing-window seek awaits first)
-      /onLoad=\{async \(s\) => \{[\s\S]*?if \(!videoPaused\) v\.playAsync\(\)/.test(sm) &&
+      // 2026-08-07 — onLoad is now a STABLE useCallback (onReviewVideoLoad) to kill the re-subscribe crash;
+      // it still kicks playback on load when not paused (async so the swing-window seek awaits first).
+      /const onReviewVideoLoad = useCallback\(async \(s: AVPlaybackStatus\) => \{[\s\S]*?if \(!videoPaused\) v\.playAsync\(\)/.test(sm) &&
+      /onLoad=\{onReviewVideoLoad\}/.test(sm) &&
+      /onPlaybackStatusUpdate=\{onReviewPlaybackStatus\}/.test(sm) && /onError=\{onReviewVideoError\}/.test(sm) &&
       // moment-tap (phase scrub) pauses then syncs state
       /try \{ await v\?\.pauseAsync\(\); \} catch[\s\S]*?setVideoPaused\(true\)/.test(sm) &&
       // seg-select play syncs state

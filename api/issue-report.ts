@@ -117,7 +117,9 @@ type StoredRow = {
 async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return false;
-  const to = process.env.ISSUE_REPORT_EMAIL_TO || 't.gustafson75@gmail.com';
+  // 2026-08-07 (Tim) — default the server auto-forward to support@ (the same address the in-app mailto
+  // prompts use), so ALL testers' logs land in one inbox once RESEND_API_KEY is set. Override via env.
+  const to = process.env.ISSUE_REPORT_EMAIL_TO || 'support@smartplaycaddie.com';
   const from = process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>';
   const reporter = rows[0]?.reporter || 'beta tester';
   const subject = `SmartPlay issue log — ${reporter} (${rows.length} new)`;

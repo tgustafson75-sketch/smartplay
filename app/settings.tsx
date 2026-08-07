@@ -171,6 +171,8 @@ export default function Settings() {
   const setAutoShotDetection = useSettingsStore(s => s.setAutoShotDetection);
   const autoHoleAdvance = useSettingsStore(s => s.autoHoleAdvance);
   const setAutoHoleAdvance = useSettingsStore(s => s.setAutoHoleAdvance);
+  const interactiveRound = useSettingsStore(s => s.interactiveRound);
+  const setInteractiveRound = useSettingsStore(s => s.setInteractiveRound);
   // 2026-06-24 — Off-device data layer Phase A: usage telemetry opt-in.
   const analyticsOptIn = useSettingsStore(s => s.analyticsOptIn);
   const setAnalyticsOptIn = useSettingsStore(s => s.setAnalyticsOptIn);
@@ -1223,6 +1225,12 @@ export default function Settings() {
             sub="GPS moves you to the next hole automatically. Off = step through yourself."
             value={autoHoleAdvance}
             onValueChange={confirmToggle('Auto Hole Advance', setAutoHoleAdvance)}
+          />
+          <ToggleRow
+            label="Interactive Round"
+            sub="Caddie speaks a read when you stop walking mid-hole. Off (default) = it stays quiet and waits for you to ask; it still auto-briefs at the tee."
+            value={interactiveRound}
+            onValueChange={confirmToggle('Interactive Round', setInteractiveRound)}
           />
           <ToggleRow
             label="Auto Shot Detection"

@@ -926,6 +926,21 @@ export default function CaddieTab() {
   // FIX M6 — GPS stop-detection proactive: debounce timer + single-fire gate.
   const stopDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopTriggeredRef = useRef(false);
+  // 2026-08-07 (Tim — "no new hole information before I proceed on the scorecard OR it can be absolutely
+  // confirmed I'm at the next tee box; no double-firing"). Track when the hole last CHANGED and which hole
+  // last got a proactive read, so the stop-detection: (a) never fires within a SETTLE window after a hole
+  // change (you've just transitioned — you're walking up, not confirmed at the tee), and (b) fires AT MOST
+  // ONCE per hole (no double).
+  const holeChangedAtRef = useRef(0);
+  const lastProactiveHoleRef = useRef<number | null>(null);
+  const prevHoleRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevHoleRef.current !== currentHole) {
+      prevHoleRef.current = currentHole;
+      holeChangedAtRef.current = Date.now();
+      stopTriggeredRef.current = false; // allow ONE read on the new hole, once it settles
+    }
+  }, [currentHole]);
 
   // Clear the 15s OB/lost outcome timer whenever the round ends or is discarded
   // so a stale timer can't fire after the round is gone.
@@ -1209,9 +1224,14 @@ export default function CaddieTab() {
   // proactive shot_strategy when the player stops walking mid-round.
   // Logic: stationary → 5s debounce → check guards → analyze → speak.
   //        walking     → clear debounce + reset gate so the next stop can re-fire.
+  // 2026-08-07 (Tim — "you can set a toggle for interactive round where it speaks when you stop but OFF by
+  // default"). Speak-when-you-stop is now gated behind settings.interactiveRound (default OFF). By default
+  // the caddie does NOT auto-read when you stop — you PULL yardage/club/wind after your tee shot by asking.
+  const interactiveRound = useSettingsStore(s => s.interactiveRound);
   const movementMode = useMovementModeStore(s => s.mode);
   useEffect(() => {
     if (!isRoundActive || !_proactive_kevin_enabled || localMode || currentHole < 1) return; // Local Mode = no proactive (#10)
+    if (!interactiveRound) return; // 2026-08-07 (Tim) — speak-on-stop is opt-in; default is tee-box-only + pull.
 
     if (movementMode === 'walking') {
       // Clear any pending debounce and reset gate so the NEXT stop can fire.
@@ -1232,6 +1252,14 @@ export default function CaddieTab() {
         if (isSpeaking()) return;
         if (voiceState !== 'idle') return;
         if (stopTriggeredRef.current) return;
+        // 2026-08-07 (Tim) — SETTLE gate: never fire the shot read within 25s of a hole CHANGE. Right after a
+        // transition you're walking up to the tee, not confirmed at it — firing here is the "new hole info
+        // before I'm at the tee" he called out. Requiring a stationary settle AFTER the change means we only
+        // speak once you've actually arrived and stopped. (Leaves the debounce armed so a later stop fires.)
+        if (Date.now() - holeChangedAtRef.current < 25_000) return;
+        // Fire at most ONCE per hole (no double read on the same hole).
+        if (lastProactiveHoleRef.current === currentHole) return;
+        lastProactiveHoleRef.current = currentHole;
         stopTriggeredRef.current = true;
         void (async () => {
           try {
@@ -1256,7 +1284,7 @@ export default function CaddieTab() {
       }, 5000);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, localMode, apiUrl]);
+  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, localMode, apiUrl, interactiveRound]);
 
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every

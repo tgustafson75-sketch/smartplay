@@ -42,7 +42,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOverlay';
@@ -3748,6 +3748,44 @@ export default function SmartMotion() {
   const pageCount = showShotMap ? 3 : 2;
 
   // ── the HUD page (full-bleed camera/replay + floating data) ──
+  // 2026-08-07 (Tim — the swing-library crash's TWIN, on the higher-traffic SmartMotion review screen).
+  // The review <Video>'s onLoad/onPlaybackStatusUpdate/onError were INLINE literals recreated every render.
+  // At 25×/s (Motion overlay on) each re-render handed the native Video changed callback identities →
+  // expo-av re-subscribed + re-emitted status synchronously → setState cascade → the SAME fatal "Maximum
+  // update depth" crash. Memoizing `source` (done in July) fixed only half; these useCallbacks fix the rest.
+  // Stable during playback (deps only change on new analysis / pause), so the Video never re-subscribes on a
+  // tick. Logic is byte-identical to the previous inline handlers.
+  const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
+    if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
+    const v = videoRef.current;
+    if (!v) return;
+    const seg = segments[selectedSwingRef.current];
+    if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
+    if (!videoPaused) v.playAsync().catch(() => undefined);
+  }, [segments, videoPaused]);
+  const onReviewPlaybackStatus = useCallback((s: AVPlaybackStatus) => {
+    if ('positionMillis' in s && typeof s.positionMillis === 'number'
+        && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
+      playbackMsEmitRef.current = s.positionMillis;
+      setPlaybackMs(s.positionMillis);
+    }
+    if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
+      const seg = segments[selectedSwingRef.current];
+      const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
+      const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
+      if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
+        loopSeekGuardRef.current = true;
+        void videoRef.current?.setPositionAsync(seg.startMs)
+          .catch(() => undefined)
+          .finally(() => { loopSeekGuardRef.current = false; });
+      }
+    }
+  }, [segments, videoPaused]);
+  const onReviewVideoError = useCallback((e: unknown) => {
+    console.log('[smartmotion] video load error:', JSON.stringify(e));
+    setAnalysisError('Video failed to load — try re-recording');
+  }, []);
+
   const hudPage = (
     <View style={{ width: windowWidth, flex: 1 }}>
       <View
@@ -3780,58 +3818,11 @@ export default function SmartMotion() {
             // feedback"; it adds nothing to silent skeleton/speed analysis.
             isMuted
             useNativeControls={false}
-            onLoad={async (s) => {
-              if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
-              const v = videoRef.current;
-              if (!v) return;
-              // 2026-06-14 (Tim) — start at the SELECTED swing's window, not frame 0.
-              // Frame 0 is usually the pre-swing setup ("bending to place the ball")
-              // the user saw replay; seek to the swing first so review opens on the
-              // actual swing. Awaited so the kick-play below starts at the swing.
-              // Read the selection via the ref (this callback closure is captured on
-              // mount; selectedSwing in scope would be stale — see the loop below).
-              const seg = segments[selectedSwingRef.current];
-              if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
-              // expo-av often ignores the shouldPlay PROP on first load, leaving the
-              // clip frozen; kick playback explicitly.
-              if (!videoPaused) v.playAsync().catch(() => undefined);
-            }}
-            onPlaybackStatusUpdate={(s) => {
-              // Track position ALWAYS (not just when the motion overlay is on) so the
-              // review scrubber can show + seek by time even on a clean video.
-              // 2026-07-29 (Tim — "Maximum update depth" white screen). Only commit a MEANINGFUL move
-              // (≥20ms) so this 25×/s callback can't drive a redundant-setState re-render cascade.
-              if ('positionMillis' in s && typeof s.positionMillis === 'number'
-                  && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
-                playbackMsEmitRef.current = s.positionMillis;
-                setPlaybackMs(s.positionMillis);
-              }
-              // 2026-06-14 (Tim) — WINDOW the loop to the selected swing so it stops
-              // replaying the whole clip (the setup the user reported). isLooping loops
-              // the entire file; when this swing is a real sub-window (endMs < clip end)
-              // we re-seek to its start once playback runs past endMs. The whole-clip
-              // synthetic segment has endMs ≈ duration, so this is a no-op there.
-              if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
-                // 2026-06-14 (audit) — read the LIVE selection via the ref; the stale
-                // closure value made the loop briefly re-seek to the OLD swing when
-                // tapping a reel chip for an earlier-in-clip swing.
-                const seg = segments[selectedSwingRef.current];
-                const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
-                const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
-                if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
-                  loopSeekGuardRef.current = true;
-                  void videoRef.current?.setPositionAsync(seg.startMs)
-                    .catch(() => undefined)
-                    .finally(() => { loopSeekGuardRef.current = false; });
-                }
-              }
-            }}
-            onError={(e) => {
-              // Surface video load failures so "black screen / won't play" is
-              // diagnosable in logcat instead of silently swallowed.
-              console.log('[smartmotion] video load error:', JSON.stringify(e));
-              setAnalysisError('Video failed to load — try re-recording');
-            }}
+            // 2026-08-07 — stable (useCallback) handlers so a 25×/s re-render can't re-subscribe the native
+            // Video into the fatal "Maximum update depth" loop (root cause; see the defs above hudPage).
+            onLoad={onReviewVideoLoad}
+            onPlaybackStatusUpdate={onReviewPlaybackStatus}
+            onError={onReviewVideoError}
           />
         ) : (
           // 2026-06-09 — `mute` disables the camera's own audio track. We run a

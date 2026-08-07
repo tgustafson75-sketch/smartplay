@@ -1720,7 +1720,10 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
         const roll = ((data.rotation.gamma ?? 0) * 180) / Math.PI;
         pitchRef.current = pitch;
         rollRef.current = roll;
-        setTilt({ pitch, roll });
+        // 2026-08-07 (render-stability sweep) — only setState when the level actually MOVED (≥0.5°). This
+        // fired a fresh {pitch,roll} object 5×/s regardless of change → continuous re-render + battery drain
+        // on a high-traffic on-course surface. The refs above still update every sample for the live read.
+        setTilt(prev => (Math.abs(prev.pitch - pitch) >= 0.5 || Math.abs(prev.roll - roll) >= 0.5) ? { pitch, roll } : prev);
       }
     });
     return () => sub.remove();

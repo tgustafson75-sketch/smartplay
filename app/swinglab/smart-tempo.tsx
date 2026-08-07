@@ -241,20 +241,35 @@ export default function SmartTempoScreen() {
   }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames, tempoMode]);
 
   // ── Playback status ──────────────────────────────────────────────────
-  const onStatus = (status: AVPlaybackStatus) => {
+  // 2026-08-07 (Tim — the swing-crash class, swept). useCallback (stable identity) + change-guards so this
+  // ~per-tick status callback can't re-subscribe the native Video OR setState on every redundant tick (the
+  // "Maximum update depth" pattern). Position commits on a ≥20ms move, duration once (±50ms), isPlaying on
+  // a real flip. Setters + refs are stable → empty deps.
+  const tempoEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null }>({ pos: -1, dur: -1, playing: null });
+  const onStatus = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;
     const posSec = (s.positionMillis ?? 0) / 1000;
-    if (s.positionMillis != null) setPosition(posSec);
-    if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
-    setIsPlaying(s.isPlaying === true);
-    // Replay-tempo loop: when we pass the marked impact, snap back to the
-    // marked backswing-start so the player FEELS the tempo on repeat.
+    if (s.positionMillis != null && Math.abs(posSec - tempoEmitRef.current.pos) >= 0.02) {
+      tempoEmitRef.current.pos = posSec; setPosition(posSec);
+    }
+    if (s.durationMillis != null) {
+      const d = s.durationMillis / 1000;
+      if (tempoEmitRef.current.dur < 0 || Math.abs(d - tempoEmitRef.current.dur) > 0.05) { tempoEmitRef.current.dur = d; setDuration(d); }
+    }
+    const playing = s.isPlaying === true;
+    if (tempoEmitRef.current.playing !== playing) { tempoEmitRef.current.playing = playing; setIsPlaying(playing); }
+    // Replay-tempo loop: when we pass the marked impact, snap back to the marked backswing-start.
     const r = replayRef.current;
     if (r && s.isPlaying && posSec >= r.endSec) {
       void videoRef.current?.setPositionAsync(r.startSec * 1000);
     }
-  };
+  }, []);
+  const onTempoVideoLoad = useCallback(async () => {
+    setVideoError(null);
+    try { await videoRef.current?.pauseAsync(); } catch { /* */ }
+  }, []);
+  const onTempoVideoError = useCallback(() => setVideoError('This video could not be played on this device.'), []);
 
   // ── scrubTo — seek + HOLD the frame (reused from swing-detail) ────────
   const scrubTo = useCallback(async (sec: number) => {
@@ -537,13 +552,9 @@ export default function SmartTempoScreen() {
                 useNativeControls={false}
                 isMuted
                 shouldCorrectPitch={false}
-                onLoad={async () => {
-                  setVideoError(null);
-                  // Hold on the first frame so the user scrubs deliberately.
-                  try { await videoRef.current?.pauseAsync(); } catch { /* */ }
-                }}
+                onLoad={onTempoVideoLoad}
                 onPlaybackStatusUpdate={onStatus}
-                onError={() => setVideoError('This video could not be played on this device.')}
+                onError={onTempoVideoError}
               />
             </Pressable>
 

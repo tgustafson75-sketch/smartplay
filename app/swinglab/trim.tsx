@@ -24,7 +24,7 @@
  * everyone who uploads a >6s clip.
  */
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView,
 } from 'react-native';
@@ -72,12 +72,21 @@ export default function TrimScreen() {
     setWindowDefaulted(true);
   }, [duration, windowDefaulted]);
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+  // 2026-08-07 (Tim — swing-crash class, swept) — useCallback (stable identity) + change-guards so the
+  // status callback can't re-subscribe the native Video or setState on every redundant tick.
+  const trimEmitRef = useRef<{ pos: number; dur: number }>({ pos: -1, dur: -1 });
+  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;
-    if (s.positionMillis != null) setPosition(s.positionMillis / 1000);
-    if (s.durationMillis != null) setDuration(s.durationMillis / 1000);
-  };
+    if (s.positionMillis != null) {
+      const p = s.positionMillis / 1000;
+      if (Math.abs(p - trimEmitRef.current.pos) >= 0.02) { trimEmitRef.current.pos = p; setPosition(p); }
+    }
+    if (s.durationMillis != null) {
+      const d = s.durationMillis / 1000;
+      if (trimEmitRef.current.dur < 0 || Math.abs(d - trimEmitRef.current.dur) > 0.05) { trimEmitRef.current.dur = d; setDuration(d); }
+    }
+  }, []);
 
   const setStart = () => {
     // Clamp: start must be < end (leave at least 0.5s window)
