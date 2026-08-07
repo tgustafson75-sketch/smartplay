@@ -968,6 +968,30 @@ check('Swing-detail transport is CROPPED to the located swing window (bar + stag
   })(),
   'the swing-detail player presents ONLY the located swing — walk-up/waggle/post-swing dead air are cropped from the timeline and from playback, and the jump-to-stage chips line up with the bar');
 
+// 2026-08-07 (Tim — the FATAL "Maximum update depth exceeded" at onPlaybackStatusUpdate that keeps coming
+// back). ROOT CAUSE: unstable props on the native <Video>. At 25×/s (overlay on) each re-render handed the
+// Video a NEW prop identity → expo-av re-subscribed + re-emitted status synchronously → setState cascade →
+// crash. LOCK every Video prop as referentially stable so a re-render can never re-subscribe. Also: the
+// Motion overlay is OFF by default and a normal library open does NOT auto-play (only the ?watch=1 path).
+check('Swing-library video: every <Video> prop is STABLE (no re-subscribe loop) + overlay-off + no autoplay',
+  (() => {
+    const d = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /const videoSource = useMemo\(/.test(d) &&                          // source memoized
+      /const onPlaybackStatusUpdate = useCallback\(/.test(d) &&           // callback identity stable
+      /const videoStyle = useMemo\(/.test(d) &&                           // style memoized (was inline array)
+      /const onVideoLoad = useCallback\(/.test(d) &&                      // onLoad stable
+      /const onVideoError = useCallback\(/.test(d) &&                     // onError stable
+      /source=\{videoSource\}/.test(d) && /style=\{videoStyle\}/.test(d) &&
+      /onPlaybackStatusUpdate=\{onPlaybackStatusUpdate\}/.test(d) &&
+      /onLoad=\{onVideoLoad\}/.test(d) && /onError=\{onVideoError\}/.test(d) &&
+      // Motion overlay OFF by default; only the deferred-analysis path auto-plays.
+      /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(d) &&
+      /shouldPlay=\{shouldAutoplayThenAnalyze\}/.test(d)
+    );
+  })(),
+  'the swing-library <Video> has fully referentially-stable props (memoized source/style + useCallback status/load/error) so a 25x/s re-render can never re-subscribe expo-av into the fatal update-depth loop; Motion overlay defaults OFF and a normal open does not auto-play');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every

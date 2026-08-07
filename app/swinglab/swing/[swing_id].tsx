@@ -456,7 +456,10 @@ export default function SwingDetail() {
     setControlsHidden(false);
     controlsOpacity.setValue(1);
   }, [isPlaying, controlsOpacity]);
-  const [showSkeleton, setShowSkeleton] = useState(true);
+  // 2026-08-07 (Tim, said ~20×) — the Motion / body-mechanics overlay is OFF by default. Opening a swing
+  // shows the clean video; the user taps "Motion" to add the skeleton. (It was defaulting ON, which — with
+  // the old auto-play — opened straight into the 25×/s overlay path that triggered the crash.)
+  const [showSkeleton, setShowSkeleton] = useState(false);
   // 2026-07-27 (Tim) — trace default is applied once analysis resolves (see the auto-default effect
   // below: ON whenever the swing has pose). Starts OFF so a mid-analysis swing shows nothing yet.
   // The trace is clubhead-OR-NOTHING, so defaulting it on never fabricates anything. The old
@@ -966,7 +969,15 @@ export default function SwingDetail() {
     })();
   }, [swing_id, shot?.clipUri, shot?.id]);
 
-  const onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+  // 2026-08-07 (Tim — recurring FATAL "Maximum update depth exceeded" at onPlaybackStatusUpdate, root cause).
+  // This callback was defined INLINE, so it got a NEW function identity on every render. The 25×/s position
+  // updates (when the Motion overlay is on) each re-render the screen → the <Video> saw a changed
+  // onPlaybackStatusUpdate prop → expo-av re-subscribed and re-emitted the current status synchronously →
+  // callback → setState → re-render → new callback identity → re-emit → infinite loop React kills as a fatal
+  // crash. With the overlay OFF it ran at 4×/s and flushed between ticks (no crash) — exactly Tim's repro.
+  // The memoized `source` fixed the source-identity half of this in July; useCallback fixes the callback half.
+  // Stable across a playback session (deps are rarely-changing), so the Video never re-subscribes on a tick.
+  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
     const s = status as AVPlaybackStatusSuccess;
     // 2026-07-29 (Tim — recurring FATAL "Maximum update depth exceeded" at onPlaybackStatusUpdate). This
@@ -1025,7 +1036,34 @@ export default function SwingDetail() {
       useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       void runPhaseKOnSession(swing_id);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisStatus, shouldAutoplayThenAnalyze, swing_id]);
+
+  // 2026-08-07 (Tim — the video-loop crash keeps coming back). ROOT CAUSE, made structural: EVERY prop
+  // passed to the native <Video> must be referentially STABLE, or a re-render (the position updates 25×/s
+  // when the overlay is on) makes expo-av tear down + re-emit its status synchronously → the setState
+  // cascade React kills as fatal "Maximum update depth". Past fixes stabilized ONE prop at a time (source,
+  // then the callback) while others (style/onLoad/onError, all inline) stayed unstable and re-triggered it.
+  // These memoize the rest so a re-render can NEVER re-subscribe the Video. `source` (memoized above) +
+  // onPlaybackStatusUpdate (useCallback above) + these three = all Video props stable.
+  const videoStyle = useMemo(() => [styles.video, motionOnly && { opacity: 0 }], [motionOnly]);
+  const onVideoLoad = useCallback(async () => {
+    setVideoError(null);
+    // Begin at the located swing (not the pre-swing waggle). Guarded; no valid start → plays from 0.
+    try {
+      const start = shot?.clipStartSeconds ?? 0;
+      if (start > 0.05) await videoRef.current?.setPositionAsync(start * 1000);
+    } catch { /* best-effort */ }
+    // 2026-08-07 (Tim — "when opening a file in the swing library it automatically plays"). Only the deferred
+    // ?watch=1 analysis path auto-plays (it needs playthrough to fire analysis); a normal library open now
+    // sits STATIC on the first frame — tap to play. Removes the "auto-plays into a crash" trigger entirely.
+    if (shouldAutoplayThenAnalyze) { try { await videoRef.current?.playAsync(); } catch { /* best-effort */ } }
+  }, [shot?.clipStartSeconds, shouldAutoplayThenAnalyze]);
+  const onVideoError = useCallback((e: unknown) => {
+    const msg = typeof e === 'string' ? e : 'This video could not be played on this device.';
+    console.error('[swing-detail] video error:', e);
+    setVideoError(msg);
+  }, []);
 
   const scrubTo = async (sec: number) => {
     // 2026-06-15 (Tim) — seek + HOLD the frame (don't force play). Scrubbing to
@@ -2099,7 +2137,7 @@ export default function SwingDetail() {
               <Video
                 ref={attachVideoRef}
                 source={videoSource}
-                style={[styles.video, motionOnly && { opacity: 0 }]}
+                style={videoStyle}
                 resizeMode={ResizeMode.CONTAIN}
                 // 2026-07-02 (Tim — skeleton lags behind the motion) — ~25x/s time reports (vs
                 // expo-av's ~2x/s default) so the pose overlay tracks near frame-rate.
@@ -2120,34 +2158,17 @@ export default function SwingDetail() {
                 // sat on a frozen frame = "won't play". Now it plays the moment it
                 // loads (muted + looping for library so scrubbing/replay is calm);
                 // tap still pauses. watch-then-analyze keeps its own audio path.
-                shouldPlay
-                // 2026-06-29 (Tim) — PLAY ONCE: the clip auto-plays through a single
-                // time on open (while analysis runs in parallel); when it stops the
-                // analysis is ready and the user takes over — tap to replay from the
-                // top, scrub, slow-mo. No auto-loop (it was looping indefinitely).
+                // 2026-08-07 (Tim — "when opening a file it automatically plays" + it crashed). A normal
+                // library open no longer auto-plays: it sits STATIC on the located frame; the user taps to
+                // play. Only the deferred ?watch=1 analysis path auto-plays (needs playthrough to analyze).
+                shouldPlay={shouldAutoplayThenAnalyze}
                 isLooping={false}
                 isMuted={!shouldAutoplayThenAnalyze}
                 rate={playbackRate}
                 shouldCorrectPitch={false}
-                onLoad={async () => {
-                  setVideoError(null);
-                  // 2026-07-26 (Tim — "in swing library and elsewhere it starts at the beginning") —
-                  // begin at the LOCATED swing, not the clip's pre-swing setup/waggle. Seek to
-                  // clipStartSeconds first, then play. Guarded; no valid start → plays from 0 as before.
-                  try {
-                    const start = shot?.clipStartSeconds ?? 0;
-                    if (start > 0.05) await videoRef.current?.setPositionAsync(start * 1000);
-                  } catch { /* best-effort */ }
-                  // expo-av can ignore the shouldPlay PROP on first load (the
-                  // documented quirk); kick playback explicitly so it ALWAYS starts.
-                  try { await videoRef.current?.playAsync(); } catch { /* best-effort */ }
-                }}
+                onLoad={onVideoLoad}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
-                onError={(e) => {
-                  const msg = typeof e === 'string' ? e : 'This video could not be played on this device.';
-                  console.error('[swing-detail] video error:', e);
-                  setVideoError(msg);
-                }}
+                onError={onVideoError}
               />
               {/* 2026-06-29 (Tim — "zoom to see the ball") — the skeleton + ball trace +
                   target overlays now live INSIDE the zoom so they TRACK the video when you
