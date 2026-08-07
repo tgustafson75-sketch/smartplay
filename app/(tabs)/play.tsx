@@ -1199,6 +1199,36 @@ export default function PlayTab() {
           <Text style={styles.playTagline}>{t('play.tagline', { defaultValue: 'Smart guidance. Lower scores.' })}</Text>
         </View>
 
+        {/* 2026-08-07 (Tim) — NEAREST-COURSE HERO. When GPS knows where the player is and no round is
+            running, the single closest course gets a prominent one-tap "Start round" card at the top of
+            the tab. Suppressed when co-located siblings are ambiguous (the atCourse "which course?" banner
+            below handles that more accurately) so the hero never one-tap-starts the wrong nine. */}
+        {!isRoundActive && userPosition && closestLocal[0] && !atCourse?.sibling && (
+          <TouchableOpacity
+            style={styles.heroCard}
+            onPress={() => startRoundAtCourse(closestLocal[0])}
+            accessibilityRole="button"
+            accessibilityLabel={`Start a round at ${closestLocal[0].club_name}`}
+          >
+            <View style={styles.heroIconWrap}>
+              <AppIcon name="golf" size={22} color="#00C896" />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.heroKicker}>
+                {distanceLabelById[closestLocal[0].id] ? `NEAREST · ${distanceLabelById[closestLocal[0].id]}` : 'NEAREST COURSE'}
+              </Text>
+              <Text style={styles.heroCourseName} numberOfLines={1}>{closestLocal[0].club_name}</Text>
+              {!!closestLocal[0].location && (
+                <Text style={styles.heroMeta} numberOfLines={1}>{closestLocal[0].location}</Text>
+              )}
+            </View>
+            <View style={styles.heroCta}>
+              <Text style={styles.heroCtaText}>Start</Text>
+              <AppIcon name="chevron-forward" size={16} color="#001b12" />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* 2026-06-10 — Tournament Mode moved into the round-setup FORMAT row
             (next to 9-Hole / Competition) so it lives with the other format
             choices instead of as a standalone card pinned to the top of the tab. */}
@@ -1977,6 +2007,60 @@ return StyleSheet.create({
   // the closest-local list when GPS puts the player within ~550y of a
   // known course. Subtle teal border to read as informational, not as
   // a primary call-to-action.
+  // 2026-08-07 (Tim) — nearest-course hero card (top of Play tab).
+  heroCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,150,0.45)',
+    backgroundColor: 'rgba(0,200,150,0.10)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  heroIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,200,150,0.16)',
+  },
+  heroKicker: {
+    color: c.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  heroCourseName: {
+    color: '#eafff6',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  heroMeta: {
+    color: 'rgba(232,245,233,0.65)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  heroCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: c.accent,
+  },
+  heroCtaText: {
+    color: '#001b12',
+    fontSize: 14,
+    fontWeight: '800',
+  },
   atCourseBanner: {
     marginHorizontal: 16,
     marginBottom: 8,
