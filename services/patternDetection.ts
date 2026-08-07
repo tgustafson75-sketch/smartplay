@@ -50,6 +50,22 @@ function dominantDirection(
   return 'balanced';
 }
 
+/**
+ * 2026-08-07 (Tim — "the caddie learns your miss but the on-course read ignores it"). A confident LATERAL
+ * miss tendency ('left' | 'right') derived from the player's OWN logged shot directions. Used to fill the
+ * shot read's `dominantMiss` when the manual Settings field is null. Honest: requires a minimum sample and
+ * a clear majority (dominantDirection's >1.5× gate); returns null for straight/balanced/too-few — never a
+ * guess.
+ */
+export function learnedMissDirection(shots: ShotResult[], minShots = 6): 'left' | 'right' | null {
+  const graded = (shots ?? []).filter(
+    (s) => s.direction === 'left' || s.direction === 'right' || s.direction === 'straight',
+  );
+  if (graded.length < minShots) return null;
+  const dom = dominantDirection(countDirections(graded));
+  return dom === 'left' || dom === 'right' ? dom : null;
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function generatePatternInsights(

@@ -232,6 +232,11 @@ export interface SwingMetricInputs {
   /** Measured club speed from Galaxy Watch IMU or similar (mph).
    *  When present, used directly. */
   measuredClubSpeedMph?: number | null;
+  /** 2026-08-07 (Tim — "unify persisted carry"). The app's ONE carry number: estimateCarryYards (club +
+   *  effort + learned bag), the value that gets PERSISTED to the shot map, shown in the library, and narrated
+   *  by the caddie. When provided it IS carry_yards, so the results metric card can't diverge from every
+   *  other surface (the old ball-speed × factor path drew a second, different number for the same swing). */
+  estimatedCarryYds?: number | null;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────
@@ -479,7 +484,17 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // club is the most honest number). Otherwise derive from ball speed
   // — and gate: if ball speed is low, carry is low too (compounds).
   let carryYards: SwingMetric;
-  if (profileCarry != null) {
+  if (inputs.estimatedCarryYds != null && Number.isFinite(inputs.estimatedCarryYds)) {
+    // 2026-08-07 (Tim) — the ONE carry: the same club+effort estimate that gets persisted / narrated, so
+    // the results card matches the library + caddie instead of showing an independent ball-speed carry.
+    carryYards = finalize({
+      value: Math.round(inputs.estimatedCarryYds),
+      unit: 'yds',
+      source: 'pose', // estimate-grade → keeps the "est" marker/range (honest)
+      confidence: 0.45,
+      estimateNote: 'club + effort estimate',
+    });
+  } else if (profileCarry != null) {
     carryYards = finalize({
       value: profileCarry,
       unit: 'yds',

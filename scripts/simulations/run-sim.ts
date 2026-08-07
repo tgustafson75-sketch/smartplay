@@ -6470,7 +6470,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   }
 
   check('SmartMotion: DTL readout shows the carry estimate + cycling badge + icon set',
-    /estimateCarryYards\(club, effortRaw, profile\.handicap\)/.test(smSrc2) &&
+    // 2026-08-07 (Tim — unify persisted carry) — estCarry now uses the player's LEARNED carry when present
+    // and is fed to synthesizeSwingMetrics (estimatedCarryYds) so all surfaces show ONE carry number.
+    /estimateCarryYards\(club, effortRaw, profile\.handicap, learned\)/.test(smSrc2) &&
+      /estimatedCarryYds: estCarry/.test(smSrc2) &&
       // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
       // 2026-07-07 (audit M2) — relabeled "PLAN CARRY" so a projection isn't shown as an outcome.
       /Stat label="PLAN CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&

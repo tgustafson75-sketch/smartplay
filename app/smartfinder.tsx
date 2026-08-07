@@ -31,6 +31,7 @@ import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
 import { composeShotRead } from '../services/cnsShotRead';
+import { getLearnedMissDirection } from '../services/effectiveMiss';
 import { bagDistances } from '../services/shotStrategy';
 // SF fix #2 — learned-bag club lookup (inferClub) + the canonical club ladder so
 // the rangefinder recommends from the player's real distances, not a generic chart.
@@ -1309,7 +1310,10 @@ function TargetCameraOverlay({
   const avgCarryDriver = usePracticeStore(s => s.avgCarryDriver);
   const avgCarry3Wood = usePracticeStore(s => s.avgCarry3Wood);
   const handicap = usePlayerProfileStore(s => s.handicap);
-  const dominantMiss = usePlayerProfileStore(s => s.dominantMiss);
+  // 2026-08-07 (Tim) — the manual "dominant miss" is almost always null; fall back to the miss the caddie
+  // has LEARNED from the player's own logged shots so the read favors the safe side automatically.
+  const manualMiss = usePlayerProfileStore(s => s.dominantMiss);
+  const dominantMiss = manualMiss ?? getLearnedMissDirection();
 
   useEffect(() => {
     DeviceMotion.setUpdateInterval(80);

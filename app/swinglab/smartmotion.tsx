@@ -1180,7 +1180,16 @@ export default function SmartMotion() {
   const effortPct = effortRaw != null && effortRaw > 0 && effortRaw < 85 ? effortRaw : null;
   // 2026-06-12 — yardage estimate from the SELECTED CLUB + effort % (Tim). Reuses the
   // app's club carry table scaled by handicap; null when we can't honestly estimate.
-  const estCarry = useMemo(() => estimateCarryYards(club, effortRaw, profile.handicap), [club, effortRaw, profile.handicap]);
+  // 2026-08-07 (Tim — "unify persisted carry") — now uses the player's LEARNED carry for this club when we
+  // have it (their real bag beats the industry table), and this ONE value is fed to synthesizeSwingMetrics
+  // (estimatedCarryYds) so the results card, the persisted shot map, the library, and the caddie all show
+  // the same carry number.
+  const estCarry = useMemo(() => {
+    const cn = club ? clubIdToClubName(club) : null;
+    const cs = useClubStatsStore.getState();
+    const learned = cn && cs.hasDistance(cn) ? cs.carryFor(cn) : null;
+    return estimateCarryYards(club, effortRaw, profile.handicap, learned);
+  }, [club, effortRaw, profile.handicap]);
   // 2026-07-07 (Tim — "shot tracing that actually lines up on the user") — the CV points
   // (departure / ball-path) are FRAME-normalized; the ball box + target the user placed
   // are CONTAINER-normalized. Over the full-bleed COVER review video those spaces DON'T
@@ -1246,8 +1255,10 @@ export default function SmartMotion() {
         club: clubIdToSmashKey(club),
         profile: { handicap: profile.handicap ?? null },
         measuredBallSpeedMph,
+        // 2026-08-07 (Tim) — the ONE carry (same value persisted + narrated), so the card can't diverge.
+        estimatedCarryYds: estCarry,
       }),
-    [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap, club],
+    [poseFrames, videoDurationMs, measuredBallSpeedMph, profile.handicap, club, estCarry],
   );
 
   // 2026-06-12 — RIGHT rail: now the SAME custom green badges as the left rail

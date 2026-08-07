@@ -47,6 +47,7 @@ import { bagDistances } from './shotStrategy';
 // locally so "how far does it play / plays like" works with NO network. composeShotRead
 // is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
 import { composeShotRead } from './cnsShotRead';
+import { getEffectiveDominantMiss } from './effectiveMiss';
 import { getCachedWeatherEvenIfStale } from './weatherService';
 import { playsLikeDistance } from '../utils/playsLike';
 // 2026-06-14 (Tim — course book) — STATIC per-hole knowledge (note/description/
@@ -670,7 +671,8 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
     bag: bagDistances(),
-    dominantMiss: usePlayerProfileStore.getState().dominantMiss,
+    // 2026-08-07 (Tim) — manual miss first, else the miss learned from the player's own shots.
+    dominantMiss: getEffectiveDominantMiss(),
     isCompetition: round.isCompetition,
   });
   if (!read || read.playsLikeYards == null) {
