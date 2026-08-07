@@ -13,6 +13,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { getLastFix } from './gpsManager';
+import { haversineYards } from '../utils/geoDistance';
 import { bagDistances } from './shotStrategy';
 import { getGreenYardagesSync } from './smartFinderService';
 import { getCaddieContext } from './caddieMemoryRetrieval';
@@ -59,6 +60,20 @@ export function buildPipecatContext() {
         try {
           const y = getGreenYardagesSync(round.currentHole);
           return y.middle != null ? { front: y.front, middle: y.middle, back: y.back } : undefined;
+        } catch { return undefined; }
+      })(),
+      // 2026-08-07 (Tim — "if I ask for remaining yardage, confirm my drive: 'you just hit 275, you've
+      // got 135 remaining, here's the play'"). Live distance from the CURRENT hole's tee to the player's
+      // position — the drive estimate, so the caddie can confirm the shot they just hit even before it's
+      // logged. Paired with the green yardages above (the remaining), the caddie has BOTH halves without
+      // needing a logged shot. Guards out the at-tee case (<20y) and absurd reads (>700y).
+      distanceFromTeeYds: (() => {
+        try {
+          const fix = getLastFix();
+          const tee = round.courseHoles.find((x) => x.hole === round.currentHole);
+          if (!fix || fix.lat == null || fix.lng == null || !tee || !tee.teeLat || !tee.teeLng) return undefined;
+          const d = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
+          return d >= 20 && d <= 700 ? Math.round(d) : undefined;
         } catch { return undefined; }
       })(),
       // 2026-07-08 (Tim — Green Hill: "why won't it tell me the yardage") — when we have

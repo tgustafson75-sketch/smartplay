@@ -335,6 +335,11 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
         rYards && rYards.middle != null
           ? `Live distance to the green — front ${rYards.front ?? '?'}, MIDDLE ${rYards.middle}, back ${rYards.back ?? '?'}. Use the MIDDLE number for "how far" unless he asks front/back.`
           : '',
+        // 2026-08-07 (Tim — "if I ask remaining yardage, confirm my drive: 'you just hit 275, 135 to go,
+        // here's the play'"). distanceFromTeeYds = live tee→player distance = roughly the drive he just hit.
+        (round.distanceFromTeeYds != null)
+          ? `He's about ${round.distanceFromTeeYds}y from THIS hole's tee — that's roughly the drive/last shot he just hit. When he asks his remaining yardage (or "what's left / what do I have"), CONFIRM that shot naturally first ("you hit that about ${round.distanceFromTeeYds}"), THEN give the remaining (middle-of-green number), THEN the play — one flowing sentence, never robotic.`
+          : '',
         // 2026-07-08 (Tim — Green Hill: the caddie asked HIM the yardage) — when there's no
         // live GPS distance, the caddie must OWN it, never put the question back on the golfer.
         (round.gpsLost || (!(rYards && rYards.middle != null)))

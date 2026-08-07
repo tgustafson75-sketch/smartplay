@@ -1112,6 +1112,23 @@ check('Caddie keeps talking across tab switches (total presence); only deep-tool
   })(),
   'switching between the main tabs does NOT cut the caddie mid-sentence; deep-tool navigations still stop leaks');
 
+// 2026-08-07 (Tim — "if I ask remaining yardage, confirm my drive: 'you just hit 275, you've got 135
+// remaining, here's the play'"). LOCK: the caddie context carries a LIVE tee→player distance (the drive
+// estimate) and the on-course prompt tells the caddie to confirm that shot, then give the remaining, then
+// the play. Client field (pipecatContext, OTA) + server prompt (pipecat-turn, deploys on push).
+check('Caddie confirms the just-hit drive + remaining + play (live tee-to-player distance in context)',
+  (() => {
+    const ctx = read('services/pipecatContext.ts');
+    const turn = read('api/pipecat-turn.ts');
+    return (
+      /distanceFromTeeYds:/.test(ctx) &&
+      /haversineYards\(\{ lat: fix\.lat, lng: fix\.lng \}, \{ lat: tee\.teeLat, lng: tee\.teeLng \}\)/.test(ctx) &&
+      /round\.distanceFromTeeYds != null/.test(turn) &&
+      /CONFIRM that shot naturally first/.test(turn)
+    );
+  })(),
+  'the caddie has the drive distance and confirms it → remaining → play, one flowing sentence');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every
