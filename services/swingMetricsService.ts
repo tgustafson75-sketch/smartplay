@@ -440,14 +440,34 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       // per-swing value. Suppress it (→ "—"). Smash only surfaces when ball speed is independently
       // measured (acoustic branch above, or truth-grade), where the ratio actually reflects THIS strike.
       smashFactor = nullMetric('');
+    } else if (ballSpeed.source === 'acoustic') {
+      // 2026-08-06 (Tim — "we have smash and speed factors we can derive from tempo, speed, impact and
+      // approximate... acoustics when they can be picked up"). When the MIC gave a real per-swing ball
+      // speed (acoustic impact), smash = ball ÷ club carries genuine per-swing signal: the acoustic ball
+      // reading rises on a flush strike and falls on a thin/fat one, so the ratio VARIES with THIS strike
+      // (unlike club × typical-smash, which is a constant). The denominator (club speed) is still a pose/
+      // profile ESTIMATE, so this is an ESTIMATE — labeled as such (est note + a range), confidence capped
+      // at the worse parent, never promoted to a clean measured-looking number. This is the honest
+      // middle ground Tim asked for: a real approximation from the signals we can actually acquire.
+      const ratio = ballSpeed.value / clubSpeed.value;
+      // Clamp to a physically plausible band so a noisy club-speed denominator can't print an absurd smash
+      // (a golf smash is ~1.0–1.55; anything outside is denominator noise, not a real strike).
+      if (ratio >= 1.0 && ratio <= 1.55) {
+        smashFactor = finalize({
+          value: Math.round(ratio * 100) / 100,
+          unit: '',
+          source: 'pose', // estimate-grade → the UI keeps the "est" marker + range (honest, not measured)
+          confidence: Math.min(0.5, ballSpeed.confidence, clubSpeed.confidence),
+          estimateNote: 'est — acoustic ball ÷ club speed',
+        });
+      } else {
+        smashFactor = nullMetric('');
+      }
     } else {
-      // 2026-07-25 (deep audit — S1 honesty) — this branch divided ball speed by a POSE-estimated
-      // club-head speed. Club-head speed is the exact metric the app states it CANNOT measure (needs
-      // 240fps+; parked — see smartmotion-metrics-honesty / face-smash-fps-future). The left rail
-      // strips the estimate marker, so a pose-denominator smash printed as a clean, measured-looking
-      // "1.4x". Suppress it — matching the two branches above (eitherLow / typical-smash), which null
-      // out for the same reason: any value here misleads. Smash returns only when ball speed is
-      // independently measured against a truth-grade club speed.
+      // 2026-07-25 (deep audit — S1 honesty) — with NO acoustic ball reading, the only smash available is
+      // ball(pose) ÷ club(pose) or the typical constant — no independent per-swing signal, so suppress it
+      // (the branches above null for the same reason). Smash returns only with an acoustic/truth-grade ball
+      // speed against the club estimate.
       smashFactor = nullMetric('');
     }
   } else {

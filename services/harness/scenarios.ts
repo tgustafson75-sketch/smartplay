@@ -410,6 +410,17 @@ const SCEN_16: Scenario = {
     a.expectEqual('driver ball speed = 100×1.48 = 148', m1.ball_speed.value, 148);
     a.expectEqual('unknown ball speed = 100×1.36 = 136', m2.ball_speed.value, 136);
     a.expect('driver ≠ unknown — club wiring is live', m1.ball_speed.value !== m2.ball_speed.value);
+
+    // 2026-08-06 (Tim — "smash + speed factors we can derive from... impact... acoustics when they can be
+    // picked up"). A real ACOUSTIC ball speed against a club-speed estimate yields a per-swing SMASH
+    // ESTIMATE (previously suppressed). It's an estimate (source 'pose', not truth-grade), and it VARIES
+    // with the acoustic ball reading — so it's a real per-swing signal, not the circular typical constant.
+    const m3 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, measuredBallSpeedMph: 140, club: 'driver' });
+    a.expectEqual('acoustic smash = 140/100 = 1.40', m3.smash_factor.value, 1.4);
+    a.expectEqual('smash is estimate-grade (source pose), not measured', m3.smash_factor.source, 'pose');
+    // Without an acoustic ball reading, smash stays SUPPRESSED (no circular constant / fabricated number).
+    const m4 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, club: 'driver' });
+    a.expect('no acoustic → smash null (no fabricated constant)', m4.smash_factor.value == null);
   }),
 };
 
