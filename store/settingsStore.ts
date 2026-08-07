@@ -570,6 +570,15 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => {
+        // 2026-08-06 (audit) — Tank is OWNER-GATED. The per-pillar pickers were gated, but the "Active
+        // Caddie" override picker, the tools-menu cycler, and the onboarding pickers still wrote 'tank'
+        // directly — and many voice/brain paths read `caddiePersonality` raw, bypassing caddieResolver's
+        // gate. Enforce the invariant at the SETTER: while Tank is disabled, a request to set 'tank' is
+        // redirected to the current (non-Tank) persona, so NO surface can ever run Tank unless enabled.
+        if (p === 'tank' && !get().tankEnabled) {
+          const cur = get().caddiePersonality;
+          p = cur !== 'tank' ? cur : 'kevin';
+        }
         // 2026-05-21 — Fix Q (Path B): global persona is the single source
         // of truth. Setting it ALSO resets every per-pillar assignment to
         // the same persona so the per-pillar map can never silently

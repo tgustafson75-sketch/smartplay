@@ -970,8 +970,6 @@ export default function SmartMotion() {
   // Cage targeting (ball + movable target) — reactive mirror of the
   // ingested session id so the targeting card/overlay update live.
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [targetFrameUri, setTargetFrameUri] = useState<string | null>(null);
-  const [autoDetectingBall, setAutoDetectingBall] = useState(false);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
   // 2026-07-08 (segmentation audit #1/#8) — session token + in-flight dedupe for the
   // per-swing analysis. Bumping the token on reset/new-recording makes any still-in-
@@ -2226,70 +2224,11 @@ export default function SmartMotion() {
   // Address still for the targeting card / ball auto-detect. Sample near
   // the start of the selected swing (or ~12% into a single clip) where
   // the ball is sitting at address.
-  useEffect(() => {
-    if (!clipUri || phase !== 'review') { setTargetFrameUri(null); return; }
-    const seg = segments[selectedSwing];
-    const addressMs = seg ? Math.max(0, seg.startMs) : Math.round((videoDurationMs ?? 3000) * 0.12);
-    let cancelled = false;
-    void (async () => {
-      // 2026-07-30 (analysis audit C2) — this grabs on review open while <Video> loops the SAME clip.
-      // A native retriever on the file ExoPlayer is decoding SIGSEGVs to the launcher. Extract from a
-      // PRIVATE COPY (distinct file handle) so the crash condition can't arise; degrade to no still on
-      // copy failure rather than touch the playing original.
-      let tempCopy: string | null = null;
-      try {
-        const FS = await import('expo-file-system/legacy');
-        const dir = FS.cacheDirectory;
-        let workUri = clipUri;
-        if (dir) {
-          const dest = `${dir}address-src-${addressMs}-${Date.now()}.mp4`; // unique per invocation (audit C-1)
-          try {
-            await FS.copyAsync({ from: clipUri, to: dest });
-            const info = await FS.getInfoAsync(dest);
-            if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
-          } catch { /* copy failed */ }
-        }
-        if (!tempCopy) { if (!cancelled) setTargetFrameUri(null); return; }
-        const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: addressMs, quality: 0.8 });
-        if (!cancelled) setTargetFrameUri(uri);
-      } catch (e) {
-        console.log('[smartmotion] address-frame extract failed (non-fatal):', e);
-        if (!cancelled) setTargetFrameUri(null);
-      } finally {
-        if (tempCopy) { try { const FS = await import('expo-file-system/legacy'); await FS.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ } }
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipUri, phase, selectedSwing, segments]);
-
-  // Ball auto-detection — sends the address frame to the same vision
-  // endpoint the swing-detail screen uses (/api/swing-analysis
-  // mode=detect_ball, Claude Haiku). Commits the normalized ball area to
-  // the session; on failure the user can still tap-place via the card.
-  const autoDetectBall = useCallback(async () => {
-    if (!targetFrameUri || !sessionId) return;
-    setAutoDetectingBall(true);
-    try {
-      const apiUrl = getApiBaseUrl();
-      const FS = await import('expo-file-system/legacy');
-      const b64 = await FS.readAsStringAsync(targetFrameUri, { encoding: FS.EncodingType.Base64 });
-      const res = await fetch(`${apiUrl}/api/swing-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'detect_ball', frames: [{ b64, media_type: 'image/jpeg' }] }),
-        signal: AbortSignal.timeout(15_000),
-      });
-      const data = (await res.json()) as { found?: boolean; x?: number; y?: number; r?: number };
-      if (data.found && typeof data.x === 'number' && typeof data.y === 'number') {
-        setSessionBallArea(sessionId, { x: data.x, y: data.y, r: typeof data.r === 'number' ? data.r : 0.06 });
-      }
-    } catch (e) {
-      console.log('[smartmotion] ball auto-detect failed (non-fatal):', e);
-    } finally {
-      setAutoDetectingBall(false);
-    }
-  }, [targetFrameUri, sessionId, setSessionBallArea]);
+  // 2026-08-06 (audit) — the address-frame extraction effect + autoDetectBall + targetFrameUri/
+  // autoDetectingBall state were removed here: their ONLY consumer was the CageTargetingCard on the review
+  // report, which was removed (Tim — "why is there cage targeting on the reports?"). The effect was still
+  // doing a real per-review-open copyAsync + thumbnail extraction feeding nothing. Ball/target placement
+  // lives in the SETUP phase (the deck flag + EditableCageTargets), which is untouched.
 
   // Library / upload re-analyze (clipUriParam) path.
   // 2026-06-11 (audit C2) — an uploaded clip carries NO acoustics, so — exactly
@@ -2344,7 +2283,6 @@ export default function SmartMotion() {
     recordingPromiseRef.current = null;
     stoppingRef.current = false;
     setSessionId(null);
-    setTargetFrameUri(null);
     setClipUri(null);
     setAnalysis(null);
     setAnalysisError(null);

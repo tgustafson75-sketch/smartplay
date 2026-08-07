@@ -134,7 +134,6 @@ import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 // Phase AT — KevinHelpButton import removed; ? button no longer rendered
 // on caddie home (Tutorials in Tool menu is the discoverability path).
-import ScorecardChip from '../../components/caddie/ScorecardChip';
 import AppIcon, { type IconName } from '../../components/AppIcon';
 // ImagePicker import removed when Capture Photo was pulled from the
 // Tools menu (Tim flagged it as not belonging there). Re-add when the
