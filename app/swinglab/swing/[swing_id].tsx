@@ -2983,8 +2983,13 @@ export default function SwingDetail() {
                   aiming, with optional one-tap auto-detect for the
                   ball position. Both flow through cageStore as
                   normalized coords; the overlay above the video
-                  renders them on playback. */}
-              <CageTargetingSlot session={session} />
+                  renders them on playback.
+                  2026-08-06 (Tim — "why is there cage targeting on the reports?"). Targeting is a
+                  CAPTURE-TIME framing aid — on a saved-swing REPORT there's nothing to aim, so this card
+                  was just clutter. Gate it behind the SAME "Targets" toggle that already hides the video
+                  overlay (default OFF), so the report is clean and targeting is one opt-in for anyone
+                  who wants to re-mark the ball/aim. */}
+              {showTargets ? <CageTargetingSlot session={session} /> : null}
 
               <CoachNoteCard
                 sessionId={session.id}

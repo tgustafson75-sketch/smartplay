@@ -3787,11 +3787,10 @@ export default function SmartMotion() {
             ref={attachVideoRef}
             source={clipSource}
             style={StyleSheet.absoluteFill}
-            // 2026-08-06 (Tim — "we are not containing the video portion"; SmartMotion Redesign mockup).
-            // CONTAIN (was COVER) frames the WHOLE recorded swing inside the black capture region instead
-            // of bleeding edge-to-edge and cropping the sides (the Samsung side-crop complaint). The pose
-            // overlay + CV trace mapping below are switched to 'contain' in lockstep so the skeleton, club,
-            // and ball trace letterbox identically and stay aligned.
+            // 2026-08-06 (Tim — "couldn't see the golfer"). CONTAIN (was COVER) shows the WHOLE recorded
+            // swing instead of cropping the sides edge-to-edge (the Samsung side-crop). The pose overlay +
+            // CV trace mapping are switched to 'contain' in lockstep so the skeleton, club, and ball trace
+            // scale identically and stay aligned on the golfer.
             resizeMode={ResizeMode.CONTAIN}
             isLooping
             shouldPlay={!videoPaused}
@@ -4816,18 +4815,11 @@ export default function SmartMotion() {
             </Pressable>
           </View>
 
-          {/* Ball + target placement. Auto-detect the ball, tap-place the
-              target (movable) — both render as overlays on the swing video. */}
-          <CageTargetingCard
-            colors={colors}
-            frameUri={targetFrameUri}
-            ballArea={ballArea}
-            target={targetPoint}
-            onChangeBallArea={(a) => { if (sessionId) setSessionBallArea(sessionId, a); }}
-            onChangeTarget={(t) => { if (sessionId) setSessionTarget(sessionId, t); }}
-            onAutoDetectBall={targetFrameUri ? autoDetectBall : undefined}
-            autoDetecting={autoDetectingBall}
-          />
+          {/* 2026-08-06 (Tim — "why is there cage targeting on the reports?"). Ball/target placement is a
+              CAPTURE-TIME framing aid — it's set during setup/recording (the deck flag + the video overlay).
+              On the analyzed-swing REPORT there's nothing to aim, so this re-mark card was pure clutter.
+              Removed from the report; setup still owns targeting. (Saved-swing library keeps it behind the
+              opt-in "Targets" toggle for anyone re-examining an old swing.) */}
         </>
       )}
 
