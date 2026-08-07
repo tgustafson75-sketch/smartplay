@@ -43,11 +43,36 @@ export interface TrendChartProps {
   markerColor?: string;
   /** Legend text for the markers, e.g. 'warm-up'. Shown with a marker swatch when markerIndices is set. */
   markerLabel?: string;
+  // 2026-08-06 (Tim — "there should be ONE graph not multiple"). A SECOND series overlaid on the same
+  // chart (its own independent scale, so different units — practice balls vs score-vs-par — can share one
+  // timeline and read as "are they moving together"). Drawn as a line in its own color with its own legend
+  // entry. This is what collapses the old score/effort pair into a single graph.
+  overlay?: {
+    data: number[];
+    color: string;
+    label: string;
+    /** Overlay is drawn in its solid color (not trend-colored) so the two lines stay distinguishable. */
+  } | null;
 }
 
 const MIN_POINTS = 2;
 
 type Pt = { x: number; y: number };
+
+/** Map a numeric series into chart points over a shared x-range, normalized to its OWN [lo,hi]. */
+function seriesToPoints(series: number[], xPad: number, chartW: number, yTop: number, chartH: number): Pt[] {
+  if (series.length < 1) return [];
+  const rawMin = Math.min(...series);
+  const rawMax = Math.max(...series);
+  const pad = Math.max(rawMax - rawMin, 1) * 0.15;
+  const lo = rawMin - pad;
+  const span = (rawMax + pad) - lo || 1;
+  const n = series.length;
+  return series.map((v, i) => ({
+    x: xPad + (chartW * i) / Math.max(1, n - 1),
+    y: yTop + chartH - ((v - lo) / span) * chartH,
+  }));
+}
 
 // Catmull-Rom spline → cubic-Bézier path. Endpoints are duplicated so the curve
 // passes through every data point with natural tension (1/6).
@@ -72,10 +97,15 @@ export default function TrendChart({
   data, width, height, color = '#00C896', label, yMin, yMax,
   higherIsBetter = true, emptyText = 'Not enough data yet',
   legendDotColor, showTrend = false, deltaUnit, markerIndices, markerColor = '#38bdf8', markerLabel,
+  overlay = null,
 }: TrendChartProps) {
   const series = useMemo(
     () => data.filter((v) => typeof v === 'number' && Number.isFinite(v)),
     [data],
+  );
+  const overlaySeries = useMemo(
+    () => (overlay?.data ?? []).filter((v) => typeof v === 'number' && Number.isFinite(v)),
+    [overlay],
   );
 
   if (series.length < MIN_POINTS) {
@@ -109,6 +139,17 @@ export default function TrendChart({
     return { x, y };
   });
   const last = points[points.length - 1];
+  // Overlay series: its OWN normalization over the SAME x-range/geometry (shape-correlation on one graph).
+  const overlayPts = overlaySeries.length >= MIN_POINTS
+    ? seriesToPoints(overlaySeries, PAD_X, chartW, PAD_TOP, chartH)
+    : [];
+  const overlayPath = overlayPts.length ? smoothLinePath(overlayPts) : '';
+  // Markers sit on the effort (overlay) line when present — warm-ups are a property of practice weeks —
+  // otherwise on the primary line.
+  const markerHost = overlayPts.length ? overlayPts : points;
+  const markerPts = (markerIndices ?? [])
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < markerHost.length)
+    .map((i) => markerHost[i]);
 
   // Color the line by trend direction relative to "better".
   const improving = higherIsBetter ? delta >= 0 : delta <= 0;
@@ -119,10 +160,9 @@ export default function TrendChart({
   const arrow = flat ? '→' : improving ? '↑' : '↓';
   const deltaAbs = Math.abs(delta);
   const deltaStr = flat ? 'flat' : `${arrow} ${deltaAbs % 1 === 0 ? deltaAbs : deltaAbs.toFixed(1)}${deltaUnit ? ' ' + deltaUnit : ''}`;
-  // Warm-up (or other) markers: distinct dots ON the line at the given data indices.
-  const markerPts = (markerIndices ?? [])
-    .filter((i) => Number.isInteger(i) && i >= 0 && i < points.length)
-    .map((i) => points[i]);
+  // Warm-up (or other) markers: distinct dots ON the relevant line at the given data indices. When there's
+  // an overlay (effort line), the markers belong to IT (warm-ups are a property of practice weeks); else the
+  // primary line. Computed after overlayPts below via markerHost.
 
   const linePath = smoothLinePath(points);
   // Area = the smooth line, then down to the baseline and back to the start.
@@ -140,6 +180,12 @@ export default function TrendChart({
           {showTrend ? (
             <Text style={[styles.legendTrend, { color: trendColor }]} numberOfLines={1}>{deltaStr}</Text>
           ) : null}
+          {overlayPath ? (
+            <>
+              <View style={[styles.legendDot, { backgroundColor: overlay!.color, marginLeft: 8 }]} />
+              <Text style={styles.legendLabel} numberOfLines={1}>{overlay!.label}</Text>
+            </>
+          ) : null}
           {markerPts.length && markerLabel ? (
             <>
               <View style={[styles.legendMarker, { borderColor: markerColor }]} />
@@ -156,6 +202,11 @@ export default function TrendChart({
           </LinearGradient>
         </Defs>
         <Path d={areaPath} fill={`url(#${gradId})`} stroke="none" />
+        {/* 2026-08-06 (Tim — ONE graph) — the overlaid effort line (own scale, own solid color), drawn
+            BENEATH the primary outcome line so the score line stays the visual anchor. */}
+        {overlayPath ? (
+          <Path d={overlayPath} fill="none" stroke={overlay!.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" strokeOpacity={0.9} strokeDasharray="5 3" />
+        ) : null}
         <Path
           d={linePath}
           fill="none"

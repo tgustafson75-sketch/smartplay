@@ -276,6 +276,27 @@ export default function Dashboard() {
     [workoutHistory, realRounds],
   );
 
+  // 2026-08-06 (Tim — "there should be ONE graph not multiple"). Collapse the three correlation cards
+  // (practice / points / training, each two stacked sparklines) into a SINGLE progress graph: score-vs-par
+  // (the outcome) with the chosen EFFORT line overlaid, a source toggle, and warm-ups marked on the practice
+  // line. Each source keeps its own honest gating; only sources with data are offered.
+  const progressSources = useMemo(() => {
+    type Src = { key: 'practice' | 'points' | 'training'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[] };
+    const list: Src[] = [];
+    if (practiceHistory.length > 0 && roundHistory.length > 0) {
+      list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreSeries, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices });
+    }
+    if (libraryHistory.length > 0) {
+      list.push({ key: 'points', tab: 'Points', effort: pointsPerf.pointsSeries, effortLabel: 'POINTS / WK', deltaUnit: 'pts', score: pointsPerf.scoreSeries, hasEnough: pointsPerf.hasEnough, headline: pointsPerf.headline, markers: [] });
+    }
+    if (workoutHistory.length > 0) {
+      list.push({ key: 'training', tab: 'Training', effort: workoutPerf.workoutSeries, effortLabel: workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK', deltaUnit: workoutPerf.metric === 'minutes' ? 'min' : '', score: workoutPerf.scoreSeries, hasEnough: workoutPerf.hasEnough, headline: workoutPerf.headline, markers: [] });
+    }
+    return list;
+  }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf]);
+  const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training'>('practice');
+  const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
+
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
   // IN-APP rounds that predate the recap feature (Golfshot imports excluded).
   // Idempotent; no-op once every in-app round has a summary.
@@ -903,58 +924,57 @@ export default function Dashboard() {
           </View>
         </TouchableOpacity>
 
-        {/* ─── PRACTICE → PERFORMANCE (Tim, phase 3) — the honest connection:
-            practice volume vs scoring trend. Shows once there's any of both. */}
-        {practiceHistory.length > 0 && roundHistory.length > 0 && (
+        {/* ─── PROGRESS (Tim, 2026-08-06 — "there should be ONE graph not multiple") — a SINGLE graph:
+            score-vs-par (the outcome) with the chosen EFFORT line overlaid (Practice / Points / Training via
+            the toggle), warm-ups marked on the practice line. Replaces the three separate correlation cards.
+            Each source keeps its own honest gating; the chart shows only once that source has enough on both
+            sides, else the "keep logging" building copy. */}
+        {activeProgress && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE → PERFORMANCE</Text>
-            {/* 2026-06-24 — mutually-exclusive: until there's enough on BOTH
-                sides (computePracticeImpact.hasEnough = ≥3 sessions & ≥4 rounds),
-                show ONLY the "once there's enough" building copy — no chart on top
-                of a not-enough-data message. Once hasEnough, the headline is a real
-                insight and the sparklines render. */}
-            <Text
-              style={[
-                styles.impactHeadline,
-                { color: practiceImpact.hasEnough ? colors.text_primary : colors.text_muted },
-              ]}
-            >
-              {practiceImpact.headline}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>PROGRESS</Text>
+              {/* Source toggle — only the sources that actually have data are offered. */}
+              {progressSources.length > 1 && (
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  {progressSources.map((s) => {
+                    const on = s.key === activeProgress.key;
+                    return (
+                      <TouchableOpacity
+                        key={s.key}
+                        onPress={() => setProgressSourceKey(s.key)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show ${s.tab} vs score`}
+                        style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: on ? colors.accent : colors.border, backgroundColor: on ? colors.accent : 'transparent' }}
+                      >
+                        <Text style={{ fontSize: 10, fontWeight: '900', letterSpacing: 0.4, color: on ? '#06281b' : colors.text_muted }}>{s.tab}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+            <Text style={[styles.impactHeadline, { color: activeProgress.hasEnough ? colors.text_primary : colors.text_muted }]}>
+              {activeProgress.headline}
             </Text>
-            {practiceImpact.hasEnough && (
-              <>
-                {/* 2026-08-06 (Tim — "no labels, can't tell which is score vs practice; a much smarter
-                    graph; show warm-ups as a data point"). Distinct identity colors + a self-explaining
-                    legend (dot ↔ line, metric name, trend arrow), and warm-up weeks marked on the practice
-                    line as their own data point. */}
-                <TrendChart
-                  data={practiceImpact.practiceSeries}
-                  width={chartW}
-                  height={72}
-                  color="#22d3ee"
-                  legendDotColor="#22d3ee"
-                  label="PRACTICE / WK"
-                  showTrend
-                  deltaUnit="balls"
-                  markerIndices={practiceImpact.warmupWeekIndices}
-                  markerColor="#f9a8d4"
-                  markerLabel="warm-up"
-                  higherIsBetter
-                  emptyText="—"
-                />
-                <TrendChart
-                  data={practiceImpact.scoreSeries}
-                  width={chartW}
-                  height={72}
-                  color="#a3e635"
-                  legendDotColor="#a3e635"
-                  label="SCORE VS PAR"
-                  showTrend
-                  deltaUnit="vs par"
-                  higherIsBetter={false}
-                  emptyText="—"
-                />
-              </>
+            {activeProgress.hasEnough && (
+              <TrendChart
+                // Primary = the OUTCOME (score vs par, lower is better → green when dropping). Overlay = the
+                // selected effort line (own scale). Warm-ups marked on the practice line. ONE graph.
+                data={activeProgress.score}
+                overlay={{ data: activeProgress.effort, color: '#22d3ee', label: activeProgress.effortLabel }}
+                markerIndices={activeProgress.markers}
+                markerColor="#f9a8d4"
+                markerLabel={activeProgress.markers.length ? 'warm-up' : undefined}
+                width={chartW}
+                height={112}
+                color="#a3e635"
+                legendDotColor="#a3e635"
+                label="SCORE VS PAR"
+                showTrend
+                deltaUnit="vs par"
+                higherIsBetter={false}
+                emptyText="—"
+              />
             )}
           </View>
         )}
@@ -1010,97 +1030,10 @@ export default function Dashboard() {
           </View>
         )}
 
-        {/* ─── SWING LIBRARY · POINTS → PERFORMANCE (Tim, 2026-06-15) — estimated
-            points from every library capture, paired with scoring. First version of
-            the point/performance graph. */}
-        {libraryHistory.length > 0 && (
-          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>LIBRARY POINTS → PERFORMANCE</Text>
-              <Text style={[styles.practiceLabel, { color: colors.accent }]}>~{pointsPerf.totalEstimatedPoints} EST</Text>
-            </View>
-            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{pointsPerf.headline}</Text>
-            {pointsPerf.hasEnough && (
-              <>
-                <TrendChart
-                  data={pointsPerf.pointsSeries}
-                  width={chartW}
-                  height={72}
-                  color="#22d3ee"
-                  legendDotColor="#22d3ee"
-                  label="POINTS / WK"
-                  showTrend
-                  deltaUnit="pts"
-                  higherIsBetter
-                  emptyText="—"
-                />
-                <TrendChart
-                  data={pointsPerf.scoreSeries}
-                  width={chartW}
-                  height={72}
-                  color="#a3e635"
-                  legendDotColor="#a3e635"
-                  label="SCORE VS PAR"
-                  showTrend
-                  deltaUnit="vs par"
-                  higherIsBetter={false}
-                  emptyText="—"
-                />
-              </>
-            )}
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
-              {pointsBaselineMs
-                ? `Running live since ${new Date(pointsBaselineMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${pointsPerf.sessionsCounted} ${pointsPerf.sessionsCounted === 1 ? 'session' : 'sessions'} so far. Watch it build — we'll re-estimate your earlier history later.`
-                : 'Building live as you practice. We\'ll re-estimate your earlier history later.'}
-            </Text>
-          </View>
-        )}
-
-        {/* ─── WORKOUT · TRAINING → PERFORMANCE (Tim, 2026-07-07 — SmartPump third rail) —
-            imported golf-workout volume per week paired with scoring. Honest: association,
-            never causation; only charts once there's enough on both sides. */}
-        {workoutHistory.length > 0 && (
-          <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>TRAINING → PERFORMANCE</Text>
-              <Text style={[styles.practiceLabel, { color: colors.accent }]}>
-                {workoutPerf.totalWorkouts} {workoutPerf.totalWorkouts === 1 ? 'WORKOUT' : 'WORKOUTS'}
-              </Text>
-            </View>
-            <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>{workoutPerf.headline}</Text>
-            {workoutPerf.hasEnough && (
-              <>
-                <TrendChart
-                  data={workoutPerf.workoutSeries}
-                  width={chartW}
-                  height={72}
-                  color="#22d3ee"
-                  legendDotColor="#22d3ee"
-                  label={workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK'}
-                  showTrend
-                  deltaUnit={workoutPerf.metric === 'minutes' ? 'min' : ''}
-                  higherIsBetter
-                  emptyText="—"
-                />
-                <TrendChart
-                  data={workoutPerf.scoreSeries}
-                  width={chartW}
-                  height={72}
-                  color="#a3e635"
-                  legendDotColor="#a3e635"
-                  label="SCORE VS PAR"
-                  showTrend
-                  deltaUnit="vs par"
-                  higherIsBetter={false}
-                  emptyText="—"
-                />
-              </>
-            )}
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 8, letterSpacing: 0 }]}>
-              From your SmartPump golf workouts{workoutPerf.metric === 'minutes' ? ` · ${workoutPerf.minutesEstimated ? '~' : ''}${Math.round(workoutPerf.totalMinutes / 60)}h total${workoutPerf.minutesEstimated ? ' (est.)' : ''}` : ''}. Import updates in Settings → Backup & Data.
-            </Text>
-          </View>
-        )}
+        {/* 2026-08-06 (Tim — "there should be ONE graph not multiple") — the separate LIBRARY POINTS →
+            PERFORMANCE and TRAINING → PERFORMANCE graph cards were folded into the single PROGRESS graph
+            above (source toggle: Practice / Points / Training). pointsPerf / workoutPerf still power those
+            toggle views; their standalone chart cards were removed to keep ONE graph. */}
 
         {/* ─── 7. RECENT SHOTS ─────────────────────────────────────────
             2026-05-25 — Fix X: swapped the plain text list for the new

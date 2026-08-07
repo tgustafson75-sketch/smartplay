@@ -4796,24 +4796,26 @@ check('Practice→performance: honest connection card (association, gated, no fa
       /showing up on the course/.test(svc) &&
       // never claims causation
       !/because you practiced|practice caused|proves/.test(svc);
+    // 2026-08-06 (Tim — "there should be ONE graph not multiple") — the three correlation cards collapsed
+    // into a SINGLE PROGRESS graph: score-vs-par (outcome) with the chosen effort line overlaid.
     const dashOk =
-      /PRACTICE → PERFORMANCE/.test(dash) &&
+      /PROGRESS/.test(dash) &&
       /computePracticeImpact\(\{/.test(dash) &&
-      // two trends: practice volume + score-vs-par (lower better)
-      /data=\{practiceImpact\.practiceSeries\}/.test(dash) &&
-      /data=\{practiceImpact\.scoreSeries\}/.test(dash) &&
+      // one chart: score-vs-par primary (lower better) + the selected effort as an OVERLAY
+      /data=\{activeProgress\.score\}/.test(dash) &&
+      /overlay=\{\{ data: activeProgress\.effort/.test(dash) &&
       /higherIsBetter=\{false\}/.test(dash) &&
-      /practiceHistory\.length > 0 && roundHistory\.length > 0/.test(dash);
-    // 2026-08-06 (Tim — "no labels, which is score vs practice; smarter graph; warm-ups as a data point").
-    // The graph now self-labels (distinct legend colors + trend) and marks warm-up weeks on the practice line.
+      // source toggle across only the sources with data
+      /progressSources\.map\(/.test(dash) && /setProgressSourceKey/.test(dash);
+    // The graph self-labels (distinct legend colors + trend) and marks warm-up weeks on the practice line.
     const graphSmartOk =
       /warmupWeekIndices: number\[\]/.test(svc) &&                    // service surfaces warm-up weeks
       /warmupWeeks\.add\(WEEKS - 1 - ageWeeks\)/.test(svc) &&          // bucketed like practiceSeries
       /warmups: practiceHistory/.test(dash) &&                        // dashboard feeds warm-up sessions
-      /markerIndices=\{practiceImpact\.warmupWeekIndices\}/.test(dash) && // marked on the practice line
-      /markerLabel="warm-up"/.test(dash) &&
+      /markerIndices=\{activeProgress\.markers\}/.test(dash) &&        // warm-ups marked on the (overlay) practice line
+      /markerLabel=\{activeProgress\.markers\.length \? 'warm-up' : undefined\}/.test(dash) &&
       /legendDotColor=/.test(dash) && /showTrend/.test(dash) &&        // self-labeling legend + trend
-      /legendDotColor\?: string/.test(read('components/charts/TrendChart.tsx'));
+      /overlay\?: \{/.test(read('components/charts/TrendChart.tsx')); // one-graph overlay support
     return svcOk && dashOk && graphSmartOk;
   })(),
   'the dashboard shows a practice→performance card pairing weekly practice volume against score-vs-par trend, described as an honest association (gated until ≥3 sessions + ≥4 rounds, "keep logging" before that), never claiming practice caused the result');
