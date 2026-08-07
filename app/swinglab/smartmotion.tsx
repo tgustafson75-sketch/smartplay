@@ -1196,8 +1196,10 @@ export default function SmartMotion() {
   }, [ballDeparture, ballPathFrameAR]);
   const containerAR = rootSize.w > 0 && rootSize.h > 0 ? rootSize.w / rootSize.h : null;
   const cvToContainer = useCallback(
+    // 2026-08-06 — 'contain' to match the review <Video> CONTAIN mode (video containment); the ball/shot
+    // trace now maps into the SAME letterboxed space as the skeleton so it stays on the ball.
     (p: { x: number; y: number }) =>
-      frameAR != null && containerAR != null ? frameToContainerNorm(p, frameAR, containerAR, 'cover') : p,
+      frameAR != null && containerAR != null ? frameToContainerNorm(p, frameAR, containerAR, 'contain') : p,
     [frameAR, containerAR],
   );
 
@@ -3785,7 +3787,12 @@ export default function SmartMotion() {
             ref={attachVideoRef}
             source={clipSource}
             style={StyleSheet.absoluteFill}
-            resizeMode={ResizeMode.COVER}
+            // 2026-08-06 (Tim — "we are not containing the video portion"; SmartMotion Redesign mockup).
+            // CONTAIN (was COVER) frames the WHOLE recorded swing inside the black capture region instead
+            // of bleeding edge-to-edge and cropping the sides (the Samsung side-crop complaint). The pose
+            // overlay + CV trace mapping below are switched to 'contain' in lockstep so the skeleton, club,
+            // and ball trace letterbox identically and stay aligned.
+            resizeMode={ResizeMode.CONTAIN}
             isLooping
             shouldPlay={!videoPaused}
             rate={playbackRate}
@@ -3966,7 +3973,9 @@ export default function SmartMotion() {
               currentTimeMs={playbackMs}
               showSkeleton
               showTrace={showSkeleton && shotConfirmed}
-              resizeMode="cover"
+              // 2026-08-06 — matches the review <Video> CONTAIN mode (video containment) so the skeleton
+              // letterboxes with the frame instead of cropping.
+              resizeMode="contain"
               // 2026-07-06 (range audit RANK 3) — light the diagnosed fault's body
               // region orange/red in the LIVE review too (was only on the saved-swing
               // screen), so a significant over-the-top actually reads red as you watch.
