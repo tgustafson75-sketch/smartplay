@@ -512,6 +512,17 @@ export const openToolHandler: IntentHandler = {
       // synchronous from the screen's perspective.
       let coachedPlayerName: string | null = null;
       if (toolName === 'coach_mode' || toolName === 'coachmode') {
+        // 2026-08-07 (Tim — gate audit) — Coach Mode is toggle-gated (settings.coachModeEnabled, off by
+        // default). Bail BEFORE mutating the family roster or announcing coaching: the old path quick-added
+        // a phantom student + spoke "coaching Emma", THEN the screen bounced with "Coach Mode is off" — a
+        // self-contradiction. Speak the enable-it line and don't navigate/mutate.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const settings = (require('../../store/settingsStore') as typeof import('../../store/settingsStore')).useSettingsStore.getState();
+          if (!settings.coachModeEnabled) {
+            return { success: true, voice_response: "Coach Mode is off — turn it on in Settings, then I'll coach your player.", side_effects: [], follow_up_needed: false };
+          }
+        } catch { /* if the flag can't be read, fall through to the normal path */ }
         const fromParam = typeof intent.parameters.player_name === 'string'
           ? intent.parameters.player_name.trim()
           : '';

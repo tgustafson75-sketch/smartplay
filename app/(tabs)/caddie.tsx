@@ -209,10 +209,9 @@ export default function CaddieTab() {
     () => familyMembers.filter(m => !m.archived).length,
     [familyMembers],
   );
-  // 2026-06-04 — Coach Mode toggle. Hides the "Coach X" pill below
-  // when off. Toggle lives in the L4 green-arrow expandable row.
-  const _coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
-  const _setCoachModeEnabled = useSettingsStore(s => s.setCoachModeEnabled);
+  // 2026-08-07 (re-verify audit) — removed the dead _coachModeEnabled/_setCoachModeEnabled subscriptions:
+  // the "Coach X" pill they gated was already removed, so these only caused needless re-renders on the
+  // toggle. Coach Mode is now gated at its screen + the voice open handler.
 
   // ── Stores ──────────────────────────────
   // Audit 101 / W1 — useShallow subscribes only to the listed fields with

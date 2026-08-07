@@ -47,7 +47,7 @@ export const HOW_TO: HowTo[] = [
   {
     id: 'change-caddie',
     asks: ['change my caddie', 'change your voice', 'pick a different caddie', 'switch caddie', 'build a custom caddie'],
-    steps: 'Settings → Caddie Team — pick Kevin, Serena, Harry, or Tank, or build a Custom caddie. Same brain, different delivery. On-course you can also just say "switch to Tank".',
+    steps: 'Settings → Caddie Team — pick Kevin or Serena, or build a Custom caddie with your own name, face, and voice. Same brain, different delivery.',
   },
   {
     id: 'set-bag',
