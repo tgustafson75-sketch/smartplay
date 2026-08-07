@@ -3251,6 +3251,25 @@ check('Conversational "…for that last shot" CORRECTS the logged shot (editShot
   })(),
   'brain updates the last shot from conversation (correct_last_shot → editShot); offline-deterministic');
 
+// 2026-08-07 (Tim — "the hero card is basic as shit… no thumbnail, course info, description, add user
+// history on that course. Pre-App-Store release, not a bullshit MVP"). LOCK the nearest-course hero as
+// RICH: satellite thumbnail, rating/slope + location, the player's own record from roundHistory, and a
+// one-tap Start. Guards against a regression back to a bare name+chevron row.
+check('Play nearest-course hero is rich: thumbnail + course info + user history + Start',
+  (() => {
+    const p = read('app/(tabs)/play.tsx');
+    return (
+      /const heroCourse: CourseSummary \| null/.test(p) &&
+      /const heroStats/.test(p) &&
+      /roundHistory\.filter/.test(p) && // pulls the player's rounds at this course
+      /Played \$\{heroStats\.rounds\}/.test(p) && // history line rendered
+      /First time here/.test(p) && // honest empty state
+      /<Image source=\{thumb\}/.test(p) && // real thumbnail
+      /heroImageWrap/.test(p) && /heroStartBtn/.test(p)
+    );
+  })(),
+  'nearest-course hero shows thumbnail, rating/slope, per-course history, and one-tap Start');
+
 check('Round recap notes show the player\'s notes only, not the error log',
   // 2026-06-16 (Tim — recap was 3 pages of transcribe/voice errors) — "Notes from
   // this round" filters to kind==='user' (or legacy undefined), excluding the

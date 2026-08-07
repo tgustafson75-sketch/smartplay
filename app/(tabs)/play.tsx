@@ -500,6 +500,7 @@ export default function PlayTab() {
   // Phone portrait + fold-closed render unchanged.
   const { isWide } = useDeviceLayout();
   const recentCourseIds = useRoundStore(s => s.recentCourseIds);
+  const roundHistory = useRoundStore(s => s.roundHistory);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const activeCourseId = useRoundStore(s => s.activeCourseId);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -814,6 +815,42 @@ export default function PlayTab() {
     );
     return { course: best.course, yards: best.yards, sibling: sibling?.course ?? null };
   }, [closestLocal, userPosition]);
+
+  // 2026-08-07 (Tim — "the hero card is basic as shit… add course info, description, user history on
+  // that course"). The single nearest course + everything we can honestly show about it: a real
+  // satellite thumbnail, rating/slope, and the player's OWN record at that course pulled from
+  // roundHistory (rounds played, best/last score, best vs-par). Matched by courseId first, then a
+  // normalized name compare (imports/local rounds may lack the API id). Null when GPS/round aren't ready.
+  const heroCourse: CourseSummary | null = (!isRoundActive && userPosition && !atCourse?.sibling)
+    ? (closestLocal[0] ?? null)
+    : null;
+  const heroStats: {
+    rounds: number; bestScore: number | null; lastScore: number | null;
+    bestVsPar: number | null; lastVsPar: number | null;
+  } | null = useMemo(() => {
+    if (!heroCourse) return null;
+    const norm = (s: string | null | undefined) =>
+      (s ?? '').toLowerCase().replace(/\s[—-]\s.*/, '').replace(/[^a-z0-9]/g, '').trim();
+    const heroName = norm(heroCourse.club_name);
+    const mine = roundHistory.filter(r =>
+      (r.courseId != null && r.courseId === heroCourse.id) ||
+      (heroName.length >= 4 && norm(r.courseName) === heroName),
+    );
+    if (mine.length === 0) return { rounds: 0, bestScore: null, lastScore: null, bestVsPar: null, lastVsPar: null };
+    const scored = mine.filter(r => typeof r.totalScore === 'number' && r.totalScore > 0);
+    const byDate = [...mine].sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
+    const last = byDate[0];
+    const bestScore = scored.length ? Math.min(...scored.map(r => r.totalScore)) : null;
+    const withPar = mine.filter(r => typeof r.scoreVsPar === 'number');
+    const bestVsPar = withPar.length ? Math.min(...withPar.map(r => r.scoreVsPar as number)) : null;
+    return {
+      rounds: mine.length,
+      bestScore,
+      lastScore: last && typeof last.totalScore === 'number' && last.totalScore > 0 ? last.totalScore : null,
+      bestVsPar,
+      lastVsPar: last && typeof last.scoreVsPar === 'number' ? last.scoreVsPar : null,
+    };
+  }, [heroCourse, roundHistory]);
 
   // Default the SELECTED COURSE card to the user's home course on first
   // mount (or Palms — Tim's primary local — if none is set yet). User
@@ -1199,35 +1236,59 @@ export default function PlayTab() {
           <Text style={styles.playTagline}>{t('play.tagline', { defaultValue: 'Smart guidance. Lower scores.' })}</Text>
         </View>
 
-        {/* 2026-08-07 (Tim) — NEAREST-COURSE HERO. When GPS knows where the player is and no round is
-            running, the single closest course gets a prominent one-tap "Start round" card at the top of
-            the tab. Suppressed when co-located siblings are ambiguous (the atCourse "which course?" banner
-            below handles that more accurately) so the hero never one-tap-starts the wrong nine. */}
-        {!isRoundActive && userPosition && closestLocal[0] && !atCourse?.sibling && (
-          <TouchableOpacity
-            style={styles.heroCard}
-            onPress={() => startRoundAtCourse(closestLocal[0])}
-            accessibilityRole="button"
-            accessibilityLabel={`Start a round at ${closestLocal[0].club_name}`}
-          >
-            <View style={styles.heroIconWrap}>
-              <AppIcon name="golf" size={22} color="#00C896" />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.heroKicker}>
-                {distanceLabelById[closestLocal[0].id] ? `NEAREST · ${distanceLabelById[closestLocal[0].id]}` : 'NEAREST COURSE'}
-              </Text>
-              <Text style={styles.heroCourseName} numberOfLines={1}>{closestLocal[0].club_name}</Text>
-              {!!closestLocal[0].location && (
-                <Text style={styles.heroMeta} numberOfLines={1}>{closestLocal[0].location}</Text>
-              )}
-            </View>
-            <View style={styles.heroCta}>
-              <Text style={styles.heroCtaText}>Start</Text>
-              <AppIcon name="chevron-forward" size={16} color="#001b12" />
-            </View>
-          </TouchableOpacity>
-        )}
+        {/* 2026-08-07 (Tim — "the hero card is basic as shit… no thumbnail, course info, description, add
+            user history on that course. This is a pre-App-Store release"). Rich NEAREST-COURSE hero: live
+            satellite thumbnail, distance, rating/slope, and the player's OWN record at that course from
+            roundHistory (rounds / best / last). One tap starts the round. Suppressed when co-located
+            siblings are ambiguous (the atCourse "which course?" banner handles that). */}
+        {heroCourse && (() => {
+          const thumb = heroCourse.thumbnail
+            ?? (heroCourse.lat != null && heroCourse.lng != null ? satelliteThumb(heroCourse.lat, heroCourse.lng) : null);
+          const dist = distanceLabelById[heroCourse.id];
+          const vsPar = (n: number | null) => n == null ? null : n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
+          const info: string[] = [];
+          if (heroCourse.rating != null) info.push(`${heroCourse.rating.toFixed(1)}${heroCourse.slope != null ? `/${heroCourse.slope}` : ''}`);
+          else if (heroCourse.slope != null) info.push(`Slope ${heroCourse.slope}`);
+          if (heroCourse.location) info.push(heroCourse.location);
+          const historyLine = heroStats && heroStats.rounds > 0
+            ? [
+                `Played ${heroStats.rounds}×`,
+                heroStats.bestScore != null ? `Best ${heroStats.bestScore}${vsPar(heroStats.bestVsPar) ? ` (${vsPar(heroStats.bestVsPar)})` : ''}` : null,
+                heroStats.lastScore != null ? `Last ${heroStats.lastScore}` : null,
+              ].filter(Boolean).join('  ·  ')
+            : "First time here — I'll learn it with you";
+          return (
+            <TouchableOpacity
+              style={styles.heroCard}
+              activeOpacity={0.9}
+              onPress={() => startRoundAtCourse(heroCourse)}
+              accessibilityRole="button"
+              accessibilityLabel={`Start a round at ${heroCourse.club_name}`}
+            >
+              <View style={styles.heroImageWrap}>
+                {thumb
+                  ? <Image source={thumb} style={styles.heroImage} resizeMode="cover" />
+                  : <View style={[styles.heroImage, styles.heroImagePlaceholder]}><AppIcon name="golf" size={30} color="#00C896" /></View>}
+                <View style={styles.heroKickerBadge}>
+                  <AppIcon name="location" size={11} color="#001b12" />
+                  <Text style={styles.heroKickerBadgeText}>{dist ? `NEAREST · ${dist}` : 'NEAREST'}</Text>
+                </View>
+              </View>
+              <View style={styles.heroBody}>
+                <Text style={styles.heroCourseName} numberOfLines={1}>{heroCourse.club_name}</Text>
+                {info.length > 0 && <Text style={styles.heroMeta} numberOfLines={1}>{info.join('  ·  ')}</Text>}
+                <View style={styles.heroHistoryRow}>
+                  <AppIcon name={heroStats && heroStats.rounds > 0 ? 'stats-chart' : 'sparkles'} size={13} color="#00C896" />
+                  <Text style={styles.heroHistoryText} numberOfLines={1}>{historyLine}</Text>
+                </View>
+                <View style={styles.heroStartBtn}>
+                  <Text style={styles.heroStartBtnText}>Start round</Text>
+                  <AppIcon name="arrow-forward" size={15} color="#001b12" />
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* 2026-06-10 — Tournament Mode moved into the round-setup FORMAT row
             (next to 9-Hole / Competition) so it lives with the other format
@@ -2007,58 +2068,89 @@ return StyleSheet.create({
   // the closest-local list when GPS puts the player within ~550y of a
   // known course. Subtle teal border to read as informational, not as
   // a primary call-to-action.
-  // 2026-08-07 (Tim) — nearest-course hero card (top of Play tab).
+  // 2026-08-07 (Tim) — rich nearest-course hero card (top of Play tab): thumbnail banner + course
+  // info + the player's history at that course + a one-tap Start.
   heroCard: {
     marginHorizontal: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginBottom: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,200,150,0.45)',
-    backgroundColor: 'rgba(0,200,150,0.10)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderColor: 'rgba(0,200,150,0.40)',
+    backgroundColor: 'rgba(0,200,150,0.08)',
+    overflow: 'hidden',
   },
-  heroIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  heroImageWrap: {
+    width: '100%',
+    height: 132,
+    backgroundColor: 'rgba(0,200,150,0.10)',
+  },
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroImagePlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,200,150,0.16)',
   },
-  heroKicker: {
-    color: c.accent,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 2,
+  heroKickerBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,200,150,0.92)',
+  },
+  heroKickerBadgeText: {
+    color: '#001b12',
+    fontSize: 10.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  heroBody: {
+    paddingHorizontal: 14,
+    paddingTop: 11,
+    paddingBottom: 13,
   },
   heroCourseName: {
     color: '#eafff6',
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '800',
   },
   heroMeta: {
-    color: 'rgba(232,245,233,0.65)',
-    fontSize: 12,
+    color: 'rgba(232,245,233,0.62)',
+    fontSize: 12.5,
     fontWeight: '500',
-    marginTop: 1,
+    marginTop: 2,
   },
-  heroCta: {
+  heroHistoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
+    gap: 6,
+    marginTop: 8,
+  },
+  heroHistoryText: {
+    flex: 1,
+    color: 'rgba(232,245,233,0.9)',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  heroStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 13,
+    paddingVertical: 11,
+    borderRadius: 11,
     backgroundColor: c.accent,
   },
-  heroCtaText: {
+  heroStartBtnText: {
     color: '#001b12',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
   },
   atCourseBanner: {
