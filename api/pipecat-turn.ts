@@ -344,6 +344,17 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
         (typeof round.mode === 'string' && round.mode !== 'free_play') ? `Round mode/goal: ${round.mode} — shape every call to it (e.g. break-100 = keep the big number off the card).` : '',
         round.isCompetition ? `COMPETITION round — bias conservative, protect against the blow-up.` : '',
         round.holeNote ? `His note on THIS hole: "${round.holeNote}" — factor it in.` : '',
+        (() => {
+          // 2026-08-07 (Tim) — a green read he SAVED on a prior visit to this hole; recall it if he's putting.
+          const pgr = round.priorGreenRead as { feet?: number; slopePct?: number; note?: string } | undefined;
+          if (!pgr) return '';
+          const parts = [
+            pgr.feet != null ? `${Math.round(pgr.feet)}ft` : '',
+            pgr.slopePct != null ? `${pgr.slopePct > 0 ? 'uphill' : 'downhill'} ${Math.abs(Math.round(pgr.slopePct))}%` : '',
+            pgr.note || '',
+          ].filter(Boolean).join(', ');
+          return parts ? `Prior green read on THIS hole (from a past visit): ${parts} — recall it naturally if he's on/near the green.` : '';
+        })(),
         rShots.length ? `Recent shots: ${rShots.map((s) => `${s.club ?? '?'}${s.distance ? ' ' + s.distance + 'y' : ''}${s.outcome ? ' ' + s.outcome : ''}`).join('; ')}` : '',
         round.mentalState ? `Mental state: ${round.mentalState}` : '',
         round.goal ? `Round goal: ${round.goal}` : '',

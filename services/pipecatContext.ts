@@ -86,6 +86,24 @@ export function buildPipecatContext() {
       simRound: round.isSimRound || undefined,
       isCompetition: round.isCompetition ?? undefined,
       holeNote: (round.holeNotes ?? {})[round.currentHole] ?? undefined,
+      // 2026-08-07 (Tim — "the caddie learns your miss but ignores it"; green-read recall) — a green read
+      // the player SAVED on a PRIOR visit to this hole, so on a revisit the caddie can recall "last time
+      // this putt played downhill, died left" instead of reading blind. Honest — replays a real prior read.
+      priorGreenRead: (() => {
+        try {
+          if (!round.isRoundActive || round.currentHole == null) return undefined;
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const gr = require('../store/greenReadStore').useGreenReadStore.getState()
+            .lastForHole(round.activeCourseId ?? null, round.currentHole) as
+            | { feetEst: number | null; slopePct: number | null; text: string } | null;
+          if (!gr || (gr.feetEst == null && gr.slopePct == null && !gr.text)) return undefined;
+          return {
+            feet: gr.feetEst ?? undefined,
+            slopePct: gr.slopePct ?? undefined,
+            note: gr.text || undefined,
+          };
+        } catch { return undefined; }
+      })(),
       recentShots: (round.shots ?? []).slice(-5).map((s) => ({
         club: s.club ?? null, hole: s.hole ?? null, distance: s.distance_yards ?? null, outcome: s.outcome_text ?? null,
       })),
