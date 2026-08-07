@@ -138,13 +138,18 @@ export const clubChangeHandler: IntentHandler = {
       const statedYds = parseStatedYardage(String(intent.raw_text ?? phrase));
       if (statedYds != null) round.setUserStatedYardage(statedYds, 'user');
       track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice' });
+      // 2026-08-07 (Tim — "I say 'I'm gonna hit a 5 wood off this tee' and it just says 'got it, 5 wood'
+      // with NO correlation to anything. It's already on a tee box — it should populate yardage, wind, the
+      // play. This is not AI, not a caddie"). The club is SET above; now route to the conversational brain
+      // (mirrors hole_read / shot_strategy) so the caddie ACKNOWLEDGES the club WITH live context — the
+      // yardage this leaves, wind, whether it fits the hole — instead of a canned confirm. Offline, the
+      // caddie's own fallback composes a local line. [[feels-like-a-real-caddie]]
       return {
-        success: true,
-        voice_response: statedYds != null
-          ? `Got it — ${clubLabel(parsed.club_id)} from ${statedYds}.`
-          : `Got it, ${clubLabel(parsed.club_id)}.`,
+        success: false,
+        voice_response: null,
         side_effects: [`round:club_switched:${parsed.club_id}`],
         follow_up_needed: false,
+        route_to_brain: true,
       };
     }
 

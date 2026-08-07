@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
+import { haversineYards } from '../../utils/geoDistance';
 import { prewarmVoice } from '../../services/voiceWarmup';
 import { clearScreenContext, getScreenContext } from '../../services/screenContext';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -934,6 +935,8 @@ export default function CaddieTab() {
   const holeChangedAtRef = useRef(0);
   const lastProactiveHoleRef = useRef<number | null>(null);
   const prevHoleRef = useRef<number | null>(null);
+  // 2026-08-07 (Tim) — fire the tee-box auto-brief AT MOST once per hole.
+  const teeBriefedHoleRef = useRef<number | null>(null);
   useEffect(() => {
     if (prevHoleRef.current !== currentHole) {
       prevHoleRef.current = currentHole;
@@ -1285,6 +1288,54 @@ export default function CaddieTab() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, localMode, apiUrl, interactiveRound]);
+
+  // 2026-08-07 (Tim — "Tee box is the ONLY spot for an auto brief for that hole… the briefing was missing
+  // windage and yardage because we couldn't build the holes"). With bundled geometry now loading (real tee
+  // coords), fire ONE hole brief automatically when GPS confirms the player is AT the current hole's tee
+  // box — THE single allowed auto-brief per hole (independent of interactiveRound, which gates speak-on-
+  // stop ELSEWHERE). Yardage + wind + the play come from the live shot context, which is now populated.
+  // Guards: within ~40y of the tee, stationary settle (6s) so a walk-through doesn't trigger it, once per
+  // hole, never over an active read. If a hole has no tee coords (geometry missing) it silently no-ops and
+  // the player still gets the read by asking (pull).
+  useEffect(() => {
+    if (!isRoundActive || !_proactive_kevin_enabled || localMode || currentHole < 1) return;
+    if (movementMode !== 'stationary') return;
+    if (teeBriefedHoleRef.current === currentHole) return;
+    const tee = courseHoles.find(h => h.hole === currentHole);
+    if (!tee || !tee.teeLat || !tee.teeLng) return; // no geometry → pull-only, no auto tee brief
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      void (async () => {
+        try {
+          const { getLastFix } = await import('../../services/gpsManager');
+          const fix = getLastFix();
+          if (!fix || fix.lat == null || fix.lng == null) return;
+          const distYds = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
+          if (distYds > 40) return; // not AT the tee box — the player gets the read by asking
+          if (isSpeaking() || voiceState !== 'idle') return;
+          if (teeBriefedHoleRef.current === currentHole) return;
+          teeBriefedHoleRef.current = currentHole;
+          const engine = await import('../../services/smartAnalysisEngine');
+          const env = await engine.analyze({ kind: 'shot_strategy' });
+          const text = env.voice_summary;
+          if (!text) return;
+          setCaddieResponse(text);
+          setVoiceState('proactive');
+          const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+          if (ve) {
+            speak(text, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState('idle'));
+          } else {
+            setTimeout(() => setVoiceState('idle'), 3000);
+          }
+        } catch (e) {
+          console.log('[caddie] tee-box auto-brief failed (non-fatal):', e);
+        }
+      })();
+    }, 6000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movementMode, isRoundActive, _proactive_kevin_enabled, currentHole, localMode, apiUrl, courseHoles]);
 
   // Audit 101 / W2 — removed three orphan useMemos (_totalScore, _scoreVsPar,
   // _holesPlayed) that were unused. They invalidated and recomputed on every

@@ -1071,6 +1071,33 @@ check('Tool opens require an explicit open-verb; otherwise stay conversational',
   })(),
   'bare tool names / misclassified opens stay conversational; only an explicit "open/show me <tool>" navigates');
 
+// 2026-08-07 (Tim — "Tee box is the ONLY spot for an auto brief… missing yardage/wind because we couldn't
+// build the holes"). LOCK the tee-box auto-brief: fires once per hole when GPS confirms arrival at the
+// current hole's tee, independent of interactiveRound, gated on real tee coords.
+check('Tee-box auto-brief fires once at the tee (GPS-confirmed), yardage/wind from live context',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    return (
+      /teeBriefedHoleRef/.test(c) &&
+      /haversineYards\(\{ lat: fix\.lat, lng: fix\.lng \}, \{ lat: tee\.teeLat, lng: tee\.teeLng \}\)/.test(c) &&
+      /distYds > 40/.test(c) && // must be AT the tee
+      /kind: 'shot_strategy'/.test(c)
+    );
+  })(),
+  'the one allowed auto-brief per hole fires at the tee box (≤40y, once per hole), not mid-walk');
+
+// 2026-08-07 (Tim — "'I'm gonna hit a 5 wood off this tee' → 'got it, 5 wood' with NO correlation. Not
+// AI, not a caddie"). LOCK: an in-round club declaration SETS the club then routes to the brain so the
+// caddie acknowledges WITH context (yardage this leaves, wind, fit) — no canned "got it".
+check('In-round club declaration routes to the brain for a CONTEXTUAL reply (not a canned confirm)',
+  (() => {
+    const h = read('services/intents/clubHandler.ts');
+    // the round branch: setClub then route_to_brain (no canned "Got it, <club>")
+    return /round\.setClub\(parsed\.club_id\)/.test(h) &&
+      /round:club_switched:\$\{parsed\.club_id\}`\],\s*follow_up_needed: false,\s*route_to_brain: true/.test(h);
+  })(),
+  'declaring a club on the tee correlates hole/yardage/wind via the brain instead of "got it, 5-wood"');
+
 check('TTS never sends `speed` to gpt-4o-mini-tts (the 500 "Voice generation failed" root cause)',
   // 2026-07-30 (Tim — voice_silent_fail 500, "this has happened since we adjusted speed"). ROOT CAUSE:
   // gpt-4o-mini-tts does NOT accept the `speed` param (only tts-1 / tts-1-hd), so OpenAI 500'd every
