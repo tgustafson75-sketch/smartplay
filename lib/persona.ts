@@ -114,6 +114,16 @@ export function isActivePersona(p: Persona): boolean {
   return (ACTIVE_PERSONAS as readonly Persona[]).includes(p);
 }
 
+/**
+ * 2026-08-07 (Tim — "you can STILL toggle to Tank; how the fuck is that hidden?"). Tank is OWNER-GATED, so
+ * EVERY surface that lists/cycles pickable caddies (the tools-menu cycler, the persona-intensity list, the
+ * onboarding intro pickers) must drop Tank when it's disabled — not just the Settings pillar pickers. This
+ * is the single gated list those surfaces should render instead of ACTIVE_PERSONAS directly.
+ */
+export function selectablePersonas(tankEnabled: boolean): readonly Persona[] {
+  return tankEnabled ? ACTIVE_PERSONAS : ACTIVE_PERSONAS.filter((p) => p !== 'tank');
+}
+
 // Audit 101 / B4 — server-side request body persona resolver. Prefer the
 // newer `persona` field; fall back to the legacy `voiceGender` field. This
 // closes the F13 server-side gap where ~20 api/* routes called

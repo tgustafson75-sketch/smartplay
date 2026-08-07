@@ -230,6 +230,51 @@ function AppNavigator() {
     return () => { unsubA?.(); unsubB?.(); };
   }, []);
 
+  // 2026-08-07 (Tim — "my custom caddie still defaults to Kevin after a restart; it's never persisted").
+  // ROOT CAUSE: the custom caddie's identity spans TWO independently-persisted stores — settingsStore
+  // (caddiePersonality === 'custom' + the mirrored per-pillar assignments) and playerProfileStore
+  // (useCustomCaddie === true). They rehydrate asynchronously and in an unspecified order, so a boot read
+  // during that window can see caddiePersonality still at its default 'kevin' while useCustomCaddie is
+  // already 'custom' (or vice-versa) — and the caddie renders as Kevin. Both values ARE persisted; they
+  // just aren't reconciled after hydration. Fix: once BOTH stores have hydrated, RECONCILE from the user's
+  // saved intent. The two stores only ever disagree because of this race — every real user action
+  // (applyCustomCaddie / switchToKevin / the pickers) sets BOTH together — so restoring the pair is safe.
+  useEffect(() => {
+    let done = false;
+    const reconcile = (): boolean => {
+      if (done) return true;
+      if (!(usePlayerProfileStore.persist.hasHydrated() && useSettingsStore.persist.hasHydrated())) return false;
+      done = true;
+      try {
+        const profile = usePlayerProfileStore.getState();
+        const settings = useSettingsStore.getState();
+        const wantsCustom = profile.useCustomCaddie === true && !!(profile.customCaddieName && profile.customCaddieName.trim());
+        if (wantsCustom && settings.caddiePersonality !== 'custom') {
+          // The saved custom caddie was active; restore the persona + per-pillar mirror WITHOUT firing the
+          // spoken persona-handoff intro (setState, not setCaddiePersonality — this is a silent restore).
+          useSettingsStore.setState({
+            caddiePersonality: 'custom',
+            voiceGender: profile.customCaddieGender === 'female' ? 'female' : 'male',
+            caddieAssignments: { round: 'custom', cage: 'custom', drills: 'custom', play: 'custom' },
+          });
+        } else if (!wantsCustom && settings.caddiePersonality === 'custom') {
+          // Persona says custom but the custom caddie isn't set up (or was turned off) — resolve to the
+          // safe default so we never render a broken 'custom' with no identity.
+          useSettingsStore.setState({
+            caddiePersonality: 'kevin',
+            caddieAssignments: { round: 'kevin', cage: 'kevin', drills: 'kevin', play: 'kevin' },
+          });
+          try { profile.setUseCustomCaddie(false); } catch { /* non-fatal */ }
+        }
+      } catch { /* non-fatal — worst case the pre-existing render stands */ }
+      return true;
+    };
+    if (reconcile()) return;
+    const unsubP = usePlayerProfileStore.persist.onFinishHydration(() => { reconcile(); });
+    const unsubS = useSettingsStore.persist.onFinishHydration(() => { reconcile(); });
+    return () => { unsubP?.(); unsubS?.(); };
+  }, []);
+
   // 2026-06-30 (Tim) — start the Galaxy Watch swing-IMU bridge on boot when the user has
   // it enabled, so a persisted toggle survives app restarts. No-ops without the native
   // module (older binaries) — safe everywhere. Stop it on teardown.

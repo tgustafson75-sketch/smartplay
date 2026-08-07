@@ -46,11 +46,12 @@ const CARDS: Card[] = [
   {
     icon: 'people-circle-outline',
     title: 'Your Caddie Team',
-    body: 'SmartPlay gives you four AI caddies. Each one shines in a different part of your game.',
+    // 2026-08-07 (Tim) — Tank is owner-gated (off by default); don't advertise him in onboarding.
+    body: 'SmartPlay gives you a team of AI caddies. Each one shines in a different part of your game — and you can build your own.',
     named: [
       { name: 'Kevin — The Steady Hand',        body: 'Warm, knowledgeable, balanced. Your default caddie on the course.' },
       { name: 'Serena — The Composed Professional', body: 'Confident, supportive, precise. Good for technical drill work.' },
-      { name: 'Tank — The Intense Coach',       body: 'Marine vet intensity. Direct, motivating. Cage practice specialist.' },
+      { name: 'Your Custom Caddie',             body: 'Build your own — your name, your face, backed by a caddie personality + voice.' },
     ],
     footer:
       'Pick your caddie team in Settings → Caddie Team. Defaults work fine to start. Change anytime.',

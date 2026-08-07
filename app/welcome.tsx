@@ -44,9 +44,10 @@ type CaddiePick = {
   accent: string;
 };
 
+// 2026-08-07 (Tim) — Tank is owner-gated (default OFF); onboarding runs before he's ever enabled, so he
+// is NOT offered here. He appears only after being enabled in Owner Tools.
 const CADDIES: CaddiePick[] = [
   { id: 'kevin',  name: 'Kevin',  blurb: 'Warm, balanced, decisive',                 accent: '#00C896' },
-  { id: 'tank',   name: 'Tank',   blurb: 'Marine cadence, intense, demanding',       accent: '#ef4444' },
   { id: 'serena', name: 'Serena', blurb: 'Precise instructor, confident, energetic', accent: '#a855f7' },
 ];
 

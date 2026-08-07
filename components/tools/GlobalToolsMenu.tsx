@@ -36,7 +36,7 @@ import { WHATS_NEW } from '../../services/knowledgeBase/whatsNew';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
-import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
+import { getCaddieName, selectablePersonas, type Persona } from '../../lib/persona';
 import { recalibrateGps } from '../../services/gpsManager';
 import { markGpsRefreshNow, useLastGpsRefresh, formatRefreshAge } from '../../services/lastGpsRefresh';
 import { forceMarkPosition } from '../../services/positionMarkBus';
@@ -104,7 +104,9 @@ export function GlobalToolsMenu() {
   };
 
   const cyclePersona = () => {
-    const list = ACTIVE_PERSONAS as readonly Persona[];
+    // 2026-08-07 (Tim) — Tank is owner-gated: the cycler must SKIP him when disabled (was cycling through
+    // ACTIVE_PERSONAS which always includes Tank).
+    const list = selectablePersonas(useSettingsStore.getState().tankEnabled);
     const idx = list.indexOf(caddiePersonality as Persona);
     const next = list[(Math.max(idx, -1) + 1) % list.length];
     setCaddiePersonality(next);

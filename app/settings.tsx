@@ -45,7 +45,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
-import { getCaddieName, ACTIVE_PERSONAS } from '../lib/persona';
+import { getCaddieName, selectablePersonas } from '../lib/persona';
 import { syncBluetoothMediaButtonState } from '../services/voiceTriggers';
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import {
@@ -1100,7 +1100,10 @@ export default function Settings() {
               Now mirrors the cycler: same ACTIVE_PERSONAS set + the same sync. */}
           <PillRow
             label="Active Caddie"
-            options={[
+            // 2026-08-07 (Tim — "you can STILL toggle to Tank") — this picker hardcoded Tank and skipped the
+            // personaChoices() filter the per-pillar pickers use, so Tank stayed selectable while disabled.
+            // Filtered now; Tank shows here only when enabled in Owner Tools.
+            options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               { label: 'Tank', value: 'tank' },
@@ -1113,7 +1116,7 @@ export default function Settings() {
                 })(),
                 value: 'custom',
               },
-            ]}
+            ])}
             value={caddiePersonality}
             onSelect={(v) => {
               setCaddiePersonality(v as 'kevin' | 'serena' | 'tank' | 'custom');
@@ -1393,8 +1396,8 @@ export default function Settings() {
           />
 
           {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
-              Harry=90, Kevin/Serena=100. */}
-          {ACTIVE_PERSONAS.map((p, idx, arr) => {
+              Harry=90, Kevin/Serena=100. 2026-08-07 (Tim) — hide Tank's dial when Tank is disabled. */}
+          {selectablePersonas(tankEnabled).map((p, idx, arr) => {
             // 2026-06-06 — Display the user's chosen custom caddie name
             // here instead of the static "My Caddie" fallback. Also
             // belt-and-suspenders `?? 100` for personaIntensity reads
