@@ -407,7 +407,14 @@ export default function SwingDetail() {
   const [isPlaying, setIsPlaying] = useState(false);
   // Synchronous "last emitted" tracker so onPlaybackStatusUpdate commits only REAL changes (kills the
   // 25×/s redundant-setState cascade behind the "Maximum update depth" white screen). See the callback.
-  const playbackEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null }>({ pos: -1, dur: -1, playing: null });
+  const playbackEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null; lastPosAt: number }>({ pos: -1, dur: -1, playing: null, lastPosAt: 0 });
+  // 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
+  // crashes. Addressed 50 times"). ROOT: with the overlay ON, position emits at 25×/s and EACH setPosition
+  // re-renders the whole heavy screen + the SVG skeleton/trace; a render that can't finish inside the tick
+  // lets updates pile up faster than React flushes → "Maximum update depth". This ref lets the status
+  // callback wall-clock-throttle the position setState to a rate React can sustain WHILE the heavy overlay
+  // is mounted (the overlay interpolates between frames, so it stays smooth at the lower commit rate).
+  const overlayActiveRef = useRef(false);
   // 2026-07-24 (Tim — universal screen timeout) — never let the idle rest-dim engage while a clip is
   // actually playing (the user is watching, not touching). Resumes eligibility the moment it pauses.
   useRestSuppress(isPlaying);
@@ -1006,7 +1013,18 @@ export default function SwingDetail() {
     // on a real transition. Nothing downstream sees a redundant change, so the cascade can't spin up.
     if (s.positionMillis != null) {
       const p = s.positionMillis / 1000;
-      if (Math.abs(p - playbackEmitRef.current.pos) >= 0.02) { playbackEmitRef.current.pos = p; setPosition(p); }
+      // 2026-08-08 (Tim — crash from mechanics + trace + playback together). WALL-CLOCK throttle on top of
+      // the value guard: while the heavy overlay is mounted, commit position at most ~every 90ms (≈11×/s) so
+      // a slow SVG render can NEVER let 25×/s ticks pile into React's "Maximum update depth". Overlay off →
+      // 40ms (the seek bar is cheap). The overlay interpolates between pose frames, so 11×/s stays smooth.
+      // This also drops any sub-frame synchronous re-emit (0ms apart), which is the loop's tightest form.
+      const nowMs = Date.now();
+      const minGapMs = overlayActiveRef.current ? 90 : 40;
+      if (Math.abs(p - playbackEmitRef.current.pos) >= 0.02 && nowMs - playbackEmitRef.current.lastPosAt >= minGapMs) {
+        playbackEmitRef.current.pos = p;
+        playbackEmitRef.current.lastPosAt = nowMs;
+        setPosition(p);
+      }
     }
     if (s.durationMillis != null) {
       const d = s.durationMillis / 1000;
@@ -1146,6 +1164,12 @@ export default function SwingDetail() {
   // ExoPlayer even spins up (no race window against the status-callback state update).
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  // 2026-08-08 (Tim — crash from mechanics + trace + playback together). Keep the status callback's
+  // wall-clock throttle in sync with whether the heavy SVG overlay is actually mounted, so we throttle
+  // position commits ONLY when they're expensive (overlay on), never penalizing plain playback.
+  useEffect(() => {
+    overlayActiveRef.current = hasPose && (showSkeleton || showTrace || motionOnly);
+  }, [hasPose, showSkeleton, showTrace, motionOnly]);
   const scrubTrackWRef = useRef(0);
   const [scrubbing, setScrubbing] = useState(false);
   const seekFromTouch = (locationX: number) => {

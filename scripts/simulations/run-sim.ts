@@ -992,6 +992,24 @@ check('Swing-library video: every <Video> prop is STABLE (no re-subscribe loop) 
   })(),
   'the swing-library <Video> has fully referentially-stable props (memoized source/style + useCallback status/load/error) so a 25x/s re-render can never re-subscribe expo-av into the fatal update-depth loop; Motion overlay defaults OFF and a normal open does not auto-play');
 
+// 2026-08-08 (Tim — "if it tries to do too much — mechanics, shot trace AND playback together — it
+// crashes. Addressed 50 times"). The memoized-props fix stopped the re-subscribe loop, but the crash
+// still fired with the HEAVY overlay on: at 25×/s each setPosition re-renders the whole screen + SVG
+// skeleton/trace; a render slower than the 40ms tick lets updates pile into "Maximum update depth".
+// LOCK a WALL-CLOCK throttle on the position setState — while the overlay is mounted, commit at most
+// ~every 90ms — which caps the setState rate to what React sustains AND drops any sub-frame re-emit.
+check('Swing-library position setState is wall-clock throttled when the heavy overlay is on (no update-depth pile-up)',
+  (() => {
+    const d = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /overlayActiveRef/.test(d) &&
+      /overlayActiveRef\.current = hasPose && \(showSkeleton \|\| showTrace \|\| motionOnly\)/.test(d) &&
+      /const minGapMs = overlayActiveRef\.current \? 90 : 40/.test(d) &&
+      /nowMs - playbackEmitRef\.current\.lastPosAt >= minGapMs/.test(d)
+    );
+  })(),
+  'mechanics + trace + playback together can no longer pile 25x/s setStates into a fatal update-depth crash (position commits throttled to ~11x/s when the overlay is mounted)');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);
