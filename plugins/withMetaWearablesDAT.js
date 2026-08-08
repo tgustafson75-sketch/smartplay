@@ -226,6 +226,36 @@ function withManifest(config) {
     if (!application) return manifestConfig;
     application['meta-data'] = application['meta-data'] || [];
 
+    // 3b-2. 2026-08-08 (Tim — "they're just not seeing each other"; ROOT of NO_ELIGIBLE_DEVICE).
+    // Meta's DAT registration flow is "deeplink to Meta AI app → user confirmation → RETURN" — and the
+    // return leg lands on the UNIVERSAL LINK Tim registered at Meta (https://api.smartplaycaddie.com/
+    // glasses; assetlinks.json already served with the VERIFIED signing SHA). The Android manifest had
+    // NO intent filter for it (our AppLink config was iOS-Info.plist-only), so the consent hand-back had
+    // nowhere verified to land and the handshake could never complete. Add the autoVerify app-link
+    // filter on MainActivity. Takes effect in the next native build (queued end-of-freeze).
+    {
+      const mainActivity = (application.activity ?? []).find(
+        a => a?.$?.['android:name'] === '.MainActivity',
+      );
+      if (mainActivity) {
+        mainActivity['intent-filter'] = mainActivity['intent-filter'] || [];
+        const hasGlassesLink = mainActivity['intent-filter'].some(f =>
+          (f.data ?? []).some(d => d?.$?.['android:host'] === 'api.smartplaycaddie.com'),
+        );
+        if (!hasGlassesLink) {
+          mainActivity['intent-filter'].push({
+            $: { 'android:autoVerify': 'true' },
+            action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
+            category: [
+              { $: { 'android:name': 'android.intent.category.DEFAULT' } },
+              { $: { 'android:name': 'android.intent.category.BROWSABLE' } },
+            ],
+            data: [{ $: { 'android:scheme': 'https', 'android:host': 'api.smartplaycaddie.com', 'android:pathPrefix': '/glasses' } }],
+          });
+        }
+      }
+    }
+
     // 2026-05-23 — NUCLEAR manifest hardening (DAT side).
     // Mirrors the withMediaPipePose.js block: strip auto-init
     // providers that could crash at boot. We don't know if the
