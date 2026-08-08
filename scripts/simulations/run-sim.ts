@@ -1045,6 +1045,26 @@ check('Club trace extracts during playback (no stale isPlaying gate) + private-c
   })(),
   'the swing trace can extract while the clip plays (private-copy makes it collision-safe); a swing without a stored arc finally draws its trace');
 
+// 2026-08-08 (Tim photographed the OFFICIAL Berlin CC scorecard). LOCK the card-sourced data: official
+// men's yardages + rating/slope in the bundle, and the local rules (OB stone walls, the No.9 brook
+// lift-clean-place) seeded into the CNS course book — which is the path the caddie's hole brief READS
+// (caddieMemoryRetrieval getStaticHole) — anchored at boot.
+check('Berlin CC carries the OFFICIAL card: yardages + rating/slope + local rules in the course book',
+  (() => {
+    const c = read('data/courses.ts');
+    const seeds = read('data/courseBookSeeds.ts');
+    const layout = read('app/_layout.tsx');
+    return (
+      /hole:  1, par: 4, distance: 312/.test(c) && /hole:  9, par: 3, distance: 133/.test(c) &&
+      /rating: '62\.4', slope: '98', par: 33, totalYards: 2233/.test(c) &&
+      /course_id: 'local:berlin-cc'/.test(seeds) &&
+      /lift-clean-and-place/.test(seeds) && /OB stone wall/.test(seeds) &&
+      /saveCourseBook\(/.test(seeds) &&
+      /seedBundledCourseBooks\(\)/.test(layout) // anchored at boot
+    );
+  })(),
+  'Berlin briefs cite the real card: official yardages, 62.4/98, per-hole OB walls + the brook rule, offline from hole 1');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);

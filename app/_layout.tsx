@@ -618,6 +618,10 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
+    // 2026-08-08 (Tim — official Berlin card) — anchor BUNDLED course-book seeds (card-sourced local
+    // rules / OB walls / official par+yardage) into the CNS so the caddie's hole briefs carry them
+    // offline from hole 1. Additive-merge + idempotent; lazy import keeps boot lean.
+    void import('../data/courseBookSeeds').then((m) => m.seedBundledCourseBooks()).catch(() => undefined);
     // 2026-07-01 — Cloud backup boot: re-hydrate the Supabase session (so a
     // still-signed-in user keeps auto-backing-up) and install the AppState
     // auto-backup listener. Both are inert until the cloud is configured +

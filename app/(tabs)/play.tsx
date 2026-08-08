@@ -120,7 +120,8 @@ const LOCAL_COURSES: CourseSummary[] = [
     id: 'local:berlin-cc',
     club_name: 'Berlin Country Club',
     location: 'Berlin, MA',
-    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(42.4078, -71.6290),
+    // 2026-08-08 — rating/slope from the OFFICIAL card Tim photographed (men's 9-hole).
+    rating: 62.4, slope: 98, isLocal: true, thumbnail: satelliteThumb(42.4078, -71.6290),
     lat: 42.4078, lng: -71.6290,
   },
   {
