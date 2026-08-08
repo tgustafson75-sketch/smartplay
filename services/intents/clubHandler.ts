@@ -81,6 +81,31 @@ export const clubChangeHandler: IntentHandler = {
     const phrase = String(intent.parameters.club_phrase ?? intent.raw_text ?? '').trim();
     const parsed = parseSpokenClub(phrase);
 
+    // 2026-08-08 (Tim — "can't change club in sim mode"). The SwingSim game: hands are ON the phone
+    // (it IS the club), so voice is the only natural switch. Route to the mounted game via the sim bus;
+    // honest reply when the club has no learned distance (the sim can only play the learned bag).
+    {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const simBus = require('../simRoundBus') as typeof import('../simRoundBus');
+      if (simBus.isSimGameActive()) {
+        if (!parsed) {
+          return { success: false, voice_response: clubClarifyPrompt(phrase), side_effects: ['sim:club_ambiguous'], follow_up_needed: true };
+        }
+        const r = simBus.requestSimClubChange(parsed.club_id);
+        track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice_sim' });
+        return {
+          success: r === 'applied',
+          voice_response: r === 'applied'
+            ? `Got it, ${clubLabel(parsed.club_id)}.`
+            : r === 'not_in_bag'
+              ? `${clubLabel(parsed.club_id)} doesn't have a learned distance yet — the sim plays your learned bag. Pick one from the rail or teach me the yardage first.`
+              : `Got it, ${clubLabel(parsed.club_id)}.`,
+          side_effects: [`sim:club_${r}`],
+          follow_up_needed: false,
+        };
+      }
+    }
+
     // 2026-06-09 — Hands-free club tagging on the Smart Motion screen (no cage
     // session needed there). Update the shared club store so the HUD + ball
     // speed reflect it. "scan/what/this club" with no named club → trigger the

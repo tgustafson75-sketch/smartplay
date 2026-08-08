@@ -2908,9 +2908,18 @@ export default function SmartMotion() {
             detectedSegments = segmentsFromStrikes(real, durationMs);
             firstStrikeMs = real[0]?.timeMs ?? null;
           } else if (meterMode === 'course') {
-            // CHIP on COURSE (off-round, single shot): no multi-segmentation — just
-            // take the chip's strike as the impact anchor for tempo / ball-departure.
-            firstStrikeMs = res.strikes[0]?.timeMs ?? null;
+            // 2026-08-08 (Tim — "it doesn't find the points in the swing correctly; gets caught up on
+            // practice swings" — ROOT CAUSE FIX). The strike was only a TEMPO anchor here; the swing
+            // WINDOW still came from video-locate, which is exactly what latches onto a practice swing.
+            // On course you hit ONE real ball: the LOUDEST rebound-filtered strike IS the swing — anchor
+            // the segment to it (practice swings make no strike, so they structurally can't be picked).
+            // No confident strike (wind gust ate it / foam) → segments stay empty → video-locate fallback.
+            const real = filterReboundStrikes(res.strikes);
+            const anchor = [...real].sort((a, b) => (b.peakDb ?? -999) - (a.peakDb ?? -999))[0] ?? null;
+            if (anchor) {
+              firstStrikeMs = anchor.timeMs;
+              detectedSegments = segmentsFromStrikes([anchor], durationMs);
+            }
           }
         }
       }

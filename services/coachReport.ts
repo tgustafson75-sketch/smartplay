@@ -39,8 +39,15 @@ export interface CoachReportInput {
     fix?: string | null;
     drill?: string | null;
     confidence?: string | null;
+    // 2026-08-08 (Tim — "a logical professional coaching swing report") — the honest extras the
+    // session already carries; each section renders only when real data exists.
+    severity?: string | null;
+    strengths?: string[] | null;
+    evidence?: string | null;
   } | null;
   coachNote: string | null;
+  /** Named practice drills with steps (from the drill catalog for the diagnosed issue). */
+  practicePlan?: { name: string; steps: string }[] | null;
 }
 
 const esc = (s: string): string =>
@@ -107,70 +114,90 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
         <head>
           <meta charset="utf-8" />
           <style>
-            /* 2026-08-08 (Tim — "the export report should look like our SmartMotion report UI —
-               consistent look and branding is key"). Restyled to the app's EXACT dark tokens
-               (theme/tokens.ts darkTheme): background #060f09, surface #0d1a0d, elevated #0d2418,
-               border #1e3a28, accent #00C896, lime #88F700, white/#e8f5e9 text. The report now reads
-               as a SmartPlay screen, not a generic light-mode printout. */
-            @page { size: letter; margin: 0; }
-            html, body { background: #060f09; }
-            body { font-family: -apple-system, system-ui, "Segoe UI", sans-serif; color: #ffffff; margin: 0; padding: 0.5in; }
-            .top { display: flex; align-items: center; gap: 12pt; border-bottom: 2pt solid #00C896; padding-bottom: 10pt; }
-            .logo { width: 42pt; height: 42pt; border-radius: 9pt; }
-            .brand { font-size: 11pt; color: #00C896; font-weight: 800; letter-spacing: 0.5pt; }
-            .instructor { font-size: 18pt; font-weight: 800; margin-top: 1pt; color: #ffffff; }
-            .creds { font-size: 10.5pt; color: #9ca3af; margin-top: 1pt; }
-            .meta { font-size: 10pt; color: #9ca3af; margin: 10pt 0 4pt; }
-            /* 2026-07-02 — height-capped; 2026-08-08 — sizes to its OWN aspect (no forced-wide letterbox),
-               and on the dark page the frame reads seamless (no visible black bars at all). */
-            .frame { display: block; width: auto; max-width: 100%; max-height: 4.6in; object-fit: contain;
-                     background: #0d1a0d; border: 1pt solid #1e3a28; border-radius: 12pt; margin: 8pt auto 4pt; }
-            .metrics { display: flex; flex-wrap: wrap; gap: 6pt 18pt; margin: 8pt 0 2pt; }
-            .metric { min-width: 1.2in; }
-            .metric .mv { font-size: 15pt; font-weight: 800; color: #88F700; }
-            .metric .ml { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.6pt; color: #9ca3af; text-transform: uppercase; }
-            .card { page-break-inside: avoid; }
-            .card { background: #0d1a0d; border: 1pt solid #1e3a28; border-radius: 10pt; padding: 9pt 12pt; margin-top: 8pt; }
-            .card.accent { background: #0d2418; border-color: #00C896; }
-            .label { font-size: 9pt; font-weight: 800; letter-spacing: 0.8pt; color: #00C896; text-transform: uppercase; }
-            .body { font-size: 12pt; line-height: 1.45; margin-top: 3pt; color: #e8f5e9; }
-            .fault { font-size: 15pt; font-weight: 800; margin-top: 2pt; color: #ffffff; }
-            .foot { margin-top: 14pt; font-size: 9pt; color: #9ca3af; text-align: center; }
+            /* 2026-08-08 (Tim — "needs to be white background… a logical professional coaching swing
+               report"). Reversal of the same-day dark restyle by his order: clean WHITE professional
+               document (what you'd hand a student), brand-green accents only. Structured like a real
+               lesson write-up: header → session facts → swing frame → key numbers → assessment →
+               what's working → what I see / why → the fix → practice plan → coach's note. */
+            @page { size: letter; margin: 0.55in; }
+            html, body { background: #ffffff; }
+            body { font-family: -apple-system, system-ui, "Segoe UI", Georgia, serif; color: #111827; margin: 0; }
+            .top { display: flex; align-items: center; gap: 12pt; border-bottom: 3pt solid #00936e; padding-bottom: 10pt; }
+            .logo { width: 44pt; height: 44pt; border-radius: 9pt; }
+            .brand { font-size: 10.5pt; color: #00936e; font-weight: 800; letter-spacing: 1.2pt; }
+            .rtitle { font-size: 20pt; font-weight: 800; margin-top: 1pt; color: #111827; }
+            .creds { font-size: 10pt; color: #6b7280; margin-top: 1pt; }
+            .meta { display: flex; flex-wrap: wrap; gap: 4pt 16pt; font-size: 10pt; color: #374151; margin: 9pt 0 2pt; }
+            .meta b { color: #111827; }
+            .frame { display: block; width: auto; max-width: 100%; max-height: 4.2in; object-fit: contain;
+                     background: #f3f4f6; border: 1pt solid #e5e7eb; border-radius: 10pt; margin: 10pt auto 2pt; }
+            .framecap { text-align: center; font-size: 8.5pt; color: #6b7280; margin: 2pt 0 6pt; }
+            .metrics { display: flex; flex-wrap: wrap; gap: 6pt 22pt; margin: 8pt 0 2pt; padding: 8pt 12pt;
+                       background: #f0faf6; border: 1pt solid #ccebe0; border-radius: 10pt; }
+            .metric { min-width: 1.15in; }
+            .metric .mv { font-size: 16pt; font-weight: 800; color: #065f46; }
+            .metric .ml { font-size: 8pt; font-weight: 700; letter-spacing: 0.7pt; color: #047857; text-transform: uppercase; }
+            .card { page-break-inside: avoid; background: #ffffff; border: 1pt solid #e5e7eb; border-left: 3.5pt solid #d1d5db;
+                    border-radius: 8pt; padding: 9pt 13pt; margin-top: 9pt; }
+            .card.accent { border-left-color: #00936e; background: #f8fdfb; }
+            .card.good { border-left-color: #2563eb; background: #f8fafc; }
+            .label { font-size: 8.5pt; font-weight: 800; letter-spacing: 1pt; color: #00936e; text-transform: uppercase; }
+            .card.good .label { color: #2563eb; }
+            .body { font-size: 11.5pt; line-height: 1.5; margin-top: 3pt; color: #1f2937; }
+            .fault { font-size: 16pt; font-weight: 800; margin-top: 2pt; color: #111827; }
+            .sev { display: inline-block; margin-left: 8pt; font-size: 9pt; font-weight: 800; letter-spacing: 0.5pt;
+                   color: #92400e; background: #fef3c7; border-radius: 6pt; padding: 2pt 8pt; vertical-align: middle; text-transform: uppercase; }
+            .drill { margin-top: 6pt; }
+            .drill .dn { font-size: 11.5pt; font-weight: 800; color: #111827; }
+            .drill .ds { font-size: 11pt; line-height: 1.45; color: #374151; margin-top: 1pt; }
+            ul.strengths { margin: 4pt 0 0 14pt; padding: 0; }
+            ul.strengths li { font-size: 11.5pt; line-height: 1.5; color: #1f2937; }
+            .foot { margin-top: 16pt; padding-top: 8pt; border-top: 1pt solid #e5e7eb; font-size: 8.5pt; color: #9ca3af; text-align: center; }
           </style>
         </head>
         <body>
           <div class="top">
             ${logoUrl ? `<img class="logo" src="${logoUrl}" />` : ''}
             <div>
-              <div class="brand">SMARTPLAY CADDIE · SWING REPORT</div>
-              <div class="instructor">${esc(instructor)}</div>
-              ${creds ? `<div class="creds">${esc(creds)}</div>` : ''}
+              <div class="brand">SMARTPLAY CADDIE · SWING ANALYSIS REPORT</div>
+              <div class="rtitle">${student ? esc(student) + "'s Swing Lesson" : 'Swing Lesson'}</div>
+              <div class="creds">Prepared by ${esc(instructor)}${creds ? ' · ' + esc(creds) : ''}</div>
             </div>
           </div>
-          <div class="meta">${metaBits}</div>
+          <div class="meta">
+            <span><b>Date:</b> ${esc(dateStr)} · ${esc(timeStr)}</span>
+            ${input.sessionNumber != null ? `<span><b>Session:</b> #${input.sessionNumber}</span>` : ''}
+            ${student ? `<span><b>Player:</b> ${esc(student)}</span>` : ''}
+          </div>
           ${(input.metrics && input.metrics.length > 0)
             ? `<div class="metrics">${input.metrics.map(m => `<div class="metric"><div class="mv">${esc(m.value)}</div><div class="ml">${esc(m.label)}</div></div>`).join('')}</div>`
             : ''}
-          ${frameUrl ? `<img class="frame" src="${frameUrl}" />` : ''}
-          ${fault ? `<div class="card accent"><div class="label">Top Focus</div><div class="fault">${esc(fault)}</div>${a.confidence ? `<div class="creds">Confidence: ${esc(a.confidence)}</div>` : ''}</div>` : ''}
-          ${section('What I see', a.observation)}
+          ${frameUrl ? `<img class="frame" src="${frameUrl}" /><div class="framecap">Key frame from this session${fault ? ` — ${esc(fault.toLowerCase())} visible at this position` : ''}</div>` : ''}
+          ${fault ? `<div class="card accent"><div class="label">Primary Focus</div><div class="fault">${esc(fault)}${a.severity && a.severity !== 'none' ? `<span class="sev">${esc(a.severity)}</span>` : ''}</div>${a.confidence ? `<div class="creds">Read confidence: ${esc(a.confidence)}</div>` : ''}</div>` : ''}
+          ${(a.strengths && a.strengths.length > 0)
+            ? `<div class="card good"><div class="label">What's Working</div><ul class="strengths">${a.strengths.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`
+            : ''}
+          ${section('What I See', a.observation)}
           ${(() => {
-            // 2026-08-08 (Tim — "report is pretty bad": WHAT I SEE and WHY IT HAPPENS said the SAME thing,
-            // e.g. "club moves over the plane … left miss" twice). Drop the cause section when it's
-            // near-identical to the observation (word-set overlap), so the report never reads as padding.
+            // 2026-08-08 — drop the cause section when it's near-identical to the observation
+            // (word-set overlap), so the report never reads as padding.
             const words = (t: string | null | undefined) =>
               new Set((t ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3));
             const obs = words(a.observation); const cau = words(a.cause);
             if (cau.size > 0 && obs.size > 0) {
               let shared = 0; cau.forEach(w => { if (obs.has(w)) shared++; });
-              if (shared / cau.size >= 0.7) return ''; // ~duplicate — omit
+              if (shared / cau.size >= 0.7) return '';
             }
-            return section('Why it happens', a.cause);
+            return section('Why It Happens', a.cause);
           })()}
-          ${section('The fix', a.fix, true)}
-          ${section('Drill', a.drill)}
-          ${section(`${instructor.split(' ')[0]}'s note`, input.coachNote, true)}
-          <div class="foot">Built with SmartPlay Caddie — your swing, honestly analyzed.</div>
+          ${a.evidence ? section('Seen In Your Video', a.evidence) : ''}
+          ${section('The Fix', a.fix, true)}
+          ${(input.practicePlan && input.practicePlan.length > 0)
+            ? `<div class="card accent"><div class="label">Practice Plan</div>${input.practicePlan.map(d =>
+                `<div class="drill"><div class="dn">${esc(d.name)}</div><div class="ds">${esc(d.steps)}</div></div>`).join('')}</div>`
+            : section('Drill', a.drill)}
+          ${section(`${instructor.split(' ')[0]}'s Note`, input.coachNote, true)}
+          <div class="foot">SmartPlay Caddie · Swing Analysis Report — real measurements and observed mechanics only, honestly analyzed.</div>
         </body>
       </html>
     `;

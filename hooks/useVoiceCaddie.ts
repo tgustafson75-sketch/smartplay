@@ -1838,6 +1838,21 @@ export const useVoiceCaddie = ({
           if (bothActivelyFailed) {
             coldUnreachable = { ping, get };
             try { coldAbort.abort(); } catch { /* no-op */ }
+            return;
+          }
+          // 2026-08-08 (Tim's log: AbortError elapsedMs 25033, both probes dead at ~3s) — the BLACK-HOLE
+          // case: fetches HANG (no refusal), both probes TIME OUT at budget, the confident-fast rule
+          // correctly declines… and the transcribe burns the full 22s cold budget anyway. Second-stage
+          // verdict: when BOTH probes failed (however slowly), give the host ONE longer GET (6s) to show
+          // life. Still silent by ~11s total → it will never complete a 25s audio POST → abort + degrade
+          // to the on-device caddie. A slow-but-ALIVE network answers the GET and is never aborted, so
+          // the cold-boot-patience invariant holds ([[voice-first-try-failure-timeout-root-cause]]).
+          if (!ping.ok && !get.ok) {
+            const retry = await healthGet(6000);
+            if (!retry.ok) {
+              coldUnreachable = { ping, get: retry };
+              try { coldAbort.abort(); } catch { /* no-op */ }
+            }
           }
         })();
       }

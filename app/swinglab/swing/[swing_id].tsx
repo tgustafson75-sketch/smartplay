@@ -1555,8 +1555,27 @@ export default function SwingDetail() {
         fix: pi.fix ?? null,
         drill: pi.drill ?? null,
         confidence: pi.confidence ?? null,
+        // 2026-08-08 (Tim — "a logical professional coaching swing report… this is the Caddie's job").
+        // The honest extras the session already carries — What's Working, severity badge, the
+        // seen-in-your-video evidence line. Renders only when real.
+        severity: pi.severity ?? null,
+        strengths: pi.strengths ?? null,
+        evidence: pi.evidence ?? null,
       } : null,
       coachNote: session.coach_note ?? null,
+      // Named practice drills WITH steps from the catalog for the diagnosed issue — a real practice
+      // plan instead of a one-line drill name. Falls back to the one-liner when the issue isn't mapped.
+      practicePlan: (() => {
+        try {
+          const issueId = pi?.issue_id ?? pi?.primary_fault ?? null;
+          if (!issueId) return null;
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { getDrillEntry } = require('../../../data/drillCatalog') as typeof import('../../../data/drillCatalog');
+          const entry = getDrillEntry(String(issueId));
+          const drills = entry?.drills ?? [];
+          return drills.length > 0 ? drills.map((dd: { name: string; steps: string }) => ({ name: dd.name, steps: dd.steps })) : null;
+        } catch { return null; }
+      })(),
     });
     if (!res.ok) {
       useToastStore.getState().show(res.reason === 'sharing_unavailable' ? 'Sharing not available on this device.' : 'Couldn’t build the report — try again.');

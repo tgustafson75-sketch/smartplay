@@ -1017,18 +1017,27 @@ check('Swing-library position setState is wall-clock throttled when the heavy ov
 // was a tiny portrait crammed in a WIDE box with black side-bars; (3) WHAT I SEE ≈ WHY IT HAPPENS. LOCK
 // all three fixes: club label resolved, frame sized to its own aspect (no forced letterbox), duplicate
 // cause section dropped.
-check('Swing report PDF: real club label + no letterbox frame + de-duplicated cause',
+// 2026-08-08 (Tim — "white background… a logical professional coaching swing report. This is the
+// Caddie's job"). LOCK the professional white report: structured lesson write-up (session facts →
+// numbers → key frame → primary focus w/ severity → What's Working → see/why → fix → PRACTICE PLAN
+// with named drills + steps from the catalog → coach's note), readable club label, de-duplicated cause.
+check('Swing report PDF: WHITE professional coaching report with practice plan + real data sections',
   (() => {
     const rep = read('services/coachReport.ts');
     const caller = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /width: auto; max-width: 100%; max-height: 4\.6in/.test(rep) &&           // frame sizes to its aspect
+      /html, body \{ background: #ffffff; \}/.test(rep) &&                        // white, professional
+      /SWING ANALYSIS REPORT/.test(rep) &&
+      /What's Working/.test(rep) && /Practice Plan/.test(rep) &&                  // real coaching sections
+      /class="sev"/.test(rep) &&                                                  // severity badge
+      /width: auto; max-width: 100%; max-height: 4\.2in/.test(rep) &&             // frame sizes to its aspect
       /shared \/ cau\.size >= 0\.7/.test(rep) &&                                  // dupe cause dropped
       /FAMILY\[rawClub\.toUpperCase\(\)\]/.test(caller) &&                        // "H" → "Hybrid"
-      /normalizeClub\(rawClub\)/.test(caller)
+      /getDrillEntry\(String\(issueId\)\)/.test(caller) &&                        // catalog drills w/ steps
+      /strengths: pi\.strengths \?\? null/.test(caller)
     );
   })(),
-  'the exported swing report shows a readable club, a properly-sized frame, and never repeats itself');
+  'the export is a white professional lesson write-up: severity, strengths, evidence, and a named practice plan with steps — the caddie doing its job');
 
 // 2026-08-08 (Tim — "shot trace has yet to work right"). The stale crash-era `if (isPlaying) return`
 // blocked clubhead extraction whenever the clip was playing → no trace on swings without a stored arc.

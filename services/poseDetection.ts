@@ -563,6 +563,32 @@ const LOCATE_MIN_CLIP_MS = 6_000;
 // count now halved the common case is far faster, so this ceiling is only ever hit on a cold miss.
 const LOCATE_TIMEOUT_MS = 35_000;
 
+// 2026-08-08 (Tim's log: swing_locate_fallback "Aborted" ×6 in 10 min — each one a FULL 35s hang on a
+// flaky home network before the fallback smeared the analysis; "reads should be faster"). Concurrent
+// dead-host guard, same design as the transcribe path: probe /api/health (3s) while the locate fetch
+// runs; both a fast refusal AND a black-hole (probe times out, one 6s retry also silent) abort the
+// doomed locate in ~3-9s so analysis degrades fast instead of burning 35s per swing. A slow-but-ALIVE
+// host answers the tiny GET and the locate is never aborted (cold-Lambda patience preserved).
+function armDeadHostGuard(apiUrl: string, controller: AbortController): { cancel: () => void } {
+  let cancelled = false;
+  const probe = async (timeoutMs: number): Promise<boolean> => {
+    try {
+      const pc = new AbortController();
+      const pt = setTimeout(() => pc.abort(), timeoutMs);
+      const r = await fetch(`${apiUrl}/api/health`, { method: 'GET', signal: pc.signal }).finally(() => clearTimeout(pt));
+      return r.ok;
+    } catch { return false; }
+  };
+  void (async () => {
+    if (await probe(3000)) return;
+    if (cancelled) return;
+    if (await probe(6000)) return;
+    if (cancelled) return;
+    try { controller.abort(); } catch { /* no-op */ }
+  })();
+  return { cancel: () => { cancelled = true; } };
+}
+
 // Small, many, evenly-spread frames tagged with timestamps. Cheap to extract
 // and tiny on the wire — used only to ASK "where's the swing", not to read it.
 async function extractCoarseFrames(clipUri: string, durationMs: number, count: number): Promise<Frame[]> {
@@ -633,15 +659,26 @@ export async function locateSwingWindow(
     return null;
   }
   try {
-    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'locate_swing',
-        frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
-      }),
-      signal: AbortSignal.timeout(LOCATE_TIMEOUT_MS),
-    });
+    // 2026-08-08 — dead-host guard (see armDeadHostGuard): a provably-dead network aborts in ~3-9s
+    // instead of hanging the full 35s ceiling per swing.
+    const locateCtl = new AbortController();
+    const locateTimer = setTimeout(() => { try { locateCtl.abort(); } catch { /* no-op */ } }, LOCATE_TIMEOUT_MS);
+    const guard = armDeadHostGuard(apiUrl, locateCtl);
+    let res: Response;
+    try {
+      res = await fetch(`${apiUrl}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'locate_swing',
+          frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+        }),
+        signal: locateCtl.signal,
+      });
+    } finally {
+      clearTimeout(locateTimer);
+      guard.cancel();
+    }
     if (!res.ok) {
       logLocate('swing_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
       return null;
@@ -708,15 +745,25 @@ export async function locateSwings(
     return [];
   }
   try {
-    const res = await fetch(`${apiUrl}/api/swing-analysis`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'locate_swings',
-        frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
-      }),
-      signal: AbortSignal.timeout(LOCATE_SWINGS_TIMEOUT_MS),
-    });
+    // 2026-08-08 — same dead-host guard as the single locate: flaky network degrades in ~3-9s, not 30s+.
+    const rangeCtl = new AbortController();
+    const rangeTimer = setTimeout(() => { try { rangeCtl.abort(); } catch { /* no-op */ } }, LOCATE_SWINGS_TIMEOUT_MS);
+    const rangeGuard = armDeadHostGuard(apiUrl, rangeCtl);
+    let res: Response;
+    try {
+      res = await fetch(`${apiUrl}/api/swing-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'locate_swings',
+          frames: frames.map((f) => ({ b64: f.b64, media_type: f.media_type, time_sec: f.time_sec })),
+        }),
+        signal: rangeCtl.signal,
+      });
+    } finally {
+      clearTimeout(rangeTimer);
+      rangeGuard.cancel();
+    }
     if (!res.ok) {
       logLocate('range_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
       return [];

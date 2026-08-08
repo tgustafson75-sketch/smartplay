@@ -82,6 +82,27 @@ export default function SwingSimScreen() {
   }, []);
   const [club, setClub] = useState<string>('7 Iron');
   const [armed, setArmed] = useState(false);
+  // 2026-08-08 (Tim — "can't change club in Sim"). Voice club change: hands are ON the phone (it IS the
+  // club), so tap-chips aren't reachable mid-flow. Register with the sim bus; the voice clubChangeHandler
+  // resolves a spoken club here — applied only when it's in the LEARNED bag (honest: the sim can only
+  // play clubs with distances). bagRef keeps the resolver reading live state without re-registering.
+  const bagRef = useRef<{ club: string; carry: number }[]>([]);
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const bus = require('../../services/simRoundBus') as typeof import('../../services/simRoundBus');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { normalizeClub } = require('../../services/clubNormalize') as typeof import('../../services/clubNormalize');
+    bus.setSimGameActive(true);
+    bus.registerSimClubResolver((clubId: string) => {
+      const name = normalizeClub(clubId);
+      if (!name) return false;
+      const hit = bagRef.current.find((b) => b.club === name);
+      if (!hit) return false;
+      setClub(hit.club);
+      return true;
+    });
+    return () => { bus.setSimGameActive(false); };
+  }, []);
   // 2026-07-08 (Tim — "screen goes white after the flyover") — the tracer Polyline was
   // fed PERCENTAGE point strings ("50%,90%"), which react-native-svg's points parser
   // does NOT accept (circles tolerate %, polylines don't) → native parse throw → white
@@ -107,6 +128,8 @@ export default function SwingSimScreen() {
       .map((c) => ({ club: c, carry: Math.round(st.distanceFor(c)) }))
       .sort((a, b) => b.carry - a.carry);
   }, []);
+  // Keep the voice resolver's view of the bag live (see the sim-bus registration above).
+  useEffect(() => { bagRef.current = bag; }, [bag]);
   const suggest = useCallback((dist: number, currentLie: SimLie) => {
     if (bag.length === 0) return { club: '7 Iron', carry: 150 };
     const eff = liePenalty(currentLie);
