@@ -574,12 +574,14 @@ export default function SwingDetail() {
       setClubArcPoints(storedArc);
       return;
     }
-    // 2026-07-21 (BETA — swing-replay crash, ROOT CAUSE) — NEVER extract clubhead frames while the
-    // clip is playing. detectClubPath opens a native MediaMetadataRetriever on the file, and a
-    // retriever decoding the SAME mp4 that ExoPlayer is decoding for playback SIGSEGVs the app to
-    // the launcher (uncatchable from JS = the crash-after-replay with no error-log entry). The clip
-    // opens STATIC, so extraction runs then; isPlaying is in the deps so a pause/finish re-runs it.
-    if (isPlaying) return;
+    // 2026-08-08 (Tim — "shot trace has yet to work right"). REMOVED the stale `if (isPlaying) return`
+    // crash-era guard. It predated the 07-30 private-copy fix: detectClubPath now extracts from its OWN
+    // copied file (services/swing/clubPath.ts hard-refuses to run without the copy), so a native retriever
+    // can never collide with ExoPlayer on the same handle — the SIGSEGV condition is structurally gone.
+    // But this leftover guard still blocked STARTING extraction whenever the clip was playing, so any
+    // swing without a stored arc showed NO trace while playing (the "trace never works" case). Extraction
+    // now starts regardless of playback; isPlaying stays in the deps so an aborted run retries on a
+    // play/pause flip, and the runKey below dedupes after the first real success.
     const startMs = (shot.clipStartSeconds ?? 0) * 1000;
     const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }

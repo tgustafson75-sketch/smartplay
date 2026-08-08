@@ -1027,6 +1027,24 @@ check('Swing report PDF: real club label + no letterbox frame + de-duplicated ca
   })(),
   'the exported swing report shows a readable club, a properly-sized frame, and never repeats itself');
 
+// 2026-08-08 (Tim — "shot trace has yet to work right"). The stale crash-era `if (isPlaying) return`
+// blocked clubhead extraction whenever the clip was playing → no trace on swings without a stored arc.
+// Safe to remove ONLY because detectClubPath extracts from a PRIVATE COPY and hard-refuses to run
+// without it (no retriever/ExoPlayer same-file collision). LOCK both halves together: the guard stays
+// gone AND the copy-refusal stays in — reintroducing either breaks this check.
+check('Club trace extracts during playback (no stale isPlaying gate) + private-copy refusal intact',
+  (() => {
+    const d = read('app/swinglab/swing/[swing_id].tsx');
+    const cp = read('services/swing/clubPath.ts');
+    // the extraction effect must not early-return on isPlaying anymore
+    const effect = d.slice(d.indexOf('const shotArc = shot?.club_arc'), d.indexOf('clubArcRunKeyRef.current === runKey'));
+    return (
+      effect.length > 0 && !/if \(isPlaying\) return;/.test(effect) &&
+      /if \(!tempCopy\) return null;/.test(cp) // copy-safety invariant that makes this safe
+    );
+  })(),
+  'the swing trace can extract while the clip plays (private-copy makes it collision-safe); a swing without a stored arc finally draws its trace');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);
