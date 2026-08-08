@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getSmartPlaySupabase } from './_supabase';
 import { readSharedGeometry } from './_courseCloud';
 
@@ -92,7 +93,7 @@ out geom;`;
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-        'User-Agent': 'SmartPlayCaddie/1.0 (https://smartplay-beta.vercel.app)',
+        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
       },
       body: 'data=' + encodeURIComponent(query),
       signal: controller.signal,
@@ -156,7 +157,7 @@ out geom;`;
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
-        'User-Agent': 'SmartPlayCaddie/1.0 (https://smartplay-beta.vercel.app)',
+        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
       },
       body: 'data=' + encodeURIComponent(query),
       signal: controller.signal,
@@ -490,6 +491,10 @@ function extractRawHoles(course: Record<string, unknown>): Record<string, unknow
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 2026-08-08 (course-engine audit gap #4) — this endpoint proxies the PAID golfcourseapi key and
+  // hammers Overpass with NO throttle: a curl loop could burn the quota / get the UA banned. IP-based
+  // rate limit (generous — a real round pulls one course); same pattern as every AI route.
+  if (!allowInference(req, res, 'course-geometry', 30)) return;
   // ── Course Cloud read-first ──────────────────────────────────────────────
   // Serve crowd-sourced geometry only when the client signals the proxy is WEAK for this course
   // (cloudFirst=1 — sent for OSM-only local courses with no golfcourseapi id). This prevents the

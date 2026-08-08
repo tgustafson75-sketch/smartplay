@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 
 const BASE = 'https://api.golfcourseapi.com';
 const TIMEOUT_MS = 10_000;
@@ -24,6 +25,9 @@ async function proxyFetch(url: string, apiKey: string): Promise<{ ok: boolean; s
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 2026-08-08 (course-engine audit gap #4) — proxies the PAID golfcourseapi key; add the same IP
+  // throttle as course-geometry so the quota can't be burned by a loop.
+  if (!allowInference(req, res, 'course-proxy', 60)) return;
   const apiKey = process.env.GOLFCOURSE_API_KEY;
   if (!apiKey) {
     console.error('[golfcourseapi] GOLFCOURSE_API_KEY not set in environment');
