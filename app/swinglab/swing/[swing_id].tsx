@@ -1513,8 +1513,17 @@ export default function SwingDetail() {
         const trRatio = typeof tr?.ratio === 'number' ? tr!.ratio! : null;
         const tempo = smRatio ?? trRatio;
         if (tempo != null && Number.isFinite(tempo)) out.push({ label: 'Tempo', value: `${tempo.toFixed(1)} : 1` });
-        const club = typeof s.club === 'string' ? s.club : (s.upload as { club?: string } | undefined)?.club;
-        if (club) out.push({ label: 'Club', value: club });
+        // 2026-08-08 (Tim — "exportable PDF report is pretty bad": the CLUB showed a raw "H"). Resolve to
+        // a readable label: canonical name when we can (normalizeClub → "3 Hybrid"/"Driver"), else expand a
+        // bare family code ("H"→"Hybrid", "D"→"Driver"), else the raw. Never surface a lone letter.
+        const rawClub = typeof s.club === 'string' ? s.club : (s.upload as { club?: string } | undefined)?.club;
+        if (rawClub && rawClub.trim() && rawClub.toLowerCase() !== 'unknown') {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const norm = (require('../../../services/clubNormalize') as typeof import('../../../services/clubNormalize')).normalizeClub(rawClub);
+          const FAMILY: Record<string, string> = { H: 'Hybrid', D: 'Driver', W: 'Wood', I: 'Iron', P: 'Putter', PT: 'Putter' };
+          const clubValue = norm ?? FAMILY[rawClub.toUpperCase()] ?? rawClub.replace(/_/g, ' ');
+          out.push({ label: 'Club', value: clubValue });
+        }
         return out.length ? out : undefined;
       })(),
       analysis: pi ? {

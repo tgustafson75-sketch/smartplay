@@ -1010,6 +1010,23 @@ check('Swing-library position setState is wall-clock throttled when the heavy ov
   })(),
   'mechanics + trace + playback together can no longer pile 25x/s setStates into a fatal update-depth crash (position commits throttled to ~11x/s when the overlay is mounted)');
 
+// 2026-08-08 (Tim — "exportable PDF report is pretty bad"): (1) CLUB showed a raw "H"; (2) the swing frame
+// was a tiny portrait crammed in a WIDE box with black side-bars; (3) WHAT I SEE ≈ WHY IT HAPPENS. LOCK
+// all three fixes: club label resolved, frame sized to its own aspect (no forced letterbox), duplicate
+// cause section dropped.
+check('Swing report PDF: real club label + no letterbox frame + de-duplicated cause',
+  (() => {
+    const rep = read('services/coachReport.ts');
+    const caller = read('app/swinglab/swing/[swing_id].tsx');
+    return (
+      /width: auto; max-width: 100%; max-height: 4\.6in/.test(rep) &&           // frame sizes to its aspect
+      /shared \/ cau\.size >= 0\.7/.test(rep) &&                                  // dupe cause dropped
+      /FAMILY\[rawClub\.toUpperCase\(\)\]/.test(caller) &&                        // "H" → "Hybrid"
+      /normalizeClub\(rawClub\)/.test(caller)
+    );
+  })(),
+  'the exported swing report shows a readable club, a properly-sized frame, and never repeats itself');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);

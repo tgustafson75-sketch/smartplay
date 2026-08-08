@@ -115,11 +115,13 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
             .instructor { font-size: 18pt; font-weight: 800; margin-top: 1pt; }
             .creds { font-size: 10.5pt; color: #6b7280; margin-top: 1pt; }
             .meta { font-size: 10pt; color: #6b7280; margin: 10pt 0 4pt; }
-            /* 2026-07-02 (Tim — "report is pretty bad") — the frame was full-width with NO height
-               cap, so a portrait/odd keyframe rendered ~10in tall = a whole wasted page. Cap the
-               height + contain so the featured frame is a tidy inline image, never a page-filler. */
-            .frame { display: block; width: 100%; max-width: 7.5in; height: 3.2in; object-fit: contain;
-                     background: #0d1a0d; border-radius: 12pt; margin: 8pt 0 4pt; }
+            /* 2026-07-02 (Tim — "report is pretty bad") — cap the height so a tall keyframe can't fill a
+               page. 2026-08-08 (Tim — "pretty bad" again: the frame was a tiny portrait crammed in a WIDE
+               box with huge black side-bars). SmartMotion captures are portrait, so let the image size to
+               its OWN aspect (width auto), centered, height-capped — no forced-wide letterbox. A landscape
+               frame still fits (bounded by max-width). */
+            .frame { display: block; width: auto; max-width: 100%; max-height: 4.6in; object-fit: contain;
+                     background: #0d1a0d; border-radius: 12pt; margin: 8pt auto 4pt; }
             .metrics { display: flex; flex-wrap: wrap; gap: 6pt 18pt; margin: 8pt 0 2pt; }
             .metric { min-width: 1.2in; }
             .metric .mv { font-size: 15pt; font-weight: 800; color: #0d1a0d; }
@@ -149,7 +151,19 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
           ${frameUrl ? `<img class="frame" src="${frameUrl}" />` : ''}
           ${fault ? `<div class="card accent"><div class="label">Top Focus</div><div class="fault">${esc(fault)}</div>${a.confidence ? `<div class="creds">Confidence: ${esc(a.confidence)}</div>` : ''}</div>` : ''}
           ${section('What I see', a.observation)}
-          ${section('Why it happens', a.cause)}
+          ${(() => {
+            // 2026-08-08 (Tim — "report is pretty bad": WHAT I SEE and WHY IT HAPPENS said the SAME thing,
+            // e.g. "club moves over the plane … left miss" twice). Drop the cause section when it's
+            // near-identical to the observation (word-set overlap), so the report never reads as padding.
+            const words = (t: string | null | undefined) =>
+              new Set((t ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3));
+            const obs = words(a.observation); const cau = words(a.cause);
+            if (cau.size > 0 && obs.size > 0) {
+              let shared = 0; cau.forEach(w => { if (obs.has(w)) shared++; });
+              if (shared / cau.size >= 0.7) return ''; // ~duplicate — omit
+            }
+            return section('Why it happens', a.cause);
+          })()}
           ${section('The fix', a.fix, true)}
           ${section('Drill', a.drill)}
           ${section(`${instructor.split(' ')[0]}'s note`, input.coachNote, true)}
