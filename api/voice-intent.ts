@@ -614,7 +614,7 @@ The language reflects the transcript itself, not the user's preferred app langua
 
 Return ONLY valid JSON, no preamble, no code fences. Shape:
 {
-   "intent_type": "open_tool" | "query_status" | "change_setting" | "navigate" | "help" | "acknowledge" | "rules_query" | "handicap_query" | "set_trust_quiet" | "set_trust_companion" | "in_round_diagnostic" | "club_change" | "club_query" | "club_menu" | "log_shot" | "log_score" | "log_putts" | "media_capture" | "media_playback" | "at_my_ball" | "log_issue" | "sequence" | "declare_hole" | "set_hole_note" | "putt_watch" | "ask_golf_father" | "quick_round" | "open_external" | "state_yardage" | "refresh_gps" | "coach_refine" | "position_declaration" | "confirm_position" | "end_round" | "social_greeting" | "conversational" | "unknown",
+   "intent_type": ${INTENT_TYPE_ENUM.map((t) => `"${t}"`).join(' | ')},
   "parameters": {...},
   "confidence": "high" | "medium" | "low",
   "follow_up_question": string | null,
