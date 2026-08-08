@@ -63,9 +63,10 @@ export const setHoleNoteHandler: IntentHandler = {
     }
 
     round.setHoleNote(hole, note);
-    if (round.isRoundActive && round.currentHole !== hole) {
-      round.setCurrentHole(hole);
-    }
+    // 2026-08-08 (progression audit P2-8, Tim-approved market model) — REMOVED the side-effect
+    // navigation: "remember on hole 5, bunker right" used to MOVE the live round to hole 5. A note
+    // attaches to its named hole without touching where you are; only explicit navigation (voice
+    // "next hole"/declare, steppers, GPS at the tee) moves the round.
 
     return {
       success: true,

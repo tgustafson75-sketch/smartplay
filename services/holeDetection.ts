@@ -40,6 +40,10 @@ const POSITION_HISTORY_WINDOW_MS = 30_000;       // rolling 30s
 const SUSTAINED_TRANSITION_MS    = 10_000;        // 10s sustained position required
 const MIN_DISTANCE_FROM_GREEN_YD = 30;            // user must be 30+ yds from current green
 const MAX_TRANSITION_LOOKAHEAD   = 2;             // only consider current+1 and current+2 holes
+// 2026-08-08 (Tim-approved market model) — an UNSCORED hole may still advance, but only when the player
+// is genuinely AT the next tee (tight radius), not merely closer-to-it (the loose rule stays score-gated
+// so the Dudley Hills premature jump can't return). 25y ≈ standing on the tee box.
+const AT_NEXT_TEE_CONFIRM_YD     = 25;
 const POLL_INTERVAL_MS           = 4_000;         // 4s poll cadence (cheap)
 
 type LatLng = { lat: number; lng: number };
@@ -235,10 +239,25 @@ export function detectCurrentHole(
       reason: `closer to hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) than hole ${currentHole} green (${Math.round(distFromCurrentGreen)}y)`,
     };
   }
+  // 2026-08-08 (Tim-approved MARKET MODEL — "GPS advances, score nags"). An unscored hole no longer
+  // blocks the advance forever (walking to the next tee without logging used to leave EVERY system —
+  // yardage, shot stamping, watch push, tee brief — stale on the old hole with zero feedback). It now
+  // advances when the player is GENUINELY AT the next tee (≤25y — standing on the box), which the
+  // ≥30y-from-green gate above keeps distinct from "still putting near a close-by tee" (the Dudley
+  // premature-jump case). The looser closer-than rule stays score-gated. The transition consumer
+  // surfaces the "hole N not scored" nag; the scorecard's any-hole chips take the late score.
+  if (bestNextHole !== currentHole && !currentHoleScored && bestNextDist <= AT_NEXT_TEE_CONFIRM_YD) {
+    return {
+      hole_number: bestNextHole,
+      confidence: 'high',
+      transition_recommended: true,
+      reason: `AT hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) with hole ${currentHole} unscored — market-model advance (score nag to follow)`,
+    };
+  }
   if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen && !currentHoleScored) {
     return {
       hole_number: currentHole, confidence: 'high', transition_recommended: false,
-      reason: `near hole ${bestNextHole} tee but hole ${currentHole} not yet scored — advance holds until you log it`,
+      reason: `near hole ${bestNextHole} tee but hole ${currentHole} not yet scored — advances when you're ON the tee (≤${AT_NEXT_TEE_CONFIRM_YD}y)`,
     };
   }
 
@@ -254,9 +273,17 @@ export function detectCurrentHole(
   // sequence-aware forward detector above still wins when the player
   // is genuinely advancing.
   if (distFromCurrentGreen > 50) {
+    // 2026-08-08 (progression audit P0-3 — score-vs-GPS ping-pong at shared tee complexes). If the
+    // player is ALSO within ~30y of the CURRENT hole's tee (co-located tees: waiting to hit on N+1
+    // beside N's tee box), a <20y read on the played tee is ambiguous — do NOT jump backward. Genuine
+    // walk-backs (retrieving a club mid-fairway of the old hole) are nowhere near the current tee.
+    const currentTee = currentGeom.tee;
+    const nearOwnTee = !!currentTee && isValidGolfCoord(currentTee.lat, currentTee.lng)
+      && haversineYards(position, currentTee) <= 30;
     for (const playedHoleStr of Object.keys(scoresByHole)) {
       const playedHole = Number(playedHoleStr);
       if (!Number.isFinite(playedHole) || playedHole === currentHole) continue;
+      if (nearOwnTee) break; // at our own tee box — never re-enter a played hole from here
       const playedGeom = getHoleGeometry(courseId, playedHole);
       const playedTee = playedGeom?.tee;
       // 2026-06-01 — Fix GL: guard played-hole tee coord.

@@ -1006,29 +1006,11 @@ export const useRoundStore = create<RoundState>()(
         // player hears "Hole 1. Par 4. 380 yards." at round start without requiring
         // a manual hole-advance. No double-fire risk: setCurrentHole only speaks when
         // prevHole !== clamped, so a subsequent auto-advance to hole 2 won't repeat it.
-        void (async () => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const settingsMod = require('./settingsStore') as typeof import('./settingsStore');
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const trustMod = require('./trustLevelStore') as typeof import('./trustLevelStore');
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
-            const settings = settingsMod.useSettingsStore.getState();
-            const trustLevel = trustMod.useTrustLevelStore.getState().level;
-            if (settings.voiceEnabled && trustLevel !== 1) {
-              const holeOne = holes.find(h => h.hole === 1);
-              let text = 'Hole 1.';
-              if (holeOne?.par) text += ` Par ${holeOne.par}.`;
-              if (holeOne?.distance) text += ` ${holeOne.distance} yards.`;
-              const apiUrl = getApiBaseUrl();
-              void voiceMod.speak(text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
-                ?.catch?.(() => {});
-            }
-          } catch (e) {
-            console.log('[roundStore] hole-1 intro failed (non-fatal):', e);
-          }
-        })();
+        // 2026-08-08 (progression audit P1-5, Tim-approved) — REMOVED the FIX B6 spoken intro here. It
+        // hardcoded "Hole 1. Par X. Y yards." — WRONG on a back-nine start (says Hole 1 while the round
+        // starts on 10) — and DOUBLE-SPOKE over the caddie tab's own correct intro (skip_briefings
+        // branch), two overlapping voices at round start. The caddie tab is the ONE intro owner now;
+        // this store stays silent (matching the pull-only per-hole model everywhere else).
         // 2026-05-22 — Course Data Orchestrator: clear sustained-fix buffer
         // so a heading carried over from a prior round can't bias the
         // first reconciliation on this round.

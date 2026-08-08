@@ -138,11 +138,14 @@ export async function initWatchSwingBridge(): Promise<boolean> {
 
       // 2026-08-07 (Tim — "how can we use the watch to turn on swing detection in a LIVE round?"). A
       // watch-detected swing is a DEFINITIVE "a shot was just hit" signal — more reliable than the phone's
-      // GPS-displacement / acoustic inference. When a round is active, feed it to the live shot detector so
-      // the shot is tracked from the player's current position (the same seam a manual mark uses). Gated on
-      // a REAL swing (transition or real impact/speed, not a waggle) + a 20s debounce; the detector's own
-      // round-guard drops it pre-round. NOTE: the watch's own GPS is NOT in this event yet — the origin is
-      // still the phone's fix. Sending the watch's exact standing position needs a native watch-app change.
+      // GPS-displacement / acoustic inference. Gated on a REAL swing (transition or real impact/speed, not
+      // a waggle) + a 20s debounce. NOTE: the watch's own GPS is NOT in this event yet — the origin is the
+      // phone's fix. Sending the watch's exact standing position needs a native watch-app change.
+      // 2026-08-08 (audit + Tim picker decision — "bypass in cart"). The first wiring went through
+      // shotDetectionService.triggerManual → emit → the AUTO handler, which SUPPRESSES in cart mode /
+      // >4 m/s — i.e. it recorded nothing from the cart, Tim's exact setup. Now routes through the TRUE
+      // manual seam (conversationalLoggingOrchestrator.triggerManual → runFlow directly), which bypasses
+      // the auto-path suppression; its {0,0} sentinel start_location resolves to a real fix downstream.
       try {
         const realSwing = !!e.transitionDetected
           || (e.impactAcceleration ?? 0) > 0
@@ -154,9 +157,9 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         if (roundActive && realSwing && now - lastLiveShotTriggerAt > LIVE_SHOT_TRIGGER_COOLDOWN_MS) {
           lastLiveShotTriggerAt = now;
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          (require('./shotDetectionService') as typeof import('./shotDetectionService'))
-            .shotDetectionService.triggerManual();
-          console.log('[watchSwing] live round → shot detection triggered (club:', club, ')');
+          void (require('./conversationalLoggingOrchestrator') as typeof import('./conversationalLoggingOrchestrator'))
+            .conversationalLoggingOrchestrator.triggerManual().catch(() => undefined);
+          console.log('[watchSwing] live round → manual shot flow triggered, cart-suppression bypassed (club:', club, ')');
         }
       } catch (err) { console.log('[watchSwing] live-round shot trigger failed (non-fatal):', err); }
 

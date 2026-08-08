@@ -362,7 +362,12 @@ export const openToolHandler: IntentHandler = {
     // scorecard, "tell me what you see", send/show issue log) — Tim didn't flag those.
     {
       const raw = (intent.raw_text ?? '').toLowerCase();
-      const EXPLICIT_OPEN = /\b(open|show me|show us|show the|pull up|bring up|go to|take me to|get me to|launch|jump to|switch to|navigate to|let me see|head to|pull open)\b/;
+      // 2026-08-08 (Tim picker decision — "action verbs act") — explicit ACTION commands count as open
+      // verbs too: "analyze/check my lie" (TightLie), "record me down the line" (SmartMotion), "scan my
+      // club". These are commands naming what to DO, not the conversational hijacks Tim banned ("play"
+      // → Tight Lie stays dead — the classifier must still emit open_tool AND an action verb must be
+      // in the user's actual words).
+      const EXPLICIT_OPEN = /\b(open|show me|show us|show the|pull up|bring up|go to|take me to|get me to|launch|jump to|switch to|navigate to|let me see|head to|pull open|analy[sz]e|check my|read my|record|capture|scan)\b/;
       const EXEMPT_ACTION_TOOLS = new Set([
         'mark_green', 'markgreen', 'mark_tee', 'marktee', 'mark_tee_box',
         'sim_round', 'simround', 'sim', 'register_club',

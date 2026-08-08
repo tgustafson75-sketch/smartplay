@@ -155,11 +155,10 @@ export const confirmPositionHandler: IntentHandler = {
     const implied = destinationPoint(green, greenToTeeBearing, distance);
 
     // If the user did NOT name a hole and we used currentHole as the
-    // fallback, this is just a soft self-locator; if they named it
-    // explicitly, this is the player declaring they switched holes.
-    if (namedHole && namedHole !== round.currentHole) {
-      round.setCurrentHole(namedHole);
-    }
+    // fallback, this is just a soft self-locator.
+    // 2026-08-08 (progression audit P2-8, Tim-approved) — REMOVED the side-effect navigation: "I'm about
+    // 150 out on 6" no longer MOVES the round to 6 (a position remark isn't a navigation command — the
+    // explicit "I'm ON hole 6" declaration is declareHoleHandler's job and still navigates).
 
     const fix = getLastFix();
     if (!fix) {

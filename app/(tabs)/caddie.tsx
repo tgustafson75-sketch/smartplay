@@ -1325,6 +1325,14 @@ export default function CaddieTab() {
           if (!fix || fix.lat == null || fix.lng == null) return;
           const distYds = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
           if (distYds > 40) return; // not AT the tee box — the player gets the read by asking
+          // 2026-08-08 (progression audit P1-6, Tim-approved) — next tees are routinely <40y from the
+          // PREVIOUS green, so after a score-advance the brief could fire while the player was still
+          // picking the ball out of the cup. Require having LEFT the previous green (>40y) first.
+          const prevHoleData = courseHoles.find(h => h.hole === currentHole - 1);
+          if (prevHoleData && prevHoleData.middleLat !== 0 && prevHoleData.middleLng !== 0) {
+            const distFromPrevGreen = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: prevHoleData.middleLat, lng: prevHoleData.middleLng });
+            if (distFromPrevGreen <= 40) return; // still at the previous green — brief when they walk over
+          }
           // 2026-08-08 (O6) — LIVE voice state via ref, not the closure captured 6s ago when the timer
           // armed (a brief queued behind a finishing answer used to be silently skipped forever).
           if (isSpeaking() || voiceStateRef.current !== 'idle') return;

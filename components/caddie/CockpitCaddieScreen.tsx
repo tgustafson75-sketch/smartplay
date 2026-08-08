@@ -23,7 +23,7 @@
  * Kevin still hears, responds, and works exactly the same way.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -229,16 +229,38 @@ export default function CockpitCaddieScreen({
     void Haptics.selectionAsync().catch(() => undefined);
     setCurrentHole(next);
   };
+  // 2026-08-08 (progression audit P0-1, Tim-approved) — the SHOTS stepper used to COMMIT on every "+"
+  // tap: logScore fired per tap and the first-score auto-advance MOVED THE ROUND, so tapping "+" five
+  // times to record a 5 walked through FIVE holes each scored 1. Taps now accumulate in a PENDING value
+  // (displayed immediately) and commit ONCE after the stepper settles (1.6s after the last tap) —
+  // logScore fires with the final number, auto-advance fires once, no burned holes. Unmount commits any
+  // pending value so navigating away can't drop the score just tapped in.
+  const [pendingShots, setPendingShots] = useState<number | null>(null);
+  const pendingShotsRef = useRef<number | null>(null);
+  const pendingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitPendingShots = useCallback(() => {
+    const val = pendingShotsRef.current;
+    pendingShotsRef.current = null;
+    setPendingShots(null);
+    if (val == null || val <= 0) return;
+    const hole = useRoundStore.getState().currentHole;
+    const alreadyScored = (useRoundStore.getState().scores[hole] ?? 0) > 0;
+    logScore(hole, val);
+    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(val, par);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logScore, par]);
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
-    // Mirror the standard-layout handleLogHole: advance the mental-state
-    // coach on the FIRST score for this hole only (guarded so editing an
-    // already-scored hole doesn't double-count). Snapshot BEFORE logScore
-    // overwrites scores[currentHole].
-    const alreadyScored = (useRoundStore.getState().scores[currentHole] ?? 0) > 0;
-    logScore(currentHole, next);
-    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(next, par);
+    pendingShotsRef.current = next;
+    setPendingShots(next);
+    if (pendingCommitTimerRef.current) clearTimeout(pendingCommitTimerRef.current);
+    pendingCommitTimerRef.current = setTimeout(commitPendingShots, 1600);
   };
+  useEffect(() => () => {
+    if (pendingCommitTimerRef.current) clearTimeout(pendingCommitTimerRef.current);
+    commitPendingShots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleStepperPutts = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
     logPutts(currentHole, next);
@@ -372,7 +394,7 @@ export default function CockpitCaddieScreen({
         <StepperPair
           holeNumber={currentHole}
           par={par}
-          shots={holeShots}
+          shots={pendingShots ?? holeShots}
           putts={holePutts}
           totalHoles={totalHolesCockpit}
           firstHole={firstHoleCockpit}

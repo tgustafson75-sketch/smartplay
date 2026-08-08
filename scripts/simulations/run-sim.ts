@@ -1205,17 +1205,20 @@ check('Caddie confirms the just-hit drive + remaining + play (live tee-to-player
 // 2026-08-07 (Tim — "how can we use the watch to turn on swing detection in a LIVE round?"). LOCK: a
 // watch-detected swing during an active round triggers the live shot detector (from the phone's current
 // position), gated on a real swing + a 20s debounce. Watch's own GPS is NOT in the event yet (native).
-check('Watch swing turns on live-round shot detection (debounced, round-gated)',
+// 2026-08-08 (audit + Tim picker — "bypass in cart"): the first wiring rode the AUTO path, which
+// suppresses in cart mode (recorded nothing from the cart). LOCK the TRUE manual seam.
+check('Watch swing fires the MANUAL shot flow (cart-suppression bypassed), debounced + round-gated',
   (() => {
     const b = read('services/watchSwingBridge.ts');
     return (
-      /shotDetectionService\.triggerManual\(\)/.test(b) &&
+      /conversationalLoggingOrchestrator\.triggerManual\(\)/.test(b) &&
+      !/require\('\.\/shotDetectionService'\)/.test(b) && // the suppressed auto path must stay un-imported
       /isRoundActive/.test(b) &&
       /LIVE_SHOT_TRIGGER_COOLDOWN_MS/.test(b) &&
       /const realSwing =/.test(b)
     );
   })(),
-  'a watch swing in a live round fires shot detection (definitive swing signal), debounced + round-gated');
+  'a watch swing in a live round records the shot even from the cart (manual seam, not the suppressed auto path)');
 
 // 2026-08-07 (Tim — "add a record button on the watch to control SmartMotion record + stop"). LOCK the
 // PHONE side: a watch control command opens SmartMotion + start/stops the camera via the shared record

@@ -871,7 +871,20 @@ function AppNavigator() {
     const unsubDetect = subscribeToHoleDetection((nextHole) => {
       if (!useSettingsStore.getState().autoHoleAdvance) return;
       const round = useRoundStore.getState();
-      if (round.currentHole !== nextHole) round.setCurrentHole(nextHole);
+      if (round.currentHole !== nextHole) {
+        // 2026-08-08 (Tim-approved market model — "GPS advances, score nags"). When GPS advances FORWARD
+        // over an UNSCORED hole (walked to the next tee without logging), surface the nag so the score
+        // isn't silently lost — the scorecard's any-hole chips take it anytime. One toast per skip.
+        const prevHole = round.currentHole;
+        const prevUnscored = nextHole > prevHole && (round.scores[prevHole] ?? 0) === 0;
+        round.setCurrentHole(nextHole);
+        if (prevUnscored) {
+          try {
+            (require('../store/toastStore') as typeof import('../store/toastStore'))
+              .useToastStore.getState().show(`Hole ${prevHole} not scored — add it on the scorecard anytime`);
+          } catch { /* non-fatal */ }
+        }
+      }
     });
     // 2026-05-24 (Flow B) — GPS confidence-gated proactive ask
     // orchestrator. Init alongside the toast subscriber. Subscribes
