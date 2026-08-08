@@ -338,7 +338,17 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             bookingUrl: (bookingUrl && bookingUrl.trim()) ? bookingUrl.trim() : prev.bookingUrl,
             savedAt: nowMs,
           };
-          return { courseBook: { ...s.courseBook, [course_id]: next } };
+          // 2026-08-08 (server audit #3 — the ONLY unbounded persisted map in the app; writers fire per
+          // course VIEWED, not just played, ~5-10KB/entry → slow burn toward the Android ~2MB AsyncStorage
+          // row limit that already bricked cageStore twice). LRU-evict beyond 40 entries by savedAt —
+          // same compaction pattern as roundStore. The just-written entry always survives (newest savedAt).
+          const book = { ...s.courseBook, [course_id]: next };
+          const ids = Object.keys(book);
+          if (ids.length > 40) {
+            ids.sort((a, b) => (book[a]?.savedAt ?? 0) - (book[b]?.savedAt ?? 0));
+            for (const evict of ids.slice(0, ids.length - 40)) delete book[evict];
+          }
+          return { courseBook: book };
         });
       },
 
@@ -435,7 +445,16 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             holes: holesMap,
             lastPlayed: nowMs,
           };
-          return { players: { ...s.players, [id]: { ...p, courses: { ...p.courses, [course_id]: nextCourse }, updated_at: nowMs } } };
+          // 2026-08-08 (server audit #3) — cap per-player course memories at 40, LRU by lastPlayed
+          // (writes fire only per round END, but a course-hopping player still grows unbounded; same
+          // AsyncStorage-row-limit hazard as the courseBook). The just-played course always survives.
+          const courses = { ...p.courses, [course_id]: nextCourse };
+          const cids = Object.keys(courses);
+          if (cids.length > 40) {
+            cids.sort((a, b) => (courses[a]?.lastPlayed ?? 0) - (courses[b]?.lastPlayed ?? 0));
+            for (const evict of cids.slice(0, cids.length - 40)) delete courses[evict];
+          }
+          return { players: { ...s.players, [id]: { ...p, courses, updated_at: nowMs } } };
         });
       },
 
