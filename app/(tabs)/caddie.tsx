@@ -2535,6 +2535,17 @@ export default function CaddieTab() {
       }
     }
 
+    // 2026-08-08 (Tim — "you have to allow a 9-hole course to be played twice"). At a 9-hole course the
+    // 18-HOLE format now MEANS twice around (exactly the 18Birdies semantic; zero new UI): holes 10-18
+    // reuse holes 1-9's par/yardage/coords with renumbered hole numbers. Scorecard shows OUT/IN, WHS
+    // posts as 18, GPS/briefs work on the second loop via the getHoleGeometry twice-around wrap.
+    // Choosing the 9-Hole format pill still plays a single loop.
+    if (holes.length === 9 && !opts.nineHole) {
+      const secondNine = holes.map(h => ({ ...h, hole: h.hole + 9 }));
+      holes = [...holes, ...secondNine];
+      console.log('[startRound] 9-hole course + 18 format → twice around (holes expanded to 18)');
+    }
+
     const startedWithoutHoles = holes.length === 0;
     if (startedWithoutHoles) {
       console.log('[startRound] no holes loaded for', courseName, '— starting empty; geometry fetch will populate async');

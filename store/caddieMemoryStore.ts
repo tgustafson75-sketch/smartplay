@@ -285,7 +285,17 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
 
       getStaticHole: (courseId, hole) => {
         const book = get().courseBook?.[courseId];
-        return book?.holes?.[hole] ?? null;
+        const direct = book?.holes?.[hole];
+        if (direct) return direct;
+        // 2026-08-08 (Tim — 9-hole course played twice) — second-loop wrap: when the book only covers
+        // holes 1-9 (a true 9-hole course) and hole 10-18 is asked, serve (hole-9) so the caddie's OB/
+        // local-rule notes carry to the second time around. Never fires for an 18-hole book (which has,
+        // or legitimately lacks, its own 10-18 keys — gated on NO key >= 10 existing at all).
+        if (hole >= 10 && hole <= 18 && book?.holes) {
+          const keys = Object.keys(book.holes).map(Number);
+          if (keys.length > 0 && keys.every(k => k <= 9)) return book.holes[hole - 9] ?? null;
+        }
+        return null;
       },
 
       saveCourseBook: ({ course_id, name, holes, tips, about, website, phone, bookingUrl, nowMs }) => {

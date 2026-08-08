@@ -308,7 +308,18 @@ export function getCachedGeometry(courseId: string): CourseGeometry | null {
 /** Returns a single hole's geometry from cache (or bundled coords), or null if none exists. */
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
   const c = memCache.get(courseId) ?? buildBundledGeometry(courseId);
-  return c?.holes.find(h => h.hole_number === holeNumber) ?? null;
+  const direct = c?.holes.find(h => h.hole_number === holeNumber);
+  if (direct) return direct;
+  // 2026-08-08 (Tim — "allow a 9-hole course to be played twice"). TWICE-AROUND wrap: at a course whose
+  // geometry has exactly 9 holes, holes 10-18 are the SAME physical holes 1-9 played again — serve the
+  // wrapped geometry so GPS yardage / hole detection / green centroids / tee briefs all work on the
+  // second loop. Only fires when the course genuinely has 9 (an 18-hole course never wraps), and being
+  // on hole 12 of a 9-hole course is only possible in a twice-around round.
+  if (holeNumber >= 10 && holeNumber <= 18 && c && c.holes.length === 9) {
+    const wrapped = c.holes.find(h => h.hole_number === holeNumber - 9);
+    if (wrapped) return { ...wrapped, hole_number: holeNumber };
+  }
+  return null;
 }
 
 // ─── Derived (AI-estimated) geometry — kept SEPARATE from the real cache ──────

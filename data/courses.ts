@@ -75,6 +75,10 @@ export function getCourseHoleCount(
   liveLength?: number,
 ): number {
   const bundled = getBundledHoles(courseId);
+  // 2026-08-08 (Tim — 9-hole course played twice). When the LIVE round is exactly double a 9-hole
+  // bundle (twice around — holes 10-18 replay 1-9), the round's real length is 18; the bundled 9 must
+  // not cap it (advance would stop at 9 mid-round). Any other live length still defers to bundled.
+  if (bundled.length === 9 && liveLength === 18) return 18;
   if (bundled.length > 0) return bundled.length;
   if (liveLength && liveLength > 0) return liveLength;
   return 18;

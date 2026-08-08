@@ -1065,6 +1065,25 @@ check('Berlin CC carries the OFFICIAL card: yardages + rating/slope + local rule
   })(),
   'Berlin briefs cite the real card: official yardages, 62.4/98, per-hole OB walls + the brook rule, offline from hole 1');
 
+// 2026-08-08 (Tim — "you have to allow a 9-hole course to be played twice"). LOCK all four twice-around
+// seams: 18-format at a 9-hole course expands holes to 18 (10-18 replay 1-9); geometry wraps for the
+// second loop; the hole count treats live-18-over-bundled-9 as 18 (advance doesn't stop at 9); the
+// course book's notes wrap so OB/local rules carry to the second nine.
+check('9-hole course plays TWICE with the 18 format (holes, geometry, count, book all wrap)',
+  (() => {
+    const c = read('app/(tabs)/caddie.tsx');
+    const g = read('services/courseGeometryService.ts');
+    const d = read('data/courses.ts');
+    const m = read('store/caddieMemoryStore.ts');
+    return (
+      /holes\.length === 9 && !opts\.nineHole/.test(c) && /hole: h\.hole \+ 9/.test(c) &&    // expansion
+      /holeNumber >= 10 && holeNumber <= 18 && c && c\.holes\.length === 9/.test(g) &&        // geometry wrap
+      /bundled\.length === 9 && liveLength === 18\) return 18/.test(d) &&                     // count seam
+      /keys\.every\(k => k <= 9\)\) return book\.holes\[hole - 9\]/.test(m)                   // book wrap
+    );
+  })(),
+  'picking 18 at a 9-hole course = twice around: full 18 scorecard/WHS, GPS + briefs + card notes on the second loop');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);
