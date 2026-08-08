@@ -137,6 +137,53 @@ out geom;`;
   }
 }
 
+/**
+ * 2026-08-08 (Tim — "I want the course builder engine: no user gets to a course and doesn't GET the
+ * course"). The elite hole-way pass, ported from scripts/build-course-holeways.mjs (the hand-run dev
+ * tool that built Berlin CC) into the LIVE synthesis path. OSM `golf=hole` WAYS carry the real hole
+ * number (`ref`) and often `par` — so an unknown course gets REAL hole ordering + pars automatically,
+ * instead of the centroid-pairing guesses with fabricated par-4s. Falls back to the pairing path when
+ * hole-ways are absent/untagged (the minority of mapped courses).
+ */
+type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
+async function fetchOsmHoleWays(centroid: Loc): Promise<OsmHoleWay[]> {
+  const query = `[out:json][timeout:20];
+(
+  way[golf=hole](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
+);
+out geom;`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
+      },
+      body: 'data=' + encodeURIComponent(query),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = (await res.json()) as { elements?: OsmElement[] };
+    const out: OsmHoleWay[] = [];
+    for (const el of data.elements ?? []) {
+      if (!el.geometry || el.geometry.length < 2) continue;
+      const ref = el.tags?.ref != null && Number.isFinite(Number(el.tags.ref)) ? Number(el.tags.ref) : null;
+      const par = el.tags?.par != null && Number.isFinite(Number(el.tags.par)) ? Number(el.tags.par) : null;
+      out.push({ ref, par, pts: el.geometry.map(g => ({ lat: g.lat, lng: g.lon })) });
+    }
+    console.log(`[course-geometry] OSM hole-ways: ${out.length} (${out.filter(h => h.ref != null).length} with ref)`);
+    return out;
+  } catch (e) {
+    clearTimeout(timer);
+    console.warn('[course-geometry] OSM hole-ways exception:', e);
+    return [];
+  }
+}
+
 async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[]> {
   const query = `[out:json][timeout:20];
 (
@@ -564,6 +611,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const osmOnly = String(req.query.osmOnly ?? '') === '1';
   if (osmOnly) {
     if (!centroid) return res.status(400).json({ error: 'osmOnly requires lat/lng' });
+    // 2026-08-08 (Tim — the course BUILDER engine, live). PRIMARY PASS: OSM golf=hole WAYS with real
+    // hole numbers (ref) + pars — the same algorithm the hand-run script used to build Berlin CC, now
+    // automatic for every course a user arrives at. Only when hole-ways are absent/untagged do we fall
+    // to the centroid-pairing guesswork below.
+    const [holeWays, greenPolys] = await Promise.all([
+      fetchOsmHoleWays(centroid),
+      fetchOsmPolygons(centroid, 'green'),
+    ]);
+    const refWays = holeWays.filter(h => h.ref != null && h.ref >= 1 && h.ref <= 18);
+    if (refWays.length >= 3 && greenPolys.length >= 3) {
+      const nearestGreen = (p: Loc): { poly: OsmPolygon; d: number } | null => {
+        let best: OsmPolygon | null = null; let bd = Infinity;
+        for (const g of greenPolys) {
+          const d = haversineYards(p, g.centroid);
+          if (d < bd) { bd = d; best = g; }
+        }
+        return best ? { poly: best, d: bd } : null;
+      };
+      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc }> = [];
+      for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
+        const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
+        const gA = nearestGreen(A); const gB = nearestGreen(B);
+        if (!gA || !gB) continue;
+        const greenEnd = gA.d <= gB.d ? gA : gB;
+        const tee = gA.d <= gB.d ? B : A;
+        // Front/back of the green relative to the tee, from the actual polygon.
+        let front = greenEnd.poly.centroid; let back = greenEnd.poly.centroid;
+        let dF = Infinity; let dB = -Infinity;
+        for (const p of greenEnd.poly.polygon) {
+          const d = haversineYards(tee, p);
+          if (d < dF) { dF = d; front = p; }
+          if (d > dB) { dB = d; back = p; }
+        }
+        const center = haversineYards(tee, greenEnd.poly.centroid);
+        const par = w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4);
+        rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back });
+      }
+      if (rows.length >= 3) {
+        const holes = rows.map(r => ({
+          hole_number: r.ref,
+          par: r.par,
+          yardage: Math.round(haversineYards(r.tee, r.green)),
+          tee: r.tee,
+          green: r.green,
+          green_front: r.front,
+          green_back: r.back,
+          bearing_deg: bearingDeg(r.tee, r.green),
+          hazards: [],
+          fairway_centerline: [],
+          green_outline: [],
+          green_polygon: null as Loc[] | null,
+          // Real hole number + polygon-derived green; par is real when tagged, flagged when inferred.
+          estimated: r.parEstimated,
+        }));
+        console.log(`[course-geometry] OSM hole-way synthesis: ${holes.length} holes with REAL refs (pars estimated on ${holes.filter(h => h.estimated).length})`);
+        return res.status(200).json({
+          course_id: courseId,
+          course_name: 'OSM-derived',
+          holes,
+          source: 'osm_holeways',
+        });
+      }
+    }
     const [osmGreens, osmTees] = await Promise.all([
       fetchOsmFeatures(centroid, 'green'),
       fetchOsmFeatures(centroid, 'tee'),
