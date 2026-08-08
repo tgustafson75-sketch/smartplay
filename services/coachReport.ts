@@ -107,31 +107,34 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
         <head>
           <meta charset="utf-8" />
           <style>
-            @page { size: letter; margin: 0.5in; }
-            body { font-family: -apple-system, system-ui, "Segoe UI", sans-serif; color: #0d1a0d; margin: 0; }
+            /* 2026-08-08 (Tim — "the export report should look like our SmartMotion report UI —
+               consistent look and branding is key"). Restyled to the app's EXACT dark tokens
+               (theme/tokens.ts darkTheme): background #060f09, surface #0d1a0d, elevated #0d2418,
+               border #1e3a28, accent #00C896, lime #88F700, white/#e8f5e9 text. The report now reads
+               as a SmartPlay screen, not a generic light-mode printout. */
+            @page { size: letter; margin: 0; }
+            html, body { background: #060f09; }
+            body { font-family: -apple-system, system-ui, "Segoe UI", sans-serif; color: #ffffff; margin: 0; padding: 0.5in; }
             .top { display: flex; align-items: center; gap: 12pt; border-bottom: 2pt solid #00C896; padding-bottom: 10pt; }
             .logo { width: 42pt; height: 42pt; border-radius: 9pt; }
-            .brand { font-size: 11pt; color: #00936e; font-weight: 800; letter-spacing: 0.5pt; }
-            .instructor { font-size: 18pt; font-weight: 800; margin-top: 1pt; }
-            .creds { font-size: 10.5pt; color: #6b7280; margin-top: 1pt; }
-            .meta { font-size: 10pt; color: #6b7280; margin: 10pt 0 4pt; }
-            /* 2026-07-02 (Tim — "report is pretty bad") — cap the height so a tall keyframe can't fill a
-               page. 2026-08-08 (Tim — "pretty bad" again: the frame was a tiny portrait crammed in a WIDE
-               box with huge black side-bars). SmartMotion captures are portrait, so let the image size to
-               its OWN aspect (width auto), centered, height-capped — no forced-wide letterbox. A landscape
-               frame still fits (bounded by max-width). */
+            .brand { font-size: 11pt; color: #00C896; font-weight: 800; letter-spacing: 0.5pt; }
+            .instructor { font-size: 18pt; font-weight: 800; margin-top: 1pt; color: #ffffff; }
+            .creds { font-size: 10.5pt; color: #9ca3af; margin-top: 1pt; }
+            .meta { font-size: 10pt; color: #9ca3af; margin: 10pt 0 4pt; }
+            /* 2026-07-02 — height-capped; 2026-08-08 — sizes to its OWN aspect (no forced-wide letterbox),
+               and on the dark page the frame reads seamless (no visible black bars at all). */
             .frame { display: block; width: auto; max-width: 100%; max-height: 4.6in; object-fit: contain;
-                     background: #0d1a0d; border-radius: 12pt; margin: 8pt auto 4pt; }
+                     background: #0d1a0d; border: 1pt solid #1e3a28; border-radius: 12pt; margin: 8pt auto 4pt; }
             .metrics { display: flex; flex-wrap: wrap; gap: 6pt 18pt; margin: 8pt 0 2pt; }
             .metric { min-width: 1.2in; }
-            .metric .mv { font-size: 15pt; font-weight: 800; color: #0d1a0d; }
-            .metric .ml { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.6pt; color: #6b7280; text-transform: uppercase; }
+            .metric .mv { font-size: 15pt; font-weight: 800; color: #88F700; }
+            .metric .ml { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.6pt; color: #9ca3af; text-transform: uppercase; }
             .card { page-break-inside: avoid; }
-            .card { background: #f3faf6; border: 1pt solid #d7ece1; border-radius: 10pt; padding: 9pt 12pt; margin-top: 8pt; }
-            .card.accent { background: #e9f9f2; border-color: #00C896; }
-            .label { font-size: 9pt; font-weight: 800; letter-spacing: 0.8pt; color: #00936e; text-transform: uppercase; }
-            .body { font-size: 12pt; line-height: 1.45; margin-top: 3pt; }
-            .fault { font-size: 15pt; font-weight: 800; margin-top: 2pt; }
+            .card { background: #0d1a0d; border: 1pt solid #1e3a28; border-radius: 10pt; padding: 9pt 12pt; margin-top: 8pt; }
+            .card.accent { background: #0d2418; border-color: #00C896; }
+            .label { font-size: 9pt; font-weight: 800; letter-spacing: 0.8pt; color: #00C896; text-transform: uppercase; }
+            .body { font-size: 12pt; line-height: 1.45; margin-top: 3pt; color: #e8f5e9; }
+            .fault { font-size: 15pt; font-weight: 800; margin-top: 2pt; color: #ffffff; }
             .foot { margin-top: 14pt; font-size: 9pt; color: #9ca3af; text-align: center; }
           </style>
         </head>
