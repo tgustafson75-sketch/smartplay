@@ -1106,6 +1106,33 @@ check('Handicap differentials use the REAL course par/rating (no par-36 assumpti
   })(),
   'a 9-hole round at par-33 Berlin differentials against ~31.2/98 (real card), not the neutral 36/113 that dragged the index down ~2 points');
 
+// 2026-08-08 (Tim — "in onboarding and in general I should be able to TELL the caddie what's in my bag
+// and my yardages and it gets registered correctly"). LOCK the full bag-by-voice chain: ONE registrar
+// seam; the brain tool (rich sentences + interview) and the offline precheck ("my 7-iron goes 165")
+// both write through it; the get-to-know hard-mute EXEMPTS register_bag; the client suppression
+// allowlist does NOT include it (data tool, not navigation).
+check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemption all wired',
+  (() => {
+    const reg = read('services/bagVoiceRegistration.ts');
+    const turn = read('api/pipecat-turn.ts');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    const pre = read('services/localIntentPrecheck.ts');
+    const idx = read('services/intents/index.ts');
+    return (
+      /export function registerBagFromSpeech/.test(reg) &&
+      /registerClub\(parsed\.club_id, \{ source: 'voice' \}\)/.test(reg) &&        // bag membership
+      /stats\.setManual\(name, yds\)/.test(reg) &&                                  // honest stated carry
+      /yds < 30 \|\| yds > 400/.test(reg) &&                                        // plausibility clamp
+      /name: 'register_bag'/.test(turn) &&                                          // brain tool declared
+      /register_bag stays ON/.test(turn) &&                                         // interview exemption
+      /case 'register_bag':/.test(disp) &&                                          // client dispatch
+      !/NAV_OPEN_ACTIONS = new Set\(\[[^\]]*register_bag/.test(disp) &&             // not suppressed in interview
+      /'set_club_distance', \{ club_phrase/.test(pre) &&                            // offline declarative form
+      /registerHandler\(setClubDistanceHandler\)/.test(idx)
+    );
+  })(),
+  '"I carry driver, 3-wood…" and "my 7-iron goes 165" register the real bag + carries the brain then quotes — onboarding interview included');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);

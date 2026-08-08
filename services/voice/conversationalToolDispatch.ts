@@ -81,6 +81,9 @@ type AnyAction = {
   // switch_caddie / set_golfer
   personality?: string;
   name?: string;
+  // register_bag (2026-08-08 — spoken bag registration)
+  clubs?: string[];
+  distances?: { club: string; yards: number; kind?: 'carry' | 'total' | null }[];
   // log_score / log_shot / plan_shot
   hole?: number;
   score?: number;
@@ -216,6 +219,30 @@ function dispatchOne(a: AnyAction): void {
           ?? fam.members.find((mm) => (mm.firstName ?? '').toLowerCase().startsWith(lower));
         if (m) fam.setActiveMember(m.id);
       }
+      break;
+    }
+    case 'register_bag': {
+      // 2026-08-08 (Tim — "tell the caddie what's in my bag and my yardages and it registers"). One
+      // guarded seam (bagVoiceRegistration): clubs → clubBagStore (source 'voice'), stated yardages →
+      // clubStatsStore honest-carry chain — the SAME stores the brain's registered-bag/club_distances
+      // prompt reads, so the next club call quotes the numbers he just said. Unparsed phrases return in
+      // `missed`; the brain's confirm can ask about them instead of guessing.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const reg = (require('../bagVoiceRegistration') as typeof import('../bagVoiceRegistration'));
+        const result = reg.registerBagFromSpeech({
+          clubs: Array.isArray(a.clubs) ? (a.clubs as string[]) : null,
+          distances: Array.isArray(a.distances)
+            ? (a.distances as { club: string; yards: number; kind?: 'carry' | 'total' | null }[])
+            : null,
+        });
+        if (result.registered.length > 0 || result.distancesSet.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../../store/toastStore') as typeof import('../../store/toastStore'))
+            .useToastStore.getState().show(result.confirmLine || 'Bag updated');
+        }
+        console.log(`[register_bag] +${result.registered.length} clubs, ${result.distancesSet.length} distances, missed=${result.missed.join('|') || 'none'}`);
+      } catch (e) { console.log('[register_bag] failed (non-fatal):', e); }
       break;
     }
     case 'mark_tee': {

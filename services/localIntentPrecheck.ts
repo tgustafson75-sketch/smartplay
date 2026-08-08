@@ -417,6 +417,18 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     }
   }
 
+  // 2026-08-08 (Tim — "tell the caddie my yardages and it registers"). Declarative bag fact:
+  // "my 7-iron goes 165" / "my driver carries about 250" → set_club_distance (offline, instant).
+  // The GOES/CARRIES verb + a number makes it unambiguous: the QUERY form ("what's my 7 iron") has no
+  // number, and the shot report ("I hit my 7-iron 165") has "hit" — neither matches here. Rich
+  // multi-club sentences ("I carry driver, 3-wood, 5 through PW") ride the brain's register_bag tool.
+  {
+    const sm = t.match(/\bmy\s+(.{2,24}?)\s+(?:goes|carries|carry\s+is|flies)\s+(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
+    if (sm && /\b(driver|wood|hybrid|rescue|iron|wedge|pitching|sand|lob|gap|degree|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(sm[1])) {
+      return intent(t, 'set_club_distance', { club_phrase: sm[1].trim(), yards: Number(sm[2]), raw_utterance: t });
+    }
+  }
+
   for (const p of PATTERNS) {
     const m = t.match(p.rx);
     if (m) return p.build(t, m);

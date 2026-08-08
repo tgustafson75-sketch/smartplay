@@ -232,6 +232,31 @@ const KEVIN_TOOLS: AiToolDef[] = [
     },
   },
   {
+    // 2026-08-08 (Tim — "in onboarding and in general I should be able to TELL the caddie what's in my
+    // bag and my yardages and it gets registered correctly").
+    name: 'register_bag',
+    description: 'Register the clubs the player CARRIES and/or their stated per-club yardages, whenever they tell you — onboarding/get-to-know, mid-round, or casual chat. Examples: "I carry driver, 3-wood, 4-hybrid, 5-iron through pitching wedge, 56 and 60, and a putter" → clubs (EXPAND ranges like "5 through PW" into every individual club: "5 iron","6 iron","7 iron","8 iron","9 iron","pitching wedge"; bare numbers with degree context like "56 and 60" are wedges: "56 degree","60 degree"). "My 7-iron goes 165, driver about 250" → distances [{club:"7 iron", yards:165},{club:"driver", yards:250}]. A stated number is a CARRY unless they explicitly say total/rollout. Capture EVERY club and number they said — never drop one.',
+    parameters: {
+      type: 'object',
+      properties: {
+        clubs: { type: 'array', items: { type: 'string' }, description: 'Individual club phrases the player carries, ranges fully expanded. Omit if they only stated yardages.' },
+        distances: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              club:  { type: 'string', description: 'The club phrase (e.g. "7 iron", "driver").' },
+              yards: { type: 'number', description: 'The stated distance in yards.' },
+              kind:  { type: 'string', enum: ['carry', 'total'], description: 'carry unless they explicitly said total/with roll.' },
+            },
+            required: ['club', 'yards'],
+          },
+          description: 'Stated per-club yardages. Omit if they only listed clubs.',
+        },
+      },
+    },
+  },
+  {
     name: 'lookup_hole',
     description: 'Get hole details (par, yardage) for a known course.',
     parameters: {
@@ -507,7 +532,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       'set_angle, and do NOT say you are opening or pulling up anything. Just keep the ' +
       'conversation going: reflect back what you heard and ask ONE natural follow-up question ' +
       '(end with a question mark so the mic stays open). Only exception: the player EXPLICITLY ' +
-      'says to stop the interview and open something ("okay, take me to the tempo drill now").';
+      'says to stop the interview and open something ("okay, take me to the tempo drill now").' +
+      // 2026-08-08 (Tim — bag registration IS interview material). register_bag is a DATA tool, not a
+      // navigation — it stays LIVE in the interview. Actively ask about the bag at a natural moment.
+      '\nEXCEPTION — register_bag stays ON: when they tell you the clubs they carry or their ' +
+      'yardages, CALL register_bag with everything they said (it records silently — no navigation). ' +
+      'At a natural point in the interview, ASK about their bag: what clubs they carry and their ' +
+      'go-to yardages (7-iron and driver at minimum).';
   }
 
   if (!text?.trim()) return res.status(400).json({ error: 'text is required' });

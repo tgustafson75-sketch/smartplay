@@ -34,6 +34,7 @@ import { setHoleNoteHandler } from './setHoleNoteHandler';
 import { socialGreetingHandler } from './socialGreetingHandler';
 import { undoHandler } from './undoHandler';
 import { correctLastShotHandler } from './correctLastShotHandler';
+import { setClubDistanceHandler } from './setClubDistanceHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -84,6 +85,7 @@ voiceCommandRouter.registerHandler(setHoleNoteHandler);
 // voiceCommandRouter.registerHandler(socialGreetingHandler);
 voiceCommandRouter.registerHandler(undoHandler);
 voiceCommandRouter.registerHandler(correctLastShotHandler);
+voiceCommandRouter.registerHandler(setClubDistanceHandler);
 
 export {
   openToolHandler,
