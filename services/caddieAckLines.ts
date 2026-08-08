@@ -19,3 +19,16 @@ export const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
   es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],
   zh: ['好的，明白了。', '明白了。', '好的。', '收到。', '让我看看。', '稍等。'],
 };
+
+// 2026-08-08 (Tim — Tozo T6 never hears the 200ms tock earcon; "add our own caddie VERBAL response, not
+// canned but logical"). Short spoken cues in the CADDIE'S REAL VOICE, replacing the earcons when a cached
+// persona render exists (offlineVoiceCache pre-renders these — same no-drift pattern as ACK_PHRASES).
+// "Logical, not canned": context-picked (mid-round vs off-course), rotating never-repeat, persona voice.
+// A spoken word (~600ms) also survives the Bluetooth A2DP→mic route handoff that swallows the short tock.
+/** Tap-to-listen cue — the caddie says it the moment the mic opens ("I'm listening"). */
+export const LISTEN_CUES: { idle: string[]; round: string[] } = {
+  idle: ['Go ahead.', "I'm here.", "What's up?", 'Yeah, go ahead.'],
+  round: ['Go ahead.', 'Talk to me.', 'What are we looking at?', "I'm with you."],
+};
+/** Tap-again endpoint cue — the caddie confirms it HEARD you and is working. */
+export const GOTIT_CUES: string[] = ['Got it.', 'On it.', 'Okay.', 'Heard you.'];

@@ -24,7 +24,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { DEAD_END_PRACTICE } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 
 type Lang = 'en' | 'es' | 'zh';
 type Gender = 'male' | 'female';
@@ -42,6 +42,12 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   // acks keep the device-TTS fallback until there are non-English testers.
   { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH },
   ...ACK_PHRASES.en.map((text, i) => ({ slug: `ack_en_${i}`, language: 'en' as const, text })),
+  // 2026-08-08 (Tim — verbal listen/got-it cues replace the earcons his Tozo T6 never hears). Rendered
+  // in the persona's real voice; listeningSession resolves + plays them at tap-to-listen / tap-again.
+  // De-duped against pools above so a shared phrase ("Got it.") isn't rendered twice.
+  ...LISTEN_CUES.idle.map((text, i) => ({ slug: `listen_idle_${i}`, language: 'en' as const, text })),
+  ...LISTEN_CUES.round.filter(t => !LISTEN_CUES.idle.includes(t)).map((text, i) => ({ slug: `listen_round_${i}`, language: 'en' as const, text })),
+  ...GOTIT_CUES.filter(t => !ACK_PHRASES.en.includes(t)).map((text, i) => ({ slug: `gotit_${i}`, language: 'en' as const, text })),
   // Off-course practice nudge — the one FIXED deadEndLine branch (the others are dynamic reads).
   { slug: 'off_course_en', language: 'en', text: DEAD_END_PRACTICE.en },
   { slug: 'off_course_es', language: 'es', text: DEAD_END_PRACTICE.es },

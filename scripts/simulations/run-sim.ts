@@ -3469,7 +3469,12 @@ check('Earbud tap-again ENDS + submits the utterance (not cancel), with a distin
       endpointIdx !== -1 && inFlightGuardIdx !== -1 &&
       endpointIdx < inFlightGuardIdx && // REACHABILITY: endpoint handled before the sessionInFlight bail
       /Date\.now\(\) - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS/.test(ls) && // open-echo guard
-      /playLocalFile\(GOTIT_EARCON/.test(ls) &&
+      // 2026-08-08 — the confirm is now a VERBAL cue in the persona voice (Tozo T6 never heard the 200ms
+      // tock); playVerbalCue keeps the earcon as its first-run fallback, so the audible confirm is intact.
+      /playVerbalCue\('gotit', GOTIT_EARCON/.test(ls) &&
+      /playVerbalCue\('listen', LISTENING_EARCON/.test(ls) &&
+      /async function playVerbalCue/.test(ls) &&
+      /resolveCachedOfflineClipUri/.test(ls) && // real persona-voice cache, not device TTS
       /import \{[^}]*endCaptureEarly[^}]*\} from '\.\/voiceService'/.test(ls)
     );
   })(),

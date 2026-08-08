@@ -4,7 +4,7 @@ import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, pla
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -214,6 +214,36 @@ function pickAck(lang: 'en' | 'es' | 'zh'): string {
   return arr[i];
 }
 
+// 2026-08-08 (Tim — his Tozo T6 never hears the 200ms tock; "add our own caddie VERBAL response, not
+// canned but logical"). Speak the listen/got-it cue in the CADDIE'S REAL VOICE from the offline persona
+// cache — context-picked (mid-round vs off-course), rotating never-repeat, and long enough (~600ms) to
+// survive the Bluetooth A2DP→mic route handoff that swallows the short tock. Cache miss (first-ever runs
+// before the online warm) → the old earcon, so there is ALWAYS an audible cue. Awaited like the earcon
+// was, so the cue can never be self-recorded by the mic that opens right after.
+let lastCueIdx = -1;
+function pickCue(pool: string[]): string {
+  if (pool.length <= 1) return pool[0] ?? '';
+  let i = Math.floor(Math.random() * pool.length);
+  if (i === lastCueIdx) i = (i + 1) % pool.length;
+  lastCueIdx = i;
+  return pool[i];
+}
+async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, fallbackMs: number): Promise<void> {
+  try {
+    const pool = kind === 'gotit'
+      ? GOTIT_CUES
+      : (useRoundStore.getState().isRoundActive ? LISTEN_CUES.round : LISTEN_CUES.idle);
+    const text = pickCue(pool);
+    const s = useSettingsStore.getState();
+    const gender: 'male' | 'female' = s.voiceGender === 'female' ? 'female' : 'male';
+    const persona = (s.caddiePersonality ?? 'kevin') as string;
+    const cache = await import('./offlineVoiceCache');
+    const uri = text ? cache.resolveCachedOfflineClipUri(text, gender, persona) : null;
+    if (uri) { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
+  } catch { /* additive — fall through to the earcon */ }
+  try { await playLocalFile(fallbackEarcon, fallbackMs, { userInitiated: true }); } catch { /* non-fatal */ }
+}
+
 function setSessionStateMirror(next: SessionState): void {
   const prev = state;
   state = next;
@@ -325,7 +355,9 @@ export async function toggle(): Promise<void> {
     sessionCloseTapAt = Date.now();
     endCaptureEarly();
     if (useSettingsStore.getState().voiceEnabled) {
-      void playLocalFile(GOTIT_EARCON, GOTIT_EARCON_MS, { userInitiated: true }).catch(() => {});
+      // 2026-08-08 (Tim) — the caddie SAYS it heard you ("Got it." in the persona voice, cached);
+      // earcon only as first-run fallback. Not awaited — capture already ended, nothing to self-record.
+      void playVerbalCue('gotit', GOTIT_EARCON, GOTIT_EARCON_MS).catch(() => {});
     }
     return;
   }
@@ -469,12 +501,14 @@ async function openSession() {
   setSessionStateMirror('listening');
   listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
   console.log('[audit:voice] listening engaged');
-  // 2026-08-06 (Tim — "when I tap the earbud there's no beep telling me the caddie is listening; the phone's
-  // 40y away in the cart"). Play the audible "I'm listening" earcon through the AUDIO ROUTE (the earbud)
-  // BEFORE the mic opens — so the user gets the go-ahead in their ears (not a phone haptic they can't feel),
-  // and it can't be self-recorded. userInitiated:true so it fires even at L1/Quiet (the user just tapped).
+  // 2026-08-06 (Tim — "no beep telling me the caddie is listening; the phone's 40y away in the cart").
+  // 2026-08-08 (Tim — Tozo T6 never hears the 200ms tock; "add our own caddie VERBAL response, not canned
+  // but logical"). The caddie now SAYS the go-ahead in its own voice — context-picked + rotating (cached
+  // persona render; playVerbalCue falls back to the tock until the first online warm). AWAITED before the
+  // mic opens so the cue can't be self-recorded. A spoken word also survives the BT route handoff that
+  // swallowed the tock. userInitiated:true so it fires even at L1/Quiet (the user just tapped).
   if (settings.voiceEnabled) {
-    try { await playLocalFile(LISTENING_EARCON, LISTENING_EARCON_MS, { userInitiated: true }); } catch { /* non-fatal */ }
+    try { await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
   }
   // 2026-08-06 (voice audit) — the earcon is awaited (~200ms), during which cancelMic is still null. If the
   // user cancels (a second tap → closeSession → state 'idle') DURING the earcon, stopCapture would be a
