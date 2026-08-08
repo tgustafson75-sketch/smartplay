@@ -367,7 +367,9 @@ export const openToolHandler: IntentHandler = {
       // club". These are commands naming what to DO, not the conversational hijacks Tim banned ("play"
       // → Tight Lie stays dead — the classifier must still emit open_tool AND an action verb must be
       // in the user's actual words).
-      const EXPLICIT_OPEN = /\b(open|show me|show us|show the|pull up|bring up|go to|take me to|get me to|launch|jump to|switch to|navigate to|let me see|head to|pull open|analy[sz]e|check my|read my|record|capture|scan)\b/;
+      // 2026-08-08 (Arccos refinement) — "import" added: "import my Arccos" is an explicit action command
+      // (routes to /arccos-import via the catalog) and was being bounced to the brain.
+      const EXPLICIT_OPEN = /\b(open|show me|show us|show the|pull up|bring up|go to|take me to|get me to|launch|jump to|switch to|navigate to|let me see|head to|pull open|analy[sz]e|check my|read my|record|capture|scan|import)\b/;
       const EXEMPT_ACTION_TOOLS = new Set([
         'mark_green', 'markgreen', 'mark_tee', 'marktee', 'mark_tee_box',
         'sim_round', 'simround', 'sim', 'register_club',

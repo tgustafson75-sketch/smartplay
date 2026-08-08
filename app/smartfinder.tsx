@@ -160,9 +160,12 @@ export default function SmartFinder() {
     }
     const cached = getHoleGeometry(geoCourseId, currentHole);
     if (cached && !cancelled) setGeometry(cached);
-    fetchCourseGeometry(geoCourseId).then(full => {
+    fetchCourseGeometry(geoCourseId).then(() => {
       if (cancelled) return;
-      setGeometry(full?.holes.find(h => h.hole_number === currentHole) ?? null);
+      // 2026-08-08 (wave-2 audit — twice-around clobber): re-resolve through getHoleGeometry (owns the
+      // 10-18→1-9 wrap) instead of a raw .find. On the second loop at a 9-hole course the fetched set
+      // has holes 1-9 only, so the .find missed and CLOBBERED the good wrapped geometry with null.
+      setGeometry(getHoleGeometry(geoCourseId, currentHole));
     }).catch(err => {
       // 2026-06-08 (audit #2) — geometry fetch failure must not crash the
       // rangefinder; keep any cached geometry, otherwise degrade.

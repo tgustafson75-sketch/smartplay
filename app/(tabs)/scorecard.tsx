@@ -162,7 +162,12 @@ export default function Scorecard() {
         // nineHoleMode flag. A natively-9-hole course is played with nineHoleMode=false (the whole
         // course IS 9), so `? 9 : 18` rendered 9 real rows PLUS 9 phantom back-nine rows on the
         // completed scorecard. Bundled length is authoritative when we have it.
-        const total = bundled.length > 0 ? bundled.length : (effectiveNineHoleMode ? 9 : 18);
+        // 2026-08-08 (audit — the FIFTH twice-around surface): a TWICE-AROUND round at a bundled-9
+        // course stores scores 1-18, but bundled.length=9 capped the completed view at 9 rows — the
+        // back nine vanished and totalPar only covered 1-9 (+52-style vs-par). Never render fewer
+        // rows than the highest SCORED hole (holePars snapshot covers 10-18 for pars).
+        const maxScored = Math.max(0, ...Object.keys(lastCompletedRound.scores ?? {}).map(Number).filter(Number.isFinite));
+        const total = Math.max(bundled.length > 0 ? bundled.length : (effectiveNineHoleMode ? 9 : 18), maxScored);
         const parFor = (hole: number): number =>
           snap?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? 4;
         return Array.from({ length: total }, (_, i) => ({

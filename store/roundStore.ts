@@ -1446,6 +1446,8 @@ export const useRoundStore = create<RoundState>()(
             next.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({
               startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed,
               handicapAgs: r.handicapAgs, handicapHoles: r.handicapHoles,
+              // 2026-08-08 (Tim's index cratering) — REAL par/rating baseline per round.
+              ...calcMod.postingBaseline(r),
             })),
           );
           profile.resetDifferentials(diffs);
@@ -1810,6 +1812,8 @@ export const useRoundStore = create<RoundState>()(
               hist.filter((r: RoundRecord) => !r.simulated).map((r: RoundRecord) => ({
                 startedAt: r.startedAt, totalScore: r.totalScore, holesPlayed: r.holesPlayed,
                 handicapAgs: r.handicapAgs, handicapHoles: r.handicapHoles,
+                // 2026-08-08 (Tim's index cratering) — REAL par/rating baseline per round.
+                ...calcMod.postingBaseline(r),
               })),
             );
             profile.resetDifferentials(diffs);

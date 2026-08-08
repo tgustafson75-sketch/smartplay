@@ -10,7 +10,7 @@ function formatDate(ts: number): string {
   });
 }
 
-export function pickHeroStat(recap: RoundRecap): string {
+export function pickHeroStat(recap: RoundRecap, parByHole?: Record<number, number>): string {
   const comparisons = recap.hole_comparisons.filter(hc => hc.actual_score != null);
   if (comparisons.length === 0) return `${recap.hole_comparisons.length} holes played`;
 
@@ -21,13 +21,23 @@ export function pickHeroStat(recap: RoundRecap): string {
     if (d === 0) return 'Tied your past round exactly';
   }
 
-  // 2026-06-04 — HolePlan removed. Per-hole "best hole vs par" detection
-  // and total_planned_score are gone. Fallback: assume par 4 per played
-  // hole (same intent as the previous fallback when no plan was set).
-  const totalPar = comparisons.length * 4;
-  const svp = recap.total_score - totalPar;
-  if (svp <= 0) return `${Math.abs(svp)} under for the round`;
-  if (svp <= 5) return `${svp} over for the round`;
+  // 2026-08-08 (wave-2 audit — the share card FABRICATED vs-par from assumed par-4s: an even round on a
+  // par-27 nine shared as "9 under"). REAL pars only, passed by the recap screen (the record's holePars
+  // snapshot); pars unknown or partial → the honest holes-completed line. [[illustration-data-points]] —
+  // never fabricate on the app's most public surface.
+  if (parByHole) {
+    let totalPar = 0; let covered = 0;
+    for (const hc of comparisons) {
+      const p = parByHole[hc.hole_number];
+      if (typeof p === 'number' && p > 0) { totalPar += p; covered += 1; }
+    }
+    if (covered === comparisons.length && totalPar > 0) {
+      const svp = recap.total_score - totalPar;
+      if (svp === 0) return 'Even par for the round';
+      if (svp < 0) return `${Math.abs(svp)} under for the round`;
+      if (svp <= 9) return `${svp} over for the round`;
+    }
+  }
   return `${comparisons.length} holes completed`;
 }
 
@@ -45,7 +55,7 @@ export function pickKevinQuote(recap: RoundRecap): string {
   return summaries[0];
 }
 
-export function buildShareCardProps(recap: RoundRecap): ShareCardProps {
+export function buildShareCardProps(recap: RoundRecap, parByHole?: Record<number, number>): ShareCardProps {
   return {
     courseName: recap.course_name,
     date: formatDate(recap.ended_at),
@@ -53,7 +63,7 @@ export function buildShareCardProps(recap: RoundRecap): ShareCardProps {
     mode: recap.mode as RoundMode,
     ghostVariance: recap.ghost_match?.overall_delta ?? null,
     ghostLabel: recap.ghost_match?.ghost_round_label ?? null,
-    heroStat: pickHeroStat(recap),
+    heroStat: pickHeroStat(recap, parByHole),
     kevinQuote: pickKevinQuote(recap),
   };
 }

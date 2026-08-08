@@ -144,9 +144,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     if (!activeCourseId) { setGeometry(null); return; }
     const cached = getHoleGeometry(activeCourseId, currentHole);
     if (cached && !cancelled) setGeometry(cached);
-    fetchCourseGeometry(activeCourseId).then(full => {
+    fetchCourseGeometry(activeCourseId).then(() => {
       if (cancelled) return;
-      setGeometry(full?.holes.find(h => h.hole_number === currentHole) ?? null);
+      // 2026-08-08 (wave-2 audit — twice-around clobber): resolve via getHoleGeometry (owns the
+      // 10-18→1-9 wrap); the raw .find missed holes 10-18 and nulled the flyover on the second loop.
+      setGeometry(getHoleGeometry(activeCourseId, currentHole));
     });
     return () => { cancelled = true; };
   }, [activeCourseId, currentHole]);

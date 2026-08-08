@@ -228,6 +228,52 @@ const MIN_STROKES_PER_HOLE = 3;
  * Per-hole AGS capping is skipped (no per-hole pars). Differentials are
  * returned oldest-first, trimmed to the last 20 (the WHS look-back window).
  */
+/**
+ * 2026-08-08 (Tim's index cratering) — derive the REAL differential baseline for a round record:
+ * parTotal from the round's own holePars snapshot (summed over its scored holes, or all keys when the
+ * snapshot only covers the posted length), and the course's real rating/slope from the bundled catalog
+ * when the round has a bundled courseId. Bundled ratings are 18-HOLE ratings (the card standard), so a
+ * 9-hole posting halves the rating; slope is length-independent. Lazy-required so no import cycle.
+ */
+export function postingBaseline(r: {
+  holesPlayed: number;
+  handicapHoles?: 9 | 18;
+  holePars?: Record<number, number> | null;
+  scores?: Record<number, number> | null;
+  courseId?: string | null;
+}): { parTotal: number | null; rating: number | null; slope: number | null } {
+  const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
+  let parTotal: number | null = null;
+  if (posted && r.holePars) {
+    const parKeys = Object.keys(r.holePars).map(Number).filter(Number.isFinite);
+    if (parKeys.length > 0 && parKeys.length <= posted) {
+      parTotal = parKeys.reduce((s, k) => s + (r.holePars![k] || 0), 0);
+    } else if (parKeys.length > posted && r.scores) {
+      // Full-course snapshot but a shorter posting (front/back nine at an 18): sum the SCORED holes' pars.
+      const scoredKeys = Object.keys(r.scores).map(Number).filter(k => (r.scores![k] ?? 0) > 0 && r.holePars![k] != null);
+      if (scoredKeys.length > 0) {
+        const sum = scoredKeys.reduce((s, k) => s + (r.holePars![k] || 0), 0);
+        parTotal = scoredKeys.length === posted ? sum : Math.round((sum / scoredKeys.length) * posted);
+      }
+    }
+    if (parTotal != null && parTotal <= 0) parTotal = null;
+  }
+  let rating: number | null = null;
+  let slope: number | null = null;
+  try {
+    if (r.courseId && r.courseId.startsWith('local:')) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { COURSES } = require('../data/courses') as typeof import('../data/courses');
+      const c = COURSES.find(x => x.id === r.courseId!.slice('local:'.length));
+      const rr = c ? parseFloat(c.rating) : NaN;
+      const ss = c ? parseInt(c.slope, 10) : NaN;
+      if (Number.isFinite(rr) && rr > 0) rating = posted === 9 ? Math.round((rr / 2) * 10) / 10 : rr;
+      if (Number.isFinite(ss) && ss > 0) slope = ss;
+    }
+  } catch { /* course data unavailable — par/neutral baseline */ }
+  return { parTotal, rating, slope };
+}
+
 export function rebuildDifferentialsFromHistory(rounds: {
   startedAt: number;
   totalScore: number;
@@ -240,15 +286,39 @@ export function rebuildDifferentialsFromHistory(rounds: {
   // Imported/legacy rounds without per-hole data fall back to the raw total + exact 9/18 count.
   handicapAgs?: number;
   handicapHoles?: 9 | 18;
+  // 2026-08-08 (Tim — "my last few 9-hole rounds dropped the index ~2 points, which is incorrect").
+  // ROOT CAUSE: the differential baseline was a hardcoded neutral par-36 nine / par-72 eighteen
+  // regardless of the course. At par-33 Berlin a 9-hole score read ~3 strokes BETTER than reality
+  // every round — artificially-low differentials filled the best-8 and cratered the Index.
+  //   parTotal     = REAL total par of the posted holes (round's holePars snapshot).
+  //   rating/slope = the course's REAL rating/slope for the POSTED length when known (Berlin 9 =
+  //                  62.4/2 = 31.2, slope 98). Baseline preference: real rating+slope → parTotal
+  //                  (rating≈par, neutral slope) → the legacy neutral 36/72.
+  parTotal?: number | null;
+  rating?: number | null;
+  slope?: number | null;
+  // Full RoundRecords may be passed directly (the Recalculate buttons do) — when the explicit baseline
+  // fields above are absent, it is DERIVED from these via postingBaseline, so every caller stays in
+  // sync without changes.
+  holePars?: Record<number, number> | null;
+  scores?: Record<number, number> | null;
+  courseId?: string | null;
 }[]): number[] {
   const NINE_HOLE_CR = 36; // neutral 9-hole course rating (half of 72)
   const normalized = rounds.map(r => {
     const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
     const score = r.handicapAgs ?? r.totalScore;
-    return { startedAt: r.startedAt, score, posted };
+    const derived = (r.rating == null && r.parTotal == null && (r.holePars || r.courseId))
+      ? postingBaseline(r)
+      : { parTotal: r.parTotal ?? null, rating: r.rating ?? null, slope: r.slope ?? null };
+    const baseRating = (typeof derived.rating === 'number' && derived.rating > 0)
+      ? derived.rating
+      : (typeof derived.parTotal === 'number' && derived.parTotal > 0) ? derived.parTotal : null;
+    const baseSlope = (typeof derived.slope === 'number' && derived.slope > 0) ? derived.slope : NEUTRAL_SLOPE;
+    return { startedAt: r.startedAt, score, posted, baseRating, baseSlope };
   });
   const eligible = normalized
-    .filter((r): r is { startedAt: number; score: number; posted: 9 | 18 } => r.posted != null && r.score > 0)
+    .filter((r): r is { startedAt: number; score: number; posted: 9 | 18; baseRating: number | null; baseSlope: number } => r.posted != null && r.score > 0)
     // 2026-06-11 — Drop INCOMPLETE rounds (under MIN_STROKES_PER_HOLE / hole).
     // An abandoned round (e.g. an imported "4") would otherwise convert into a
     // wildly-negative differential that lands in the "best 8" and craters the
@@ -268,8 +338,8 @@ export function rebuildDifferentialsFromHistory(rounds: {
   for (let pass = 0; pass < 8; pass++) {
     diffs = eligible.map(r =>
       r.posted === 9
-        ? Math.round((computeScoreDifferential(r.score, NINE_HOLE_CR, NEUTRAL_SLOPE) + expectedNineDifferential(hi)) * 10) / 10
-        : computeScoreDifferential(r.score, 72.0, NEUTRAL_SLOPE),
+        ? Math.round((computeScoreDifferential(r.score, r.baseRating ?? NINE_HOLE_CR, r.baseSlope) + expectedNineDifferential(hi)) * 10) / 10
+        : computeScoreDifferential(r.score, r.baseRating ?? 72.0, r.baseSlope),
     );
     const est = estimateNewIndex(diffs);
     if (est.newIndex == null) break;

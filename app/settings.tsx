@@ -255,7 +255,21 @@ export default function Settings() {
         const msg = typeof err?.message === 'string' ? err.message : String(e ?? 'unknown error');
         // 2026-08-07 (Tim — raw "NO_ELIGIBLE_DEVICE" toast). Show a HUMAN, actionable line (north star:
         // no robotic error codes); the raw code + message still go to the issue log below for diagnosis.
-        useToastStore.getState().show(describeGlassesError(code, msg));
+        // 2026-08-08 — signing SHA verified EXACT against Meta's registration (parsed from the shipped
+        // APK), so an eligibility failure is the Meta-side chain: Developer Mode + owner account. GUIDE
+        // it (Alert with the two steps + an Open-Meta-AI button) instead of a transient toast.
+        if ((code || msg).toUpperCase().includes('ELIGIBLE') || (code || '').toUpperCase().includes('SESSION')) {
+          Alert.alert(
+            'Glasses not authorized yet',
+            'The app + registration check out — this is the Meta side. Two switches:\n\n1. Meta AI app → Settings → App Info → tap the version number 5× → turn ON Developer Mode.\n2. Make sure the glasses are paired on the t.gustafson@hotmail.com account (the developer-app owner).\n\nThen try the toggle again.',
+            [
+              { text: 'Open Meta AI', onPress: () => { Linking.openURL('fb-mwa://').catch(() => Linking.openURL('https://www.meta.com/smart-glasses/app/').catch(() => {})); } },
+              { text: 'OK', style: 'cancel' },
+            ],
+          );
+        } else {
+          useToastStore.getState().show(describeGlassesError(code, msg));
+        }
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))

@@ -208,7 +208,12 @@ export default function DrillDetail() {
         {/* WATCH — instructor video card. 2026-07-06 (pro-video → drill loop moat) —
             plays IN-APP with full-watch detection: finishing awards one-time points
             and offers "try this drill" → drill-aware Smart Motion, instead of the old
-            terminal Linking.openURL link-out. */}
+            terminal Linking.openURL link-out.
+            2026-08-08 (wave-2 audit #1 — the chipping drill's video has url:'' by design, but this card
+            rendered anyway: "0 min · tap to watch" → the video screen's "Couldn't load" dead end with
+            the try-drill CTA ALSO hidden). No url → no WATCH card; the drill's own coaching steps below
+            ARE the lesson. */}
+        {!!video.url && (<>
         <Text style={[styles.sectionLabel, { color: colors.accent }]}>WATCH</Text>
         <TouchableOpacity
           onPress={() => router.push({
@@ -247,6 +252,7 @@ export default function DrillDetail() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
+        </>)}
 
         {/* 2026-05-27 — Fix EP: Send-to-Tank CTA. ONLY on Tank's
             drill (videoCategory === 'tank_caddie') for now — Tank IS

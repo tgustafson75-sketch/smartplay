@@ -81,10 +81,22 @@ export function reconcileCurrentHole(fix: GpsFix, force = false): ReconcileResul
   }
 
   // Score every hole with usable geometry.
+  // 2026-08-08 (wave-2 audit — reconcile dead on the twice-around second loop). Wrapped holes 10-18 tie
+  // EXACTLY with their first-loop twins (same coords); the lower twin sorted first and hit the backward
+  // gate, so Refresh-GPS could never recommend forward on the second loop. Past hole 9 on a twice-around
+  // round, score ONLY the second loop's numbers (10..18) — physically identical, numerically forward.
   const sustained = getSustainedHeading();
   const total = round.courseHoles.length || 18;
+  const isTwiceAround = total === 18 && currentHole >= 10 && (() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+      return getCourseHoleCount(round.activeCourseId, 0) === 9;
+    } catch { return false; }
+  })();
+  const startHole = isTwiceAround ? 10 : 1;
   const scores: HoleScore[] = [];
-  for (let h = 1; h <= total; h++) {
+  for (let h = startHole; h <= total; h++) {
     const geom = getHoleGeometry(round.activeCourseId, h);
     if (!geom?.tee || !geom?.green) continue;
     const dTee = haversineYards({ lat: fix.lat, lng: fix.lng }, geom.tee);

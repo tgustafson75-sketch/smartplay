@@ -63,10 +63,13 @@ export default function OpenRangeScreen() {
               </TouchableOpacity>
             </View>
 
-            {history.length > 0 && (
+            {/* 2026-08-08 (wave-2 audit #3) — OPEN-RANGE sessions only. The unfiltered list showed every
+                practice kind, and sample-less kinds (Pre-Round Warm Up logs swingCount, no samples)
+                rendered as "No balls logged yet this session." on this screen. */}
+            {history.some((s) => s.kind === 'open_range') && (
               <View style={{ gap: 8 }}>
                 <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>RECENT SESSIONS</Text>
-                {history.slice(0, 6).map((s) => {
+                {history.filter((s) => s.kind === 'open_range').slice(0, 6).map((s) => {
                   const sum = summarizeOpenRange(s.swings);
                   return (
                     <View key={s.id} style={[styles.histRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>

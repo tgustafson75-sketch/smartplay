@@ -25,7 +25,10 @@
 
 import { Linking } from 'react-native';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { getInstructorVideo, type IssueCategory } from '../../constants/instructorVideos';
+// 2026-08-08 (wave-2 audit #4) — consolidated to data/instructorVideos (what every other consumer uses).
+// constants/instructorVideos was a stale hand-duplicate: a future URL swap in data/ would silently never
+// reach this voice "pull up a video for X" path.
+import { getInstructorVideo, type IssueCategory } from '../../data/instructorVideos';
 
 type ExternalService = 'youtube' | 'youtube_music' | 'spotify' | 'apple_music';
 
@@ -53,7 +56,9 @@ function pickGolfVideo(query: string): { url: string; title: string; instructor:
   for (const c of CURATED_TOPICS) {
     if (c.kw.some(k => q.includes(k))) {
       const v = getInstructorVideo(c.category);
-      return { url: v.url, title: v.title, instructor: v.instructor };
+      // Defensive: a catalog entry with no URL (in-app-lesson-only, e.g. chipping) can't be "opened
+      // externally" — fall through to the search path instead of Linking.openURL('').
+      if (v.url) return { url: v.url, title: v.title, instructor: v.instructor };
     }
   }
   if (GOLF_TOPIC_KW.some(k => q.includes(k))) {

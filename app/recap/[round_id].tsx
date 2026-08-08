@@ -879,8 +879,9 @@ export default function RecapScreen() {
       />
 
       {/* Hidden share card — rendered offscreen for captureRef */}
+      {/* 2026-08-08 (wave-2 audit) — pass REAL pars so the hero stat never fabricates vs-par. */}
       <View style={styles.offscreen} pointerEvents="none">
-        <RoundShareCard ref={cardRef} {...buildShareCardProps(recap)} caddieName={caddieName} />
+        <RoundShareCard ref={cardRef} {...buildShareCardProps(recap, parByHole)} caddieName={caddieName} />
       </View>
 
     </SafeAreaView>

@@ -200,9 +200,19 @@ export function detectCurrentHole(
   // played (dogleg / loop-back protection — won't transition backward).
   let bestNextHole = currentHole;
   let bestNextDist = Infinity;
+  // 2026-08-08 (wave-2 audit #3) — bound candidates by the ROUND's real last hole, not a hardcoded 18.
+  // The twice-around geometry wrap made getHoleGeometry(courseId, 10) REAL at a 9-hole course, so a
+  // SINGLE-loop nine finishing near the 1st tee started emitting phantom hole-10 transitions (clamped
+  // back by setCurrentHole, but re-toasting the unscored nag every override window).
+  let roundMaxHole = 18;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rs = require('../store/roundStore') as typeof import('../store/roundStore');
+    roundMaxHole = rs.roundLastHole(rs.useRoundStore.getState());
+  } catch { /* store unavailable (tests) — keep 18 */ }
   for (let offset = 1; offset <= MAX_TRANSITION_LOOKAHEAD; offset++) {
     const candidate = currentHole + offset;
-    if (candidate > 18) break;
+    if (candidate > roundMaxHole) break;
     if (scoresByHole[candidate] != null) continue; // already played
     const candGeom = getHoleGeometry(courseId, candidate);
     const candTee = candGeom?.tee;

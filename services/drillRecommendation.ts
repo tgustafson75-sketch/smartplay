@@ -26,23 +26,23 @@ const ISSUE_TO_DRILL: Record<CanonicalIssue, { drill_id: string; drill_name: str
   },
   club_face_open: {
     drill_id: 'alignment',
-    drill_name: 'Alignment Check',
-    reason: "Start with Alignment Check — open face often starts at setup. If alignment's clean and the face still leaks, we'll work the release next.",
+    drill_name: 'Knuckle Check',
+    reason: "Start with the Knuckle Check — an open face usually starts at the grip. Two to three knuckles on the top hand, flat lead wrist at the top, and the face squares up.",
   },
   club_face_closed: {
     drill_id: 'alignment',
-    drill_name: 'Alignment Check',
-    reason: "Alignment Check first. A shut face usually traces back to grip and aim. Square the foundation and the face squares with it.",
+    drill_name: 'Soft-Hands Punch',
+    reason: "Soft-Hands Punch first. A shut face is usually too much forearm roll — half swings, hold the finish low with the toe skyward, and the hook stops appearing.",
   },
   attack_angle_steep: {
     drill_id: 'impact',
-    drill_name: 'Impact Position',
-    reason: "Impact Position is the move. The steep cut comes from hands behind at impact — the bag drill resets the hand position.",
+    drill_name: 'Headcover Drill',
+    reason: "The Headcover drill is the move — a cover six inches behind the ball forces a shallower approach, and the belt-loop turn keeps it there.",
   },
   attack_angle_shallow: {
     drill_id: 'impact',
-    drill_name: 'Impact Position',
-    reason: "Impact Position. Shallow attack means no compression — train the hands ahead and weight forward, the angle steepens to neutral.",
+    drill_name: 'Lead-Shoulder Drill',
+    reason: "Lead-Shoulder drill. Shallow attack means no compression — drop the lead shoulder an inch at setup and hit down into the strike; the angle steepens to neutral.",
   },
   early_extension: {
     drill_id: 'pump',
@@ -56,13 +56,13 @@ const ISSUE_TO_DRILL: Record<CanonicalIssue, { drill_id: string; drill_name: str
   },
   chicken_wing: {
     drill_id: 'one-handed',
-    drill_name: 'One Handed Swings',
-    reason: "Lead-hand-only swings. The chicken wing is a lead-arm collapse — train the extension with one hand, then both rejoin and the elbow stays straighter.",
+    drill_name: 'Wide-and-Rotate',
+    reason: "Wide-and-Rotate — the chicken wing is a lead-arm collapse. Hold the finish with both arms extended toward the target; the towel-under-armpit rep locks it in.",
   },
   reverse_pivot: {
     drill_id: 'tempo',
-    drill_name: 'Tempo Training',
-    reason: "Tempo Training will help — reverse pivot usually comes from rushing the takeaway. Smooth back, full turn, then the weight stays where it should.",
+    drill_name: 'Trail-Foot Weight',
+    reason: "Trail-Foot Weight — reverse pivot means the weight's going the wrong way. Pause at the top and check sixty percent is in the trail foot before you swing.",
   },
   none: null,
 };

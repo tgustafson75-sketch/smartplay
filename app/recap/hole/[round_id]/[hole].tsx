@@ -59,9 +59,11 @@ export default function HoleShotMapScreen() {
         if (!courseId) return;
         const cached = getHoleGeometry(courseId, hole);
         if (cached && !cancelled) { setGeometry(cached); return; }
-        const full = await fetchCourseGeometry(courseId);
+        await fetchCourseGeometry(courseId);
         if (cancelled) return;
-        setGeometry(full?.holes.find(h => h.hole_number === hole) ?? null);
+        // 2026-08-08 (wave-2 audit — twice-around): resolve via getHoleGeometry (owns the 10-18→1-9
+        // wrap) so second-loop recap holes at a 9-hole course still get their real geometry.
+        setGeometry(getHoleGeometry(courseId, hole));
       } catch { /* geometry is best-effort — fall through to loaded with whatever we have */ }
       finally { if (!cancelled) setGeometryLoaded(true); }
     }

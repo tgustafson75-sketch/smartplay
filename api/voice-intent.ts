@@ -187,6 +187,12 @@ Available intents:
    - "response_mode" (short/neutral/detailed)
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
    - "caddie_persona" (kevin/tank/serena/harry) — which AI caddie persona is active
+   - "cart_mode" (true/false) — riding a cart vs walking ("I'm in a cart", "cart mode on", "we're walking")
+   - "ghost" (true/false) — ghost-round comparison overlay ("turn on the ghost", "ghost off")
+   - "family_recording" (member name) — record a FAMILY MEMBER's swings ("record Emma's swing", "switch recording to Mike")
+   - "handedness" (left/right) — "I'm a lefty", "switch to left-handed"
+   - "units" (yards/meters)
+   - "imagery" (satellite/photo) — the hole-view imagery style
    Examples:
    - "switch to dark mode" -> { setting_name: "theme", new_value: "dark" }
    - "mute ${caddieName}" -> { setting_name: "voice_enabled", new_value: false }

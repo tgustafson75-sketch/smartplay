@@ -1084,6 +1084,25 @@ check('9-hole course plays TWICE with the 18 format (holes, geometry, count, boo
   })(),
   'picking 18 at a 9-hole course = twice around: full 18 scorecard/WHS, GPS + briefs + card notes on the second loop');
 
+// 2026-08-08 (Tim — "my last few 9-hole rounds dropped the index ~2 points, which is incorrect"). ROOT:
+// differentials used a hardcoded neutral par-36 nine regardless of the course — par-33 Berlin scores read
+// ~3 strokes better than reality every round and cratered the Index. LOCK the real-baseline math: the
+// rebuild derives parTotal from the round's holePars + real bundled rating/slope (halved for a 9-hole
+// posting), with the neutral 36/72 only as the final fallback.
+check('Handicap differentials use the REAL course par/rating (no par-36 assumption cratering the index)',
+  (() => {
+    const h = read('services/handicapCalculator.ts');
+    const rs = read('store/roundStore.ts');
+    return (
+      /export function postingBaseline/.test(h) &&
+      /posted === 9 \? Math\.round\(\(rr \/ 2\) \* 10\) \/ 10 : rr/.test(h) &&       // 18-hole card rating halves for a 9 posting
+      /r\.baseRating \?\? NINE_HOLE_CR/.test(h) && /r\.baseRating \?\? 72\.0/.test(h) && // real baseline wins, neutral only as fallback
+      /postingBaseline\(r\)/.test(h) &&                                                // derived inside for RoundRecord callers
+      /\.\.\.calcMod\.postingBaseline\(r\)/.test(rs)                                    // round-end + delete paths pass it
+    );
+  })(),
+  'a 9-hole round at par-33 Berlin differentials against ~31.2/98 (real card), not the neutral 36/113 that dragged the index down ~2 points');
+
 // 2026-08-07 (Tim — "the upload picker isn't working to set the golfer; swing entries need to be editable
 // after the fact — who it is, the orientation"). Two fixes: (1) upload resolves the picked swinger →
 // player_id so the swing FILES under that golfer (library groups by player_id, not the swinger text);

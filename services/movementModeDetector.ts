@@ -46,11 +46,29 @@ export const useMovementModeStore = create<MovementState>((set) => ({
 
 let gpsUnsub: (() => void) | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-const speedBuffer: number[] = [];
+// 2026-08-08 (wave-2 audit #6 — iOS never classifies 'stationary'). Entries carry a timestamp so stale
+// samples decay (a parked cart no longer shows the cart icon forever), and invalid speeds are DERIVED
+// from displacement instead of dropped (iOS CoreLocation reports speed −1 while standing still, so the
+// buffer never filled and mode stayed 'unknown' — which silently disabled the tee-box auto-brief on
+// TestFlight devices; Android reports real speeds, which is why Tim's preview phone worked).
+const speedBuffer: { s: number; at: number }[] = [];
+let lastFixForDerive: { lat: number; lng: number; at: number } | null = null;
 
-function pushSpeed(s: number | null): void {
-  if (s == null || !Number.isFinite(s) || s < 0) return;
-  speedBuffer.push(s);
+function pushSpeed(s: number | null, fix?: { lat: number | null; lng: number | null }): void {
+  let speed = (s != null && Number.isFinite(s) && s >= 0) ? s : null;
+  // Derive from displacement when the OS speed is invalid (iOS −1/null while still).
+  if (speed == null && fix && fix.lat != null && fix.lng != null) {
+    const now = Date.now();
+    if (lastFixForDerive && now - lastFixForDerive.at >= 1_000 && now - lastFixForDerive.at <= 30_000) {
+      const dLat = (fix.lat - lastFixForDerive.lat) * 111_320;
+      const dLng = (fix.lng - lastFixForDerive.lng) * 111_320 * Math.cos(fix.lat * Math.PI / 180);
+      const meters = Math.hypot(dLat, dLng);
+      speed = meters / ((now - lastFixForDerive.at) / 1000);
+    }
+    lastFixForDerive = { lat: fix.lat, lng: fix.lng, at: now };
+  }
+  if (speed == null || !Number.isFinite(speed) || speed < 0) return;
+  speedBuffer.push({ s: speed, at: Date.now() });
   while (speedBuffer.length > SPEED_WINDOW) speedBuffer.shift();
 }
 
@@ -62,12 +80,16 @@ function evaluate(): void {
     }
     return;
   }
+  // 2026-08-08 (wave-2 audit #6) — evict stale samples (>30s) so a parked cart's old cart-speed
+  // readings can't hold the cart classification indefinitely.
+  const cutoff = Date.now() - 30_000;
+  while (speedBuffer.length > 0 && speedBuffer[0].at < cutoff) speedBuffer.shift();
   if (speedBuffer.length === 0) return;
-  const avg = speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
+  const avg = speedBuffer.reduce((a, b) => a + b.s, 0) / speedBuffer.length;
   let cartCount = 0;
   let walkCount = 0;
   let stillCount = 0;
-  for (const s of speedBuffer) {
+  for (const { s } of speedBuffer) {
     if (s > CART_SPEED_MS) cartCount++;
     else if (s > WALK_SPEED_MIN_MS) walkCount++;
     else stillCount++;
@@ -85,12 +107,12 @@ function evaluate(): void {
 export function startMovementModeDetector(): void {
   if (gpsUnsub) return;
   gpsUnsub = subscribeGps((fix) => {
-    pushSpeed(fix.speed);
+    pushSpeed(fix.speed, { lat: fix.lat, lng: fix.lng });
   });
   // Seed with the current cached fix so a player who isn't moving yet
   // still gets 'stationary' classified within the first tick.
   const last = getLastFix();
-  if (last) pushSpeed(last.speed);
+  if (last) pushSpeed(last.speed, { lat: last.lat, lng: last.lng });
   if (!pollTimer) pollTimer = setInterval(evaluate, 5_000);
   console.log('[movementMode] detector started');
 }

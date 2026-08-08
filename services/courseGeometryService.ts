@@ -316,6 +316,16 @@ export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeome
   // second loop. Only fires when the course genuinely has 9 (an 18-hole course never wraps), and being
   // on hole 12 of a 9-hole course is only possible in a twice-around round.
   if (holeNumber >= 10 && holeNumber <= 18 && c && c.holes.length === 9) {
+    // 2026-08-08 (wave-2 audit #4) — key the wrap on the AUTHORITATIVE course hole count, not just the
+    // geometry set's length: server/OSM-synthesized geometry for an 18-HOLE course can legitimately be
+    // sparse (9 resolved holes), and wrapping there would feed front-nine tees/greens into holes 10-18.
+    // Bundled courses are exact; for non-bundled ids getCourseHoleCount falls back to the live length,
+    // so a genuinely-9-hole non-bundled course still wraps.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+      if (getCourseHoleCount(courseId, c.holes.length) !== 9 && getCourseHoleCount(courseId, 0) !== 9) return null;
+    } catch { /* course data unavailable — fall through on the length check alone */ }
     const wrapped = c.holes.find(h => h.hole_number === holeNumber - 9);
     if (wrapped) return { ...wrapped, hole_number: holeNumber };
   }

@@ -505,6 +505,19 @@ export default function SmartVisionScreen() {
   // Local hole index — independent of currentHole so the screen acts as
   // a viewer across the whole course without forcing the round to follow.
   const [holeIndex, setHoleIndex] = useState<number>(currentHole || 1);
+  // 2026-08-08 (progression P2-7, Tim-approved market model; logic-only — frozen layout untouched).
+  // FOLLOW the round: when currentHole advances (score/GPS/voice) and the viewer was NOT deliberately
+  // browsing another hole (holeIndex still equals the hole the round was just on), track the new hole.
+  // Deliberate browsing (chevrons moved holeIndex away) is respected — no forced jumps. This also
+  // re-enables cart GPS auto-follow + shot tracking, which gate on holeIndex === currentHole.
+  const prevCurrentHoleRef = useRef<number>(currentHole || 1);
+  useEffect(() => {
+    const prev = prevCurrentHoleRef.current;
+    prevCurrentHoleRef.current = currentHole || 1;
+    if (currentHole && currentHole !== prev) {
+      setHoleIndex(hi => (hi === prev ? currentHole : hi));
+    }
+  }, [currentHole]);
 
   // 2026-06-23 (SV-4) — per-hole marker OVERRIDE maps (targetByHole / pinByHole /
   // teeByHole) were keyed by holeIndex ALONE. If SmartVision stayed mounted across
@@ -658,9 +671,11 @@ export default function SmartVisionScreen() {
         geo = cached;
         if (!geo) {
           try {
-            const c = await fetchCourseGeometry(courseId);
+            await fetchCourseGeometry(courseId);
             if (cancelled) return;
-            geo = c?.holes.find(h => h.hole_number === holeIndex) ?? null;
+            // 2026-08-08 (wave-2 audit — twice-around): resolve via getHoleGeometry (owns the
+            // 10-18→1-9 wrap); a raw .find missed the second loop's holes at a 9-hole course.
+            geo = getHoleGeometry(courseId, holeIndex);
           } catch (e) {
             // 2026-06-08 (audit #2) — never let a geometry fetch failure
             // crash the on-course screen; degrade to no-geometry.
