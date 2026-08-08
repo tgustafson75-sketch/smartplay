@@ -201,15 +201,27 @@ export default function SwingDetail() {
   // 2026-08-07 (Tim) — set this swing's camera angle after the fact, then re-analyze so the correct
   // metrics (face-on: sway/weight/rotation; DTL: plane/path) are computed instead of nulled. No-op if
   // the angle is unchanged (don't burn a re-analysis for nothing).
+  // 2026-08-08 (2-week audit #1 — FATAL TDZ) — this callback referenced `onReanalyze` (a const declared
+  // BELOW the early returns) directly. On a cold deep-link the pre-hydration render aborts before that
+  // binding initializes, and for sessions whose angleOverride stays undefined (every live capture) the
+  // deps never change — React retains the aborted-render closure FOREVER → tapping an angle threw
+  // "Cannot access 'onReanalyze' before initialization" (after half-committing the patch + toast).
+  // Fix: call through a ref that the render body refreshes every render (see onReanalyzeRef below).
+  // 2026-08-08 (audit #2 — silent no-op) — live SmartMotion captures have NO upload object, and
+  // patchSessionUpload hard-guards on it: the old code showed "re-reading…" then re-analyzed with the
+  // OLD angle, burning an analysis per retry. Persist the override only when it will actually stick;
+  // the chip is also hidden for upload-less sessions (render below).
+  const onReanalyzeRef = useRef<(() => void) | null>(null);
   const assignAngle = useCallback((angle: 'down_the_line' | 'face_on') => {
     if (!swing_id) return;
     setAngleSheetOpen(false);
-    if ((session?.upload?.angleOverride ?? null) === angle) return;
+    const cur = useCageStore.getState().sessionHistory.find(s => s.id === swing_id);
+    if (!cur?.upload) return; // upload-less session — the chip is hidden, but never half-commit
+    if ((cur.upload.angleOverride ?? null) === angle) return;
     useCageStore.getState().patchSessionUpload(swing_id, { angleOverride: angle });
     useToastStore.getState().show(angle === 'face_on' ? 'Face-on — re-reading…' : 'Down-the-line — re-reading…');
-    onReanalyze();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [swing_id, session?.upload?.angleOverride]);
+    onReanalyzeRef.current?.();
+  }, [swing_id]);
   const onAddGolferSubmit = useCallback(() => {
     const name = newGolferName.trim();
     if (!name) return;
@@ -589,6 +601,14 @@ export default function SwingDetail() {
     // real result below, so an extraction aborted by playback retries the next time we're paused.
     const runKey = `${shot.clipUri}|${Math.round(startMs)}|${Math.round(endMs)}`;
     if (clubArcRunKeyRef.current === runKey) return;
+    // 2026-08-08 (2-week audit S3 — swing A's arc rendered over swing B). The "keep prior points" retry
+    // semantics were meant for SAME-window retries, but the state also survived a WINDOW change (screen
+    // reuse without remount): if B's clubhead was never trackable, A's blue trace stayed on B forever —
+    // a clubhead-or-nothing violation. On entering extraction for a DIFFERENT window than the last
+    // committed one, blank the stale arc first; same-window retries still keep prior points.
+    if (clubArcRunKeyRef.current !== null && clubArcRunKeyRef.current !== runKey) {
+      setClubArcPoints(null);
+    }
     let cancelled = false;
     void (async () => {
       // 2026-07-10 (audit SM5) — heal the clip URI first (iOS rotates the container UUID on
@@ -1712,6 +1732,7 @@ export default function SwingDetail() {
   const onReanalyze = () => {
     if (!swing_id || reanalyzing || analyzeInFlightRef.current) return;
     analyzeInFlightRef.current = true;
+    // (body continues below — see onReanalyzeRef refresh right after this declaration)
     // Phase V.7 — flip status to 'pending' BEFORE clearing spokenForRef so the
     // auto-narrate effect can't fire with stale 'ok' status and re-speak the
     // old primary_issue between the ref clear and the first runPhaseK status
@@ -1778,6 +1799,9 @@ export default function SwingDetail() {
       }
     })();
   };
+  // 2026-08-08 (2-week audit #1 — TDZ) — refresh the ref EVERY render so assignAngle (declared above the
+  // early returns) always calls the live onReanalyze, never an aborted pre-hydration closure.
+  onReanalyzeRef.current = onReanalyze;
 
   // 2026-05-22 — Phase 2 "Compare to..." action. Opens the bottom-sheet
   // picker (CompareReferencePickerSheet); the sheet calls onCompareToSelect
@@ -1966,8 +1990,13 @@ export default function SwingDetail() {
                   {golferDisplayName}
                 </Text>
               </TouchableOpacity>
-              {/* 2026-08-07 (Tim) — ORIENTATION chip: always-editable camera angle. Tap to fix a
-                  mis-tagged DTL/face-on; changing it re-analyzes with the correct metric set. */}
+              {/* 2026-08-07 (Tim) — ORIENTATION chip: editable camera angle. Tap to fix a mis-tagged
+                  DTL/face-on; changing it re-analyzes with the correct metric set.
+                  2026-08-08 (audit #2) — UPLOADS ONLY: live SmartMotion sessions have no upload object,
+                  patchSessionUpload hard-guards on it, and the analyzer reads only upload.angleOverride —
+                  so on a live capture the chip was a lie ("re-reading…" then the OLD angle, burning an
+                  analysis per retry). Live captures already declare their angle at record time. */}
+              {session.upload != null && (
               <TouchableOpacity
                 onPress={() => setAngleSheetOpen(true)}
                 style={[styles.kindBadge, { borderColor: colors.accent, marginTop: 0 }]}
@@ -1980,6 +2009,7 @@ export default function SwingDetail() {
                   {session.upload?.angleOverride === 'face_on' ? 'Face-on' : session.upload?.angleOverride === 'down_the_line' ? 'DTL' : 'Set angle'}
                 </Text>
               </TouchableOpacity>
+              )}
             </View>
           </View>
           <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>

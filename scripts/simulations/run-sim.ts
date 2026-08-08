@@ -5733,14 +5733,19 @@ check('Pre-response conversational filler removed from the main voice path',
 // 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
 // the metered track (acoustic candidates the video confirms). Course stays off.
 const smEnvSrc = read('app/swinglab/smartmotion.tsx');
-check('Environment mode phase 1: range window + metering gating (cage+range on, course off)',
+// 2026-08-08 (Tim — "on-course easy flow: course mode, DTL, ADJUSTED course acoustics") — COURSE now
+// runs the metered track too, INCLUDING in-round: segmentation stays VIDEO-primary in course mode (wind
+// can't invent a swing), acoustics are confirmatory (impact anchor + smash estimate); mic contention is
+// handled by the earbud tap-stop + VAD gates. The old "course off" assertion locked the old behavior.
+check('Environment mode phase 1: range window + metering gating (cage+range+course on; course video-primary)',
   /environmentMode: 'cage' \| 'range' \| 'course'/.test(read('store/settingsStore.ts')) &&
     /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
     /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
-    /\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smEnvSrc) && // chip: cage+course (off-round)
-    /: \(captureMode === 'cage' \|\| captureMode === 'range'\)/.test(smEnvSrc) &&                       // default: cage+range
+    /\? \(captureMode === 'cage' \|\| captureMode === 'course'\)/.test(smEnvSrc) &&                                  // chip: cage+course (in-round too)
+    /: \(captureMode === 'cage' \|\| captureMode === 'range' \|\| captureMode === 'course'\)/.test(smEnvSrc) &&       // default: all three
+    /const effectiveMode: 'cage' \| 'range' \| 'course' = isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) && // live round forces COURSE
     /setEnvironmentMode\(environmentMode === 'cage'/.test(smEnvSrc),                  // toggle cycles modes
-  'range records up to 120s and now ALSO runs the metered audio track (its strikes are candidates the in-frame video confirms); ONLY course goes acoustics-off (wind, single shot); a setup-rail toggle cycles cage/range/course');
+  'a live round forces COURSE mode with the metered acoustic track ON (video-primary segmentation, acoustics confirmatory) — the on-course easy-flow default');
 
 // 2026-06-11 — Environment mode phase 2: RANGE correlates acoustics with video.
 // Acoustics propose WHEN, the in-frame video locator disposes WHICH are yours.
@@ -5791,14 +5796,16 @@ check('Environment mode phase 2: range acoustic↔video correlation (propose/dis
     `a 2nd in-frame swing with no acoustic match is kept at its visual time with peakDb 0 (still your swing, just not heard) → ${unheard.length} segments, swing2 peakDb ${unheard[1]?.peakDb}`);
 }
 
-// 2026-06-10 — Environment mode phase 3: course = acoustics off + single shot,
-// and a live round forces course.
-check('Environment mode phase 3: course is acoustics-off single-shot; a live round forces course',
+// 2026-06-10 — Environment mode phase 3: course = single shot, and a live round forces course.
+// 2026-08-08 (Tim — "adjusted course acoustics") — course now RUNS the metered track (in-round too);
+// segmentation stays video-primary so wind can't invent a swing; acoustics are confirmatory.
+check('Environment mode phase 3: course is video-primary single-shot with confirmatory acoustics; a live round forces course',
   /const effectiveMode.*isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) &&           // round forces course (reactive)
     /isRoundActive[\s\S]{0,30}\? 'course'[\s\S]{0,60}environmentMode/.test(smEnvSrc) &&           // and at capture time
-    /const useMetering = foamOnStart\s*\n\s*\? false\s*\n\s*: chipOnStart/.test(smEnvSrc) &&        // metering is foam/mode/chip-aware; course off by default, foam forces off
+    /const useMetering = foamOnStart\s*\n\s*\? false\s*\n\s*: chipOnStart/.test(smEnvSrc) &&        // metering is foam/mode/chip-aware; foam forces off
+    /captureMode === 'course'\)/.test(smEnvSrc) &&                                                  // course included in the metering set
     /disabled=\{isRoundActive\}/.test(smEnvSrc),                                                    // toggle locked during a round
-  'course mode disables acoustics (wind) and is single-shot (skips multi-segmentation → single-swing localization); metering runs for cage+range but NOT course; a live round forces course sensing regardless of the practice toggle, which is locked + shows CRSE on-course');
+  'course mode is single-shot video-primary WITH the metered acoustic track on (impact anchor + smash estimate); a live round forces course sensing; the practice toggle stays locked + shows CRSE on-course');
 
 // 2026-06-10 — Multi-swing UPLOAD expansion: a 60s uploaded video with several
 // swings gets one per-swing card, not "1 of 1".
@@ -6839,8 +6846,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /CHIP_STRIKE_THRESHOLD_DB = 18/.test(smSrc2) &&
       // 2026-07-08 (cage audit #1) — the calibration branch is now env-gated (calOk).
       /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : \(calOk \? appliedCalibration\?\.transientThresholdDb : undefined\)/.test(smSrc2) &&
-      // mode-aware: chip → cage+course (off-round), NOT range; default → cage+range
-      /chipOnStart\s*\n?\s*\? \(captureMode === 'cage' \|\| \(captureMode === 'course' && !roundActive\)\)/.test(smSrc2) &&
+      // 2026-08-08 (Tim — course acoustics in-round): chip → cage+course (INCLUDING in-round), NOT range.
+      /chipOnStart\s*\n?\s*\? \(captureMode === 'cage' \|\| captureMode === 'course'\)/.test(smSrc2) &&
       // course+chip single-shot anchor
       /else if \(meterMode === 'course'\) \{/.test(smSrc2) &&
       // unmistakable toggle feedback: filled ON state + a toast

@@ -1,5 +1,5 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { useRoundStore } from '../../store/roundStore';
+import { useRoundStore, roundFirstHole, roundLastHole } from '../../store/roundStore';
 
 const HOME_PATH = '/(tabs)/caddie';
 
@@ -51,9 +51,12 @@ export const navigateHandler: IntentHandler = {
       case 'next_hole': {
         const round = useRoundStore.getState();
         if (!round.isRoundActive) return notInRound();
-        // 2026-07-24 (full-app audit) — cap at the 9-hole-aware total, not the physical courseHoles.length
-        // (18 for a front-9 round), so voice "next hole" doesn't walk past hole 9 on a 9-hole round.
-        const maxHole = round.nineHoleMode ? 9 : (round.courseHoles.length || 18);
+        // 2026-07-24 (full-app audit) — cap at the 9-hole-aware total, not the physical courseHoles.length.
+        // 2026-08-08 (2-week audit O4 — back nine): `nineHoleMode ? 9` predated the back-nine range fix, so
+        // from hole 12 "next hole" computed min(13,9)=9, ANNOUNCED "Hole 9." and setCurrentHole clamped it
+        // back to 10 — dragged the round backward while naming a hole it never went to. Use the round's
+        // REAL range (roundFirstHole/roundLastHole: back nine = 10..18, front nine = 1..9, full = 1..N).
+        const maxHole = roundLastHole(round);
         const next = Math.min(round.currentHole + 1, maxHole);
         if (next === round.currentHole) {
           return ok(`You're already on the last hole.`, ['navigate:next_hole:noop']);
@@ -64,9 +67,10 @@ export const navigateHandler: IntentHandler = {
       case 'previous_hole': {
         const round = useRoundStore.getState();
         if (!round.isRoundActive) return notInRound();
-        const prev = Math.max(round.currentHole - 1, 1);
+        // 2026-08-08 (O4) — floor at the round's FIRST hole (10 on a back nine), not a hardcoded 1.
+        const prev = Math.max(round.currentHole - 1, roundFirstHole(round));
         if (prev === round.currentHole) {
-          return ok(`Already on hole 1.`, ['navigate:previous_hole:noop']);
+          return ok(`Already on hole ${prev}.`, ['navigate:previous_hole:noop']);
         }
         round.setCurrentHole(prev);
         return ok(`Hole ${prev}.`, ['navigate:previous_hole:' + prev]);

@@ -2770,11 +2770,18 @@ export default function SmartMotion() {
     // track at all; swings come from the VIDEO locator instead (see the segmentation branch below).
     // On-course always hits real balls, so foam mode only applies off-round.
     const foamOnStart = useSettingsStore.getState().foamBallMode && !roundActive;
+    // 2026-08-08 (Tim — "on-course easy flow: course mode, DTL, with ADJUSTED course acoustics").
+    // COURSE mode now runs the metered track too — including DURING a live round. The two reasons it
+    // was off are both handled since 06-10: (1) wind falsing — segmentation in course mode is
+    // VIDEO-primary (single shot via the locator); acoustics are CONFIRMATORY only (precise impact
+    // anchor + the acoustic smash/ball-speed estimate), so a gust can't invent a swing; (2) mic
+    // contention with voice — the earbud tap-stop chokepoint (isSmartMotionRecording → 'stop') and the
+    // VAD gate both stand down while SmartMotion records, so the recorders can't collide.
     const useMetering = foamOnStart
       ? false
       : chipOnStart
-        ? (captureMode === 'cage' || (captureMode === 'course' && !roundActive))
-        : (captureMode === 'cage' || captureMode === 'range');
+        ? (captureMode === 'cage' || captureMode === 'course')
+        : (captureMode === 'cage' || captureMode === 'range' || captureMode === 'course');
     if (useMetering) {
       // Parallel metered audio track for multi-strike detection.
       try {

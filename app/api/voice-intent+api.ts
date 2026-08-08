@@ -26,6 +26,8 @@ const INTENT_TYPE_ENUM = [
   // NOTE: this file is a hand-maintained duplicate of api/voice-intent.ts and WILL re-drift — it should be
   // collapsed to import the shared enum + prompt. Prod (api.smartplaycaddie.com) is the live path.
   'undo', 'find_my_data', 'open_course', 'set_session_focus',
+  // 2026-08-08 (2-week audit V4 — sync w/ prod twin): corrections amend the last shot, never duplicate it.
+  'correct_last_shot',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -282,6 +284,11 @@ Available intents:
     - "score me a 5 on hole 7" -> { strokes: 5, hole_number: 7 }
     - "I bogeyed seven" -> { strokes: <par+1 — leave as null, the handler computes par-relative; but if you can resolve, fine> }
     Prefer log_score over log_shot when the user is reporting a TOTAL ("I made a five") rather than a single swing.
+
+14b. correct_last_shot — User is CORRECTING the club (optionally distance) of the shot ALREADY logged — references the LAST/previous shot or contradicts a prior club. AMENDS the record; never a new shot.
+    parameters: { club_phrase: string, distance_yards?: number, raw_utterance: string }
+    Examples: "I hit 3-hybrid for that last shot" / "that last one was actually a 5-iron" / "that was a 3 hybrid, not a 5 iron" / "change my last shot to driver".
+    KEY vs log_shot: a correction REFERENCES the last shot or contradicts a prior club; a plain past-tense report ("I hit driver 240") stays log_shot.
 
 15b. declare_hole — User is telling the caddie which hole they are starting / on. NOT a relative move (next/previous), NOT a score report. Use this when the user says they're TEEING OFF on a specific hole or just declares the absolute hole number.
    parameters: { hole_number: integer 1..18 }

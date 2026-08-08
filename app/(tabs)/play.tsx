@@ -1062,7 +1062,22 @@ export default function PlayTab() {
     setSelectedLoading(true);
     setSelectError(null);
     try {
-      const c = await getCourse(s.id);
+      // 2026-08-08 (2-week audit O3 — GPS-nearby cards were a PERMANENT dead end). The nearby list mints
+      // synthetic ids (place:<google_place_id> / near:<name>) that the course API can't resolve — tapping
+      // one 404'd forever ("tap to retry" could never succeed). Resolve them by NAME first (the same
+      // pattern the (i) button uses), then load the real API id.
+      let resolveId = s.id;
+      if (String(s.id).startsWith('place:') || String(s.id).startsWith('near:')) {
+        const found = await searchCourses(s.club_name ?? '');
+        const real = found.find(r => !r._error && r.id);
+        if (!real) {
+          setSelectError(`Couldn't find "${s.club_name}" in the course database — try the search box.`);
+          setSelectedLoading(false);
+          return;
+        }
+        resolveId = real.id;
+      }
+      const c = await getCourse(resolveId);
       if (c) {
         setSelected(c);
         useRoundStore.getState().setPreviewCourse(c.id);

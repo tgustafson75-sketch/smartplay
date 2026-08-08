@@ -187,10 +187,18 @@ export async function detectClubPath(args: {
     if (dir) {
       const dest = `${dir}clubpath-src-${Date.now()}-${Math.round(Math.random() * 1e6)}.mp4`; // per-invocation unique — two calls in the same ms must not share a temp file (audit #25)
       await FileSystem.copyAsync({ from: videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+      try {
+        const info = await FileSystem.getInfoAsync(dest);
+        if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
+        // 2026-08-08 (2-week audit S5) — a zero-byte copy was left on disk (never adopted as tempCopy →
+        // never cleaned). Delete the reject so repeated failed runs can't accumulate orphans.
+        else void FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => undefined);
+      } catch {
+        // getInfo threw AFTER the copy landed — the file may exist; best-effort delete so it can't leak.
+        void FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => undefined);
+      }
     }
-  } catch { /* copy failed */ }
+  } catch { /* copy failed before the file existed */ }
   // 2026-07-27 (full-app audit) — if the private copy could NOT be made, do NOT fall back to decoding the
   // ORIGINAL. On a surface that keeps looping the same file (SmartMotion review), a native retriever on
   // the file ExoPlayer is playing is the exact SIGSEGV / white-screen vector. Return no arc instead —

@@ -154,16 +154,23 @@ export const queryStatusHandler: IntentHandler = {
 
       case 'holes_left': {
         // Match the canonical formula in localStatusResponder.holesLeftReply EXACTLY so voice never
-        // gives two different answers: "holes to play" INCLUDES the current hole (hole 1 of 18 → 18 to
-        // play; hole 18 → 1), total from nineHoleMode (not courseHoles.length).
-        const total = round.nineHoleMode ? 9 : 18;
-        const cur = round.currentHole ?? 1;
-        const left = Math.max(0, total - cur + 1);
+        // gives two different answers: "holes to play" INCLUDES the current hole.
+        // 2026-08-08 (2-week audit O4) — `nineHoleMode ? 9 : 18` broke both new round shapes: back nine
+        // (hole 12 → "Last hole — 12 of 9") and a natively-9 course played with nineHoleMode=false
+        // (Berlin hole 5 → "14 to play — you're on 5 of 18"). Use the round's REAL range.
+        const { roundFirstHole, roundLastHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+        const last = roundLastHole(round);
+        const first = roundFirstHole(round);
+        const total = last - first + 1;
+        const cur = round.currentHole ?? first;
+        const left = Math.max(0, last - cur + 1);
         return {
           success: true,
+          // "hole ${cur}" not "${cur} of ${total}" — on a back nine the hole NUMBER (12) exceeds the
+          // round length (9), so "12 of 9" read as nonsense. Total still spoken for full rounds.
           voice_response: left <= 1
-            ? `Last hole — ${cur} of ${total}.`
-            : `${left} holes to play — you're on ${cur} of ${total}.`,
+            ? `Last hole — hole ${cur}.`
+            : `${left} holes to play — you're on hole ${cur}${first === 1 && total >= cur ? ` of ${total}` : ''}.`,
           side_effects: ['query:holes_left'],
           follow_up_needed: false,
         };

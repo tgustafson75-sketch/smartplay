@@ -30,6 +30,10 @@ const INTENT_TYPE_ENUM = [
   // 2026-07-27 (Tim — SESSION FOCUS) — capture "I want to work on X this session" so the caddie holds
   // that intent and orients the whole session around it.
   'set_session_focus',
+  // 2026-08-08 (2-week audit V4) — the correction intent had a handler + precheck regex but was missing
+  // here, so phrasings the narrow regex missed ("that was a 3 hybrid, not a 5 iron") classified as
+  // log_shot and appended a DUPLICATE shot instead of correcting the last one.
+  'correct_last_shot',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -415,6 +419,16 @@ Available intents:
    raw_utterance: pass the verbatim user phrase so the handler can store it for context.
    KEY: "mark my shot/tee shot/drive" = log_shot trigger even without distance. "I went left with my [club]" embedded in any sentence = log_shot for that club+outcome. Extract the club and outcome even from longer narrative sentences.
    ONLY match when the user is reporting a shot they ALREADY hit (past tense or present-narrative: "I hit", "went left with my", "drove it"). DO NOT match generic queries about clubs ("what club here") — those are open_tool / query_status. DO NOT match club selections for a shot ABOUT to be hit — future/intent phrasing ("I'm gonna go with a 5-wood", "we're gonna hit 7 here", "switching to 6-iron") is club_change (#13), NOT log_shot.
+   DO NOT match CORRECTIONS of a shot already logged — "I hit 3-hybrid for that last shot", "that last one was actually a 5-iron", "that was a 3 hybrid, not a 5 iron", "change my last shot to driver" = correct_last_shot (#16b), which AMENDS the existing record instead of appending a duplicate.
+
+16b. correct_last_shot — User is CORRECTING the club (and optionally distance) of the shot ALREADY logged — referencing the LAST/previous shot ("for that last shot", "that last one was", "not a 5 iron, a 3 hybrid", "change my last shot to…").
+   parameters: { club_phrase: string, distance_yards?: number, raw_utterance: string }
+   Examples:
+   - "I hit 3-hybrid for that last shot" -> { club_phrase: "3-hybrid", raw_utterance: "I hit 3-hybrid for that last shot" }
+   - "that last one was actually a 5-iron" -> { club_phrase: "5-iron", raw_utterance: "that last one was actually a 5-iron" }
+   - "that was a 3 hybrid, not a 5 iron" -> { club_phrase: "3 hybrid", raw_utterance: "that was a 3 hybrid, not a 5 iron" }
+   - "change my last shot to driver, it went about 250" -> { club_phrase: "driver", distance_yards: 250, raw_utterance: "change my last shot to driver, it went about 250" }
+   KEY vs log_shot: a correction REFERENCES the previous/last shot or contradicts a prior club ("not a 5 iron"). A plain past-tense report with no last-shot reference ("I hit driver 240") stays log_shot.
 
 21. log_score — User is REPORTING their final score for a hole they just finished. Past-tense report with a number ("I got a 4", "took a 5") OR a score name ("made par", "bogey", "birdie"). This is DISTINCT from:
    - log_shot (#16), which captures a single SWING mid-hole ("I hit driver 240 left").

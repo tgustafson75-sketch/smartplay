@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useRoundStore } from '../../store/roundStore';
+import { useRoundStore, roundFirstHole, roundLastHole } from '../../store/roundStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useClubStatsStore } from '../../store/clubStatsStore';
 import { normalizeClub } from '../../services/clubNormalize';
@@ -124,6 +124,11 @@ export default function Scorecard() {
   const effectiveNineHoleMode = isRoundActive
     ? nineHoleMode
     : (lastCompletedRound?.nineHoleMode ?? false);
+  // 2026-08-08 (2-week audit O1) — is this nine-hole round the BACK nine (holes 10-18)? Live: from the
+  // round's real start hole. History: from the completed record's scored hole numbers.
+  const isBackNineView = effectiveNineHoleMode && (isRoundActive
+    ? roundFirstHole(useRoundStore.getState()) >= 10
+    : Object.keys(lastCompletedRound?.scores ?? {}).every(h => Number(h) >= 10) && Object.keys(lastCompletedRound?.scores ?? {}).length > 0);
 
   const viewCourseHoles = isRoundActive
     // 2026-07-21 (BETA — can't-score dead-end) — a live round on a data-less course (empty
@@ -132,12 +137,19 @@ export default function Scorecard() {
     // fallback (mirrors the completed-round branch below) so scoring always works.
     ? (courseHoles.length > 0
         ? courseHoles
-        : Array.from({ length: effectiveNineHoleMode ? 9 : 18 }, (_, i) => ({
-            hole: i + 1, par: 4, distance: 0, front: 0, back: 0,
-            teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
-            frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
-            note: '', estimated: false,
-          })))
+        // 2026-08-08 (2-week audit O1 — back nine): synth the round's REAL hole range (back nine =
+        // 10..18), not always 1..9/1..18, so a data-less back-nine round is still scoreable here.
+        : (() => {
+            const st = useRoundStore.getState();
+            const first = roundFirstHole(st);
+            const last = roundLastHole(st);
+            return Array.from({ length: Math.max(1, last - first + 1) }, (_, i) => ({
+              hole: first + i, par: 4, distance: 0, front: 0, back: 0,
+              teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
+              frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
+              note: '', estimated: false,
+            }));
+          })())
     : (() => {
         if (!lastCompletedRound) return [];
         // 2026-07-01 (audit) — was a hardcoded par-4 for EVERY hole of a completed
@@ -170,8 +182,11 @@ export default function Scorecard() {
   // scoreVsPar=-60 — misleading "60 under" reading. Sum par for HOLES
   // SCORED only (and only first 9 in nine-hole mode for safety).
   const scoredHoleNums = new Set(Object.keys(viewScores).map(n => Number(n)));
+  // 2026-08-08 (2-week audit O1 — back nine): the `h.hole <= 9` nine-hole filter excluded EVERY scored
+  // back-nine hole (10-18) → totalPar 0 → "+41 vs par" nonsense. Scored-holes-only is the real guard;
+  // any scored hole in the rendered rows counts its par.
   const totalPar = viewCourseHoles
-    .filter(h => (effectiveNineHoleMode ? h.hole <= 9 : h.hole <= 18) && scoredHoleNums.has(h.hole))
+    .filter(h => scoredHoleNums.has(h.hole))
     .reduce((a, h) => a + h.par, 0);
   const scoreVsPar = totalScore - totalPar;
   const holesPlayed = Object.keys(viewScores).length;
@@ -797,7 +812,11 @@ export default function Scorecard() {
         {/* PER-HOLE ROWS — Front 9. Quick-score chips moved to a single
             sticky panel below this list (rendered after Back 9) instead
             of interleaved per-row, which made them appear to pop around. */}
-        {hasAnythingToShow && front9.length > 0 && (
+        {/* 2026-08-08 (2-week audit O1 — back nine): a BACK-NINE round (nineHoleMode=true, holes 10-18)
+            used to render ONLY empty front-9 rows and HIDE the section with the holes actually being
+            played (the back-9 gate was `!effectiveNineHoleMode`). Gate each nine on whether the ROUND'S
+            RANGE touches it: front-nine round → front only; back-nine round → back only; full → both. */}
+        {hasAnythingToShow && front9.length > 0 && !isBackNineView && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.front9')}</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -808,7 +827,7 @@ export default function Scorecard() {
         )}
 
         {/* PER-HOLE ROWS — Back 9. */}
-        {hasAnythingToShow && !effectiveNineHoleMode && back9.length > 0 && (
+        {hasAnythingToShow && back9.length > 0 && (!effectiveNineHoleMode || isBackNineView) && (
           <View style={[styles.section, styles.holeListWrap]}>
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.back9')}</Text>
             <View style={[styles.holeList, { backgroundColor: c.surface, borderColor: c.border }]}>

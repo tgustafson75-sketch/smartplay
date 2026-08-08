@@ -725,6 +725,14 @@ async function openSession() {
         return;
       }
       intent = await parseRes.json() as VoiceIntent;
+      // 2026-08-08 (2-week audit V2 — earbud "open settings" dead-ended). The cloud classifier returns
+      // NO raw_text (the VoiceIntent typing masked it), and the 08-07 EXPLICIT_OPEN gate in
+      // openToolHandler reads intent.raw_text to find the open/show verb — so every classifier-routed
+      // tool open on THIS path evaluated the gate against '' and got bounced to the brain even when the
+      // user literally said "open". Backfill from the utterance we already hold (the watch path at
+      // handleTranscribedUtterance already does exactly this). Also un-breaks the send-log verb
+      // fallback, coach-name regex, record-intent backstop, and catalog lookup on raw_text.
+      if (!intent.raw_text) intent.raw_text = utterance;
       // Cloud escalation — the local precheck + local-primary both missed, so we paid
       // the classifier (and usually the brain). The metric Tim watches: this should
       // trend DOWN relative to local as the CNS brain grows.

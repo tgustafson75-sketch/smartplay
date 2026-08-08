@@ -1599,10 +1599,13 @@ export const useRoundStore = create<RoundState>()(
             // 2026-08-07 (audit — Berlin CC 9-hole): intendedHoles was `nineHoleMode ? 9 : 18`, but a
             // natively-9-hole course is played with nineHoleMode=false, so this said 18. computeWhsPostingScore
             // then loops holes 1-18, hits a null par at hole 10 (pars only cover 1-9), and returns null — so
-            // the round NEVER posted to the handicap index, even though WHS allows 9-hole posting. Derive the
-            // intended length from the REAL course hole count instead of the flag.
+            // the round NEVER posted to the handicap index, even though WHS allows 9-hole posting.
+            // 2026-08-08 (2-week audit O2 — my fix REGRESSED the other case): dropping the nineHoleMode
+            // signal entirely meant a front/back-NINE round at an 18-HOLE course computed intendedHoles=18,
+            // WHS needed 14 played, saw 9 → null → silently fell back to legacy posting WITHOUT the
+            // net-double-bogey caps. BOTH signals matter: the player's declared nine OR a natively-9 course.
             const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
-            const intendedHoles = getCourseHoleCount(s.activeCourseId, s.courseHoles.length) === 9 ? 9 : 18;
+            const intendedHoles = s.nineHoleMode ? 9 : (getCourseHoleCount(s.activeCourseId, s.courseHoles.length) === 9 ? 9 : 18);
             const post = calcMod.computeWhsPostingScore({
               intendedHoles,
               courseHandicap,

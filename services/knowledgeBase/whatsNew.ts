@@ -25,7 +25,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   { when: 'Jul 2026', note: 'A lot of new courses with real hole flyovers — including Coyote Creek (Tournament & Valley), Pruneridge, Wente Vineyards, Yocha Dehe, Crane Creek Reserve, and Manatee Cove; plus tighter, corrected hole framing on the existing library.' },
   { when: 'Jul 2026', note: 'The first voice response after opening the app is faster and more reliable — no more "having trouble connecting" on that first ask.' },
   { when: 'Jul 2026', note: 'Import your Arccos "Smart Club Distances" — snap the screen and it seeds your bag carries (tag the club by hand, since Arccos Air guesses club from distance).' },
-  { when: 'Jul 2026', note: 'Each caddie personality (Kevin, Serena, Tank) now sounds truly like themselves on every reply, not just the opener.' },
+  { when: 'Jul 2026', note: 'Each caddie personality (Kevin, Serena, Harry) now sounds truly like themselves on every reply, not just the opener.' },
   { when: 'Jul 2026', note: 'Cleaner branded hole view — course, hole, and distance shown neatly in the corner over a crisp satellite flyover.' },
   { when: 'Jul 2026', note: 'Ask the caddie by voice to switch the hole view between satellite and the static photo, and open practice tools (Focus Session, Shot Shapes, Setup Check, Fit Profile, Import Range) by name.' },
 ];

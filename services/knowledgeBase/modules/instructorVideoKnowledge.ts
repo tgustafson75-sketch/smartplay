@@ -209,15 +209,15 @@ export const INSTRUCTOR_VIDEO_KNOWLEDGE: KBEntry[] = [
     related: ['sg.chip.contact'],
   },
 
-  // ── EARLY EXTENSION — TANK'S TAKE (Tank · SmartPlay Caddie) ───────────────
+  // ── EARLY EXTENSION — the tough-love read (SmartPlay Caddie) ─────────────
   {
     id: 'video.early_extension.tank',
     layer: 'full_swing',
     module: MODULE,
-    topic: "early extension — Tank's take",
+    topic: 'early extension — the tough-love read',
     aliases: ['early extension', 'standing up', 'losing posture', 'hips toward the ball', 'thrust', 'blocks and hooks'],
     principle:
-      "Tank's take (SmartPlay Caddie): early extension is the hips thrusting toward the ball in the downswing — you stand up, lose your spine angle, and the hands get trapped, spraying blocks and hooks. Keep your chest down and your trail-side posture, feel like you SIT INTO the shot and keep room for your arms to swing past. Hold the angle you set at address.",
+      "The blunt read (SmartPlay Caddie): early extension is the hips thrusting toward the ball in the downswing — you stand up, lose your spine angle, and the hands get trapped, spraying blocks and hooks. Keep your chest down and your trail-side posture, feel like you SIT INTO the shot and keep room for your arms to swing past. Hold the angle you set at address.",
     honesty: 'coaching_only',
     coachingCues: ['keep the chest down through impact', 'sit into it — don\'t stand up', 'hold your address spine angle'],
     related: ['fs.transition.early-extension', 'video.posture.balance'],

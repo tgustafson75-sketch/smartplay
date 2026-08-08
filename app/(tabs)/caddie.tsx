@@ -864,6 +864,10 @@ export default function CaddieTab() {
 
   // ── Local state ─────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  // 2026-08-08 (2-week audit O6) — live mirror so timers (tee-box brief) read the CURRENT voice state,
+  // not a stale closure captured when the timer armed.
+  const voiceStateRef = useRef<VoiceState>('idle');
+  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
   const [appActive, setAppActive] = useState(true);
   const [kevinEmotion, setKevinEmotion] = useState<string | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
@@ -937,6 +941,14 @@ export default function CaddieTab() {
   const prevHoleRef = useRef<number | null>(null);
   // 2026-08-07 (Tim) — fire the tee-box auto-brief AT MOST once per hole.
   const teeBriefedHoleRef = useRef<number | null>(null);
+  // 2026-08-08 (2-week audit O6) — refs survive across ROUNDS (same app session), so round #2 got no
+  // tee brief / no proactive read on any hole number already hit in round #1. Reset on round start.
+  useEffect(() => {
+    if (isRoundActive) {
+      teeBriefedHoleRef.current = null;
+      lastProactiveHoleRef.current = null;
+    }
+  }, [isRoundActive]);
   useEffect(() => {
     if (prevHoleRef.current !== currentHole) {
       prevHoleRef.current = currentHole;
@@ -1313,13 +1325,24 @@ export default function CaddieTab() {
           if (!fix || fix.lat == null || fix.lng == null) return;
           const distYds = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
           if (distYds > 40) return; // not AT the tee box — the player gets the read by asking
-          if (isSpeaking() || voiceState !== 'idle') return;
+          // 2026-08-08 (O6) — LIVE voice state via ref, not the closure captured 6s ago when the timer
+          // armed (a brief queued behind a finishing answer used to be silently skipped forever).
+          if (isSpeaking() || voiceStateRef.current !== 'idle') return;
           if (teeBriefedHoleRef.current === currentHole) return;
           teeBriefedHoleRef.current = currentHole;
           const engine = await import('../../services/smartAnalysisEngine');
           const env = await engine.analyze({ kind: 'shot_strategy' });
-          const text = env.voice_summary;
+          let text = env.voice_summary;
           if (!text) return;
+          // 2026-08-08 (O8) — fold the COURSE BOOK's card intel (OB walls, the No.9 brook rule) into the
+          // auto tee brief; the strategy engine doesn't read the book, so the seeded card knowledge never
+          // reached this spoken brief. One short sentence, honest source (the printed card / server book).
+          try {
+            const { useCaddieMemoryStore } = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
+            const cid = useRoundStore.getState().activeCourseId;
+            const sh = cid ? useCaddieMemoryStore.getState().getStaticHole(cid, currentHole) : null;
+            if (sh?.note) text = `${text} Heads up: ${sh.note}`;
+          } catch { /* book optional */ }
           setCaddieResponse(text);
           setVoiceState('proactive');
           const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
@@ -2118,8 +2141,28 @@ export default function CaddieTab() {
       activeCourse: cName,
     });
 
+    // 2026-08-08 (2-week audit V3 — the REAL "best score yet" source Tim raged about). This compared ANY
+    // finished total against the user-entered 18-hole personalBest with NO holes-played and NO
+    // first-time-at-course check — so a first-ever 9-hole round (total 45 < PB 89) fired a full false
+    // celebration, and ending early after 3 holes did too. A PB claim now requires: a FULL 18 played
+    // (the personalBest field is an 18-hole number), and NOT the first round at this course (first time
+    // = a BASELINE — the brain prompt frames it that way; never fake congratulations).
     const best = usePlayerProfileStore.getState().personalBest;
-    const isNewPersonalBest = !!(best && total > 0 && total < best);
+    const priorRoundsHere = (() => {
+      try {
+        // endRound has ALREADY appended this round to history (and reset the live store), so identify
+        // the course from the newest record and count OTHER records at the same course. courseId when
+        // present, else course-name match (manual rounds).
+        const hist = useRoundStore.getState().roundHistory;
+        const lastRec = hist[hist.length - 1];
+        if (!lastRec) return 0;
+        return hist.filter(r => r.id !== lastRec.id && (
+          (lastRec.courseId != null && r.courseId === lastRec.courseId) ||
+          (lastRec.courseId == null && r.courseName != null && r.courseName === lastRec.courseName)
+        )).length;
+      } catch { return 0; }
+    })();
+    const isNewPersonalBest = !!(best && total > 0 && total < best && played >= 18 && priorRoundsHere > 0);
     if (isNewPersonalBest) {
       summary = 'New personal best — ' + total + ". That's what we came for.";
       relState.recordBreakthrough(
@@ -2454,7 +2497,21 @@ export default function CaddieTab() {
     // it bundled WITH coordinates and the loaded holes lack coordinates, use the bundle and route
     // courseId through local: so geometry / hole-detection / SmartVision / yardage all use the real map.
     {
-      const bundledMatch = getCourse(courseName);
+      // 2026-08-08 (2-week audit O7) — getCourse() requires the BUNDLED name to CONTAIN the searched
+      // name, so a longer API name silently no-op'd the override ("Mines Golf Club" vs bundled "Mines").
+      // Normalized bidirectional match: strip punctuation + generic suffixes, then either-contains.
+      const normName = (s: string) => s.toLowerCase()
+        .replace(/\b(golf|country|club|course|links|g\.?c\.?|c\.?c\.?)\b/g, '')
+        .replace(/[^a-z0-9]/g, '').trim();
+      const bundledMatch = getCourse(courseName) ?? (() => {
+        const q = normName(courseName);
+        if (q.length < 4) return null; // too short to trust a fuzzy hit
+        const { COURSES } = require('../../data/courses') as typeof import('../../data/courses');
+        return COURSES.find(c => {
+          const b = normName(c.name) || normName(c.fullName);
+          return b.length >= 4 && (b === q || b.includes(q) || q.includes(b));
+        }) ?? null;
+      })();
       const bundledHasCoords = !!bundledMatch?.holes?.some(h => h.middleLat !== 0 && h.middleLng !== 0);
       const loadedHasCoords = holes.some(h => h.middleLat !== 0 && h.middleLng !== 0);
       if (bundledMatch && bundledHasCoords && !loadedHasCoords) {

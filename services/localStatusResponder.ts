@@ -846,9 +846,10 @@ function scoreReply(lang: LocalReplyLanguage): LocalReplyResult {
 function holesLeftReply(lang: LocalReplyLanguage): LocalReplyResult | null {
   const round = useRoundStore.getState();
   if (typeof round.currentHole !== 'number' || round.currentHole <= 0) return null;
-  const totalHoles = round.nineHoleMode ? 9 : 18;
   // "Holes to play" semantic — includes the current hole the player is on.
-  // On hole 1 of 18: 18 to play. On hole 18 of 18: 1 to play.
-  const left = Math.max(0, totalHoles - round.currentHole + 1);
+  // 2026-08-08 (2-week audit O4) — `nineHoleMode ? 9 : 18` said 0-left on a back nine (hole 12 vs cap 9)
+  // and 14-left at a natively-9 course (Berlin, nineHoleMode=false). Use the round's REAL last hole.
+  const { roundLastHole } = require('../store/roundStore') as typeof import('../store/roundStore');
+  const left = Math.max(0, roundLastHole(round) - round.currentHole + 1);
   return { text: L[lang].holesLeft(left), queryType: 'holes_left' };
 }
