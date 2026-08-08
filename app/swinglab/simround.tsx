@@ -84,9 +84,9 @@ export default function SwingSimScreen() {
   const [armed, setArmed] = useState(false);
   // 2026-08-08 (Tim — "can't change club in Sim"). Voice club change: hands are ON the phone (it IS the
   // club), so tap-chips aren't reachable mid-flow. Register with the sim bus; the voice clubChangeHandler
-  // resolves a spoken club here — applied only when it's in the LEARNED bag (honest: the sim can only
-  // play clubs with distances). bagRef keeps the resolver reading live state without re-registering.
-  const bagRef = useRef<{ club: string; carry: number }[]>([]);
+  // resolves a spoken club here against the FULL sim bag (learned + starred standard carries).
+  // bagRef keeps the resolver reading live state without re-registering.
+  const bagRef = useRef<{ club: string; carry: number; learned?: boolean }[]>([]);
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bus = require('../../services/simRoundBus') as typeof import('../../services/simRoundBus');
@@ -122,10 +122,16 @@ export default function SwingSimScreen() {
 
   // Real bag: playable clubs (has a distance), longest first. Caddie suggestion =
   // the club whose carry best fits the remaining number (with lie penalty).
+  // 2026-08-08 (Tim's screenshot — the rail showed ONE club, GW·42, so "can't change club in Sim" was
+  // really "nothing to change TO": the bag only offered LEARNED clubs, and a fresh install has few/none).
+  // The sim is explicitly a GAME ("SIM ROUND · NOT REAL STATS"), so offer the FULL bag: learned carries
+  // where they exist, standard-chart carries (marked with * and a one-line footnote) until taught. Voice
+  // and chips can now always switch to any club. Honest: learned vs standard is visibly distinguished.
   const bag = useMemo(() => {
     const st = useClubStatsStore.getState();
-    return CLUB_ORDER.filter((c) => c !== 'Putter' && st.hasDistance(c))
-      .map((c) => ({ club: c, carry: Math.round(st.distanceFor(c)) }))
+    return CLUB_ORDER.filter((c) => c !== 'Putter')
+      .map((c) => ({ club: c, carry: Math.round(st.carryFor(c)), learned: st.hasDistance(c) }))
+      .filter((b) => b.carry > 0)
       .sort((a, b) => b.carry - a.carry);
   }, []);
   // Keep the voice resolver's view of the bag live (see the sim-bus registration above).
@@ -357,7 +363,7 @@ export default function SwingSimScreen() {
               </ScrollView>
             </View>
           ) : null}
-          {bag.length === 0 ? <Text style={s.honest}>No learned club distances yet — the sim will use a stock 150y club until your bag learns.</Text> : null}
+          {bag.some((b) => !b.learned) ? <Text style={s.honest}>* standard yardage — tell me your real number ("my 7-iron goes 165") and the sim uses yours.</Text> : null}
           <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button" accessibilityLabel="Tee off">
             <Text style={s.teeOffText}>{ghost ? 'TEE OFF vs GHOST' : 'TEE OFF'}</Text>
           </TouchableOpacity>
@@ -442,7 +448,7 @@ export default function SwingSimScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                   {bag.map((b) => (
                     <TouchableOpacity key={b.club} style={[s.clubChip, club === b.club && s.clubChipActive]} onPress={() => setClub(b.club)} accessibilityRole="button">
-                      <Text style={[s.clubChipText, club === b.club && { color: '#0b1220' }]}>{b.club} · {b.carry}</Text>
+                      <Text style={[s.clubChipText, club === b.club && { color: '#0b1220' }]}>{b.club} · {b.carry}{b.learned ? '' : '*'}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
