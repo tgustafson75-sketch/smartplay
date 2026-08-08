@@ -427,7 +427,10 @@ const expectedIntents = [
 ];
 
 for (const intent of expectedIntents) {
-  const inUnion = voiceIntentSrc.includes(`"${intent}"`);
+  // 2026-08-08 — the prompt's tail union is now INTERPOLATED from INTENT_TYPE_ENUM (can't drift), so
+  // check membership in the enum source of truth: quoted anywhere in the file (enum entries are
+  // 'single-quoted'; prompt sections may also "double-quote" them).
+  const inUnion = voiceIntentSrc.includes(`"${intent}"`) || voiceIntentSrc.includes(`'${intent}'`);
   check(`voice-intent type union has '${intent}'`, inUnion, inUnion ? 'present' : 'MISSING from intent_type union');
 }
 
