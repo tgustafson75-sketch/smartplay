@@ -7981,6 +7981,24 @@ check('Team intelligence: ALL four triggers reachable (cage end, shot streak, ro
   })(),
   'the team-of-caddies handoff suggestions can actually fire: plateau + frustration at cage end, stuck via voice, struggle on-course');
 
+// 2026-08-09 (Tim — club logic must be RIGHT) — the club-REC stamp must fire on the DEFAULT pipecat
+// path, not just the legacy engine. shot_strategy routes to the brain by default and used to return
+// without ever calling setPendingKevinRec, so silent adherence attributed nothing on the path 99% of
+// users are on. LOCK: the brain-routed branch stamps the learned-bag club before returning.
+check('Club rec stamped on the DEFAULT (pipecat) shot-strategy path, not only the legacy engine',
+  (() => {
+    const q = read('services/intents/queryStatusHandler.ts');
+    // the stamp must sit INSIDE the pipecat early-return branch (before route_to_brain), using the
+    // learned-bag inferClub against a real distance-to-green.
+    const branch = q.slice(q.indexOf("case 'shot_strategy'"), q.indexOf('route_to_brain: true'));
+    return (
+      /inferClub\(yds\)/.test(branch) &&
+      /setPendingKevinRec\(\{ club: recClub/.test(branch) &&
+      /resolveGreenCoords\(r\.currentHole\)/.test(branch)
+    );
+  })(),
+  'asking the caddie for the play on the default voice path stamps a rec, so hitting it silently trains the bag');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →

@@ -251,6 +251,32 @@ export const queryStatusHandler: IntentHandler = {
         try {
           const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
           if ((settingsMod.useSettingsStore.getState().voiceOrchestrator ?? 'pipecat') === 'pipecat') {
+            // 2026-08-09 (Tim — "missing major club use logic", dead-path audit) — the DEFAULT pipecat
+            // path returns here to let the brain speak the play, and used to NEVER stamp a
+            // recommendation (only the legacy non-pipecat engine below called setPendingKevinRec). So
+            // "caddie says a club, player hits it silently" attributed NOTHING and trained no distance —
+            // the exact lost club logic. Stamp the player's LEARNED-BAG club for the real distance-to-green
+            // here so silent adherence is captured + trains the bag on the production path too. Best-effort,
+            // active-round only; the shot-club resolver arbitrates this against any club the player then
+            // declares, and it clears on hole change. (A server-side recommend_club tool would let us stamp
+            // the brain's EXACT spoken club incl. hazard/lie nuance — queued; this distance-club is the
+            // honest baseline and a strict improvement over stamping nothing.)
+            try {
+              const r = useRoundStore.getState();
+              if (r.isRoundActive) {
+                const fix = await getOneShotFix({ maxAgeMs: 6_000 });
+                const green = resolveGreenCoords(r.currentHole).middle;
+                if (fix && green) {
+                  const yds = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green));
+                  if (yds > 0 && yds <= 400) {
+                    // eslint-disable-next-line @typescript-eslint/no-require-imports
+                    const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+                    const recClub = useClubStatsStore.getState().inferClub(yds);
+                    if (recClub) r.setPendingKevinRec({ club: recClub, shape: null, aimPoint: null });
+                  }
+                }
+              }
+            } catch { /* stamp is best-effort — never blocks the brain answer */ }
             return { success: false, voice_response: null, side_effects: ['query:shot_strategy:route_to_brain'], follow_up_needed: false, route_to_brain: true };
           }
         } catch { /* settings unavailable — fall through to the engine */ }
