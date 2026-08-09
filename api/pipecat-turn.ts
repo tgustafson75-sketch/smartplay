@@ -56,6 +56,11 @@ const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'plan_shot', 'log_score', 'log_emotional_state',
   'mark_tee', 'mark_green', 'log_issue', 'set_reminder',
+  // 2026-08-08 (verification wave) — register_bag was declared + prompted but MISSING here, so it fell
+  // through to the bare 'Done.' with NO toolActions.push: the model verbally confirmed the bag while the
+  // client dispatch case never fired and nothing was written. The passthrough spread carries the
+  // clubs/distances arrays intact to the client registrar.
+  'register_bag',
 ]);
 
 // ── Kevin's tools (same definitions as api/kevin.ts AI_TOOLS) ─────────────
@@ -718,6 +723,13 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
         // All other tools: collect for client dispatch, return an acknowledgment
         if (UI_TOOLS.has(toolName)) {
           toolActions.push({ type: toolName, ...toolInput });
+          // register_bag: give the model a truthful, speakable result (it echoes tool results) —
+          // the device does the actual store writes and asks about anything it couldn't parse.
+          if (toolName === 'register_bag') {
+            const n = Array.isArray(toolInput.clubs) ? toolInput.clubs.length : 0;
+            const d = toolInput.distances && typeof toolInput.distances === 'object' ? Object.keys(toolInput.distances).length : 0;
+            return `Bag registration sent to the device (${n} clubs, ${d} distances). It will confirm what it recorded.`;
+          }
           return `${toolName} dispatched to device.`;
         }
 

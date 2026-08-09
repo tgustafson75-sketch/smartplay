@@ -625,7 +625,7 @@ export default function SwingDetail() {
         // cancellation (unmount / swing change) now; the private copy makes concurrent playback safe.
         const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled });
         if (cancelled) return;
-        // 2026-07-22 (Tim) — require a real arc (>= 4 validated points from detectClubPath, which
+        // 2026-07-22 (Tim) — require a real arc (>= 3 validated points from detectClubPath, which
         // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
         // set falls through to the honest hand trace instead of a wrong "club".
         if (r && r.points.length >= 3) {
@@ -730,8 +730,16 @@ export default function SwingDetail() {
     if (!swing_id || autoTraceAppliedForRef.current === swing_id) return;
     if (analysisStatus === 'pending' || analysisStatus === 'analyzing_frames'
       || analysisStatus === 'analyzing_pose' || analysisStatus === 'analyzing_pattern') return; // wait for the read
+    // 2026-08-08 (Tim — "still don't see club trace", verification wave) — the upload pipeline commits
+    // 'ok' at Phase K and runs pose/biomech AFTER, fire-and-forget. On the exact analyze→open flow, this
+    // effect used to fire in that window (status 'ok', pose not landed yet), latch the ref, and set the
+    // trace OFF — permanently, because the latch blocked a re-run when pose arrived moments later. Every
+    // downstream trace path (persisted club_arc read + live extraction) is gated on showTrace, so the
+    // whole chain went dark on first open. Latch ONLY once pose is present (apply-ON-only): while pose
+    // is still absent the default is simply not decided yet, and showTrace already starts false.
+    if (!hasPose) return;
     autoTraceAppliedForRef.current = swing_id;
-    setShowTrace(hasPose);
+    setShowTrace(true);
   }, [swing_id, hasPose, analysisStatus]);
 
   // 2026-05-23 — Auto-suggest 1-2 relevant comparisons once analysis
@@ -1567,11 +1575,15 @@ export default function SwingDetail() {
       // plan instead of a one-line drill name. Falls back to the one-liner when the issue isn't mapped.
       practicePlan: (() => {
         try {
-          const issueId = pi?.issue_id ?? pi?.primary_fault ?? null;
-          if (!issueId) return null;
+          // 2026-08-08 (verification wave) — issue_id is a REQUIRED string, so `?? primary_fault` was dead
+          // code: single-swing/tentative sessions carry issue_id 'tentative_read'/'no_clear_fault' (not in
+          // the catalog) while primary_fault holds the REAL mapped fault (over_the_top, early_extension…).
+          // Look up issue_id first, then genuinely fall back to primary_fault so those reports get the
+          // full named-drill plan instead of silently downgrading to the one-liner.
+          if (!pi) return null;
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { getDrillEntry } = require('../../../data/drillCatalog') as typeof import('../../../data/drillCatalog');
-          const entry = getDrillEntry(String(issueId));
+          const entry = getDrillEntry(String(pi.issue_id)) ?? getDrillEntry(String(pi.primary_fault ?? ''));
           const drills = entry?.drills ?? [];
           return drills.length > 0 ? drills.map((dd: { name: string; steps: string }) => ({ name: dd.name, steps: dd.steps })) : null;
         } catch { return null; }

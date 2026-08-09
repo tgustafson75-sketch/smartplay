@@ -1714,7 +1714,9 @@ export const useVoiceCaddie = ({
         try {
           const gc = new AbortController();
           const gt = setTimeout(() => gc.abort(), timeoutMs);
-          const gr = await fetch(apiUrl + '/api/health', { method: 'GET', signal: gc.signal })
+          // 2026-08-08 — ?lite=1: reachability only; the probe-running bare endpoint is slow (3 provider
+          // probes + cold start) and billable, which both skewed the diagnostic timing and cost money.
+          const gr = await fetch(apiUrl + '/api/health?lite=1', { method: 'GET', signal: gc.signal })
             .finally(() => clearTimeout(gt));
           return { ok: gr.ok, ms: Date.now() - gStart };
         } catch { return { ok: false, ms: Date.now() - gStart }; }

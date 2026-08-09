@@ -171,6 +171,9 @@ out geom;`;
     const out: OsmHoleWay[] = [];
     for (const el of data.elements ?? []) {
       if (!el.geometry || el.geometry.length < 2) continue;
+      // 2026-08-08 (verification wave) — same practice filter as every sibling fetcher. A practice
+      // golf=hole way with a numeric ref would pair to the nearest REAL green and steal that row.
+      if (isPracticeFeature(el.tags)) continue;
       const ref = el.tags?.ref != null && Number.isFinite(Number(el.tags.ref)) ? Number(el.tags.ref) : null;
       const par = el.tags?.par != null && Number.isFinite(Number(el.tags.par)) ? Number(el.tags.par) : null;
       out.push({ ref, par, pts: el.geometry.map(g => ({ lat: g.lat, lng: g.lon })) });
@@ -619,7 +622,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fetchOsmHoleWays(centroid),
       fetchOsmPolygons(centroid, 'green'),
     ]);
-    const refWays = holeWays.filter(h => h.ref != null && h.ref >= 1 && h.ref <= 18);
+    // 2026-08-08 (verification wave) — OSM routinely SPLITS one golf=hole way into segments at
+    // path/road crossings, each segment keeping ref+par. Emitting one row per WAY produced duplicate
+    // hole_numbers (a mid-fairway segment endpoint became a badly-short "tee", could snap to a
+    // NEIGHBORING hole's green, inflated holes.length past 9 — which silently disabled the client's
+    // twice-around wrap — and left find(hole_number) consumers on whichever segment sorted first).
+    // Dedup: keep the LONGEST way per ref (the main tee→green line). Also apply the client's
+    // holeCount cap HERE, not just in the fallback pass — a 1500m Overpass radius can pull an
+    // adjacent course's hole ways at multi-course facilities.
+    const wayLen = (w: OsmHoleWay): number => {
+      let len = 0;
+      for (let i = 1; i < w.pts.length; i++) len += haversineYards(w.pts[i - 1], w.pts[i]);
+      return len;
+    };
+    const byRef = new Map<number, OsmHoleWay>();
+    for (const w of holeWays) {
+      if (w.ref == null || w.ref < 1 || w.ref > holeCount) continue;
+      const prev = byRef.get(w.ref);
+      if (!prev || wayLen(w) > wayLen(prev)) byRef.set(w.ref, w);
+    }
+    const refWays = [...byRef.values()];
     if (refWays.length >= 3 && greenPolys.length >= 3) {
       const nearestGreen = (p: Loc): { poly: OsmPolygon; d: number } | null => {
         let best: OsmPolygon | null = null; let bd = Infinity;

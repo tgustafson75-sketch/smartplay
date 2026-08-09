@@ -87,13 +87,11 @@ export function reconcileCurrentHole(fix: GpsFix, force = false): ReconcileResul
   // round, score ONLY the second loop's numbers (10..18) — physically identical, numerically forward.
   const sustained = getSustainedHeading();
   const total = round.courseHoles.length || 18;
-  const isTwiceAround = total === 18 && currentHole >= 10 && (() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
-      return getCourseHoleCount(round.activeCourseId, 0) === 9;
-    } catch { return false; }
-  })();
+  // 2026-08-08 (verification wave) — read the round's authoritative twiceAround flag (stamped by
+  // runStartRound) instead of getCourseHoleCount, which returned its 18 DEFAULT for any non-bundled
+  // API course id → isTwiceAround false → wrapped holes tied with their first-loop twins and the
+  // backward gate blocked — Refresh-GPS dead on the second loop, the exact bug this code addresses.
+  const isTwiceAround = total === 18 && currentHole >= 10 && round.twiceAround === true;
   const startHole = isTwiceAround ? 10 : 1;
   const scores: HoleScore[] = [];
   for (let h = startHole; h <= total; h++) {

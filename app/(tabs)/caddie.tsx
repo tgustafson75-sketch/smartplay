@@ -2170,7 +2170,20 @@ export default function CaddieTab() {
         )).length;
       } catch { return 0; }
     })();
-    const isNewPersonalBest = !!(best && total > 0 && total < best && played >= 18 && priorRoundsHere > 0);
+    // 2026-08-08 (verification wave) — PAR-COMPARABILITY gate: twice-around reopened this exact false
+    // celebration. 18 holes at par-66 Berlin (33×2) beating an 18-hole PB set at par 72 is not a PB —
+    // raw totals only compare on a regulation-length course. Require this round's par to be a real
+    // 18-hole par (≥ 68) before claiming; short-course rounds just get the normal summary.
+    const roundParTotal = (() => {
+      try {
+        const hist = useRoundStore.getState().roundHistory;
+        const lastRec = hist[hist.length - 1];
+        const pars = lastRec?.holePars ?? {};
+        return Object.values(pars).reduce((a: number, b) => a + (typeof b === 'number' ? b : 0), 0);
+      } catch { return 0; }
+    })();
+    const isNewPersonalBest = !!(best && total > 0 && total < best && played >= 18 && priorRoundsHere > 0
+      && roundParTotal >= 68);
     if (isNewPersonalBest) {
       summary = 'New personal best — ' + total + ". That's what we came for.";
       relState.recordBreakthrough(
@@ -2540,9 +2553,11 @@ export default function CaddieTab() {
     // reuse holes 1-9's par/yardage/coords with renumbered hole numbers. Scorecard shows OUT/IN, WHS
     // posts as 18, GPS/briefs work on the second loop via the getHoleGeometry twice-around wrap.
     // Choosing the 9-Hole format pill still plays a single loop.
+    let twiceAround = false;
     if (holes.length === 9 && !opts.nineHole) {
       const secondNine = holes.map(h => ({ ...h, hole: h.hole + 9 }));
       holes = [...holes, ...secondNine];
+      twiceAround = true;
       console.log('[startRound] 9-hole course + 18 format → twice around (holes expanded to 18)');
     }
 
@@ -2563,6 +2578,10 @@ export default function CaddieTab() {
       // FIX B5 — pass snapshotted tee/transport so startRound never falls back to ambient store.
       selectedTee: selectedTeeSnapshot,
       transportMode: transportModeSnapshot,
+      // 2026-08-08 (verification wave) — stamp the flag HERE, the one place that knows the 18 holes are a
+      // 9-hole course doubled. The geometry wrap / hole reconciliation / course-book consumers read this
+      // instead of guessing from hole counts (guesses were dead or wrong for non-bundled courses).
+      twiceAround,
     });
     // Round is started — release the in-flight lock so a deliberate later new-round start proceeds.
     startRoundInFlightRef.current = false;
@@ -2579,8 +2598,12 @@ export default function CaddieTab() {
     // (saveCourseBook plausibility-gates + merges — never wipes existing tips/about/geometry).
     if (courseId && holes.length > 0) {
       try {
+        // 2026-08-08 (verification wave) — for a twice-around round, only write the REAL holes (1-9)
+        // into the course book. Writing the expanded 10-18 duplicates (note-less par/yardage rows)
+        // permanently defeated getStaticHole's twice-around wrap: the book gained keys ≥10, so the
+        // seeded hole 1-9 notes (OB walls, brooks) never reached the second loop's tee briefs.
         const scorecardHoles = holes
-          .filter(h => typeof h.hole === 'number')
+          .filter(h => typeof h.hole === 'number' && (!twiceAround || h.hole <= 9))
           .map(h => ({ hole: h.hole, par: h.par ?? null, yardage: h.distance ?? null }));
         useCaddieMemoryStore.getState().saveCourseBook({
           course_id: courseId,

@@ -48,7 +48,11 @@ export function registerBagFromSpeech(input: SpokenBagInput): BagRegistrationRes
     const p = String(phrase ?? '').trim();
     if (!p) continue;
     const parsed = parseSpokenClub(p);
-    if (parsed) {
+    // 2026-08-08 (verification wave) — require the parsed id to NORMALIZE into the canonical ClubName
+    // union before writing. An out-of-union escape (the historical '9W' class) used to register a key
+    // no reader ever reads while the caddie confirmed success — the exact `as ClubName`-cast failure
+    // clubNormalize's header documents. Unresolvable → missed (the caddie asks, never fakes).
+    if (parsed && normalizeClub(parsed.club_id)) {
       bag.registerClub(parsed.club_id, { source: 'voice' });
       registered.push(clubLabel(parsed.club_id));
     } else {
@@ -63,9 +67,12 @@ export function registerBagFromSpeech(input: SpokenBagInput): BagRegistrationRes
     if (yds < 30 || yds > 400) { missed.push(`${p} ${d?.yards}`); continue; }
     const parsed = parseSpokenClub(p);
     if (!parsed) { missed.push(p); continue; }
+    // Same normalize gate as above: never cast an unresolvable id into ClubName — that wrote garbage
+    // store keys ('9-wood') that carryFor/totalFor (keyed on CLUB_ORDER) can never read.
+    const name = normalizeClub(parsed.club_id);
+    if (!name) { missed.push(p); continue; }
     // Stating a yardage implies the club is in the bag — register it too (idempotent).
     bag.registerClub(parsed.club_id, { source: 'voice' });
-    const name = (normalizeClub(parsed.club_id) ?? clubLabel(parsed.club_id)) as ClubName;
     const kind: 'carry' | 'total' = d?.kind === 'total' ? 'total' : 'carry';
     if (kind === 'total') stats.recordTotal(name, yds);
     else stats.setManual(name, yds);

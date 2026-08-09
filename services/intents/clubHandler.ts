@@ -93,13 +93,16 @@ export const clubChangeHandler: IntentHandler = {
         }
         const r = simBus.requestSimClubChange(parsed.club_id);
         track('club_switched', { club_id: parsed.club_id, club_type: parsed.club_type, source: 'voice_sim' });
+        // 2026-08-08 (verification wave) — the rail now offers the FULL bag (learned + starred standard
+        // carries), so not_in_bag only means the club truly isn't a bag club. And 'no_game' must never
+        // claim "Got it" (success:false with a success line was make-believe) — say what happened.
         return {
           success: r === 'applied',
           voice_response: r === 'applied'
             ? `Got it, ${clubLabel(parsed.club_id)}.`
             : r === 'not_in_bag'
-              ? `${clubLabel(parsed.club_id)} doesn't have a learned distance yet — the sim plays your learned bag. Pick one from the rail or teach me the yardage first.`
-              : `Got it, ${clubLabel(parsed.club_id)}.`,
+              ? `${clubLabel(parsed.club_id)} isn't in the sim bag — pick a club from the rail.`
+              : `The sim game isn't running right now.`,
           side_effects: [`sim:club_${r}`],
           follow_up_needed: false,
         };

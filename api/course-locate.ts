@@ -53,8 +53,10 @@ type PlaceResult = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2026-08-08 (server audit #4) — paid Google Places behind zero throttle; IP-limit it (partner-shaped
   // endpoint stays keyless by design, but a curl loop can't burn quota anymore).
-  if (!allowInference(req, res, 'course-locate', 30)) return;
+  // 2026-08-08 (verification wave) — CORS first: preflight OPTIONS must not burn rate-limit quota,
+  // and a 429 without CORS headers is unreadable to the browser callers this endpoint advertises.
   if (applyCors(req, res)) return;
+  if (!allowInference(req, res, 'course-locate', 30)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!KEY) return res.status(200).json({ courses: [], source: 'places', error: 'not_configured' });
 

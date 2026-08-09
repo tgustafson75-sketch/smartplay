@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ImageBackground, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Gyroscope } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
 import Svg, { Polyline, Circle as SvgCircle } from 'react-native-svg';
@@ -87,7 +87,12 @@ export default function SwingSimScreen() {
   // resolves a spoken club here against the FULL sim bag (learned + starred standard carries).
   // bagRef keeps the resolver reading live state without re-registering.
   const bagRef = useRef<{ club: string; carry: number; learned?: boolean }[]>([]);
-  useEffect(() => {
+  // 2026-08-08 (verification wave) — FOCUS-scoped, not mount-scoped: expo-router keeps this screen
+  // MOUNTED under a pushed SmartMotion ("record my swing" from the sim), and a mount-scoped flag left
+  // the hidden sim game swallowing "switch to 8 iron" meant for the visible SmartMotion HUD — with an
+  // identical "Got it" reply masking it. useFocusEffect drops the registration the moment the sim
+  // stops being the visible screen and re-arms on return.
+  useFocusEffect(useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bus = require('../../services/simRoundBus') as typeof import('../../services/simRoundBus');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -102,7 +107,7 @@ export default function SwingSimScreen() {
       return true;
     });
     return () => { bus.setSimGameActive(false); };
-  }, []);
+  }, []));
   // 2026-07-08 (Tim — "screen goes white after the flyover") — the tracer Polyline was
   // fed PERCENTAGE point strings ("50%,90%"), which react-native-svg's points parser
   // does NOT accept (circles tolerate %, polylines don't) → native parse throw → white

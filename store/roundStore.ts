@@ -337,6 +337,11 @@ interface RoundState {
   recentCourseIds: string[]; // last 5 API course IDs played
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
+  // 2026-08-08 (verification wave) — TRUE only when runStartRound expanded a 9-hole course to 18 (twice
+  // around). Stamped by the ONE place that knows, instead of three consumers (geometry wrap, hole
+  // reconciliation, course-book write) each GUESSING from hole counts — every guess failed differently
+  // for non-bundled/API courses (18-default fallbacks made the wrap/reconcile dead or wrongly enabled).
+  twiceAround: boolean;
   // 2026-08-06 (tester Matt Abid) — the hole this round STARTED on (1 = front nine, 10 = back nine). For a
   // 9-hole round the final hole is roundStartHole + 8, so a back nine plays 10-18 and ends at 18.
   roundStartHole: number;
@@ -487,6 +492,8 @@ interface RoundState {
       // yet). Defaults to 'white' when omitted.
       selectedTee?: TeeColor;
       transportMode?: TransportMode;
+      /** 2026-08-08 — set by runStartRound when it expanded a 9-hole course to 18 (twice around). */
+      twiceAround?: boolean;
       /** 2026-07-04 (Tim — voice sim round / "level one of the golf game") —
        *  marks the round SIMULATED: played by narration on simulated GPS.
        *  A sim round exercises the ENTIRE live pipeline but never trains
@@ -740,6 +747,7 @@ export const useRoundStore = create<RoundState>()(
       recentCourseIds: [],
       courseHoles: [],
       nineHoleMode: false,
+      twiceAround: false,
       roundStartHole: 1,
       isCompetition: false,
       roundNotes: '',
@@ -951,6 +959,7 @@ export const useRoundStore = create<RoundState>()(
           recentCourseIds: updatedRecent,
           courseHoles: holes,
           nineHoleMode: options.nineHole,
+          twiceAround: options.twiceAround === true,
           isCompetition: options.isCompetition,
           roundNotes: options.notes,
           goal: options.goal,
@@ -1378,6 +1387,7 @@ export const useRoundStore = create<RoundState>()(
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
+          twiceAround: false,
           roundStartHole: 1,
           isCompetition: false,
           roundNotes: '',
@@ -1705,6 +1715,7 @@ export const useRoundStore = create<RoundState>()(
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
+          twiceAround: false,
           roundStartHole: 1,
           isCompetition: false,
           roundNotes: '',
@@ -2698,6 +2709,7 @@ export const useRoundStore = create<RoundState>()(
         previewCourseId: s.previewCourseId,
         courseHoles: s.courseHoles,
         nineHoleMode: s.nineHoleMode,
+        twiceAround: s.twiceAround,
         roundStartHole: s.roundStartHole ?? 1,
         isCompetition: s.isCompetition,
         roundNotes: s.roundNotes,

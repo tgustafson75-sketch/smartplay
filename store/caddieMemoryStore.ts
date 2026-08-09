@@ -286,16 +286,30 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
       getStaticHole: (courseId, hole) => {
         const book = get().courseBook?.[courseId];
         const direct = book?.holes?.[hole];
-        if (direct) return direct;
-        // 2026-08-08 (Tim — 9-hole course played twice) — second-loop wrap: when the book only covers
-        // holes 1-9 (a true 9-hole course) and hole 10-18 is asked, serve (hole-9) so the caddie's OB/
-        // local-rule notes carry to the second time around. Never fires for an 18-hole book (which has,
-        // or legitimately lacks, its own 10-18 keys — gated on NO key >= 10 existing at all).
+        // 2026-08-08 (Tim — 9-hole course played twice) — second-loop wrap: on a twice-around round,
+        // hole 10-18 IS hole (n-9), so serve the real hole's OB/local-rule notes on the second loop.
+        // 2026-08-08 (verification wave) — gate on the round's AUTHORITATIVE twiceAround flag: the old
+        // "NO key ≥ 10 exists" guess was permanently defeated by runStartRound's own book write, which
+        // used to save the expanded 10-18 duplicates (note-less) — the seeded notes never reached the
+        // second loop. The flag also HEALS books already polluted that way: a content-less direct entry
+        // defers to its first-loop twin. Outside a twice-around round, direct entries win untouched.
         if (hole >= 10 && hole <= 18 && book?.holes) {
-          const keys = Object.keys(book.holes).map(Number);
-          if (keys.length > 0 && keys.every(k => k <= 9)) return book.holes[hole - 9] ?? null;
+          let twiceAround = false;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const rs = (require('./roundStore') as typeof import('./roundStore')).useRoundStore.getState();
+            twiceAround = rs.isRoundActive && rs.twiceAround === true
+              && (rs.activeCourseId === courseId || rs.activeCourseId == null);
+          } catch { /* store unavailable — fall through to the legacy key gate */ }
+          const hasContent = (e: StaticHoleKnowledge | undefined | null): boolean =>
+            !!e && (!!e.note || !!e.description || (e.hazards?.length ?? 0) > 0);
+          if (twiceAround && !hasContent(direct)) return book.holes[hole - 9] ?? direct ?? null;
+          if (!direct) {
+            const keys = Object.keys(book.holes).map(Number);
+            if (keys.length > 0 && keys.every(k => k <= 9)) return book.holes[hole - 9] ?? null;
+          }
         }
-        return null;
+        return direct ?? null;
       },
 
       saveCourseBook: ({ course_id, name, holes, tips, about, website, phone, bookingUrl, nowMs }) => {

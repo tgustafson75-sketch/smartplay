@@ -575,7 +575,11 @@ function armDeadHostGuard(apiUrl: string, controller: AbortController): { cancel
     try {
       const pc = new AbortController();
       const pt = setTimeout(() => pc.abort(), timeoutMs);
-      const r = await fetch(`${apiUrl}/api/health`, { method: 'GET', signal: pc.signal }).finally(() => clearTimeout(pt));
+      // 2026-08-08 (verification wave) — ?lite=1: the bare /api/health runs 3 BILLABLE provider probes
+      // with ~3s internal timeouts + cold start, so a 3s client budget timed out spuriously on a healthy
+      // host (false-abort risk) and every armed guard burned paid provider calls. lite answers instantly
+      // and free — it's a REACHABILITY probe, provider health is irrelevant here.
+      const r = await fetch(`${apiUrl}/api/health?lite=1`, { method: 'GET', signal: pc.signal }).finally(() => clearTimeout(pt));
       return r.ok;
     } catch { return false; }
   };

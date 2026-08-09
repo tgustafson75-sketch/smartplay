@@ -74,8 +74,32 @@ function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
     pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
   }
   if (pathLen <= 1e-6) return false;
-  const netSpan = Math.hypot(pts[pts.length - 1].x - pts[0].x, pts[pts.length - 1].y - pts[0].y);
-  if (netSpan / pathLen < 0.45) return false;
+  // 2026-08-08 (verification wave — "still don't see club trace" root #2) — whole-path efficiency
+  // STRUCTURALLY rejects a COMPLETE swing: address→top→impact→finish doubles back on itself, so
+  // netSpan/pathLen lands ~0.33 (< 0.45) and a perfect full-swing arc was thrown away as "scatter" —
+  // deterministically, on every retry. The insight that survives: a real sweep is SMOOTH PER LEG while
+  // scatter zig-zags at every scale. So: pass if the whole path is efficient (partial arcs, unchanged),
+  // OTHERWISE split at the apex (farthest point from the start — the top of the swing) and require each
+  // leg to be efficient, recursing one more level for legs that themselves double back (impact→finish).
+  // Grip/ball/background scatter stays rejected: its legs zig-zag no matter how it's split.
+  const eff = (a: number, b: number): boolean => {
+    let len = 0;
+    for (let i = a + 1; i <= b; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    if (len <= 1e-6) return false;
+    return Math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y) / len >= 0.45;
+  };
+  const smooth = (a: number, b: number, depth: number): boolean => {
+    if (eff(a, b)) return true;
+    if (depth <= 0 || b - a < 5) return false; // too few points to claim a doubled-back real arc
+    let apex = a + 1, best = -1;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.hypot(pts[i].x - pts[a].x, pts[i].y - pts[a].y);
+      if (d > best) { best = d; apex = i; }
+    }
+    if (apex <= a + 1 || apex >= b - 1) return false; // apex at an end = no real turnaround
+    return smooth(a, apex, depth - 1) && smooth(apex, b, depth - 1);
+  };
+  if (!smooth(0, pts.length - 1, 2)) return false;
   return true;
 }
 

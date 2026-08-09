@@ -223,6 +223,17 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
   if (/\b(sw|sand\s*wedge)\b/.test(p))     return { club_id: 'SW', club_type: 'wedge' };
   if (/\b(lw|lob\s*wedge)\b/.test(p))      return { club_id: 'LW', club_type: 'wedge' };
 
+  // 2026-08-08 (verification wave) — wedges BY LOFT ("56 degree", "60"+"degree wedge"): the brain's
+  // register_bag tool description explicitly teaches the model to emit these phrases, but nothing
+  // parsed them — the promised phrasing always landed in `missed`. Map loft → the bag's wedge slots
+  // (46-49 → PW, 50-53 → GW, 54-57 → SW, 58-64 → LW).
+  const deg = p.match(/\b(4[6-9]|5[0-9]|6[0-4])\s*(?:degrees?|deg\b|°)/);
+  if (deg) {
+    const loft = Number(deg[1]);
+    const id: ClubId = loft <= 49 ? 'PW' : loft <= 53 ? 'GW' : loft <= 57 ? 'SW' : 'LW';
+    return { club_id: id, club_type: 'wedge' };
+  }
+
   // Bare "wedge" → ambiguous, return null so caller can prompt
   if (/\bwedge\b/.test(p)) return null;
 
@@ -230,8 +241,10 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
   const hyb = p.match(/\b([2-5])\s*(?:h|hybrid|rescue)\b/);
   if (hyb) return { club_id: `${hyb[1]}H` as ClubId, club_type: 'hybrid' };
 
-  // Woods: "3 wood", "5w", "fairway 3"
-  const wood = p.match(/\b([3579])\s*(?:w|wood)\b/);
+  // Woods: "3 wood", "5w", "fairway 3". 2026-08-08 — '9' removed: there is NO 9W slot in
+  // CLUB_ORDER/ClubName, so a parsed '9W' flowed into stores as a garbage key no reader ever read
+  // (while the caddie confirmed it). Out-of-bag clubs must land in `missed` (ask), never register.
+  const wood = p.match(/\b([357])\s*(?:w|wood)\b/);
   if (wood) return { club_id: `${wood[1]}W` as ClubId, club_type: 'wood' };
 
   // Numbered irons: "6 iron", "6-iron". 2026-05-17 — the bare-digit

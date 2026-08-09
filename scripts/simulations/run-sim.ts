@@ -1033,7 +1033,9 @@ check('Swing report PDF: WHITE professional coaching report with practice plan +
       /width: auto; max-width: 100%; max-height: 4\.2in/.test(rep) &&             // frame sizes to its aspect
       /shared \/ cau\.size >= 0\.7/.test(rep) &&                                  // dupe cause dropped
       /FAMILY\[rawClub\.toUpperCase\(\)\]/.test(caller) &&                        // "H" → "Hybrid"
-      /getDrillEntry\(String\(issueId\)\)/.test(caller) &&                        // catalog drills w/ steps
+      // 2026-08-08 (verification wave) — issue_id-then-primary_fault: the old `issueId ??` fallback was
+      // dead (issue_id is required), so 'tentative_read' sessions lost the named-drill plan.
+      /getDrillEntry\(String\(pi\.issue_id\)\) \?\? getDrillEntry\(String\(pi\.primary_fault/.test(caller) && // catalog drills w/ real fallback
       /strengths: pi\.strengths \?\? null/.test(caller)
     );
   })(),
@@ -1133,6 +1135,11 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
       /stats\.setManual\(name, yds\)/.test(reg) &&                                  // honest stated carry
       /yds < 30 \|\| yds > 400/.test(reg) &&                                        // plausibility clamp
       /name: 'register_bag'/.test(turn) &&                                          // brain tool declared
+      // 2026-08-08 (verification wave) — REACHABILITY, not just presence: the tool was declared and the
+      // client case existed while the server dispatch fell through to bare 'Done.' (no toolActions.push)
+      // → the caddie verbally confirmed a bag it never recorded and THIS guard stayed green. Require
+      // register_bag in the UI_TOOLS dispatch set so the action actually reaches the client.
+      /UI_TOOLS = new Set\(\[[\s\S]*?'register_bag'[\s\S]*?\]\)/.test(turn) &&    // server DISPATCHES it
       /register_bag stays ON/.test(turn) &&                                         // interview exemption
       /case 'register_bag':/.test(disp) &&                                          // client dispatch
       !/NAV_OPEN_ACTIONS = new Set\(\[[^\]]*register_bag/.test(disp) &&             // not suppressed in interview

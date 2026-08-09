@@ -30,7 +30,12 @@ for(const e of j.elements||[]){if(e.type!=='way'||!e.geometry)continue;const pts
 console.log(`  OSM: ${greens.length} greens, ${holes.length} hole-ways`);
 const nearestGreen=p=>{let best=null,bd=Infinity;for(const g of greens){const d=hav(p,g.c);if(d<bd){bd=d;best=g;}}return {g:best,d:bd};};
 const rows=[];
-for(const h of holes.filter(x=>x.ref!=null).sort((a,b)=>a.ref-b.ref)){
+// 2026-08-08 — dedup split ways: OSM splits a hole way at crossings, every segment keeps ref/par.
+// Keep the LONGEST segment per ref (the main tee->green line) so duplicates can't emit twice.
+const wl=w=>{let L=0;for(let i=1;i<w.pts.length;i++)L+=hav(w.pts[i-1],w.pts[i]);return L;};
+const byRef=new Map();
+for(const h of holes){if(h.ref==null)continue;const p0=byRef.get(h.ref);if(!p0||wl(h)>wl(p0))byRef.set(h.ref,h);}
+for(const h of [...byRef.values()].sort((a,b)=>a.ref-b.ref)){
   const A=h.pts[0],B=h.pts[h.pts.length-1];
   const gA=nearestGreen(A),gB=nearestGreen(B);
   const greenEnd=gA.d<=gB.d?{end:A,g:gA.g}:{end:B,g:gB.g};

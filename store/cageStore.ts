@@ -1536,11 +1536,13 @@ export const useCageStore = create<CageState>()(
         set(s => {
           const apply = (session: CageSession): CageSession => {
             if (session.id !== sessionId) return session;
-            // 2026-07-30 (analysis audit P6) — a failed re-run yields <4 points; never overwrite a
-            // previously-good arc (≥4 pts) with an empty/short one. Keep the good arc + its frame.
+            // 2026-07-30 (analysis audit P6) — a failed re-run yields too few points; never overwrite a
+            // previously-good arc with an empty/short one. Keep the good arc + its frame.
+            // 2026-08-08 (verification wave) — bar lowered 4→3 to match MIN_ARC_POINTS everywhere else;
+            // the stale 4 rejected a VALID 3-point re-run arc that the draw path accepts.
             const incomingLen = Array.isArray(arc) ? arc.length : 0;
             const existingLen = Array.isArray(session.club_arc) ? session.club_arc.length : 0;
-            if (incomingLen < 4 && existingLen >= 4) return session;
+            if (incomingLen < 3 && existingLen >= 3) return session;
             return { ...session, club_arc: arc, club_arc_frame: frame ?? session.club_arc_frame ?? null };
           };
           // 2026-07-30 (analysis audit P4) — dual-patch activeSession so a write that lands before
@@ -1582,10 +1584,10 @@ export const useCageStore = create<CageState>()(
               ...session,
               shots: session.shots.map(sh => {
                 if (sh.id !== shotId) return sh;
-                // P6 — same "don't downgrade good→empty" guard as the session-level arc.
+                // P6 — same "don't downgrade good→empty" guard as the session-level arc (bar 3 = MIN_ARC_POINTS).
                 const incomingLen = Array.isArray(arc) ? arc.length : 0;
                 const existingLen = Array.isArray(sh.club_arc) ? sh.club_arc.length : 0;
-                if (incomingLen < 4 && existingLen >= 4) return sh;
+                if (incomingLen < 3 && existingLen >= 3) return sh;
                 return { ...sh, club_arc: arc, club_arc_frame: frame ?? sh.club_arc_frame ?? null };
               }),
             };

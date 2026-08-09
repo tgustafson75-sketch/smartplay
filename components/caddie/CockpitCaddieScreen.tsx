@@ -227,6 +227,13 @@ export default function CockpitCaddieScreen({
 
   const handleStepperHole = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
+    // 2026-08-08 (verification wave P0) — flush any pending shots BEFORE moving the hole. The natural
+    // "log 5, advance" gesture used to let the 1.6s settle-timer fire AFTER the hole changed, and the
+    // commit read currentHole at COMMIT time → the score landed on the WRONG hole (then first-score
+    // auto-advance jumped again). The pending value is stamped with its hole at tap time (below) and
+    // settled synchronously here, so the score can only ever land where it was tapped.
+    if (pendingCommitTimerRef.current) { clearTimeout(pendingCommitTimerRef.current); pendingCommitTimerRef.current = null; }
+    commitPendingShots();
     setCurrentHole(next);
   };
   // 2026-08-08 (progression audit P0-1, Tim-approved) — the SHOTS stepper used to COMMIT on every "+"
@@ -237,25 +244,48 @@ export default function CockpitCaddieScreen({
   // pending value so navigating away can't drop the score just tapped in.
   const [pendingShots, setPendingShots] = useState<number | null>(null);
   const pendingShotsRef = useRef<number | null>(null);
+  // 2026-08-08 (verification wave P0) — the pending value is stamped with the HOLE (and par) it was
+  // tapped on. The commit used to read currentHole at COMMIT time, so any hole change inside the 1.6s
+  // settle window (hole stepper, GPS auto-advance — MORE likely now that the market model advances
+  // unscored holes at the next tee — or voice nav) landed the score on the wrong hole and then
+  // auto-advanced again. Commit now writes to the tap-time hole, always.
+  const pendingHoleRef = useRef<number | null>(null);
+  const pendingParRef = useRef<number>(4);
   const pendingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitPendingShots = useCallback(() => {
     const val = pendingShotsRef.current;
+    const hole = pendingHoleRef.current;
+    const holePar = pendingParRef.current;
     pendingShotsRef.current = null;
+    pendingHoleRef.current = null;
     setPendingShots(null);
-    if (val == null || val <= 0) return;
-    const hole = useRoundStore.getState().currentHole;
-    const alreadyScored = (useRoundStore.getState().scores[hole] ?? 0) > 0;
+    if (val == null || val <= 0 || hole == null) return;
+    const st = useRoundStore.getState();
+    // Unmount-commit can fire AFTER endRound reset the store — logScore has no active-round guard, so
+    // writing here would pollute the dead store and miss the saved round record. Drop it instead.
+    if (!st.isRoundActive) return;
+    const alreadyScored = (st.scores[hole] ?? 0) > 0;
     logScore(hole, val);
-    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(val, par);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logScore, par]);
+    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(val, holePar);
+  }, [logScore]);
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
     pendingShotsRef.current = next;
+    pendingHoleRef.current = useRoundStore.getState().currentHole;
+    pendingParRef.current = par;
     setPendingShots(next);
     if (pendingCommitTimerRef.current) clearTimeout(pendingCommitTimerRef.current);
     pendingCommitTimerRef.current = setTimeout(commitPendingShots, 1600);
   };
+  // Any OTHER hole change (GPS auto-advance, voice nav — paths that don't go through the stepper)
+  // settles the pending score immediately, to its tap-time hole. Also stops the stale pending count
+  // from displaying over the new hole's stepper.
+  useEffect(() => {
+    if (pendingShotsRef.current != null && pendingHoleRef.current != null && pendingHoleRef.current !== currentHole) {
+      if (pendingCommitTimerRef.current) { clearTimeout(pendingCommitTimerRef.current); pendingCommitTimerRef.current = null; }
+      commitPendingShots();
+    }
+  }, [currentHole, commitPendingShots]);
   useEffect(() => () => {
     if (pendingCommitTimerRef.current) clearTimeout(pendingCommitTimerRef.current);
     commitPendingShots();
