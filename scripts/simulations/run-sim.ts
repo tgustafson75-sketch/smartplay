@@ -7962,6 +7962,25 @@ check('Club attribution: advised club becomes the shot club when un-overridden, 
   })(),
   'caddie advises 8i, player hits it silently -> the 8-iron is logged, adherence stamped, and the measured distance trains the bag');
 
+// 2026-08-09 (mechanical dead-export audit, ts-prune) — team-intelligence had FOUR detection
+// triggers + a full suggestion UI (CaddieSuggestionCard + accept flow), and only ONE trigger
+// (round progress) was ever called. drill_plateau, cage_frustration and user_explicit_stuck were
+// dead since Phase 106. REACHABILITY lock: every evaluator must keep a real caller.
+check('Team intelligence: ALL four triggers reachable (cage end, shot streak, round progress, explicit stuck)',
+  (() => {
+    const cage = read('app/cage/summary.tsx');
+    const cad = read('app/(tabs)/caddie.tsx');
+    const brain = read('services/conversationalBrain.ts');
+    return (
+      /ti\.evaluateCageEnd\(\)/.test(cage) &&
+      /ti\.evaluateCageShotStreak\(maxStreak\)/.test(cage) &&
+      /evaluateRoundProgress\(\)/.test(cad) &&
+      /ti\.evaluateUserExplicitStuck\(pillar\)/.test(brain) &&
+      /contact === 'fat' \|\| contact === 'thin' \|\| contact === 'topped'/.test(cage)  // conservative mishit gate
+    );
+  })(),
+  'the team-of-caddies handoff suggestions can actually fire: plateau + frustration at cage end, stuck via voice, struggle on-course');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →

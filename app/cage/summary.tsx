@@ -162,6 +162,25 @@ export default function CageSummary() {
       const drill = issue ? recommendDrill(issue.issue_id as never) : null;
       setPrimaryIssue(issue);
       if (drill) setDrillRec(drill);
+      // 2026-08-09 (dead-trigger audit) — the team-intelligence CAGE boundary. evaluateCageEnd
+      // (drill-plateau: same dominant fault 3 sessions running) and evaluateCageShotStreak
+      // (frustration: N consecutive real mishits) were built + thresholded + had a full suggestion
+      // UI (CaddieSuggestionCard) — and were never called from anywhere. This is their designed
+      // boundary moment (session analysis complete). Best-effort; detection stays conservative.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const ti = require('../../services/teamIntelligence') as typeof import('../../services/teamIntelligence');
+        ti.evaluateCageEnd();
+        const fresh = useCageStore.getState().sessionHistory.find((x) => x.id === session.id);
+        let streak = 0; let maxStreak = 0;
+        for (const sh of fresh?.shots ?? []) {
+          const contact = sh.perShotAnalysis?.contact_read;
+          const bad = contact === 'fat' || contact === 'thin' || contact === 'topped';
+          streak = bad ? streak + 1 : 0;
+          if (streak > maxStreak) maxStreak = streak;
+        }
+        ti.evaluateCageShotStreak(maxStreak);
+      } catch { /* suggestions are best-effort — never block the summary */ }
       cageLog('summary-phase-k-result', issue ? 'ok' : 'partial', {
         session_id: session.id,
         results_count: results.length,
