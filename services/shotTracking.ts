@@ -101,8 +101,19 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
   const approachYards = approachFromLocation(hole, loc);
 
   const clubStats = useClubStatsStore.getState();
+  // 2026-08-09 (Tim — "missing major club use logic") — attribution priority: explicit caller club >
+  // the more RECENT of the player's declared club vs the caddie's ADVICE (silent adherence — the
+  // caddie says "8-iron", the player hits it without a word — now attributes the 8-iron, and via
+  // confirmTrackedShot its MEASURED distance trains the learned bag) > distance inference (a guess,
+  // last resort). normalizeClub keeps the resolver's string vocab out of the ClubName union.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resolveShotClub } = require('./shotClubResolver') as typeof import('./shotClubResolver');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { normalizeClub: normClub } = require('./clubNormalize') as typeof import('./clubNormalize');
+  const resolved = resolveShotClub(opts?.club ?? null);
   const club: ClubName | null =
-    opts?.club ?? (shotDistanceYards != null && shotDistanceYards > 0 ? clubStats.inferClub(shotDistanceYards) : null);
+    (resolved.club != null ? normClub(resolved.club) : null)
+    ?? (shotDistanceYards != null && shotDistanceYards > 0 ? clubStats.inferClub(shotDistanceYards) : null);
 
   shotSeq += 1;
   const shotId = `track-${Date.now()}-${shotSeq}`;
@@ -126,8 +137,14 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
     // measuredCarry guard (distance_yards !== gps_distance_yards) correctly EXCLUDES it from training the
     // learned per-club carry the caddie quotes. It stays a DISPLAY distance; it just doesn't teach the bag.
     gps_distance_yards: shotDistanceYards ?? undefined,
+    // 2026-08-09 — adherence stamped on TRACKED shots too (was voice-only), and the rec is consumed
+    // below so it can't leak onto the next shot.
+    kevin_rec_club: resolved.recClub,
+    kevin_rec_shape: resolved.recShape,
+    kevin_adhered: resolved.adhered,
   };
   round.logShot(shot);
+  if (resolved.recClub != null) round.clearPendingKevinRec();
 
   return { ok: true, shotDistanceYards, approachYards, distanceSource, club, shotId };
 }

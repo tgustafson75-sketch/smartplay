@@ -304,8 +304,13 @@ function dispatchOne(a: AnyAction): void {
         const fix = (require('../gpsManager') as typeof import('../gpsManager')).getLastFix();
         if (fix) startLoc = { lat: fix.lat, lng: fix.lng };
       } catch { /* non-fatal */ }
-      const pendingRec = round.pendingKevinRec ?? null;
-      const shotClub = a.club ?? round.club ?? null;
+      // 2026-08-09 (Tim — club-use logic) — ONE arbiter: explicit club > the more RECENT of the
+      // player's declared club vs the caddie's advice. Silent adherence now attributes the ADVISED
+      // club to the shot (it used to log club:null and learn nothing).
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { resolveShotClub } = require('../shotClubResolver') as typeof import('../shotClubResolver');
+      const resolved = resolveShotClub(typeof a.club === 'string' ? a.club : null);
+      const shotClub = resolved.club;
       const shotHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : round.currentHole;
       const dist = typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 500
         ? Math.round(a.distance_yards) : null;
@@ -323,9 +328,9 @@ function dispatchOne(a: AnyAction): void {
         start_location: startLoc,
         distance_yards: dist,
         shot_number: typeof a.shot_number === 'number' && a.shot_number > 0 ? Math.round(a.shot_number) : null,
-        kevin_rec_club: pendingRec?.club ?? null,
-        kevin_rec_shape: pendingRec?.shape ?? null,
-        kevin_adhered: pendingRec?.club != null && shotClub != null ? shotClub === pendingRec.club : null,
+        kevin_rec_club: resolved.recClub,
+        kevin_rec_shape: resolved.recShape,
+        kevin_adhered: resolved.adhered,
       });
       round.clearPendingKevinRec();
       break;

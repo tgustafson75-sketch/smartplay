@@ -7937,6 +7937,31 @@ check('Course download engine: every export REACHABLE (arrival + selection + rou
   })(),
   'arriving at a course auto-downloads it (Arccos flow); selecting or starting a round marks offline availability — no dead exports');
 
+// 2026-08-09 (Tim — "missing major club use logic... If user does not change the advised club then
+// that use should be logged and tied to the distances") — the CLUB ATTRIBUTION chain. One arbiter
+// (services/shotClubResolver): explicit > more-recent-of declared vs ADVISED (silent adherence
+// attributes the advised club) > distance inference last. Consumed at ALL THREE shot-log sites, the
+// advice hard-expires on hole change, and tracked shots feed the learned bag via confirmTrackedShot.
+check('Club attribution: advised club becomes the shot club when un-overridden, at EVERY log site',
+  (() => {
+    const res = read('services/shotClubResolver.ts');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    const cad = read('app/(tabs)/caddie.tsx');
+    const trk = read('services/shotTracking.ts');
+    const rs = read('store/roundStore.ts');
+    return (
+      /export function resolveShotClub/.test(res) &&
+      /source: 'advised', adhered: true/.test(res) &&                             // silent adherence attributes
+      /resolveShotClub\(typeof a\.club === 'string' \? a\.club : null\)/.test(disp) &&
+      /resolveShotClub\(typeof a\.club === 'string' \? a\.club : null\)/.test(cad) &&
+      /resolveShotClub\(opts\?\.club \?\? null\)/.test(trk) &&                  // tracked shots too
+      /kevin_adhered: resolved\.adhered/.test(trk) &&
+      /userStatedYardage: null, pendingKevinRec: null/.test(rs) &&                // advice dies with the hole
+      /setClub: \(club\) => set\(\{ club, clubSetAt: Date\.now\(\) \}\)/.test(rs) // recency arbitration is real
+    );
+  })(),
+  'caddie advises 8i, player hits it silently -> the 8-iron is logged, adherence stamped, and the measured distance trains the bag');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →

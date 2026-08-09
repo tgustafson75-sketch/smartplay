@@ -1612,7 +1612,12 @@ export default function CaddieTab() {
         // FIX B9 — use the club from the tool args first; fall back to the store's
         // last-known club so the shot is never silently de-clubbed when Kevin
         // extracts a club name from the player's utterance.
-        const shotClub: string | null = a.club ?? useRoundStore.getState().club ?? null;
+        // 2026-08-09 (Tim — club-use logic) — same arbiter as the dispatch path: explicit > more
+        // recent of declared vs ADVISED. Silent adherence attributes the advised club.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { resolveShotClub } = require('../../services/shotClubResolver') as typeof import('../../services/shotClubResolver');
+        const resolvedClub = resolveShotClub(typeof a.club === 'string' ? a.club : null);
+        const shotClub: string | null = resolvedClub.club;
         // FIX B9 — snapshot GPS position at log time so start_location is the
         // player's actual position when the shot was hit, not stale or null.
         let shotStartLocation: ShotLocation | null = null;
@@ -1624,12 +1629,8 @@ export default function CaddieTab() {
         } catch { /* non-fatal — start_location stays null */ }
         // FIX M8 — snapshot Kevin's pending rec before building the shot so
         // adherence is stamped, then clear the slot.
-        const brainPendingRec = useRoundStore.getState().pendingKevinRec ?? null;
-        const brainKevinRecClub = brainPendingRec?.club ?? null;
-        const brainKevinAdhered =
-          brainKevinRecClub != null && shotClub != null
-            ? shotClub === brainKevinRecClub
-            : null;
+        const brainKevinRecClub = resolvedClub.recClub;
+        const brainKevinAdhered = resolvedClub.adhered;
         // 2026-07-04 (Tim — compound statements) — honor a hole/distance the player
         // named ("...on hole 3 with 210 yards") instead of dropping them: log the shot
         // against the stated hole, and stamp the stated yardage when nothing measured it.
@@ -1652,7 +1653,7 @@ export default function CaddieTab() {
           // 2026-07-04 (clean-audit M1) — stop dropping the stated shot ordinal.
           shot_number: typeof a.shot_number === 'number' && a.shot_number > 0 ? Math.round(a.shot_number) : null,
           kevin_rec_club: brainKevinRecClub,
-          kevin_rec_shape: brainPendingRec?.shape ?? null,
+          kevin_rec_shape: resolvedClub.recShape,
           kevin_adhered: brainKevinAdhered,
         };
         logShot(shot);

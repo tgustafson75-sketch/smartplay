@@ -420,7 +420,11 @@ interface RoundState {
   // FIX M8 — Kevin's last shot recommendation, held until the next log_shot
   // fires so adherence (did the player follow the club call?) can be stamped
   // onto the ShotResult. Cleared by clearPendingKevinRec after each shot.
-  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null } | null;
+  // 2026-08-09 (Tim — "missing major club use logic") — WHEN the player last declared a club, so shot
+  // attribution can arbitrate "user declared 7i" vs "caddie advised 8i" by recency (advised stands
+  // unless the player changed club AFTER the advice).
+  clubSetAt: number | null;
+  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number } | null;
 
   roundStartTime: number | null;
   roundNumber: number;
@@ -510,7 +514,7 @@ interface RoundState {
   clearPendingLieAnalysis: () => void;
 
   // FIX M8 — Kevin recommendation adherence tracking.
-  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null } | null) => void;
+  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number } | null) => void;
   clearPendingKevinRec: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;
@@ -791,13 +795,14 @@ export const useRoundStore = create<RoundState>()(
       pendingLieAnalysis: null,
 
       // FIX M8 — Kevin's last recommendation, cleared after each shot is logged.
+      clubSetAt: null,
       pendingKevinRec: null,
 
       setSelectedTee: (color) => set({ selectedTee: color }),
       setTransportMode: (m) => set({ transportMode: m }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
-      setPendingKevinRec: (rec) => set({ pendingKevinRec: rec }),
+      setPendingKevinRec: (rec) => set({ pendingKevinRec: rec ? { at: Date.now(), ...rec } : null }),
       clearPendingKevinRec: () => set({ pendingKevinRec: null }),
 
       // 2026-05-24 — Append + soft-cap. 500-entry FIFO keeps the
@@ -2137,7 +2142,10 @@ export const useRoundStore = create<RoundState>()(
         const holeData = state.courseHoles.find(h => h.hole === clamped);
         // 2026-05-25 — Clear userStatedYardage when advancing holes;
         // a number you spoke on hole 5 is meaningless on hole 6.
-        const clearStated = prevHole !== clamped ? { userStatedYardage: null } : {};
+        // 2026-08-09 (club-use logic) — the caddie's pending club REC clears with the hole too: advice
+        // for the approach on 5 must never attribute a club to a shot on 6 (the shot-club resolver
+        // arbitrates declared-vs-advised by recency; hole change hard-expires the advice side).
+        const clearStated = prevHole !== clamped ? { userStatedYardage: null, pendingKevinRec: null } : {};
         set({ currentHole: clamped, currentYardage: holeData?.distance ?? null, ...clearStated });
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
@@ -2199,7 +2207,7 @@ export const useRoundStore = create<RoundState>()(
       },
 
       clearUserStatedYardage: () => set({ userStatedYardage: null }),
-      setClub: (club) => set({ club }),
+      setClub: (club) => set({ club, clubSetAt: Date.now() }),
       setMentalState: (state) => set({ mentalState: state }),
       setRiskMode: (mode) => set({ riskMode: mode }),
 
