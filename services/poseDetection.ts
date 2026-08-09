@@ -645,7 +645,7 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
 export async function locateSwingWindow(
   clipUri: string,
   durationMs: number,
-): Promise<{ startSec: number; endSec: number } | null> {
+): Promise<{ startSec: number; endSec: number; swingTimeSec: number } | null> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
     logLocate('swing_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_under_12s' : 'no_api_url', dur_ms: durationMs });
@@ -707,7 +707,12 @@ export async function locateSwingWindow(
       confidence: data.confidence ?? null, coarse_frames: frames.length,
     });
     logLocate('swing_located', { swing_time_sec: Math.round(t * 10) / 10, start_sec: Math.round(startSec * 10) / 10, end_sec: Math.round(endSec * 10) / 10, confidence: data.confidence ?? null });
-    return { startSec, endSec };
+    // 2026-08-09 (verification wave C1) — return the IMPACT ESTIMATE itself, not just the window.
+    // Callers used to convert this to a window and throw the anchor away, then sample "impact" at a
+    // fixed 65% window fraction — which lands ~1.1s AFTER the ball (impact truly sits at 2.5/5.5 =
+    // 45.5% of this window). Threading swingTimeSec lets the strike-anchored sampling branch (the
+    // correct one) run for uploads too.
+    return { startSec, endSec, swingTimeSec: t };
   } catch (e) {
     V6('LOCATE — failed (fallback to wide spread)', { error: e instanceof Error ? e.message : String(e) });
     logLocate('swing_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });

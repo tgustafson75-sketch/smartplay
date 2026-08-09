@@ -2224,7 +2224,13 @@ export default function SmartMotion() {
     setTempo(null);
     void (async () => {
       try {
-        const t = await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
+        // 2026-08-09 (verification wave speed #2) — the pose pass already extracted ~20 dense wrist
+        // frames across this exact swing; reading tempo from them is FREE (zero decodes) and uses the
+        // same wrist-Y top/takeaway logic. Only when the dense read can't produce an honest ratio
+        // (sparse frames / no interior top) do we pay the old full copy + 11-thumbnail decode pass.
+        const { tempoFromPoseFrames } = await import('../../services/poseAnalysisApi');
+        const dense = tempoFromPoseFrames(biomech?.frames, seg.strikeMs, impactSource);
+        const t = dense.ratio != null ? dense : await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
         if (cancelled) return;
         tempoCacheRef.current[cacheKey] = t;
         setTempo(t);
@@ -2234,7 +2240,7 @@ export default function SmartMotion() {
       }
     })();
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing, isPutt]);
+  }, [clipUri, segments, selectedSwing, isPutt, biomech]);
 
   // Address still for the targeting card / ball auto-detect. Sample near
   // the start of the selected swing (or ~12% into a single clip) where
@@ -3067,17 +3073,14 @@ export default function SmartMotion() {
             }
             if (s0 && (s0.peakDb ?? 0) !== 0) {
               if (audioUriRef.current) {
-                // 4 s cap so ball-speed never delays the runAnalysis call.
-                // Race resolves null on timeout; .catch handles any throw.
-                const speed = await Promise.race([
-                  detectBallSpeed({
-                    audioUri: audioUriRef.current,
-                    impact_ms: s0.strikeMs,
-                    club: clubIdToServerKey(clubRef.current),
-                  }),
-                  new Promise<null>(resolve => setTimeout(() => resolve(null), 4_000)),
-                ]).catch(() => null);
-                if (speed) setBallSpeed(speed);
+                // 2026-08-09 (verification wave speed #4) — fire-and-forget, matching the cage path. The
+                // old `await Promise.race(...4s)` sat SERIALLY above runAnalysis despite its own comment
+                // claiming it "never delays" it — up to 4s of dead time before the verdict started.
+                void detectBallSpeed({
+                  audioUri: audioUriRef.current,
+                  impact_ms: s0.strikeMs,
+                  club: clubIdToServerKey(clubRef.current),
+                }).then(speed => { if (speed) setBallSpeed(speed); }).catch(() => undefined);
               }
             }
           }

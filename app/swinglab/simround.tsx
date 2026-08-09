@@ -318,7 +318,7 @@ export default function SwingSimScreen() {
 
       {stage === 'lobby' ? (
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          <Text style={s.lobbyLead}>Your real bag. Your real tendencies. Your real tempo. A full round from wherever you're standing.</Text>
+          <Text style={s.lobbyLead}>Your real bag. Your real tendencies. Your real tempo. A full round from wherever you’re standing.</Text>
           {SIM_COURSES.map((id) => {
             const c = COURSES.find((x) => x.id === id)!;
             return (
@@ -368,7 +368,7 @@ export default function SwingSimScreen() {
               </ScrollView>
             </View>
           ) : null}
-          {bag.some((b) => !b.learned) ? <Text style={s.honest}>* standard yardage — tell me your real number ("my 7-iron goes 165") and the sim uses yours.</Text> : null}
+          {bag.some((b) => !b.learned) ? <Text style={s.honest}>* standard yardage — tell me your real number (“my 7-iron goes 165”) and the sim uses yours.</Text> : null}
           <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button" accessibilityLabel="Tee off">
             <Text style={s.teeOffText}>{ghost ? 'TEE OFF vs GHOST' : 'TEE OFF'}</Text>
           </TouchableOpacity>

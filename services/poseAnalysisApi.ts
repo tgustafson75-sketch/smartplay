@@ -977,6 +977,70 @@ function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null 
  * between them. Honest — the anchors are measured positions, and we return NO_TEMPO (all-null → no fault)
  * whenever they aren't cleanly present. `video_pose` because the impact came from the video segmenter.
  */
+/**
+ * 2026-08-09 (verification wave C3 + speed #2) — HONEST tempo from the dense pose frames the biomech
+ * pass ALREADY extracted, anchored on a REAL impact time (acoustic strike or the vision locator's
+ * estimate). Reads the actual wrist-Y series — top = hands highest, takeaway = 20% of observed travel —
+ * with the same sanity gates as deriveSwingTempo, but with ZERO extra video decodes (the old upload
+ * path re-copied the clip + ran 11 more thumbnail+pose calls; worse, tempoFromBiomechanics computed the
+ * ratio from SYNTHETIC anchor timestamps, which is a CONSTANT of the offset table — every windowed
+ * upload returned exactly the same "tempo" regardless of the swing. Fabricated metric, now dead).
+ * Returns NO_TEMPO whenever the series is too sparse or shows no clean interior top — never a guess.
+ */
+export function tempoFromPoseFrames(
+  frames: PoseFrame[] | null | undefined,
+  impactMs: number | null | undefined,
+  impactSource: 'acoustic' | 'video' = 'video',
+): SwingTempo {
+  if (!frames || frames.length === 0 || impactMs == null || !(impactMs > 0)) return NO_TEMPO;
+  // Backswing-side wrist series: strictly before impact (small guard so the impact frame itself
+  // never reads as "top" when the hands are low through the ball).
+  const series: { t: number; y: number; frame: PoseFrame }[] = [];
+  for (const f of [...frames].sort((a, b) => a.timestampMs - b.timestampMs)) {
+    if (f.timestampMs > impactMs - 80) continue;
+    const lw = getKp(f, 'left_wrist');
+    const rw = getKp(f, 'right_wrist');
+    const ys = [lw?.y, rw?.y].filter((v): v is number => typeof v === 'number');
+    if (ys.length === 0) continue;
+    series.push({ t: f.timestampMs, y: ys.reduce((a, b) => a + b, 0) / ys.length, frame: f });
+  }
+  if (series.length < 6) return NO_TEMPO;
+  if (series[series.length - 1].t - series[0].t < 350) return NO_TEMPO;
+  let topIdx = 0;
+  for (let i = 1; i < series.length; i++) if (series[i].y < series[topIdx].y) topIdx = i;
+  if (topIdx === 0 || topIdx === series.length - 1) return NO_TEMPO; // no interior reversal = no read
+  const addressY = series[0].y;
+  const travel = addressY - series[topIdx].y;
+  if (travel <= 0) return NO_TEMPO;
+  const onsetDelta = travel * 0.2;
+  let takeIdx = 0;
+  for (let i = 0; i <= topIdx; i++) {
+    if (addressY - series[i].y >= onsetDelta) { takeIdx = i; break; }
+  }
+  const topMs = series[topIdx].t;
+  const backswingMs = topMs - series[takeIdx].t;
+  const downswingMs = impactMs - topMs;
+  if (downswingMs < 80 || downswingMs > 700) return NO_TEMPO;
+  if (backswingMs < 250 || backswingMs > 1600) return NO_TEMPO;
+  const ratio = backswingMs / downswingMs;
+  if (!(ratio >= 1.0 && ratio <= 6.0)) return NO_TEMPO;
+  // Sequencing from the real top frame + the frame nearest impact (must be within 150ms to count).
+  let sequencingScore: number | null = null;
+  const near = [...frames].sort((a, b) => Math.abs(a.timestampMs - impactMs) - Math.abs(b.timestampMs - impactMs))[0];
+  if (near && Math.abs(near.timestampMs - impactMs) <= 150) {
+    sequencingScore = sequencingFromFrames(series[topIdx].frame, near);
+  }
+  return {
+    ratio: Math.round(ratio * 10) / 10,
+    backswingMs,
+    downswingMs,
+    topMs,
+    sequencingScore,
+    source: impactSource === 'acoustic' ? 'acoustic_pose' : 'video_pose',
+    confidence: series.length >= 8 && takeIdx > 0 ? 'med' : 'low',
+  };
+}
+
 export function tempoFromBiomechanics(bio: SwingBiomechanics | null): SwingTempo {
   const fr = bio?.frames ?? [];
   const p1 = fr.find(f => f.position === 'P1_address');

@@ -73,7 +73,7 @@ export default function AddCourseScreen() {
           <AppIcon name="camera-outline" size={48} color={colors.accent} />
           <Text style={[styles.lead, { color: colors.text_primary }]}>Snap or pick a scorecard</Text>
           <Text style={[styles.sub, { color: colors.text_secondary }]}>
-            Course not in the database? Take a clear photo of the scorecard (par + yardage rows) and I'll build the course so you can play it.
+            Course not in the database? Take a clear photo of the scorecard (par + yardage rows) and I’ll build the course so you can play it.
           </Text>
           <TouchableOpacity style={[styles.cta, { backgroundColor: colors.accent }]} onPress={pickAndParse}>
             <Text style={styles.ctaText}>Pick scorecard photo</Text>

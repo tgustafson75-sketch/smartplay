@@ -474,17 +474,38 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         : await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
       if (durMs >= MULTI_SWING_UPLOAD_MIN_MS) {
         const found = await pose.locateSwings(swings[0].clipUri, durMs);
-        if (found.length > 1) {
-          const { segmentsFromVideoSwings } = await import('./swing/swingSegmentation');
-          const segs = segmentsFromVideoSwings(found, durMs);
+        // 2026-08-09 (verification wave C4 — "gets caught up on practice swings") — the plural locator
+        // leans permissive by design ("include with confidence low" when it can't see a ball), and the
+        // segment 'confirmed' flag it produced had ZERO consumers — every low-confidence practice swing
+        // became a fully analyzed swing. Consume it here: when at least one confident swing exists, the
+        // low-confidence ones don't auto-expand (logged, never silent). If ALL are low we keep them all —
+        // an honest maybe beats an empty result.
+        const confident = found.filter(f => f.confidence !== 'low');
+        const kept = confident.length >= 1 ? confident : found;
+        if (kept.length < found.length) {
+          uploadLog('upload-practice-swings-dropped', { found: found.length, kept: kept.length }, sessionId);
+        }
+        const { segmentsFromVideoSwings } = await import('./swing/swingSegmentation');
+        const segs = segmentsFromVideoSwings(kept, durMs);
+        if (kept.length > 1) {
           store.expandUploadIntoSwings(sessionId, segs.map(seg => ({
             startSec: seg.startMs / 1000,
             endSec: seg.endMs / 1000,
+            impactSec: seg.strikeMs / 1000,
           })));
           const fresh = useCageStore.getState().sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
-          uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
-          V6('STAGE 0 — upload expanded into multi-swing', { found: found.length, shots: swings.length });
+          uploadLog('upload-multi-swing-expand', { swings_found: kept.length, shots: swings.length }, sessionId);
+          V6('STAGE 0 — upload expanded into multi-swing', { found: kept.length, shots: swings.length });
+        } else if (kept.length === 1 && segs.length === 1) {
+          // 2026-08-09 (verification wave speed #1) — the single-swing result used to be DISCARDED and the
+          // clip re-located from scratch inside analyzeSwing (second coarse extraction + second model call
+          // + re-probe: ~15-40s wasted on the most common upload). Persist the located window + impact on
+          // the existing shot so the analyze + pose passes run bounded and strike-anchored immediately.
+          store.setShotClipBoundaries(sessionId, swings[0].id, segs[0].startMs / 1000, segs[0].endMs / 1000, segs[0].strikeMs / 1000);
+          const fresh = useCageStore.getState().sessionHistory.find(x => x.id === sessionId);
+          if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
+          uploadLog('upload-single-swing-located', { impact_sec: Math.round((segs[0].strikeMs / 1000) * 10) / 10 }, sessionId);
         }
       }
     } catch (e) {
@@ -798,7 +819,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       });
       if (r.kind === 'ok') {
         results.push({ swing_id: swing.id, analysis: r.analysis });
-        useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, r.frame_timestamps_sec);
+        // 2026-08-09 (verification wave C2 — Tim's "DETECTED MOMENTS 0:01/0:06/0:11/0:16") — those chips
+        // were ONE PER EXTRACTED FRAME: raw sample times (on a locate miss, an even spread across the
+        // whole clip), rendered under a label claiming detection. Persist ONLY the model's actual
+        // diagnostic frame time (fault_frame_index) — one real moment, or nothing. Never sample times.
+        const faultIdx = r.analysis.fault_frame_index;
+        const faultTs = faultIdx != null && faultIdx >= 0 ? r.frame_timestamps_sec[faultIdx] : undefined;
+        useCageStore.getState().setShotIssueTimestamps(sessionId, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
         useCageStore.getState().setShotAnalysis(sessionId, swing.id, {
           detected_issue: r.analysis.detected_issue,
           // 2026-07-06 — carry the evidence-gated headline; the per-swing row
@@ -1206,6 +1233,15 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           // was never handed here. When there's no window, locate the swing ONCE and crop the pose pass to it
           // (~2s around the swing) instead of smearing across the clip. Best-effort: a locate miss falls back
           // to the full-clip sampling (unchanged), so this only ever speeds things up, never breaks them.
+          // 2026-08-09 (verification wave C1) — the REAL impact anchor for the pose pass. Priority:
+          // (1) the shot's persisted vision-located impact (set at ingest by the single-swing locate),
+          // (2) the impact from the locate-once fallback below. With it, analyzeSwingFromVideo runs its
+          // strike-anchored branch — the fixed 65%-of-window "impact" fraction (which lands ~1.1s after
+          // the ball and mislabeled every stage) is no longer used for located uploads.
+          let poseImpactMs: number | null =
+            typeof firstClipSwing.locatedImpactSec === 'number' && firstClipSwing.locatedImpactSec > 0
+              ? firstClipSwing.locatedImpactSec * 1000
+              : null;
           if (!poseWindow) {
             try {
               const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
@@ -1213,6 +1249,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
               const loc = durMs && durMs > 0 ? await locateSwingWindow(firstClipSwing.clipUri!, durMs) : null;
               if (loc && loc.endSec > loc.startSec) {
                 poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
+                poseImpactMs = loc.swingTimeSec * 1000;
                 uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec) }, sessionId);
               }
             } catch { /* full-clip fallback — no regression */ }
@@ -1222,7 +1259,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           // live SmartMotion path would have nulled).
           // 2026-07-24 (full-app audit, root D) — also thread handedness so a lefty's
           // weight-shift sign isn't inverted (default 'right' read it backwards).
-          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, null, resolveSwingerHandedness());
+          const biomech = await poseMod.analyzeSwingFromVideo(firstClipSwing.clipUri!, durationSec * 1000, session.upload?.angleOverride ?? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness());
           useCageStore.getState().setSessionBiomechanics(sessionId, biomech);
           uploadLog('pose-analysis', { ok: !!biomech, frames: biomech?.frames.length ?? 0, windowed: !!poseWindow }, sessionId);
 
@@ -1239,10 +1276,12 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
               if (sess && sess.analysis_status !== 'ok') {
                 const { buildPoseSwingRead } = await import('./swing/poseSwingRead');
                 const { poseReadToPrimaryIssue } = await import('./swing/poseReadVerdict');
-                // 2026-08-06 (analysis audit) — derive tempo from the biomech anchors (no extra pose calls)
-                // so an uploaded swing can surface a rushed/slow-transition fault too, at parity with the
-                // live path (was hardcoded null → uploads never flagged tempo).
-                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromBiomechanics(biomech)));
+                // 2026-08-09 (verification wave C3) — tempoFromBiomechanics computed the ratio from the
+                // SYNTHETIC anchor timestamps, which is a constant of the offset table: every windowed
+                // upload returned exactly the same "tempo" regardless of the swing — a fabricated metric.
+                // tempoFromPoseFrames reads the REAL wrist-Y series from the dense frames, anchored on the
+                // vision-located impact, and returns NO_TEMPO (no fault, no number) when it can't read one.
+                const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, poseMod.tempoFromPoseFrames(biomech.frames, poseImpactMs, 'video')));
                 if (pi) {
                   store.setSessionAnalysis(sessionId, pi, null);
                   store.setSessionAnalysisStatus(sessionId, 'ok');

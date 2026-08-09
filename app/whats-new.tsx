@@ -67,11 +67,11 @@ export default function WhatsNewScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={26} color={colors.text_primary} />
         </Pressable>
-        <Text style={s.headerTitle}>What's New</Text>
+        <Text style={s.headerTitle}>What’s New</Text>
         <View style={s.versionPill}><Text style={s.versionText}>v{version}</Text></View>
       </View>
       <ScrollView contentContainerStyle={s.body}>
-        <Text style={s.intro}>The latest updates to SmartPlay Caddie. You can also just ask your caddie "what's new?" anytime.</Text>
+        <Text style={s.intro}>The latest updates to SmartPlay Caddie. You can also just ask your caddie “what’s new?” anytime.</Text>
         {WHATS_NEW.length === 0 ? (
           <Text style={s.empty}>No updates yet.</Text>
         ) : (

@@ -65,8 +65,10 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
             Collecting your putts
           </Text>
           <Text style={[styles.collectingBody, { color: c.text_muted }]}>
-            Your green map fills in as you play. Log putts on each hole and the heat
-            builds from your real makes and misses — no made-up data.
+            Your green map fills in as you play. Log putts on each hole (the putts
+            stepper in the cockpit, the scorecard, or just tell me — “two putts”) and
+            the heat builds from your real makes and misses — no made-up data. Sim
+            rounds and holes without a putt count don’t feed it.
           </Text>
           <View style={[styles.progressTrack, { backgroundColor: c.border }]}>
             <View

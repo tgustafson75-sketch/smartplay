@@ -818,7 +818,10 @@ export default function SwingDetail() {
         const wStart = shot.clipStartSeconds != null ? shot.clipStartSeconds * 1000 : null;
         const wEnd = shot.clipEndSeconds != null ? shot.clipEndSeconds * 1000 : null;
         const swingWindow = (wStart != null && wEnd != null && wEnd - wStart >= 500) ? { startMs: wStart, endMs: wEnd } : null;
-        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, null, resolveSwingerHandedness());
+        // 2026-08-09 (verification wave C1) — thread the vision-located impact so the pose pass anchors
+        // the stage frames on the REAL strike instead of the 65%-of-window fraction (~1.1s late).
+        const backfillImpactMs = typeof shot.locatedImpactSec === 'number' && shot.locatedImpactSec > 0 ? shot.locatedImpactSec * 1000 : null;
+        const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, backfillImpactMs, resolveSwingerHandedness());
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
@@ -853,8 +856,10 @@ export default function SwingDetail() {
         const analyzeUri = (await resolveClipUri(selShot.clipUri!).catch(() => null)) || selShot.clipUri!;
         const { resolveSwingerHandedness } = await import('../../../services/swingerHandedness');
         const clipDurMs = Math.max(wEnd + 1000, (session?.upload?.duration_sec ?? 0) * 1000);
+        // C1 — per-shot windows from the multi-swing expansion carry their own located impact.
+        const shotImpactMs = typeof selShot.locatedImpactSec === 'number' && selShot.locatedImpactSec > 0 ? selShot.locatedImpactSec * 1000 : null;
         const biomech = await poseMod.analyzeSwingFromVideo(
-          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, null, resolveSwingerHandedness(),
+          analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, shotImpactMs, resolveSwingerHandedness(),
         );
         useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
         try {
@@ -1625,6 +1630,7 @@ export default function SwingDetail() {
       // (short clips where the whole clip is the swing, or a locate miss/timeout).
       let startSec: number;
       let endSec: number;
+      let locatedImpactSec: number | null = null;
       let located = false;
       try {
         const { locateSwingWindow } = await import('../../../services/poseDetection');
@@ -1633,6 +1639,7 @@ export default function SwingDetail() {
           // Pad the located window a touch so P1/P10 aren't clipped.
           startSec = Math.max(0, win.startSec - 0.5);
           endSec = Math.min(duration, win.endSec + 0.5);
+          locatedImpactSec = win.swingTimeSec; // C1 — carry the real anchor with the window
           located = true;
         } else {
           const center = duration / 2;
@@ -1644,7 +1651,7 @@ export default function SwingDetail() {
         startSec = Math.max(0, center - 2.5);
         endSec = Math.min(duration, center + 3);
       }
-      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, locatedImpactSec);
       useToastStore.getState().show(
         located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
       );
@@ -1702,7 +1709,12 @@ export default function SwingDetail() {
     );
   }
 
-  const issueTimestamps = shot.detected_issue_timestamps_sec ?? [];
+  // 2026-08-09 (verification wave C2) — legacy sessions persisted EVERY frame-sample time in this
+  // field (the fake "DETECTED MOMENTS" grid); new analyses persist at most the single fault-frame
+  // moment. >2 entries = legacy fabricated array → show nothing rather than fake detections.
+  const issueTimestamps = (shot.detected_issue_timestamps_sec ?? []).slice(0, 2).length === (shot.detected_issue_timestamps_sec ?? []).length
+    ? (shot.detected_issue_timestamps_sec ?? [])
+    : [];
 
   // 2026-06-23 — DrillCard recommendation. Prefer the persisted
   // session.drill_recommendation, but FALL BACK to computing it from the
@@ -1755,7 +1767,10 @@ export default function SwingDetail() {
     const center = position;
     const startSec = Math.max(0, center - 2.5);
     const endSec = (duration ? Math.min(duration, center + 3) : center + 3);
-    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec);
+    // 2026-08-09 (C1) — the frame the user scrubbed to IS their declared swing moment: use it as the
+    // impact anchor (user-supplied signal, not a fabricated fraction). The old path windowed around it
+    // and then sampled "impact" at 65% of that window — 1.1s after the very frame they pointed at.
+    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center);
     useToastStore.getState().show(`Analyzing the swing at 0:${Math.floor(center).toString().padStart(2, '0')}…`);
     onReanalyze();
   };
@@ -2566,7 +2581,7 @@ export default function SwingDetail() {
         {/* Issue timestamp anchors */}
         {issueTimestamps.length > 0 && session.primary_issue && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>DETECTED MOMENTS</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>FAULT MOMENT</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
               {issueTimestamps.map((ts, i) => (
                 <TouchableOpacity
@@ -2578,7 +2593,7 @@ export default function SwingDetail() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Text style={[styles.tsHint, { color: colors.text_muted }]}>Tap a timestamp to jump to that moment.</Text>
+            <Text style={[styles.tsHint, { color: colors.text_muted }]}>The frame the diagnosis was read from — tap to jump there.</Text>
           </View>
         )}
 

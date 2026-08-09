@@ -3872,7 +3872,7 @@ export default function CaddieTab() {
               No signal — ask me anyway
             </Text>
             <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>
-              I can't hear you without a connection, but I can still answer yardages, club calls and the basics from what's on your phone.
+              I can’t hear you without a connection, but I can still answer yardages, club calls and the basics from what’s on your phone.
             </Text>
             {/* 2026-06-28 (Tim) — the keyboard's own dictation mic (Gboard / iOS) is a
                 reliable, often-offline talk-to-text that works in this box for free —

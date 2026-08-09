@@ -102,9 +102,11 @@ export default function TrimScreen() {
     if (!session_id || !shot) return;
     setSubmitting(true);
     if (withBoundaries) {
-      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec);
+      // 2026-08-09 (C1) — a hand-trimmed window invalidates any vision-located impact anchor: clear it
+      // so the pose pass re-derives honestly instead of anchoring to a point outside the new window.
+      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec, null);
     } else {
-      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, null, null);
+      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, null, null, null);
     }
     useCageStore.getState().setSessionAnalysisStatus(session_id, 'pending');
     // Fire-and-forget; detail screen renders the analyzing card.

@@ -2799,7 +2799,9 @@ check('Uploads: skeleton + 4-card read windowed on the pointed swing',
       // 2026-07-07 (biomech #9) — the upload passes its KNOWN camera angle.
       // 2026-07-24 (full-app audit, root D) — AND threads handedness so a lefty's
       // weight-shift sign isn't inverted (default 'right' read it backwards).
-      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, null, resolveSwingerHandedness\(\)\)/.test(up) &&
+      // 2026-08-09 (verification wave C1) — the null impact slot became poseImpactMs: the vision-located
+      // impact now selects the strike-anchored sampling branch (stage labels on the real swing points).
+      /analyzeSwingFromVideo\(firstClipSwing\.clipUri!, durationSec \* 1000, session\.upload\?\.angleOverride \?\? null, false, poseWindow, poseImpactMs, resolveSwingerHandedness\(\)\)/.test(up) &&
       /session\.source === 'uploaded_video' \? \(/.test(detail) &&
       /onPress=\{onAnalyzeAtPosition\}/.test(detail)
     );
@@ -7867,6 +7869,33 @@ console.log('\n=== Scenario 13: critical-path diagnostic markers ===');
     missing4.length === 0,
     missing4.length === 0 ? 'all 10 present' : `MISSING (MIN VERIFY can\'t grep these): ${missing4.join(', ')}`);
 }
+
+// 2026-08-09 (verification wave — "It does not find the points in the swing correctly" +
+// "DETECTED MOMENTS" + fabricated upload tempo + practice swings). Four locks on the honest-analysis
+// chain: (1) uploads thread the vision-located IMPACT into the pose pass (strike-anchored stages, not
+// the 65%-of-window fraction that landed ~1.1s after the ball); (2) only the model's fault-frame moment
+// persists as an issue timestamp (never raw sample times — those were the fake DETECTED MOMENTS grid);
+// (3) the upload verdict's tempo comes from the real wrist series (tempoFromPoseFrames), never
+// tempoFromBiomechanics whose ratio was a CONSTANT of the synthetic offset table; (4) low-confidence
+// video-located swings (the practice-swing class) don't auto-expand when a confident swing exists.
+check('Swing points: upload pose pass is impact-anchored + honest moments/tempo + practice-swing gate',
+  (() => {
+    const up = read('services/videoUpload.ts');
+    const pose = read('services/poseAnalysisApi.ts');
+    const det = read('services/poseDetection.ts');
+    return (
+      /swingTimeSec: t/.test(det) &&                                              // locator RETURNS the impact
+      /poseImpactMs = loc\.swingTimeSec \* 1000/.test(up) &&                      // locate-once threads it
+      /locatedImpactSec === 'number'/.test(up) &&                                 // persisted anchor read
+      /const faultTs = faultIdx != null && faultIdx >= 0/.test(up) &&             // only the fault moment persists
+      !/setShotIssueTimestamps\(sessionId, swing\.id, r\.frame_timestamps_sec\)/.test(up) && // raw sample times DEAD
+      /tempoFromPoseFrames\(biomech\.frames, poseImpactMs, 'video'\)/.test(up) &&  // honest tempo in the verdict
+      !/tempoFromBiomechanics\(biomech\)/.test(up) &&                              // fabricated-constant path DEAD
+      /const confident = found\.filter\(f => f\.confidence !== 'low'\)/.test(up) && // practice-swing gate
+      /export function tempoFromPoseFrames/.test(pose)
+    );
+  })(),
+  'stage points anchor on the REAL located impact; fault moment only; wrist-series tempo; low-confidence swings gated');
 
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added

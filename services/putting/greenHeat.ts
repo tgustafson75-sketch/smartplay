@@ -39,8 +39,13 @@ import type { RoundRecord, CourseHole } from '../../store/roundStore';
 import type { GreenRoll } from '../../store/greenRollStore';
 
 /** Minimum real scored-putt holes before the heat map renders at all. Below this we
- *  show the honest collecting state. ~2 nine-hole rounds of logged putts. */
-export const GREEN_HEAT_MIN_HOLES = 18;
+ *  show the honest collecting state.
+ *  2026-08-09 (Tim — "green heat putting map says no putts") — lowered 18 → 9: the old bar needed two
+ *  full nine-hole rounds of per-hole putt logging before ANYTHING rendered, so the tile sat on the
+ *  collecting card indefinitely (sim rounds are excluded by design, chip-ins/unlogged holes don't
+ *  count, and score-only logging carries no putts). One real logged nine now lights the map; the
+ *  per-cell hole counts keep the small-sample honesty visible. */
+export const GREEN_HEAT_MIN_HOLES = 9;
 
 export type PuttClass = 'approachPutt' | 'scramblePutt';
 

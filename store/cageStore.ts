@@ -45,6 +45,11 @@ export interface CageShot {
   // sampling automatically.
   clipStartSeconds?: number;
   clipEndSeconds?: number;
+  /** 2026-08-09 (verification wave C1) — the vision locator's IMPACT estimate (seconds, absolute in the
+   *  clip). Threading this into the pose pass selects the correct strike-anchored sampling branch —
+   *  without it, "impact" was a fixed 65% window fraction that lands ~1.1s after the ball. Optional:
+   *  absent on acoustic/manual shots (those carry their own precise strike). */
+  locatedImpactSec?: number;
   // Phase BW — original detection offset (seconds since recording start)
   // and correlation id linking this shot to the cageStorage clip metadata.
   detectionOffsetSeconds?: number;
@@ -693,7 +698,7 @@ interface CageState {
    *  analyzeSwing's bounded-window path samples only within the user's
    *  marked swing window instead of the whole clip. Pass null to clear
    *  the bounds (reverts to whole-clip / tiered sampling). */
-  setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null) => void;
+  setShotClipBoundaries: (sessionId: string, shotId: string, startSec: number | null, endSec: number | null, impactSec?: number | null) => void;
   /** 2026-06-10 — Repoint a shot's source clip uri. Used when a legacy clip is
    *  re-persisted from a volatile cache/content uri into documentDirectory on
    *  first open, so replay + re-analyze read the durable copy from then on. */
@@ -702,7 +707,7 @@ interface CageState {
    *  several swings; once the video locator finds them, replace the session's
    *  single shot with one windowed shot per swing so each gets its own analysis
    *  + per-swing card (mirrors the live multi-swing path). No-op if <2 windows. */
-  expandUploadIntoSwings: (sessionId: string, windows: { startSec: number; endSec: number }[]) => void;
+  expandUploadIntoSwings: (sessionId: string, windows: { startSec: number; endSec: number; impactSec?: number }[]) => void;
   /** Phase R — delete a session from the library. */
   deleteSession: (sessionId: string) => void;
   /** Phase J — set the distance calibration for the current cage. Pass yards.
@@ -1661,7 +1666,7 @@ export const useCageStore = create<CageState>()(
           ),
         })),
 
-      setShotClipBoundaries: (sessionId, shotId, startSec, endSec) =>
+      setShotClipBoundaries: (sessionId, shotId, startSec, endSec, impactSec) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : {
@@ -1671,6 +1676,9 @@ export const useCageStore = create<CageState>()(
                   ...shot,
                   clipStartSeconds: startSec ?? undefined,
                   clipEndSeconds: endSec ?? undefined,
+                  // C1 — a REAL located impact rides along when the boundaries came from the locator;
+                  // an explicit null (manual trim/clear) clears the stale anchor with the window.
+                  locatedImpactSec: impactSec === undefined ? shot.locatedImpactSec : impactSec ?? undefined,
                 }
               ),
             }
@@ -1700,6 +1708,7 @@ export const useCageStore = create<CageState>()(
               id: `${sessionId}_shot_${i}`,
               clipStartSeconds: w.startSec,
               clipEndSeconds: w.endSec,
+              locatedImpactSec: w.impactSec,
               detectionOffsetSeconds: w.startSec,
               detectionMethod: 'manual' as const,
               aiAnalysis: null,
