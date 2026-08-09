@@ -107,20 +107,23 @@ type StoredRow = {
 };
 
 /**
- * 2026-08-06 — Owner delivery of tester issues via Resend (HTTP API, no SDK). Sends only when
- * RESEND_API_KEY is configured; otherwise a no-op (rows already stored in Supabase). Recipient/sender are
- * env-overridable. Short timeout so it can't hang the serverless invocation.
- *   RESEND_API_KEY            — Resend API key (required to enable email)
+ * 2026-08-09 (Tim — "f a Resend account, I'm over having so many accounts. Make it work with Google") —
+ * owner delivery of tester issues via GMAIL SMTP (nodemailer + a Google App Password; no new account,
+ * no domain verification). Resend kept ONLY as a fallback if its key happens to be configured.
+ * Sends when either transport is configured; otherwise a no-op (rows are already stored in Supabase).
+ *   GMAIL_USER                — the Gmail address to send FROM (e.g. t.gustafson75@gmail.com)
+ *   GMAIL_APP_PASSWORD        — a Google App Password (Google Account → Security → 2-Step → App passwords)
  *   ISSUE_REPORT_EMAIL_TO     — recipient (default t.gustafson75@gmail.com)
- *   ISSUE_REPORT_EMAIL_FROM   — sender (default onboarding@resend.dev for quick start; use a verified domain in prod)
  */
 async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return false;
-  // 2026-08-07 (Tim) — default the server auto-forward to support@ (the same address the in-app mailto
-  // prompts use), so ALL testers' logs land in one inbox once RESEND_API_KEY is set. Override via env.
-  const to = process.env.ISSUE_REPORT_EMAIL_TO || 'support@smartplaycaddie.com';
-  const from = process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>';
+  const gmailUser = process.env.GMAIL_USER;
+  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!gmailUser || !gmailPass) {
+    if (!resendKey) return false;
+  }
+  const to = process.env.ISSUE_REPORT_EMAIL_TO || 't.gustafson75@gmail.com';
+  const from = gmailUser ? `SmartPlay Issues <${gmailUser}>` : (process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>');
   const reporter = rows[0]?.reporter || 'beta tester';
   const subject = `SmartPlay issue log — ${reporter} (${rows.length} new)`;
   const block = (r: StoredRow) => {
@@ -132,12 +135,35 @@ async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
     return `• ${r.text}\n  [${r.reported_at ?? ''} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${where}]${det}`;
   };
   const text = `Reporter: ${reporter}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;
+
+  // Primary: Gmail SMTP (Tim's Google account, App Password — no extra accounts).
+  if (gmailUser && gmailPass) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const nodemailer = require('nodemailer') as typeof import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        auth: { user: gmailUser, pass: gmailPass },
+        connectionTimeout: 6000,
+        greetingTimeout: 6000,
+        socketTimeout: 8000,
+      });
+      await transporter.sendMail({ from, to, subject, text });
+      return true;
+    } catch (e) {
+      console.warn('[issue-report] gmail send failed', e instanceof Error ? e.message : e);
+      // fall through to Resend if configured
+    }
+  }
+  if (!resendKey) return false;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to, subject, text }),
       signal: ctrl.signal,
     });

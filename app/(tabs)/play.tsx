@@ -619,6 +619,9 @@ export default function PlayTab() {
   // Google Places golf courses), so ANY course near you auto-surfaces in the search section — not just the
   // bundled catalog. Each resolves through the same selectSummary → golfcourseapi path when tapped.
   const [nearbyApiCourses, setNearbyApiCourses] = useState<CourseSummary[]>([]);
+  // 2026-08-09 — arrival auto-download dedupe (per app session).
+  const autoDownloadFiredRef = useRef<Set<string>>(new Set());
+  const downloadToastFiredRef = useRef<Set<string>>(new Set());
 
   // Pre-beta — clear stale search error on every entry to the tab so a
   // failed search from a prior visit doesn't keep "Course search unavailable"
@@ -748,6 +751,28 @@ export default function PlayTab() {
             lng: n.lng,
           }));
         if (!cancelled) setNearbyApiCourses(mapped);
+        // 2026-08-09 (Tim — the download engine was half-wired: locate live, downloadCourse ZERO
+        // callers). The engine's whole point is the Arccos flow: ARRIVE at a course → its full data
+        // (geometry/content/intelligence/imagery) downloads itself so play is instant + offline with
+        // zero taps. Auto-download the nearest located course when the player is physically AT it
+        // (≤1.5km). Idempotent + fire-and-forget; toast only on a FRESH download (isCourseDownloaded
+        // flips), once per session per course.
+        const nearest = near[0];
+        if (nearest && nearest.distance_m <= 1500 && !autoDownloadFiredRef.current.has(nearest.name)) {
+          autoDownloadFiredRef.current.add(nearest.name);
+          void (async () => {
+            try {
+              const eng = await import('../../services/courseDownloadEngine');
+              const r = await eng.downloadCourse({ name: nearest.name, lat: nearest.lat, lng: nearest.lng });
+              if (r.ok && r.courseId && !downloadToastFiredRef.current.has(r.courseId)) {
+                downloadToastFiredRef.current.add(r.courseId);
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState()
+                  .show(`${nearest.name} is ready — full course data downloaded.`);
+              }
+            } catch { /* best-effort — arrival download never surfaces an error */ }
+          })();
+        }
       } catch { /* best-effort — offline / no key just shows the manual search */ }
     })();
     return () => { cancelled = true; };
@@ -1098,6 +1123,12 @@ export default function PlayTab() {
           // Idempotent (skips if already anchored) + best-effort; fire-and-forget so it never
           // blocks the geometry/hero warm.
           void lookupCoursePlaces({ courseId: c.id, name: c.club_name, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null });
+          // 2026-08-09 — run the download ENGINE on selection too: it orchestrates the full prefetch
+          // chain (content + intelligence on top of the geometry/imagery below) and marks the course
+          // available offline in downloadedCoursesStore. Idempotent; caches make re-runs cheap.
+          void import('../../services/courseDownloadEngine')
+            .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
+            .catch(() => undefined);
           await fetchCourseGeometry(c.id, { courseLocation });
           // Build SmartVision hole imagery on selection for searched/API courses too —
           // geometry (just fetched) + per-hole satellite tiles, persisted for offline.

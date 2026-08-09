@@ -2585,6 +2585,15 @@ export default function CaddieTab() {
     });
     // Round is started — release the in-flight lock so a deliberate later new-round start proceeds.
     startRoundInFlightRef.current = false;
+    // 2026-08-09 (download-engine wiring) — every round start runs the download ENGINE fire-and-forget:
+    // it orchestrates the full prefetch chain and marks the course available offline in
+    // downloadedCoursesStore (idempotent — an already-downloaded course returns instantly). This keeps
+    // the offline-availability record TRUE no matter how the round was started (search, GPS, voice).
+    if (courseName) {
+      void import('../../services/courseDownloadEngine')
+        .then((eng) => eng.downloadCourse({ name: courseName, courseId: courseId ?? null, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
+        .catch(() => undefined);
+    }
     // FIX B1 — apply mentalState from pendingStartFactors so the player's
     // pre-round mental check-in survives into Kevin's first-hole context.
     if (opts.mentalState) {

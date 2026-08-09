@@ -7916,6 +7916,27 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
   })(),
   'stage points anchor on the REAL located impact; fault moment only (ALL producers); wrist-series tempo; low-confidence swings gated on BOTH upload surfaces');
 
+// 2026-08-09 (Tim — "UNUSED COURSE DOWNLOAD ENGINE NOT WIRED? WTF") — REACHABILITY lock: every export
+// of the download engine must have a real caller. The engine shipped 08-06 with downloadCourse +
+// isCourseDownloaded at ZERO callers (locate-only wiring) while being described as done — the exact
+// dead-code-behind-green-gates class. Wired 08-09: ARRIVAL auto-download (play.tsx, ≤1.5km nearest),
+// SELECTION download (play.tsx tap handler), ROUND-START mark (caddie.tsx runStartRound), and the
+// fresh-download toast consumes isCourseDownloaded via downloadCourse's idempotence.
+check('Course download engine: every export REACHABLE (arrival + selection + round-start wiring live)',
+  (() => {
+    const play = read('app/(tabs)/play.tsx');
+    const cad = read('app/(tabs)/caddie.tsx');
+    return (
+      /locateNearbyCourses\(userPosition\.lat, userPosition\.lng/.test(play) &&        // locate live
+      /nearest\.distance_m <= 1500/.test(play) &&                                      // arrival trigger
+      /eng\.downloadCourse\(\{ name: nearest\.name/.test(play) &&                      // arrival download
+      /eng\.downloadCourse\(\{ name: c\.club_name, courseId: c\.id/.test(play) &&      // selection download
+      /eng\.downloadCourse\(\{ name: courseName, courseId/.test(cad) &&                // round-start mark
+      /full course data downloaded/.test(play)                                          // fresh-download surface
+    );
+  })(),
+  'arriving at a course auto-downloads it (Arccos flow); selecting or starting a round marks offline availability — no dead exports');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
