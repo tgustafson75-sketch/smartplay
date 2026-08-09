@@ -137,8 +137,13 @@ export default function CageSummary() {
         for (const { swing, r } of chunkResults) {
           if (r.kind === 'ok') {
             results.push({ swing_id: swing.id, analysis: r.analysis });
-            // Phase R — persist frame timestamps for swing detail anchors
-            useCageStore.getState().setShotIssueTimestamps(session.id, swing.id, r.frame_timestamps_sec);
+            // 2026-08-09 (verification wave C2, every-surface pass) — persist ONLY the model's actual
+            // fault-frame moment, mirroring videoUpload: the raw per-frame sample times rendered as a
+            // fake "detected moments" grid (and the legacy guard now hides those arrays entirely, so
+            // this producer was silently losing cage sessions their one real moment).
+            const faultIdx = r.analysis.fault_frame_index;
+            const faultTs = faultIdx != null && faultIdx >= 0 ? r.frame_timestamps_sec[faultIdx] : undefined;
+            useCageStore.getState().setShotIssueTimestamps(session.id, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
           }
           if (r.kind === 'no_frames') anyNoFrames = true;
         }

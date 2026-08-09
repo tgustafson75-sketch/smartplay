@@ -12,11 +12,14 @@
  *   • END     ≈ where speed settles after impact (follow-through).
  * Self-consistent, needs no audio/segmentation, and ALWAYS returns a best-estimate structure for a
  * recorded swing (never "no swing"). deriveSwingAnchors is PURE (unit-tested on synthetic motion);
- * sampleSwingMotion does the pose I/O.
+ * (2026-08-09 — poseMotionSampler.ts, the staged pose I/O half, was DELETED: zero callers and it
+ * passed a video URI to analyzePoseFromUri, which expects an image — dead and broken. This pure,
+ * sim-tested core stays as the foundation for the planned on-device locate; the I/O layer will be
+ * rewritten against thumbnail extraction when that lands.)
  */
 
 // TYPE-ONLY import (erased at runtime) so this module stays pure — no expo/native deps — and is
-// directly unit-testable. The pose I/O lives in poseMotionSampler.ts.
+// directly unit-testable (exercised by the sim harness synthetic-swing check).
 import type { PoseFrame } from '../poseAnalysisApi';
 
 export interface MotionSample { tMs: number; x: number; y: number; }

@@ -2279,7 +2279,16 @@ export default function SmartMotion() {
         // as before), but reusing the window we already paid for. swings.length
         // === 0 still falls through to analyzeSwing's own locate (no regression).
         if (!cancelled && swings.length >= 1) {
-          const segs = segmentsFromVideoSwings(swings, durMs);
+          // 2026-08-09 (verification wave C4, every-surface pass) — same practice-swing gate as the
+          // upload ingest path: when at least one CONFIDENT swing exists, low-confidence video-located
+          // ones (the practice-swing class) don't become analyzed segments here either. All-low keeps
+          // all (honest maybe beats an empty reel).
+          const confident = swings.filter(sw => sw.confidence !== 'low');
+          const kept = confident.length >= 1 ? confident : swings;
+          if (kept.length < swings.length) {
+            console.log('[smartmotion] re-analyze: dropped low-confidence swings', { found: swings.length, kept: kept.length });
+          }
+          const segs = segmentsFromVideoSwings(kept, durMs);
           setSegments(segs);
           setSelectedSwing(0);
           // Sync the ref SYNCHRONOUSLY (mirrors the cage path) so runAnalysis's

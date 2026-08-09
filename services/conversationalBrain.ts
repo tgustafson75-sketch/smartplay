@@ -117,7 +117,10 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         // primary brain does (matches services/voice/brainSettings + pipecat-turn).
         responseMode: settings.responseMode ?? 'neutral',
         cecilyMode: settings.cecilyMode ?? false,
-        personaIntensity: settings.personaIntensity?.[settings.caddiePersonality] ?? 100,
+        // 2026-08-09 (deferred-minor fix) — key the intensity dial off the persona actually SENT
+        // (per-pillar getActiveCaddie), not the global pick: with pillar overrides active, Serena was
+        // being scaled by Kevin's dial.
+        personaIntensity: settings.personaIntensity?.[getActiveCaddie()] ?? 100,
         tankSoftIntro: settings.tankSoftIntro ?? false,
         // Personalization parity with the main kevin path.
         playerName: profile.name ?? '',
@@ -206,7 +209,10 @@ export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Pr
         // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
         customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
         customCaddieName: profile.customCaddieName ?? null,
-        personaIntensity: settings.personaIntensity?.[settings.caddiePersonality] ?? 100,
+        // 2026-08-09 (deferred-minor fix) — key the intensity dial off the persona actually SENT
+        // (per-pillar getActiveCaddie), not the global pick: with pillar overrides active, Serena was
+        // being scaled by Kevin's dial.
+        personaIntensity: settings.personaIntensity?.[getActiveCaddie()] ?? 100,
         tankSoftIntro: settings.tankSoftIntro ?? false,
         responseMode: settings.responseMode ?? 'neutral',
         cecilyMode: settings.cecilyMode ?? false,

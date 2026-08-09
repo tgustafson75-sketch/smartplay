@@ -132,13 +132,20 @@ export default function SwingSimScreen() {
   // The sim is explicitly a GAME ("SIM ROUND · NOT REAL STATS"), so offer the FULL bag: learned carries
   // where they exist, standard-chart carries (marked with * and a one-line footnote) until taught. Voice
   // and chips can now always switch to any club. Honest: learned vs standard is visibly distinguished.
+  // 2026-08-09 (verification-wave minor) — subscribe to the stats store (was a []-deps getState memo),
+  // so a distance learned MID-GAME ("my 7-iron goes 165") refreshes the rail + resolver without a
+  // remount; the memo recomputes only when the manual/learned maps actually change.
+  const statsManual = useClubStatsStore((st) => st.manual);
+  const statsCarry = useClubStatsStore((st) => st.carry);
+  const statsTotal = useClubStatsStore((st) => st.total);
   const bag = useMemo(() => {
     const st = useClubStatsStore.getState();
     return CLUB_ORDER.filter((c) => c !== 'Putter')
       .map((c) => ({ club: c, carry: Math.round(st.carryFor(c)), learned: st.hasDistance(c) }))
       .filter((b) => b.carry > 0)
       .sort((a, b) => b.carry - a.carry);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statsManual, statsCarry, statsTotal]);
   // Keep the voice resolver's view of the bag live (see the sim-bus registration above).
   useEffect(() => { bagRef.current = bag; }, [bag]);
   const suggest = useCallback((dist: number, currentLie: SimLie) => {

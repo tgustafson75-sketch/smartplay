@@ -105,7 +105,9 @@ export function buildPipecatContext() {
         try {
           const cid = round.activeCourseId;
           if (!cid) return 0;
-          return (round.roundHistory ?? []).filter((r) => r.courseId === cid).length;
+          // 2026-08-09 (verification-wave minor) — sim rounds aren't real visits: counting them made a
+          // first REAL round at a course read as a repeat (over-suppressing the baseline framing).
+          return (round.roundHistory ?? []).filter((r) => r.courseId === cid && !r.simulated).length;
         } catch { return 0; }
       })(),
       // 2026-07-05 — sim awareness: the brain nudges for yardages so the sim moves.
@@ -119,9 +121,23 @@ export function buildPipecatContext() {
         try {
           if (!round.isRoundActive || round.currentHole == null) return undefined;
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const gr = require('../store/greenReadStore').useGreenReadStore.getState()
-            .lastForHole(round.activeCourseId ?? null, round.currentHole) as
-            | { feetEst: number | null; slopePct: number | null; text: string } | null;
+          const store = require('../store/greenReadStore').useGreenReadStore.getState();
+          // 2026-08-09 (deferred-minor fix, two halves):
+          // (1) "prior visit" must mean a PRIOR ROUND — a read saved minutes ago in THIS round was
+          //     replayed as "last time this putt played…": robotic make-believe recall. Same-round
+          //     reads are excluded.
+          // (2) EXCEPT the twice-around second loop: hole N is physically hole N-9, and its loop-1
+          //     read (logged under N-9, THIS round) is a genuine "earlier today" recall — query the
+          //     twin and allow it.
+          type GR = { at: number; feetEst: number | null; slopePct: number | null; text: string } | null;
+          const startMs = round.roundStartTime ?? 0;
+          const isPriorRound = (g: GR) => !!g && !(startMs > 0 && g.at >= startMs);
+          const direct = store.lastForHole(round.activeCourseId ?? null, round.currentHole) as GR;
+          const twin = round.twiceAround === true && round.currentHole >= 10
+            ? store.lastForHole(round.activeCourseId ?? null, round.currentHole - 9) as GR
+            : null;
+          // twin reads are valid from ANY round (loop-1 earlier today included); direct only from prior rounds
+          const gr = isPriorRound(direct) ? direct : twin;
           if (!gr || (gr.feetEst == null && gr.slopePct == null && !gr.text)) return undefined;
           return {
             feet: gr.feetEst ?? undefined,

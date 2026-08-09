@@ -7892,10 +7892,22 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
       /tempoFromPoseFrames\(biomech\.frames, poseImpactMs, 'video'\)/.test(up) &&  // honest tempo in the verdict
       !/tempoFromBiomechanics\(biomech\)/.test(up) &&                              // fabricated-constant path DEAD
       /const confident = found\.filter\(f => f\.confidence !== 'low'\)/.test(up) && // practice-swing gate
-      /export function tempoFromPoseFrames/.test(pose)
+      /export function tempoFromPoseFrames/.test(pose) &&
+      // 2026-08-09 (verifier round 2 — every-surface): the SIBLING producers were half-fixed. Cage
+      // summary persisted raw sample times (then the legacy guard hid cage sessions' real moment
+      // entirely), and SmartMotion's re-analyze path ran locateSwings with no practice gate.
+      (() => {
+        const cage = read('app/cage/summary.tsx');
+        const sm = read('app/swinglab/smartmotion.tsx');
+        return (
+          !/setShotIssueTimestamps\(session\.id, swing\.id, r\.frame_timestamps_sec\)/.test(cage) &&
+          /const faultTs = faultIdx != null && faultIdx >= 0/.test(cage) &&
+          /const confident = swings\.filter\(sw => sw\.confidence !== 'low'\)/.test(sm)
+        );
+      })()
     );
   })(),
-  'stage points anchor on the REAL located impact; fault moment only; wrist-series tempo; low-confidence swings gated');
+  'stage points anchor on the REAL located impact; fault moment only (ALL producers); wrist-series tempo; low-confidence swings gated on BOTH upload surfaces');
 
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added

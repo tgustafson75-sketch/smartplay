@@ -127,6 +127,12 @@ let recordingStopTapAt = 0;
 // 2026-07-06 (audit #2) — mirror cooldown for the CLOSE side of toggle().
 let sessionCloseTapAt = 0;
 const RECORDING_STOP_TAP_COOLDOWN_MS = 1500;
+// 2026-08-09 (deferred-minor fix) — the SESSION-CLOSE swallow only exists to eat the same physical
+// tap's ~350ms pattern-sub echo. It was reusing the 1.5s camera-release constant, so a REAL shush tap
+// within 1.5s of the "I'm done" endpoint tap was silently swallowed while the caddie kept talking.
+// 600ms covers the echo + jitter, nothing more. (Camera tap-stop keeps its full 1.5s — audio-session
+// release genuinely needs it.)
+const TAP_ECHO_SWALLOW_MS = 600;
 // 2026-08-07 (regression audit) — timestamp of when the mic actually opened (state → 'listening').
 // The endpoint tap (tap-again-to-submit) must be handled BEFORE the sessionInFlight guard, so we need
 // a way to swallow the OPEN tap's OWN ~350ms second fire (legacy sub + pattern sub) which would
@@ -350,8 +356,8 @@ export async function toggle(): Promise<void> {
   if (state === 'listening') {
     // Swallow the OPEN tap's own ~350ms echo (it lands in 'listening' but isn't a real "done" tap)...
     if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) return;
-    // ...and dedupe THIS endpoint tap's own double-fire.
-    if (Date.now() - sessionCloseTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
+    // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
+    if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
     sessionCloseTapAt = Date.now();
     endCaptureEarly();
     if (useSettingsStore.getState().voiceEnabled) {
@@ -369,8 +375,10 @@ export async function toggle(): Promise<void> {
   // immediately + pattern sub ~350ms later). During 'responding' sessionInFlight is
   // already false, so tap #1 closed the session and tap #2 saw 'idle' and REOPENED
   // the mic right after the user tried to shush the caddie. Swallow toggles for a
-  // short window after any close.
-  if (Date.now() - sessionCloseTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
+  // short window after any close — the ECHO window only (600ms): reusing the 1.5s camera-release
+  // constant here meant a genuine shush tap at a fast-responding caddie was eaten for a full 1.5s
+  // after every "I'm done" endpoint tap.
+  if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
   if (state === 'idle') {
     sessionInFlight = true;
     await openSession();
