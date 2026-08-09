@@ -3600,6 +3600,50 @@ export default function SmartMotion() {
     return () => { setSmartMotionActive(false); unsub(); unsubDrill(); };
   }, [router, setClub]);
 
+  // 2026-08-07 (Tim — the swing-library crash's TWIN, on the higher-traffic SmartMotion review screen).
+  // The review <Video>'s onLoad/onPlaybackStatusUpdate/onError were INLINE literals recreated every render.
+  // At 25×/s (Motion overlay on) each re-render handed the native Video changed callback identities →
+  // expo-av re-subscribed + re-emitted status synchronously → setState cascade → the SAME fatal "Maximum
+  // update depth" crash. Memoizing `source` (done in July) fixed only half; these useCallbacks fix the rest.
+  // Stable during playback (deps only change on new analysis / pause), so the Video never re-subscribes on a
+  // tick. Logic is byte-identical to the previous inline handlers.
+  // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT", error screens: "Rendered more hooks
+  // than during the previous render" at SmartMotion) — these three hooks were added BELOW the camera
+  // permission gate's early returns. First render: camPerm still resolving → early return → hooks
+  // skipped. Permission resolves → full body renders → 3 MORE hooks → React fatals. Hooks must be
+  // unconditional: they now live ABOVE the gate. (ESLint react-hooks/rules-of-hooks flagged exactly
+  // these three; a repo-wide sweep now runs in the sim gate so this class can't ship again.)
+  const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
+    if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
+    const v = videoRef.current;
+    if (!v) return;
+    const seg = segments[selectedSwingRef.current];
+    if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
+    if (!videoPaused) v.playAsync().catch(() => undefined);
+  }, [segments, videoPaused]);
+  const onReviewPlaybackStatus = useCallback((s: AVPlaybackStatus) => {
+    if ('positionMillis' in s && typeof s.positionMillis === 'number'
+        && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
+      playbackMsEmitRef.current = s.positionMillis;
+      setPlaybackMs(s.positionMillis);
+    }
+    if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
+      const seg = segments[selectedSwingRef.current];
+      const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
+      const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
+      if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
+        loopSeekGuardRef.current = true;
+        void videoRef.current?.setPositionAsync(seg.startMs)
+          .catch(() => undefined)
+          .finally(() => { loopSeekGuardRef.current = false; });
+      }
+    }
+  }, [segments, videoPaused]);
+  const onReviewVideoError = useCallback((e: unknown) => {
+    console.log('[smartmotion] video load error:', JSON.stringify(e));
+    setAnalysisError('Video failed to load — try re-recording');
+  }, []);
+
   // ── permission gate ──
   if (!camPerm) {
     return (
@@ -3764,43 +3808,6 @@ export default function SmartMotion() {
   const pageCount = showShotMap ? 3 : 2;
 
   // ── the HUD page (full-bleed camera/replay + floating data) ──
-  // 2026-08-07 (Tim — the swing-library crash's TWIN, on the higher-traffic SmartMotion review screen).
-  // The review <Video>'s onLoad/onPlaybackStatusUpdate/onError were INLINE literals recreated every render.
-  // At 25×/s (Motion overlay on) each re-render handed the native Video changed callback identities →
-  // expo-av re-subscribed + re-emitted status synchronously → setState cascade → the SAME fatal "Maximum
-  // update depth" crash. Memoizing `source` (done in July) fixed only half; these useCallbacks fix the rest.
-  // Stable during playback (deps only change on new analysis / pause), so the Video never re-subscribes on a
-  // tick. Logic is byte-identical to the previous inline handlers.
-  const onReviewVideoLoad = useCallback(async (s: AVPlaybackStatus) => {
-    if ('durationMillis' in s && s.durationMillis) setVideoDurationMs(s.durationMillis);
-    const v = videoRef.current;
-    if (!v) return;
-    const seg = segments[selectedSwingRef.current];
-    if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
-    if (!videoPaused) v.playAsync().catch(() => undefined);
-  }, [segments, videoPaused]);
-  const onReviewPlaybackStatus = useCallback((s: AVPlaybackStatus) => {
-    if ('positionMillis' in s && typeof s.positionMillis === 'number'
-        && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
-      playbackMsEmitRef.current = s.positionMillis;
-      setPlaybackMs(s.positionMillis);
-    }
-    if ('positionMillis' in s && typeof s.positionMillis === 'number' && !videoPaused) {
-      const seg = segments[selectedSwingRef.current];
-      const dur = ('durationMillis' in s && s.durationMillis) ? s.durationMillis : 0;
-      const windowed = seg && seg.endMs > seg.startMs && (dur === 0 || seg.endMs < dur - 250);
-      if (windowed && s.positionMillis >= seg.endMs && !loopSeekGuardRef.current) {
-        loopSeekGuardRef.current = true;
-        void videoRef.current?.setPositionAsync(seg.startMs)
-          .catch(() => undefined)
-          .finally(() => { loopSeekGuardRef.current = false; });
-      }
-    }
-  }, [segments, videoPaused]);
-  const onReviewVideoError = useCallback((e: unknown) => {
-    console.log('[smartmotion] video load error:', JSON.stringify(e));
-    setAnalysisError('Video failed to load — try re-recording');
-  }, []);
 
   const hudPage = (
     <View style={{ width: windowWidth, flex: 1 }}>

@@ -7868,6 +7868,45 @@ console.log('\n=== Scenario 13: critical-path diagnostic markers ===');
     missing4.length === 0 ? 'all 10 present' : `MISSING (MIN VERIFY can\'t grep these): ${missing4.join(', ')}`);
 }
 
+// ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
+// 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
+// 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
+// "Rendered more hooks than during the previous render", fatal AT OPEN, in the field, for every
+// tester. tsc/jest/grep are all BLIND to this class — only the rules-of-hooks lint sees it. Shell out
+// to eslint (~4s) and hard-fail the harness on ANY violation in app/components/hooks. This is a LOCK:
+// do not remove; if eslint can't run, the check FAILS (a gate that can't see must not pass).
+{
+  let hooksViolations = -1;
+  let detail = '';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execSync } = require('child_process') as typeof import('child_process');
+    const out = execSync('npx eslint app components hooks --format json', {
+      cwd: process.cwd(), encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
+    });
+    const files = JSON.parse(out) as Array<{ filePath: string; messages: Array<{ ruleId: string | null; line: number; message: string }> }>;
+    const hits = files.flatMap(f => f.messages.filter(m => m.ruleId === 'react-hooks/rules-of-hooks').map(m => `${f.filePath}:${m.line}`));
+    hooksViolations = hits.length;
+    detail = hits.slice(0, 5).join(', ');
+  } catch (e) {
+    // eslint exits 1 when ANY lint error exists — still parse its JSON from stdout.
+    const stdout = (e as { stdout?: string }).stdout;
+    if (typeof stdout === 'string' && stdout.trim().startsWith('[')) {
+      try {
+        const files = JSON.parse(stdout) as Array<{ filePath: string; messages: Array<{ ruleId: string | null; line: number; message: string }> }>;
+        const hits = files.flatMap(f => f.messages.filter(m => m.ruleId === 'react-hooks/rules-of-hooks').map(m => `${f.filePath}:${m.line}`));
+        hooksViolations = hits.length;
+        detail = hits.slice(0, 5).join(', ');
+      } catch { hooksViolations = -1; detail = 'eslint output unparsable'; }
+    } else {
+      detail = `eslint failed to run: ${e instanceof Error ? e.message.slice(0, 120) : 'unknown'}`;
+    }
+  }
+  check('LOCK: zero react-hooks/rules-of-hooks violations repo-wide (conditional hooks = field-fatal render crash)',
+    hooksViolations === 0,
+    hooksViolations === 0 ? 'eslint clean' : `${hooksViolations === -1 ? 'CHECK COULD NOT RUN' : hooksViolations + ' violation(s)'}: ${detail}`);
+}
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
