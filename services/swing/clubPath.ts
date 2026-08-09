@@ -204,25 +204,19 @@ export async function detectClubPath(args: {
   // keeps the original; the retriever only ever opens the copy → different file handles → the crash
   // condition cannot occur. Best-effort — if the copy fails we fall back to the original (no worse
   // than before), and the shouldAbort guards stay as a second layer.
+  // 2026-08-09 (speed #3) — the private copy now comes from the SHARED refcounted pool
+  // (services/swing/sharedClipCopy): one copy per clip serves pose + tempo + club path + ball
+  // departure instead of four full byte-copies per review. Refcounting makes sharing safe (the file
+  // can't be deleted while ANY consumer holds it; the old per-invocation-unique names existed only
+  // to stop one caller's delete-in-finally racing another — audit #25's class is solved structurally).
   let workUri = videoUri;
   let tempCopy: string | null = null;
+  let sharedCopy: { uri: string; release: () => void } | null = null;
   try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}clubpath-src-${Date.now()}-${Math.round(Math.random() * 1e6)}.mp4`; // per-invocation unique — two calls in the same ms must not share a temp file (audit #25)
-      await FileSystem.copyAsync({ from: videoUri, to: dest });
-      try {
-        const info = await FileSystem.getInfoAsync(dest);
-        if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
-        // 2026-08-08 (2-week audit S5) — a zero-byte copy was left on disk (never adopted as tempCopy →
-        // never cleaned). Delete the reject so repeated failed runs can't accumulate orphans.
-        else void FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => undefined);
-      } catch {
-        // getInfo threw AFTER the copy landed — the file may exist; best-effort delete so it can't leak.
-        void FileSystem.deleteAsync(dest, { idempotent: true }).catch(() => undefined);
-      }
-    }
-  } catch { /* copy failed before the file existed */ }
+    const { acquireClipCopy } = await import('./sharedClipCopy');
+    sharedCopy = await acquireClipCopy(videoUri);
+    if (sharedCopy) { tempCopy = sharedCopy.uri; workUri = sharedCopy.uri; }
+  } catch { /* acquire failed — refusal below */ }
   // 2026-07-27 (full-app audit) — if the private copy could NOT be made, do NOT fall back to decoding the
   // ORIGINAL. On a surface that keeps looping the same file (SmartMotion review), a native retriever on
   // the file ExoPlayer is playing is the exact SIGSEGV / white-screen vector. Return no arc instead —
@@ -242,7 +236,7 @@ export async function detectClubPath(args: {
     // 2026-07-21 — bail BETWEEN frames the moment playback (re)starts, so a retriever is never
     // decoding the file while ExoPlayer does. Clean up what we grabbed and abort — the arc is
     // best-effort (no trace drawn if we bail); a crash-to-launcher is not acceptable.
-    if (shouldAbort?.()) { await cleanup(frames, tempCopy); return null; }
+    if (shouldAbort?.()) { await cleanup(frames, null); sharedCopy?.release(); return null; }
     const f = await frameAt(workUri, o);
     frames.push(f);
     b64s.push(f ? await downscaled(f) : null);
@@ -253,7 +247,8 @@ export async function detectClubPath(args: {
     if (b) usable.push({ idx: i, base64: b, tMs: offsets[i] - offsets[0] });
   });
   if (usable.length < 3) {
-    await cleanup(frames, tempCopy);
+    await cleanup(frames, null);
+    sharedCopy?.release();
     return null; // not enough frames to attempt an arc
   }
 
@@ -291,6 +286,7 @@ export async function detectClubPath(args: {
   } catch {
     return null;
   } finally {
-    await cleanup(frames, tempCopy);
+    await cleanup(frames, null); // frames only — the SHARED copy is released, never deleted here
+    sharedCopy?.release();
   }
 }

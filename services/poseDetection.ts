@@ -236,15 +236,22 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
   // long). Many uploaded videos have no audio track, defeating the
   // Audio.Sound path silently — the VT probe rescues those.
   try {
-    const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
-    if (status.isLoaded && status.durationMillis && status.durationMillis > 0) {
-      const ms = status.durationMillis;
+    // 2026-08-09 (shared-copy verification) — the Audio.Sound load is a NATIVE DECODER read; under
+    // the shared-copy pool other consumers' retrievers may hold the SAME file, so this must run
+    // through the global media-read chain (decoder + retriever on one file = the SIGSEGV class).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { serializeMediaRead } = require('../utils/videoThumbnail') as typeof import('../utils/videoThumbnail');
+    const probed = await serializeMediaRead(async () => {
+      const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
+      const ms = status.isLoaded && status.durationMillis && status.durationMillis > 0 ? status.durationMillis : null;
       await sound.unloadAsync().catch(() => {});
-      V6('STAGE 1 — duration probed via Audio.Sound', { duration_ms: ms });
-      return ms;
+      return { ms, isLoaded: status.isLoaded };
+    });
+    if (probed.ms != null) {
+      V6('STAGE 1 — duration probed via Audio.Sound', { duration_ms: probed.ms });
+      return probed.ms;
     }
-    await sound.unloadAsync().catch(() => {});
-    V6('STAGE 1 — Audio.Sound loaded but no duration', { isLoaded: status.isLoaded });
+    V6('STAGE 1 — Audio.Sound loaded but no duration', { isLoaded: probed.isLoaded });
   } catch (e) {
     V6('STAGE 1 — Audio.Sound failed', { error: e instanceof Error ? e.message : String(e) });
   }

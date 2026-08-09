@@ -6803,9 +6803,11 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // so 2026-07-24 added the STRUCTURAL fix: extract from a PRIVATE COPY of the clip so the retriever
     // and ExoPlayer never share a file handle — the crash condition is impossible regardless of timing.
     /shouldAbort\?: \(\) => boolean/.test(read('services/swing/clubPath.ts')) &&
-      /if \(shouldAbort\?\.\(\)\) \{ await cleanup\(frames, tempCopy\); return null; \}/.test(read('services/swing/clubPath.ts')) &&
-      // STRUCTURAL decoupling: copy the clip, extract frames from the COPY (workUri), never videoUri.
-      /FileSystem\.copyAsync\(\{ from: videoUri, to: dest \}\)/.test(read('services/swing/clubPath.ts')) &&
+      /if \(shouldAbort\?\.\(\)\) \{ await cleanup\(frames, null\); sharedCopy\?\.release\(\); return null; \}/.test(read('services/swing/clubPath.ts')) &&
+      // STRUCTURAL decoupling: acquire the SHARED private copy, extract frames from the COPY (workUri),
+      // never videoUri. 2026-08-09 — the copy comes from the refcounted pool (sharedClipCopy); the file
+      // cannot be deleted while any consumer holds it, and the copy-or-refuse invariant stands below.
+      /acquireClipCopy\(videoUri\)/.test(read('services/swing/clubPath.ts')) &&
       /const f = await frameAt\(workUri, o\)/.test(read('services/swing/clubPath.ts')) &&
       // 2026-07-30 (Tim: "analysis isn't watching the whole swing; playback + analysis tied together") —
       // the club-arc extraction NO LONGER bails on playback: the PRIVATE COPY (above) is the structural
@@ -7772,8 +7774,13 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     /biomechanics:\s*compactBio\(sh\.biomechanics\)/.test(cageSrc) && /biomechanics:\s*compactBio\(sess\.biomechanics\)/.test(cageSrc),
     'P1: partialize compacts BOTH session- and shot-level biomechanics.frames so per-swing analysis can\'t re-bloat the row past Android\'s ~2MB limit');
   check('deriveSwingTempo extracts from a PRIVATE COPY (no SIGSEGV on review)',
-    /tempCopy/.test(read('services/poseAnalysisApi.ts').slice(read('services/poseAnalysisApi.ts').indexOf('export async function deriveSwingTempo'))),
-    'C1: the default headline tempo read no longer decodes the looping original clip');
+    (() => {
+      // 2026-08-09 (speed #3) — the copy now comes from the SHARED refcounted pool; assert the acquire
+      // + refusal + workUri adoption (the invariant, not the old inline copyAsync mechanics).
+      const fn = read('services/poseAnalysisApi.ts').slice(read('services/poseAnalysisApi.ts').indexOf('export async function deriveSwingTempo'));
+      return /acquireClipCopy\(videoUri\)/.test(fn) && /if \(!sharedCopy\)/.test(fn) && /workUri = sharedCopy\.uri/.test(fn) && /sharedCopy\.release\(\)/.test(fn);
+    })(),
+    'C1: the default headline tempo read no longer decodes the looping original clip (shared refcounted copy)');
   check('Pose extraction routes through the single-flight queue',
     /from '\.\.\/utils\/videoThumbnail'/.test(read('services/poseAnalysisApi.ts')),
     'C4: poseAnalysisApi imports the serialized wrapper, not raw expo-video-thumbnails');

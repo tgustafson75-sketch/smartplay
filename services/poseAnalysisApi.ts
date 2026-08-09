@@ -717,20 +717,18 @@ export async function extractPoseFramesFromVideo(
   // it on the review surface → native SIGSEGV/hang that cleared only on a retry. Everything native now
   // reads workUri (the copy); copy failure → skeleton-only degrade, never a crash. Deleted on every exit.
   let workUri = videoUri;
-  let tempCopy: string | null = null;
+  // 2026-08-09 (speed #3) — shared refcounted copy (services/swing/sharedClipCopy): one copy per
+  // clip serves pose + tempo + club path + ball departure. Refusal-on-failure unchanged.
+  let sharedCopy: { uri: string; release: () => void } | null = null;
   try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}pose-src-${Date.now()}.mp4`;
-      await FileSystem.copyAsync({ from: videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
-    }
-  } catch { /* copy failed */ }
-  if (!tempCopy) {
+    const { acquireClipCopy } = await import('./swing/sharedClipCopy');
+    sharedCopy = await acquireClipCopy(videoUri);
+  } catch { /* acquire failed — refusal below */ }
+  if (!sharedCopy) {
     console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
     return null;
   }
+  workUri = sharedCopy.uri;
 
   let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
 
@@ -795,7 +793,7 @@ export async function extractPoseFramesFromVideo(
 
     if (effectiveDurationMs < 500) {
       console.warn('[pose] video too short to sample', { duration_ms: effectiveDurationMs });
-      try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
+      sharedCopy.release();
       return null;
     }
 
@@ -868,7 +866,7 @@ export async function extractPoseFramesFromVideo(
       if (f) frames.push(f);
     }
   } finally {
-    try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
+    sharedCopy.release();
   }
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) return null;
@@ -1116,21 +1114,19 @@ export async function deriveSwingTempo(
   // clubPath were hardened against; the fix hadn't reached here). Mirror them EXACTLY: sample from a
   // PRIVATE COPY (distinct file handle → the crash condition can't occur), never touch the playing
   // original, and delete the copy when done. Copy failure → NO_TEMPO (a missing tempo beats a crash).
+  // 2026-08-09 (speed #3) — shared refcounted copy; refcounting solves audit C-1's re-entry class
+  // structurally (no consumer can delete a file another still holds).
   let workUri = videoUri;
-  let tempCopy: string | null = null;
+  let sharedCopy: { uri: string; release: () => void } | null = null;
   try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}tempo-src-${impactMs}-${Date.now()}.mp4`; // unique per invocation — re-entry must not share a temp file (audit C-1)
-      await FileSystem.copyAsync({ from: videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { tempCopy = dest; workUri = dest; }
-    }
-  } catch { /* copy failed */ }
-  if (!tempCopy) {
+    const { acquireClipCopy } = await import('./swing/sharedClipCopy');
+    sharedCopy = await acquireClipCopy(videoUri);
+  } catch { /* acquire failed — refusal below */ }
+  if (!sharedCopy) {
     console.warn('[tempo] private copy failed — skipping tempo read to avoid a native crash');
     return NO_TEMPO;
   }
+  workUri = sharedCopy.uri;
 
   try {
     // Sample pose at each time; keep the frame so we can read sequencing
@@ -1205,6 +1201,6 @@ export async function deriveSwingTempo(
       confidence: clean ? 'med' : 'low',
     };
   } finally {
-    try { await FileSystem.deleteAsync(tempCopy, { idempotent: true }); } catch { /* best-effort */ }
+    sharedCopy.release();
   }
 }

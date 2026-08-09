@@ -18,11 +18,27 @@ import * as VideoThumbnails from 'expo-video-thumbnails';
  */
 
 // Pass through every other export (types, enums, other functions) untouched. The explicit
-// getThumbnailAsync below shadows the star-exported one (local named exports take precedence).
+// getThumbnailAsync below shadows the star-exported one (local named exports take precedence —
+// spec'd JS behavior; the import/export lint rule can't see that the shadowing is the point).
+// eslint-disable-next-line import/export
 export * from 'expo-video-thumbnails';
 
 let chain: Promise<unknown> = Promise.resolve();
 
+/**
+ * 2026-08-09 (shared-copy verification) — serialize ANY native media reader through the SAME global
+ * chain as the thumbnail retriever. Needed because probeDurationMs opens clips with expo-av
+ * (Audio.Sound = a native decoder): under the shared-copy pool all consumers hold ONE file, so an
+ * unserialized decoder could read it while a retriever does — the documented SIGSEGV class. At most
+ * one native reader of any kind runs at a time app-wide.
+ */
+export function serializeMediaRead<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(fn);
+  chain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+// eslint-disable-next-line import/export
 export function getThumbnailAsync(
   sourceFilename: string,
   options?: VideoThumbnails.VideoThumbnailsOptions,

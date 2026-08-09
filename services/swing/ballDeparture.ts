@@ -115,25 +115,23 @@ export async function detectBallDeparture(args: {
 
   // 2026-07-30 (analysis audit C3) — extract from a PRIVATE COPY so a native retriever never decodes the
   // clip ExoPlayer is looping (SIGSEGV). Copy-or-bail; source copy only needed through extraction.
+  // 2026-08-09 (speed #3) — shared refcounted copy (services/swing/sharedClipCopy); copy-or-bail
+  // refusal unchanged.
   let depWorkUri = args.videoUri;
-  let depTempCopy: string | null = null;
+  let sharedCopy: { uri: string; release: () => void } | null = null;
   try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}balldep-src-${args.impactMs}-${Date.now()}.mp4`; // unique per invocation (audit C-1)
-      await FileSystem.copyAsync({ from: args.videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { depTempCopy = dest; depWorkUri = dest; }
-    }
-  } catch { /* copy failed */ }
-  if (!depTempCopy) { console.warn('[ballDeparture] private copy failed — skipping to avoid a native crash'); return null; }
+    const { acquireClipCopy } = await import('./sharedClipCopy');
+    sharedCopy = await acquireClipCopy(args.videoUri);
+  } catch { /* acquire failed — refusal below */ }
+  if (!sharedCopy) { console.warn('[ballDeparture] private copy failed — skipping to avoid a native crash'); return null; }
+  depWorkUri = sharedCopy.uri;
   let before: { uri: string; width: number; height: number } | null;
   let after: { uri: string; width: number; height: number } | null;
   try {
     before = await frameAt(depWorkUri, args.impactMs - PRE_MS);
     after = await frameAt(depWorkUri, args.impactMs + POST_MS);
   } finally {
-    try { await FileSystem.deleteAsync(depTempCopy, { idempotent: true }); } catch { /* best-effort */ }
+    sharedCopy.release();
   }
   if (!before || !after) return null;
 
