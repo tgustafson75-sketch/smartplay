@@ -650,10 +650,18 @@ export default function SwingDetail() {
   // mount below), so "Grab Frame" and the coach report carry the skeleton + trace
   // + fault heat, not a clean frame. Video burn-in needs a native encoder (absent
   // today) — this covers the still + reporting half now.
-  const overlayFaultJoints = faultJointsFor(
-    session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id,
-  );
-  const overlayFaultSevere = session?.primary_issue?.severity === 'significant';
+  // 2026-08-09 (deep-audit B / finding 2) — the fault-region HEAT must reflect the SELECTED swing, not
+  // always the session/primary swing. Painting swing-1's fault on swing-3's body is a visible lie. Shot
+  // 0 uses the session headline; a non-primary swing uses ITS OWN per-shot read (perShotAnalysis, which
+  // is conservative — 'none' → no heat, honest). No per-shot read yet → no heat rather than a wrong one.
+  const displayFault = selectedShotIdx === 0
+    ? (session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id)
+    : (shot?.perShotAnalysis?.primary_fault ?? (shot?.perShotAnalysis?.detected_issue && shot.perShotAnalysis.detected_issue !== 'none' ? shot.perShotAnalysis.detected_issue : null));
+  const displayFaultSevere = selectedShotIdx === 0
+    ? session?.primary_issue?.severity === 'significant'
+    : shot?.perShotAnalysis?.severity === 'significant';
+  const overlayFaultJoints = faultJointsFor(displayFault);
+  const overlayFaultSevere = displayFaultSevere;
   const { capture: captureOverlayStill, element: overlayStillCaptureEl } = useSwingStillCapture({
     poseFrames,
     faultJoints: overlayFaultJoints,
@@ -839,8 +847,14 @@ export default function SwingDetail() {
   // — never the whole multi-swing clip) and store it on the shot, so its skeleton + numbers + blue club
   // render. On-demand (only for swings you actually open), so capture stays fast — no N eager extractions.
   // Shot 0 keeps using the session-level read (skipped here).
+  // 2026-08-09 (deep-audit B / finding 1) — NOT gated on LIBRARY_AUTO_PROCESS. That flag disables
+  // AUTO-processing on OPEN (unwanted); this fires only when the user EXPLICITLY taps swing 2..N in the
+  // reel, on that swing's BOUNDED window (~5s, not the whole clip), with the SIGSEGV shouldAbort guard.
+  // Lumping it under the flag left every non-primary swing with a BLANK skeleton/trace/numbers forever
+  // (shot.biomechanics is only written for swings scrubbed-to during capture). This is the fill for the
+  // rest — on demand, bounded, safe.
   useEffect(() => {
-    if (!LIBRARY_AUTO_PROCESS || !swing_id) return;
+    if (!swing_id) return;
     const selShot = session?.shots[selectedShotIdx];
     if (!selShot?.clipUri || selShot.biomechanics !== undefined) return;             // already has / computing
     if (selectedShotIdx === 0 && session?.biomechanics !== undefined) return;        // shot 0 uses session-level
@@ -2346,8 +2360,8 @@ export default function SwingDetail() {
                   resizeMode="contain"
                   // 2026-07-06 (Tim — GolfFix-style region heat) — paint the
                   // diagnosed fault's body region orange/red on the skeleton.
-                  faultJoints={faultJointsFor(session?.primary_issue?.primary_fault ?? session?.primary_issue?.issue_id)}
-                  faultSevere={session?.primary_issue?.severity === 'significant'}
+                  faultJoints={overlayFaultJoints}
+                  faultSevere={overlayFaultSevere}
                   clubArc={clubArcPoints}
                 />
                 );
