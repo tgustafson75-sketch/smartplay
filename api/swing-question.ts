@@ -38,7 +38,7 @@ function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  *
  * Input shape:
  *   { frames: [{ b64, media_type? }], question: string,
- *     context: { caddie_name?, club?, prior_fault?, prior_cause?, player_memory?,
+ *     context: { caddie_name?, club?, persona?, prior_fault?, prior_cause?, player_memory?,
  *                prior_fix?, language? } }
  * Output:
  *   { answer: string, provider: 'gemini'|'openai',

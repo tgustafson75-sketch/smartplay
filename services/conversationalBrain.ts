@@ -14,6 +14,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { getActiveCaddie } from './caddieResolver';
 import { useRoundStore } from '../store/roundStore';
 import { buildPipecatContext } from './pipecatContext';
+import { getCaddieContext, mergeMemoryIntoContext } from './caddieMemoryRetrieval';
 import { screenContextForPrompt } from './screenContext';
 
 export interface BrainReply {
@@ -131,6 +132,18 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
         kevinContext: profile.kevinContext ?? null,
         persistentPatterns: profile.persistentPatterns ?? null,
         recentShots: (round.shots ?? []).slice(-5),
+        // 2026-08-10 (connected audit D1 — Tim: "caddie brain universal, ties to the whole CNS"). The
+        // pipecat-DOWN fallback used to drop the learned block, so an earbud "what's the play / is this
+        // my usual miss?" lost bag + tendencies the moment pipecat degraded. Send the SAME CNS block the
+        // primary path + the on-screen kevin path send, so the degraded caddie still knows the player.
+        unified_context_block: mergeMemoryIntoContext(
+          null,
+          getCaddieContext({
+            courseId: round.activeCourseId,
+            hole: round.isRoundActive ? round.currentHole : null,
+            club: round.club,
+          }).promptBlock,
+        ),
       }),
     }).finally(() => clearTimeout(t));
     if (!resp.ok) return null;

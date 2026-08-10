@@ -69,7 +69,15 @@ export default function AskYourSwingCard({ session }: Props) {
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const voiceGender = useSettingsStore(s => s.voiceGender);
   const language = useSettingsStore(s => s.language);
-  const caddieName = getCaddieName(caddiePersonality);
+  // 2026-08-10 (connected audit D2) — resolve the ACTIVE per-pillar caddie (not the global pick) so the
+  // swing-question answer speaks as the SAME caddie as every other surface, never drifting character.
+  const activePersona = (() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddie();
+    } catch { return caddiePersonality; }
+  })();
+  const caddieName = getCaddieName(activePersona);
 
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
@@ -106,6 +114,7 @@ export default function AskYourSwingCard({ session }: Props) {
           question: trimmed,
           context: {
             caddie_name: caddieName,
+            persona: activePersona,
             club: session.club,
             prior_fault: session.primary_issue?.name ?? null,
             // 2026-05-26 — Pass through GolfFix payload so the answer
