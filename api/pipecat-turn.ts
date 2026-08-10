@@ -56,6 +56,9 @@ const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'plan_shot', 'log_score', 'log_emotional_state',
   'mark_tee', 'mark_green', 'log_issue', 'set_reminder',
+  // 2026-08-09 (Tim — exact club attribution) — recommend_club carries the caddie's spoken club to the
+  // client so silent adherence trains the bag with the EXACT club advised (not just a distance proxy).
+  'recommend_club',
   // 2026-08-08 (verification wave) — register_bag was declared + prompted but MISSING here, so it fell
   // through to the bare 'Done.' with NO toolActions.push: the model verbally confirmed the bag while the
   // client dispatch case never fired and nothing was written. The passthrough spread carries the
@@ -132,6 +135,18 @@ const KEVIN_TOOLS: AiToolDef[] = [
         hole:           { type: 'number', description: 'Hole number IF they named one.' },
         target:         { type: 'string', description: 'What they are aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
       },
+    },
+  },
+  {
+    name: 'recommend_club',
+    description: 'Call this WHENEVER you tell the player which club to hit / what the play is on a shot — "I\'d go with the 8 here", "smooth 7", "this is a driver hole", "lay up with a 5 iron". Pass the exact club you recommended so the app tracks whether they take your advice and learns their distances from it. Call it IN ADDITION to speaking your recommendation — it does not replace your spoken answer. Do NOT call it for general club talk ("your 7-iron goes 165") — only when advising THIS shot.',
+    parameters: {
+      type: 'object',
+      properties: {
+        club:  { type: 'string', description: 'The club you recommended for this shot (e.g. "8 iron", "driver", "pitching wedge").' },
+        shape: { type: 'string', description: 'Shot shape you advised IF any (e.g. "draw", "fade", "punch"). Omit if none.' },
+      },
+      required: ['club'],
     },
   },
   {

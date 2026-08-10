@@ -95,6 +95,7 @@ type AnyAction = {
   shot_number?: number;
   distance_yards?: number;
   target?: string;
+  shape?: string;
   // set_reminder
   text?: string;
   when?: string;
@@ -336,6 +337,21 @@ function dispatchOne(a: AnyAction): void {
         kevin_adhered: resolved.adhered,
       });
       round.clearPendingKevinRec();
+      break;
+    }
+    case 'recommend_club': {
+      // 2026-08-09 (Tim — exact club attribution) — the caddie just advised a club for THIS shot.
+      // Stamp it as the pending rec with the EXACT spoken club (overwrites the distance-proxy stamp
+      // from the shot-strategy query path). If the player then hits it without changing clubs, the
+      // shot-club resolver attributes THIS club and its measured distance trains the bag. Active-round
+      // only; clears on hole change; the resolver arbitrates it against any club the player declares.
+      if (typeof a.club === 'string' && a.club.trim()) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
+        if (round.isRoundActive) {
+          round.setPendingKevinRec({ club: a.club.trim(), shape: typeof a.shape === 'string' && a.shape.trim() ? a.shape.trim() : null, aimPoint: null });
+        }
+      }
       break;
     }
     case 'plan_shot': {

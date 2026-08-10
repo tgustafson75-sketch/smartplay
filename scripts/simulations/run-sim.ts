@@ -7999,6 +7999,22 @@ check('Club rec stamped on the DEFAULT (pipecat) shot-strategy path, not only th
   })(),
   'asking the caddie for the play on the default voice path stamps a rec, so hitting it silently trains the bag');
 
+// 2026-08-09 (Tim — un-parked exact club attribution) — recommend_club: the brain calls it when it
+// advises a club, carrying the EXACT spoken club; client stamps it (overwriting the distance proxy).
+// LOCK: tool declared + in UI_TOOLS (server dispatches) + client case exists (reachable, not dead).
+check('recommend_club: brain tool declared, server-dispatched, client-stamped (exact spoken-club attribution)',
+  (() => {
+    const turn = read('api/pipecat-turn.ts');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    return (
+      /name: 'recommend_club'/.test(turn) &&
+      /UI_TOOLS = new Set\(\[[\s\S]*?'recommend_club'[\s\S]*?\]\)/.test(turn) &&
+      /case 'recommend_club':/.test(disp) &&
+      /setPendingKevinRec\(\{ club: a\.club\.trim\(\)/.test(disp)
+    );
+  })(),
+  'when the caddie speaks a club it is captured exactly, so silent adherence trains the bag with the RIGHT club');
+
 // 2026-08-09 (on-course audit C1/C2 — the wrong-hole voice scoring Tim's fought for months) — a bare
 // voice score/putts must resolve the hole the PLAYER means, not nav currentHole (which GPS advance +
 // first-score auto-advance move on their own). LOCK: all four voice score/putts sites route through
