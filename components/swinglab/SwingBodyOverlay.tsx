@@ -105,6 +105,12 @@ type Props = {
    *  clubhead path (with a dot at each detected position) instead of the wrist proxy.
    *  Absent/too-few → the honest hand/tempo trace, exactly as before. */
   clubArc?: { x: number; y: number; tMs: number }[] | null;
+  /** 2026-08-10 (Tim — "haven't seen the club trace in a week") — the video's true pixel size. Used as
+   *  the ALIGNED-space fallback so the clubhead arc (full-frame normalized) still renders when the pose
+   *  frames don't carry frameW/frameH (skeleton falls back to bbox; the club needs a frame to map into).
+   *  Only used when pose coords are normalized (both skeleton + club then share this full-frame space). */
+  videoW?: number | null;
+  videoH?: number | null;
 };
 
 /** Minimum detected clubhead points before we draw the club arc (vs the wrist proxy). */
@@ -213,6 +219,8 @@ export default function SwingBodyOverlay({
   faultJoints,
   faultSevere = false,
   clubArc,
+  videoW,
+  videoH,
 }: Props) {
   const hotSet = useMemo(() => new Set(faultJoints ?? []), [faultJoints]);
   const hotColor = faultSevere ? FAULT_HOT_SEVERE : FAULT_HOT_COLOR;
@@ -223,17 +231,27 @@ export default function SwingBodyOverlay({
   // space so the overlay maps onto the body exactly like the video.
   const aligned = useMemo(() => {
     const dimFrame = frames.find(f => (f.frameW ?? 0) > 0 && (f.frameH ?? 0) > 0);
-    if (!dimFrame) return null;
-    const fw = dimFrame.frameW as number;
-    const fh = dimFrame.frameH as number;
     const normalized = coordsAreNormalized(frames);
+    let fw: number, fh: number;
+    if (dimFrame) {
+      fw = dimFrame.frameW as number;
+      fh = dimFrame.frameH as number;
+    } else if (normalized && (videoW ?? 0) > 0 && (videoH ?? 0) > 0) {
+      // 2026-08-10 — no per-frame dims, but the pose coords are normalized 0..1 and we know the video's
+      // true size: use it as the full-frame space so BOTH skeleton and the clubhead arc draw aligned
+      // (was: skeleton bbox-fit, club silently dropped — the "no trace for a week" bug).
+      fw = videoW as number;
+      fh = videoH as number;
+    } else {
+      return null;
+    }
     return {
       fw, fh,
       // Scale factor to take coords into frame-pixel space.
       sx: normalized ? fw : 1,
       sy: normalized ? fh : 1,
     };
-  }, [frames]);
+  }, [frames, videoW, videoH]);
 
   // 2026-07-02 (Tim's mockup vision) — the swing trace as a TEMPO HEAT MAP: a smooth Catmull-Rom
   // spline through the lead-wrist path, split into per-segment colored strokes where color = the

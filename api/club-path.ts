@@ -90,7 +90,11 @@ function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
   };
   const smooth = (a: number, b: number, depth: number): boolean => {
     if (eff(a, b)) return true;
-    if (depth <= 0 || b - a < 5) return false; // too few points to claim a doubled-back real arc
+    // 2026-08-10 (Tim — "no trace for a week") — was `< 5`, which on a SPARSE real arc (the clubhead is
+    // only detected in ~6-8 frames, not all 14) left the doubled-back downswing leg too short to split,
+    // rejecting valid full swings as scatter. Allow legs down to 3 points; the span gates above remain the
+    // primary blob/scatter defense. (Final threshold calibration pending Tim's real-clip club-arc logs.)
+    if (depth <= 0 || b - a < 2) return false; // need ≥3 points in a leg to claim a doubled-back real arc
     let apex = a + 1, best = -1;
     for (let i = a + 1; i < b; i++) {
       const d = Math.hypot(pts[i].x - pts[a].x, pts[i].y - pts[a].y);

@@ -551,6 +551,13 @@ export default function SwingDetail() {
   // the overlay, so the library shows the true clubhead path (falls back to the
   // honest wrist trace when the head can't be seen). One server pass per swing.
   const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  // 2026-08-10 (Tim — "haven't seen the club trace in a week"). ROOT: the swing-arc overlay only draws
+  // the clubhead trace in ALIGNED frame space (viewBox = the real frame dims); when the pose frames
+  // don't carry frameW/frameH the skeleton falls back to a self-fit bbox but the club (full-frame
+  // normalized 0..1) has no frame to map into → the skeleton shows and the club is silently dropped.
+  // The video's natural size is the ground-truth full-frame dimension — capture it from onLoad and hand
+  // it to the overlay as the aligned-space fallback so the trace renders whenever we have a real arc.
+  const [videoNatural, setVideoNatural] = useState<{ w: number; h: number } | null>(null);
   // 2026-07-18 (Tim — crash mp4) — run the clubhead extraction AT MOST ONCE per unique clip
   // window. The effect re-fires when `duration` settles and when the skeleton/trace toggles flip
   // mid-playback; without this guard each re-fire could launch another native frame-extraction
@@ -1131,6 +1138,12 @@ export default function SwingDetail() {
   // These memoize the rest so a re-render can NEVER re-subscribe the Video. `source` (memoized above) +
   // onPlaybackStatusUpdate (useCallback above) + these three = all Video props stable.
   const videoStyle = useMemo(() => [styles.video, motionOnly && { opacity: 0 }], [motionOnly]);
+  // 2026-08-10 — capture the video's true pixel size for the overlay's aligned-space fallback (the
+  // full-frame space the clubhead arc lives in). naturalSize is delivered by onReadyForDisplay.
+  const onVideoReady = useCallback((e: { naturalSize?: { width: number; height: number } }) => {
+    const ns = e?.naturalSize;
+    if (ns && ns.width > 0 && ns.height > 0) setVideoNatural({ w: ns.width, h: ns.height });
+  }, []);
   const onVideoLoad = useCallback(async () => {
     setVideoError(null);
     // Begin at the located swing (not the pre-swing waggle). Guarded; no valid start → plays from 0.
@@ -2323,6 +2336,7 @@ export default function SwingDetail() {
                 rate={playbackRate}
                 shouldCorrectPitch={false}
                 onLoad={onVideoLoad}
+                onReadyForDisplay={onVideoReady}
                 onPlaybackStatusUpdate={onPlaybackStatusUpdate}
                 onError={onVideoError}
               />
@@ -2363,6 +2377,8 @@ export default function SwingDetail() {
                   faultJoints={overlayFaultJoints}
                   faultSevere={overlayFaultSevere}
                   clubArc={clubArcPoints}
+                  videoW={videoNatural?.w ?? null}
+                  videoH={videoNatural?.h ?? null}
                 />
                 );
               })()}

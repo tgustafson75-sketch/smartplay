@@ -641,6 +641,10 @@ export default function SmartMotion() {
   const [poseFrames, setPoseFrames] = useState<PoseFrame[] | null>(null);
   const [biomech, setBiomech] = useState<SwingBiomechanics | null>(null);
   const [videoDurationMs, setVideoDurationMs] = useState<number | null>(null);
+  // 2026-08-10 (Tim — "no club trace for a week") — the review video's true pixel size; fed to
+  // SwingBodyOverlay as the aligned-space fallback so the clubhead arc renders even when the pose frames
+  // lack frameW/frameH (skeleton falls back to bbox, the club needs a full frame to map into).
+  const [reviewVideoNatural, setReviewVideoNatural] = useState<{ w: number; h: number } | null>(null);
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
   // Camera cross-check of the acoustic strike (ball there → gone at impact).
   const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
@@ -3659,6 +3663,10 @@ export default function SmartMotion() {
     if (seg && seg.startMs > 0) { try { await v.setPositionAsync(seg.startMs); } catch { /* ignore */ } }
     if (!videoPaused) v.playAsync().catch(() => undefined);
   }, [segments, videoPaused]);
+  const onReviewVideoReady = useCallback((e: { naturalSize?: { width: number; height: number } }) => {
+    const ns = e?.naturalSize;
+    if (ns && ns.width > 0 && ns.height > 0) setReviewVideoNatural({ w: ns.width, h: ns.height });
+  }, []);
   const onReviewPlaybackStatus = useCallback((s: AVPlaybackStatus) => {
     if ('positionMillis' in s && typeof s.positionMillis === 'number'
         && Math.abs(s.positionMillis - playbackMsEmitRef.current) >= 20) {
@@ -3882,6 +3890,7 @@ export default function SmartMotion() {
             // 2026-08-07 — stable (useCallback) handlers so a 25×/s re-render can't re-subscribe the native
             // Video into the fatal "Maximum update depth" loop (root cause; see the defs above hudPage).
             onLoad={onReviewVideoLoad}
+            onReadyForDisplay={onReviewVideoReady}
             onPlaybackStatusUpdate={onReviewPlaybackStatus}
             onError={onReviewVideoError}
           />
@@ -4005,6 +4014,8 @@ export default function SmartMotion() {
               faultJoints={faultJointsFor(analysis?.primary_fault ?? analysis?.detected_issue)}
               faultSevere={analysis?.severity === 'significant'}
               clubArc={clubArcPoints}
+              videoW={reviewVideoNatural?.w ?? null}
+              videoH={reviewVideoNatural?.h ?? null}
             />
           </View>
         ) : null}

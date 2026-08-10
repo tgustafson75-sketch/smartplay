@@ -8084,6 +8084,27 @@ check('Fault engine: arm/finish/sway faults wired, fabricated over-the-top remov
   })(),
   'the analyzer names the plainly-visible faults (bent lead arm, chicken wing, incomplete finish, sway, head movement) from reliable arm/hip metrics and no longer fabricates over-the-top');
 
+// 2026-08-10 (Tim — 'haven't seen the club trace in a week'). ROOT: the clubhead arc only drew in the
+// overlay's ALIGNED space (real frame dims); when pose frames lacked frameW/frameH the skeleton fell
+// back to a self-fit bbox but the club (full-frame normalized) had no frame to map into → skeleton
+// shows, club silently dropped. Fix: feed the video's natural size as the aligned-space fallback (both
+// review surfaces), and loosen the sparse-arc rejection so real full swings aren't dropped as scatter.
+check('Club trace renders without per-frame dims: video-size aligned fallback + sparse-arc gate loosened',
+  (() => {
+    const overlay = read('components/swinglab/SwingBodyOverlay.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const cp = read('services/swing/clubPath.ts');
+    return (
+      /videoW\?: number \| null;/.test(overlay) &&
+      /normalized && \(videoW \?\? 0\) > 0 && \(videoH \?\? 0\) > 0/.test(overlay) &&  // aligned fallback from video size
+      /onReadyForDisplay=\{onVideoReady\}/.test(detail) && /videoW=\{videoNatural/.test(detail) &&
+      /onReadyForDisplay=\{onReviewVideoReady\}/.test(sm) && /videoW=\{reviewVideoNatural/.test(sm) &&
+      /b - a < 2\) return false/.test(cp)                                             // sparse full-swing arc no longer over-rejected
+    );
+  })(),
+  'the swing trace draws whenever a real clubhead arc exists (video-size aligned fallback covers dimless pose frames), on both the library detail and live review');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
