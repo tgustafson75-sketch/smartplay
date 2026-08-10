@@ -359,6 +359,11 @@ export function resolveGreenCoords(holeNumber: number): {
 } {
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  // 2026-08-10 (logic-universality fix #4) — TWICE-AROUND: the player's marked/surveyed green from loop 1
+  // is stored under the physical hole (1-9). On loop 2 (holes 10-18) look those personal sources up under
+  // hole-9 so a green you marked on the front nine still resolves on the back nine (the geometry cache
+  // already wraps; truth/override/golfbert did not). courseHoles/geometry keep the raw number.
+  const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
   // 2026-05-24 — Surveyed ground truth wins over EVERYTHING. The dev
   // screen at app/dev/CourseTruth.tsx captures on-foot GPS at the
   // green center; getCourseTruthSync reads from a cache hydrated at
@@ -368,7 +373,7 @@ export function resolveGreenCoords(holeNumber: number): {
   // below — but truth short-circuits so override F/B is preserved
   // only via that branch's own flow when truth is absent).
   if (courseId) {
-    const truth = getCourseTruthSync(courseId, holeNumber);
+    const truth = getCourseTruthSync(courseId, personalHole);
     if (truth) {
       return {
         front: null,
@@ -383,7 +388,7 @@ export function resolveGreenCoords(holeNumber: number): {
   // we have a tee anchor to compute bearing from; otherwise F/B stay
   // null and the smartFinder strip just shows middle.
   if (courseId) {
-    const ov = getGreenOverride(courseId, holeNumber);
+    const ov = getGreenOverride(courseId, personalHole);
     if (ov) {
       const middleLoc: ShotLocation = { lat: ov.lat, lng: ov.lng };
       let front: ShotLocation | null = null;
@@ -397,7 +402,7 @@ export function resolveGreenCoords(holeNumber: number): {
   // 2026-06-03 — Golfbert paid premium data. Single pin point per
   // hole (flagcoords); F/B stay null. Cache populated by SmartVision.
   if (courseId) {
-    const golfbertHole = getCachedGolfbertHole(courseId, holeNumber);
+    const golfbertHole = getCachedGolfbertHole(courseId, personalHole);
     if (golfbertHole) {
       const greenLoc = getGolfbertGreenCoord(golfbertHole);
       if (greenLoc) {
@@ -447,8 +452,11 @@ export function resolveTeeCoords(holeNumber: number): {
 } {
   const round = useRoundStore.getState();
   const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  // 2026-08-10 (logic-universality fix #4) — twice-around: personal marks (tee override / golfbert) live
+  // under the physical hole 1-9; wrap on loop 2 so a marked tee resolves on the back nine too.
+  const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
   if (courseId) {
-    const ov = getTeeOverride(courseId, holeNumber);
+    const ov = getTeeOverride(courseId, personalHole);
     if (ov) {
       return { tee: { lat: ov.lat, lng: ov.lng }, source: 'override' };
     }
@@ -457,7 +465,7 @@ export function resolveTeeCoords(holeNumber: number): {
   // fallback). Falls through to courseHoles when no Golfbert vectors
   // are cached for this course/hole.
   if (courseId) {
-    const golfbertHole = getCachedGolfbertHole(courseId, holeNumber);
+    const golfbertHole = getCachedGolfbertHole(courseId, personalHole);
     if (golfbertHole) {
       const teeLoc = getGolfbertTeeCoord(golfbertHole);
       if (teeLoc) {

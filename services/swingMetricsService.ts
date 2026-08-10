@@ -31,6 +31,7 @@
 
 import type { PoseFrame } from './poseAnalysisApi';
 import { devLog } from './devLog';
+import { normalizeClub as canonicalClubName } from './clubNormalize';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -306,10 +307,14 @@ function normalizeClub(c: string | null | undefined): string {
  *   measured > pose_estimated > profile_estimated > placeholder
  */
 export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSet {
-  const clubKey = normalizeClub(inputs.club);
+  const clubKey = normalizeClub(inputs.club); // local lowercase key for the private clubFactor table
   const handicap = inputs.profile?.handicap ?? null;
-  const profileCarry = clubKey !== 'unknown'
-    ? inputs.profile?.clubDistances?.[clubKey] ?? null
+  // 2026-08-10 (logic-universality fix #5) — profile clubDistances are keyed by CANONICAL ClubName
+  // ('Driver','7I'), so the lowercase clubKey always missed (silent no-op). Look it up by the canonical
+  // name so a passed clubDistances map actually resolves.
+  const canonName = canonicalClubName(inputs.club);
+  const profileCarry = canonName
+    ? inputs.profile?.clubDistances?.[canonName] ?? null
     : null;
 
   // ── Club speed ──

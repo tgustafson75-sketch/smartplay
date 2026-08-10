@@ -574,6 +574,17 @@ export default function SmartMotion() {
       ? activeMemberHandedness
       : profile.handedness ?? 'right';
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
+  // 2026-08-10 (logic-universality fix #3) — swing analysis narration + feel must speak as the ACTIVE
+  // per-pillar caddie (cage pillar), NOT the raw global pick — otherwise the SAME swing narrated live vs
+  // uploaded (videoUpload already uses getActiveCaddie) is a different caddie, and a Tank-disabled global
+  // leaks Tank. Recomputes when the persona/assignments change (settings dep via the hook above).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const analysisCaddie = React.useMemo(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddieForPillar('cage');
+    } catch { return caddiePersonality; }
+  }, [caddiePersonality]);
   const language = useSettingsStore((s) => s.language);
   // 2026-06-10 — Environment mode (cage/range/course). Default 'cage' keeps every
   // existing path byte-for-byte; 'range' is an additive branch (longer window,
@@ -1717,7 +1728,7 @@ export default function SmartMotion() {
         analyzeSwing(rawUri, {
           club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
           swing_number: segment?.index ?? 1,
-          caddie_name: caddiePersonality,
+          caddie_name: analysisCaddie,
           angle,
           handedness: swingerHandedness,
           language,
@@ -2418,7 +2429,7 @@ export default function SmartMotion() {
         videoUri: clipUri ?? '',
         feel: t,
         durationMs: videoDurationMs,
-        caddieName: caddiePersonality,
+        caddieName: analysisCaddie,
         club: club ? clubLabel(club) : null,
         priorFault: a?.primary_fault ?? a?.detected_issue ?? null,
         priorCause: a?.cause ?? null,
@@ -2489,7 +2500,7 @@ export default function SmartMotion() {
           analyzeSwing(uri, {
             club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
             swing_number: seg.index,
-            caddie_name: caddiePersonality,
+            caddie_name: analysisCaddie,
             angle,
             handedness: swingerHandedness,
             language,
@@ -3207,8 +3218,8 @@ export default function SmartMotion() {
       try {
         const cid = clubRef.current;
         if (cid && cid !== 'unknown') {
-          const cn = (cid === 'DR' ? 'Driver' : cid) as ClubName;
-          if ((CLUB_ORDER as readonly string[]).includes(cn)) {
+          const cn = clubIdToClubName(cid); // 2026-08-10 — canonical map, not a hand-rolled DR cast
+          if (cn && (CLUB_ORDER as readonly string[]).includes(cn)) {
             useClubStatsStore.getState().addReps(cn, segsForAnalysis.length || 1);
           }
         }

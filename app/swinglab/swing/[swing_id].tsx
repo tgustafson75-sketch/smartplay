@@ -1001,7 +1001,9 @@ export default function SwingDetail() {
       const line = await presenceFill({
         trigger: 'analysis_failed',
         context: {
-          persona: caddiePersonality,
+          // 2026-08-10 (logic-universality fix #3) — the spoken failure line speaks as the ACTIVE
+          // per-pillar caddie (cage), not the raw global pick, matching every other swing surface.
+          persona: (() => { try { return (require('../../../services/caddieResolver') as typeof import('../../../services/caddieResolver')).getActiveCaddieForPillar('cage'); } catch { return caddiePersonality; } })(),
           club: session?.club ?? null,
           swingTitle: session?.upload?.notes ?? null,
         },

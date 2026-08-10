@@ -36,7 +36,8 @@ import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, voicePuttsHole } from '../store/roundStore';
+import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useFamilyStore } from '../store/familyStore';
@@ -799,9 +800,14 @@ export const useVoiceCaddie = ({
     // player's language via the full voice-intent pipeline (which sends
     // language='es'/'zh' to Kevin). Only English gets the hardcoded shortcut.
     if (language === 'en' && matchesCommand(transcript, YARDAGE_PHRASES)) {
-      const response = currentYardage
-        ? "You're " + currentYardage + ' yards to the center.' +
-          (club ? ' ' + club + ' in hand.' : '')
+      // 2026-08-10 (logic-universality fix #1) — speak the SAME resolved yardage the screen + the
+      // non-English voice path use (user-stated > live GPS > static card), not the raw static
+      // `currentYardage` store field. Was: the English 'how far?' shortcut spoke the scorecard tee→green
+      // number, ignoring a fresh GPS read AND a just-stated 'I'm 150 out' — three answers to one question.
+      const resolved = resolveYardage(currentHole);
+      const y = resolved.value ?? currentYardage;
+      const response = y
+        ? "You're " + y + ' yards to the center.' + (club ? ' ' + club + ' in hand.' : '')
         : 'Check the hole view for your yardage.';
       return { handled: true, response };
     }
@@ -1440,7 +1446,11 @@ export const useVoiceCaddie = ({
             ? num
             : (PUTT_WORDS[lower] !== undefined ? PUTT_WORDS[lower] : null);
           if (parsed !== null) {
-            useRoundStore.getState().logPutts(currentHole, parsed);
+            // 2026-08-10 (logic-universality fix #2) — putts follow the SCORED hole (voicePuttsHole),
+            // not the raw nav currentHole. After 'I made a 5' auto-advances the hole, this English
+            // shortcut used to land the putts on the NEW hole — the exact bug voicePuttsHole prevents
+            // everywhere else.
+            useRoundStore.getState().logPutts(voicePuttsHole(useRoundStore.getState()), parsed);
             recordUserTurn(trimmed);
             const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
             onResponseReceived(confirmLine);

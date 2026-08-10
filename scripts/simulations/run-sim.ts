@@ -8140,6 +8140,23 @@ check('Caddie web search: grounded search_web tool wired on BOTH brain paths (un
   })(),
   'ask the caddie a real-world course/fact question and it searches the web (grounded, cited) on whichever brain answers — never a hallucinated fact');
 
+// 2026-08-10 (connected audit #4 — logic universality; Tim: 'no more broken-up frustration'). Same
+// question, same answer on every path: the English voice 'how far?' uses the SHARED resolveYardage
+// (live/stated), not the raw static currentYardage; voice putts follow the SCORED hole (voicePuttsHole),
+// not raw currentHole; swing narration speaks the ACTIVE per-pillar caddie (live == upload identity).
+check('Logic universal: voice yardage + putts + swing-caddie match every other path',
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    return (
+      /const resolved = resolveYardage\(currentHole\)/.test(vc) &&              // #1 voice how-far uses shared resolver
+      /logPutts\(voicePuttsHole\(useRoundStore\.getState\(\)\), parsed\)/.test(vc) && // #2 putts -> scored hole
+      /getActiveCaddieForPillar\('cage'\)/.test(sm) &&                          // #3 narration = active caddie
+      /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)
+    );
+  })(),
+  'asking how far / logging putts / hearing your swing read is the SAME on the voice shortcut as on the screen and the brain — no divergent path');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
