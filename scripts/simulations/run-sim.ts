@@ -8372,6 +8372,31 @@ check('LOCK: hole-scan traces + verifies tight outlines, and the derivation cons
   })(),
   'outlines traced for green/tee/fairway/hazards, extent-verified, token budget sized for polygons, consumed by the derivation with card-verified tees');
 
+// A z16 tile spans ~1990 yds, so a 30-yd green is ~15px — a hard resolution ceiling on "tightly",
+// unfixable by prompting. The read MUST locate wide then re-centre and trace tight, and pixels must
+// be unprojected against the tile that produced them or every coordinate silently shifts.
+check('LOCK: hole geometry derives in two passes — locate wide, then trace on a re-centred tight tile',
+  (() => {
+    const d = read('services/holeGeometryDerivation.ts');
+    const twoPass =
+      /const TRACE_ZOOM = 18/.test(d) &&
+      /scanTile\(seed, TILE_ZOOM,/.test(d) &&          // pass 1 locates on the wide tile
+      /scanTile\(coarseGreen, TRACE_ZOOM,/.test(d);    // pass 2 traces re-centred on the found green
+    // the tight read must be a strict upgrade: any failure keeps the wide result
+    const failsSafe = /let data: HoleScanResponse = wide;/.test(d) && /keeping the wide read/.test(d);
+    // projection must be bound to whichever tile produced the data
+    const boundProjection =
+      /let tileCenter: LatLng = seed;/.test(d) && /let tileZoom = TILE_ZOOM;/.test(d) &&
+      /toCoord = \(p: \{ x: number; y: number \} \| null\): LatLng \| null => unproject\(p, tileCenter, tileZoom\)/.test(d);
+    // and the timeout must cover TWO vision calls, not one
+    const budget = (() => {
+      const m = d.match(/const REQUEST_TIMEOUT_MS = ([\d_]+)/);
+      return m ? Number(m[1].replace(/_/g, '')) >= 60_000 : false;
+    })();
+    return twoPass && failsSafe && boundProjection && budget;
+  })(),
+  'locate-wide → trace-tight, fails safe to the wide read, projection bound to its own tile, timeout sized for two passes');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

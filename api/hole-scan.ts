@@ -183,6 +183,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (spanYards
         ? ` SCALE: this image spans about ${Math.round(spanYards)} yards edge to edge, so 0.01 of normalized width ≈ ${Math.round(spanYards / 100)} yards. A putting green is typically 20-40 yards across (${(25 / spanYards).toFixed(3)}-${(40 / spanYards).toFixed(3)} normalized) and a tee box 8-20 yards — use this to reject anything of the wrong size.`
         : '') +
+      // 2026-08-10 — a wide frame contains the WHOLE PROPERTY, not one hole: several greens, the
+      // practice green and the clubhouse are all in shot, and a green is only ~15px across. Saying
+      // so changes the task from "trace this green" (impossible at that size) to "pick the right
+      // one" (what the wide view is actually good for) — and stops it outlining a neighbouring hole.
+      (spanYards && spanYards > 700
+        ? ` NOTE: this frame is wide enough to contain SEVERAL holes plus practice areas and the clubhouse. Pick the green belonging to the hole at the CENTRE of the frame, and prefer a green that has a fairway corridor leading to it (a practice green has none). At this scale features are small — locating the correct green matters far more than a precise outline, so return polygons only where you are genuinely confident.`
+        : '') +
       ` Return normalized coordinates per your instructions.`;
 
     const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);

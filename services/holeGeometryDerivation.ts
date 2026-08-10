@@ -35,16 +35,66 @@ const TILE_ZOOM = 16;
 const TILE_SIZE = 1024;
 
 /**
+ * 2026-08-10 (Tim — "locate the green, the tee box, the fairway, hazards correctly and TIGHTLY").
+ *
+ * THE HARD LIMIT nobody had measured. At z16 a 1024px tile spans ~1990 yards — the whole property,
+ * not one hole. A 30-yard green is therefore about **15 pixels across**. You cannot trace 8-14 tight
+ * vertices around a 15px blob, and "find THE green" is ambiguous when eighteen of them are in frame.
+ * No amount of prompt work fixes that; it is a resolution ceiling. (Verified by pulling the real
+ * Connecticut National tile: clubhouse, parking lot and most of the course, all in one frame.)
+ *
+ * So the read is now TWO PASSES, which is also how a person would do it:
+ *   1. LOCATE on the wide z16 tile — plenty for "which blob is this hole's green", the job the wide
+ *      view is actually good at.
+ *   2. TRACE on a z18 tile re-centred on that green — ~498 yards across, where the same green is
+ *      ~62 pixels and its collar, bunker edges and tee pad are genuinely resolvable.
+ * Pass 2 is where every outline comes from. If it fails for any reason we keep pass 1's result, so
+ * this is strictly additive — worst case is exactly the old behavior.
+ */
+const TRACE_ZOOM = 18;
+
+/**
  * 2026-08-10 — how many YARDS the square tile spans edge to edge at this latitude.
  * Web-Mercator ground resolution is 156543.03 m/px at z0 scaled by cos(lat), halving each zoom.
  * Sent to the vision route as an absolute scale cue so the model can size-check a candidate green
  * instead of judging it purely on appearance.
  */
-function tileSpanYards(lat: number): number {
-  const metresPerPx = (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, TILE_ZOOM);
+function tileSpanYards(lat: number, zoom: number = TILE_ZOOM): number {
+  const metresPerPx = (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
   return Math.round(metresPerPx * TILE_SIZE * 1.09361);
 }
-const REQUEST_TIMEOUT_MS = 30_000;
+
+/** One scan of one tile. Shared by the locate pass and the trace pass so they cannot drift apart. */
+async function scanTile(
+  center: LatLng,
+  zoom: number,
+  opts: { holeNumber: number; par?: number | null; signal: AbortSignal },
+): Promise<HoleScanResponse | null> {
+  const url = getCenteredImageryUrl({ lat: center.lat, lng: center.lng, zoom, width: TILE_SIZE, height: TILE_SIZE });
+  if (!url) return null;
+  const b64 = await fetchTileAsBase64(url);
+  if (!b64) return null;
+  const res = await fetch(`${getApiBaseUrl()}/api/hole-scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      image_b64: b64,
+      image_media_type: 'image/jpeg',
+      hole_number: opts.holeNumber,
+      par: opts.par ?? undefined,
+      // The tile's true span at THIS zoom — the model's absolute scale reference, so the same code
+      // gives an honest cue whether it's reading the wide locate tile or the tight trace tile.
+      tile_span_yards: tileSpanYards(center.lat, zoom),
+    }),
+    signal: opts.signal,
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as HoleScanResponse;
+}
+// 2026-08-10 — was 30s for ONE vision pass. The read is now locate + trace (two tile fetches and two
+// vision calls, the second returning polygons), so a 30s budget would abort mid-trace and quietly
+// throw away a good wide read. This is a background derivation, never a blocking UI wait.
+const REQUEST_TIMEOUT_MS = 75_000;
 
 export type DerivedHoleGeometry = HoleGeometry & {
   /** Always true — this geometry came from AI vision, not a curated/API source. */
@@ -114,9 +164,6 @@ export async function deriveHoleGeometry(input: {
   const { seed, holeNumber } = input;
   if (!Number.isFinite(seed.lat) || !Number.isFinite(seed.lng)) return null;
 
-  const url = getCenteredImageryUrl({ lat: seed.lat, lng: seed.lng, zoom: TILE_ZOOM, width: TILE_SIZE, height: TILE_SIZE });
-  if (!url) return null;
-
   const ctrl = new AbortController();
   const outerSignal = input.signal;
   const onAbort = () => ctrl.abort();
@@ -124,34 +171,39 @@ export async function deriveHoleGeometry(input: {
   const timeout = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const b64 = await fetchTileAsBase64(url);
-    if (!b64) return null;
+    // ── PASS 1 — LOCATE on the wide tile. At this zoom a green is ~15px: enough to say WHICH blob
+    // is the green, nowhere near enough to trace its edge. That's all we ask of this pass.
+    const wide = await scanTile(seed, TILE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal });
+    if (!wide?.found_green || !wide.green_center) return null;
 
-    const res = await fetch(`${getApiBaseUrl()}/api/hole-scan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        image_b64: b64,
-        image_media_type: 'image/jpeg',
-        hole_number: holeNumber,
-        par: input.par ?? undefined,
-        // 2026-08-10 — the tile's real-world width. Gives the model an absolute SCALE, turning
-        // "does this look like a green?" into "is this blob 20-40 yards across?". Computed from the
-        // tile's own projection so it stays correct if TILE_ZOOM/TILE_SIZE ever change.
-        tile_span_yards: tileSpanYards(seed.lat),
-      }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as HoleScanResponse;
-    if (!data.found_green || !data.green_center) return null;
-
-    // Unproject normalized pixels → lat/lng. Tile is north-up (bearing 0), square TILE_SIZE.
-    const toCoord = (p: { x: number; y: number } | null): LatLng | null => {
+    const unproject = (p: { x: number; y: number } | null, center: LatLng, zoom: number): LatLng | null => {
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
-      const c = unprojectTilePixel(p.x * TILE_SIZE, p.y * TILE_SIZE, seed, TILE_ZOOM, 0, TILE_SIZE, TILE_SIZE);
+      const c = unprojectTilePixel(p.x * TILE_SIZE, p.y * TILE_SIZE, center, zoom, 0, TILE_SIZE, TILE_SIZE);
       return Number.isFinite(c.lat) && Number.isFinite(c.lng) ? c : null;
     };
+
+    const coarseGreen = unproject(wide.green_center, seed, TILE_ZOOM);
+    if (!coarseGreen) return null;
+
+    // ── PASS 2 — TRACE on a tight tile re-centred on that green. Same green is now ~62px, so the
+    // collar, bunker lips and tee pad are actually resolvable. Everything we render comes from here.
+    // Any failure falls back to the wide read, so this can only add detail, never remove it.
+    let data: HoleScanResponse = wide;
+    let tileCenter: LatLng = seed;
+    let tileZoom = TILE_ZOOM;
+    const tight = await scanTile(coarseGreen, TRACE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal }).catch(() => null);
+    if (tight?.found_green && tight.green_center) {
+      data = tight;
+      tileCenter = coarseGreen;
+      tileZoom = TRACE_ZOOM;
+    } else {
+      console.log(`[holeGeometry] hole ${holeNumber}: trace pass unavailable — keeping the wide read`);
+    }
+
+    // Unproject normalized pixels → lat/lng against WHICHEVER tile produced `data` (north-up,
+    // square TILE_SIZE). Binding these together is what stops a pass-2 pixel being read against
+    // pass-1's projection, which would silently offset every coordinate on the hole.
+    const toCoord = (p: { x: number; y: number } | null): LatLng | null => unproject(p, tileCenter, tileZoom);
 
     const green = toCoord(data.green_center);
     if (!green) return null;
