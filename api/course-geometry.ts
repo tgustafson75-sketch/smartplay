@@ -383,6 +383,45 @@ function nearestUnassigned(target: Loc, candidates: Loc[], used: Set<number>): n
   return bestIdx;
 }
 
+/**
+ * 2026-08-10 (Tim, playing Connecticut National — "holes are not always oriented correctly and the
+ * measuring tool does not often land on the teebox and green respectively").
+ *
+ * ROOT CAUSE, proven against the live endpoint: with the course's real centroid, OSM filled 18/18
+ * holes — but EVERY hole measured 38-95 yards tee→green against a scorecard saying 137-527. Not
+ * noise; a systematic structural error. nearestUnassigned() picks the tee NEAREST the assigned
+ * green, and on a golf course the nearest tee box to any green is the NEXT hole's tee, sitting a
+ * few paces away by design. So hole N was consistently drawn as green_N → tee_(N+1): a ~50y stub on
+ * an arbitrary axis. That is exactly both symptoms — a bearing computed off that pair points
+ * nowhere near the real hole (wrong orientation), and the measure tool's endpoints are the wrong
+ * two objects (never lands on the tee box or the green).
+ *
+ * THE FIX: we already hold the answer. golfcourseapi gives us the REAL yardage for all 18 holes, so
+ * a correct tee↔green pair is not the closest one — it is the one whose distance MATCHES THE CARD.
+ * Select by |distance − cardYardage| instead of raw distance and the next-tee decoy is rejected
+ * outright, because it is ~300 yards wrong. Falls back to nearest-unassigned only when a hole has
+ * no card yardage to constrain it, so behavior is unchanged where we have nothing better.
+ */
+function bestByTargetYards(
+  from: Loc,
+  candidates: Loc[],
+  used: Set<number>,
+  targetYards: number,
+): number {
+  if (!(targetYards > 0)) return nearestUnassigned(from, candidates, used);
+  let bestIdx = -1;
+  let bestErr = Infinity;
+  for (let i = 0; i < candidates.length; i++) {
+    if (used.has(i)) continue;
+    const err = Math.abs(haversineYards(from, candidates[i]) - targetYards);
+    if (err < bestErr) {
+      bestErr = err;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
 // 2026-05-17 — Minimum-cost bipartite assignment for tee→green pairing.
 // Pairs tees and greens such that the resulting hole yardages cluster
 // in a realistic range. Earlier iterations:
@@ -959,7 +998,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (const h of holes) {
         const anchor = h.tee ?? lastAnchor;
         if (!h.green && osmGreens.length > 0) {
-          const idx = nearestUnassigned(anchor, osmGreens, usedGreens);
+          // Green: when the tee is already known, the card yardage pins WHICH green belongs to this
+          // hole; otherwise fall back to walking the routing (nearest to the previous green).
+          const idx = h.tee
+            ? bestByTargetYards(h.tee, osmGreens, usedGreens, h.yardage)
+            : nearestUnassigned(anchor, osmGreens, usedGreens);
           if (idx >= 0) {
             usedGreens.add(idx);
             h.green = osmGreens[idx];
@@ -968,8 +1011,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
         if (!h.tee && osmTees.length > 0) {
+          // 2026-08-10 — THE orientation fix. Was nearestUnassigned(green, tees), which always
+          // grabbed the next hole's tee sitting beside this green (~50y "holes", garbage bearings).
+          // Match the card yardage instead: the real tee is ~h.yardage away, the decoy is ~300 off.
           const teeAnchor = h.green ?? lastAnchor;
-          const idx = nearestUnassigned(teeAnchor, osmTees, usedTees);
+          const idx = h.green
+            ? bestByTargetYards(h.green, osmTees, usedTees, h.yardage)
+            : nearestUnassigned(teeAnchor, osmTees, usedTees);
           if (idx >= 0) {
             usedTees.add(idx);
             h.tee = osmTees[idx];
@@ -980,7 +1028,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (h.green) lastAnchor = h.green;
       }
-      console.log(`[course-geometry] after OSM: ${holes.filter(x => x.green).length}/${holes.length} greens filled`);
+
+      // 2026-08-10 — HONEST VALIDATION. Even with card-matched pairing, a course whose OSM tee
+      // features are missing/misplaced can still produce a pair that disagrees with the scorecard.
+      // Drawing that hole is worse than not drawing it: the player gets a confidently wrong
+      // orientation and a measure tool anchored on the wrong objects. When a pair is off by >35%,
+      // drop the TEE (keep the green — F/M/B yardages off live GPS stay correct) and clear the
+      // bearing, so the hole degrades to "no drawn axis" instead of a lie. Same tenet as
+      // [[illustration-data-points]]: real signals or nothing, never fabricate.
+      let rejected = 0;
+      for (const h of holes) {
+        if (!h.tee || !h.green || !(h.yardage > 0)) continue;
+        const measured = haversineYards(h.tee, h.green);
+        if (measured > h.yardage * 1.35 || measured < h.yardage * 0.65) {
+          console.warn(`[course-geometry] hole ${h.hole_number}: OSM pair ${Math.round(measured)}y vs card ${h.yardage}y — rejecting tee`);
+          h.tee = null;
+          h.bearing_deg = null;
+          rejected++;
+        }
+      }
+      console.log(`[course-geometry] after OSM: ${holes.filter(x => x.green).length}/${holes.length} greens filled, ${holes.filter(x => x.tee && x.green).length} card-verified tee→green pairs, ${rejected} rejected`);
     }
 
     // Distance-from-tee-to-green sanity check, surfaced for debugging

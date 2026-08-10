@@ -8296,6 +8296,24 @@ check('LOCK: Play-tab thumbnails resolve through the single courseThumb() helper
   })(),
   'courseThumb() is the only thumbnail path, coord-guarded, used at every Play-tab surface');
 
+// "Holes are not always oriented correctly and the measuring tool does not often land on the teebox
+// and green." Proven live: every Connecticut National hole measured 38-95y against a 137-527y card,
+// because nearestUnassigned() paired each green with the NEXT hole's tee beside it. The scorecard
+// yardage must constrain the pairing, and a pair that still disagrees must be REJECTED, not drawn.
+check('LOCK: OSM tee↔green pairing is card-matched, and off-card pairs are rejected not drawn',
+  (() => {
+    const s = read('api/course-geometry.ts');
+    return (
+      /function bestByTargetYards/.test(s) &&
+      // the tee selection specifically must use the card yardage, not raw nearest
+      /h\.green[\s\S]{0,120}?bestByTargetYards\(h\.green, osmTees, usedTees, h\.yardage\)/.test(s) &&
+      // and a pair that disagrees with the card drops the tee + bearing rather than rendering a lie
+      /measured > h\.yardage \* 1\.35 \|\| measured < h\.yardage \* 0\.65/.test(s) &&
+      /h\.tee = null;[\s\S]{0,80}?h\.bearing_deg = null;/.test(s)
+    );
+  })(),
+  'card-constrained pairing + honest rejection of off-card tee→green pairs');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
