@@ -138,6 +138,10 @@ TIGHTNESS — this is what the whole read is judged on:
 - Never let a polygon include the collar, the surrounding rough, the sand's grass lip, or the water's bank.
 - Points must be ordered around the perimeter (either direction), never crossing over themselves.
 
+NOT A GOLF HOLE — the highest-cost mistake, and the easiest one to make:
+Golf courses sit among houses, farms and parkland, and a wide frame catches plenty that is not the course. A RESIDENTIAL PROPERTY is the classic trap because every one of its parts mimics a feature: a SWIMMING POOL looks exactly like a small water hazard (dark, flat, textureless, glare); a DRIVEWAY, PATIO or tennis court looks exactly like a bunker (bright, pale, sharply edged); a mown LAWN looks like fairway or green. The tell is CONTEXT: golf features belong to a CHAIN — tee, then a mown corridor, then a green — and they sit on continuous managed turf. A pale oval with a house, a roof, a driveway and a fence around it is a garden, not a hole. A rectangle of water with perfectly straight parallel sides and a paved surround is a swimming pool: real water hazards have irregular natural shorelines.
+Before reporting a green, confirm it is part of a golf hole: is there a fairway corridor leading to it, other golf features nearby, and no roof/driveway/fence attached? If not, found_green=false. Farm fields, sports pitches, cemeteries and solar arrays are the other common decoys.
+
 RULES — honesty outranks completeness everywhere:
 - If you cannot clearly see a putting green in THIS frame, set found_green=false, all point/polygon fields null, hazards [], confidence "low". Do NOT invent a green on a fairway, a lighter patch, or a practice area — a wrong green is worse than none.
 - Return null for any individual feature you cannot see (tee, fairway, or all hazards) even when the green is clear. A partial honest read is correct; a padded one is not.

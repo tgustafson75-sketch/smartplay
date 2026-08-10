@@ -192,12 +192,33 @@ export async function deriveHoleGeometry(input: {
     let tileCenter: LatLng = seed;
     let tileZoom = TILE_ZOOM;
     const tight = await scanTile(coarseGreen, TRACE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal }).catch(() => null);
+
     if (tight?.found_green && tight.green_center) {
       data = tight;
       tileCenter = coarseGreen;
       tileZoom = TRACE_ZOOM;
+    } else if (tight && !tight.found_green) {
+      /**
+       * 2026-08-10 — PASS 2 IS THE VERIFIER, not just a refiner. This distinction is the difference
+       * between an elite read and a confident lie, and it was found by testing rather than reasoning:
+       * pointed at Connecticut National's wide tile, the model located a "green" with HIGH confidence
+       * on a private house 945m away — reporting the swimming pool as a water hazard and the driveway
+       * and patio as bunkers. Its own polygon was a perfectly plausible 16y x 28y, so neither the
+       * extent check nor the confidence field caught it. Nothing in the model's self-report could.
+       *
+       * What DID catch it: looking closer. A tight tile re-centred on the claim returns
+       * found_green=false, because at 62px-per-green the house is obviously a house. So a NEGATIVE
+       * verdict from the tight pass now discards the derivation outright.
+       *
+       * The distinction below is load-bearing: `tight === null` is a TRANSPORT failure (timeout,
+       * offline, 5xx) — no verdict was reached, so we keep the wide read, degraded. `found_green
+       * === false` is a VERDICT — the close look actively disproved the claim, and a disproved
+       * green must never reach the map.
+       */
+      console.log(`[holeGeometry] hole ${holeNumber}: trace pass DISPROVED the located green — discarding (${tight.notes || 'no green at that spot'})`);
+      return null;
     } else {
-      console.log(`[holeGeometry] hole ${holeNumber}: trace pass unavailable — keeping the wide read`);
+      console.log(`[holeGeometry] hole ${holeNumber}: trace pass unreachable — keeping the wide read unverified`);
     }
 
     // Unproject normalized pixels → lat/lng against WHICHEVER tile produced `data` (north-up,

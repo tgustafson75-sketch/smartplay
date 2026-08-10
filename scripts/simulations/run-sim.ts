@@ -8382,8 +8382,21 @@ check('LOCK: hole geometry derives in two passes — locate wide, then trace on 
       /const TRACE_ZOOM = 18/.test(d) &&
       /scanTile\(seed, TILE_ZOOM,/.test(d) &&          // pass 1 locates on the wide tile
       /scanTile\(coarseGreen, TRACE_ZOOM,/.test(d);    // pass 2 traces re-centred on the found green
-    // the tight read must be a strict upgrade: any failure keeps the wide result
-    const failsSafe = /let data: HoleScanResponse = wide;/.test(d) && /keeping the wide read/.test(d);
+    // Pass 2 is the VERIFIER. A NEGATIVE VERDICT (found_green=false) must DISCARD the derivation —
+    // that is what catches a high-confidence wide read landing on a house. A TRANSPORT failure
+    // (null, no verdict reached) keeps the wide read. Collapsing those two cases back together
+    // re-opens the false-positive that put a swimming pool on the map as a water hazard.
+    const verifier =
+      /\} else if \(tight && !tight\.found_green\) \{/.test(d) &&
+      /trace pass DISPROVED the located green[\s\S]{0,200}?return null;/.test(d) &&
+      /trace pass unreachable — keeping the wide read unverified/.test(d);
+    const failsSafe = /let data: HoleScanResponse = wide;/.test(d) && verifier;
+    // and the prompt must name the residential decoys that produced that false positive
+    const decoys = (() => {
+      const s = read('api/hole-scan.ts');
+      return /NOT A GOLF HOLE/.test(s) && /SWIMMING POOL/.test(s) && /DRIVEWAY/.test(s);
+    })();
+    if (!decoys) return false;
     // projection must be bound to whichever tile produced the data
     const boundProjection =
       /let tileCenter: LatLng = seed;/.test(d) && /let tileZoom = TILE_ZOOM;/.test(d) &&
