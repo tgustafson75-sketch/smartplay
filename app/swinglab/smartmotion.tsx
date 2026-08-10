@@ -2081,11 +2081,16 @@ export default function SmartMotion() {
     const poseWindow = seg && typeof seg.startMs === 'number' && typeof seg.endMs === 'number' && seg.endMs - seg.startMs >= 500
       ? { startMs: seg.startMs, endMs: seg.endMs }
       : null;
-    // 2026-07-07 (biomech audit #2) — anchor the phase frames to the ACOUSTIC strike
-    // when we have one (peakDb !== 0 = real metering hit; video-located strikes are
-    // only ±1s accurate and stay on window fractions). Fixes "impact" landing 100ms+
-    // past the ball / "top" landing mid-backswing — the wrong-phase numbers.
-    const acousticImpactMs = seg && seg.strikeMs != null && (seg.peakDb ?? 0) !== 0 ? seg.strikeMs : null;
+    // 2026-07-07 (biomech audit #2) — anchor the phase frames to the strike so "impact" doesn't land
+    // 100ms+ past the ball / "top" mid-backswing (the wrong-phase numbers).
+    // 2026-08-09 (deep-audit A / P3) — anchor VIDEO-located swings too, not just acoustic ones. The
+    // located swing_time_sec is the locator's real impact ESTIMATE — a far better anchor than a blind
+    // 65%-of-window fraction (which is deterministically ~1.1s late and let the caddie name over-the-top
+    // from a frame that wasn't the transition). This also makes biomech consistent with tempo, which
+    // already trusts seg.strikeMs for video. The strike-anchored branch clamps to the window, so a ±1s
+    // located estimate can't wander outside the swing. EXCLUDE the synthesized whole-clip fallback
+    // (strikeMs is a 0.6·duration guess) → it stays on honest window fractions.
+    const acousticImpactMs = seg && seg.strikeMs != null && !seg.synthesized ? seg.strikeMs : null;
     void (async () => {
       try {
         // trustDuration=true: videoDurationMs is the player's real onLoad
@@ -2222,19 +2227,25 @@ export default function SmartMotion() {
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
+    // 2026-08-09 (deep-audit A / finding 1) — WAIT for biomech before deriving tempo. The dense-frame
+    // fast path (speed #2) reads the ~20 wrist frames the pose pass extracts — but biomech lands
+    // ASYNCHRONOUSLY (pose effect), and this effect used to run first with biomech still null, so
+    // tempoFromPoseFrames(undefined) → NO_TEMPO → it fell to the EXPENSIVE deriveSwingTempo copy+decode
+    // on every open/scrub (the fast path was dead) AND could cache NO_TEMPO permanently (P2). biomech is
+    // a dep, so returning here re-runs this once frames land — then the dense read is real and free.
+    if (!biomech?.frames || biomech.frames.length < 2) { setTempo(null); return; }
     let cancelled = false;
     setTempo(null);
     void (async () => {
       try {
-        // 2026-08-09 (verification wave speed #2) — the pose pass already extracted ~20 dense wrist
-        // frames across this exact swing; reading tempo from them is FREE (zero decodes) and uses the
-        // same wrist-Y top/takeaway logic. Only when the dense read can't produce an honest ratio
-        // (sparse frames / no interior top) do we pay the old full copy + 11-thumbnail decode pass.
+        // Dense read first (FREE — reuses the pose pass's frames); only pay the full copy+11-decode
+        // deriveSwingTempo pass when the dense frames genuinely can't produce an honest ratio.
         const { tempoFromPoseFrames } = await import('../../services/poseAnalysisApi');
-        const dense = tempoFromPoseFrames(biomech?.frames, seg.strikeMs, impactSource);
+        const dense = tempoFromPoseFrames(biomech.frames, seg.strikeMs, impactSource);
         const t = dense.ratio != null ? dense : await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
         if (cancelled) return;
-        tempoCacheRef.current[cacheKey] = t;
+        // Only cache a real read; never poison the key with a transient NO_TEMPO (P2).
+        if (t.ratio != null) tempoCacheRef.current[cacheKey] = t;
         setTempo(t);
       } catch (e) {
         console.log('[smartmotion] tempo derive failed (non-fatal):', e);
