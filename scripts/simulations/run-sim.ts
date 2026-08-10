@@ -5367,10 +5367,15 @@ check('Course book: Places lookup anchors website/phone; booking prefers the rea
       /findplacefromtext\/json/.test(cph) &&
       /place\/details\/json/.test(cph) &&
       // 2026-07-10 — degrade on ANY non-OK Places status (not just REQUEST_DENIED), and read the
-      // key that's ACTUALLY in Vercel (GOOGLE_API_KEY, all APIs enabled) — the handler used to
-      // read only GOOGLE_MAPS_KEY, which was never set, so every lookup returned not_configured.
+      // key that's ACTUALLY in Vercel — the handler used to read only GOOGLE_MAPS_KEY, which was
+      // never set, so every lookup returned not_configured.
       /findData\.status !== 'OK'/.test(cph) &&
-      /process\.env\.GOOGLE_API_KEY/.test(cph);
+      // 2026-08-10 — that key read is now the MULTI-PROJECT walker rather than one pinned env var
+      // (Tim has two Google Cloud projects with different APIs enabled). _googleKeys covers
+      // GOOGLE_API_KEY among the others, so the original intent holds and strengthens: the lookup
+      // lands on whichever project has Places enabled instead of failing on the wrong one.
+      /withGoogleKeys<Found>\('places-legacy:findplace\+details'/.test(cph) &&
+      /\bGOOGLE_API_KEY\b/.test(read('api/_googleKeys.ts'));
     const bookingOk =
       /export async function openTeeTimeSearch\(courseName: string, locationHint\?: string \| null, courseId\?: string \| null\)/.test(tt) &&
       /const url = book\?\.bookingUrl \?\? book\?\.website \?\? null;/.test(tt);
@@ -8313,6 +8318,30 @@ check('LOCK: OSM tee↔green pairing is card-matched, and off-card pairs are rej
     );
   })(),
   'card-constrained pairing + honest rejection of off-card tee→green pairs');
+
+// Two SmartPlay projects exist in Google Cloud with different APIs enabled. No route may pin itself
+// to a single key again — that's what left Places(New) unused while a project that had it sat idle.
+check('LOCK: Google-backed routes walk EVERY configured project instead of pinning one key',
+  (() => {
+    const helper = read('api/_googleKeys.ts');
+    const locate = read('api/course-locate.ts');
+    const places = read('api/course-places.ts');
+    const walker =
+      /export async function withGoogleKeys/.test(helper) &&
+      /export function isCapabilityMiss/.test(helper) &&
+      // a quota-exhausted key must NOT silently spill onto the other project (hides a billing problem)
+      !/OVER_QUERY_LIMIT/.test(helper.split('export function isCapabilityMiss')[1] ?? '') &&
+      // keys are never serialized — diagnostics use the fingerprint
+      /createHash\('sha1'\)/.test(helper);
+    // neither route may reconstruct a module-level pinned key
+    const noPinnedKey = [locate, places].every(s => !/^const KEY =/m.test(s));
+    const bothWalk =
+      /withGoogleKeys<Located\[\]>\('places-new:searchNearby'/.test(locate) &&
+      /withGoogleKeys<Located\[\]>\('places-legacy:nearbysearch'/.test(locate) &&
+      /withGoogleKeys<Found>\('places-legacy:findplace\+details'/.test(places);
+    return walker && noPinnedKey && bothWalk;
+  })(),
+  'withGoogleKeys walker + capability-miss detection, no pinned KEY, both Places routes walking');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

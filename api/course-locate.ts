@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { applyCors } from './_cors';
+import { googleKeys, withGoogleKeys, isCapabilityMiss } from './_googleKeys';
 
 /**
  * api/course-locate.ts — the COURSE-DOWNLOAD ENGINE's locator (2026-08-06, Tim — "build the course
@@ -32,11 +33,10 @@ import { applyCors } from './_cors';
  *   POST /api/course-locate  { lat: number, lng: number, radius_m?: number, limit?: number }
  *   → { courses: [{ name, place_id, lat, lng, distance_m, vicinity, rating, open_now }], source }
  */
-const KEY =
-  process.env.GOOGLE_MAPS_KEY ||
-  process.env.GOOGLE_API_KEY ||
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ||
-  '';
+// 2026-08-10 (Tim — two SmartPlay projects in Google Cloud, only one with everything enabled).
+// Keys are no longer pinned here; _googleKeys walks EVERY configured project and lands on whichever
+// one has the API in question enabled. That's what lets Places (New) start working the moment the
+// second project's key is present, with no code change and nobody having to work out which is which.
 const TIMEOUT_MS = 8_000;
 const DEFAULT_RADIUS_M = 8_000; // ~5 miles — a course you could be at / driving to
 const MAX_RADIUS_M = 40_000;
@@ -98,7 +98,7 @@ function isGolfPlace(p: Located): boolean {
  * try legacy" from "enabled, genuinely no courses here".
  */
 async function searchNearbyNew(lat: number, lng: number, radius: number): Promise<Located[] | null> {
-  try {
+  return withGoogleKeys<Located[]>('places-new:searchNearby', async (KEY) => {
     const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'POST',
       headers: {
@@ -125,8 +125,14 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!r.ok) {
-      console.log(`[course-locate] Places(New) HTTP ${r.status} — falling back to legacy`);
-      return null;
+      // A 403/PERMISSION_DENIED here means THIS project doesn't have Places (New) enabled — a
+      // capability miss, so the walker tries the other project before we give up on the New API.
+      let message: string | null = null;
+      try {
+        const err = (await r.json()) as { error?: { message?: string; status?: string } };
+        message = err.error?.message ?? null;
+      } catch { /* body not JSON — status code alone decides */ }
+      return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status, message }) };
     }
     type NewPlace = {
       id?: string;
@@ -139,7 +145,7 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
       currentOpeningHours?: { openNow?: boolean };
     };
     const data = (await r.json()) as { places?: NewPlace[] };
-    return (data.places ?? [])
+    const value = (data.places ?? [])
       .map((p): Located | null => {
         const plat = p.location?.latitude;
         const plng = p.location?.longitude;
@@ -157,26 +163,26 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
         };
       })
       .filter((p): p is Located => p != null);
-  } catch (e) {
-    console.log('[course-locate] Places(New) failed — falling back to legacy:', e instanceof Error ? e.message : e);
-    return null;
-  }
+    return { ok: true, value };
+  });
 }
 
 /** Legacy Nearby Search, keyword-filtered (`keyword` IS honored by legacy; `type=golf_course` never was). */
 async function searchNearbyLegacy(lat: number, lng: number, radius: number): Promise<Located[] | null> {
-  try {
+  return withGoogleKeys<Located[]>('places-legacy:nearbysearch', async (KEY) => {
     const url =
       `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
       `?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent('golf course')}&key=${KEY}`;
     const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!r.ok) return null;
+    if (!r.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status }) };
     const data = (await r.json()) as { status?: string; error_message?: string; results?: PlaceResult[] };
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      // Legacy reports "API not enabled for this project" as HTTP 200 + REQUEST_DENIED, so the
+      // capability check has to read the BODY here, not the status code.
       console.log(`[course-locate] Places nearbysearch status=${data.status} — ${data.error_message || ''}`);
-      return null;
+      return { ok: false, capabilityMiss: isCapabilityMiss({ status: data.status, message: data.error_message }) };
     }
-    return (data.results ?? [])
+    const value = (data.results ?? [])
       .map((p): Located | null => {
         const plat = p.geometry?.location?.lat;
         const plng = p.geometry?.location?.lng;
@@ -194,10 +200,8 @@ async function searchNearbyLegacy(lat: number, lng: number, radius: number): Pro
         };
       })
       .filter((p): p is Located => p != null);
-  } catch (e) {
-    console.log('[course-locate] legacy nearbysearch failed:', e instanceof Error ? e.message : e);
-    return null;
-  }
+    return { ok: true, value };
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -208,7 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (!allowInference(req, res, 'course-locate', 30)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!KEY) return res.status(200).json({ courses: [], source: 'places', error: 'not_configured' });
+  if (googleKeys().length === 0) return res.status(200).json({ courses: [], source: 'places', error: 'not_configured' });
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as {

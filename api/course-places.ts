@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
+import { googleKeys, withGoogleKeys, isCapabilityMiss } from './_googleKeys';
 
 /**
  * 2026-07-10 (audit S2) — SERVER proxy for the course website/phone lookup that used to run
@@ -12,11 +13,9 @@ import { applyCors } from './_cors';
  * the same key the AI provider uses. Prefer a dedicated GOOGLE_MAPS_KEY if one is ever set, but
  * fall back to GOOGLE_API_KEY so this works with the key that's actually in the env today.
  */
-const KEY =
-  process.env.GOOGLE_MAPS_KEY ||
-  process.env.GOOGLE_API_KEY ||
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY ||
-  '';
+// 2026-08-10 — multi-project key walk (see api/_googleKeys.ts). Was pinned to one key, which meant
+// a website/phone lookup failed whenever THAT Cloud project lacked Places, even with a second
+// project configured that had it. Now each lookup lands on whichever project has the API enabled.
 const TIMEOUT_MS = 8_000;
 
 function isNum(v: unknown): v is number { return typeof v === 'number' && Number.isFinite(v); }
@@ -24,7 +23,7 @@ function isNum(v: unknown): v is number { return typeof v === 'number' && Number
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-  if (!KEY) return res.status(200).json({ website: null, phone: null, error: 'not_configured' });
+  if (googleKeys().length === 0) return res.status(200).json({ website: null, phone: null, error: 'not_configured' });
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as {
@@ -35,28 +34,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!name) return res.status(400).json({ error: 'name required' });
     const bias = isNum(body.lat) && isNum(body.lng) ? `&locationbias=point:${body.lat},${body.lng}` : '';
 
-    const findUrl =
-      `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
-      `?input=${encodeURIComponent(name)}&inputtype=textquery&fields=place_id${bias}&key=${KEY}`;
-    const findRes = await fetch(findUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!findRes.ok) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: `find HTTP ${findRes.status}` } : {}) });
-    const findData = (await findRes.json()) as { status?: string; error_message?: string; candidates?: { place_id?: string }[] };
-    if (findData.status !== 'OK') {
-      console.log(`[course-places] Places findplace status=${findData.status} — ${findData.error_message || 'no candidates'}`);
-      return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: { status: findData.status, error_message: findData.error_message || null } } : {}) });
-    }
-    const placeId = findData.candidates?.[0]?.place_id;
-    if (!placeId) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: 'OK but no candidates' } : {}) });
+    // find + details run under ONE key: if a project lacks Places, the whole lookup moves to the
+    // next project rather than half-completing against two different Cloud projects.
+    type Found = { website: string | null; phone: string | null; diag: unknown };
+    const found = await withGoogleKeys<Found>('places-legacy:findplace+details', async (KEY) => {
+      const findUrl =
+        `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
+        `?input=${encodeURIComponent(name)}&inputtype=textquery&fields=place_id${bias}&key=${KEY}`;
+      const findRes = await fetch(findUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!findRes.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: findRes.status }) };
+      const findData = (await findRes.json()) as { status?: string; error_message?: string; candidates?: { place_id?: string }[] };
+      if (findData.status !== 'OK') {
+        console.log(`[course-places] Places findplace status=${findData.status} — ${findData.error_message || 'no candidates'}`);
+        // ZERO_RESULTS is a real answer (this project works, the course just isn't found) — only a
+        // permission/not-enabled status should send us to the other project.
+        if (isCapabilityMiss({ status: findData.status, message: findData.error_message })) {
+          return { ok: false, capabilityMiss: true };
+        }
+        return { ok: true, value: { website: null, phone: null, diag: { status: findData.status, error_message: findData.error_message || null } } };
+      }
+      const placeId = findData.candidates?.[0]?.place_id;
+      if (!placeId) return { ok: true, value: { website: null, phone: null, diag: 'OK but no candidates' } };
 
-    const detUrl =
-      `https://maps.googleapis.com/maps/api/place/details/json` +
-      `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number&key=${KEY}`;
-    const detRes = await fetch(detUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!detRes.ok) return res.status(200).json({ website: null, phone: null });
-    const detData = (await detRes.json()) as { result?: { website?: string; formatted_phone_number?: string } };
+      const detUrl =
+        `https://maps.googleapis.com/maps/api/place/details/json` +
+        `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number&key=${KEY}`;
+      const detRes = await fetch(detUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!detRes.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: detRes.status }) };
+      const detData = (await detRes.json()) as { result?: { website?: string; formatted_phone_number?: string } };
+      return {
+        ok: true,
+        value: {
+          website: detData.result?.website?.trim() || null,
+          phone: detData.result?.formatted_phone_number?.trim() || null,
+          diag: null,
+        },
+      };
+    });
+
+    if (!found) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: 'no configured project has Places enabled' } : {}) });
     return res.status(200).json({
-      website: detData.result?.website?.trim() || null,
-      phone: detData.result?.formatted_phone_number?.trim() || null,
+      website: found.website,
+      phone: found.phone,
+      ...(debug && found.diag ? { _diag: found.diag } : {}),
     });
   } catch (e) {
     console.log('[course-places] lookup failed (non-fatal):', e instanceof Error ? e.message : String(e));
