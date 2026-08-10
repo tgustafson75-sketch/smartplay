@@ -8222,6 +8222,63 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
     hooksViolations === 0 ? 'eslint clean' : `${hooksViolations === -1 ? 'CHECK COULD NOT RUN' : hooksViolations + ' violation(s)'}: ${detail}`);
 }
 
+// ─── 2026-08-10 (Tim's Connecticut National round) — three field bugs, locked ──────────────────
+
+// "It's showing hospitals and hotels." Legacy Nearby Search silently DROPS an unrecognized `type`,
+// and `golf_course` exists only in Places API (NEW) — so the filter never bound and every business
+// in the radius came back. Lock all three layers of the fix; the phantom legacy filter must never
+// return, because it fails OPEN (looks like bad ranking, not a broken filter).
+check('LOCK: course-locate filters golf via Places(New) includedTypes + keyword fallback + name/type guard',
+  (() => {
+    const s = read('api/course-locate.ts');
+    return (
+      // primary: the New API, where golf_course is a real type
+      /places\.googleapis\.com\/v1\/places:searchNearby/.test(s) &&
+      /includedTypes:\s*\['golf_course'\]/.test(s) &&
+      /X-Goog-FieldMask/.test(s) &&
+      // fallback: legacy with a keyword (which legacy DOES honor), never the phantom type
+      /keyword=\$\{encodeURIComponent\('golf course'\)\}/.test(s) &&
+      !/[?&]type=golf_course/.test(s) &&
+      // guard: golf evidence required on every row, whichever path produced it
+      /function isGolfPlace/.test(s) &&
+      /isGolfPlace\(p\)/.test(s) &&
+      /NOT_A_COURSE_RE/.test(s)
+    );
+  })(),
+  'no phantom legacy type=golf_course; New-API type filter + keyword fallback + isGolfPlace guard all present');
+
+// "164-yard shot and the caddie defaults to gap wedge." One mis-attributed sample became a club's
+// permanent average. The band must be enforced at INGEST *and* at READ — read-time is what heals a
+// store already poisoned before the fix shipped, so dropping it silently strands existing players.
+check('LOCK: club ladder plausibility band enforced at BOTH ingest and inferClub read',
+  (() => {
+    const s = read('store/clubStatsStore.ts');
+    const ingestGuarded =
+      /recordCarry:[\s\S]{0,400}?isPlausibleForClub\(club, yards, 'carry'/.test(s) &&
+      /recordTotal:[\s\S]{0,400}?isPlausibleForClub\(club, yards, 'total'/.test(s);
+    const readHeals = /inferClub:[\s\S]{0,2000}?isPlausibleForClub\(club, learned, 'total'[\s\S]{0,200}?expectedYards\(club, 'total'/.test(s);
+    const bagFiltered = /inferClub:[\s\S]{0,2000}?bagKeys && !bagKeys\.has\(club\)/.test(s);
+    return ingestGuarded && readHeals && bagFiltered;
+  })(),
+  'plausibility band at ingest + self-healing read + registered-bag filter');
+
+// "Back at the main caddy tab, I still get green screen." The preview had only captured/curated
+// imagery — no Mapbox tile — so any live-resolved course fell through to the SVG sketch's dark-green
+// <Rect>. It must share SmartVision's tile builder so the two views can never disagree.
+check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision renders',
+  (() => {
+    const s = read('components/caddie/L1HolePreview.tsx');
+    return (
+      /import \{ getHoleImageryUrl \} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
+      /aerialTileUrl/.test(s) &&
+      // the tile is a FALLBACK: captured shot and curated bundle still win, in that order
+      /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?curatedImage \?\? \(aerialTileUrl/.test(s) &&
+      // the memo must sit ABOVE the isRoundActive early return (a hook below a gate crashes on open)
+      s.indexOf('const aerialTileUrl') < s.indexOf('if (!isRoundActive)')
+    );
+  })(),
+  'Mapbox tile wired as third source, precedence preserved, hook above the gate');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

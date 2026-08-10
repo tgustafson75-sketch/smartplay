@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
@@ -18,6 +18,7 @@ import { getBundledHoles, COURSES } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
+import { getHoleImageryUrl } from '../../services/mapboxImagery';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -153,6 +154,43 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return () => { cancelled = true; };
   }, [activeCourseId, currentHole]);
 
+  /**
+   * 2026-08-10 (Tim, playing Connecticut National — "back at the main caddy tab, I still get green
+   * screen", while tapping through to full SmartVision showed the real hole).
+   *
+   * ROOT CAUSE: this preview's ONLY imagery sources were a player-captured aerial and a curated
+   * BUNDLED hole photo. SmartVision has a third one — the Mapbox satellite tile built from the hole's
+   * tee/green geometry (getHoleImageryUrl) — and this component never had it. So on any course we
+   * don't ship photos for (i.e. every course resolved live through the download engine), the preview
+   * fell straight past both sources to the SVG sketch, whose backdrop is a dark-green <Rect>. That
+   * green rectangle IS the "green screen" — not a load failure, a missing source.
+   *
+   * Reusing the same builder SmartVision calls keeps the two views on one projection (identical
+   * center/zoom/tee→green bearing), so the preview can't disagree with the screen it opens into.
+   * Null (Mapbox unconfigured / no valid green) → unchanged SVG-sketch behavior.
+   *
+   * Hook placement is deliberate: ABOVE the `!isRoundActive` early return, with the other hooks —
+   * a hook below a gate is what crashed SmartMotion on open ([[analysis-wow-wave-2026-08-09]]).
+   */
+  const aerialTileUrl = useMemo(() => {
+    if (!geometry?.green) return null;
+    try {
+      return getHoleImageryUrl(
+        {
+          courseId: activeCourseId,
+          holeNumber: currentHole,
+          tee: geometry.tee ?? null,
+          green: geometry.green,
+          par: geometry.par,
+          yardage: geometry.yardage,
+        },
+        { width: Math.round(Math.max(320, Math.min(W, 1280))), height: Math.round(Math.max(240, Math.min(H, 1280))) },
+      );
+    } catch {
+      return null;
+    }
+  }, [geometry, W, H]);
+
   // Player dot refresh tick
   useEffect(() => {
     if (!isRoundActive) return;
@@ -212,8 +250,12 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     getLocalHoleImageById(activeCourseId, currentHole) ??
     getLocalHoleImage(activeCourse, currentHole);
 
-  // Prefer the player's own captured shot; fall back to the curated bundle.
-  const heroImageSource = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? null);
+  // Prefer the player's own captured shot, then the curated bundle, then the SAME Mapbox satellite
+  // tile SmartVision renders (2026-08-10 green-screen fix — see aerialTileUrl above). Only when all
+  // three are absent do we fall through to the SVG sketch.
+  // NOTE: the captured-shot ternary stays on ONE line — scripts/simulations/run-sim.ts asserts this
+  // exact precedence (`capturedUri ? ({ uri: capturedUri }`) to lock "your own photo always wins".
+  const heroImageSource: ImageSourcePropType | null = capturedUri ? ({ uri: capturedUri } as const) : (curatedImage ?? (aerialTileUrl ? ({ uri: aerialTileUrl } as const) : null));
 
   if (heroImageSource) {
     // A curated crop (require) → aspect-lock to its natural aspect; a captured aerial (uri) → fill.

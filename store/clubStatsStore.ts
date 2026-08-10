@@ -80,6 +80,54 @@ const ROLL_YARDS: Record<ClubName, number> = {
   PW: 4, AW: 4, GW: 4, SW: 3, LW: 2, Putter: 0,
 };
 
+/**
+ * 2026-08-10 (Tim — "164-yard shot and the caddie defaults to gap wedge") — the PLAUSIBILITY BAND.
+ *
+ * ROOT CAUSE of the wedge-on-a-mid-iron bug: recordInto() sets avgYards = the FIRST sample verbatim,
+ * with no sanity check. One mis-attributed shot (wrong club tagged on a tracked GPS total, a
+ * cart-mark on the wrong hole, a bad Arccos row) wrote GW = 164y — and from then on inferClub()
+ * legitimately picked GW for a 164y shot, because by the store's own numbers GW *was* the closest
+ * club. It is self-reinforcing: every later GW shot averages against the poisoned anchor.
+ *
+ * The rule: a club's distance must sit within this band of its EXPECTED distance — the player's own
+ * stated My-Bag number when they've given one, otherwise the standard chart. Generous enough that a
+ * long hitter's Driver (245 chart → 135-355) or a strong player's 9I (122 → 67-177) still learns
+ * normally; tight enough that a GW (102 total → 56-148) can never claim a 164y shot.
+ *
+ * Applied at BOTH ends, deliberately:
+ *   - INGEST (recordCarry/recordTotal) — implausible samples never enter a ladder.
+ *   - READ (inferClub) — an ALREADY-poisoned ladder heals itself without a data migration, so the
+ *     fix reaches players whose store was corrupted before this shipped (i.e. Tim's, today).
+ */
+const PLAUSIBLE_LO = 0.55;
+const PLAUSIBLE_HI = 1.45;
+
+/** The distance we EXPECT for this club in the given ladder's unit: stated My-Bag carry when the
+ *  player gave one, else the standard chart. Putter → 0 (no band; it is never inferred). */
+function expectedYards(
+  club: ClubName,
+  ladder: 'carry' | 'total',
+  manual: Partial<Record<ClubName, number>>,
+): number {
+  const stated = manual[club];
+  const base = stated != null && stated > 0 ? stated : STANDARD_YARDS[club];
+  if (base <= 0) return 0;
+  return ladder === 'carry' ? base : base + ROLL_YARDS[club];
+}
+
+/** True when `yards` is physically believable for this club. A zero/absent expectation (Putter)
+ *  imposes no band, so this can never reject data for a club we have no opinion about. */
+function isPlausibleForClub(
+  club: ClubName,
+  yards: number,
+  ladder: 'carry' | 'total',
+  manual: Partial<Record<ClubName, number>>,
+): boolean {
+  const center = expectedYards(club, ladder, manual);
+  if (!(center > 0)) return true;
+  return yards >= center * PLAUSIBLE_LO && yards <= center * PLAUSIBLE_HI;
+}
+
 interface ClubStatsState {
   // 2026-07-24 (club-logic unification) — TWO explicit ladders so the app stops confusing units.
   //   carry = measured AIRTIME carry (acoustic/pose, range Flat-Carry, or My Bag stated).
@@ -168,10 +216,20 @@ export const useClubStatsStore = create<ClubStatsState>()(
       },
       recordCarry: (club, yards) => {
         if (!Number.isFinite(yards) || yards <= 0) return;
+        // 2026-08-10 — plausibility gate (see PLAUSIBLE_LO). A wildly out-of-band sample is a
+        // mis-attribution, not a career shot; dropping it protects the ladder from one bad row.
+        if (!isPlausibleForClub(club, yards, 'carry', get().manual)) {
+          console.log(`[clubStats] rejected implausible ${club} carry ${Math.round(yards)}y (expected ~${expectedYards(club, 'carry', get().manual)}y)`);
+          return;
+        }
         set((s) => ({ carry: recordInto(s.carry, club, yards) }));
       },
       recordTotal: (club, yards) => {
         if (!Number.isFinite(yards) || yards <= 0) return;
+        if (!isPlausibleForClub(club, yards, 'total', get().manual)) {
+          console.log(`[clubStats] rejected implausible ${club} total ${Math.round(yards)}y (expected ~${expectedYards(club, 'total', get().manual)}y)`);
+          return;
+        }
         set((s) => ({ total: recordInto(s.total, club, yards) }));
       },
       record: (club, yards) => get().recordTotal(club, yards), // deprecated alias
@@ -202,11 +260,37 @@ export const useClubStatsStore = create<ClubStatsState>()(
       hasDistance: (club) => (get().carry[club]?.samples ?? 0) > 0 || (get().total[club]?.samples ?? 0) > 0 || get().manual[club] != null,
       inferClub: (yards) => {
         const g = get();
+        // 2026-08-10 (Tim — "164y and the caddie defaults to gap wedge"). Two guards, both required:
+        //
+        // 1) HEAL a poisoned ladder at read time. A club whose learned total is outside its
+        //    plausibility band is a mis-attribution that already got persisted (the ingest gate only
+        //    protects data written from now on). Fall back to its expected distance for INFERENCE so
+        //    a corrupted GW can't claim a mid-iron yardage — without silently deleting the player's
+        //    data, which stays visible/correctable in My Bag.
+        // 2) Only recommend clubs the player ACTUALLY CARRIES. The registered bag is the roster
+        //    ([[clubBagStore]]); when it's empty (not registered yet) every club stays eligible, so
+        //    this can never leave the caddie with nothing to suggest.
+        const bagKeys = (() => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { useClubBagStore } = require('./clubBagStore') as typeof import('./clubBagStore');
+            const ids = Object.keys(useClubBagStore.getState().clubs ?? {});
+            const names = ids.map(clubIdToClubName).filter((n): n is ClubName => n != null && n !== 'Putter');
+            return names.length > 0 ? new Set<ClubName>(names) : null;
+          } catch {
+            return null; // bag unavailable → no restriction (fail open, never blocks a recommendation)
+          }
+        })();
+
         let best: ClubName = '7I';
         let bestDiff = Infinity;
         for (const club of CLUB_ORDER) {
           if (club === 'Putter') continue;
-          const dist = g.totalFor(club); // match a to-target (total-ish) yardage against total distances
+          if (bagKeys && !bagKeys.has(club)) continue;
+          const learned = g.totalFor(club); // match a to-target (total-ish) yardage against total distances
+          const dist = isPlausibleForClub(club, learned, 'total', g.manual)
+            ? learned
+            : expectedYards(club, 'total', g.manual);
           const diff = Math.abs(dist - yards);
           if (diff < bestDiff) { bestDiff = diff; best = club; }
         }
