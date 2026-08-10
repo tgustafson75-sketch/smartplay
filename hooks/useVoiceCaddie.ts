@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice } from '../services/voiceWarmup';
+import { getActiveCaddie } from '../services/caddieResolver';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import {
@@ -1171,12 +1172,14 @@ export const useVoiceCaddie = ({
           // PGA HOPE follow-up — server-side persona resolution, intensity
           // dial, and Tank soft-intro flag. Read fresh at call time so
           // settings changes apply to the next utterance without restart.
-          persona: useSettingsStore.getState().caddiePersonality,
+          // 2026-08-09 (pass-2 systemic) — persona + intensity off the ACTIVE per-pillar caddie so the
+          // spoken answer + its cadence dial match the caddie actually speaking, not the global pick.
+          persona: getActiveCaddie(),
           // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
           // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
           customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
           customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
-          personaIntensity: useSettingsStore.getState().personaIntensity?.[useSettingsStore.getState().caddiePersonality] ?? 100,
+          personaIntensity: useSettingsStore.getState().personaIntensity?.[getActiveCaddie()] ?? 100,
           tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
           // 2026-05-30 — Fix FY: Local Mode → pin brain to TACTICAL
           // tier (Haiku 4.5). Server's classifyQuestion auto-tier is
@@ -1272,7 +1275,7 @@ export const useVoiceCaddie = ({
             playerName: name,
             firstName,
             handicap,
-            persona: useSettingsStore.getState().caddiePersonality,
+            persona: getActiveCaddie(),
           // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
           // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
           customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
