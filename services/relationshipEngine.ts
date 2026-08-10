@@ -69,6 +69,22 @@ export function processSwingAnalysis(args: {
     : tag;
 
   store.addObservation({ type: 'technical', content });
+
+  // 2026-08-10 (Tim — "logic universal; the caddie brain ties to the whole CNS"). Every non-live
+  // analysis path (cage summary, uploads) calls this; SmartMotion live capture writes the CNS fault
+  // directly. Feed the SAME CNS dominant-miss tendency here so the brain's "what I've learned about you"
+  // block is fed by ALL analysis paths uniformly, not just live capture — otherwise a player who reviews
+  // by upload/cage teaches the caddie's observations but not its cited dominant miss (the disconnect).
+  const fault = issue.primary_fault && issue.primary_fault !== 'no_dominant_fault' && issue.primary_fault !== 'inconclusive'
+    ? issue.primary_fault
+    : null;
+  if (fault) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
+      mem.useCaddieMemoryStore.getState().recordSwingFault({ fault, nowMs: Date.now() });
+    } catch { /* non-fatal — CNS write is best-effort */ }
+  }
 }
 
 // 2026-05-17 — Legacy `relationshipEngine` no-op stubs removed.

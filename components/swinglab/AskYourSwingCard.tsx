@@ -114,6 +114,16 @@ export default function AskYourSwingCard({ session }: Props) {
             // gives it grounding when the player asks a follow-up.
             prior_cause: session.primary_issue?.mechanical_breakdown ?? null,
             prior_fix: session.drill_recommendation?.reason ?? null,
+            // 2026-08-10 (Tim — "caddie brain is universal, ties to the whole CNS"). Give the
+            // image-grounded swing Q&A the SAME learned-player block every other brain surface gets, so
+            // it can answer "is this my usual miss?" from the CNS instead of being a memory island.
+            player_memory: (() => {
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { getCaddieContext } = require('../../services/caddieMemoryRetrieval') as typeof import('../../services/caddieMemoryRetrieval');
+                return getCaddieContext({ club: session.club }).promptBlock || null;
+              } catch { return null; }
+            })(),
             language,
           },
         }),

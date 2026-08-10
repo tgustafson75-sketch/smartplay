@@ -38,7 +38,7 @@ function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  *
  * Input shape:
  *   { frames: [{ b64, media_type? }], question: string,
- *     context: { caddie_name?, club?, prior_fault?, prior_cause?,
+ *     context: { caddie_name?, club?, prior_fault?, prior_cause?, player_memory?,
  *                prior_fix?, language? } }
  * Output:
  *   { answer: string, provider: 'gemini'|'openai',
@@ -87,6 +87,8 @@ Context the player has already seen for this swing (use when relevant; don't rec
     typeof ctx.prior_cause === 'string' && ctx.prior_cause ? `\n- Earlier cause read: ${ctx.prior_cause}` : ''
   }${
     typeof ctx.prior_fix === 'string' && ctx.prior_fix ? `\n- Earlier fix offered: ${ctx.prior_fix}` : ''
+  }${
+    typeof ctx.player_memory === 'string' && ctx.player_memory.trim() ? `\n\nWHAT YOU'VE LEARNED ABOUT THIS PLAYER (cite naturally when they ask about their tendencies):\n${ctx.player_memory.trim()}` : ''
   }`;
 }
 
