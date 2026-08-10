@@ -86,3 +86,45 @@ export function formatGroundedForBrain(r: GroundedSearchResult): string {
   const src = r.sources.length ? ` (sources: ${r.sources.join(', ')})` : '';
   return `WEB SEARCH RESULT — speak this as your own knowledge, concisely${src}:\n${r.answer}`;
 }
+
+/**
+ * 2026-08-10 (Tim — "combine Gemini with golfcourse api to help"). Resolve a golf course's COORDINATES
+ * from its name via Google-Search-grounded Gemini. golfcourseapi gives us the course record + pars but
+ * often NO location; without a centroid the OSM geometry builder can't run. When the player isn't
+ * standing on the course (no live GPS fix — e.g. browsing Holden from home), this finds WHERE it is so
+ * the existing engine can build it. Returns null on any miss so the caller degrades honestly.
+ */
+export async function groundedCourseCoords(
+  name: string,
+  opts?: { context?: string | null; timeoutMs?: number },
+): Promise<{ lat: number; lng: number } | null> {
+  const n = (name ?? '').trim();
+  if (!n || !keyPresent()) return null;
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  const ai = new GoogleGenAI({ apiKey });
+  const ctx = opts?.context?.trim() ? ` (${opts.context.trim()})` : '';
+  const prompt =
+    `Find the precise geographic coordinates of the golf course "${n}"${ctx}. Use web search. ` +
+    `Reply with ONLY the decimal latitude and longitude of the clubhouse/course, as "lat,lng" ` +
+    `(e.g. "38.9072,-77.0369"). If you cannot find the specific course with confidence, reply "unknown".`;
+  try {
+    const resp = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { tools: [{ googleSearch: {} }], temperature: 0, maxOutputTokens: 60 },
+      }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('coords timeout')), opts?.timeoutMs ?? 9_000)),
+    ]);
+    const text = (resp.text ?? '').trim();
+    const m = text.match(/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+    if (!m) return null;
+    const lat = Number(m[1]); const lng = Number(m[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}

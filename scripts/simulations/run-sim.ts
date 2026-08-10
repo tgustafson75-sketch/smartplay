@@ -1213,6 +1213,32 @@ check('Round start uses bundled hole GEOMETRY by name, not just for local: ids',
   })(),
   'a bundled course (e.g. Berlin) loads its real tee/green coords for yardage+wind no matter the entry path');
 
+// 2026-08-10 (Tim — "the course builder engine like Arccos HAS to work… combine our Gemini abilities
+// with golfcourse api to help"). LOCK the course-builder resilience chain so an unbundled course a
+// tester browses/plays off-site still gets live greens:
+//   • Finding #1 — the live GPS fix is used as a last-resort centroid (client), not thrown away.
+//   • Gemini combo — server derives a centroid from the golfcourseapi record, else Gemini-locates it
+//     from the course name (+city/state), so OSM green-fill can fire with NO client centroid.
+//   • Finding #2 — the 9-hole bundled courses register their TRUE physical count (no 9→18 ghost pad).
+check('Course builder: live GPS centroid fallback + golfcourseapi→Gemini locate + 9-hole counts',
+  (() => {
+    const svc = read('services/courseGeometryService.ts');
+    const geo = read('api/course-geometry.ts');
+    const ws = read('api/_webSearch.ts');
+    const clientGpsFallback =
+      /getLastFix\(\)/.test(svc) && /centroid = \{ lat: fix\.lat, lng: fix\.lng \}/.test(svc);
+    const holeCounts =
+      /'berlin-cc':\s*9/.test(svc) && /'webster-dudley':\s*9/.test(svc) && /'echo-hills':\s*9/.test(svc);
+    const geminiHelper =
+      /export async function groundedCourseCoords/.test(ws) && /tools: \[\{ googleSearch: \{\} \}\]/.test(ws);
+    const serverLocate =
+      /coordsFromCourseRecord\(course\)/.test(geo) &&
+      /groundedCourseCoords\(nameHint, \{ context: locHint \}\)/.test(geo) &&
+      /if \(loc\) \{ centroid = loc;/.test(geo);
+    return clientGpsFallback && holeCounts && geminiHelper && serverLocate;
+  })(),
+  'an unbundled course resolves a centroid from live GPS, its API record, or a Gemini web-locate — so live greens/yardages build off-site, and 9-hole courses never pad to 18');
+
 // 2026-08-07 (Tim — "NO more auto tool-opening. I ask for 'play' and it opens Tight Lie. Unless I say
 // OPEN/SHOW ME the tool by name, leave it conversational"). LOCK the gate: a navigation open without an
 // explicit open-verb routes to the brain (conversational) instead of yanking the user into a screen.

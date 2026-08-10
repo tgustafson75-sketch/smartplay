@@ -2039,7 +2039,7 @@ export default function SwingDetail() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
           </TouchableOpacity>
-          <View style={{ flex: 1, alignItems: 'center' }}>
+          <View style={{ flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 6 }}>
             <Text style={[styles.title, { color: colors.text_primary, flex: 0, maxWidth: '100%' }]} numberOfLines={1}>
               {session.upload?.notes ?? `${session.club} swing`}
             </Text>
@@ -2087,7 +2087,7 @@ export default function SwingDetail() {
               )}
             </View>
           </View>
-          <View style={{ width: 84, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 14 }}>
+          <View style={{ flexShrink: 0, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
             {/* 2026-05-27 — Fix EP: send-to-Tank icon. Sits next to
                 the existing share icon. Sends this swing's video to
                 Tank's review queue via system Share sheet. Pre-set
@@ -3900,8 +3900,8 @@ const styles = StyleSheet.create({
   linkCancelText: { fontSize: 14, fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, gap: 6,
   },
   back: { fontSize: 16, fontWeight: '600', width: 60 },
   title: { fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center' },

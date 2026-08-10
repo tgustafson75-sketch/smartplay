@@ -45,6 +45,32 @@ type OsmElement = {
   members?: { geometry?: { lat: number; lon: number }[] }[];
 };
 
+// 2026-08-10 — pull a usable clubhouse centroid straight from the golfcourseapi record when it carries
+// one (field shape varies across their tiers: flat latitude/longitude, lat/lng, or a nested `location`).
+// Returns null when absent or a null-island / out-of-range value, so the caller falls to Gemini-locate.
+function num(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+function coordsFromCourseRecord(course: Record<string, unknown>): Loc | null {
+  const loc = (course.location as Record<string, unknown> | undefined) ?? course;
+  const lat = num(loc.latitude) ?? num(loc.lat) ?? num((course as Record<string, unknown>).latitude);
+  const lng =
+    num(loc.longitude) ?? num(loc.lng) ?? num(loc.lon) ?? num((course as Record<string, unknown>).longitude);
+  if (lat == null || lng == null) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return null;
+  return { lat, lng };
+}
+// A "City, State" hint from the record to disambiguate the Gemini coordinate lookup (many clubs share a name).
+function courseLocationHint(course: Record<string, unknown>): string | null {
+  const loc = (course.location as Record<string, unknown> | undefined) ?? course;
+  const city = String(loc.city ?? (course as Record<string, unknown>).city ?? '').trim();
+  const state = String(loc.state ?? (course as Record<string, unknown>).state ?? '').trim();
+  const parts = [city, state].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
 function polygonCentroid(points: { lat: number; lon: number }[]): Loc | null {
   if (points.length === 0) return null;
   let latSum = 0;
@@ -589,7 +615,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // null-green hole to its nearest OSM green centroid.
   const centroidLat = Number(req.query.lat);
   const centroidLng = Number(req.query.lng);
-  const centroid: Loc | null =
+  let centroid: Loc | null =
     isFinite(centroidLat) && isFinite(centroidLng) && centroidLat !== 0 && centroidLng !== 0
       ? { lat: centroidLat, lng: centroidLng }
       : null;
@@ -613,7 +639,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // since OSM rarely tags hole numbers consistently.
   const osmOnly = String(req.query.osmOnly ?? '') === '1';
   if (osmOnly) {
+    // 2026-08-10 (Tim — "combine Gemini with golfcourse api to help"). No centroid but we know the
+    // course NAME (golfcourseapi gave us the record + pars, just no location, and the player isn't
+    // standing on it): ask Gemini (Google-Search-grounded) WHERE it is, then build from there. This is
+    // how an unbundled course like Holden gets mapped when browsing off-site. Honest — a miss returns
+    // null and we fall through to the original 400.
+    if (!centroid) {
+      const courseName = typeof req.query.name === 'string' ? req.query.name : '';
+      if (courseName) {
+        try {
+          const { groundedCourseCoords } = await import('./_webSearch');
+          const loc = await groundedCourseCoords(courseName, { context: typeof req.query.region === 'string' ? req.query.region : null });
+          if (loc) { centroid = loc; console.log('[course-geometry] Gemini-located centroid for', courseName, loc); }
+        } catch { /* fall through to the 400 */ }
+      }
+    }
     if (!centroid) return res.status(400).json({ error: 'osmOnly requires lat/lng' });
+    const centroidNN = centroid; // non-null capture for closures below (sort callback loses `let` narrowing)
     // 2026-08-08 (Tim — the course BUILDER engine, live). PRIMARY PASS: OSM golf=hole WAYS with real
     // hole numbers (ref) + pars — the same algorithm the hand-run script used to build Berlin CC, now
     // automatic for every course a user arrives at. Only when hole-ways are absent/untagged do we fall
@@ -725,8 +767,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Sort pairs by bearing from centroid — rough walk-the-course
     // ordering. Far from perfect, but better than insertion order.
     pairs.sort((a, b) => {
-      const ba = bearingDeg(centroid, a.green);
-      const bb = bearingDeg(centroid, b.green);
+      const ba = bearingDeg(centroidNN, a.green);
+      const bb = bearingDeg(centroidNN, b.green);
       return ba - bb;
     });
 
@@ -845,6 +887,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (data.course as Record<string, unknown> | undefined) ??
       (data.data as Record<string, unknown> | undefined) ??
       data;
+
+    // 2026-08-10 (Tim — "combine Gemini with golfcourse api to help"). The OSM green-fill + polygon
+    // enrichment below only fire when we have a centroid. When the player is BROWSING an unbundled
+    // course off-site (no active round, no live GPS) the client sends none — so Holden came back with
+    // frozen scorecard yardages and no live greens. golfcourseapi's own record usually carries the
+    // clubhouse coords (or at least a city/state); pull them, and if it doesn't, ask Gemini
+    // (Google-Search-grounded) WHERE the named course is. Either way the existing engine then fills
+    // greens/polygons. Honest: a miss leaves centroid null and behavior is exactly as before.
+    if (!centroid) {
+      centroid = coordsFromCourseRecord(course);
+      if (!centroid) {
+        const locHint = courseLocationHint(course);
+        const nameHint = String(course.club_name ?? course.course_name ?? course.name ?? '').trim();
+        if (nameHint) {
+          try {
+            const { groundedCourseCoords } = await import('./_webSearch');
+            const loc = await groundedCourseCoords(nameHint, { context: locHint });
+            if (loc) { centroid = loc; console.log('[course-geometry] Gemini-located centroid for', nameHint, loc); }
+          } catch { /* degrade to no-centroid behavior */ }
+        }
+      }
+    }
 
     const rawHoles = extractRawHoles(course);
     // Phase AG diagnostic — log the actual field shape of the FIRST hole

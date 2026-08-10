@@ -37,6 +37,14 @@ const LOCAL_COURSE_HOLE_COUNT: Record<string, number> = {
   'shadow-lakes': 18,
   'crane-creek': 18,
   'manatee-cove': 18,
+  // 2026-08-10 (course-builder audit — Finding #2) — the three 9-hole bundled courses (Berlin CC is
+  // 9-par-33; Webster/Dudley is the nine played twice for 18; Echo Hills has 9 mapped holes). Same
+  // defensive intent as the DISCO-F4 block above: bundled coords win today so the cap is inert, but
+  // registering the TRUE physical count means a later API hint can never pad the nine to eighteen
+  // ghost holes (which would also silently disable the client's twice-around wrap).
+  'berlin-cc': 9,
+  'webster-dudley': 9,
+  'echo-hills': 9,
 };
 
 /**
@@ -550,6 +558,20 @@ export async function fetchCourseGeometry(
     }
     if (!centroid) {
       centroid = deriveCentroidFromActiveCourseLocation(courseId);
+    }
+    // 2026-08-10 (Tim — "the course builder like Arccos HAS to work"). Finding #1: the player is
+    // STANDING on an unbundled course with a live GPS fix, but we were throwing it away — so a course
+    // whose API record lacks coords got frozen scorecard yardages, no live distance-to-green. Use the
+    // live fix as the centroid so the server OSM green-fill fires and greens map at ANY course.
+    if (!centroid) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fix = (require('./gpsManager') as typeof import('./gpsManager')).getLastFix();
+        if (fix && Number.isFinite(fix.lat) && Number.isFinite(fix.lng)
+            && !(Math.abs(fix.lat) < 0.001 && Math.abs(fix.lng) < 0.001)) {
+          centroid = { lat: fix.lat, lng: fix.lng };
+        }
+      } catch { /* gps unavailable — fall through */ }
     }
   }
 
