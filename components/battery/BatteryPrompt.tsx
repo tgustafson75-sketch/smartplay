@@ -38,14 +38,19 @@ export default function BatteryPrompt() {
   useEffect(() => {
     if (!bs?.promptVisible) return;
     if (trustLevel === 1 || !voiceEnabled) return;
+    // 2026-08-09 (UI-honesty audit) — speak the REAL level, not a hardcoded 20%. The prompt fires at
+    // 30% on round start (batteryMonitor ROUND_START_THRESHOLD) and 20% mid-round, so "20%" lied to a
+    // golfer starting at 24-30%. bs.level (0..1) is the true reading.
     void speak(
-      "Phone's at 20%. Want me to slow down TightLie and stretch the battery?",
+      `Phone's at ${Math.round((bs.level ?? 0.2) * 100)}%. Want me to slow down TightLie and stretch the battery?`,
       voiceGender, language, apiUrl,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bs?.promptVisible, trustLevel, voiceEnabled]);
 
   if (!bs?.promptVisible) return null;
+  // 2026-08-09 (UI-honesty audit) — the real battery percentage for every surface below.
+  const pctText = `${Math.round((bs.level ?? 0.2) * 100)}%`;
 
   // Quiet trust → render as a banner instead of a modal so we don't speak
   // over a player who explicitly asked for silence.
@@ -53,7 +58,7 @@ export default function BatteryPrompt() {
     return (
       <View style={[styles.banner, { top: insets.top + 88 }]}>
         <Ionicons name="battery-half-outline" size={18} color="#fbbf24" />
-        <Text style={styles.bannerText}>Phone at 20%. Save battery this round?</Text>
+        <Text style={styles.bannerText}>Phone at {pctText}. Save battery this round?</Text>
         <TouchableOpacity onPress={acceptBatterySaver} style={styles.bannerYes}>
           <Text style={styles.bannerYesText}>Yes</Text>
         </TouchableOpacity>
@@ -70,7 +75,7 @@ export default function BatteryPrompt() {
         <View style={[styles.card, { marginTop: insets.top + 80 }]}>
           <View style={styles.headerRow}>
             <Ionicons name="battery-half-outline" size={22} color="#fbbf24" />
-            <Text style={styles.headerTitle}>Battery at 20%</Text>
+            <Text style={styles.headerTitle}>Battery at {pctText}</Text>
           </View>
           <Text style={styles.body}>
             Want me to slow down TightLie and stretch the battery for the rest of the round?
