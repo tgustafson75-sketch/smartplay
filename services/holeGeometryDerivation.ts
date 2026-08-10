@@ -22,15 +22,28 @@ import * as Sentry from '@sentry/react-native';
 import { getApiBaseUrl } from './apiBase';
 import { getCenteredImageryUrl, isMapboxConfigured } from './mapboxImagery';
 import { unprojectTilePixel, type LatLng } from './smartVisionOverlay';
-import { bearingDegrees } from '../utils/geoDistance';
-import { haversineMeters } from '../utils/geoDistance';
-import { saveDerivedHoleGeometry, type HoleGeometry } from './courseGeometryService';
+import { bearingDegrees, haversineMeters } from '../utils/geoDistance';
+import { saveDerivedHoleGeometry, type HoleGeometry, type LandmarkFeature } from './courseGeometryService';
+
+/** The side vocabulary LandmarkFeature uses — kept in one place so the derived side can't drift. */
+type LandmarkSide = LandmarkFeature['side'];
 
 /** Zoom for the derivation tile. At z16, a 1024px tile spans ~2 km — wide enough to contain a
  *  full par-5 green even when the seed is the tee, while keeping the green large enough (~30-60px)
  *  for the model to localize. Square so x and y normalize identically. */
 const TILE_ZOOM = 16;
 const TILE_SIZE = 1024;
+
+/**
+ * 2026-08-10 — how many YARDS the square tile spans edge to edge at this latitude.
+ * Web-Mercator ground resolution is 156543.03 m/px at z0 scaled by cos(lat), halving each zoom.
+ * Sent to the vision route as an absolute scale cue so the model can size-check a candidate green
+ * instead of judging it purely on appearance.
+ */
+function tileSpanYards(lat: number): number {
+  const metresPerPx = (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, TILE_ZOOM);
+  return Math.round(metresPerPx * TILE_SIZE * 1.09361);
+}
 const REQUEST_TIMEOUT_MS = 30_000;
 
 export type DerivedHoleGeometry = HoleGeometry & {
@@ -40,15 +53,25 @@ export type DerivedHoleGeometry = HoleGeometry & {
   confidence: 'high' | 'medium' | 'low';
 };
 
+type NormPoint = { x: number; y: number };
+
 export type HoleScanResponse = {
   found_green: boolean;
-  green_center: { x: number; y: number } | null;
-  green_front: { x: number; y: number } | null;
-  green_back: { x: number; y: number } | null;
-  tee: { x: number; y: number } | null;
+  green_center: NormPoint | null;
+  green_front: NormPoint | null;
+  green_back: NormPoint | null;
+  tee: NormPoint | null;
   confidence: 'high' | 'medium' | 'low';
   notes: string;
   provider?: string;
+  // 2026-08-10 (Tim — "locate the green, the tee box, the fairway, hazards correctly and TIGHTLY").
+  // The scan now traces OUTLINES, not just centre points. All optional: an older deployment of
+  // api/hole-scan (or an honest "couldn't resolve the edge") simply omits them and the derivation
+  // degrades to the previous point-only behavior.
+  green_polygon?: NormPoint[] | null;
+  tee_polygon?: NormPoint[] | null;
+  fairway_centerline?: NormPoint[] | null;
+  hazards?: { kind: 'bunker' | 'water'; polygon: NormPoint[]; carry_side?: string }[] | null;
 };
 
 async function fetchTileAsBase64(url: string): Promise<string | null> {
@@ -112,6 +135,10 @@ export async function deriveHoleGeometry(input: {
         image_media_type: 'image/jpeg',
         hole_number: holeNumber,
         par: input.par ?? undefined,
+        // 2026-08-10 — the tile's real-world width. Gives the model an absolute SCALE, turning
+        // "does this look like a green?" into "is this blob 20-40 yards across?". Computed from the
+        // tile's own projection so it stays correct if TILE_ZOOM/TILE_SIZE ever change.
+        tile_span_yards: tileSpanYards(seed.lat),
       }),
       signal: ctrl.signal,
     });
@@ -136,20 +163,99 @@ export async function deriveHoleGeometry(input: {
     // mis-projection or a hallucinated far-field green, not a hole the player is standing on.
     if (haversineMeters(seed, green) > 800) return null;
 
-    const bearing_deg = tee ? bearingDegrees(tee, green) : null;
+    // 2026-08-10 — unproject each traced OUTLINE the same way as the points, dropping any vertex
+    // that fails to project. A ring reduced below 3 usable vertices isn't a shape, so it becomes
+    // null rather than a degenerate sliver.
+    const toRing = (pts: NormPoint[] | null | undefined, minPts: number): LatLng[] | null => {
+      if (!Array.isArray(pts)) return null;
+      const ring = pts.map(toCoord).filter((c): c is LatLng => c != null);
+      return ring.length >= minPts ? ring : null;
+    };
+    const greenOutline = toRing(data.green_polygon, 3);
+    const teeOutline = toRing(data.tee_polygon, 3);
+    const fairwayLine = toRing(data.fairway_centerline, 2);
+
+    /**
+     * 2026-08-10 — SCORECARD VERIFICATION, the same discipline that fixed the OSM tee↔green
+     * mis-pairing: when we know the hole's real yardage, the vision read has to AGREE with it.
+     * A tee the model placed on the wrong pad (or on a neighbouring hole) shows up immediately as
+     * a tee→green distance nothing like the card. Drop that tee and its bearing rather than draw a
+     * confidently mis-oriented hole; the green — the part live GPS yardages depend on — is kept.
+     */
+    let verifiedTee = tee;
+    const cardYards = input.yardage ?? 0;
+    if (verifiedTee && cardYards > 0) {
+      const measured = haversineMeters(verifiedTee, green) * 1.09361;
+      if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {
+        console.log(`[holeGeometry] hole ${holeNumber}: vision tee ${Math.round(measured)}y vs card ${cardYards}y — rejecting tee`);
+        verifiedTee = null;
+      }
+    }
+
+    const bearing_deg = verifiedTee ? bearingDegrees(verifiedTee, green) : null;
+
+    // Bunkers/water carry their own outline + centroid so the renderer and the brain can both use
+    // them (distance-to-carry, "bunker short-left") without re-deriving anything.
+    const centroidOf = (ring: LatLng[]): LatLng => ({
+      lat: ring.reduce((s, p) => s + p.lat, 0) / ring.length,
+      lng: ring.reduce((s, p) => s + p.lng, 0) / ring.length,
+    });
+    /**
+     * Which SIDE of the hole a hazard sits on, derived from geometry rather than taken from the
+     * model's word for it — the caddie says "bunker short-left", and that phrase has to be true.
+     * Greenside (within 30y of the green) wins over left/right because it's the more useful fact;
+     * otherwise the sign of the cross product of tee→green against tee→hazard gives the side.
+     * Null when there's no verified tee to reference, per the honesty rule.
+     */
+    const sideOf = (p: LatLng): LandmarkSide => {
+      if (haversineMeters(p, green) * 1.09361 <= 30) return 'greenside';
+      if (!verifiedTee) return null;
+      const ax = green.lng - verifiedTee.lng, ay = green.lat - verifiedTee.lat;
+      const bx = p.lng - verifiedTee.lng, by = p.lat - verifiedTee.lat;
+      const cross = ax * by - ay * bx;
+      if (!Number.isFinite(cross) || cross === 0) return null;
+      // Looking down the hole from the tee, a positive cross product is to the player's LEFT.
+      return cross > 0 ? 'left' : 'right';
+    };
+
+    const scanned = Array.isArray(data.hazards) ? data.hazards : [];
+    const features = scanned
+      .map((h) => {
+        const ring = toRing(h.polygon, 3);
+        if (!ring) return null;
+        const centroid = centroidOf(ring);
+        const side = sideOf(centroid);
+        return {
+          kind: h.kind,
+          polygon: ring,
+          centroid,
+          side,
+          // A readable label the brain and the UI can both quote: "Bunker (short-left)" reads like
+          // a caddie; an unnamed polygon reads like a database row.
+          name: side ? `${h.kind === 'water' ? 'Water' : 'Bunker'} (${side})` : h.kind === 'water' ? 'Water' : 'Bunker',
+        };
+      })
+      .filter((h): h is { kind: 'bunker' | 'water'; polygon: LatLng[]; centroid: LatLng; side: LandmarkSide; name: string } => h != null);
+    const bunkers = features.filter((f) => f.kind === 'bunker').map(({ polygon, centroid, side, name }) => ({ polygon, centroid, side, name }));
+    const waters = features.filter((f) => f.kind === 'water').map(({ polygon, centroid, side, name }) => ({ polygon, centroid, side, name }));
 
     const derived: DerivedHoleGeometry = {
       hole_number: holeNumber,
       par: input.par ?? 0,
       yardage: input.yardage ?? 0,
-      tee,
+      tee: verifiedTee,
       green,
       green_front,
       green_back,
       bearing_deg,
-      hazards: [],
-      fairway_centerline: [],
-      green_outline: [],
+      // Labeled hazard points for the text/brain surfaces that read `hazards`.
+      hazards: features.map((f) => ({ label: f.name, location: f.centroid })),
+      fairway_centerline: fairwayLine ?? [],
+      green_outline: greenOutline ?? [],
+      green_polygon: greenOutline,
+      tee_polygon: teeOutline,
+      bunkers,
+      water_hazards: waters,
       estimated: true,
       estimated_confidence: data.confidence,
       confidence: data.confidence,

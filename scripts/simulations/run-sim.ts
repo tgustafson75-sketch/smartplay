@@ -8343,6 +8343,35 @@ check('LOCK: Google-backed routes walk EVERY configured project instead of pinni
   })(),
   'withGoogleKeys walker + capability-miss detection, no pinned KEY, both Places routes walking');
 
+// "Make sure we're using computer vision correctly, and we're locating the green, the tee box, the
+// fairway, hazards correctly and TIGHTLY." The scan must trace OUTLINES (points can't be tight),
+// verify them, and the client must actually USE them — the derivation used to hardcode empty arrays.
+check('LOCK: hole-scan traces + verifies tight outlines, and the derivation consumes them',
+  (() => {
+    const scan = read('api/hole-scan.ts');
+    const der = read('services/holeGeometryDerivation.ts');
+    const tracesAll =
+      /green_polygon: POLY_OAI/.test(scan) && /tee_polygon: POLY_OAI/.test(scan) &&
+      /fairway_centerline: POLY_OAI/.test(scan) && /hazards: \{ type: 'array', items: HAZARD_OAI \}/.test(scan);
+    // outlines are VERIFIED, not trusted: vertex count + extent, so a full-frame "outline" is rejected
+    const verified = /const poly = \(v: unknown, minPts: number, maxExtent: number\)/.test(scan) &&
+      /if \(w > maxExtent \|\| h > maxExtent\) return null;/.test(scan);
+    // the token budget must fit polygons — 500 was sized for 4 points and would truncate the JSON
+    const budgetOk = (() => {
+      const m = scan.match(/maxTokens: ([\d_]+),[^\n]*schema: HOLE_GEOMETRY_SCHEMA/);
+      return m ? Number(m[1].replace(/_/g, '')) >= 2000 : false;
+    })();
+    // and the client must WIRE them through instead of the old hardcoded empties
+    const consumed =
+      !/hazards: \[\],\s*\n\s*fairway_centerline: \[\],\s*\n\s*green_outline: \[\],/.test(der) &&
+      /green_polygon: greenOutline/.test(der) && /tee_polygon: teeOutline/.test(der) &&
+      /bunkers,/.test(der) && /water_hazards: waters,/.test(der) &&
+      // vision tees are scorecard-verified, same discipline as the OSM pairing fix
+      /measured > cardYards \* 1\.35 \|\| measured < cardYards \* 0\.65/.test(der);
+    return tracesAll && verified && budgetOk && consumed;
+  })(),
+  'outlines traced for green/tee/fairway/hazards, extent-verified, token budget sized for polygons, consumed by the derivation with card-verified tees');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
