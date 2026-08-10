@@ -70,6 +70,9 @@ export const FAULT_REGION_JOINTS: Record<string, string[]> = {
   reverse_pivot:         ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'],
   spine_angle_loss:      ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'],
   head_movement:         ['nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear'],
+  // 2026-08-09 (elite fault engine) — arm + finish faults.
+  lead_arm_bent:         ['left_shoulder', 'left_elbow', 'left_wrist', 'right_shoulder', 'right_elbow', 'right_wrist'],
+  poor_finish:           ['left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'],
 };
 
 /** Joints to paint hot for a fault id (primary_fault or canonical issue_id).

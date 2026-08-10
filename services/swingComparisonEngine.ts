@@ -414,6 +414,9 @@ function jointsForMetric(key: MetricDelta['key']): string[] {
     case 'headDriftPxNorm':    return ['nose'];
     case 'hipSlideRatio':      return ['left_hip', 'right_hip'];
     case 'sequencingScore':    return ['left_hip', 'left_shoulder'];
+    // 2026-08-09 (elite fault engine) — the new arm/finish metrics aren't part of the swing-COMPARISON
+    // heatmap (a separate feature); default keeps this exhaustive without adding them to comparison.
+    default:                   return [];
   }
 }
 

@@ -6733,19 +6733,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // 2026-08-06 (analysis audit) — the fault gate now only escalates a scold when the pose was CONFIDENT
     // about the metric (trust ≥ 0.4, unknown → untrusted). Real biomech always carries metric_confidence
     // (poseAnalysisApi.computeBiomechanics), so faulty swings supply it here to represent real data.
-    const CONF_HI = { hipTurn: 0.9, shoulderTurn: 0.9, shoulderTilt: 0.9, weightShift: 0.9, spineAngleDelta: 0.9, headDrift: 0.9, hipSlide: 0.9, sequencing: 0.9 };
-    // Clean swing: strong numbers → strengths, no faults, usable.
-    const clean = buildPoseSwingRead({ hipTurnDeg: 46, shoulderTurnDeg: 92, weightShiftPct: 20, spineAngleDeltaDeg: 4, hipSlideRatio: 1.0, sequencingScore: 72, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
+    // 2026-08-09 (elite fault engine) — confidence now carries the arm/finish/sway keys too; over_the_top
+    // is NO LONGER asserted (fabricated from a width proxy), sway is driven by swayNorm not hipSlideRatio.
+    const CONF_HI = { hipTurn: 0.9, shoulderTurn: 0.9, shoulderTilt: 0.9, weightShift: 0.9, spineAngleDelta: 0.9, headDrift: 0.9, hipSlide: 0.9, sequencing: 0.9, leadArm: 0.9, chickenWing: 0.9, sway: 0.9, finish: 0.9 };
+    // Clean swing: strong numbers (incl. straight lead arm, centered sway, full finish) → strengths, no faults.
+    const clean = buildPoseSwingRead({ hipTurnDeg: 46, shoulderTurnDeg: 92, weightShiftPct: 20, spineAngleDeltaDeg: 4, hipSlideRatio: null, sequencingScore: 72, leadArmTopDeg: 168, leadArmImpactDeg: 165, swayNorm: 0.08, finishWeightPct: 35, headDriftPxNorm: 0.03, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
     const cleanOk = clean.usable && clean.faults.length === 0 && clean.strengths.length > 0 && clean.dimensions.length >= 6;
-    // Faulty swing: early extension + sway + hanging back + over the top → all detected from thresholds (confident).
-    const faulty = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
+    // Faulty swing: early extension + REBUILT sway (swayNorm) + hanging back + bent lead arm → all detected. NO over_the_top.
+    const faulty = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: null, swayNorm: 0.26, leadArmTopDeg: 130, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_HI }, mkTempo(3.0));
     const fk = faulty.faults.map((f: { key: string }) => f.key);
-    const faultyOk = fk.includes('early_extension') && fk.includes('sway') && fk.includes('reverse_pivot') && fk.includes('over_the_top') && faulty.faults[0].severity === 'significant';
+    const faultyOk = fk.includes('early_extension') && fk.includes('sway') && fk.includes('reverse_pivot') && fk.includes('lead_arm_bent') && !fk.includes('over_the_top') && faulty.faults[0].severity === 'significant';
     // 2026-08-06 (analysis audit, finding #5) — the SAME faulty numbers but LOW confidence must NOT lead with
     // those scolds (unknown/low pose confidence → hedged dimension, no headline fault). Locks the honesty gate.
-    const CONF_LO = { hipTurn: 0.2, shoulderTurn: 0.2, shoulderTilt: 0.2, weightShift: 0.2, spineAngleDelta: 0.2, headDrift: 0.2, hipSlide: 0.2, sequencing: 0.2 };
-    const faultyLowConf = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: 1.5, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_LO }, mkTempo(3.0));
-    const gatedKeys = ['early_extension', 'sway', 'reverse_pivot', 'over_the_top'];
+    const CONF_LO = { hipTurn: 0.2, shoulderTurn: 0.2, shoulderTilt: 0.2, weightShift: 0.2, spineAngleDelta: 0.2, headDrift: 0.2, hipSlide: 0.2, sequencing: 0.2, leadArm: 0.2, chickenWing: 0.2, sway: 0.2, finish: 0.2 };
+    const faultyLowConf = buildPoseSwingRead({ hipTurnDeg: 40, shoulderTurnDeg: 85, weightShiftPct: -6, spineAngleDeltaDeg: 20, hipSlideRatio: null, swayNorm: 0.26, leadArmTopDeg: 130, sequencingScore: 30, frames: [], verdicts: {}, metric_confidence: CONF_LO }, mkTempo(3.0));
+    const gatedKeys = ['early_extension', 'sway', 'reverse_pivot', 'lead_arm_bent'];
     const lowConfGated = !faultyLowConf.faults.some((f: { key: string }) => gatedKeys.includes(f.key));
     // Unmeasurable (e.g. bad angle): every dimension null → omitted, NO fabricated fault, not usable — never "no swing" as a fault.
     const empty = buildPoseSwingRead({ hipTurnDeg: null, shoulderTurnDeg: null, weightShiftPct: null, spineAngleDeltaDeg: null, hipSlideRatio: null, sequencingScore: null, frames: [], verdicts: {} }, null);
@@ -8057,6 +8059,30 @@ check('Course geometry: estimated flag reflects COORD provenance (real hole-ways
     return hwHonest && hwComment && pairHonest;
   })(),
   'unmapped courses never present fabricated par-4s as trustworthy while badging real community-mapped coords as AI');
+
+// 2026-08-09 (elite fault engine — Tim: over-the-top FABRICATED, missing lead-arm-bent/chicken-wing/
+// finish/sway my eyes see). Over-the-top is no longer asserted from the hip/shoulder width 'sequencing'
+// proxy (two endpoint frames can't measure transition order or club plane). New reliable ARM/FINISH/
+// HEAD faults + a rebuilt sway (hip-midpoint translation) are wired end-to-end.
+check('Fault engine: arm/finish/sway faults wired, fabricated over-the-top removed',
+  (() => {
+    const api = read('services/poseAnalysisApi.ts');
+    const read2 = read('services/swing/poseSwingRead.ts');
+    const verdict = read('services/swing/poseReadVerdict.ts');
+    const drills = read('data/drillCatalog.ts');
+    const overlay = read('components/swinglab/SwingBodyOverlay.tsx');
+    return (
+      /leadArmTopDeg\b/.test(api) && /leadArmImpactDeg\b/.test(api) && /swayNorm\b/.test(api) && /finishWeightPct\b/.test(api) &&
+      /jointAngleDeg\(/.test(api) &&                                                    // real 3-point arm angle
+      /key: 'lead_arm_bent'/.test(read2) && /key: 'chicken_wing'/.test(read2) && /key: 'poor_finish'/.test(read2) && /key: 'head_movement'/.test(read2) &&
+      !/key: 'over_the_top', label: 'Over the top'/.test(read2) &&                       // fabricated assertion GONE
+      /faults\.push\(\{ key: 'sway'[\s\S]{0,120}?swayNorm|swayNorm[\s\S]{0,400}?key: 'sway'/.test(read2) &&
+      /lead_arm_bent: 'lead_arm_bent'/.test(verdict) && /chicken_wing: 'chicken_wing'/.test(verdict) &&
+      /id: 'lead_arm_bent'/.test(drills) && /id: 'poor_finish'/.test(drills) && /id: 'sway'/.test(drills) &&
+      /lead_arm_bent:\s*\[/.test(overlay) && /poor_finish:\s*\[/.test(overlay)
+    );
+  })(),
+  'the analyzer names the plainly-visible faults (bent lead arm, chicken wing, incomplete finish, sway, head movement) from reliable arm/hip metrics and no longer fabricates over-the-top');
 
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added

@@ -30,6 +30,11 @@ export type CanonicalIssue =
   | 'over_the_top'
   | 'chicken_wing'
   | 'reverse_pivot'
+  // 2026-08-09 (elite fault engine) — arm/finish/sway/head faults now detected from pose.
+  | 'lead_arm_bent'
+  | 'poor_finish'
+  | 'sway'
+  | 'head_movement'
   // 2026-05-26 — Short-game + branded categories. chipping_inconsistent
   // surfaces Randy Chang's "Chang Chip" video; tank_caddie_practice
   // surfaces the SmartPlay-branded Tank placeholder card. Both fit the
@@ -287,6 +292,78 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     ],
     videoCategory: 'weight_transfer',
     cardImage: CARD_WEIGHT_TRANSFER,
+  },
+  {
+    id: 'lead_arm_bent',
+    practice: { shotCount: 5, shotType: 'full', focus: 'connection', angle: 'face_on' },
+    title: 'Bent Lead Arm',
+    primary: 'The lead arm bends at the top, collapsing the swing radius — you lose width, speed and a consistent low point.',
+    commonFaults: [
+      'Lead elbow folds as the club goes back',
+      'Narrow, short backswing arc',
+      'Casting / early release to make up the lost width',
+    ],
+    missPattern: 'Inconsistent strike, distance loss, fat/thin misses',
+    drills: [
+      { name: 'Wide takeaway',   steps: 'Push the clubhead low and wide away from the ball, lead arm straight, until the shaft is parallel to the ground. Feel the lead arm stay extended — no early fold.' },
+      { name: 'Headcover width',  steps: 'Hold a headcover between your lead bicep and chest. Swing to the top keeping the lead arm straight (headcover stays put but the arm does NOT collapse). 10 slow reps.' },
+    ],
+    videoCategory: 'posture',
+    cardImage: CARD_POSTURE,
+  },
+  {
+    id: 'poor_finish',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'face_on' },
+    title: 'Incomplete Finish',
+    primary: 'You are falling back instead of finishing balanced over the lead leg — a sign the weight never fully transferred through the ball.',
+    commonFaults: [
+      'Weight hangs on the trail foot at the finish',
+      'Body stops rotating; arms flip at the ball',
+      'Loss of balance backward off the shot',
+    ],
+    missPattern: 'Thin, high, weak shots; hanging-back pushes and flips',
+    drills: [
+      { name: 'Hold the finish', steps: 'Swing and HOLD a full finish for 3 seconds: belt buckle to target, trail toe down, ~90% of weight on the lead foot, tall and balanced. If you stumble, you didn\'t get through.' },
+      { name: 'Step-through',     steps: '7-iron. Swing and let the trail foot step past the lead foot toward the target at the finish — forces the weight all the way through onto the lead side.' },
+    ],
+    videoCategory: 'weight_transfer',
+    cardImage: CARD_WEIGHT_TRANSFER,
+  },
+  {
+    id: 'sway',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'face_on' },
+    title: 'Sway Off the Ball',
+    primary: 'Your hips slide laterally away from the target in the backswing instead of turning around a stable post — the low point wanders and the strike suffers.',
+    commonFaults: [
+      'Hips shift toward the trail foot going back',
+      'Head and center drift off the ball',
+      'Reverse move + early extension to recover coming down',
+    ],
+    missPattern: 'Fat/thin misses, pushes and blocks; inconsistent contact',
+    drills: [
+      { name: 'Trail-hip wall',   steps: 'Set up with your trail hip a few inches from a wall (or alignment stick in the ground). Turn to the top WITHOUT the hip bumping into it — you rotate around the post instead of sliding.' },
+      { name: 'Load and turn',    steps: 'Feel the trail glute turn BEHIND you (into your back pocket) rather than sliding sideways. 10 slow backswings checking the head stays centered over the ball.' },
+    ],
+    videoCategory: 'posture',
+    cardImage: CARD_POSTURE,
+  },
+  {
+    id: 'head_movement',
+    practice: { shotCount: 5, shotType: 'full', focus: 'posture', angle: 'face_on' },
+    title: 'Steady Your Head',
+    primary: 'Your head drifts too much from address to impact — a moving center makes the low point (and the strike) inconsistent.',
+    commonFaults: [
+      'Head sways off the ball with the backswing',
+      'Head lifts/dips through the strike',
+      'Chasing the ball with the upper body',
+    ],
+    missPattern: 'Fat, thin and off-center strikes; scattered dispersion',
+    drills: [
+      { name: 'Wall-touch',   steps: 'Address with the top of your head lightly touching a wall (or a friend\'s hand). Make slow swings keeping contact through the backswing and into impact.' },
+      { name: 'Eyes on a spot', steps: 'Pick a single dimple / blade of grass and keep your eyes locked on it from takeaway through impact. 10 reps — the head follows the eyes.' },
+    ],
+    videoCategory: 'posture',
+    cardImage: CARD_POSTURE,
   },
   // 2026-08-06 (Tim — "remove Randy from Chipping and find a better Caddie's Chipping lesson"). De-branded
   // from Randy Chang into the Caddie's own chipping fundamentals: the drill steps ARE the lesson (weight-

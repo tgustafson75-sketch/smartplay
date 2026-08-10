@@ -23,7 +23,7 @@ import type { SwingBiomechanics, SwingTempo } from '../poseAnalysisApi';
 export type DimensionVerdict = 'strength' | 'solid' | 'watch' | 'needs_work';
 
 export interface DimensionRead {
-  key: 'tempo' | 'hip_turn' | 'shoulder_turn' | 'weight_shift' | 'posture' | 'sway' | 'sequencing';
+  key: 'tempo' | 'hip_turn' | 'shoulder_turn' | 'weight_shift' | 'posture' | 'sway' | 'sequencing' | 'lead_arm' | 'chicken_wing' | 'finish' | 'head';
   label: string;
   /** Human value, e.g. "2.9 : 1", "46°", "+18%". Null when not measurable from this angle. */
   display: string | null;
@@ -34,7 +34,7 @@ export interface DimensionRead {
 
 export interface PoseFault {
   /** Matches the canonical fault vocabulary where possible. */
-  key: 'early_extension' | 'sway' | 'reverse_pivot' | 'over_the_top' | 'under_coil' | 'quick_tempo' | 'slow_tempo';
+  key: 'early_extension' | 'sway' | 'reverse_pivot' | 'over_the_top' | 'under_coil' | 'quick_tempo' | 'slow_tempo' | 'lead_arm_bent' | 'chicken_wing' | 'poor_finish' | 'head_movement';
   label: string;
   severity: 'minor' | 'moderate' | 'significant';
   /** The measurement that triggered it — the honest evidence. */
@@ -137,26 +137,65 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
     }
   }
 
-  // Sway: hipSlideRatio > 1 = hips sliding laterally off the ball more than rotating in the backswing.
-  if (bio?.hipSlideRatio != null) {
-    const r = bio.hipSlideRatio;
-    const display = r.toFixed(1);
-    if (r <= 1.05) dims.push({ key: 'sway', label: 'Hip stability', display: `${display}×`, verdict: 'strength', note: `Your hips rotate more than they slide (${display}×) — a stable, centered turn.` });
+  // SWAY (rebuilt 2026-08-09) — hip-MIDPOINT lateral translation address→top as a fraction of shoulder
+  // width. The old hipSlideRatio (single hip ÷ noisy rotation proxy) divided real sway away on a good
+  // turn (Tim: "misses sway my eyes see"). ~0.15 watch, ~0.20 fault, ~0.28 significant.
+  if (bio?.swayNorm != null) {
+    const v = bio.swayNorm;
+    const display = `${Math.round(v * 100)}%`;
+    if (v <= 0.15) dims.push({ key: 'sway', label: 'Hip stability', display, verdict: 'strength', note: `Hips stayed stacked over the ball (${display} drift) — a centered turn around a post.` });
     else {
-      dims.push({ key: 'sway', label: 'Hip stability', display: `${display}×`, verdict: r > 1.4 ? 'needs_work' : 'watch', note: `Your hips slide off the ball ${display}× more than they rotate in the backswing.` });
-      if (trust(conf.hipSlide)) faults.push({ key: 'sway', label: 'Sway off the ball', severity: sev(r > 1.5 ? 2 : r > 1.25 ? 1 : 0), evidence: `Hip slide ${display}× rotation — you're swaying laterally instead of turning around a centered post.` });
+      dims.push({ key: 'sway', label: 'Hip stability', display, verdict: v > 0.22 ? 'needs_work' : 'watch', note: `Your hips slid ${display} of shoulder-width off the ball in the backswing.` });
+      if (trust(conf.sway)) faults.push({ key: 'sway', label: 'Sway off the ball', severity: sev(v > 0.28 ? 2 : v > 0.20 ? 1 : 0), evidence: `Hips slid ${display} of shoulder-width off the ball — swaying laterally instead of turning around a centered post.` });
     }
   }
 
-  // Sequencing: hips-lead-the-downswing score (0..100). High = tour kinematic sequence; low = shoulders
-  // start it = over the top.
-  if (bio?.sequencingScore != null) {
-    const q = bio.sequencingScore;
-    const display = `${Math.round(q)}`;
-    if (q >= 60) dims.push({ key: 'sequencing', label: 'Sequence', display, verdict: 'strength', note: `Your hips lead the downswing (${display}/100) — the tour kinematic order.` });
+  // 2026-08-09 (elite fault engine — Tim's named misses). Over-the-top is NO LONGER asserted from the
+  // hip/shoulder width "sequencing" proxy — two static endpoint frames on the face-on plane cannot
+  // measure transition ORDER or club PLANE, so it was fabricated (Tim: correct). Real over-the-top
+  // needs the clubhead PATH (DTL) — queued to derive from the already-extracted club arc. Until then we
+  // stay silent rather than fabricate. In its place: the ARM + FINISH faults the golfer plainly sees.
+
+  // LEAD ARM at the top — a straight lead arm keeps width; bent = collapsed radius.
+  if (bio?.leadArmTopDeg != null) {
+    const a = bio.leadArmTopDeg;
+    if (a >= 155) dims.push({ key: 'lead_arm', label: 'Lead arm', display: `${a}°`, verdict: 'strength', note: `Lead arm straight (${a}°) at the top — wide and connected.` });
     else {
-      dims.push({ key: 'sequencing', label: 'Sequence', display, verdict: q < 40 ? 'needs_work' : 'watch', note: `Your upper body is starting the downswing (${display}/100) instead of the hips leading.` });
-      if (trust(conf.sequencing)) faults.push({ key: 'over_the_top', label: 'Over the top', severity: sev(q < 35 ? 2 : q < 50 ? 1 : 0), evidence: `Sequencing ${display}/100 — the shoulders fire first, throwing the club over the plane.` });
+      dims.push({ key: 'lead_arm', label: 'Lead arm', display: `${a}°`, verdict: a < 140 ? 'needs_work' : 'watch', note: `Lead arm bent to ${a}° at the top — losing width and arc radius.` });
+      if (trust(conf.leadArm)) faults.push({ key: 'lead_arm_bent', label: 'Bent lead arm', severity: sev(a < 135 ? 2 : a < 148 ? 1 : 0), evidence: `Lead arm bent to ${a}° at the top (a wide swing holds ~165°+) — the collapsed radius costs width, speed and a consistent low point.` });
+    }
+  }
+
+  // CHICKEN WING — lead arm folding through impact/early follow-through (loss of extension + face control).
+  if (bio?.leadArmImpactDeg != null) {
+    const a = bio.leadArmImpactDeg;
+    if (a >= 150) dims.push({ key: 'chicken_wing', label: 'Extension', display: `${a}°`, verdict: 'strength', note: `Lead arm extending (${a}°) through impact — a full release.` });
+    else {
+      dims.push({ key: 'chicken_wing', label: 'Extension', display: `${a}°`, verdict: a < 135 ? 'needs_work' : 'watch', note: `Lead arm folding to ${a}° through impact.` });
+      if (trust(conf.chickenWing)) faults.push({ key: 'chicken_wing', label: 'Chicken wing', severity: sev(a < 130 ? 2 : a < 145 ? 1 : 0), evidence: `Lead arm folded to ${a}° through impact — a chicken wing; you're losing extension and control of the face (weak, blocked or scooped strikes).` });
+    }
+  }
+
+  // FINISH — weight through onto the lead side at the finish frame; low = falling back / incomplete.
+  if (bio?.finishWeightPct != null) {
+    const w = bio.finishWeightPct;
+    const display = `${w >= 0 ? '+' : ''}${w}%`;
+    if (w >= 25) dims.push({ key: 'finish', label: 'Finish', display, verdict: 'strength', note: `Balanced finish — weight ${display} onto the lead side, fully through.` });
+    else {
+      dims.push({ key: 'finish', label: 'Finish', display, verdict: w < 5 ? 'needs_work' : 'watch', note: `Weight ${display} at the finish — not getting all the way through.` });
+      if (trust(conf.finish)) faults.push({ key: 'poor_finish', label: 'Incomplete finish', severity: sev(w < 0 ? 2 : w < 10 ? 1 : 0), evidence: `Weight only ${display} onto the lead side at the finish — you're falling back instead of finishing balanced and rotated over your lead leg.` });
+    }
+  }
+
+  // HEAD MOVEMENT — headDriftPxNorm was computed and orphaned; wire it. >~0.06 of frame height =
+  // meaningful head travel address→impact (excess sway/lift hurts low-point control).
+  if (bio?.headDriftPxNorm != null) {
+    const d = bio.headDriftPxNorm;
+    const display = `${Math.round(d * 100)}%`;
+    if (d <= 0.05) dims.push({ key: 'head', label: 'Head', display, verdict: 'strength', note: `Head stayed quiet (${display} of frame) — a steady center to swing around.` });
+    else {
+      dims.push({ key: 'head', label: 'Head', display, verdict: d > 0.09 ? 'needs_work' : 'watch', note: `Head moved ${display} of the frame from address to impact.` });
+      if (trust(conf.headDrift)) faults.push({ key: 'head_movement', label: 'Head movement', severity: sev(d > 0.11 ? 2 : d > 0.07 ? 1 : 0), evidence: `Head drifted ${display} of the frame from address to impact — excess movement makes the low point (and strike) inconsistent.` });
     }
   }
 

@@ -411,7 +411,7 @@ export interface PrimaryIssue {
   primary_fault?:
     | 'over_the_top' | 'early_extension' | 'casting' | 'sway'
     | 'reverse_pivot' | 'chicken_wing' | 'plane_too_flat' | 'plane_too_steep'
-    | 'head_movement' | 'spine_angle_loss' | 'no_dominant_fault' | 'inconclusive';
+    | 'head_movement' | 'spine_angle_loss' | 'lead_arm_bent' | 'poor_finish' | 'no_dominant_fault' | 'inconclusive';
   cause?: string;
   fix?: string;
   drill?: string;

@@ -94,6 +94,19 @@ export interface SwingBiomechanics {
    *  rotation rates between P4_top and P6_impact. Null when we don't
    *  have both frames or hip/shoulder widths needed to read it. */
   sequencingScore?: number | null;
+  /** 2026-08-09 (elite fault engine) — lead-arm elbow angle (deg; 180 = straight) at the TOP of the
+   *  backswing. Below ~150° = a bent lead arm (collapsed radius). null when the arm keypoints weren't
+   *  cleanly tracked. */
+  leadArmTopDeg?: number | null;
+  /** Lead-arm elbow angle (deg) through impact/early follow-through. Below ~150° = chicken wing
+   *  (loss of extension). */
+  leadArmImpactDeg?: number | null;
+  /** Hip-midpoint lateral translation address→top as a FRACTION of shoulder width (scale-invariant).
+   *  ~0.20+ = swaying off the ball. Replaces the unreliable hipSlideRatio for the sway fault. */
+  swayNorm?: number | null;
+  /** Weight-through onto the lead side at the FINISH frame (%; same proxy as weightShift). Low/negative
+   *  = a fall-back / incomplete finish. */
+  finishWeightPct?: number | null;
   /** 2026-06-10 — camera angle this read was computed for. The pose pipeline is
    *  angle-aware: the width-foreshortening turn metrics + the lateral-x weight
    *  shift are nulled for down-the-line (that geometry makes them invalid from
@@ -113,6 +126,10 @@ export interface SwingBiomechanics {
      *  tilt / sequencing computed) don't fail-shape at read. */
     shoulderTilt?: string | null;
     sequencing?: string | null;
+    leadArm?: string | null;
+    chickenWing?: string | null;
+    finish?: string | null;
+    sway?: string | null;
   };
   /** 2026-05-22 audit refinement — per-metric confidence 0..1 derived
    *  from the source keypoint scores. Lets the poseEstimator facade
@@ -128,6 +145,10 @@ export interface SwingBiomechanics {
     headDrift?: number;
     hipSlide?: number;
     sequencing?: number;
+    leadArm?: number;
+    chickenWing?: number;
+    sway?: number;
+    finish?: number;
   };
 }
 
@@ -253,6 +274,28 @@ function getKp(frame: PoseFrame, name: string): Keypoint | null {
 /** Angle (degrees) of the line through two points relative to horizontal. */
 function angleDeg(a: Keypoint, b: Keypoint): number {
   return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+}
+
+/** 2026-08-09 (elite fault engine) — the INTERIOR angle at joint `b` formed by segments b→a and b→c,
+ *  in degrees (0..180). 180 = perfectly straight (e.g. a straight lead arm: shoulder-elbow-wrist).
+ *  Elbow/shoulder/wrist are the largest, highest-confidence, least-foreshortened keypoints, so arm
+ *  angles are among the MOST reliable single-camera 2D reads — exactly the plainly-visible faults
+ *  (bent lead arm, chicken wing) the width-ratio metrics never attempted. */
+function jointAngleDeg(a: Keypoint, b: Keypoint, c: Keypoint): number {
+  const v1x = a.x - b.x, v1y = a.y - b.y;
+  const v2x = c.x - b.x, v2y = c.y - b.y;
+  const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
+  if (m1 === 0 || m2 === 0) return 180;
+  const cos = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2)));
+  return Math.round((Math.acos(cos) * 180) / Math.PI);
+}
+
+/** Midpoint x of two named keypoints (score-gated via getKp). null if either is missing/low-score. */
+function midX(frame: PoseFrame, leftName: string, rightName: string): number | null {
+  const l = getKp(frame, leftName);
+  const r = getKp(frame, rightName);
+  if (!l || !r) return null;
+  return (l.x + r.x) / 2;
 }
 
 /** Width of the line segment connecting two named keypoints — proxy for
@@ -405,6 +448,64 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   // denoises. Tighten impact's window (~one frame each side at 30fps) so it still rejects a single bad
   // frame without teleporting a joint across fast motion.
   const impact = robustAnchor(frames, frames.find(f => f.position === 'P6_impact'), 45);
+  const finish = robustAnchor(frames, frames.find(f => f.position === 'P10_finish'));
+
+  // 2026-08-09 (elite fault engine — Tim: "lead arm bent, trail chicken winged, finish correct or not.
+  // Missing a lot my eyes see plainly"). The engine measured hips/shoulders/spine but NEVER the ARMS —
+  // yet bent-lead-arm and chicken-wing are the most VISUALLY OBVIOUS faults and the most RELIABLE 2D
+  // reads (elbow/wrist are big, high-confidence, barely foreshortened). Lead arm = the target-line arm:
+  // RH golfer → LEFT arm, LH → RIGHT.
+  const leadPrefix = handedness === 'left' ? 'right' : 'left';
+  const armAngleAt = (frame: PoseFrame | null | undefined): number | null => {
+    if (!frame) return null;
+    const sh = getKp(frame, `${leadPrefix}_shoulder`);
+    const el = getKp(frame, `${leadPrefix}_elbow`);
+    const wr = getKp(frame, `${leadPrefix}_wrist`);
+    if (!sh || !el || !wr) return null;
+    return jointAngleDeg(sh, el, wr); // 180 = straight lead arm
+  };
+  // Lead-arm angle at the TOP of the backswing: a straight lead arm keeps width + a wide arc; a bent
+  // lead arm collapses the radius (power leak, inconsistent low point).
+  const leadArmTopDeg = armAngleAt(top);
+  // Lead-arm angle through IMPACT/early follow-through: a bent/cupping lead arm here is the "chicken
+  // wing" — loss of extension + face control.
+  const leadArmImpactDeg = armAngleAt(impact);
+
+  // ROBUST SWAY (Tim's named miss): lateral translation of the hip MIDPOINT from address→top,
+  // normalized by shoulder width (scale-invariant). Replaces the old hipSlideRatio, which used a
+  // single hip's x (moves from rotation AND sway — conflating the two it claims to separate) divided by
+  // a noisy Δwidth (→ divided real sway away on a well-rotated turn = the miss). A fraction of shoulder
+  // width is directly interpretable: ~0.20+ = the hips have slid meaningfully off the ball.
+  let swayNorm: number | null = null;
+  if (address && top) {
+    const hipMidA = midX(address, 'left_hip', 'right_hip');
+    const hipMidT = midX(top, 'left_hip', 'right_hip');
+    const shW = pairWidthX(address, 'left_shoulder', 'right_shoulder');
+    if (hipMidA != null && hipMidT != null && shW && shW > 0) {
+      swayNorm = Math.round((Math.abs(hipMidT - hipMidA) / shW) * 100) / 100;
+    }
+  }
+
+  // FINISH quality (Tim: "finish correct or not"): weight through onto the lead side at the finish
+  // frame. A full, balanced finish stacks the pelvis over the lead leg; weight still centered/back =
+  // a fall-back / incomplete finish. Reuses the validated pelvis-in-stance proxy at the FINISH frame.
+  let finishWeightPct: number | null = null;
+  if (address && finish) {
+    const la = getKp(finish, 'left_ankle'); const ra = getKp(finish, 'right_ankle');
+    const laA = getKp(address, 'left_ankle'); const raA = getKp(address, 'right_ankle');
+    const lhF = getKp(finish, 'left_hip'); const rhF = getKp(finish, 'right_hip');
+    const lhA = getKp(address, 'left_hip'); const rhA = getKp(address, 'right_hip');
+    if (la && ra && laA && raA && lhF && rhF && lhA && rhA) {
+      const stance = Math.abs(ra.x - la.x) || 1;
+      const pelvisAddr = (lhA.x + rhA.x) / 2 - (laA.x + raA.x) / 2;
+      const pelvisFinish = (lhF.x + rhF.x) / 2 - (la.x + ra.x) / 2;
+      const raw = ((pelvisFinish - pelvisAddr) / stance) * 100;
+      const lead = handedness === 'left' ? ra : la;
+      const trail = handedness === 'left' ? la : ra;
+      const towardLead = Math.sign(lead.x - trail.x) || 1;
+      finishWeightPct = Math.round(raw * towardLead);
+    }
+  }
 
   // Hip turn: shoulder/hip width "shrinks" as the body rotates away
   // from the camera. Ratio of width(top)/width(address) → degrees via
@@ -626,6 +727,23 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
       sequencingScore < 35 ? `Sequencing ${sequencingScore}/100 — shoulders leading the downswing.` :
       sequencingScore > 65 ? `Sequencing ${sequencingScore}/100 — hips lead clearly, tour kinematic order.` :
       `Sequencing ${sequencingScore}/100 — even hip/shoulder timing.`,
+    // 2026-08-09 (elite fault engine) — arm + finish verdicts.
+    leadArm:
+      leadArmTopDeg == null ? null :
+      leadArmTopDeg < 150 ? `Lead arm bent to ${leadArmTopDeg}° at the top — collapsing your radius (a straighter lead arm keeps width + speed).` :
+      `Lead arm straight (${leadArmTopDeg}°) at the top — wide, connected.`,
+    chickenWing:
+      leadArmImpactDeg == null ? null :
+      leadArmImpactDeg < 150 ? `Lead arm folding to ${leadArmImpactDeg}° through impact — a chicken wing; you're losing extension + face control.` :
+      `Lead arm extending (${leadArmImpactDeg}°) through impact — good release.`,
+    finish:
+      finishWeightPct == null ? null :
+      finishWeightPct < 15 ? `Finish weight ${finishWeightPct >= 0 ? '+' : ''}${finishWeightPct}% — not getting through; you're falling back instead of finishing balanced over your lead side.` :
+      `Balanced finish — weight +${finishWeightPct}% onto the lead side.`,
+    sway:
+      swayNorm == null ? null :
+      swayNorm > 0.20 ? `Hips slid ${Math.round(swayNorm * 100)}% of shoulder-width off the ball in the backswing — swaying instead of turning around a post.` :
+      `Centered turn — hips stayed stacked (${Math.round(swayNorm * 100)}% drift).`,
   };
 
   // 2026-05-22 audit refinement — per-metric confidence. Each metric's
@@ -642,12 +760,17 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     headDrift: avgScore(address, impact, ['nose', 'left_shoulder', 'right_shoulder']),
     hipSlide: avgScore(address, top, ['left_hip', 'right_hip']),
     sequencing: avgScore(top, impact, ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder']),
+    leadArm: avgScore(top, null, [`${leadPrefix}_shoulder`, `${leadPrefix}_elbow`, `${leadPrefix}_wrist`]),
+    chickenWing: avgScore(impact, null, [`${leadPrefix}_shoulder`, `${leadPrefix}_elbow`, `${leadPrefix}_wrist`]),
+    sway: avgScore(address, top, ['left_hip', 'right_hip', 'left_shoulder', 'right_shoulder']),
+    finish: avgScore(address, finish, ['left_hip', 'right_hip', 'left_ankle', 'right_ankle']),
   };
 
   return {
     hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg,
     weightShiftPct, spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio,
     sequencingScore,
+    leadArmTopDeg, leadArmImpactDeg, swayNorm, finishWeightPct,
     angle: angle ?? null,
     frames, verdicts, metric_confidence,
   };

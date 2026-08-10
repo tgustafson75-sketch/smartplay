@@ -12,9 +12,12 @@ import type { PoseSwingRead, PoseFault } from './poseSwingRead';
 const POSE_FAULT_CATEGORY: Record<PoseFault['key'], PrimaryIssue['category']> = {
   early_extension: 'attack_angle', sway: 'setup', reverse_pivot: 'setup',
   over_the_top: 'swing_path', under_coil: 'setup', quick_tempo: 'tempo', slow_tempo: 'tempo',
+  // 2026-08-09 (elite fault engine) — arm/finish/head faults.
+  lead_arm_bent: 'setup', chicken_wing: 'other', poor_finish: 'other', head_movement: 'setup',
 };
 const POSE_FAULT_TO_PRIMARY: Partial<Record<PoseFault['key'], NonNullable<PrimaryIssue['primary_fault']>>> = {
   early_extension: 'early_extension', sway: 'sway', reverse_pivot: 'reverse_pivot', over_the_top: 'over_the_top',
+  chicken_wing: 'chicken_wing', head_movement: 'head_movement', lead_arm_bent: 'lead_arm_bent', poor_finish: 'poor_finish',
 };
 
 export function poseReadToPrimaryIssue(read: PoseSwingRead): PrimaryIssue | null {
