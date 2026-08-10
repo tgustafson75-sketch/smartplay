@@ -42,8 +42,22 @@ function entryBlock(e: IssueLogEntry): string {
 }
 
 /** Build the full email body (Reporter / Entries / Device + every entry w/ details). */
+// 2026-08-10 (Tim — "shut off the non-errors on the issue log"). The store also holds DIAGNOSTIC
+// breadcrumbs — every voice turn (voice_turn), the sim-round trace (sim_round), and boot timing (boot).
+// Those are for deep owner-log review, NOT issues. What we SEND/EXPORT as an issue report is real
+// problems only: actual errors + the tester's own manual notes. (Everything stays in the store; this
+// only filters what leaves the device as an "issue".)
+const REPORTABLE_KINDS = new Set([
+  'user', 'voice_error', 'voice_silent_fail', 'transcribe_error', 'gps_error', 'analysis_error',
+  'voice_miss', 'app_error',
+]);
+function isReportable(e: { kind?: string }): boolean {
+  // Legacy entries with no kind are manual user notes → keep.
+  return e.kind == null || REPORTABLE_KINDS.has(e.kind);
+}
+
 export function buildIssueLogBody(): { subject: string; body: string; count: number } {
-  const entries = useIssueLogStore.getState().entries;
+  const entries = useIssueLogStore.getState().entries.filter(isReportable);
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
   const text = entries.map(entryBlock).join('\n\n');
   const subject = `SmartPlay Caddie issue log — ${reporter}`;
@@ -78,7 +92,9 @@ export async function autoSendIssues(): Promise<boolean> {
   const base = getApiBaseUrl();
   if (!base) return false;
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
-  const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id));
+  // 2026-08-10 — only real errors + manual notes auto-send; the voice_turn / sim_round / boot
+  // breadcrumbs stay device-side for owner-log review and never clutter the issue email.
+  const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id) && isReportable(e));
   if (unsent.length === 0) return false;
   const payload = {
     entries: unsent.map(e => ({
@@ -121,12 +137,12 @@ export async function autoSendIssues(): Promise<boolean> {
 export async function exportAllIssues(): Promise<boolean> {
   const { subject, body, count } = buildIssueLogBody();
   if (count === 0) return false;
-  const mailto = `mailto:support@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const mailto = `mailto:tim@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   try {
     if (await Linking.canOpenURL(mailto).catch(() => false)) {
       await Linking.openURL(mailto);
     } else {
-      await Share.share({ message: `support@smartplaycaddie.com\n\n${body}`, title: subject });
+      await Share.share({ message: `tim@smartplaycaddie.com\n\n${body}`, title: subject });
     }
     useIssueLogStore.getState().markExported();
     return true;

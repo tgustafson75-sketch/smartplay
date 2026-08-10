@@ -17,6 +17,13 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  { when: 'Aug 2026', note: 'Your swing read now names the faults you can see plainly — a bent lead arm, a chicken wing through impact, swaying off the ball, an incomplete finish, excess head movement — measured from your real motion, not guessed. If it can\'t measure something cleanly, it stays quiet instead of making it up.' },
+  { when: 'Aug 2026', note: 'Ask me about a course and I can now look it up on the web — course details, local knowledge, rules, conditions — and give you real, current facts instead of guessing.' },
+  { when: 'Aug 2026', note: 'Voice scoring is sharper: say your score walking off the green and it lands on the RIGHT hole every time, even when GPS has already moved you to the next tee. Putts follow the hole you just scored.' },
+  { when: 'Aug 2026', note: 'Take the club I suggest and I learn from it — your real carry distances build up as you play, so my numbers get more yours over time.' },
+  { when: 'Aug 2026', note: 'Faster swing reads, and every swing in a multi-swing session now shows its own skeleton, numbers, and the correct fault region — not just the first one.' },
+  { when: 'Aug 2026', note: 'A 9-hole course can now be played twice around as a full 18 — scorecard, handicap posting, and GPS all handle the second loop, including greens you marked on the front nine.' },
+  { when: 'Aug 2026', note: 'Tell me what\'s in your bag and your yardages any time — in onboarding or mid-round — and I\'ll register it correctly.' },
   { when: 'Jul 2026', note: 'Ask me anything about the app — I now know every tool and how to use it, and I\'ll tell you what\'s new, so you don\'t have to go hunting or read a manual.' },
   { when: 'Jul 2026', note: 'If your course isn\'t in the list, just say "add a course" (or snap your scorecard) and I\'ll pull it in — new courses are getting added all the time.' },
   { when: 'Jul 2026', note: 'Two-angle swing analysis: combine a down-the-line and a face-on capture of the same swing for a fuller read.' },

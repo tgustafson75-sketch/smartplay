@@ -29,6 +29,7 @@ import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLa
 // rest of the app respected useTheme/light mode. Importing here so
 // the StyleSheet can be themed via makeStyles(colors) at the bottom.
 import { useTheme } from '../../contexts/ThemeContext';
+import WhatsNewHeroCard from '../../components/WhatsNewHeroCard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
@@ -1311,6 +1312,9 @@ export default function PlayTab() {
         contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
       >
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
+        {/* 2026-08-10 (Tim — what's-new hero) — surfaces new changelog items the player hasn't seen since
+            their last load, FIRST, above everything. Dismissible; renders nothing when nothing is new. */}
+        <WhatsNewHeroCard />
         {/* 2026-06-16 (Tim — Play mockup) — title + tagline header (look/feel). */}
         <View style={styles.playTitleBlock}>
           <Text style={styles.playTitle}>{t('play.title', { defaultValue: 'PLAY' })}</Text>
