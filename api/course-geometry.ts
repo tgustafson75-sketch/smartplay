@@ -684,10 +684,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           fairway_centerline: [],
           green_outline: [],
           green_polygon: null as Loc[] | null,
-          // Real hole number + polygon-derived green; par is real when tagged, flagged when inferred.
-          estimated: r.parEstimated,
+          // 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the "AI ESTIMATE — not
+          // surveyed" badge + the 45% confidence cap, which are about COORDINATE provenance. These coords
+          // are REAL (community-mapped golf=hole ways + polygon-derived greens), so estimated:false even
+          // when PAR was inferred from distance — badging real coords "AI ESTIMATE" because par lacked a
+          // tag was backwards. par_estimated carries the (minor) par uncertainty separately.
+          estimated: false,
         }));
-        console.log(`[course-geometry] OSM hole-way synthesis: ${holes.length} holes with REAL refs (pars estimated on ${holes.filter(h => h.estimated).length})`);
+        console.log(`[course-geometry] OSM hole-way synthesis: ${holes.length} holes with REAL refs (par inferred on ${rows.filter(r => r.parEstimated).length})`);
         return res.status(200).json({
           course_id: courseId,
           course_name: 'OSM-derived',
@@ -748,6 +752,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fairway_centerline: [],
       green_outline: [],
       green_polygon: null as Loc[] | null,
+      // 2026-08-09 (course-engine audit C1) — this is the SPECULATIVE path: par hardcoded 4, hole order
+      // guessed by bearing-sort, tee/green by min-cost pairing. It IS synthesized, so it MUST carry the
+      // estimated flag (badge + 45% cap) — previously it shipped with none, presenting the LEAST reliable
+      // output as fully trustworthy while the real hole-way path got badged. Now honest.
+      estimated: true,
+      estimated_confidence: 'low' as const,
       tee_polygon: null as Loc[] | null,
       fairway_polygons: [] as Loc[][],
       bunkers: [] as AssignedPolygon[],

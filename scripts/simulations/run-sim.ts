@@ -8038,6 +8038,23 @@ check('Voice scoring targets the reported hole (voiceScoreHole/voicePuttsHole), 
   })(),
   '"I got a 5" walking off a GPS-advanced hole logs to the RIGHT hole and does not double-jump; putts follow the score');
 
+// 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the 'AI ESTIMATE / not surveyed'
+// badge + 45% confidence cap (coordinate provenance). It was inverted: real OSM hole-way coords were
+// badged estimated merely because par was inferred, while the SPECULATIVE centroid-pairing fallback
+// (guessed par-4s, bearing-sorted holes) shipped with NO flag = full confidence. LOCK the honest
+// direction: hole-way synthesis estimated:false, pairing fallback estimated:true.
+check('Course geometry: estimated flag reflects COORD provenance (real hole-ways false, guessed pairing true)',
+  (() => {
+    const g = read('api/course-geometry.ts');
+    // hole-way path (real community-mapped coords): estimated:false even when par was inferred.
+    const hwHonest = g.includes('estimated: false,') && g.includes('these coords are AI') === false;
+    const hwComment = g.includes('badging real coords');
+    // centroid-pairing fallback (synthesized par-4s + bearing-sorted holes): estimated:true, low conf.
+    const pairHonest = g.includes('estimated: true,') && g.includes("estimated_confidence: 'low' as const,");
+    return hwHonest && hwComment && pairHonest;
+  })(),
+  'unmapped courses never present fabricated par-4s as trustworthy while badging real community-mapped coords as AI');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
