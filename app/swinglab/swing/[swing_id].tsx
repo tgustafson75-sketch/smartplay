@@ -2589,7 +2589,7 @@ export default function SwingDetail() {
                   onPress={() => void scrubTo(ts)}
                   style={[styles.tsPill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
                 >
-                  <Text style={[styles.tsText, { color: colors.accent }]}>0:{Math.floor(ts).toString().padStart(2, '0')}</Text>
+                  <Text style={[styles.tsText, { color: colors.accent }]}>{Math.floor(ts / 60)}:{Math.floor(ts % 60).toString().padStart(2, '0')}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>

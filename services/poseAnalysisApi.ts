@@ -968,14 +968,6 @@ function sequencingFromFrames(top: PoseFrame, impact: PoseFrame): number | null 
 }
 
 /**
- * 2026-08-06 (analysis audit) — derive tempo DIRECTLY from an already-computed biomech's phase anchors,
- * with no extra pose calls. The UPLOAD on-device-verdict fallback used to pass tempo=null, so an uploaded
- * swing could NEVER surface a rushed/slow-transition fault (a real gap vs the live path). The biomech
- * already carries the real P1_address / P4_top / P6_impact frames; tempo is just backswing:downswing
- * between them. Honest — the anchors are measured positions, and we return NO_TEMPO (all-null → no fault)
- * whenever they aren't cleanly present. `video_pose` because the impact came from the video segmenter.
- */
-/**
  * 2026-08-09 (verification wave C3 + speed #2) — HONEST tempo from the dense pose frames the biomech
  * pass ALREADY extracted, anchored on a REAL impact time (acoustic strike or the vision locator's
  * estimate). Reads the actual wrist-Y series — top = hands highest, takeaway = 20% of observed travel —
@@ -1036,26 +1028,6 @@ export function tempoFromPoseFrames(
     sequencingScore,
     source: impactSource === 'acoustic' ? 'acoustic_pose' : 'video_pose',
     confidence: series.length >= 8 && takeIdx > 0 ? 'med' : 'low',
-  };
-}
-
-export function tempoFromBiomechanics(bio: SwingBiomechanics | null): SwingTempo {
-  const fr = bio?.frames ?? [];
-  const p1 = fr.find(f => f.position === 'P1_address');
-  const p4 = fr.find(f => f.position === 'P4_top');
-  const p6 = fr.find(f => f.position === 'P6_impact');
-  if (!p1 || !p4 || !p6) return NO_TEMPO;
-  const backswingMs = p4.timestampMs - p1.timestampMs;
-  const downswingMs = p6.timestampMs - p4.timestampMs;
-  if (!(backswingMs > 0) || !(downswingMs > 0)) return NO_TEMPO;
-  return {
-    ratio: backswingMs / downswingMs,
-    backswingMs,
-    downswingMs,
-    topMs: p4.timestampMs,
-    sequencingScore: sequencingFromFrames(p4, p6),
-    source: 'video_pose',
-    confidence: 'low',
   };
 }
 

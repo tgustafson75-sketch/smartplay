@@ -1242,15 +1242,32 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             typeof firstClipSwing.locatedImpactSec === 'number' && firstClipSwing.locatedImpactSec > 0
               ? firstClipSwing.locatedImpactSec * 1000
               : null;
-          if (!poseWindow) {
+          // 2026-08-09 (swing-analysis audit #1) — gate on a MISSING IMPACT, not a missing window. A
+          // manual trim ("point at your swing") sets a window but CLEARS locatedImpactSec (trim.tsx), so
+          // the old `if (!poseWindow)` skipped the locate and left poseImpactMs null → the fixed 65%
+          // fraction came back for trimmed uploads (the exact bug C1 claims to kill). Now: if we have no
+          // impact, locate it. When a window already exists (trim), keep that window and only ADOPT the
+          // located impact if it lands inside it (the dominant swing is why they trimmed there); an
+          // out-of-window locate falls back to the window CENTRE — both beat the downswing-fraction.
+          if (poseImpactMs == null) {
             try {
               const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
               const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
               const loc = durMs && durMs > 0 ? await locateSwingWindow(firstClipSwing.clipUri!, durMs) : null;
               if (loc && loc.endSec > loc.startSec) {
-                poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
-                poseImpactMs = loc.swingTimeSec * 1000;
-                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec) }, sessionId);
+                if (!poseWindow) {
+                  poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };
+                  poseImpactMs = loc.swingTimeSec * 1000;
+                } else {
+                  const impMs = loc.swingTimeSec * 1000;
+                  poseImpactMs = (impMs >= poseWindow.startMs && impMs <= poseWindow.endMs)
+                    ? impMs
+                    : Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
+                }
+                uploadLog('pose-window-located', { startSec: Math.round(loc.startSec), endSec: Math.round(loc.endSec), impact_ms: Math.round(poseImpactMs) }, sessionId);
+              } else if (poseWindow) {
+                // locate failed but the user trimmed → anchor impact to the trim centre, not the 65% fraction.
+                poseImpactMs = Math.round((poseWindow.startMs + poseWindow.endMs) / 2);
               }
             } catch { /* full-clip fallback — no regression */ }
           }

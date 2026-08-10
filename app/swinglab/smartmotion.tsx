@@ -3052,6 +3052,13 @@ export default function SmartMotion() {
           if (swings.length === 0 && acousticStrikes.length === 0) {
             swings = await pose.locateSwings(recorded.uri, durMs).catch(() => []);
           }
+          // 2026-08-09 (swing-analysis audit #2) — same practice-swing gate as the upload paths: when at
+          // least one CONFIDENT swing exists, drop the low-confidence ones (waggles/practice motion) so
+          // the live reel isn't inflated with junk segments. All-low keeps all (honest maybe > empty).
+          {
+            const conf = swings.filter((sw) => sw.confidence !== 'low');
+            if (conf.length >= 1 && conf.length < swings.length) swings = conf;
+          }
           if (swings.length > 0 && acousticStrikes.length > 0) {
             // 2026-08-01 (marquee audit — range under-count). Video is the spine (neighbour-proof), but
             // recover a HIGH-confidence strike the locator missed in your own frame so a partial vision
@@ -3109,7 +3116,12 @@ export default function SmartMotion() {
           // collapse the fast path into locateSwings + an unbounded re-locate (30-70s).
           const worthVideo = durMs > 12_000 && (detectedSegments.length === 0 || durMs > 20_000);
           if (worthVideo) {
-            const swings = await pose.locateSwings(recorded.uri, durMs);
+            let swings = await pose.locateSwings(recorded.uri, durMs);
+            // 2026-08-09 (swing-analysis audit #2) — practice-swing gate, matching range + uploads.
+            {
+              const conf = swings.filter((sw) => sw.confidence !== 'low');
+              if (conf.length >= 1 && conf.length < swings.length) swings = conf;
+            }
             // Use the video segments only if they found MORE swings than acoustics
             // — never reduce the count, just recover missed ones.
             if (swings.length > segsForAnalysis.length) {
