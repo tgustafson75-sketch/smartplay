@@ -8105,6 +8105,23 @@ check('Club trace renders without per-frame dims: video-size aligned fallback + 
   })(),
   'the swing trace draws whenever a real clubhead arc exists (video-size aligned fallback covers dimless pose frames), on both the library detail and live review');
 
+// 2026-08-10 (Tim — honest club-path faults from the arc). The over-the-top/steep/shallow family is a
+// CLUB-PLANE read (not the removed hip-width proxy). readClubPath measures the downswing-vs-backswing
+// plane delta from the REAL clubhead arc, DTL-only, self-referential (viewpoint-robust). STAGED +
+// unit-tested (geometry directionally locked); the angle threshold/sign is PROVISIONAL pending a real
+// DTL over-the-top clip. Wires into the verdict tomorrow after that calibration.
+check('Club-path read: DTL-gated plane geometry exists + is provisional (staged for calibration)',
+  (() => {
+    const cpr = read('services/swing/clubPathRead.ts');
+    return (
+      /export function readClubPath/.test(cpr) &&
+      /if \(angle !== 'down_the_line'\) return EMPTY/.test(cpr) &&      // face-on refused, not fabricated
+      /classification = 'over_the_top'/.test(cpr) && /classification = 'shallow'/.test(cpr) &&
+      /provisional: true/.test(cpr)
+    );
+  })(),
+  'the club-path plane read is built + DTL-gated + honest (null when unmeasurable), staged for real-clip calibration before it becomes a headline fault');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
