@@ -52,6 +52,7 @@ import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeome
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
+import { isValidGolfCoord } from '../../utils/coordGuard';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
@@ -111,6 +112,33 @@ const NEARBY_COLLAPSED = 5;
 const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
   const uri = getCenteredImageryUrl({ lat, lng, zoom: 15, width: 160, height: 160 });
   return uri ? { uri } : null;
+};
+
+/**
+ * 2026-08-10 (Tim — "make sure my thumbnails in the Play tab ALWAYS work and populate when we add a
+ * new course, and that you get CORRECT thumbnails").
+ *
+ * ROOT CAUSE of the blank cards: `thumbnail` was a HAND-AUTHORED field on the bundled LOCAL_COURSES
+ * literals only. Every dynamically-sourced course — the GPS "Courses near you" rows, golfcourseapi
+ * search results, scorecard-photo customs, recents — had no such field, so those rows rendered the
+ * generic golf-outline placeholder no matter how good their coordinates were. The hero card had
+ * already grown a private lat/lng fallback inline; the four other surfaces never got it.
+ *
+ * This is that fallback, promoted to the ONE resolver every thumbnail surface calls, so a course
+ * added tomorrow is covered by construction instead of by remembering to touch five call sites.
+ *
+ * CORRECTNESS over coverage: the coords go through isValidGolfCoord first. Several records carry
+ * 0,0 placeholders, and centering a satellite tile on 0°,0° is what produced the ocean/parking-lot
+ * thumbnails before ([[mapboxImagery]] carries the same guard). An unverifiable coord returns null
+ * and keeps the honest placeholder — a WRONG picture of someone else's course is worse than none.
+ */
+const courseThumb = (c: { thumbnail?: ImageSourcePropType | { uri: string } | null; lat?: number | null; lng?: number | null } | null | undefined):
+  ImageSourcePropType | { uri: string } | null => {
+  if (!c) return null;
+  if (c.thumbnail) return c.thumbnail;
+  if (c.lat == null || c.lng == null) return null;
+  if (!isValidGolfCoord(c.lat, c.lng)) return null;
+  return satelliteThumb(c.lat, c.lng);
 };
 
 const LOCAL_COURSES: CourseSummary[] = [
@@ -1327,8 +1355,9 @@ export default function PlayTab() {
             roundHistory (rounds / best / last). One tap starts the round. Suppressed when co-located
             siblings are ambiguous (the atCourse "which course?" banner handles that). */}
         {heroCourse && (() => {
-          const thumb = heroCourse.thumbnail
-            ?? (heroCourse.lat != null && heroCourse.lng != null ? satelliteThumb(heroCourse.lat, heroCourse.lng) : null);
+          // 2026-08-10 — was an inline private fallback; now the shared resolver, so the hero and
+          // the rows below it can never disagree about a course's thumbnail.
+          const thumb = courseThumb(heroCourse);
           const dist = distanceLabelById[heroCourse.id];
           const vsPar = (n: number | null) => n == null ? null : n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
           const info: string[] = [];
@@ -1522,8 +1551,8 @@ export default function PlayTab() {
                 activeOpacity={0.85}
               >
                 <View style={styles.localThumb}>
-                  {c.thumbnail ? (
-                    <Image source={c.thumbnail as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+                  {courseThumb(c) ? (
+                    <Image source={courseThumb(c) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
                   ) : (
                     <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
                       <AppIcon name="golf-outline" size={20} color="#00C896" />
@@ -1631,8 +1660,16 @@ export default function PlayTab() {
                 accessibilityRole="button"
                 accessibilityLabel={`Play ${r.club_name}`}
               >
-                <View style={[styles.localThumb, styles.thumbPlaceholder]}>
-                  <AppIcon name="location-outline" size={20} color="#00C896" />
+                {/* 2026-08-10 — these GPS-located rows always carry real coords from the locator,
+                    so they get a true satellite thumbnail instead of the old pin placeholder. */}
+                <View style={styles.localThumb}>
+                  {courseThumb(r) ? (
+                    <Image source={courseThumb(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
+                      <AppIcon name="location-outline" size={20} color="#00C896" />
+                    </View>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.localName} numberOfLines={1}>{r.club_name}</Text>
@@ -1715,8 +1752,14 @@ export default function PlayTab() {
             style={[styles.localRow, selected?.id === r.id && styles.localRowActive, { marginHorizontal: 16, marginTop: 6 }]}
             onPress={() => selectSummary(r)}
           >
-            <View style={[styles.localThumb, styles.thumbPlaceholder]}>
-              <AppIcon name="golf-outline" size={20} color="#00C896" />
+            <View style={styles.localThumb}>
+              {courseThumb(r) ? (
+                <Image source={courseThumb(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+              ) : (
+                <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
+                  <AppIcon name="golf-outline" size={20} color="#00C896" />
+                </View>
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.localName} numberOfLines={1}>{r.club_name}</Text>
@@ -1749,10 +1792,20 @@ export default function PlayTab() {
             <View style={styles.selectedCard}>
               <View style={styles.selectedHeader}>
                 <View style={styles.selectedThumb}>
+                  {/* 2026-08-10 — 4th rung added: bundled hole photo → geometry-framed hero →
+                      coordinate satellite tile → placeholder. Before, an API course whose geometry
+                      hadn't warmed yet (no hero URL) showed a bare icon even though its own
+                      lat/lng were sitting right there in the record. */}
                   {selectedLocalThumb ? (
                     <Image source={selectedLocalThumb as ImageSourcePropType} style={styles.selectedThumbImg} resizeMode="cover" />
                   ) : selectedHero ? (
                     <Image source={{ uri: selectedHero }} style={styles.selectedThumbImg} resizeMode="cover" />
+                  ) : courseThumb({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) ? (
+                    <Image
+                      source={courseThumb({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) as ImageSourcePropType}
+                      style={styles.selectedThumbImg}
+                      resizeMode="cover"
+                    />
                   ) : (
                     <View style={[styles.selectedThumbImg, styles.thumbPlaceholder]}>
                       {selectedLoading ? <ActivityIndicator size="small" color="#00C896" /> : <AppIcon name="golf-outline" size={26} color="#00C896" />}

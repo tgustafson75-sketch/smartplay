@@ -8279,6 +8279,23 @@ check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision r
   })(),
   'Mapbox tile wired as third source, precedence preserved, hook above the gate');
 
+// "Make sure my thumbnails in the Play tab ALWAYS work and populate when we add a new course, and
+// that you get CORRECT thumbnails." `thumbnail` was hand-authored on the bundled course literals
+// only, so every dynamically-sourced course rendered a placeholder. ONE resolver must serve EVERY
+// thumbnail surface — a new surface that reads `.thumbnail` directly re-opens the hole.
+check('LOCK: Play-tab thumbnails resolve through the single courseThumb() helper on every surface',
+  (() => {
+    const s = read('app/(tabs)/play.tsx');
+    // the resolver exists and refuses unverifiable coords (no 0,0 ocean tiles)
+    const resolver = /const courseThumb = \(/.test(s) && /isValidGolfCoord\(c\.lat, c\.lng\)/.test(s);
+    // every surface goes through it: hero, nearby-local rows, GPS-located rows, search rows, selected card
+    const uses = (s.match(/courseThumb\(/g) ?? []).length;
+    // and no surface renders a raw `.thumbnail` behind the resolver's back
+    const noRawThumb = !/\{c\.thumbnail \? \(/.test(s) && !/source=\{c\.thumbnail as/.test(s);
+    return resolver && uses >= 8 && noRawThumb;
+  })(),
+  'courseThumb() is the only thumbnail path, coord-guarded, used at every Play-tab surface');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

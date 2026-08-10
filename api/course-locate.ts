@@ -128,18 +128,17 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
       console.log(`[course-locate] Places(New) HTTP ${r.status} — falling back to legacy`);
       return null;
     }
-    const data = (await r.json()) as {
-      places?: Array<{
-        id?: string;
-        displayName?: { text?: string };
-        location?: { latitude?: number; longitude?: number };
-        shortFormattedAddress?: string;
-        rating?: number;
-        businessStatus?: string;
-        types?: string[];
-        currentOpeningHours?: { openNow?: boolean };
-      }>;
+    type NewPlace = {
+      id?: string;
+      displayName?: { text?: string };
+      location?: { latitude?: number; longitude?: number };
+      shortFormattedAddress?: string;
+      rating?: number;
+      businessStatus?: string;
+      types?: string[];
+      currentOpeningHours?: { openNow?: boolean };
     };
+    const data = (await r.json()) as { places?: NewPlace[] };
     return (data.places ?? [])
       .map((p): Located | null => {
         const plat = p.location?.latitude;

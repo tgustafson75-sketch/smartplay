@@ -189,7 +189,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     } catch {
       return null;
     }
-  }, [geometry, W, H]);
+  }, [geometry, W, H, activeCourseId, currentHole]);
 
   // Player dot refresh tick
   useEffect(() => {
