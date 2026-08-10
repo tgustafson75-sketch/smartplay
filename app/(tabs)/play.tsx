@@ -34,6 +34,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
+import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
@@ -758,13 +759,18 @@ export default function PlayTab() {
         // (≤1.5km). Idempotent + fire-and-forget; toast only on a FRESH download (isCourseDownloaded
         // flips), once per session per course.
         const nearest = near[0];
-        if (nearest && nearest.distance_m <= 1500 && !autoDownloadFiredRef.current.has(nearest.name)) {
+        // 2026-08-09 (stores audit P2) — don't fire the arrival download until downloadedCoursesStore has
+        // rehydrated; otherwise isDownloaded() reads false on a cold boot and re-prefetches an owned course.
+        const dcHydrated = (() => { try { return useDownloadedCoursesStore.persist?.hasHydrated?.() ?? true; } catch { return true; } })();
+        if (dcHydrated && nearest && nearest.distance_m <= 1500 && !autoDownloadFiredRef.current.has(nearest.name)) {
           autoDownloadFiredRef.current.add(nearest.name);
           void (async () => {
             try {
               const eng = await import('../../services/courseDownloadEngine');
               const r = await eng.downloadCourse({ name: nearest.name, lat: nearest.lat, lng: nearest.lng });
-              if (r.ok && r.courseId && !downloadToastFiredRef.current.has(r.courseId)) {
+              // 2026-08-09 (stores audit P2) — toast ONLY on a genuinely fresh download (r.fresh),
+              // never for a course already owned (was claiming 'downloaded' for weeks-old courses).
+              if (r.ok && r.fresh && r.courseId && !downloadToastFiredRef.current.has(r.courseId)) {
                 downloadToastFiredRef.current.add(r.courseId);
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState()

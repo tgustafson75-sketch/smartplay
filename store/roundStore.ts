@@ -970,6 +970,11 @@ export const useRoundStore = create<RoundState>()(
           courseHoles: holes,
           nineHoleMode: options.nineHole,
           twiceAround: options.twiceAround === true,
+          // 2026-08-09 (stores audit P1) — clear last round's club context so it can't bleed into the
+          // first shot of a new round (resolveShotClub's 12-min freshness would otherwise carry it).
+          club: null,
+          clubSetAt: null,
+          pendingKevinRec: null,
           isCompetition: options.isCompetition,
           roundNotes: options.notes,
           goal: options.goal,
@@ -1394,6 +1399,8 @@ export const useRoundStore = create<RoundState>()(
           emotionalLog: [],
           pendingLieAnalysis: null,
           pendingKevinRec: null,
+          club: null,
+          clubSetAt: null,
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
@@ -1722,6 +1729,8 @@ export const useRoundStore = create<RoundState>()(
           emotionalLog: [],
           pendingLieAnalysis: null,
           pendingKevinRec: null,
+          club: null,
+          clubSetAt: null,
           selectedTee: 'unspecified',
           transportMode: 'walking',
           nineHoleMode: false,
@@ -2731,6 +2740,11 @@ export const useRoundStore = create<RoundState>()(
         holeNotes: s.holeNotes,
         currentYardage: s.currentYardage,
         club: s.club,
+        // 2026-08-09 (stores audit C1) — clubSetAt MUST persist alongside club + pendingKevinRec.at.
+        // resolveShotClub arbitrates declared-vs-advised by RECENCY; if clubSetAt is lost on a mid-round
+        // crash while the advised rec's timestamp survives, the resolver picks the CADDIE's club over the
+        // player's and trains the wrong club. The three timestamps must persist symmetrically.
+        clubSetAt: s.clubSetAt,
         scores: s.scores,
         putts: s.putts,
         penalties: s.penalties,

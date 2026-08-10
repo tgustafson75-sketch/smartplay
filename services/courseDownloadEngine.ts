@@ -120,14 +120,17 @@ export async function downloadCourse(input: {
   courseId?: string | null;
   lat?: number | null;
   lng?: number | null;
-}): Promise<{ ok: boolean; courseId?: string; reason?: string }> {
+}): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
+  // 2026-08-09 (stores audit P2) — `fresh` distinguishes an ACTUAL new download from an already-owned
+  // course, so callers only toast "downloaded" when it truly happened (the arrival toast was claiming
+  // a fresh download for courses owned for weeks).
   const store = useDownloadedCoursesStore.getState();
-  if (input.courseId && store.isDownloaded(input.courseId)) return { ok: true, courseId: input.courseId };
+  if (input.courseId && store.isDownloaded(input.courseId)) return { ok: true, courseId: input.courseId, fresh: false };
 
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
   if (!resolved) return { ok: false, reason: 'unresolved' };
   const { courseId, courseName, holes, rating, slope } = resolved;
-  if (store.isDownloaded(courseId)) return { ok: true, courseId };
+  if (store.isDownloaded(courseId)) return { ok: true, courseId, fresh: false };
 
   store.markDownloading(courseId, courseName, 0.1);
   try {
@@ -142,7 +145,7 @@ export async function downloadCourse(input: {
       slope: slope ?? null,
     });
     store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now() });
-    return { ok: true, courseId };
+    return { ok: true, courseId, fresh: true };
   } catch (e) {
     store.clearDownloading(courseId);
     return { ok: false, courseId, reason: e instanceof Error ? e.message : 'prefetch_failed' };
