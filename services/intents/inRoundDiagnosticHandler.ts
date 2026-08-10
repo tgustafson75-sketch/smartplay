@@ -128,9 +128,13 @@ export const inRoundDiagnosticHandler: IntentHandler = {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const settings = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
         const s = settings.useSettingsStore.getState();
-        persona = s.caddiePersonality;
+        // 2026-08-09 (pass-2 C1) — the round-pillar ACTIVE caddie, not the global pick, for this
+        // on-course brain diagnostic (persona + its intensity dial). Matches every other brain path.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const activePersona = (require('../caddieResolver') as typeof import('../caddieResolver')).getActiveCaddieForPillar('round');
+        persona = activePersona;
         voiceGender = s.voiceGender;
-        personaIntensity = s.personaIntensity?.[s.caddiePersonality] ?? 100;
+        personaIntensity = s.personaIntensity?.[activePersona] ?? 100;
         tankSoftIntro = s.tankSoftIntro;
       } catch {
         // Non-fatal: defaults keep behavior stable if store is unavailable.

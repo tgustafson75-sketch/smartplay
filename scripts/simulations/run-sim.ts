@@ -7129,7 +7129,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // accurate impact instant: acoustic swings anchor on the strike detector, video/range/upload
     // swings anchor on the segmenter's frame-accurate strikeMs. Impact source is tagged honestly.
     /const impactSource: 'acoustic' \| 'video' = \(seg\?\.peakDb \?\? 0\) === 0 \? 'video' : 'acoustic';/.test(smA) &&
-      /if \(!clipUri \|\| isPutt \|\| !seg \|\| seg\.strikeMs == null\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      /if \(!clipUri \|\| isPutt \|\| !seg \|\| seg\.strikeMs == null \|\| seg\.synthesized\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      // 2026-08-09 (pass-2 P4) — a synthesized whole-clip fallback (strikeMs = 0.6·duration guess) is
+      // skipped: tempo off a fabricated impact is not honest. Real located/acoustic swings still derive.
+      /synthesized: true/.test(smA) &&
       // the old peakDb===0 suppression must be gone (no "=== 0 ... setTempo(null)" gate).
       !/\(seg\.peakDb \?\? 0\) === 0\) \{ setTempo\(null\); return; \}/.test(smA) &&
       /deriveSwingTempo\(clipUri, seg\.strikeMs, \{ impactSource \}\)/.test(smA) &&

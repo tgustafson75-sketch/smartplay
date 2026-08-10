@@ -639,7 +639,10 @@ const currentPlaybackVolume = (): number => {
   try {
     const settingsMod = require('../store/settingsStore');
     const s = settingsMod.useSettingsStore.getState();
-    const persona = s.caddiePersonality as 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+    // 2026-08-09 (pass-2 P2) — the playback-volume dial must track the persona actually SPEAKING (the
+    // active per-pillar caddie), not the global pick, or a per-pillar caddie is scaled by the wrong dial.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const persona = (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie();
     const dial = s.personaIntensity?.[persona];
     let base = 1.0;
     if (typeof dial === 'number') {

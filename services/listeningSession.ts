@@ -745,7 +745,8 @@ async function openSession() {
         body: JSON.stringify({
           text: utterance,
           voiceGender: settings.voiceGender ?? 'male',
-          persona: settings.caddiePersonality,
+          // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
+          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
           ...customCaddieFields(),
         }),
       }, intentTimeout());
@@ -879,9 +880,11 @@ async function openSession() {
           inRoundDiagnostic: true,
           voiceGender: settingsStore.voiceGender ?? 'male',
           // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
-          persona: settingsStore.caddiePersonality,
+          // 2026-08-09 (pass-2 C1) — persona + intensity off the ACTIVE per-pillar caddie, not the global
+          // pick (this in-round diagnostic is a brain-answer; global bled the wrong persona/dial).
+          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
           ...customCaddieFields(),
-          personaIntensity: settingsStore.personaIntensity?.[settingsStore.caddiePersonality] ?? 100,
+          personaIntensity: settingsStore.personaIntensity?.[(require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie()] ?? 100,
           tankSoftIntro: settingsStore.tankSoftIntro,
         };
         await fillerP;
@@ -1300,7 +1303,8 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         body: JSON.stringify({
           text,
           voiceGender: settings.voiceGender ?? 'male',
-          persona: settings.caddiePersonality,
+          // 2026-08-09 (pass-2 P3) — active per-pillar persona for consistent clarifier styling.
+          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
           ...customCaddieFields(),
         }),
       }, intentTimeout());

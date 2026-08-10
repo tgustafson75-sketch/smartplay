@@ -66,6 +66,10 @@ export interface SwingSegment {
    *  high/medium; low-confidence strikes start unconfirmed so the user
    *  can tick or drop them. */
   confirmed: boolean;
+  /** 2026-08-09 (pass-2 P4) — true ONLY for the whole-clip fallback segment synthesized when neither
+   *  vision nor acoustics located a swing. Its strikeMs is a proportional GUESS (0.6·duration), NOT a
+   *  real impact, so tempo/impact-anchored reads must skip it — a fabricated anchor is not a metric. */
+  synthesized?: boolean;
 }
 
 // A full swing fits comfortably here: ~2.5s back through the strike,

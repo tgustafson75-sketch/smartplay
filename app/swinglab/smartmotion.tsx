@@ -2216,7 +2216,9 @@ export default function SmartMotion() {
     // pose read and display identically. deriveSwingTempo's sanity gates still return
     // no-tempo ("—") for a genuinely unreadable swing, so it degrades honestly.
     const impactSource: 'acoustic' | 'video' = (seg?.peakDb ?? 0) === 0 ? 'video' : 'acoustic';
-    if (!clipUri || isPutt || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    // 2026-08-09 (pass-2 P4) — a synthesized whole-clip segment has no real impact (strikeMs is a
+    // 0.6·duration guess); never derive a tempo off a fabricated anchor — show "—".
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null || seg.synthesized) { setTempo(null); return; }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -3159,11 +3161,12 @@ export default function SmartMotion() {
         // bounded window is ALWAYS better than going unbounded: the 30 s
         // watchdog is sufficient, and extractKeyFrames samples proportionally.
         if (durMs > 0) {
-          firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false };
+          firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false, synthesized: true };
           // 2026-06-14 (audit fix) — surface the synthesized whole-clip segment to
           // state too, so the review's per-swing effects see segments[0] instead of
-          // [] (otherwise tempo/ball-departure silently skipped this swing). It's
-          // peakDb:0 so tempo/departure stay honestly off, but the segment exists.
+          // []. 2026-08-09 (pass-2 P4) — it carries synthesized:true; its strikeMs is a 0.6·duration
+          // GUESS, so the tempo effect skips it (was deriving a video-anchored tempo off a fabricated
+          // impact — the old "peakDb:0 keeps tempo off" comment went stale once tempo derived for video).
           segsForAnalysis = [firstSeg];
           setSegments(segsForAnalysis);
           setSelectedSwing(0);
