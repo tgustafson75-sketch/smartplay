@@ -139,6 +139,10 @@ const TAP_ECHO_SWALLOW_MS = 600;
 // otherwise land in 'listening' and end the capture before the user says a word. Any tap within
 // LISTEN_ENDPOINT_MIN_MS of the mic opening is that echo, not a real "I'm done".
 let listeningStartedAt = 0;
+// 2026-08-09 (voice audit P2) — when a tap-to-submit already played the persona-voice "Got it" cue,
+// suppress the redundant device-TTS pick-ack so the nice cue isn't clipped by a robotic one. Timestamp
+// of the last got-it verbal cue; the capture-end ack checks it.
+let gotItCueFiredAt = 0;
 const LISTEN_ENDPOINT_MIN_MS = 800;
 export function isSessionInFlight(): boolean {
   return sessionInFlight;
@@ -363,6 +367,7 @@ export async function toggle(): Promise<void> {
     if (useSettingsStore.getState().voiceEnabled) {
       // 2026-08-08 (Tim) — the caddie SAYS it heard you ("Got it." in the persona voice, cached);
       // earcon only as first-run fallback. Not awaited — capture already ended, nothing to self-record.
+      gotItCueFiredAt = Date.now(); // P2: tells the capture-end flow to skip its device-TTS pick-ack
       void playVerbalCue('gotit', GOTIT_EARCON, GOTIT_EARCON_MS).catch(() => {});
     }
     return;
@@ -444,6 +449,31 @@ function failureFallbackFor(lang: string | null | undefined): string {
  * /api/kevin body (this file's speculative, in-round-diagnostic, and small-talk fallbacks), or the
  * server defaults custom → Kevin's spec + onyx voice. Spread this into each kevin body. Best-effort.
  */
+// 2026-08-09 (voice audit P1) — the small-talk kevin fallback (speculative + fresh) dropped every
+// brain-steering setting (Kids Mode / response length / persona-intensity dial / Tank soft-intro) and
+// keyed persona off the GLOBAL pick, so on the rare triple-failure / legacy path the fallback caddie
+// behaved wrong + bled personas. This forwards the SAME steering the primary brain sends, with persona
+// resolved to the ACTIVE per-pillar caddie. kevin ignores fields it doesn't use, so it's safe to spread.
+function kevinSteering(): Record<string, unknown> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const s = require('../store/settingsStore').useSettingsStore.getState();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const active = (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie();
+    const dial = s.personaIntensity?.[active];
+    return {
+      persona: active,
+      responseMode: s.responseMode ?? 'neutral',
+      cecilyMode: s.cecilyMode ?? false,
+      personaIntensity: typeof dial === 'number' && Number.isFinite(dial) ? dial : 100,
+      tankSoftIntro: s.tankSoftIntro ?? false,
+      ...customCaddieFields(),
+    };
+  } catch {
+    return { ...customCaddieFields() };
+  }
+}
+
 function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -576,7 +606,11 @@ async function openSession() {
     const settingsAck = useSettingsStore.getState();
     // 2026-07-20 (bug-hunt fix) — same phone-speaker mute respect as the opener/replies:
     // don't speak the "got it" ack aloud on the phone speaker when the user muted it.
-    if (settingsAck.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+    // 2026-08-09 (voice audit P2) — skip this device-TTS ack when a tap-to-submit just played the
+    // persona "Got it" cue (within 4s): firing it here stops the mp3 mid-word (one-voice invariant) and
+    // replaces a natural cue with a robotic stutter. Silence/VAD-ended captures (no tap cue) still ack.
+    const gotItRecent = Date.now() - gotItCueFiredAt < 4000;
+    if (settingsAck.voiceEnabled && !gotItRecent && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
       const lang = (['en', 'es', 'zh'] as const).includes(settingsAck.language as never) ? (settingsAck.language as 'en' | 'es' | 'zh') : 'en';
       const { speakDeviceNotice } = await import('./voiceService');
       void speakDeviceNotice(pickAck(lang), lang, settingsAck.voiceGender).catch(() => {});
@@ -697,8 +731,8 @@ async function openSession() {
           holeNotes: round.holeNotes,
           isRoundActive: round.isRoundActive,
           voiceGender: settings.voiceGender ?? 'male',
-          persona: settings.caddiePersonality,
-          ...customCaddieFields(),
+          // 2026-08-09 (voice audit P1) — full steering + ACTIVE persona (was global + no steering).
+          ...kevinSteering(),
         }),
       }, kevinTimeout()).catch(() => null);
 
@@ -979,8 +1013,8 @@ async function openSession() {
                 // was the #1 cross-persona bleed channel — voice replies
                 // to "hey Tank, how are you" were coming back as Kevin.
                 voiceGender: settings.voiceGender ?? 'male',
-                persona: settings.caddiePersonality,
-          ...customCaddieFields(),
+                // 2026-08-09 (voice audit P1) — full steering + ACTIVE persona (was global + no steering).
+                ...kevinSteering(),
               }),
             }, kevinTimeout());
             if (chatRes.ok) {

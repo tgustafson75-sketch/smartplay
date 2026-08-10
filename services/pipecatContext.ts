@@ -163,7 +163,12 @@ export function buildPipecatContext() {
     // computed from its own store so it stays separate.
     settings: {
       trustLevel,
-      ...brainSettings(settings),
+      // 2026-08-09 (voice audit C1 — completing the persona-intensity fix). The two kevin fallback paths
+      // (conversationalBrain) already key intensity off the ACTIVE per-pillar caddie; this PRIMARY pipecat
+      // path was left keyed off the GLOBAL pick, so a per-pillar user (Round=Serena, global=Kevin) got
+      // Serena's voice scaled by Kevin's dial. Override caddiePersonality with getActiveCaddie() so
+      // brainSettings resolves personaIntensity[activePersona] — matching the persona actually spoken.
+      ...brainSettings({ ...settings, caddiePersonality: getActiveCaddie() }),
     },
     gps: {
       lat: getLastFix()?.lat ?? undefined,
