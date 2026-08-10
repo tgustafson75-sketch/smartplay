@@ -235,6 +235,17 @@ const AI_TOOLS: AiToolDef[] = [
     },
   },
   {
+    name: 'search_web',
+    description: 'Search the live web for a FACTUAL, real-world answer you do not already have — course details (record, signature hole, dress code, rates, tee-time policy, conditions), local knowledge, golf rules, equipment facts, anything current. Use it whenever the honest answer is "I would need to look that up" instead of guessing. NOT for the player\'s own data (scores/bag/swing — already in your context) or app navigation. After it returns, speak the result naturally as your own knowledge.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The factual question to look up, phrased for a search.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'lookup_hole',
     description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par and yardage from each tee box.',
     parameters: {
@@ -1350,6 +1361,15 @@ ${onCourseContextBlock}${baseMessage}`
       timeoutMs: 14_000,
     };
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {
+      if (name === 'search_web') {
+        capture.dataToolCalls++;
+        // 2026-08-10 — Gemini Google-Search grounding (universal: both brain paths can search).
+        try {
+          const { groundedSearch, formatGroundedForBrain } = await import('./_webSearch');
+          const r = await groundedSearch(String(input.query ?? ''), { context: activeCourse ? `at ${activeCourse}` : null });
+          return formatGroundedForBrain(r);
+        } catch (e) { return `Web search failed: ${e instanceof Error ? e.message : String(e)}`; }
+      }
       if (name === 'lookup_course') {
         capture.dataToolCalls++;
         console.log(`[kevin] calling lookup_course query="${input.query}"`);

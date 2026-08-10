@@ -277,6 +277,17 @@ const KEVIN_TOOLS: AiToolDef[] = [
     },
   },
   {
+    name: 'search_web',
+    description: 'Search the live web for a FACTUAL, real-world answer you do not already have in your context — course details (record, signature hole, dress code, rates, tee-time policy, conditions), local knowledge about a course or area, golf rules, equipment facts, or anything current. Use it whenever the honest answer is "I would need to look that up" instead of guessing. Do NOT use it for the player\'s own data (their scores/bag/swing — that is in your context), for opening app features, or for casual chat. After it returns, speak the result naturally as your own knowledge.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The factual question to look up, phrased for a search (e.g. "course record at Pebble Beach", "dress code Torrey Pines").' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'lookup_hole',
     description: 'Get hole details (par, yardage) for a known course.',
     parameters: {
@@ -663,6 +674,22 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
               return `${c.club_name ?? c.name} (${[c.city, c.state_code ?? c.state].filter(Boolean).join(', ')}) id:${c.id}`;
             }).join('; ');
           } catch (e) { return `Course lookup failed: ${e instanceof Error ? e.message : String(e)}`; }
+        }
+
+        if (toolName === 'search_web') {
+          // 2026-08-10 — Gemini Google-Search grounding (Tim added the key). Real, cited facts for the
+          // caddie instead of hallucination. Folds the player's course/location into the query context.
+          try {
+            const { groundedSearch, formatGroundedForBrain } = await import('./_webSearch');
+            const ctxParts: string[] = [];
+            const cc = (context as Record<string, unknown>) ?? {};
+            const round = cc.round as Record<string, unknown> | undefined;
+            if (round?.activeCourse) ctxParts.push(`at ${String(round.activeCourse)}`);
+            const gps = cc.gps as Record<string, unknown> | undefined;
+            if (!round?.activeCourse && gps?.lat && gps?.lng) ctxParts.push(`near ${gps.lat}, ${gps.lng}`);
+            const r = await groundedSearch(String(toolInput.query ?? ''), { context: ctxParts.join(' ') || null });
+            return formatGroundedForBrain(r);
+          } catch (e) { return `Web search failed: ${e instanceof Error ? e.message : String(e)}`; }
         }
 
         if (toolName === 'lookup_hole') {

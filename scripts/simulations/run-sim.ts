@@ -8122,6 +8122,24 @@ check('Club-path read: DTL-gated plane geometry exists + is provisional (staged 
   })(),
   'the club-path plane read is built + DTL-gated + honest (null when unmeasurable), staged for real-clip calibration before it becomes a headline fault');
 
+// 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
+// factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
+// paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
+check('Caddie web search: grounded search_web tool wired on BOTH brain paths (universal)',
+  (() => {
+    const helper = read('api/_webSearch.ts');
+    const turn = read('api/pipecat-turn.ts');
+    const kevin = read('api/kevin.ts');
+    return (
+      /export async function groundedSearch/.test(helper) &&
+      /tools: \[\{ googleSearch: \{\} \}\]/.test(helper) &&                       // real Google Search grounding
+      /GOOGLE_API_KEY \|\| process\.env\.GEMINI_API_KEY/.test(helper) &&           // accepts either key name Tim set
+      /name: 'search_web'/.test(turn) && /toolName === 'search_web'/.test(turn) &&   // pipecat: declared + dispatched
+      /name: 'search_web'/.test(kevin) && /name === 'search_web'/.test(kevin)        // kevin: declared + dispatched
+    );
+  })(),
+  'ask the caddie a real-world course/fact question and it searches the web (grounded, cited) on whichever brain answers — never a hallucinated fact');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →
