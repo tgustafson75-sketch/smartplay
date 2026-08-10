@@ -738,6 +738,11 @@ export function roundLastHole(s: { nineHoleMode: boolean; roundStartHole: number
   }
 }
 
+// 2026-08-09 (on-course audit C1/C2) — bare-voice score/putts hole resolvers live in the LEAF module
+// store/voiceScoringHole (no asset imports, so it's unit-testable); re-exported here so the require()
+// call sites are unchanged. See voice-scoring-hole.test.ts.
+export { voiceScoreHole, voicePuttsHole } from './voiceScoringHole';
+
 export const useRoundStore = create<RoundState>()(
   persist(
     (set, get) => ({

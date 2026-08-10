@@ -46,9 +46,14 @@ export const logPuttsHandler: IntentHandler = {
     }
 
     const params = (intent.parameters ?? {}) as Record<string, unknown>;
+    // 2026-08-09 (on-course audit C1) — putts FOLLOW the shot just scored. After "I made a 5" auto-
+    // advances the hole, the "how many putts?" answer must land on the SCORED hole, not the new nav
+    // currentHole. voicePuttsHole reads the recent-score mutation. Explicit spoken hole still wins.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { voicePuttsHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
     const hole = (typeof params.hole_number === 'number' && params.hole_number >= 1 && params.hole_number <= 18)
       ? params.hole_number
-      : round.currentHole;
+      : voicePuttsHole(round);
 
     const putts = parsePutts(params.num_putts) ?? parsePutts(intent.raw_text);
     if (putts === null) {

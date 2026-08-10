@@ -1552,8 +1552,12 @@ export default function CaddieTab() {
         break;
       case 'log_score': {
         // Phase BJ — Kevin's structured args now persist instead of just
-        // opening the modal. `hole` is optional; default to currentHole.
-        const targetHole = (action as { hole?: number }).hole ?? currentHole;
+        // opening the modal. `hole` is optional; default to the lowest UNSCORED hole at/behind
+        // currentHole (on-course audit C2 — GPS/auto-advance move currentHole off the hole being
+        // reported). Explicit hole still wins.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+        const targetHole = (action as { hole?: number }).hole ?? voiceScoreHole(useRoundStore.getState());
         const score = (action as { score: number }).score;
         if (typeof score === 'number' && Number.isFinite(score)) {
           const rounded = Math.round(score);

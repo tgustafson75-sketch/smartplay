@@ -7999,6 +7999,29 @@ check('Club rec stamped on the DEFAULT (pipecat) shot-strategy path, not only th
   })(),
   'asking the caddie for the play on the default voice path stamps a rec, so hitting it silently trains the bag');
 
+// 2026-08-09 (on-course audit C1/C2 — the wrong-hole voice scoring Tim's fought for months) — a bare
+// voice score/putts must resolve the hole the PLAYER means, not nav currentHole (which GPS advance +
+// first-score auto-advance move on their own). LOCK: all four voice score/putts sites route through
+// voiceScoreHole/voicePuttsHole, never a raw currentHole default.
+check('Voice scoring targets the reported hole (voiceScoreHole/voicePuttsHole), not nav currentHole',
+  (() => {
+    const leaf = read('store/voiceScoringHole.ts');
+    const rs = read('store/roundStore.ts');
+    const lsh = read('services/intents/logScoreHandler.ts');
+    const lph = read('services/intents/logPuttsHandler.ts');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    const cad = read('app/(tabs)/caddie.tsx');
+    return (
+      /export function voiceScoreHole/.test(leaf) && /export function voicePuttsHole/.test(leaf) &&
+      /export \{ voiceScoreHole, voicePuttsHole \} from '.\/voiceScoringHole'/.test(rs) &&
+      /parseHole\(params\.hole_number, voiceScoreHole\(round\)\)/.test(lsh) &&
+      /voicePuttsHole\(round\)/.test(lph) &&
+      /voiceScoreHole\(round\)/.test(disp) &&
+      /voiceScoreHole\(useRoundStore\.getState\(\)\)/.test(cad)
+    );
+  })(),
+  '"I got a 5" walking off a GPS-advanced hole logs to the RIGHT hole and does not double-jump; putts follow the score');
+
 // ─── LOCK: React rules-of-hooks, repo-wide ────────────────────────────────────
 // 2026-08-09 (Tim — "SMARTMOTION IS CRASHING WHEN I OPEN IT"). Root cause: three useCallbacks added
 // 08-07 BELOW the camera-permission gate's early returns → hook count changed between renders →

@@ -132,7 +132,12 @@ export const logScoreHandler: IntentHandler = {
     // (parseStrokes) doesn't need par; we just want par available for
     // BOTH branches.
     const params = (intent.parameters ?? {}) as Record<string, unknown>;
-    const hole = parseHole(params.hole_number, round.currentHole);
+    // 2026-08-09 (on-course audit C2) — a bare score (no hole spoken) targets the lowest UNSCORED hole
+    // at/behind currentHole, NOT the nav currentHole (which GPS/first-score auto-advance move on their
+    // own). An explicit spoken hole still wins.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+    const hole = parseHole(params.hole_number, voiceScoreHole(round));
     const par = round.courseHoles.find(h => h.hole === hole)?.par ?? null;
     // Numeric parsing first (params.strokes is the classifier's primary
     // emit; raw_text is the verbatim utterance fallback). If neither

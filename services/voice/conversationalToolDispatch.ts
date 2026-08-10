@@ -268,7 +268,10 @@ function dispatchOne(a: AnyAction): void {
       if (typeof a.score !== 'number' || !Number.isFinite(a.score)) break;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
-      const targetHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : round.currentHole;
+      // 2026-08-09 (on-course audit C2) — bare score → lowest unscored hole at/behind currentHole.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+      const targetHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : voiceScoreHole(round);
       const rounded = Math.round(a.score);
       const alreadyScored = (round.scores[targetHole] ?? 0) > 0;
       round.logScore(targetHole, rounded);
