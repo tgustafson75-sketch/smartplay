@@ -34,6 +34,16 @@ describe('voiceScoreHole — bare score targets the reported hole, not nav curre
     expect(voiceScoreHole({ nineHoleMode: true, roundStartHole: 10, currentHole: 12, scores: { 10: 4, 11: 5 } })).toBe(12);
     expect(voiceScoreHole({ nineHoleMode: true, roundStartHole: 10, currentHole: 12, scores: { 10: 4 } })).toBe(11);
   });
+
+  it('P2: a SKIPPED/picked-up earlier hole (3) is NOT targeted — score lands on the current hole', () => {
+    // holes 1,2,4 scored; 3 never recorded (pick-up); player on 5 (unscored). "I got a 5" means 5, not 3.
+    expect(voiceScoreHole({ ...base, currentHole: 5, scores: { 1: 4, 2: 5, 4: 6 } })).toBe(5);
+  });
+
+  it('P2: contiguous unscored run ending at current is filled from its start', () => {
+    // 4 scored, 5 & 6 unscored, on 6 → the run [5,6] → 5 (just walked off 5)
+    expect(voiceScoreHole({ ...base, currentHole: 6, scores: { 1: 4, 2: 4, 3: 4, 4: 4 } })).toBe(5);
+  });
 });
 
 describe('voicePuttsHole — putts follow the score just logged', () => {
@@ -56,5 +66,16 @@ describe('voicePuttsHole — putts follow the score just logged', () => {
 
   it('no mutation → current hole', () => {
     expect(voicePuttsHole({ currentHole: 2, lastMutation: null })).toBe(2);
+  });
+
+  it('P3: a voice EDIT of a far past hole (3) does NOT capture the current hole putts', () => {
+    // scored hole 3 recently while on hole 6 → "2 putts" means hole 6, not 3 (non-adjacent).
+    const hole = voicePuttsHole({ currentHole: 6, lastMutation: { kind: 'score', hole: 3, at: Date.now() } });
+    expect(hole).toBe(6);
+  });
+
+  it('P3: same-hole score (auto-advance off) → putts still land on that hole', () => {
+    const hole = voicePuttsHole({ currentHole: 5, lastMutation: { kind: 'score', hole: 5, at: Date.now() } });
+    expect(hole).toBe(5);
   });
 });

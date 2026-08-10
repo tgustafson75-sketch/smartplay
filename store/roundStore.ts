@@ -2318,7 +2318,13 @@ export const useRoundStore = create<RoundState>()(
           // it would see prevScore 0 → treat "1" as the hole's first score → auto-advance to the
           // next hole AND stamp a bogus score of 1. Record the penalty stroke directly; the real
           // total overwrites it when the player scores the hole.
-          set(s => ({ scores: { ...s.scores, [hole]: 1 } }));
+          // 2026-08-09 (pass-2 C1) — stamp lastMutation as a SCORE write so undoLastMutation clears this
+          // phantom 1. Previously logShot (above) left lastMutation kind:'shot'; an undo then removed the
+          // penalty shot but left scores[hole]=1 orphaned (inflating the total by 1 with no backing shot).
+          set(s => ({
+            scores: { ...s.scores, [hole]: 1 },
+            lastMutation: { kind: 'score', hole, prevScore: 0, prevCurrentHole: get().currentHole, at: Date.now() },
+          }));
         }
         // Legacy penalties[] field intentionally NOT written — ShotResult is authoritative now.
       },

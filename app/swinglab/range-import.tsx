@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useClubStatsStore } from '../../store/clubStatsStore';
+import { normalizeClub } from '../../services/clubNormalize';
 import { useToastStore } from '../../store/toastStore';
 import {
   pickForTopTracer, parseTopTracerScreenshot, sortedClubs,
@@ -75,9 +76,16 @@ export default function RangeImportScreen() {
   }, []);
 
   const onApply = useCallback((result: TopTracerParseResult) => {
-    const applicable = result.clubs.filter(r => r.club_id !== null && r.flat_carry_yds !== null);
+    // 2026-08-09 (pass-2 P4) — normalize the parsed club to a canonical CLUB_ORDER name before writing.
+    // The parser casts server JSON to ClubName without runtime validation; a non-canonical value ('DR',
+    // 'Pitching Wedge') would write a key no reader ever reads (silent stated-carry loss). Skip the
+    // unresolvable ones rather than store garbage.
+    const applicable = result.clubs
+      .filter(r => r.club_id !== null && r.flat_carry_yds !== null)
+      .map(r => ({ name: normalizeClub(r.club_id!), yards: r.flat_carry_yds! }))
+      .filter((r): r is { name: NonNullable<ReturnType<typeof normalizeClub>>; yards: number } => r.name !== null);
     applicable.forEach(r => {
-      setManual(r.club_id!, r.flat_carry_yds!);
+      setManual(r.name, r.yards);
     });
     const n = applicable.length;
     showToast(`${n} club distance${n === 1 ? '' : 's'} applied to your bag.`);

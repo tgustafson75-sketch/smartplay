@@ -26,11 +26,17 @@ export function voiceScoreHole(s: {
   nineHoleMode: boolean;
   roundStartHole: number;
 }): number {
+  const scored = (h: number) => (s.scores[h] ?? 0) > 0;
+  // 2026-08-09 (pass-2 refinement P2) — target the lowest hole of the CONTIGUOUS unscored run that
+  // ENDS at currentHole. This is the hole(s) the player just walked through: GPS advances currentHole
+  // over an unscored hole at the next tee, so "I got a 5" fills the run's start. The old "lowest
+  // unscored ≤ current" grabbed a hole SKIPPED/picked-up long ago (e.g. never scored hole 3 → every
+  // later bare score landed on 3). A non-contiguous gap is left alone; use an explicit "on hole N".
+  if (scored(s.currentHole)) return s.currentHole; // current already scored → re-score/edit here
   const first = firstHole(s);
-  for (let h = first; h <= s.currentHole; h++) {
-    if (!((s.scores[h] ?? 0) > 0)) return h;
-  }
-  return s.currentHole;
+  let h = s.currentHole;
+  while (h - 1 >= first && !scored(h - 1)) h--;
+  return h;
 }
 
 /** The hole a bare voice PUTTS entry targets: putts follow the shot you just scored. If a score was
@@ -41,7 +47,13 @@ export function voicePuttsHole(s: {
   currentHole: number;
 }): number {
   const m = s.lastMutation;
-  if (m && m.kind === 'score' && typeof m.hole === 'number' && typeof m.at === 'number' && Date.now() - m.at < 120_000) {
+  // Putts follow the score just logged (the "how many putts?" auto-advance follow-up). 2026-08-09
+  // (pass-2 refinement P3) — ONLY when that score is the current hole or the one just auto-advanced
+  // FROM (currentHole-1); otherwise a voice EDIT of an old hole ("put me down for a 5 on hole 3")
+  // would misdirect an unrelated "2 putts" to hole 3. Non-adjacent recent score → current hole.
+  if (m && m.kind === 'score' && typeof m.hole === 'number' && typeof m.at === 'number'
+      && Date.now() - m.at < 120_000
+      && (m.hole === s.currentHole || m.hole === s.currentHole - 1)) {
     return m.hole;
   }
   return s.currentHole;

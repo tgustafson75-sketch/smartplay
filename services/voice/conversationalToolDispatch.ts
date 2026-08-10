@@ -269,6 +269,9 @@ function dispatchOne(a: AnyAction): void {
       if (typeof a.score !== 'number' || !Number.isFinite(a.score)) break;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
+      // 2026-08-09 (pass-2 P5) — don't write into a dead store: a brain-emitted log_score racing just
+      // after endRound would flash a transient score on the scorecard between rounds (never persisted).
+      if (!round.isRoundActive) break;
       // 2026-08-09 (on-course audit C2) — bare score → lowest unscored hole at/behind currentHole.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
