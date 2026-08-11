@@ -185,6 +185,24 @@ function AppNavigator() {
   useEffect(() => {
     try { require('../services/routeBreadcrumb').setRoute(pathname); } catch { /* non-fatal */ }
   }, [pathname]);
+  /**
+   * 2026-08-10 (Tim — "need something in the app to prevent racing and prevent cache buildup that can
+   * clean up and refresh back to no bad content as needed").
+   *
+   * Launch sweep of the course-geometry cache: drop entries from superseded pipelines, entries with
+   * zero mapped holes, and anything unparseable, then trim the oldest beyond the cap. This is what
+   * makes bad geometry SELF-HEALING — without it, the broken data his phone captured mid-round was
+   * pinned locally for a week and no server fix could reach it. Runs once, off the render path, and
+   * never removes an entry that is still servable so offline courses survive.
+   */
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { sweepGeometryCache } = await import('../services/courseGeometryService');
+        await sweepGeometryCache();
+      } catch { /* non-fatal — a failed sweep must never block startup */ }
+    })();
+  }, []);
   useEffect(() => {
     if (!pathname) return;
     if (!DEBUG_ROUTES.has(pathname)) return;

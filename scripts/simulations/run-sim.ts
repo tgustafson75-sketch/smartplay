@@ -8628,6 +8628,35 @@ check('LOCK: cage rig geometry (canvas/camera-behind) is recorded ONLY in cage m
   })(),
   'canvas/camera-behind only in cage mode; an active round forces course; no unconditional write');
 
+// "The orientation is still completely wrong" then "when I restarted the app, it went back to a green
+// screen." ONE root cause: the client cache served a persisted copy for a WEEK without refetching, so
+// the broken geometry captured mid-round was pinned locally and no server fix could reach the device.
+check('LOCK: geometry cache is versioned, self-healing, race-free, and purgeable',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    const root = read('app/_layout.tsx');
+    // a pipeline version, stamped on write and enforced on read — so future fixes propagate without a key bump
+    const versioned = /const GEOMETRY_PIPELINE_VERSION = \d+;/.test(g) &&
+      /pipeline_version = GEOMETRY_PIPELINE_VERSION;/.test(g) &&
+      /function cacheIsServable/.test(g);
+    // the key bump that orphans today's poisoned entries on every device at once
+    const bumped = /const CACHE_KEY_PREFIX = 'course-geometry-v3::';/.test(g);
+    // a SUSPECT entry (old pipeline / zero mapped holes) must never be served, not even once more —
+    // stale-while-revalidate is for OLD data, not for data we have reason to distrust
+    const noSuspectServe = /const suspect =/.test(g) && /discarding suspect cache/.test(g);
+    // one fetch per course, so concurrent surfaces can't triple-hammer Overpass or race the writer
+    const antiRace = /const inflight: Map<string, Promise<CourseGeometry \| null>>/.test(g) &&
+      /const pending = inflight\.get\(courseId\);/.test(g) &&
+      /fetchCourseGeometryInner/.test(g);
+    // buildup control + a real recovery path, and the sweep must actually RUN at launch
+    const hygiene = /export async function sweepGeometryCache/.test(g) &&
+      /export async function purgeCourseGeometry/.test(g) &&
+      /MAX_CACHED_COURSES/.test(g) &&
+      /sweepGeometryCache\(\)/.test(root);
+    return versioned && bumped && noSuspectServe && antiRace && hygiene;
+  })(),
+  'pipeline-versioned cache, v3 key bump, suspect entries never served, one in-flight fetch per course, sweep at launch + purge escape hatch');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

@@ -253,7 +253,26 @@ export type CourseGeometry = {
 // it on OTA — so without this bump the whole OSM-hole-ways framing fix stays shadowed by the old cache
 // on the 6 no-hint courses (Highland, Mines, Redlands, Killian, Hermitage, Miccosukee). Bump again on
 // any future bundled-coord change.
-const CACHE_KEY_PREFIX = 'course-geometry-v2::';
+// 2026-08-10 (Tim — "there's no more green screen on Connecticut National, but the ORIENTATION of the
+// holes is still completely wrong" … then "when I restarted the app, it went back to a green screen").
+//
+// Both symptoms are ONE root cause, and it is the reason today's server fixes never reached his phone.
+// The server data is now verifiably correct — the stored Connecticut National build validates 18/18
+// against the scorecard, mean error 6%. But this cache returns a persisted copy IMMEDIATELY whenever
+// it is younger than REFRESH_AFTER_MS, and that window is a WEEK. So the geometry his device captured
+// during the broken round — parking-lot tees, and at one point zero greens — was pinned locally for
+// seven days, served on every launch, and no amount of fixing the server could dislodge it.
+//
+// v2→v3 orphans every entry written today, on every device, at once. That is the immediate unblock.
+const CACHE_KEY_PREFIX = 'course-geometry-v3::';
+/**
+ * The structural fix, so the next geometry correction doesn't need a key bump to reach anyone:
+ * every cached entry records the pipeline version that produced it. A cached entry from an older
+ * pipeline is treated as STALE regardless of age — refetched rather than served. Bump this whenever
+ * the geometry pipeline's OUTPUT changes (pairing rules, validation, new fields), which is exactly
+ * the class of change that was silently unable to reach existing users.
+ */
+const GEOMETRY_PIPELINE_VERSION = 3;
 const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000; // weekly maximum
 
 const memCache: Map<string, CourseGeometry> = new Map();
@@ -408,6 +427,23 @@ async function readPersistedCache(courseId: string): Promise<CourseGeometry | nu
   }
 }
 
+/**
+ * 2026-08-10 — is this cached entry still allowed to be served WITHOUT a refetch?
+ *
+ * Age alone was the only test, and a week is far too long a leash for data that can be wrong. Two
+ * additional disqualifiers, both drawn from what actually happened on Tim's phone:
+ *   - produced by an OLDER pipeline → the rules that built it have since been corrected;
+ *   - ZERO mapped holes → an empty course can never be the right answer to serve, at any age. That
+ *     is the entry that made the green screen come back on every restart.
+ */
+function cacheIsServable(geo: CourseGeometry | null): boolean {
+  if (!geo) return false;
+  const v = (geo as CourseGeometry & { pipeline_version?: number }).pipeline_version ?? 0;
+  if (v !== GEOMETRY_PIPELINE_VERSION) return false;
+  if (mappedHoleCount(geo) === 0) return false;
+  return Date.now() - geo.fetched_at < REFRESH_AFTER_MS;
+}
+
 /** How many holes in this geometry actually carry a usable green — the measure of "is this real". */
 export function mappedHoleCount(geo: CourseGeometry | null | undefined): number {
   if (!geo?.holes?.length) return 0;
@@ -430,6 +466,8 @@ export function mappedHoleCount(geo: CourseGeometry | null | undefined): number 
  */
 async function writePersistedCache(geo: CourseGeometry): Promise<void> {
   try {
+    // Stamp the pipeline that produced this entry so a future correction can invalidate it.
+    (geo as CourseGeometry & { pipeline_version?: number }).pipeline_version = GEOMETRY_PIPELINE_VERSION;
     const incoming = mappedHoleCount(geo);
     if (incoming === 0) {
       const existing = await readPersistedCache(geo.course_id);
@@ -536,19 +574,154 @@ function deriveCentroidFromActiveCourseLocation(
   }
 }
 
+/**
+ * 2026-08-10 (Tim — "need something in the app to prevent racing and prevent cache buildup that can
+ * clean up and refresh back to no bad content as needed").
+ *
+ * THREE jobs, all of which this module was missing:
+ *
+ * 1. ANTI-RACE. fetchCourseGeometry had no in-flight guard, so a screen mounting three surfaces at
+ *    once (caddie preview + SmartVision + prefetch) fired three identical builds. Each hammered the
+ *    same Overpass mirrors — making throttling MORE likely, the very failure that started all of
+ *    this — and then all three raced to write the cache, so whichever finished last won regardless
+ *    of quality. One promise per course now serves every concurrent caller.
+ *
+ * 2. NO BUILDUP. Entries accumulated forever, one per course ever opened, with nothing to evict
+ *    them. sweepGeometryCache() drops keys from superseded pipelines and any entry with zero mapped
+ *    holes, then trims the oldest beyond a cap.
+ *
+ * 3. RECOVERY. purgeCourseGeometry() gives a real "clean up and refresh" — clear the bad content and
+ *    let the next read rebuild from the server, without a reinstall.
+ */
+const inflight: Map<string, Promise<CourseGeometry | null>> = new Map();
+
+/** Max persisted course entries to keep. A heavy user plays a handful of courses; this is generous. */
+const MAX_CACHED_COURSES = 40;
+
+/**
+ * Drop unusable entries and trim the cache. Safe to call at launch — it never touches an entry that
+ * is servable, so a good offline course survives. Returns how many keys were removed.
+ */
+export async function sweepGeometryCache(): Promise<number> {
+  let removed = 0;
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(CACHE_KEY_PREFIX));
+    // Entries from a SUPERSEDED key prefix (v1/v2) are pure dead weight — nothing can ever read them.
+    const deadPrefixes = ['course-geometry-v1::', 'course-geometry-v2::'];
+    const orphans = (await AsyncStorage.getAllKeys()).filter(k => deadPrefixes.some(p => k.startsWith(p)));
+    if (orphans.length) {
+      await AsyncStorage.multiRemove(orphans).catch(() => undefined);
+      removed += orphans.length;
+    }
+
+    const entries: { key: string; fetched_at: number; usable: boolean }[] = [];
+    for (const k of keys) {
+      try {
+        const raw = await AsyncStorage.getItem(k);
+        if (!raw) continue;
+        const geo = JSON.parse(raw) as CourseGeometry & { pipeline_version?: number };
+        const usable = (geo.pipeline_version ?? 0) === GEOMETRY_PIPELINE_VERSION && mappedHoleCount(geo) > 0;
+        entries.push({ key: k, fetched_at: geo.fetched_at ?? 0, usable });
+      } catch {
+        // Unparseable entry — remove it; it can only ever throw again.
+        await AsyncStorage.removeItem(k).catch(() => undefined);
+        removed++;
+      }
+    }
+
+    const junk = entries.filter(e => !e.usable);
+    if (junk.length) {
+      await AsyncStorage.multiRemove(junk.map(e => e.key)).catch(() => undefined);
+      removed += junk.length;
+    }
+
+    // Trim the oldest usable entries beyond the cap — they refetch on demand.
+    const usable = entries.filter(e => e.usable).sort((a, b) => b.fetched_at - a.fetched_at);
+    if (usable.length > MAX_CACHED_COURSES) {
+      const excess = usable.slice(MAX_CACHED_COURSES).map(e => e.key);
+      await AsyncStorage.multiRemove(excess).catch(() => undefined);
+      removed += excess.length;
+    }
+    if (removed > 0) console.log(`[courseGeometry] cache sweep removed ${removed} entr${removed === 1 ? 'y' : 'ies'}`);
+  } catch (e) {
+    console.warn('[courseGeometry] cache sweep failed (non-fatal):', e instanceof Error ? e.message : e);
+  }
+  return removed;
+}
+
+/**
+ * Hard reset for one course (or all of them). The "refresh back to no bad content" escape hatch:
+ * the next read rebuilds from the server. Never throws.
+ */
+export async function purgeCourseGeometry(courseId?: string): Promise<void> {
+  try {
+    if (courseId) {
+      memCache.delete(courseId);
+      inflight.delete(courseId);
+      await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
+      console.log('[courseGeometry] purged', courseId);
+      return;
+    }
+    memCache.clear();
+    inflight.clear();
+    const keys = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(CACHE_KEY_PREFIX));
+    if (keys.length) await AsyncStorage.multiRemove(keys).catch(() => undefined);
+    console.log('[courseGeometry] purged ALL course geometry —', keys.length, 'entries');
+  } catch (e) {
+    console.warn('[courseGeometry] purge failed:', e instanceof Error ? e.message : e);
+  }
+}
+
 export async function fetchCourseGeometry(
   courseId: string,
   options?: { courseLocation?: { lat: number; lng: number } | null },
 ): Promise<CourseGeometry | null> {
   if (!courseId) return null;
+  /**
+   * 2026-08-10 — ANTI-RACE. Several surfaces ask for the same course at the same moment (the caddie
+   * preview, SmartVision, the round prefetch). Without this each fired its OWN build: three sets of
+   * Overpass calls, which makes the throttling that broke the engine MORE likely, and then three
+   * writers racing the cache so the last one to finish won regardless of quality. One promise per
+   * course now serves every concurrent caller; it clears on settle so later calls refetch normally.
+   */
+  const pending = inflight.get(courseId);
+  if (pending) return pending;
+  const run = fetchCourseGeometryInner(courseId, options).finally(() => { inflight.delete(courseId); });
+  inflight.set(courseId, run);
+  return run;
+}
+
+async function fetchCourseGeometryInner(
+  courseId: string,
+  options?: { courseLocation?: { lat: number; lng: number } | null },
+): Promise<CourseGeometry | null> {
 
   const memHit = memCache.get(courseId);
-  if (memHit && Date.now() - memHit.fetched_at < REFRESH_AFTER_MS) return memHit;
+  // 2026-08-10 — servability, not just age: an entry from an older pipeline or one with zero
+  // mapped holes is never served, however recent it is.
+  if (memHit && cacheIsServable(memHit)) return memHit;
 
   const persisted = await readPersistedCache(courseId);
   if (persisted) {
     memCache.set(courseId, persisted);
-    if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
+    if (cacheIsServable(persisted)) return persisted;
+    /**
+     * 2026-08-10 — POISONED entries must not be served even once more.
+     *
+     * Stale-while-revalidate is right for data that is merely OLD: show it now, refresh behind. It
+     * is exactly wrong for data we have positive reason to distrust — an entry from a superseded
+     * pipeline, or one with zero mapped holes. Returning those "just for this launch" is precisely
+     * what put a green screen back on Tim's screen every restart while the correct data sat one
+     * fetch away. So: old → serve and refresh; suspect → drop it and go get the real thing.
+     */
+    const suspect =
+      ((persisted as CourseGeometry & { pipeline_version?: number }).pipeline_version ?? 0) !== GEOMETRY_PIPELINE_VERSION ||
+      mappedHoleCount(persisted) === 0;
+    if (suspect) {
+      console.log(`[courseGeometry] discarding suspect cache for ${courseId} (pipeline/empty) — fetching fresh`);
+      memCache.delete(courseId);
+      await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
+    } else {
     // 2026-05-26 — Fix DI: stale-while-revalidate. When a persisted
     // entry exists but is older than REFRESH_AFTER_MS (1 week), return
     // it IMMEDIATELY so the UI renders instantly with cached geometry,
@@ -557,8 +730,9 @@ export async function fetchCourseGeometry(
     // fetch even when a stale entry was available, causing 2-5s splash
     // on weekly cached courses. The promise below is intentionally
     // detached (void) — we don't await it; persisted is returned now.
-    void refreshGeometryInBackground(courseId).catch(() => undefined);
-    return persisted;
+      void refreshGeometryInBackground(courseId).catch(() => undefined);
+      return persisted;
+    }
   }
 
   // Resolve "local:<slug>" → real upstream golfcourseapi ID, if we have
