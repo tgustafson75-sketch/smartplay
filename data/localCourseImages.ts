@@ -750,7 +750,21 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
 //   Mariners Point:   was (37.5480, -122.2750) → 2.8 km off
 //   Crystal Springs:  was (37.5120, -122.3580) → 5.0 km off
 // Palms, Lakes, Rancho left unchanged — already accurate vs OSM.
-export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+/**
+ * 2026-08-11 — THIS is the table the geometry engine searches from, and it carried the same
+ * hand-typed errors as the Play tab's.
+ *
+ * Correcting the Play-tab centroids without this one would have been a half-fix of exactly the kind
+ * that keeps biting: the map would have looked right while the ENGINE kept searching empty ground,
+ * because courseGeometryService reads its `lat`/`lng` from here. Greenhill's literal below sat on
+ * Tatnuck Country Club, 6.8km away; Echo Hills was 2.6km out and Westlake 3.3km. All three had been
+ * reporting "OSM unavailable" — a ~1.5km search centered on nothing.
+ *
+ * The raw literals stay (four courses have no hole geometry to derive from), but every course whose
+ * real tee/green coordinates we hold now overrides its literal. One source of truth, two consumers.
+ * [[no-half-fixes-enforce-every-surface]]
+ */
+const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: number }> = {
   'crane-creek':              { lat: 28.075233, lng: -80.630249 },
   'manatee-cove':             { lat: 28.219306, lng: -80.608414 },
   'wente-vineyards':          { lat: 37.630166, lng: -121.753313 },
@@ -798,6 +812,19 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   // 2026-07-18 — Pembroke Lakes CC, Pembroke Pines FL (golfcourseapi id 29669).
   'pembroke-pines':   { lat: 26.019337,  lng: -80.2868 },
 };
+
+export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> =
+  (() => {
+    // Lazy require: data/courses.ts is large and does not import this module, so there is no cycle,
+    // but keeping it inside the IIFE means the bundle only pays for it when centroids are read.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getBundledCourseCentroid } = require('./courses') as typeof import('./courses');
+    const out = {} as Record<LocalCourseSlug, { lat: number; lng: number }>;
+    for (const slug of Object.keys(LOCAL_COURSE_CENTROIDS_RAW) as LocalCourseSlug[]) {
+      out[slug] = getBundledCourseCentroid(slug) ?? LOCAL_COURSE_CENTROIDS_RAW[slug];
+    }
+    return out;
+  })();
 
 /**
  * Resolve a course name to a LOCAL_COURSE_CENTROIDS key. Mirrors the

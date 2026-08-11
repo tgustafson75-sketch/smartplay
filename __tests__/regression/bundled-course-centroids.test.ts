@@ -92,3 +92,46 @@ describe('derivation cannot be poisoned', () => {
     expect(getBundledCourseCentroid('local:greenhill')).toEqual(getBundledCourseCentroid('greenhill'));
   });
 });
+
+/**
+ * 2026-08-11 (backtracking check) — the SECOND centroid table.
+ *
+ * Correcting the Play tab alone would have been a half-fix. courseGeometryService reads the lat/lng
+ * it sends to the engine from LOCAL_COURSE_CENTROIDS in data/localCourseImages.ts, which carried the
+ * SAME hand-typed errors — so the map would have looked right while the engine kept searching empty
+ * ground and reporting "OSM unavailable". [[no-half-fixes-enforce-every-surface]]
+ */
+describe('the engine searches from the same corrected centroid the UI draws', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { LOCAL_COURSE_CENTROIDS } = require('../../data/localCourseImages');
+
+  it.each(['greenhill', 'echo-hills', 'westlake-cc-nj'])(
+    '%s — the engine table agrees with the derived centroid',
+    slug => {
+      const derived = getBundledCourseCentroid(slug)!;
+      expect(derived).not.toBeNull();
+      expect(haversineM(LOCAL_COURSE_CENTROIDS[slug], derived)).toBeLessThan(1);
+    },
+  );
+
+  it('greenhill no longer sends the engine to Tatnuck Country Club', () => {
+    // A ~1.5km search centered 6.8km away is why this course would never build.
+    expect(haversineM(LOCAL_COURSE_CENTROIDS['greenhill'], { lat: 42.274306, lng: -71.861492 }))
+      .toBeGreaterThan(3000);
+  });
+
+  it('keeps the literal for courses with no geometry to derive from', () => {
+    // Four scorecard-only courses have no coordinates at all; their literal is load-bearing.
+    expect(getBundledCourseCentroid('gleneagles-queens')).toBeNull();
+    expect(LOCAL_COURSE_CENTROIDS['webster-dudley']).toBeDefined();
+  });
+
+  it('covers every slug — derivation must not drop entries', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('../../data/localCourseImages');
+    expect(Object.keys(mod.LOCAL_COURSE_CENTROIDS).length).toBeGreaterThanOrEqual(30);
+    for (const v of Object.values(mod.LOCAL_COURSE_CENTROIDS) as { lat: number; lng: number }[]) {
+      expect(Number.isFinite(v.lat) && Number.isFinite(v.lng)).toBe(true);
+    }
+  });
+});
