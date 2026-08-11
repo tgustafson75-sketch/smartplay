@@ -8657,6 +8657,26 @@ check('LOCK: geometry cache is versioned, self-healing, race-free, and purgeable
   })(),
   'pipeline-versioned cache, v3 key bump, suspect entries never served, one in-flight fetch per course, sweep at launch + purge escape hatch');
 
+// "5G signal but it says we can't connect", four empty-transcript misses, and "switching the caddie
+// seemed to bring voice back" — that last one is the tell: changing persona REMOUNTS the hook and
+// clears a wedged busy-flag. Voice must self-heal without the user changing caddie.
+check('LOCK: voice self-heals — stuck-turn watchdog, advisory probe, persistent in-character re-ask',
+  (() => {
+    const v = read('hooks/useVoiceCaddie.ts');
+    // a busy flag with no escape is a one-way trap; the timestamp makes it recoverable
+    const watchdog = /const processingSinceRef = useRef\(0\);/.test(v) &&
+      /STUCK_TURN_MS/.test(v) && /wedged for/.test(v) &&
+      /processingSinceRef\.current = Date\.now\(\);/.test(v);
+    // a 3s probe must never veto a real upload — that's the 5G false-offline
+    const probeAdvisory = /const probeSaysDown = !ping\.ok;/.test(v) &&
+      /retrying the REAL upload before calling it offline/.test(v);
+    // a miss must not be the same canned sentence forever — the caddie is a presence, not a tool
+    const persists = /missStreakRef/.test(v) && /const askAgain =/.test(v) &&
+      /missStreakRef\.current = 0;/.test(v);
+    return watchdog && probeAdvisory && persists;
+  })(),
+  'wedged turns clear themselves (no caddie-switch needed), probe never vetoes a real upload, misses escalate in-character and reset on success');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

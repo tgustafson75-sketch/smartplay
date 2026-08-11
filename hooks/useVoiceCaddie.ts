@@ -493,6 +493,16 @@ export const useVoiceCaddie = ({
 
   const currentPathname = usePathname();
   const recordingRef    = useRef<Audio.Recording | null>(null);
+  /**
+   * 2026-08-10 (Tim — "we should be able to persist; if we don't have the right information, ask for
+   * it to be corrected… real time if possible" + "the Caddie is a PRESENCE. It's an actual caddie,
+   * not a tool or a group of tools. It's an actual person").
+   *
+   * How many turns in a row we failed to hear. A real caddie doesn't say the identical sentence
+   * every time he misses you — he leans in, then asks differently, then suggests something else.
+   * Reset on any turn we DO hear, so a single miss in a good conversation never escalates.
+   */
+  const missStreakRef = useRef(0);
   // 2026-08-06 (Tim — "Only one Recording object" mic collision): let voiceService.captureUtterance see
   // whether THIS tap path is holding the mic, so a follow-up capture bails instead of racing the session.
   useEffect(() => {
@@ -500,6 +510,27 @@ export const useVoiceCaddie = ({
     return () => registerExternalMicCheck(null);
   }, []);
   const isProcessingRef = useRef(false);
+  /**
+   * 2026-08-10 (Tim — "preventing and clearing things such as voice races or bumps in the voice
+   * logic… so that if you hit a bump we can logically clear it").
+   *
+   * WHEN the current turn started processing. The busy flag alone is a one-way trap: any path that
+   * sets it and then dies without reaching its reset leaves voice permanently deaf — every later tap
+   * hits `if (isProcessingRef.current) return` and the caddie simply never answers again, with no
+   * error and nothing for the user to do but restart the app. processAudioUri has a finally, but
+   * processFollowUp and any future caller are one missed reset away from that state.
+   *
+   * A timestamp turns the trap into something recoverable: a "busy" turn older than any legitimate
+   * turn could possibly be is treated as wedged, cleared, and taken over. Self-healing by
+   * construction, whatever caused the leak.
+   *
+   * CONFIRMED IN THE FIELD, and this is the tell that proves the diagnosis: Tim reported that
+   * "switching the caddie seemed to bring voice back". Changing persona REMOUNTS this hook, which
+   * builds fresh refs — clearing the wedged flag. It was never the persona doing anything; it was
+   * the remount. His issue log matches exactly: kevin entries until 5:39pm, then serena from 5:53pm.
+   * Nobody should have to change caddie to make the caddie hear them.
+   */
+  const processingSinceRef = useRef(0);
   const autoStopTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 2026-06-06 — Silence-VAD polling timer for handleMicPress.
   // Cleared in clearAutoStop() alongside autoStopTimer.
@@ -1411,6 +1442,7 @@ export const useVoiceCaddie = ({
       if (!trimmed) return;
 
       isProcessingRef.current = true;
+      processingSinceRef.current = Date.now();
       try {
         // 2026-05-26 — Fix BA: client-side close-intent gate. The brain
         // is smart enough to NOT ask follow-up questions when the user
@@ -1606,7 +1638,19 @@ export const useVoiceCaddie = ({
   // ── PROCESS AUDIO URI (shared by manual + VAD) ────
 
   const processAudioUri = useCallback(async (uri: string, opts?: { source?: 'manual' | 'vad' }): Promise<void> => {
-    if (isProcessingRef.current) return;
+    // 2026-08-10 — stuck-turn watchdog. A legitimate turn is bounded by the cold transcribe budget
+    // plus the brain call; 90s is comfortably past any real one. Beyond that the flag is a leak, not
+    // a turn in progress, so clear it and serve the user instead of ignoring them forever.
+    const STUCK_TURN_MS = 90_000;
+    if (isProcessingRef.current) {
+      const busyFor = Date.now() - (processingSinceRef.current || 0);
+      if (processingSinceRef.current > 0 && busyFor > STUCK_TURN_MS) {
+        console.warn(`[voice] previous turn wedged for ${Math.round(busyFor / 1000)}s — clearing and taking over`);
+        isProcessingRef.current = false;
+      } else {
+        return; // a real turn is genuinely in flight
+      }
+    }
     const source = opts?.source ?? 'manual';
     // 2026-06-29 (fix A) — THE round-one fix. Read the live host at call-time so
     // transcribe / reachability-ping / health / brain all use the host the app
@@ -1617,6 +1661,7 @@ export const useVoiceCaddie = ({
     const apiUrl = getApiBaseUrl();
     try {
       isProcessingRef.current = true;
+      processingSinceRef.current = Date.now();
       // Reset follow-up depth for each fresh top-level mic tap so a
       // conversation that hit HARD_FOLLOWUP_DEPTH_CAP never blocks a
       // brand-new question in the same 2-minute idle window.
@@ -1975,17 +2020,34 @@ export const useVoiceCaddie = ({
         // (near-silent capture — the classic cold first-record symptom). Distinguishes
         // "empty recording" from "too-small file" and "transcribe error" in the log.
         logVoiceSilentFail('empty_transcript', { source: 'processAudioUri', sourceKind: source });
-        onResponseReceived("Didn't catch that — try once more, a bit closer to the mic.");
+        /**
+         * 2026-08-10 — PERSIST + stay a person about it.
+         *
+         * This used to be one fixed sentence, every single time, and then a dead end. Four of these
+         * fired during Tim's round. Hearing the identical canned line on the 1st, 2nd and 3rd miss is
+         * the most robotic thing the caddie does — a real one varies, and by the third he offers
+         * another way instead of repeating himself. So the ask escalates with the miss streak, and
+         * the streak resets the moment we hear anything, so one bad turn in a good conversation
+         * never drags the tone down. ([[feels-like-a-real-caddie]])
+         */
+        missStreakRef.current += 1;
+        const askAgain =
+          missStreakRef.current === 1 ? "Say that again? Wind took it."
+          : missStreakRef.current === 2 ? "Still not getting you — get the phone a bit closer."
+          : "I'm not hearing you out here. Type it and I'll pick it right up.";
+        onResponseReceived(askAgain);
         // 2026-07-21 (BETA — voice-first testers, #1 cold-first-tap hit) — SPEAK it too, like the
         // transcribe-error sibling above. An empty transcript is the most common cold-mic outcome;
         // without this the caddie went totally SILENT (text bubble only), which reads as "it ignored
         // me / is broken" to a hands-free/driving user who isn't looking at the screen. Device TTS
         // so it works with no signal.
-        if (voiceEnabled) void speakDeviceNotice("Didn't catch that — try once more, a bit closer to the mic.", language, voiceGender).catch(() => {});
+        if (voiceEnabled) void speakDeviceNotice(askAgain, language, voiceGender).catch(() => {});
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
       }
+      // 2026-08-10 — heard them: clear the miss streak so the next stumble starts gentle again.
+      missStreakRef.current = 0;
       // Note: source-based wake-word filtering removed 2026-05-17 after
       // breaking conversational requests like "how are you" that don't
       // include a caddie name. Spectator-noise filtering returns as an
@@ -2366,6 +2428,7 @@ export const useVoiceCaddie = ({
       wrappedOnVoiceStateChange('idle');
     } finally {
       isProcessingRef.current = false;
+      processingSinceRef.current = 0;
     }
   }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode, courseHoles, currentPar]);
 
