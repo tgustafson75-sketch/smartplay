@@ -8393,7 +8393,10 @@ check('LOCK: hole geometry derives in two passes — locate wide, then trace on 
       /\} else if \(tight && !tight\.found_green\) \{/.test(d) &&
       /trace pass DISPROVED the located green[\s\S]{0,200}?return null;/.test(d) &&
       /trace pass unreachable — keeping the wide read unverified/.test(d);
-    const failsSafe = /let data: HoleScanResponse = wide;/.test(d) && verifier;
+    // 2026-08-10 — `data` became nullable when the seeded path landed (seeded + no vision detail is
+    // a valid outcome), so assert the INVARIANT — the tight read starts from the wide one and a
+    // transport failure keeps it — rather than the exact type annotation.
+    const failsSafe = /let data: HoleScanResponse(?: \| null)? = wide;/.test(d) && verifier;
     // and the prompt must name the residential decoys that produced that false positive
     const decoys = (() => {
       const s = read('api/hole-scan.ts');
@@ -8477,6 +8480,29 @@ check('LOCK: swing verdict reconciles vision against on-device measurements (bot
     return reconciler && strict && neverDowngrades && wired;
   })(),
   'measured turn+tempo overrides a vision false-negative; noise/floor footage still cannot; good reads never downgraded');
+
+// "Once you get the OSM and you get the coordinates, then you zoom on the available tiles, and you
+// orient it correctly." Vision must NEVER hunt for a green we already hold coordinates for — every
+// false positive this pipeline produced came from the hunting, not the reading.
+check('LOCK: vision is SEEDED from known coords — skips the search, orients from the surveyed axis',
+  (() => {
+    const d = read('services/holeGeometryDerivation.ts');
+    const sv = read('app/smartvision.tsx');
+    // seeded input skips the locate pass entirely
+    const seeds = /knownGreen\?: LatLng \| null;/.test(d) && /knownTee\?: LatLng \| null;/.test(d) &&
+      /SEEDED from known coords — skipping the locate pass/.test(d);
+    // the surveyed tee wins outright, so a model can't rotate the hole
+    const orientation = /let verifiedTee = input\.knownTee/.test(d) && /const teeIsKnown = verifiedTee === input\.knownTee/.test(d);
+    // known coords are the LOCATION; a vision centre that drifts far discards its own detail
+    const anchored = /const green = seeded \?\? visionGreen;/.test(d) && /visionDriftYds <= 60/.test(d) &&
+      /const greenOutline = visionAgrees \?/.test(d);
+    // a seeded read is never DISPROVED by vision — OSM outranks a model that couldn't see the edge
+    const seededSurvives = /if \(seeded\) \{[\s\S]{0,240}?keeping OSM geometry/.test(d);
+    // and SmartVision must actually run a detail pass on holes that already have coordinates
+    const wired = /knownGreen: geo\.green,/.test(sv) && /needsDetail/.test(sv) && /:detail`/.test(sv);
+    return seeds && orientation && anchored && seededSurvives && wired;
+  })(),
+  'known coords skip the search, surveyed tee owns orientation, drifting vision detail is discarded, seeded reads survive a vision miss, detail pass wired');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

@@ -723,6 +723,13 @@ export default function SmartVisionScreen() {
                 par: geo?.par ?? null,
                 yardage: geo?.yardage ?? null,
                 courseId,
+                // 2026-08-10 (Tim — "once you get the OSM and you get the coordinates, then you
+                // zoom on the available tiles, and you orient it correctly"). Hand vision the
+                // coordinates we ALREADY have. It then skips searching entirely, zooms straight to
+                // the real green, and only reads DETAIL — green edge, tee pad, fairway, hazards —
+                // with orientation taken from the surveyed tee→green axis, never from the model.
+                knownGreen: geo?.green ?? null,
+                knownTee: geo?.tee ?? null,
               });
             } catch (e) {
               console.log('[smartvision] hole-scan derive failed (non-fatal)', e);
@@ -749,6 +756,56 @@ export default function SmartVisionScreen() {
             estimated: true,
             estimated_confidence: derivedGeo.estimated_confidence,
           };
+        }
+      }
+
+      /**
+       * 2026-08-10 (Tim — "once you get the OSM and you get the coordinates, then you zoom on the
+       * available tiles, and you orient it correctly. Otherwise AI is the dumbest shit I've ever
+       * seen if you can't figure that part out").
+       *
+       * SEEDED DETAIL PASS. Everything above only ran when the green was MISSING — so a hole that
+       * already had surveyed coordinates never got a vision read at all, and shipped with no green
+       * outline, no tee pad, no fairway line and no hazards. That is the gap: we HAD the coordinates
+       * and still weren't looking at the imagery.
+       *
+       * Here we do exactly that. Known green + known tee go IN, vision skips searching entirely,
+       * zooms straight to the real green at trace resolution, and reads detail only. Orientation
+       * stays on the surveyed tee→green axis, so this can add hazards and outlines but can never
+       * move the hole or rotate it. Runs once per hole, only for the hole being played, and merges
+       * detail ONLY — every existing coordinate is left exactly as it was.
+       */
+      if (courseId && geo?.green && isRoundActive && holeIndex === currentHole) {
+        const needsDetail = !geo.green_polygon && !(geo.bunkers?.length) && !(geo.fairway_centerline?.length);
+        const detailKey = `${courseId}:${holeIndex}:detail`;
+        if (needsDetail && !svDeriveAttempts.has(detailKey)) {
+          svDeriveAttempts.add(detailKey); // BEFORE await — suppresses the in-flight re-run race
+          try {
+            const detail = await deriveHoleGeometry({
+              seed: geo.green,
+              holeNumber: holeIndex,
+              par: geo.par ?? null,
+              yardage: geo.yardage ?? null,
+              courseId,
+              knownGreen: geo.green,
+              knownTee: geo.tee ?? null,
+            });
+            if (!cancelled && detail) {
+              geo = {
+                ...geo,
+                // Detail only. Coordinates, bearing and par/yardage are untouched.
+                green_polygon: geo.green_polygon ?? detail.green_polygon ?? null,
+                green_outline: geo.green_outline?.length ? geo.green_outline : (detail.green_outline ?? []),
+                tee_polygon: geo.tee_polygon ?? detail.tee_polygon ?? null,
+                fairway_centerline: geo.fairway_centerline?.length ? geo.fairway_centerline : (detail.fairway_centerline ?? []),
+                bunkers: geo.bunkers?.length ? geo.bunkers : (detail.bunkers ?? []),
+                water_hazards: geo.water_hazards?.length ? geo.water_hazards : (detail.water_hazards ?? []),
+                hazards: geo.hazards?.length ? geo.hazards : (detail.hazards ?? []),
+              };
+            }
+          } catch (e) {
+            console.log('[smartvision] seeded detail pass failed (non-fatal)', e);
+          }
         }
       }
 

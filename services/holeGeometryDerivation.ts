@@ -159,6 +159,21 @@ export async function deriveHoleGeometry(input: {
   yardage?: number | null;
   courseId?: string | null;  // when set, the derived hole is persisted to the derived cache
   signal?: AbortSignal;
+  /**
+   * 2026-08-10 (Tim — "once you get the OSM and you get the coordinates, then you zoom on the
+   * available tiles, and you orient it correctly").
+   *
+   * The KNOWN green (and tee, when we have one) from OSM / golfcourseapi / Course Cloud. When these
+   * are supplied, vision is not asked to FIND anything — the search pass is skipped entirely and we
+   * go straight to a tight tile centred on the real green. That removes the whole class of error
+   * that put a swimming pool on the map, because there is nothing left to guess: the location is
+   * given, and vision only reads DETAIL (green edge, tee pad, fairway corridor, hazards).
+   *
+   * Orientation comes from the known tee→green axis, never from vision, so the hole cannot be drawn
+   * rotated even if the model mis-reads a feature.
+   */
+  knownGreen?: LatLng | null;
+  knownTee?: LatLng | null;
 }): Promise<DerivedHoleGeometry | null> {
   if (!isMapboxConfigured()) return null;
   const { seed, holeNumber } = input;
@@ -171,24 +186,42 @@ export async function deriveHoleGeometry(input: {
   const timeout = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    // ── PASS 1 — LOCATE on the wide tile. At this zoom a green is ~15px: enough to say WHICH blob
-    // is the green, nowhere near enough to trace its edge. That's all we ask of this pass.
-    const wide = await scanTile(seed, TILE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal });
-    if (!wide?.found_green || !wide.green_center) return null;
-
     const unproject = (p: { x: number; y: number } | null, center: LatLng, zoom: number): LatLng | null => {
       if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
       const c = unprojectTilePixel(p.x * TILE_SIZE, p.y * TILE_SIZE, center, zoom, 0, TILE_SIZE, TILE_SIZE);
       return Number.isFinite(c.lat) && Number.isFinite(c.lng) ? c : null;
     };
 
-    const coarseGreen = unproject(wide.green_center, seed, TILE_ZOOM);
+    /**
+     * ── PASS 1 — WHERE IS THE GREEN?
+     *
+     * SEEDED (the normal case once OSM has run): we already KNOW. Skip the search entirely and go
+     * straight to the tight trace. This is the whole point — vision should never be hunting for a
+     * green we already hold coordinates for, and every false positive this pipeline has produced
+     * came from the hunting, not the reading.
+     *
+     * UNSEEDED (a course OSM doesn't cover): fall back to locating on the wide tile. At that zoom a
+     * green is ~15px, so this pass can only say WHICH blob — the tight pass still has to confirm it.
+     */
+    const seeded = input.knownGreen && Number.isFinite(input.knownGreen.lat) && Number.isFinite(input.knownGreen.lng)
+      ? input.knownGreen
+      : null;
+
+    let wide: HoleScanResponse | null = null;
+    let coarseGreen: LatLng | null = seeded;
+    if (!coarseGreen) {
+      wide = await scanTile(seed, TILE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal });
+      if (!wide?.found_green || !wide.green_center) return null;
+      coarseGreen = unproject(wide.green_center, seed, TILE_ZOOM);
+    } else {
+      console.log(`[holeGeometry] hole ${holeNumber}: SEEDED from known coords — skipping the locate pass`);
+    }
     if (!coarseGreen) return null;
 
     // ── PASS 2 — TRACE on a tight tile re-centred on that green. Same green is now ~62px, so the
     // collar, bunker lips and tee pad are actually resolvable. Everything we render comes from here.
     // Any failure falls back to the wide read, so this can only add detail, never remove it.
-    let data: HoleScanResponse = wide;
+    let data: HoleScanResponse | null = wide;
     let tileCenter: LatLng = seed;
     let tileZoom = TILE_ZOOM;
     const tight = await scanTile(coarseGreen, TRACE_ZOOM, { holeNumber, par: input.par, signal: ctrl.signal }).catch(() => null);
@@ -215,26 +248,71 @@ export async function deriveHoleGeometry(input: {
        * === false` is a VERDICT — the close look actively disproved the claim, and a disproved
        * green must never reach the map.
        */
-      console.log(`[holeGeometry] hole ${holeNumber}: trace pass DISPROVED the located green — discarding (${tight.notes || 'no green at that spot'})`);
-      return null;
+      // SEEDED case: the coordinates came from OSM, not from a guess, so a vision "no green here"
+      // does NOT disprove them — it just means the model couldn't read the edge (imagery age, tree
+      // shadow, winter turf). Keep the known geometry and go on without vision detail. Only an
+      // UNSEEDED claim, which vision itself invented, can be disproved by vision.
+      if (seeded) {
+        console.log(`[holeGeometry] hole ${holeNumber}: trace pass saw no green at the KNOWN coords — keeping OSM geometry, no vision detail`);
+        data = null;
+      } else {
+        console.log(`[holeGeometry] hole ${holeNumber}: trace pass DISPROVED the located green — discarding (${tight.notes || 'no green at that spot'})`);
+        return null;
+      }
     } else {
       console.log(`[holeGeometry] hole ${holeNumber}: trace pass unreachable — keeping the wide read unverified`);
     }
+    // Seeded with no usable vision read at all: still emit the hole from the known coordinates.
+    // The geometry we were given is the product; vision detail is the enhancement.
+    if (!data && !seeded) return null;
+
+    /**
+     * From here on the code reads ONE object. When we're seeded and vision gave us nothing usable,
+     * this is an empty read: the known coordinates still produce a hole, just without traced detail.
+     * Confidence is 'high' in the seeded case because the LOCATION came from surveyed OSM data, not
+     * from a model — the missing polygons are detail, not doubt about where the hole is.
+     */
+    const scan: HoleScanResponse = data ?? {
+      found_green: true,
+      green_center: null,
+      green_front: null,
+      green_back: null,
+      tee: null,
+      confidence: 'high',
+      notes: 'Seeded from known course geometry; vision detail unavailable.',
+    };
 
     // Unproject normalized pixels → lat/lng against WHICHEVER tile produced `data` (north-up,
     // square TILE_SIZE). Binding these together is what stops a pass-2 pixel being read against
     // pass-1's projection, which would silently offset every coordinate on the hole.
     const toCoord = (p: { x: number; y: number } | null): LatLng | null => unproject(p, tileCenter, tileZoom);
 
-    const green = toCoord(data.green_center);
+    /**
+     * 2026-08-10 — the KNOWN green is the location; vision supplies detail around it.
+     *
+     * When seeded, the surveyed coordinate wins outright — it cannot drift because a model nudged
+     * the centre onto the apron. And if vision's own centre lands far from the known green, that
+     * read is about some OTHER feature (a neighbouring green, a bunker, a pale patch), so its
+     * outlines and hazards are discarded rather than being stitched onto this hole.
+     */
+    const visionGreen = toCoord(scan.green_center);
+    const green = seeded ?? visionGreen;
     if (!green) return null;
-    const green_front = toCoord(data.green_front);
-    const green_back = toCoord(data.green_back);
-    const tee = toCoord(data.tee);
+    const visionDriftYds = seeded && visionGreen ? haversineMeters(seeded, visionGreen) * 1.09361 : 0;
+    const visionAgrees = !seeded || !visionGreen || visionDriftYds <= 60;
+    if (!visionAgrees) {
+      console.log(`[holeGeometry] hole ${holeNumber}: vision centre ${Math.round(visionDriftYds)}y off the known green — dropping its detail, keeping surveyed coords`);
+    }
+
+    const green_front = visionAgrees ? toCoord(scan.green_front) : null;
+    const green_back = visionAgrees ? toCoord(scan.green_back) : null;
+    const tee = visionAgrees ? toCoord(scan.tee) : null;
 
     // Sanity: reject an "estimated" green implausibly far from the seed (>800m ≈ 875y) — that's a
     // mis-projection or a hallucinated far-field green, not a hole the player is standing on.
-    if (haversineMeters(seed, green) > 800) return null;
+    // Skipped when seeded: the coordinate is surveyed, and the seed may legitimately be the
+    // clubhouse or a distant tee, so distance from it says nothing about correctness.
+    if (!seeded && haversineMeters(seed, green) > 800) return null;
 
     // 2026-08-10 — unproject each traced OUTLINE the same way as the points, dropping any vertex
     // that fails to project. A ring reduced below 3 usable vertices isn't a shape, so it becomes
@@ -244,9 +322,9 @@ export async function deriveHoleGeometry(input: {
       const ring = pts.map(toCoord).filter((c): c is LatLng => c != null);
       return ring.length >= minPts ? ring : null;
     };
-    const greenOutline = toRing(data.green_polygon, 3);
-    const teeOutline = toRing(data.tee_polygon, 3);
-    const fairwayLine = toRing(data.fairway_centerline, 2);
+    const greenOutline = visionAgrees ? toRing(scan.green_polygon, 3) : null;
+    const teeOutline = visionAgrees ? toRing(scan.tee_polygon, 3) : null;
+    const fairwayLine = visionAgrees ? toRing(scan.fairway_centerline, 2) : null;
 
     /**
      * 2026-08-10 — SCORECARD VERIFICATION, the same discipline that fixed the OSM tee↔green
@@ -255,9 +333,21 @@ export async function deriveHoleGeometry(input: {
      * a tee→green distance nothing like the card. Drop that tee and its bearing rather than draw a
      * confidently mis-oriented hole; the green — the part live GPS yardages depend on — is kept.
      */
-    let verifiedTee = tee;
+    /**
+     * 2026-08-10 (Tim — "you get the coordinates, then you zoom on the available tiles, and you
+     * orient it correctly"). ORIENTATION COMES FROM THE KNOWN AXIS, NOT FROM VISION.
+     *
+     * A surveyed OSM tee is authoritative; a vision-read tee is a guess about a small pale
+     * rectangle. When we have the real one, it wins outright — so the hole can never render rotated
+     * because the model picked the wrong pad. Vision's tee is only consulted when nothing else
+     * knows where the tee is, and even then it has to survive the scorecard check below.
+     */
+    let verifiedTee = input.knownTee && Number.isFinite(input.knownTee.lat) && Number.isFinite(input.knownTee.lng)
+      ? input.knownTee
+      : tee;
+    const teeIsKnown = verifiedTee === input.knownTee && verifiedTee != null;
     const cardYards = input.yardage ?? 0;
-    if (verifiedTee && cardYards > 0) {
+    if (verifiedTee && !teeIsKnown && cardYards > 0) {
       const measured = haversineMeters(verifiedTee, green) * 1.09361;
       if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {
         console.log(`[holeGeometry] hole ${holeNumber}: vision tee ${Math.round(measured)}y vs card ${cardYards}y — rejecting tee`);
@@ -291,7 +381,7 @@ export async function deriveHoleGeometry(input: {
       return cross > 0 ? 'left' : 'right';
     };
 
-    const scanned = Array.isArray(data.hazards) ? data.hazards : [];
+    const scanned = visionAgrees && Array.isArray(scan.hazards) ? scan.hazards : [];
     const features = scanned
       .map((h) => {
         const ring = toRing(h.polygon, 3);
@@ -330,8 +420,8 @@ export async function deriveHoleGeometry(input: {
       bunkers,
       water_hazards: waters,
       estimated: true,
-      estimated_confidence: data.confidence,
-      confidence: data.confidence,
+      estimated_confidence: scan.confidence,
+      confidence: scan.confidence,
     };
 
     // Anchor into the derived (estimated) CNS geometry cache — offline + brain-readable — when
