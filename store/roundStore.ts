@@ -2231,6 +2231,31 @@ export const useRoundStore = create<RoundState>()(
         // "scratch that" restores both the prior score and the hole we were on.
         set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now() } });
         set(s => ({ scores: { ...s.scores, [hole]: score } }));
+        /**
+         * 2026-08-10 (Tim — "two pars and one bogey, and it would tell me to forget the last three").
+         *
+         * Mental state is now DERIVED here, at the one seam every score path funnels through, instead
+         * of being accumulated by whichever surface happened to log. It was called from the caddie
+         * tab, the voice handler and the tool dispatch — but NOT the scorecard tab, which writes
+         * scores directly — so bad holes counted up and the pars he tapped never counted down.
+         * Deriving at the funnel makes that impossible, including for surfaces added later.
+         */
+        try {
+          const st = get();
+          const played = Object.keys(st.scores)
+            .map(Number)
+            .filter(h => Number.isFinite(h) && (st.scores[h] ?? 0) > 0)
+            .sort((a, b) => a - b)
+            .slice(-6) // a short tail is all the emotional read should ever consider
+            .map(h => ({
+              strokes: st.scores[h] ?? 0,
+              par: st.courseHoles.find(c => c.hole === h)?.par ?? 0,
+            }))
+            .filter(x => x.par > 0); // unknown par can't be judged — never guess a bad hole into existence
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const relMod = require('./relationshipStore') as typeof import('./relationshipStore');
+          relMod.useRelationshipStore.getState().recomputeMentalState(played);
+        } catch { /* non-fatal — the emotional read must never break scoring */ }
         // 2026-05-22 — Ghost Rounds. Push the just-logged score into the
         // active ghost match so the per-hole delta + running overall
         // refresh immediately. No-op when no ghost is active. Dynamic

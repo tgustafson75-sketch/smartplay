@@ -8677,6 +8677,26 @@ check('LOCK: voice self-heals — stuck-turn watchdog, advisory probe, persisten
   })(),
   'wedged turns clear themselves (no caddie-switch needed), probe never vetoes a real upload, misses escalate in-character and reset on success');
 
+// "Two pars and one bogey, and it would tell me to forget the last three." Mental state was
+// ACCUMULATED by whichever surface logged the score — and the scorecard tab writes scores directly
+// without reporting, so bad holes counted up while pars never counted down. Derive at the funnel.
+check('LOCK: mental state is DERIVED from the scorecard at the one seam, never accumulated per-surface',
+  (() => {
+    const rel = read('store/relationshipStore.ts');
+    const rnd = read('store/roundStore.ts');
+    const derives = /recomputeMentalState: \(recent\) =>/.test(rel) &&
+      /let badRun = 0;/.test(rel) &&
+      // a par or bogey must END the run — that is the whole bug
+      /if \(played\[i\]\.strokes - played\[i\]\.par >= 2\) badRun\+\+;\s*\n\s*else break;/.test(rel);
+    // unknown par must never be judged — guessing invents bad holes
+    const noGuessing = /filter\(x => x\.par > 0\)/.test(rnd);
+    // and it must run inside logScore, the seam EVERY score path funnels through
+    const atFunnel = /recomputeMentalState\(played\)/.test(rnd) &&
+      rnd.indexOf('recomputeMentalState(played)') > rnd.indexOf('logScore: (hole, score) =>');
+    return derives && noGuessing && atFunnel;
+  })(),
+  'trailing-run derivation (a par/bogey ends it), unknown par never judged, computed in logScore so no surface can skip it');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

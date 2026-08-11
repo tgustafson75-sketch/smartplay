@@ -94,6 +94,9 @@ interface RelationshipState {
   ) => string;
 
   updateMentalState: (holescore: number, par: number) => void;
+  /** 2026-08-10 — DERIVE the mental state from the real scorecard tail (oldest→newest). Preferred
+   *  over updateMentalState: it cannot drift when a surface forgets to report. */
+  recomputeMentalState: (recent: { strokes: number; par: number }[]) => void;
   resetSpiral: () => void;
 
   recordBreakthrough: (
@@ -185,6 +188,45 @@ export const useRelationshipStore = create<RelationshipState>()(
             overPar <= 0  ? 'confident' : 'neutral';
           return { consecutiveBadHoles: badHoles, currentMentalState: mental };
         });
+      },
+
+      /**
+       * 2026-08-10 (Tim — "check the canned speech, because I again had like two pars and one bogey,
+       * and it would tell me to forget the last three").
+       *
+       * ROOT CAUSE: mental state was ACCUMULATED by whichever surface happened to log the score.
+       * updateMentalState is called from the caddie tab, the voice handler and the tool dispatch —
+       * but NOT from the scorecard tab, which writes scores directly. So a bad hole logged by voice
+       * incremented the counter, while the pars he tapped on the scorecard never reset it. The
+       * counter could only ever climb, and the caddie eventually told a man playing well to forget
+       * the last three. Textbook one-producer-missed ([[no-half-fixes-enforce-every-surface]]).
+       *
+       * DERIVE, don't accumulate. The scorecard already knows the truth, so read the actual tail of
+       * played holes instead of trusting a running tally that any surface can skip. This cannot
+       * drift, and a surface added tomorrow is covered for free.
+       *
+       * `recent` = the last few PLAYED holes, oldest→newest, each with its real par.
+       */
+      recomputeMentalState: (recent) => {
+        const played = (recent ?? []).filter(h => h.strokes > 0 && h.par > 0);
+        if (played.length === 0) {
+          set({ consecutiveBadHoles: 0, currentMentalState: 'neutral' });
+          return;
+        }
+        // Count the trailing run of genuinely bad holes (double bogey or worse). A par or a bogey
+        // ends the run — which is exactly what should have happened to Tim's counter.
+        let badRun = 0;
+        for (let i = played.length - 1; i >= 0; i--) {
+          if (played[i].strokes - played[i].par >= 2) badRun++;
+          else break;
+        }
+        const last = played[played.length - 1];
+        const lastOver = last.strokes - last.par;
+        const mental: MentalState =
+          badRun >= 3 ? 'spiraling' :
+          badRun >= 2 ? 'tight' :
+          lastOver <= 0 ? 'confident' : 'neutral';
+        set({ consecutiveBadHoles: badRun, currentMentalState: mental });
       },
 
       resetSpiral: () =>
