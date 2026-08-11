@@ -73,7 +73,7 @@ import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
-import { evaluateSwingValidity } from '../../services/swingValidity';
+import { evaluateSwingValidity, reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
 import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
 import { poseReadToPrimaryIssue } from '../../services/swing/poseReadVerdict';
 import {
@@ -269,11 +269,19 @@ function deriveVerdict(
   a: SwingAnalysis | null,
   analyzing: boolean,
   contact?: SmContact,
+  // 2026-08-10 (Tim — "it gives a readout, and the little tile says no swing found, try again").
+  // Our own on-device pose/tempo measurements, so the tile can't contradict the numbers printed
+  // right next to it. Optional: callers without measurements (the reel summariser) behave as before.
+  measured?: MeasuredSwingEvidence | null,
 ): { text: string; tone: SmTone } {
   // Honest state: only say "ANALYZING…" while a read is actually in flight. Once
   // it's done (or errored) with no result, say so instead of spinning forever.
   if (!a) return { text: analyzing ? 'ANALYZING…' : 'NO READ — RECORD AGAIN', tone: analyzing ? 'neutral' : 'warn' };
-  const validity = evaluateSwingValidity(a);
+  // 2026-08-10 — reconcile the vision verdict against our OWN measurements. The gate stays (it
+  // exists because floor footage once produced a skeleton and an "82 mph club speed"), but a
+  // measured turn + tempo outranks a vision false-negative — otherwise the tile says NO SWING
+  // while real numbers are on screen beside it, which is the contradiction Tim keeps hitting.
+  const validity = reconcileSwingValidity(a, measured ?? null);
   if (!validity.valid) return { text: 'NO SWING DETECTED', tone: 'warn' };
 
   // 2026-07-07 (Tim — "I hit a chunk and it says GOOD SWING / clean") — CONTACT
@@ -1266,6 +1274,27 @@ export default function SmartMotion() {
     return traceColor(ballTrace.divergenceDeg, seg?.peakDb, refDb === -Infinity ? undefined : refDb);
   }, [ballTrace, segments, selectedSwing]);
 
+  /**
+   * 2026-08-10 (Tim — "though it gives a readout, the little tile says no swing found. Try again").
+   *
+   * The evidence WE measured on-device, gathered in one place so the verdict tile is judged against
+   * the same numbers the rails are printing. Without this the tile only ever heard the server's
+   * vision verdict, so a vision false-negative sat next to a live shoulder-turn and tempo reading
+   * and flatly contradicted them.
+   */
+  const measuredEvidence: MeasuredSwingEvidence = useMemo(
+    () => ({
+      shoulderTurnDeg: biomech?.shoulderTurnDeg ?? null,
+      hipTurnDeg: biomech?.hipTurnDeg ?? null,
+      shoulderConfidence: biomech?.metric_confidence?.shoulderTurn ?? null,
+      backswingMs: tempo?.backswingMs ?? null,
+      downswingMs: tempo?.downswingMs ?? null,
+      tempoRatio: tempo?.ratio ?? null,
+      poseFrameCount: poseFrames?.length ?? 0,
+    }),
+    [biomech, tempo, poseFrames],
+  );
+
   const metrics: SwingMetricSet = useMemo(
     () =>
       synthesizeSwingMetrics({
@@ -1635,8 +1664,8 @@ export default function SmartMotion() {
     // null. Keying NO READ off `phase === 'analyzing'` (not the old null+no-error
     // test) keeps every in-flight pass — including the re-scan — showing ANALYZING,
     // so the read no longer flashes a fail state before it lands (cage findings).
-    return deriveVerdict(analysis, phase === 'analyzing', swingContact);
-  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead]);
+    return deriveVerdict(analysis, phase === 'analyzing', swingContact, measuredEvidence);
+  }, [isPutt, puttAnalysis, analysis, analysisError, phase, swingContact, poseRead, measuredEvidence]);
   const faultHeadline = useMemo(() => {
     if (!analysis) return null;
     const f = analysis.primary_fault;

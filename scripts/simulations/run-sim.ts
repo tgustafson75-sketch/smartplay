@@ -6507,7 +6507,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // transient mid-pipeline state (bounded acoustic pass → whole-clip video re-scan)
   // before the real read landed. Now keyed off phase so it's strictly terminal.
   check('SmartMotion: NO-READ is terminal (phase-gated, not a mid-pipeline flash)',
-    /return deriveVerdict\(analysis, phase === 'analyzing', swingContact\)/.test(smSrc2) &&
+    // 2026-08-10 — the call now also passes measuredEvidence (4th arg) so the tile can't contradict
+    // the on-device numbers. This guard is about the PHASE GATING, so it no longer pins the exact
+    // arity — only that the terminal-vs-in-flight distinction is still driven by `phase`.
+    /return deriveVerdict\(analysis, phase === 'analyzing', swingContact/.test(smSrc2) &&
       /phase === 'review' && analysisError \? 'NO READ' : 'READING…'/.test(smSrc2),
     'the verdict shows ANALYZING for every in-flight pass (including the video re-scan) and only says NO READ once a read has terminally finished in review — no more fail-state flash before the read lands');
 
@@ -8452,6 +8455,28 @@ check('LOCK: score utterances read the WHOLE context — named score beats stray
     return pure && stripsPutts && precedence && byPosition && wired && puttsRead;
   })(),
   'pure parser, putt clauses stripped, named score outranks numbers, earliest-by-position, putts captured from the same utterance');
+
+// "Though it gives a readout, the little tile says no swing found." Two systems judged the same
+// clip and only the SERVER's vision verdict drove the tile, so a false negative sat beside live
+// on-device metrics. Measured turn+tempo must be able to override — while the floor-footage guard
+// (which exists because carpet once produced a skeleton and an 82mph club speed) stays intact.
+check('LOCK: swing verdict reconciles vision against on-device measurements (both directions)',
+  (() => {
+    const v = read('services/swingValidity.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const reconciler = /export function reconcileSwingValidity/.test(v) && /export function hasMeasuredSwing/.test(v);
+    // override requires rotation AND timing — either alone is reachable by noise
+    const strict = /MIN_SHOULDER_TURN_DEG/.test(v) && /MIN_POSE_FRAMES/.test(v) &&
+      /return splitOk \|\| ratioOk;/.test(v) && /if \(!rotated\) return false;/.test(v);
+    // a good vision read is never downgraded by this path
+    const neverDowngrades = /if \(base\.valid\) return base;/.test(v);
+    // and the tile must actually consume the measurements
+    const wired = /reconcileSwingValidity\(a, measured \?\? null\)/.test(sm) &&
+      /const measuredEvidence: MeasuredSwingEvidence = useMemo/.test(sm) &&
+      /deriveVerdict\(analysis, phase === 'analyzing', swingContact, measuredEvidence\)/.test(sm);
+    return reconciler && strict && neverDowngrades && wired;
+  })(),
+  'measured turn+tempo overrides a vision false-negative; noise/floor footage still cannot; good reads never downgraded');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
