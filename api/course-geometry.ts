@@ -1170,6 +1170,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    /**
+     * 2026-08-10 (Tim — "this is probably the FIFTH time we've tried to build the course engine.
+     * This needs to work"). THE FIX THAT ENDS THE PATTERN.
+     *
+     * Every previous attempt made the live Overpass dependency more reliable without REMOVING it,
+     * so the engine kept failing at some rate forever. Here we make a course's geometry permanent:
+     * a substantially-mapped build is written back to our own database, and from then on this
+     * course is served from there — for every user, not just whoever triggered the good build. A
+     * course has to build successfully exactly ONCE, ever.
+     *
+     * Deliberately fire-and-forget: persistence must never slow down or fail the response the
+     * player is waiting on. And gated on being substantially mapped, so a partial build can never
+     * become the permanent record.
+     */
+    const mappedNow = holesWithPolygons.filter(h => h.tee && h.green).length;
+    if (mappedNow >= CLOUD_COMPLETE_MIN) {
+      void (async () => {
+        try {
+          const db = getSmartPlaySupabase();
+          if (!db) return;
+          const { recordServerBuild } = await import('./_courseCloud');
+          await recordServerBuild(db, cloudKey ?? courseId, holesWithPolygons.map(h => ({
+            hole: h.hole_number,
+            par: h.par,
+            yardage: h.yardage,
+            tee_lat: h.tee?.lat ?? null, tee_lng: h.tee?.lng ?? null,
+            green_lat: h.green?.lat ?? null, green_lng: h.green?.lng ?? null,
+            green_front_lat: h.green_front?.lat ?? null, green_front_lng: h.green_front?.lng ?? null,
+            green_back_lat: h.green_back?.lat ?? null, green_back_lng: h.green_back?.lng ?? null,
+          })));
+        } catch (e) {
+          console.warn('[course-geometry] server build persist failed (non-fatal):', e instanceof Error ? e.message : e);
+        }
+      })();
+    } else {
+      /**
+       * The build came back thin — almost always a throttled Overpass, measured at ~1-in-6 in
+       * production even across three mirrors. Rather than hand the player an empty course, serve
+       * the stored copy from a previous successful build. This is the whole point of persisting:
+       * a transient upstream failure stops being visible at all.
+       */
+      try {
+        const db = getSmartPlaySupabase();
+        if (db) {
+          const stored = await readSharedGeometry(db, cloudKey ?? courseId);
+          const storedMapped = stored?.filter(h => h.tee && h.green).length ?? 0;
+          if (stored && storedMapped > mappedNow) {
+            console.log(`[course-geometry] live build was thin (${mappedNow} mapped) — serving the STORED build (${storedMapped} mapped) for ${courseId}`);
+            return res.status(200).json({
+              course_id: String(course.id ?? courseId),
+              course_name: String(course.club_name ?? course.course_name ?? course.name ?? 'Unknown'),
+              fetched_at: Date.now(),
+              holes: stored,
+              source: 'stored_build',
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('[course-geometry] stored-build fallback failed:', e instanceof Error ? e.message : e);
+      }
+    }
+
     return res.status(200).json({
       course_id: String(course.id ?? courseId),
       course_name: String(course.club_name ?? course.course_name ?? course.name ?? 'Unknown'),

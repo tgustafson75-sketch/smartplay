@@ -117,6 +117,59 @@ export async function recordContribution(
   return written;
 }
 
+/**
+ * 2026-08-10 (Tim — "this is probably the FIFTH time we've tried to build the course engine. This
+ * needs to work. We have to get this right").
+ *
+ * THE ARCHITECTURAL PROBLEM behind all five attempts: every request rebuilt a course's geometry
+ * live, from free community Overpass mirrors that throttle by design. Each previous fix made that
+ * dependency *more reliable* — a retry, three mirrors, an empty-means-throttled rule — but none
+ * REMOVED it, so the engine kept failing at some rate, forever, for reasons outside our control.
+ *
+ * This removes it. When the server successfully builds a substantially-mapped course, it writes the
+ * result back here as a SERVER-AUTHORED record. From then on, that course is served from OUR
+ * database — for every user, not just the one who happened to trigger the good build. A course has
+ * to build successfully exactly once, ever, and then it is permanent.
+ *
+ * Distinct from recordContribution() in one critical way: this is trusted, first-party data derived
+ * from golfcourseapi + OSM on our own server, so it carries source='osm' (rank 3) rather than being
+ * forced to 'ai_vision' (rank 1). That is safe precisely BECAUSE it can't be reached from the public
+ * share endpoint — the client can never call this path, so the anti-spoofing rule there is intact.
+ * A single fixed contributor hash keeps re-builds idempotent instead of piling up duplicate rows.
+ */
+const SERVER_CONTRIBUTOR = 'server:osm-build';
+
+export async function recordServerBuild(
+  db: Db,
+  courseId: string,
+  holes: SharedHoleInput[],
+): Promise<number> {
+  let written = 0;
+  for (const h of holes) {
+    const hole = Math.trunc(Number(h.hole));
+    if (!Number.isFinite(hole) || hole < 1 || hole > 36) continue;
+    if (!hasUsableCoords(h)) continue;
+    const row = {
+      course_id: courseId,
+      hole,
+      contributor_hash: SERVER_CONTRIBUTOR,
+      tee_lat: num(h.tee_lat), tee_lng: num(h.tee_lng),
+      green_lat: num(h.green_lat), green_lng: num(h.green_lng),
+      green_front_lat: num(h.green_front_lat), green_front_lng: num(h.green_front_lng),
+      green_back_lat: num(h.green_back_lat), green_back_lng: num(h.green_back_lng),
+      source: 'osm',
+      // High but not absolute: a bundled/curated course and an on-foot walk still outrank this.
+      confidence: 0.85,
+    };
+    const { error } = await db.from(REPORTS).upsert(row, { onConflict: 'course_id,hole,contributor_hash' });
+    if (error) { console.warn('[courseCloud] server build upsert failed', courseId, hole, error.message); continue; }
+    written++;
+    await recomputeCanonical(db, courseId, hole, { par: num(h.par), yardage: num(h.yardage) });
+  }
+  if (written > 0) console.log(`[courseCloud] SERVER BUILD persisted ${written} holes for ${courseId} — this course no longer depends on Overpass`);
+  return written;
+}
+
 /** Recompute the merged canonical row for one hole from all its reports. */
 async function recomputeCanonical(
   db: Db,

@@ -8525,6 +8525,27 @@ check('LOCK: the geometry cache never accepts a downgrade (empty read cannot era
   })(),
   'downgrade-proof disk + memory caches committed through one path; image-asset mapper keeps the module testable');
 
+// "This is probably the FIFTH time we've tried to build the course engine." Every prior attempt made
+// the LIVE Overpass dependency more reliable without REMOVING it, so the engine kept failing at some
+// rate forever. A good build must become PERMANENT — persisted server-side and served to everyone.
+check('LOCK: a successful course build is persisted server-side and survives a later Overpass failure',
+  (() => {
+    const g = read('api/course-geometry.ts');
+    const c = read('api/_courseCloud.ts');
+    // trusted first-party write, distinct from the public share endpoint's forced ai_vision
+    const writer = /export async function recordServerBuild/.test(c) &&
+      /source: 'osm',/.test(c) && /SERVER_CONTRIBUTOR/.test(c);
+    // the public path must STILL force ai_vision — this must not become a spoofing hole
+    const shareStillLocked = /const source = 'ai_vision';/.test(c);
+    // write-back only when substantially mapped, and never blocking the response
+    const persists = /recordServerBuild\(db, cloudKey \?\? courseId/.test(g) &&
+      /mappedNow >= CLOUD_COMPLETE_MIN/.test(g) && /void \(async \(\) => \{/.test(g);
+    // and a thin live build serves the STORED one instead of an empty course
+    const fallsBack = /storedMapped > mappedNow/.test(g) && /source: 'stored_build'/.test(g);
+    return writer && shareStillLocked && persists && fallsBack;
+  })(),
+  'server builds persist as trusted osm-rank rows (public share still forced to ai_vision), write-back is non-blocking + gated, thin builds serve the stored copy');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
