@@ -3696,7 +3696,18 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
   }, [initialNote, editing]);
 
   const onSave = () => {
-    setSessionCoachNote(sessionId, draft);
+    // 2026-08-10 (Tim — a coach note that "didn't ingest anywhere"). The setter now REPORTS whether
+    // it landed. Staying in edit mode on a miss keeps the text on screen instead of closing the card
+    // over a note that was silently dropped — the user's words are never thrown away without saying so.
+    const landed = setSessionCoachNote(sessionId, draft);
+    if (!landed) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore
+          .getState().show("Couldn't attach that note to this swing — it's still here, try again.");
+      } catch { /* toast is best-effort */ }
+      return; // stay in edit mode; the draft survives
+    }
     setEditing(false);
   };
 

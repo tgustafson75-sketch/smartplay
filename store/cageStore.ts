@@ -623,7 +623,10 @@ interface CageState {
    *  read ("hips stalled at impact") and saves. Independent of the
    *  AI analysis path — both display side-by-side on the swing
    *  detail screen. Pass empty string or null to clear. */
-  setSessionCoachNote: (sessionId: string, note: string | null) => void;
+  /** 2026-08-10 — returns FALSE when the session was found in neither activeSession nor
+   *  sessionHistory, so a caller can hold the note instead of silently losing it (Tim's note that
+   *  "didn't ingest anywhere" was a no-op map that looked exactly like a successful write). */
+  setSessionCoachNote: (sessionId: string, note: string | null) => boolean;
   /** 2026-06-13 — toggle a swing as a saved highlight (star) for its round's scorecard. */
   toggleSessionStarred: (sessionId: string) => void;
   /** Feels engine — store the player's stated feel on the session. */
@@ -1419,15 +1422,38 @@ export const useCageStore = create<CageState>()(
           };
         }),
 
-      setSessionCoachNote: (sessionId, note) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : {
-              ...session,
-              coach_note: note && note.trim().length > 0 ? note.trim() : null,
-            }
-          ),
-        })),
+      /**
+       * 2026-08-10 (Tim — "I went to put a coach's note. I put 'this swing felt good, sliced to the
+       * right, need to finish all the way around' — but that didn't ingest anywhere").
+       *
+       * ROOT CAUSE: this only ever mapped over sessionHistory. A session being reviewed right after
+       * capture is the ACTIVE session and isn't in history yet, so `.map` matched nothing and the
+       * note was dropped — silently, because a no-op map looks exactly like a successful write.
+       * Every sibling setter (feel narration, player id) already searches BOTH; this one didn't.
+       *
+       * Now it writes to activeSession as well, and reports whether it landed so the caller can
+       * stop pretending a lost note was saved.
+       */
+      setSessionCoachNote: (sessionId, note) => {
+        const clean = note && note.trim().length > 0 ? note.trim() : null;
+        let landed = false;
+        set(s => {
+          const inHistory = s.sessionHistory.some(x => x.id === sessionId);
+          const isActive = s.activeSession?.id === sessionId;
+          landed = inHistory || isActive;
+          return {
+            sessionHistory: inHistory
+              ? s.sessionHistory.map(session =>
+                  session.id !== sessionId ? session : { ...session, coach_note: clean })
+              : s.sessionHistory,
+            activeSession: isActive && s.activeSession
+              ? { ...s.activeSession, coach_note: clean }
+              : s.activeSession,
+          };
+        });
+        if (!landed) console.warn('[cageStore] coach note had nowhere to land — unknown session', sessionId);
+        return landed;
+      },
 
       toggleSessionStarred: (sessionId) =>
         set(s => ({

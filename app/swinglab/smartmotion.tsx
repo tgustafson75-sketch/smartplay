@@ -968,6 +968,9 @@ export default function SmartMotion() {
   const [annotateOpen, setAnnotateOpen] = useState(false);
   const [showLayman, setShowLayman] = useState(false);
   const [coachNote, setCoachNote] = useState('');
+  /** 2026-08-10 — a coach note typed BEFORE the session is ingested. Flushed on ingest so it can
+   *  never be lost to a race between the user typing and the session being created. */
+  const pendingCoachNoteRef = useRef<string | null>(null);
   // 2026-06-12 (Tim) — voice dictation for the page-2 note/feel inputs so the player
   // can SPEAK how it felt (ingested per-swing). One-shot press-to-talk using the same
   // captureUtterance(/api/transcribe) the caddie uses; safe here because review has the
@@ -1887,6 +1890,14 @@ export default function SmartMotion() {
               captureKind: isDrill ? 'drill' : 'smart_motion',
             });
         ingestedSessionIdRef.current = sessionId;
+        // 2026-08-10 — flush a note the user typed before this session existed.
+        if (pendingCoachNoteRef.current != null) {
+          try {
+            useCageStore.getState().setSessionCoachNote(sessionId, pendingCoachNoteRef.current);
+            console.log('[smartMotion] attached held coach note to session', sessionId);
+          } catch { /* non-fatal */ }
+          pendingCoachNoteRef.current = null;
+        }
         setSessionId(sessionId);
         // Camera-first Smart Tempo return — fire here where sessionId is assigned (the
         // stopRecording-side block raced ingestedSessionIdRef before this await).
@@ -2471,11 +2482,25 @@ export default function SmartMotion() {
     router.push((issue ? `/drills/${issue}` : '/drills') as never);
   }, [analysis, router]);
 
+  /**
+   * 2026-08-10 (Tim — "I went to put a coach's note… but that didn't ingest anywhere").
+   *
+   * This had NO else. Right after a capture the session often isn't ingested yet, so `sid` was null
+   * and the note evaporated with no error and no trace — the user typed a real observation about
+   * their swing and the app quietly threw it away. `pendingCoachNoteRef` holds it instead, and the
+   * ingest path flushes it the moment a session id exists.
+   */
   const saveCoachNote = useCallback(() => {
     const sid = ingestedSessionIdRef.current;
-    if (sid) {
-      try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
+    if (!sid) {
+      pendingCoachNoteRef.current = coachNote;
+      console.log('[smartMotion] coach note held — no session yet; will attach on ingest');
+      return;
     }
+    try {
+      const landed = useCageStore.getState().setSessionCoachNote(sid, coachNote);
+      if (!landed) pendingCoachNoteRef.current = coachNote;
+    } catch { pendingCoachNoteRef.current = coachNote; }
   }, [coachNote]);
 
   // Feels engine — store the player's feel + ask the caddie to reconcile it

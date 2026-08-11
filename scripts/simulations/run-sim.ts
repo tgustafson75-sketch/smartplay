@@ -8697,6 +8697,31 @@ check('LOCK: mental state is DERIVED from the scorecard at the one seam, never a
   })(),
   'trailing-run derivation (a par/bogey ends it), unknown par never judged, computed in logScore so no surface can skip it');
 
+// "I went to put a coach's note… but that didn't ingest anywhere." The setter mapped ONLY over
+// sessionHistory, so a note typed on a just-captured (still ACTIVE) session matched nothing and was
+// dropped — a no-op map looks exactly like a successful write. Tim: "audited a hundred times for
+// these specific things and they continue to be there." Presence-greps can't catch a write that
+// lands nowhere; this guard checks the setter REPORTS, and that every child surface handles it.
+check('LOCK: a coach note can never be silently dropped — setter reports, every surface handles it',
+  (() => {
+    const store = read('store/cageStore.ts');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // writes to BOTH activeSession and history, and returns whether it landed
+    const reports = /setSessionCoachNote: \(sessionId: string, note: string \| null\) => boolean;/.test(store) &&
+      /let landed = false;/.test(store) && /return landed;/.test(store) &&
+      /activeSession: isActive && s\.activeSession/.test(store);
+    // CHILD 1 — swing detail: a miss keeps the draft on screen instead of closing over lost text
+    const child1 = /const landed = setSessionCoachNote\(sessionId, draft\);/.test(detail) &&
+      /if \(!landed\) \{/.test(detail) && /return; \/\/ stay in edit mode/.test(detail);
+    // CHILD 2 — SmartMotion: a note typed before ingest is HELD and flushed, never discarded
+    const child2 = /pendingCoachNoteRef/.test(sm) &&
+      /pendingCoachNoteRef\.current = coachNote;/.test(sm) &&
+      /attached held coach note to session/.test(sm);
+    return reports && child1 && child2;
+  })(),
+  'setter writes activeSession + history and returns landed; swing-detail keeps the draft on failure; SmartMotion holds a pre-ingest note and flushes it');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
