@@ -1511,9 +1511,15 @@ check('Caddie TARGET no longer a hardcoded CENTER',
   !/const targetDirection = 'CENTER'/.test(read('app/(tabs)/caddie.tsx')),
   'frozen CENTER placeholder removed (honest — until a real aim engine)');
 
-check('SmartMotion camera audio muted (no iOS dual-recorder conflict)',
-  /mode="video"\s+mute/.test(read('app/swinglab/smartmotion.tsx')),
-  'camera mute prevents audio-session collision with the metering recorder');
+// 2026-08-11 (Tim — "you should be able to also HEAR that acoustic shot"). The mute is now scoped to
+// iOS, where the audio session really is a singleton and a second recorder kills strike metering.
+// Android has no such conflict, so it records the strike and playback has sound. The invariant this
+// guard protects is unchanged — iOS must never record camera audio alongside the metering recorder.
+check('SmartMotion camera audio muted ON iOS (no iOS dual-recorder conflict); Android records the strike',
+  /mute=\{Platform\.OS === 'ios'\}/.test(read('app/swinglab/smartmotion.tsx')) &&
+    // and the review player must not re-mute what we just captured
+    /isMuted=\{false\}/.test(read('app/swinglab/smartmotion.tsx')),
+  'iOS keeps the mute (singleton audio session); Android captures audio and the review loop plays it');
 
 check('practiceStore averages carry per-club, not by total swing count',
   /driverCarryCount/.test(read('store/practiceStore.ts')) &&
@@ -8761,6 +8767,28 @@ check('LOCK: driving/utility irons parse by name and by loft, into the right clu
     return named && byLoft && families && noDeadEnd;
   })(),
   'driving/utility iron by name and loft, hybrid/wood lofts stay in their own families, no dead end without a loft');
+
+// "I still pull up Connecticut National and get green screens" + "instead of yardage you get, like,
+// f w t z f". TWO causes, both proven: the client aborted the geometry fetch at 12s while the same
+// production request measured 3-20s (intermittent by construction — his "little glimpses"), and the
+// raw golfcourseapi id was rendered where the course NAME belongs.
+check('LOCK: geometry fetch outlives a slow server, and a raw course id is never shown as a name',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    const sv = read('app/smartvision.tsx');
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    // both fetch paths must outlast the measured worst case; 12s aborted a live request
+    const timeouts = (g.match(/AbortSignal\.timeout\(30_000\)/g) ?? []).length >= 2 &&
+      !/AbortSignal\.timeout\(12_000\)/.test(g);
+    // a machine id is never a name — and pipeline labels aren't either
+    const svName = /const derivedCourseLabel = \(\(\) => \{/.test(sv) &&
+      /return ''; \/\/ never the raw id/.test(sv) &&
+      /name !== 'Course Cloud'/.test(sv);
+    const prevName = /getCachedGeometry\(previewCourseId_resolved\)/.test(prev) &&
+      !/if \(previewCourseId_resolved\) return previewCourseId_resolved;/.test(prev);
+    return timeouts && svName && prevName;
+  })(),
+  '30s geometry timeouts on both paths; course name resolved from the cache, raw id never rendered');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

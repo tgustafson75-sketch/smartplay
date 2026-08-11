@@ -77,7 +77,7 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 // haversine yardages instead of the pixel-axis interpolation fallback.
 import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
-import { fetchCourseGeometry, getHoleGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
@@ -413,10 +413,39 @@ export default function SmartVisionScreen() {
   // homeCourseIdFromProfile still computed for any read-only consumer
   // below that wants it; it's no longer in the cascade.
   void homeCourseIdFromProfile;
-  const derivedCourseLabel =
-    effectiveCourseId && effectiveCourseId.startsWith('local:')
-      ? effectiveCourseId.slice('local:'.length).replace(/-/g, ' ')
-      : effectiveCourseId ?? '';
+  /**
+   * 2026-08-11 (Tim — "there's some identifying information within the screen that I don't usually
+   * see. Instead of yardage, you get, like, f w t z f").
+   *
+   * That was the raw golfcourseapi COURSE ID — `f5qh3wf4` — rendered as the course name, in the
+   * canvas title AND the hole badge. The old fallback was literally `effectiveCourseId ?? ''`, so
+   * any non-`local:` course with no resolved name showed its database key to the user.
+   *
+   * A machine id is never a name. Resolve the real one from the geometry cache (the server sends
+   * `course_name` with every build — "Connecticut National Golf Club"), then the custom-course
+   * store, and otherwise fall back to EMPTY so downstream renders its honest empty state rather
+   * than a key nobody can read.
+   */
+  const derivedCourseLabel = (() => {
+    const id = effectiveCourseId;
+    if (!id) return '';
+    if (id.startsWith('local:')) return id.slice('local:'.length).replace(/-/g, ' ');
+    try {
+      const cached = getCachedGeometry(id);
+      const name = (cached?.course_name ?? '').trim();
+      // 'Course Cloud' / 'OSM-derived' are pipeline labels, not names a player should ever see.
+      if (name && name !== 'Course Cloud' && name !== 'OSM-derived' && name !== 'Unknown') return name;
+    } catch { /* fall through */ }
+    if (id.startsWith('custom:')) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const cc = require('../store/customCourseStore') as typeof import('../store/customCourseStore');
+        const n = cc.useCustomCourseStore.getState().courses[id]?.name;
+        if (n) return n;
+      } catch { /* fall through */ }
+    }
+    return ''; // never the raw id
+  })();
   const courseId = effectiveCourseId;
   // 2026-05-17 — Resolve courseName from courseId FIRST, not from the
   // user's homeCourse. The previous cascade fell through to

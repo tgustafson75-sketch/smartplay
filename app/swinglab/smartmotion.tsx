@@ -37,8 +37,7 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
-  type ViewStyle,
-} from 'react-native';
+  type ViewStyle, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -4002,10 +4001,18 @@ export default function SmartMotion() {
             // so the review loop doesn't re-render the whole screen 25x/s for nothing
             // (restores the perf property the old showSkeleton setState gate provided).
             progressUpdateIntervalMillis={showSkeleton ? 40 : 250}
-            // 2026-06-09 — Mute the review loop. The captured clip's audio
-            // (e.g. a TV in the room) replaying on loop reads as "audio
-            // feedback"; it adds nothing to silent skeleton/speed analysis.
-            isMuted
+            /**
+             * 2026-08-11 (Tim — "I still don't understand why we can't get any sound on the
+             * playback. I know that we're picking up acoustics, but you should be able to also HEAR
+             * that acoustic shot").
+             *
+             * Playback was muted on the theory that looping room audio reads as feedback. That
+             * reasoning is weak against the thing he actually wants: the STRIKE. The sound of
+             * contact is diagnostic — a thin strike, a fat one and a flush one are audibly
+             * different, and a caddie who shows you your swing in silence is showing you half of it.
+             * Unmuted; the clip now carries audio on the platforms that can record it (below).
+             */
+            isMuted={false}
             useNativeControls={false}
             // 2026-08-07 — stable (useCallback) handlers so a 25×/s re-render can't re-subscribe the native
             // Video into the fatal "Maximum update depth" loop (root cause; see the defs above hudPage).
@@ -4015,12 +4022,22 @@ export default function SmartMotion() {
             onError={onReviewVideoError}
           />
         ) : (
-          // 2026-06-09 — `mute` disables the camera's own audio track. We run a
-          // SEPARATE Audio.Recording for acoustic strike metering; on iOS the
-          // audio session is a singleton, so two concurrent recorders can
-          // collide and silently kill metering (→ no strikes/segments/tempo).
-          // We never use the clip's audio (playback is muted), so muting the
-          // camera is lossless and removes the contention.
+          /**
+           * 2026-08-11 (Tim — "you should be able to also hear that acoustic shot").
+           *
+           * `mute` disables the camera's own audio track. It was set unconditionally because we run
+           * a SEPARATE Audio.Recording for acoustic strike metering, and on iOS the audio session is
+           * a SINGLETON — two concurrent recorders collide and silently kill metering (no strikes,
+           * no segments, no tempo). That constraint is REAL, and it is iOS-specific.
+           *
+           * Android has no such singleton: the camera can capture its own audio track while the
+           * metering recorder runs. So the mute is now scoped to the platform that actually needs
+           * it. Android (Tim's device) gets sound on playback; iOS keeps acoustics intact and stays
+           * silent until that path is redesigned rather than gambled with mid-beta.
+           *
+           * Verified against his clip before changing anything: ffprobe showed ONE stream, h264
+           * video, no audio track at all — so this was the cause, not a playback setting.
+           */
           // SmartTrace migration: behind USE_VISION_CAMERA (default OFF, native
           // build only) the swing path records via react-native-vision-camera at a
           // high frame rate for a dense ball-departure launch window. The vision
@@ -4047,7 +4064,9 @@ export default function SmartMotion() {
               facing={facing}
               mirror={false}
               mode="video"
-              mute
+              // iOS keeps the mute (singleton audio session vs. the acoustic recorder); Android records
+              // the strike so playback has sound. See the block comment above.
+              mute={Platform.OS === 'ios'}
               onCameraReady={() => {
                 // Auto-start a voice-requested recording once the camera (re)mounts
                 // coming out of review — completes the hands-free loop.

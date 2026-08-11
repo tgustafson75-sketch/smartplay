@@ -833,7 +833,21 @@ async function fetchCourseGeometryInner(
   }
   const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+    /**
+     * 2026-08-11 (Tim — "I still pull up Connecticut National and get green screens").
+     *
+     * THE GREEN SCREEN. This timeout was 12 SECONDS. Measured against production, the same request
+     * returns anywhere from 3s to 20s — it fans out to golfcourseapi plus several Overpass polygon
+     * queries, and Overpass latency is wildly variable. So the client was aborting a request that
+     * was still on its way, falling back to `persisted ?? bundled ?? null`, and for an API course
+     * with nothing cached that is NULL: no geometry, schematic markers, "waiting on your location",
+     * green screen. Intermittent by construction — which is exactly the "little glimpses" he
+     * described, where GPS and yardages worked now and then and mostly didn't.
+     *
+     * 30s is past the slowest response measured, and the request is still bounded. Cheap when the
+     * server is fast (it returns as soon as it returns); decisive when it isn't.
+     */
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] fetch failed:', res.status);
       return persisted ?? buildBundledGeometry(courseId) ?? null;
@@ -911,7 +925,9 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
     if (upstreamId === '__osm_only__') params.set('osmOnly', '1');
     if (centroid) params.set('withPolygons', '1');
     const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
+    // Same 12s→30s reasoning as the primary fetch: a background refresh that always aborts is a
+    // refresh that never happens, so a stale entry could never heal itself either.
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] background refresh failed:', res.status, courseId);
       return;

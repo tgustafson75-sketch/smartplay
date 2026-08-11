@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { getHoleGeometry, fetchCourseGeometry, type HoleGeometry } from '../../services/courseGeometryService';
+import { getHoleGeometry, fetchCourseGeometry, getCachedGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { peekFix, getLastFix, resolveGreenCoords } from '../../services/smartFinderService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
@@ -129,12 +129,28 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       const real = COURSES.find(c => c.id === slug)?.name;
       return real ?? slug.replace(/-/g, ' ');
     }
-    if (previewCourseId_resolved) return previewCourseId_resolved;
+    // 2026-08-11 — never show the raw course id (Tim saw "f5qh3wf4" where a name belongs). Same
+    // resolution as SmartVision: the geometry cache carries the real course_name.
+    if (previewCourseId_resolved) {
+      try {
+        const cached = getCachedGeometry(previewCourseId_resolved);
+        const name = (cached?.course_name ?? '').trim();
+        if (name && name !== 'Course Cloud' && name !== 'OSM-derived' && name !== 'Unknown') return name;
+      } catch { /* fall through */ }
+    }
     return null;
   })();
 
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
-  const [, setTick] = useState(0);
+  /**
+   * 2026-08-11 — the tick VALUE is now destructured, not discarded. previewTileUrl reads the geometry
+   * CACHE synchronously; the pre-round warm fetch fills that cache and then bumps this tick. Without
+   * the value in the memo's deps the memo never recomputed, so it returned the null it computed on
+   * first render — before the fetch had landed — and the preview stayed on the placeholder forever.
+   * That is why Connecticut National still showed a green screen after last night's fix: the fix
+   * fetched the data correctly and then never looked at it again.
+   */
+  const [tick, setTick] = useState(0);
   // 2026-06-13 (Tim) — course-data bootstrap: prefer a real captured shot of THIS hole
   // (snapped in SmartFinder) over the generic Mapbox tile. Self-built course imagery.
   const captured = useCourseCaptureStore(s => s.bestForward(activeCourseId, currentHole));
@@ -268,7 +284,11 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     } catch {
       return null;
     }
-  }, [previewCourseId_resolved, W, H]);
+    // `tick` is load-bearing even though eslint can't see it: previewTileUrl reads a MUTABLE cache
+    // (getHoleGeometry) rather than React state, so the tick is the only signal that the cache has
+    // changed. Removing it re-breaks the green screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewCourseId_resolved, W, H, tick]);
 
   // Player dot refresh tick
   useEffect(() => {
