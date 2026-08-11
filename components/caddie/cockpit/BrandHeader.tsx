@@ -47,7 +47,8 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
   // border; thinking/speaking get a tinted border so the tap clearly
   // "did something" even before audio init completes.
   const ringColor =
-    voiceState === 'listening' ? colors.accent
+    voiceState === 'arming' ? colors.accent
+    : voiceState === 'listening' ? colors.accent
     : voiceState === 'thinking' ? '#F5A623'
     : voiceState === 'speaking' ? colors.accent
     : colors.accent;
@@ -98,7 +99,10 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
             <Text style={{ color: colors.text_primary }}> CADDIE</Text>
           </Text>
           <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {voiceState === 'listening' ? 'LISTENING…'
+            {/* 'arming' gets its own line: the tap registered, but we are NOT recording yet, so
+                claiming LISTENING… here is what made the user speak into a dead mic. */}
+            {voiceState === 'arming' ? 'ONE SEC…'
+              : voiceState === 'listening' ? 'LISTENING…'
               : voiceState === 'thinking' ? 'THINKING…'
               : (voiceState === 'speaking' || voiceState === 'proactive') ? 'SPEAKING…'
               : 'TAP TO TALK · REAL-TIME CADDIE'}

@@ -327,8 +327,24 @@ function personaDisplayName(persona: Persona | undefined | null): string {
 
 // ─── TYPES ────────────────────────────────
 
+/**
+ * 2026-08-11 (Tim) — "when I tap to talk, the first message gets cut off, and then she says she
+ * can't hear me."
+ *
+ * 'arming' is the gap between the tap and the microphone actually capturing audio. The app used to
+ * flip straight to 'listening' on tap — but the recorder isn't live yet at that moment: the VAD hook
+ * has to release the mic (80ms), the iOS/Android audio session has to be reconfigured through a
+ * serial queue (behind any in-flight speech-mode call), and Recording.createAsync has to return.
+ * That's a few hundred milliseconds of "LISTENING…" glowing at a microphone that is not recording,
+ * so the opening words of every tapped turn were spoken into a dead mic — and a transcript missing
+ * its first words is exactly what produces "I didn't catch that".
+ *
+ * The state exists so the UI can stay honest: we only claim to be listening once we are. VAD still
+ * releases the mic immediately, because its gate is voiceState === 'idle' and 'arming' is not idle.
+ */
 export type VoiceState =
   | 'idle'
+  | 'arming'
   | 'listening'
   | 'thinking'
   | 'speaking'
@@ -836,6 +852,7 @@ export default function CaddieAvatar({
     (voiceState === 'thinking' || isThinking) ? STATE_ICONS.thinking :
     voiceState === 'speaking'              ? STATE_ICONS.speaking : null;
   const stateLabel =
+    voiceState === 'arming'                ? 'Getting ready' :
     voiceState === 'listening'             ? 'Listening' :
     (voiceState === 'thinking' || isThinking) ? 'Thinking'  :
     voiceState === 'speaking'              ? 'Speaking'  :
@@ -884,7 +901,7 @@ export default function CaddieAvatar({
         // VoiceOver / TalkBack user knows the caddie is mid-response
         // without having to wait for audio cues.
         accessibilityState={{
-          busy: voiceState === 'listening' || voiceState === 'thinking' || voiceState === 'speaking',
+          busy: voiceState === 'arming' || voiceState === 'listening' || voiceState === 'thinking' || voiceState === 'speaking',
         }}
       >
         {/* Phase AT — Kevin recompose. Source portraits have the subject

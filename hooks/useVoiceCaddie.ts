@@ -6,6 +6,7 @@ import { prewarmVoice } from '../services/voiceWarmup';
 import { getActiveCaddie } from '../services/caddieResolver';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
+import { endsAsQuestion } from '../services/voice/endsAsQuestion';
 import {
   configureAudioForRecording,
   speak,
@@ -132,28 +133,10 @@ const brainTimeoutMs = (): number => (isConnectionWarmed() ? BRAIN_TIMEOUT_MS : 
 const MIC_SILENCE_DB_THRESHOLD = -40;
 const MIC_SPEECH_DETECT_DB = -30;
 
-// 2026-06-23 (Tim — "Serena asks 'how are you feeling?' but isn't listening
-// anymore, I have to re-tap the mic. Went through this multiple times").
-// ROOT CAUSE: the four re-arm sites all used `text.trim().endsWith('?')`, which
-// is FALSE the moment the caddie's question has ANY trailing text —
-// "How are you feeling today? Take your time." / "...today?\"" / "...today? 🙂".
-// That left the user stranded after a perfectly valid question. This robust
-// check counts it as awaiting an answer if, after stripping trailing
-// quotes/emoji/space, the text ends with '?', OR a '?' sits near the end with
-// only a short closer after it (a second short sentence like "Take your time.").
-export function endsAsQuestion(raw: string | null | undefined): boolean {
-  const t = (raw ?? '').trim();
-  if (!t) return false;
-  // Strip trailing whitespace / closing quotes / brackets (Hermes-safe — no
-  // \p{Emoji} unicode-property escape, which can throw on RN's engine).
-  const stripped = t.replace(/[\s"'’”)\]}]+$/, '');
-  if (stripped.endsWith('?')) return true;
-  const lastQ = t.lastIndexOf('?');
-  if (lastQ === -1) return false;
-  // A question followed by only a SHORT closer (or trailing emoji) still wants
-  // an answer: "How are you feeling today? Take your time." / "...today? 🙂".
-  return t.slice(lastQ + 1).trim().length <= 30;
-}
+// 2026-08-11 — endsAsQuestion moved to services/voice/endsAsQuestion.ts so the earbud/global-mic
+// path (services/listeningSession.ts) re-arms on exactly the same rule this path uses. Re-exported
+// here because several call sites and other modules import it from this file.
+export { endsAsQuestion };
 // 2026-06-26 (Tim — "12s is way too long, needs to be ~3s") — dropped the stop-on-silence gap so the
 // mic closes shortly after you finish. 2026-07-30 — the FIRST-turn path (this file) had only a SINGLE
 // FIXED gap, while the follow-up loop (captureUtterance) uses an ADAPTIVE short/long window. A fixed
@@ -2643,7 +2626,14 @@ export const useVoiceCaddie = ({
       // listening was on. The 80ms delay gives React + the VAD
       // useEffect cleanup time to actually release Audio before we
       // ask for it.
-      wrappedOnVoiceStateChange('listening');
+      // 2026-08-11 (Tim) — "when I tap to talk, the first message gets cut off, and then she says
+      // she can't hear me." This used to emit 'listening', which lights the halo and the LISTENING…
+      // label — but the mic is NOT recording yet at this point. Everything below (the VAD release
+      // delay, the audio-session queue, createAsync, the OEM warm-up) happens first, so the user
+      // was invited to talk several hundred milliseconds before anything could be captured, and the
+      // opening words were lost. 'arming' releases VAD exactly the same way (its gate is
+      // voiceState === 'idle') while telling the UI to hold the invitation until we're really live.
+      wrappedOnVoiceStateChange('arming');
       await new Promise<void>(r => setTimeout(r, 80));
 
       await configureAudioForRecording();
@@ -2687,6 +2677,10 @@ export const useVoiceCaddie = ({
       micLastLoudAt = Date.now();
 
       recordingRef.current = recording;
+      // NOW the mic is genuinely capturing — past the VAD release, the audio-session queue,
+      // createAsync and the OEM warm-up. This is the first honest moment to invite the user to
+      // speak, so this is where the halo and the LISTENING… label come on. [[feels-like-a-real-caddie]]
+      wrappedOnVoiceStateChange('listening');
       devLog('[voice] recording started');
 
       // 2026-06-26 — DIRECT hard-stop. The auto-stop must NOT route through

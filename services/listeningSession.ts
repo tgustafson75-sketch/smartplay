@@ -1,6 +1,7 @@
 import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption } from './voiceService';
+import { endsAsQuestion } from './voice/endsAsQuestion';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine } from './voiceService';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
@@ -144,6 +145,28 @@ let listeningStartedAt = 0;
 // of the last got-it verbal cue; the capture-end ack checks it.
 let gotItCueFiredAt = 0;
 const LISTEN_ENDPOINT_MIN_MS = 800;
+
+/**
+ * 2026-08-11 (Tim) — "she ends with something like 'what's on your mind today', but doesn't listen."
+ *
+ * A real caddie who asks you something waits for the answer. This one asked and shut the mic —
+ * every clarifying question (follow_up_question), and every brain reply that ended in a question,
+ * dropped the user back to a closed session and made THEM tap again to answer a question they had
+ * just been asked. That reads as not listening, because functionally it isn't. [[feels-like-a-real-caddie]]
+ *
+ * So: when the caddie's own last spoken line ends in a question, reopen the mic for the answer.
+ *
+ * Bounded deliberately. Two consecutive auto-reopens is the cap — a caddie that keeps asking
+ * questions is a caddie in a loop, and an unbounded chain would hold the mic open indefinitely on a
+ * misheard turn. The chain resets on any user-initiated tap.
+ */
+const MAX_AUTO_REOPENS = 2;
+let autoReopenChain = 0;
+/** The last line the caddie spoke before this turn opened — lets us tell "new question" from stale. */
+let spokenLineAtOpen: string | null = null;
+
+// Uses the SHARED endsAsQuestion — a naive endsWith('?') is false for "What's on your mind today?
+// Take your time.", which is the exact shape Tim reported. See services/voice/endsAsQuestion.ts.
 export function isSessionInFlight(): boolean {
   return sessionInFlight;
 }
@@ -261,7 +284,12 @@ function setSessionStateMirror(next: SessionState): void {
   // Every trigger source (earbud/glasses tap, global mic badge) flows through this chokepoint, so
   // one place covers them all. Best-effort + wrapped — a haptics failure can NEVER affect the
   // voice flow. The "done listening" cue is a spoken "Okay, got it." (see the capture-end block).
-  if (next === 'listening' && prev !== 'listening') {
+  // 2026-08-11 — the tap-confirmation haptic must fire at the TAP, not when the mic finally opens.
+  // Holding 'opening' through the verbal cue (so we stop claiming to listen before we do) moved the
+  // 'listening' transition ~1s later, which would have made the tap itself feel dead — the opposite
+  // of "add a haptic when you tap so you FEEL it's on". Firing on the idle → opening/listening edge
+  // keeps the feel immediate and can't double-fire, since opening → listening has prev !== 'idle'.
+  if (prev === 'idle' && (next === 'opening' || next === 'listening')) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const H = require('expo-haptics');
@@ -386,6 +414,9 @@ export async function toggle(): Promise<void> {
   if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
   if (state === 'idle') {
     sessionInFlight = true;
+    // A deliberate tap starts a fresh conversation — clear any auto-reopen chain the caddie's own
+    // questions had built up, so the cap only ever bounds ONE run of unanswered questions.
+    autoReopenChain = 0;
     await openSession();
   } else {
     // 'responding' (shush the caddie) or any other non-idle, non-listening state. The 'listening'
@@ -497,6 +528,9 @@ export async function speakHonestFailure(
 
 async function openSession() {
   setSessionStateMirror('opening');
+  // Snapshot what the caddie had last said, so the end-of-turn check below can tell a question the
+  // caddie just ASKED from a stale line left over from an earlier turn.
+  spokenLineAtOpen = getLastSpokenLine();
   const settings = useSettingsStore.getState();
   const apiUrl = getApiBaseUrl();
   console.log(`[path4:voice] tap_open trust=${getTrustLevel()}`);
@@ -536,9 +570,15 @@ async function openSession() {
   console.log('[path4:voice] opener_done (canned opener removed — haptic + Listening strip)');
 
   // Phase 2 — open mic for utterance
-  setSessionStateMirror('listening');
-  listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
-  console.log('[audit:voice] listening engaged');
+  //
+  // 2026-08-11 (Tim) — "when I tap to talk, the first message gets cut off, and then she says she
+  // can't hear me." The state flipped to 'listening' HERE, which lights the Listening… strip — but
+  // the mic does not open until after the awaited verbal cue below, roughly a second later. So the
+  // caddie was inviting him to speak while it was still speaking its own go-ahead and recording
+  // nothing. He answered the invitation, the opening words went nowhere, and the truncated
+  // transcript came back as "I didn't catch that". The state now stays 'opening' (which the status
+  // strip already renders honestly as "One sec…") until the microphone is actually about to
+  // capture. [[feels-like-a-real-caddie]]
   // 2026-08-06 (Tim — "no beep telling me the caddie is listening; the phone's 40y away in the cart").
   // 2026-08-08 (Tim — Tozo T6 never hears the 200ms tock; "add our own caddie VERBAL response, not canned
   // but logical"). The caddie now SAYS the go-ahead in its own voice — context-picked + rotating (cached
@@ -552,7 +592,14 @@ async function openSession() {
   // user cancels (a second tap → closeSession → state 'idle') DURING the earcon, stopCapture would be a
   // no-op and we'd open a phantom 12s recording after the session already closed. Re-check state here so a
   // cancel-during-earcon never opens the mic at all.
-  if (state !== 'listening') return;
+  // 2026-08-11 — the guard now checks 'opening', since that is the state we hold through the cue.
+  if (state !== 'opening') return;
+
+  // The cue has finished and capture begins on the next line — this is the first honest moment to
+  // claim we are listening, so the strip, the halo and the tap-again endpoint all arm here.
+  setSessionStateMirror('listening');
+  listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
+  console.log('[audit:voice] listening engaged');
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
   let utterance: string | null = null;
@@ -572,9 +619,12 @@ async function openSession() {
     console.log('[listeningSession] capture failed', e);
   }
   cancelMic = null;
-  const captureCancelled = state !== 'listening' || !utterance || !utterance.trim();
+  // 2026-08-11 — read through the cast: the `state !== 'opening'` guard above narrows the
+  // module-level `state` to 'opening' for the rest of this function, and TS can't see that
+  // setSessionStateMirror('listening') reassigned it. Runtime value is 'listening' here.
+  const captureCancelled = (state as SessionState) !== 'listening' || !utterance || !utterance.trim();
   console.log(`[path4:voice] capture_done text_len=${utterance?.trim().length ?? 0} cancelled=${captureCancelled}`);
-  if (state !== 'listening') return;
+  if ((state as SessionState) !== 'listening') return;
 
   if (!utterance || !utterance.trim()) {
     // 2026-07-06 (voice-lifecycle audit #8b) — this was SILENT, so a transcribe
@@ -1226,6 +1276,27 @@ async function openSession() {
   }
 
   setSessionStateMirror('idle');
+
+  // 2026-08-11 (Tim — "she ends with something like 'what's on your mind today', but doesn't
+  // listen"). If the caddie just ASKED something, keep the mic for the answer instead of making him
+  // tap again to reply to a question he didn't ask for. See MAX_AUTO_REOPENS for why this is capped.
+  const finalLine = getLastSpokenLine();
+  const askedSomething = finalLine !== spokenLineAtOpen && endsAsQuestion(finalLine);
+  if (askedSomething && autoReopenChain < MAX_AUTO_REOPENS && useSettingsStore.getState().voiceEnabled) {
+    autoReopenChain += 1;
+    console.log('[path4:voice] auto_reopen_after_question', { chain: autoReopenChain });
+    // Mirror what toggle() does for a real tap: setSessionStateMirror already cleared the in-flight
+    // lock on the way to 'idle', so re-arm it here or a stray earbud echo would open a SECOND
+    // session on top of the one we're about to start.
+    sessionInFlight = true;
+    void openSession().catch((e) => {
+      console.log('[listeningSession] auto-reopen failed', e);
+      sessionInFlight = false;
+      setSessionStateMirror('idle');
+    });
+    return;
+  }
+  autoReopenChain = 0;
 }
 
 function closeSession() {

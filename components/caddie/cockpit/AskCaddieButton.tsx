@@ -30,6 +30,9 @@ export interface AskCaddieButtonProps {
 
 const LABEL: Record<VoiceState, string> = {
   idle:      'Tap to ask Caddie',
+  // 2026-08-11 — the mic isn't recording yet during 'arming'; saying "tap when done" here invites
+  // the user to start talking into a dead mic, which is what was cutting off his first words.
+  arming:    'One sec…',
   listening: 'Tap when done',
   thinking:  'Thinking…',
   speaking:  'Tap to interrupt',
@@ -39,6 +42,7 @@ const LABEL: Record<VoiceState, string> = {
 export function AskCaddieButton({ voiceState, onTap }: AskCaddieButtonProps) {
   const { colors } = useTheme();
   const isActive =
+    voiceState === 'arming' ||
     voiceState === 'listening' ||
     voiceState === 'thinking' ||
     voiceState === 'speaking';

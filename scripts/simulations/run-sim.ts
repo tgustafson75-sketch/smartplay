@@ -6396,9 +6396,35 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'captureUtterance gives the transcribe a 25s first attempt — enough for a cold Lambda on the first hands-free turn');
 
   // 4) TRIGGER HAPTIC — every talk trigger (earbud/glasses tap, mic badge) buzzes on open (feel it's on).
-  check('LOCK haptic: a talk trigger fires a haptic at the open chokepoint',
-    /next === 'listening' && prev !== 'listening'/.test(lsSrc) && /impactAsync\(H\.ImpactFeedbackStyle\.Medium\)/.test(lsSrc),
-    'setSessionStateMirror fires a Medium impact when opening to listening — one chokepoint covers earbud/glasses tap + mic badge');
+  // 2026-08-11 — the trigger edge moved. 'listening' is now reached ~1s after the tap (we hold
+  // 'opening' through the awaited verbal cue rather than claiming to listen while the mic is shut),
+  // so a haptic keyed to entering 'listening' would fire a second late and the TAP would feel dead.
+  // The guard now asserts the stronger property: the buzz fires on the idle → open edge, whichever
+  // state that is, and cannot double-fire on the opening → listening hop.
+  check('LOCK haptic: a talk trigger fires a haptic AT THE TAP, not when the mic finally opens',
+    /prev === 'idle' && \(next === 'opening' \|\| next === 'listening'\)/.test(lsSrc) && /impactAsync\(H\.ImpactFeedbackStyle\.Medium\)/.test(lsSrc),
+    'setSessionStateMirror fires a Medium impact on the idle→open edge — one chokepoint covers earbud/glasses tap + mic badge');
+
+  // 2026-08-11 (Tim — "when I tap to talk, the first message gets cut off"). The mic is provably
+  // closed during the awaited verbal cue (it is awaited so the cue cannot be self-recorded), so
+  // announcing 'listening' before it invited him to speak into a dead mic.
+  check('LOCK voice: the session does not claim to listen until the mic is about to capture',
+    (() => {
+      const open = lsSrc.indexOf('async function openSession()');
+      const body = lsSrc.slice(open, lsSrc.indexOf('function closeSession()', open));
+      const cue = body.indexOf("playVerbalCue('listen'");
+      const listening = body.indexOf("setSessionStateMirror('listening')");
+      const capture = body.indexOf('capture_start');
+      return cue > -1 && listening > cue && capture > listening && /if \(state !== 'opening'\) return;/.test(body);
+    })(),
+    'openSession holds "opening" through the awaited go-ahead cue and flips to listening immediately before capture');
+
+  // Tim: "she ends with something like what's on your mind today, but doesn't listen."
+  check('LOCK voice: a caddie question reopens the mic for the answer, bounded',
+    /auto_reopen_after_question/.test(lsSrc) &&
+    /finalLine !== spokenLineAtOpen/.test(lsSrc) &&
+    /autoReopenChain < MAX_AUTO_REOPENS/.test(lsSrc),
+    'a reply ending in a question re-arms the mic instead of making the user tap to answer it — capped so an unanswered loop cannot hold the mic');
 }
 
 // ─── Watch companion wiring (Tim 2026-07-29: watch WORKS; "wired optimally?" + connected indicator) ──
