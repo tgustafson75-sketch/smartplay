@@ -2283,8 +2283,44 @@ export default function SmartMotion() {
       if (sess.analysis_status === 'ok' && poseVerdictSessionRef.current !== sessionId) {
         poseVerdictSessionRef.current = sessionId; poseVerdictTempoRef.current = sessionId; return;
       }
+      /**
+       * 2026-08-11 (Tim — "on the very first pass, when that's the money shot that shows people,
+       * there's a failure. You'll get an error where it says it ca[n't]… but then you'll get some
+       * data. In swing library it'll work").
+       *
+       * THE RACE, and why it hits the BEST swings. A cold cloud read that fails sets analysisError.
+       * The on-device pose then lands and is supposed to clear it — but the clear sat AFTER
+       * `if (!pi) return`, and `pi` is null precisely when the pose read finds NO DOMINANT FAULT.
+       * That is a good swing. So the better the swing, the more likely the screen kept showing a
+       * failure banner while biomech, tempo and the metric rails filled in underneath it. The
+       * library "works" because it re-runs against a warm backend and never hits the cold failure.
+       *
+       * A measured read IS the answer, fault or no fault. Clear the transient error as soon as we
+       * have real on-device measurement, before any fault-shaped early return.
+       */
+      if (biomech) setAnalysisError(null);
+
       const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));
-      if (!pi) return; // not measurable from this angle — leave it to the cloud/observation path
+      if (!pi) {
+        /**
+         * 2026-08-11 — and the SESSION must stop being marked 'failed' too.
+         *
+         * The cloud-failure path wrote analysis_status='failed'. With no named fault this returned
+         * before ever upgrading it, so a CLEAN SWING was permanently recorded as a failed analysis —
+         * carrying that state into the library and the reports. "No dominant fault" is a successful
+         * read, not a failure; it is the result you want on your best swings. Only claim success
+         * when we genuinely measured something (biomech present), so a truly dead read still reads
+         * as failed.
+         */
+        if (biomech) {
+          try {
+            store.setSessionAnalysisStatus(sessionId, 'ok');
+            poseVerdictSessionRef.current = sessionId;
+            if (tempo) poseVerdictTempoRef.current = sessionId;
+          } catch { /* non-fatal */ }
+        }
+        return; // no fault to name — the measured read stands on its own
+      }
       store.setSessionAnalysis(sessionId, pi, null);
       store.setSessionAnalysisStatus(sessionId, 'ok');
       poseVerdictSessionRef.current = sessionId;

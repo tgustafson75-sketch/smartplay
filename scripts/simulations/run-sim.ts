@@ -8899,6 +8899,25 @@ check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
   })(),
   'third-party hole imagery unregistered (no requires => not bundled), maps still exported empty so consumers are unaffected');
 
+// "On the very first pass, when that's the money shot that shows people, there's a failure. You'll
+// get an error where it says it ca[n't]… but then you'll get some data. In swing library it'll work."
+// A cold cloud read fails → analysisError set. The on-device pose then lands and is meant to clear
+// it, but the clear sat AFTER `if (!pi) return` — and pi is null exactly when there is NO DOMINANT
+// FAULT. i.e. on a GOOD swing. The better the swing, the more likely it showed a failure banner.
+check('LOCK: a measured on-device read clears the transient cloud error, fault or no fault',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // the clear must happen BEFORE any fault-shaped early return
+    const clearIdx = sm.indexOf('if (biomech) setAnalysisError(null);');
+    const piIdx = sm.indexOf('const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));');
+    const clearsFirst = clearIdx > 0 && piIdx > 0 && clearIdx < piIdx;
+    // and a clean swing must not be RECORDED as a failed analysis
+    const statusFixed = /no fault to name — the measured read stands on its own/.test(sm) &&
+      /if \(biomech\) \{[\s\S]{0,220}?setSessionAnalysisStatus\(sessionId, 'ok'\);/.test(sm);
+    return clearsFirst && statusFixed;
+  })(),
+  'transient cold-cloud error cleared by any measured read; a no-fault swing is recorded ok, not failed');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
