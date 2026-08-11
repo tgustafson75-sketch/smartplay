@@ -271,6 +271,14 @@ interface SettingsState {
   // 'gps'     = live Mapbox satellite tile + draggable F/M/B markers
   //             (requires hole geometry with tee+green coords).
   // 'auto'    = use 'gps' when geometry available, fall back to 'curated'.
+  /**
+   * @deprecated 2026-08-11 — SmartVision no longer reads this. The Static/Satellite toggle was
+   * removed: both sides were aerials, so the setting could only choose a staler picture, and
+   * pre-round it silently chose the stale one for every course with bundled photos. Imagery is now
+   * live tile → bundled photo (only when a hole has no coordinates) → centroid/GPS tile.
+   * Kept so persisted user settings still rehydrate cleanly; safe to delete once no store
+   * snapshot in the wild carries it.
+   */
   smartVisionImagery: 'curated' | 'gps' | 'auto';
   // Phase AY — yardage source. 'live' uses GPS-driven calculations.
   // 'preround' uses static courseHoles values (good for planning before

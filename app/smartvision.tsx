@@ -486,23 +486,7 @@ export default function SmartVisionScreen() {
   // 2026-06-04 — HolePlan removed. addOrUpdatePlan / existingPlan /
   // savedFlash + the bookmark-save canvas button stripped out.
 
-  const imageryMode = useSettingsStore(s => s.smartVisionImagery);
   const { setSmartVisionState } = useSmartVision();
-  const setImageryMode = useSettingsStore(s => s.setSmartVisionImagery);
-
-  // 2026-06-04 — Pre-round force-auto. When the user opens SmartVision
-  // without an active round (course preview, hole-shopping, demo), reset
-  // the imagery mode to 'auto' so they get the best-available view
-  // regardless of what they last selected mid-round. Fires once per
-  // mount; mid-round opens leave the user's chosen mode alone.
-  useEffect(() => {
-    if (!isRoundActive && imageryMode !== 'auto') {
-      setImageryMode('auto');
-    }
-    // Intentionally not depending on imageryMode — we only want this to
-    // fire once on mount, not every time the user cycles modes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive]);
 
   // Phase BG — subscribe to position-mark bus so a Mark event triggers
   // re-render. Used to invalidate cached imagery and recompute marker
@@ -576,6 +560,23 @@ export default function SmartVisionScreen() {
     const slug = localSlugFromAnyCourseId(courseId);
     return slug ? getLocalHoleImageById(`local:${slug}`, holeIndex) : null;
   }, [courseId, courseName, holeIndex]);
+
+  /**
+   * 2026-08-11 (Tim) — "since we've gotten rid of bundled courses, do we get rid of the static
+   * setting in SmartVision? And it's always satellite, but it goes live and updates when you're in
+   * a live round."
+   *
+   * Yes. What the toggle actually chose between was a LIVE aerial and a FROZEN one — every bundled
+   * "static" hole is itself a cropped aerial photo, so the two sides were never different kinds of
+   * picture, just different vintages. Making the user pick the stale one was a setting that could
+   * only make the app worse, and pre-round it silently DID pick the stale one for 27 courses.
+   *
+   * So satellite is simply what SmartVision shows now. The 459 bundled hole photos are kept, but
+   * demoted to what they were always best at: an instant, offline-safe fallback for a hole we have
+   * no coordinates for. Order is live tile → bundled photo → centroid/GPS tile → honest empty state.
+   * [[hands-free-zero-setup-is-the-product]] [[simplified-sophistication]]
+   */
+  const [imagerySource, setImagerySource] = useState<'satellite' | 'curated' | 'none'>('none');
 
   // Image area: leaves room for back chevron + hole switcher at top, F/M/B
   // yardage panel at bottom. Square-ish on phones, full-height on tablets.
@@ -667,10 +668,11 @@ export default function SmartVisionScreen() {
   // top-level derived value needed.
 
   // ── Load geometry + imagery for the current hole ────────────────
-  // Imagery selection logic:
-  //   imageryMode='curated' → never fetch GPS tile, always show curated
-  //   imageryMode='gps'     → only show GPS tile (no curated fallback)
-  //   imageryMode='auto'    → try GPS tile if geometry available, else curated
+  // Imagery selection (2026-08-11 — one path, no user setting):
+  //   this hole has coordinates      → LIVE hole-framed satellite tile
+  //   no coordinates, bundled photo  → the bundled aerial (instant, works offline)
+  //   neither                        → centroid / live-GPS tile
+  //   no coordinate at all           → honest "waiting on location" card, never a green screen
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -678,19 +680,17 @@ export default function SmartVisionScreen() {
     // geometry from the PREVIOUS hole can flash (wrong-hole satellite tile +
     // wrong par) before the new async tile/geometry resolves. Clear them up
     // front, but GATE it: curated holes resolve SYNCHRONOUSLY below (the
-    // `curatedAvailable && imageryMode !== 'gps'` early-return sets imageUri
+    // (the old curated early-return that set imageUri
     // null and bails), so blanking them here would just cause a flash on the
     // path Tim tests most. Only clear when the new hole takes the ASYNC
     // satellite/Mapbox path (curated NOT used this render). `getLocalHoleImage*`
     // are synchronous bundled-asset lookups (no network), so this mirrors the
     // exact condition used below at the curated early-return.
-    const willUseCuratedSync =
-      (getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex)) != null &&
-      imageryMode !== 'gps';
-    if (!willUseCuratedSync) {
-      setImageUri(null);
-      setGeometry(null);
-    }
+    // 2026-08-11 — the satellite tile is now the target for every hole, so the previous-hole tile
+    // must always be cleared; leaving it up while the new one resolves is exactly the wrong-hole
+    // flash this guard was written to prevent.
+    setImageUri(null);
+    setGeometry(null);
     void (async () => {
       // Always load geometry so the F/M/B yardage panel can use it
       // even in curated mode (when geometry is available).
@@ -898,20 +898,18 @@ export default function SmartVisionScreen() {
       }
 
       // 2026-05-18 — Curated bundled images win when one exists for this
-      // course, unless the user has explicitly set imageryMode='gps'.
+      // course. Superseded 2026-08-11 — the live tile leads; see the block below.
       // Tim's expectation on the synthetic Menifee harness was the
       // bundled Palms hole photos, not a Mapbox satellite tile of green
       // grass. Previous order ("GPS tile if geometry available") forced
       // the satellite path whenever geometry was seeded, even for
       // courses with hand-curated imagery on disk. New order: curated
       // (if available + mode != gps) → GPS tile (geometry + mode != curated) → centroid fallback.
+      // 2026-08-11 — this used to RETURN here whenever a bundled photo existed, before the hole's
+      // coordinates had even been computed, so 27 courses could never show a live tile pre-round.
+      // The photo is now a fallback, decided AFTER we know whether a live tile is possible.
       const curatedAvailable =
         getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
-      if (curatedAvailable && imageryMode !== 'gps') {
-        setImageUri(null);
-        setLoading(false);
-        return;
-      }
       // 2026-06-01 — Fix GI: when geo has polygons but no centroid
       // (some upstream sources return green_polygon without computing
       // green centroid), derive the centroid from the polygon so the
@@ -945,7 +943,9 @@ export default function SmartVisionScreen() {
         resolvedTee.tee ?? geo?.tee ?? polygonCentroid(geo?.tee_polygon) ?? bundledTee;
       // Satellite tile in-round OR whenever there's no curated photo to show (the OSM courses) — never a
       // green screen when we have coords. Curated-photo courses still keep the photo pre-round.
-      if ((isRoundActive || !curatedAvailable) && imageryMode !== 'curated' && effectiveGreen && courseId) {
+      // Live tile whenever this hole has coordinates — pre-round and in-round alike. In a round the
+      // GPS/marked-green resolution above keeps feeding it, so it stays current as he plays.
+      if (effectiveGreen && courseId) {
         // Phase 401 — cap Mapbox request dims at 1280 (API limit) while
         // preserving the container's aspect ratio. Without this, a
         // Galaxy Fold unfolded container (1800×1660) requests
@@ -991,6 +991,7 @@ export default function SmartVisionScreen() {
           tee: effectiveTee,
           green: effectiveGreen,
         };
+        setImagerySource('satellite');
         const framedUrl = getHoleImageryUrl(holeInput, { width: reqW, height: reqH });
         const greenTileUrl = framedUrl ?? getCenteredImageryUrl({ lat: effectiveGreen.lat, lng: effectiveGreen.lng, zoom: 16, width: reqW, height: reqH });
         try {
@@ -1004,10 +1005,15 @@ export default function SmartVisionScreen() {
           if (cancelled) return;
           setImageUri(greenTileUrl);
         }
-      } else if (isRoundActive && imageryMode !== 'curated') {
-        // Centroid-fallback Mapbox tile — only during an active round,
-        // only for courses with no curated image.
-        const hasCurated = getLocalHoleImage(courseName, holeIndex) != null;
+      } else if (curatedAvailable) {
+        // No coordinates for this hole, but we have a bundled aerial of it — better than a course-
+        // wide centroid tile, and it works with no signal. imageUri stays null so the render picks
+        // up `curatedImage`.
+        setImagerySource('curated');
+        setImageUri(null);
+      } else {
+        // Centroid / live-GPS fallback tile for a hole we have neither coordinates nor a photo for.
+        const hasCurated = false;
         if (!hasCurated) {
           // 2026-07-14 (Tim — "if we haven't screenshotted the holes, satellite doesn't work"):
           // center a Mapbox satellite tile on the best point we have, so ANY course from the Golf
@@ -1050,22 +1056,19 @@ export default function SmartVisionScreen() {
               height: reqH,
             });
             if (cancelled) return;
+            setImagerySource('satellite');
             setImageUri(uri);
           } else {
+            // No coordinate of any kind — the render falls to the honest "waiting on location" card.
+            setImagerySource('none');
             setImageUri(null);
           }
-        } else {
-          // Bundled image exists for this hole — leave imageUri null so
-          // the render path picks up `curatedImage` from line ~292.
-          setImageUri(null);
         }
-      } else {
-        setImageUri(null);
       }
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [courseId, courseName, holeIndex, imageW, imageH, imageryMode, isRoundActive, courseHoles]);
+  }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared
@@ -1161,7 +1164,9 @@ export default function SmartVisionScreen() {
   // scattered the hazard overlays. Using our image makes the image+calibration
   // a matched pair → tee/pin anchor correctly. Trade-off (Tim's call): Golfbert
   // hazard overlays are suppressed on these holes until re-mapped onto our image.
-  const preferCurated = !!curatedImage && imageryMode !== 'gps';
+  // 2026-08-11 — was "the user chose Static". Now: we have a bundled photo AND could not build a
+  // live tile for this hole, so the photo IS the imagery.
+  const preferCurated = !!curatedImage && imagerySource === 'curated';
 
   // 2026-06-21 — Golfbert imageryUrl IS a curated photo (M13 audit fix).
   // GPS projection is Mapbox-tile-specific; applying it to any curated image
@@ -2107,7 +2112,7 @@ export default function SmartVisionScreen() {
             {/* 2026-07-14 (Tim — "cheat the paid geometry DB") — when this hole's green/tee were
                 DERIVED by AI vision from satellite (no curated/API geometry existed), say so.
                 Honesty tenet: the player must know these coords are AI-estimated, not surveyed. */}
-            {geometry?.estimated && !(curatedImage && imageryMode !== 'gps') ? (
+            {geometry?.estimated && !preferCurated ? (
               <View style={styles.estimatedBadge}>
                 <Ionicons name="sparkles" size={9} color="#0a0a0a" />
                 <Text style={styles.estimatedBadgeText}>AI ESTIMATE</Text>
@@ -2118,29 +2123,19 @@ export default function SmartVisionScreen() {
             <Ionicons name="chevron-forward" size={22} color={holeIndex >= (totalHoles) ? '#374151' : '#ffffff'} />
           </TouchableOpacity>
         </View>
-        {/* 2026-07-15 (Tim — "it's just satellite and static, drop the 3D pretense") — a clean
-            TWO-way toggle: Satellite (live aerial — now works on ANY course via Tier 1 AI geometry)
-            vs Static (hand-curated hole photo). 'auto' persists only as the invisible pre-round
-            default that picks best-available, and it always RESOLVES to one of the two visually —
-            so the surface only ever shows the two real choices. Tapping switches to the other. */}
-        {(() => {
-          // What is the canvas actually showing right now? gps → satellite; curated + a bundled
-          // photo → static; auto → static when a curated photo exists for this hole, else satellite.
-          const showingStatic =
-            imageryMode === 'curated' || (imageryMode === 'auto' && !!curatedImage);
-          return (
-            <TouchableOpacity
-              onPress={() => setImageryMode(showingStatic ? 'gps' : 'curated')}
-              style={styles.modeBtn}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              accessibilityRole="button"
-              accessibilityLabel={`Imagery: ${showingStatic ? 'Static hole photo' : 'Satellite'} (tap to switch)`}
-            >
-              <Ionicons name={showingStatic ? 'image' : 'globe'} size={20} color="#ffffff" />
-              <Text style={styles.modeBtnText}>{showingStatic ? 'Static' : 'Satellite'}</Text>
-            </TouchableOpacity>
-          );
-        })()}
+        {/* 2026-08-11 (Tim — "since we've gotten rid of bundled courses, do we get rid of the
+            static setting? and it's always satellite, but it goes live and updates when you're in a
+            live round"). Toggle REMOVED. It chose between a live aerial and a frozen one — both are
+            aerials, so the only thing it could do was hand the user a staler picture, and pre-round
+            it silently picked the stale one for the 27 courses with bundled photos. SmartVision is
+            satellite now; the bundled photo is an automatic fallback for holes with no coordinates.
+            The badge below just reports which one you're looking at — it isn't a control. */}
+        {imagerySource === 'curated' ? (
+          <View style={styles.modeBtn} accessibilityRole="text" accessibilityLabel="Showing a bundled hole photo — no live coordinates for this hole yet">
+            <Ionicons name="image" size={20} color="#ffffff" />
+            <Text style={styles.modeBtnText}>Bundled</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* 2026-05-23 — Live Strategy card. Auto-renders when the
@@ -2195,11 +2190,6 @@ export default function SmartVisionScreen() {
         ) : golfbertHole?.imageryUrl ? (
           // onError falls through to curated/Mapbox/empty instead of blank-white.
           <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setGolfbertHole(null)} />
-        ) : curatedImage && imageryMode !== 'gps' ? (
-          // Curated bundled hole photo wins over satellite — always.
-          // Tim's hand-captured shots are the canonical visual; Mapbox
-          // satellite is a fallback only when no curated image exists.
-          <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
         ) : imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setImageUri(null)} />
         ) : loading ? (
@@ -2224,7 +2214,7 @@ export default function SmartVisionScreen() {
             and suppress the bright rough/sky content at the image edges.
             Only shown on curated photos (which have light peripheral content);
             GPS satellite tiles are typically darker at the edges already. */}
-        {(curatedImage && imageryMode !== 'gps') && (<>
+        {preferCurated && (<>
           <LinearGradient
             colors={['rgba(6,15,9,0.82)', 'transparent']}
             start={{ x: 0, y: 0.5 }} end={{ x: 0.28, y: 0.5 }}
