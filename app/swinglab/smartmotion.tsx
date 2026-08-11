@@ -3553,13 +3553,29 @@ export default function SmartMotion() {
       try {
         const store = useCageStore.getState();
         if (biomech) store.setSessionBiomechanics(sid, biomech);
-        if (estCarry != null || effortPct != null || ballTrace || cageCanvasFeet != null || tempo || biomech) {
+        /**
+         * 2026-08-10 (Tim — "I put this as course mode, but it's based on Canvas. It says Canvas
+         * fourteen feet, camera seven feet back. That doesn't apply to the course. Make sure we have
+         * course logic").
+         *
+         * Canvas distance and camera-behind are CAGE rig measurements — the net you're hitting into
+         * and where the phone sits relative to it. They were written unconditionally, so a swing
+         * recorded on the tee got the cage's 14ft/7ft stamped onto its shot map and printed back as
+         * if they described the hole he was standing on. Meaningless at a range and actively wrong
+         * on course, where the ball flies to a real target.
+         *
+         * `effectiveMode` already resolves this correctly (an active round forces 'course'), so the
+         * rig geometry is now recorded ONLY in cage mode. Everywhere else it stays null and the card
+         * simply omits the line — no fabricated context. ([[environment-mode]])
+         */
+        const isCage = effectiveMode === 'cage';
+        if (estCarry != null || effortPct != null || ballTrace || (isCage && cageCanvasFeet != null) || tempo || biomech) {
           store.setSessionShotMap(sid, {
             estCarry: estCarry ?? null,
             effortPct: effortPct ?? null,
             trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-            canvasFeet: cageCanvasFeet ?? null,
-            cameraBehindFeet: cameraBehindFeet ?? null,
+            canvasFeet: isCage ? (cageCanvasFeet ?? null) : null,
+            cameraBehindFeet: isCage ? (cameraBehindFeet ?? null) : null,
             angle,
             club: club ?? null,
             tempo: tempo ? {
@@ -3636,14 +3652,18 @@ export default function SmartMotion() {
     if (phase !== 'review' || selectedSwing !== 0) return;
     const sid = ingestedSessionIdRef.current;
     if (!sid) return;
-    if (!(estCarry != null || effortPct != null || ballTrace || cageCanvasFeet != null || tempo || biomech)) return;
+    // 2026-08-10 — SECOND write site for the same shot map (the live-commit mirror of the save-time
+    // write above). Cage rig geometry has to be gated here too; fixing only one of the two would
+    // leave "Canvas 14 ft" reappearing on course via whichever path committed last.
+    const isCageLive = effectiveMode === 'cage';
+    if (!(estCarry != null || effortPct != null || ballTrace || (isCageLive && cageCanvasFeet != null) || tempo || biomech)) return;
     try {
       useCageStore.getState().setSessionShotMap(sid, {
         estCarry: estCarry ?? null,
         effortPct: effortPct ?? null,
         trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-        canvasFeet: cageCanvasFeet ?? null,
-        cameraBehindFeet: cameraBehindFeet ?? null,
+        canvasFeet: isCageLive ? (cageCanvasFeet ?? null) : null,
+        cameraBehindFeet: isCageLive ? (cameraBehindFeet ?? null) : null,
         angle,
         club: club ?? null,
         tempo: tempo ? {

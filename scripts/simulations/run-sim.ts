@@ -8600,6 +8600,26 @@ check('LOCK: club trace ZOOMS to the player (pose-derived crop) instead of downs
   })(),
   'pose-derived ROI crop + upscale, detections mapped back to full-frame, no crop when the player already fills the frame, wired from SmartMotion');
 
+// "I put this as course mode, but it's based on Canvas. It says Canvas fourteen feet, camera seven
+// feet back. That doesn't apply to the course." Cage RIG geometry was stamped onto every shot map
+// regardless of environment, so a swing on the tee was captioned with the net's dimensions.
+check('LOCK: cage rig geometry (canvas/camera-behind) is recorded ONLY in cage mode',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // BOTH write sites must be gated — the save-time write and the live-commit mirror. Fixing one
+    // leaves "Canvas 14 ft" reappearing on course via whichever path commits last.
+    const gated = /const isCage = effectiveMode === 'cage';/.test(sm) &&
+      /const isCageLive = effectiveMode === 'cage';/.test(sm) &&
+      (sm.match(/canvasFeet: isCage(?:Live)? \? \(cageCanvasFeet \?\? null\) : null,/g) ?? []).length === 2 &&
+      (sm.match(/cameraBehindFeet: isCage(?:Live)? \? \(cameraBehindFeet \?\? null\) : null,/g) ?? []).length === 2;
+    // an active round must force course mode, or the gate reads the stale manual setting
+    const roundForcesCourse = /effectiveMode: 'cage' \| 'range' \| 'course' = isRoundActive \? 'course' : environmentMode/.test(sm);
+    // and the unconditional write must not come back
+    const noUnconditional = !/canvasFeet: cageCanvasFeet \?\? null,/.test(sm);
+    return gated && roundForcesCourse && noUnconditional;
+  })(),
+  'canvas/camera-behind only in cage mode; an active round forces course; no unconditional write');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
