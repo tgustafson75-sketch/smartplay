@@ -8282,7 +8282,15 @@ check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision r
       // the tile is a FALLBACK: captured shot and curated bundle still win, in that order
       /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?curatedImage \?\? \(aerialTileUrl/.test(s) &&
       // the memo must sit ABOVE the isRoundActive early return (a hook below a gate crashes on open)
-      s.indexOf('const aerialTileUrl') < s.indexOf('if (!isRoundActive)')
+      s.indexOf('const aerialTileUrl') < s.indexOf('if (!isRoundActive)') &&
+      // 2026-08-10 second pass — the PRE-ROUND branch returns before aerialTileUrl is ever reached,
+      // so it needs its OWN tile or a selected course still shows "Pick a course on the Play tab".
+      // That was the half missed the first time, and it's the green screen Tim saw again.
+      /const previewTileUrl = useMemo/.test(s) &&
+      /if \(previewTileUrl\) \{/.test(s) &&
+      s.indexOf('const previewTileUrl') < s.indexOf('if (!isRoundActive)') &&
+      // and the geometry has to be warmed pre-round or the cache the memo reads is always empty
+      /PRE-ROUND geometry warm/.test(s) && /void fetchCourseGeometry\(id\)/.test(s)
     );
   })(),
   'Mapbox tile wired as third source, precedence preserved, hook above the gate');

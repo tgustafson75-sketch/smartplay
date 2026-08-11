@@ -140,6 +140,23 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   const captured = useCourseCaptureStore(s => s.bestForward(activeCourseId, currentHole));
   const capturedUri = captured?.kind === 'single' ? resolveCaptureUri(captured.uri) : null;
 
+  /**
+   * 2026-08-10 — PRE-ROUND geometry warm. The preview tile needs coordinates, and for a course the
+   * download engine resolved (rather than one we bundle) those live in the geometry cache, which was
+   * only ever populated for an ACTIVE round. So browsing a downloaded course pre-round found an empty
+   * cache and fell to the placeholder — the green screen — even though the data was one fetch away.
+   * Fire-and-forget; the tile memo re-reads the cache on the resulting state tick.
+   */
+  useEffect(() => {
+    if (isRoundActive) return;
+    const id = previewCourseId_resolved;
+    if (!id || id.startsWith('local:') || id.startsWith('custom:')) return; // bundled coords need no fetch
+    if (getHoleGeometry(id, 1)?.green) return; // already cached
+    let cancelled = false;
+    void fetchCourseGeometry(id).then(() => { if (!cancelled) setTick(t => t + 1); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isRoundActive, previewCourseId_resolved]);
+
   useEffect(() => {
     let cancelled = false;
     if (!activeCourseId) { setGeometry(null); return; }
@@ -191,6 +208,68 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     }
   }, [geometry, W, H, activeCourseId, currentHole]);
 
+  /**
+   * 2026-08-10, second pass (Tim — "why am I STILL seeing green screens for SmartVision when I click
+   * on them? I can see a hole. But on the PREVIEWS, I see green screens").
+   *
+   * This morning's fix was incomplete and this is the half I missed. It added the Mapbox tile to the
+   * IN-ROUND path only — aerialTileUrl needs `geometry`, and geometry only loads once activeCourseId
+   * is set. The PRE-ROUND branch below returns before any of that, so browsing a selected course
+   * still fell through to "SMARTVISION · Pick a course on the Play tab to plan" on a dark-green
+   * card, even with a course chosen and Start Round right there on screen.
+   *
+   * Same fix, applied where it actually was missing: build the tile for hole 1 of the PREVIEW course
+   * from whatever coordinates we already hold — the geometry cache first (a course downloaded by the
+   * engine), then the bundled hole coords. Null only when we genuinely have no coordinate, which is
+   * the one case that still deserves the placeholder.
+   */
+  const previewTileUrl = useMemo(() => {
+    const id = previewCourseId_resolved;
+    if (!id) return null;
+    const coordOk = (la?: number | null, ln?: number | null) =>
+      la != null && ln != null && Number.isFinite(la) && Number.isFinite(ln) &&
+      Math.abs(la) <= 90 && Math.abs(ln) <= 180 && !(Math.abs(la) < 0.001 && Math.abs(ln) < 0.001);
+
+    let tee: { lat: number; lng: number } | null = null;
+    let green: { lat: number; lng: number } | null = null;
+    let par = 4;
+    let yardage = 0;
+
+    // 1) Geometry cache — set for any course the download engine has resolved.
+    try {
+      const g = getHoleGeometry(id, 1);
+      if (g?.green && coordOk(g.green.lat, g.green.lng)) {
+        green = g.green;
+        if (g.tee && coordOk(g.tee.lat, g.tee.lng)) tee = g.tee;
+        par = g.par || 4;
+        yardage = g.yardage || 0;
+      }
+    } catch { /* fall through to bundled */ }
+
+    // 2) Bundled hole coords — the OSM-built local courses carry real surveyed points.
+    if (!green) {
+      try {
+        const bh = getBundledHoles(id)?.find(h => h.hole === 1);
+        if (bh && coordOk(bh.middleLat, bh.middleLng)) {
+          green = { lat: bh.middleLat as number, lng: bh.middleLng as number };
+          if (coordOk(bh.teeLat, bh.teeLng)) tee = { lat: bh.teeLat as number, lng: bh.teeLng as number };
+          par = bh.par ?? 4;
+          yardage = bh.distance ?? 0;
+        }
+      } catch { /* no bundled coords */ }
+    }
+
+    if (!green) return null;
+    try {
+      return getHoleImageryUrl(
+        { courseId: id, holeNumber: 1, tee, green, par, yardage },
+        { width: Math.round(Math.max(320, Math.min(W, 1280))), height: Math.round(Math.max(240, Math.min(H, 1280))) },
+      );
+    } catch {
+      return null;
+    }
+  }, [previewCourseId_resolved, W, H]);
+
   // Player dot refresh tick
   useEffect(() => {
     if (!isRoundActive) return;
@@ -231,6 +310,25 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
           {/* 2026-07-28 (Tim — "branded badge not showing") — the Course/Hole/Distance badge was only on
               the in-round branches, so browsing the Caddie tab pre-round showed no badge. Add it here too
               (previewing hole 1 of the selected course), frame-level so it clears the ••• tools pill. */}
+          <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />
+        </HoleFrame>
+      );
+    }
+    // 2026-08-10 — before the placeholder, try the satellite tile for the previewed course's hole 1.
+    // A selected course with real coordinates must never show "pick a course".
+    if (previewTileUrl) {
+      const previewDist = (() => {
+        try { return getBundledHoles(previewCourseId_resolved || '')?.find(h => h.hole === 1)?.distance ?? null; }
+        catch { return null; }
+      })();
+      return (
+        <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
+          <ImageBackground source={{ uri: previewTileUrl }} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
+            <View style={styles.planScrim} pointerEvents="none" />
+            <View style={styles.planLabelWrap} pointerEvents="none">
+              <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
+            </View>
+          </ImageBackground>
           <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />
         </HoleFrame>
       );
