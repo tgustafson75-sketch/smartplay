@@ -8554,6 +8554,28 @@ check('LOCK: a successful course build is persisted server-side and survives a l
   })(),
   'server builds persist as trusted osm-rank rows (public share still forced to ai_vision), write-back is non-blocking + gated, thin builds serve the stored copy');
 
+// "It only allows for one picture, and it hits an error." A scorecard is too wide to shoot legibly
+// in one frame (1-9 + OUT, then 10-18 + IN), so people photograph the nines separately.
+check('LOCK: scorecard ingest takes MULTIPLE photos and merges them without damaging good data',
+  (() => {
+    const ci = read('services/courseImport.ts');
+    const ri = read('services/roundImport.ts');
+    const sc = read('app/add-course.tsx');
+    const multi = /export async function pickManyFromLibrary/.test(ri) && /allowsMultipleSelection: true/.test(ri) &&
+      /export async function parseCourseScreenshots/.test(ci) && /export function mergeCourseImports/.test(ci);
+    // a later photo may FILL a gap but never overwrite a value already read
+    const nonDestructive = /if \(existing\.par == null && h\.par != null\)/.test(ci) &&
+      /if \(existing\.yardage == null && h\.yardage != null\)/.test(ci);
+    // an 18-column card needs resolution — 1280 made the digits unreadable
+    const legible = /\[\{ resize: \{ width: 2000 \} \}\]/.test(ci);
+    // one bad photo must not lose the whole import
+    const tolerant = /if \(ok\.length === 0\)/.test(ci) && /couldn't be read/.test(ci);
+    // and the screen must actually use the multi-picker
+    const wired = /pickManyFromLibrary\(4\)/.test(sc) && /parseCourseScreenshots\(picked\.uris\)/.test(sc);
+    return multi && nonDestructive && legible && tolerant && wired;
+  })(),
+  'multi-select picker + merge (gap-fill only, never overwrite), 2000px for legibility, partial-failure tolerant, wired into add-course');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

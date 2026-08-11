@@ -15,8 +15,8 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../contexts/ThemeContext';
 import AppIcon from '../components/AppIcon';
 import {
-  pickFromLibrary,
-  parseCourseScreenshot,
+  pickManyFromLibrary,
+  parseCourseScreenshots,
   saveCourseFromParse,
   type CourseImportResult,
 } from '../services/courseImport';
@@ -32,11 +32,14 @@ export default function AddCourseScreen() {
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const pickAndParse = async () => {
-    const picked = await pickFromLibrary();
+    // 2026-08-10 (Tim — "it only allows for one picture, and it hits an error"). A scorecard is too
+    // wide to shoot legibly in one frame, so people photograph the front nine and the back nine
+    // separately. Take up to 4 and merge them into one course.
+    const picked = await pickManyFromLibrary(4);
     if (picked.kind === 'permission_denied') { setErrorMsg('Photo access is off — enable it in Settings to pick a scorecard.'); setPhase('error'); return; }
     if (picked.kind !== 'ok') return; // cancelled / error — stay on intro
     setPhase('parsing');
-    const parsed = await parseCourseScreenshot(picked.uri);
+    const parsed = await parseCourseScreenshots(picked.uris);
     if (parsed.kind === 'ok') { setResult(parsed.result); setPhase('confirm'); return; }
     setErrorMsg(
       parsed.kind === 'not_a_scorecard' ? "That doesn't look like a scorecard — try a clearer photo of the card."

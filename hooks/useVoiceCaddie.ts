@@ -1892,23 +1892,43 @@ export const useVoiceCaddie = ({
         // "GET works, POST stalls" (device/proxy POST path) from "host blocked".
         // No added latency — both share the 3s window.
         const [ping, get] = await Promise.all([reachabilityPing(3000), healthGet(3000)]);
-        if (!ping.ok) {
-          // 2026-06-28 — reactive self-heal: the active host is unreachable from this
-          // device; probe + fail over to the other host so the NEXT attempt (and the
-          // offline answer's brain calls) hit a host the device can actually reach.
+        /**
+         * 2026-08-10 (Tim, mid-round — "we have five Gs signal, but you're giving me an error
+         * about connection").
+         *
+         * His issue log for that exact moment: pingOk:false pingMs:3017, getOk:false getMs:6018,
+         * elapsedMs:9051, against api.smartplaycaddie.com, on full signal. BOTH 3-second probes
+         * timed out, and the code took that as proof the host was unreachable — abandoning the
+         * upload and dropping him to the offline caddie while he had 5G in his hand.
+         *
+         * A 3-second synthetic probe proves nothing on cellular. A rural tower, a congested cell
+         * or a cold serverless function routinely exceeds 3s on a perfectly usable connection —
+         * and this probe fires at the WORST possible moment, immediately after an upload already
+         * stalled, when the radio is most contended. It was manufacturing false negatives.
+         *
+         * The real request is the only honest test of reachability. The probe is now ADVISORY: a
+         * failed probe still earns one real retry on the COLD budget, and only if THAT fails do we
+         * declare offline. A genuinely offline phone pays one extra attempt; a phone with signal
+         * stops being told it has none. ([[caddie-failsafe-no-walls]] — always attempt, degrade
+         * gracefully, never put up a wall.)
+         */
+        const probeSaysDown = !ping.ok;
+        if (probeSaysDown) {
+          console.log('[voice] probe failed (ping', ping.ms, 'ms) — retrying the REAL upload before calling it offline');
+          // Still kick the host failover so the NEXT call prefers a host this device can reach.
           void ensureBackendReachable({ force: true });
-          await failTranscribeOffline('AbortError', ping.ok, ping.ms, get.ok, get.ms);
-          return;
         }
-        // Host is up — the upload hit a cold-start/blip. Retry once.
         try {
           await new Promise(r => setTimeout(r, 300));
-          transcribeRes = await doTranscribeFetch(15000);
+          // When the probe said down, give the retry the COLD budget — if the host is merely slow
+          // to wake, 15s is exactly the window that was already too tight to catch it.
+          transcribeRes = await doTranscribeFetch(probeSaysDown ? COLD_TRANSCRIBE_TIMEOUT_MS : 15000);
+          if (probeSaysDown) console.log('[voice] probe was WRONG — retry succeeded; the connection was fine');
         } catch (retryErr) {
           const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
-          // Host answered the ping but the upload still failed twice — treat as
-          // reachable (don't offer offline typing; the brain is up, retry works).
-          await failTranscribeOffline(name, true, ping.ms, get.ok, get.ms);
+          // Two genuine attempts have now failed. Log the probe's real verdict so "probe wrong,
+          // upload fine" stays distinguishable from "genuinely down" in the field data.
+          await failTranscribeOffline(name, ping.ok, ping.ms, get.ok, get.ms);
           return;
         }
       }

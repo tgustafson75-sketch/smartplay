@@ -71,6 +71,44 @@ export type ParseResult =
  * NOT offered — scorecards live in the player's existing photo roll,
  * not in a fresh capture.
  */
+/**
+ * 2026-08-10 (Tim, after his round — "when I went to ingest the scorecard, it only allows for one
+ * picture, and it hits an error. So the pictures I took of the scorecard I wasn't able to take
+ * advantage of").
+ *
+ * A real scorecard does not fit in one usable photo. His Connecticut National card runs holes 1-9
+ * plus OUT, then 10-18 plus IN, across a card wide enough that a single legible shot is impossible —
+ * so people photograph the front nine and the back nine separately, exactly as he did. The importer
+ * accepted one URI, which meant the second photo had nowhere to go and a half-card parse.
+ *
+ * Multi-select variant. Same permission + cancel semantics as pickFromLibrary, so callers that
+ * only want one can keep using that.
+ */
+export type PickManyResult =
+  | { kind: 'ok'; uris: string[] }
+  | { kind: 'cancelled' }
+  | { kind: 'permission_denied' }
+  | { kind: 'error'; message: string };
+
+export async function pickManyFromLibrary(limit = 4): Promise<PickManyResult> {
+  try {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return { kind: 'permission_denied' };
+
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      allowsEditing: false,
+      allowsMultipleSelection: true,
+      selectionLimit: limit,
+    });
+    if (picked.canceled || picked.assets.length === 0) return { kind: 'cancelled' };
+    return { kind: 'ok', uris: picked.assets.slice(0, limit).map(a => a.uri) };
+  } catch (e) {
+    return { kind: 'error', message: e instanceof Error ? e.message : 'pick failed' };
+  }
+}
+
 export async function pickFromLibrary(): Promise<PickResult> {
   try {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();

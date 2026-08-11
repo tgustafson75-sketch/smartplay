@@ -22,6 +22,10 @@ module.exports = {
         // header: that shadow is where two of today's shipped bugs were hiding.
         '\\.(jpg|jpeg|png|gif|webp|svg|mp3|mp4|wav|m4a)$':
           '<rootDir>/__tests__/mocks/imageAsset.js',
+        // 2026-08-10 — native Expo module; unloadable under plain node, so it walled off
+        // services/courseImport (where the scorecard merge lives) from the logic suite.
+        '^expo-image-manipulator$': '<rootDir>/__tests__/mocks/expoImageManipulator.js',
+        '^expo-image-picker$': '<rootDir>/__tests__/mocks/expoImagePicker.js',
       },
     },
     {
