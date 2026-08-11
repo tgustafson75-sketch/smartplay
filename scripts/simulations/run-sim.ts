@@ -9017,6 +9017,25 @@ check('LOCK: bundled tees are validated against the scorecard before anything ca
   })(),
   'bundled tee/green pairs validated against their own scorecard at getBundledHoles; contradictory tees dropped, greens kept');
 
+// "If the bundled courses are causing the issue, then they need to be replaced with the new engine
+// courses, but they need to be BUILT because testers are on them." Bundled coords ALWAYS won for
+// hint-less local courses, on a premise ("OSM scrambles routing") that predates the osm_holeways
+// pass. Measured on Greenhill: bundled 14/16 holes contradict their own card; engine 17/18 correct.
+check('LOCK: the engine replaces bundled coords that fail their own scorecard — with a safe fallback',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    // bundled only wins when it is TRUSTWORTHY (enough holes survived tee validation)
+    const gated = /const bundledIsTrustworthy = \(\(\) => \{/.test(g) &&
+      /if \(bundled && bundledIsTrustworthy\) \{/.test(g) &&
+      // the old unconditional "bundled always wins" must not come back
+      !/if \(bundled\) \{ memCache\.set\(courseId, bundled\);/.test(g);
+    // and a failed engine build must NOT leave a tester with less than they had
+    const safeFallback = /let bundledFallback: CourseGeometry \| null = null;/.test(g) &&
+      (g.match(/bundledFallback \?\? buildBundledGeometry\(courseId\)/g) ?? []).length === 2;
+    return gated && safeFallback;
+  })(),
+  'untrustworthy bundled coords yield to an engine build; a failed build falls back to them rather than to nothing');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

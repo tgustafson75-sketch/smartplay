@@ -745,6 +745,8 @@ async function fetchCourseGeometryInner(
   let upstreamId = courseId;
   let centroid: { lat: number; lng: number } | null = null;
   let holeCount: number | null = null;
+  /** 2026-08-11 — bundled geometry we chose NOT to trust; still better than nothing if the build fails. */
+  let bundledFallback: CourseGeometry | null = null;
   if (courseId.startsWith('local:')) {
     const slug = courseId.slice('local:'.length);
     centroid = LOCAL_COURSE_CENTROIDS[slug as LocalCourseSlug] ?? null;
@@ -757,10 +759,43 @@ async function fetchCourseGeometryInner(
       // MUST win over OSM synthesis — OSM has no hole numbers, so it scrambles the routing (attaches
       // greens to the wrong hole, ghost-holes a 9-green course into 18). Prefer bundled here, both
       // online and offline. Only when we have NO bundled coords do we fall to the OSM-only request.
+      /**
+       * 2026-08-11 (Tim — "if the bundled courses are causing the issue, then they need to be
+       * replaced with the new engine courses, but they need to be BUILT because testers are on them").
+       *
+       * The comment above — bundled is ground truth, OSM scrambles routing — was TRUE when OSM
+       * synthesis had no hole numbers. It isn't any more: the engine's `osm_holeways` pass reads
+       * real `ref` hole numbers and pars off OSM golf=hole ways. Measured on Greenhill just now:
+       *
+       *   bundled coords  14 of 16 holes contradict their own scorecard (~0.4x the card)
+       *   engine build    17 of 18 holes within 35%, most within 10%
+       *
+       * So "bundled always wins" was actively serving the worse data on exactly the courses testers
+       * are playing. Bundled still wins when it's GOOD — that's most courses, and their
+       * screenshot-anchored coords are excellent. It only loses when it has failed its own
+       * scorecard: if fewer than half the holes still carry a tee after validateBundledTees stripped
+       * the self-contradicting ones, the bundle is not ground truth for this course and the engine
+       * gets a turn. Bundled remains the fallback if the engine can't build.
+       */
       const bundled = buildBundledGeometry(courseId);
-      if (bundled) { memCache.set(courseId, bundled); void writePersistedCache(bundled).catch(() => undefined); return bundled; }
-      if (!centroid) return persisted ?? null;
-      // No bundled coords but we know where it is — synthesize from OSM greens/tees (osmOnly=1).
+      const bundledIsTrustworthy = (() => {
+        if (!bundled?.holes?.length) return false;
+        const withTee = bundled.holes.filter(h => h.tee && h.green).length;
+        return withTee >= Math.ceil(bundled.holes.length * 0.5);
+      })();
+      if (bundled && bundledIsTrustworthy) {
+        memCache.set(courseId, bundled);
+        void writePersistedCache(bundled).catch(() => undefined);
+        return bundled;
+      }
+      if (!centroid) return bundled ?? persisted ?? null;
+      if (bundled) {
+        console.log(`[courseGeometry] bundled coords for ${courseId} failed their own scorecard — building from the engine instead`);
+      }
+      // Either no bundled coords, or bundled coords we can't trust: build from OSM (osmOnly=1).
+      // 2026-08-11 — keep the bundled copy as the fallback so a failed build never leaves a course
+      // with LESS than it had before; testers are mid-beta on these.
+      bundledFallback = bundled ?? null;
       upstreamId = '__osm_only__';
     }
   } else if (!centroid) {
@@ -850,7 +885,10 @@ async function fetchCourseGeometryInner(
     const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] fetch failed:', res.status);
-      return persisted ?? buildBundledGeometry(courseId) ?? null;
+      // 2026-08-11 — if we bypassed bundled coords to try the engine and the engine failed, fall
+      // back to those bundled coords rather than to nothing. Testers are mid-beta on these courses;
+      // partially-wrong geometry still beats a blank hole view.
+      return persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
     }
     const geo = (await res.json()) as CourseGeometry;
     geo.fetched_at = Date.now();
@@ -863,7 +901,7 @@ async function fetchCourseGeometryInner(
     return await commitGeometry(courseId, geo);
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
-    return persisted ?? buildBundledGeometry(courseId) ?? null;
+    return persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
   }
 }
 
