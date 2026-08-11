@@ -182,15 +182,63 @@ function armStaleHardTimer(): void {
           // hard-clear only fires on a GENUINE signal loss — and then clearing to null is right
           // (the caddie honestly says "reacquiring GPS" rather than trusting a stale coordinate).
           console.log('[gps] lastFix hard-cleared — no fresh fix in', STALE_FULL_CLEAR_MS, 'ms');
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
-              sinceMs: STALE_FULL_CLEAR_MS,
-              lastAccuracy_m: lastFix.accuracy_m ?? null,
-              lastSource: lastFix.source,
-            });
-          } catch { /* best-effort */ }
+          /**
+           * 2026-08-11 — only log it when it's ACTIONABLE, matching the rule the degrade already
+           * uses. Tim's log carried two stale_hard_clear entries at 9.9m accuracy with NO ROUND
+           * active: a phone sitting still on a table, where the OS stops producing fixes because
+           * the position isn't changing. That's normal, not a fault, and burying the real entries
+           * under it makes the log useless for the round that matters.
+           */
+          const wasAccurate = (lastFix.accuracy_m ?? 999) <= 10;
+          const roundActive = (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
+            } catch { return false; }
+          })();
+          if (roundActive || !wasAccurate) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
+                sinceMs: STALE_FULL_CLEAR_MS,
+                lastAccuracy_m: lastFix.accuracy_m ?? null,
+                lastSource: lastFix.source,
+                roundActive,
+              });
+            } catch { /* best-effort */ }
+          }
           lastFix = null;
+
+          /**
+           * 2026-08-11 (Tim's field log: gps_error stale_hard_clear, sinceMs 300000 — and on the
+           * course, "every now and then the GPS would fire correctly and I'd have some yardage, but
+           * it was just little glimpses").
+           *
+           * Clearing the fix was right; STOPPING THERE was not. After a genuine five-minute gap we
+           * nulled the position and then waited passively for the OS to volunteer another fix. If
+           * the watch had silently died — which expo-location does on Android Doze, leaving the
+           * subscription object non-null so nothing downstream can tell — it never came back.
+           *
+           * A restart already existed for exactly this failure, but it only ran on a BACKGROUND →
+           * FOREGROUND transition. During a round the app stays foregrounded for hours, so the one
+           * situation that needed it was the one situation it never fired in.
+           *
+           * Five minutes without a fix is the strongest signal we have that the watch is dead, so
+           * it now triggers the same recovery: tear the watch down, start a fresh one, and take a
+           * one-shot read so consumers aren't left waiting for the new watch to warm.
+           */
+          if (subscription) {
+            void (async () => {
+              try {
+                console.log('[gps] hard-clear — restarting a watch that has produced nothing for', STALE_FULL_CLEAR_MS, 'ms');
+                breadcrumb('stale_hard_clear_restart_watch', { sinceMs: STALE_FULL_CLEAR_MS });
+                await restartWatch();
+                await getOneShotFix().catch(() => null);
+              } catch (e) {
+                console.log('[gps] hard-clear restart failed (non-fatal):', e instanceof Error ? e.message : e);
+              }
+            })();
+          }
         }
         staleHardTimer = null;
       }, STALE_FULL_CLEAR_MS - STALE_HARD_LIMIT_MS);

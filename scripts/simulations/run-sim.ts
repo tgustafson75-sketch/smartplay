@@ -8918,6 +8918,23 @@ check('LOCK: a measured on-device read clears the transient cloud error, fault o
   })(),
   'transient cold-cloud error cleared by any measured read; a no-fault swing is recorded ok, not failed');
 
+// Field log: gps_error stale_hard_clear sinceMs 300000, and on the course "every now and then the
+// GPS would fire correctly… just little glimpses". The hard clear nulled the fix and then WAITED —
+// expo-location's watch dies silently on Android Doze with the subscription still non-null, so
+// nothing recovered. A restart existed but only fired on background→foreground, which during a
+// round never happens.
+check('LOCK: a five-minute GPS gap RESTARTS the watch instead of waiting passively',
+  (() => {
+    const g = read('services/gpsManager.ts');
+    const selfHeals = /stale_hard_clear_restart_watch/.test(g) &&
+      /await restartWatch\(\);[\s\S]{0,120}?await getOneShotFix\(\)/.test(g);
+    // and a stationary phone with a good fix and no round must not spam the owner log
+    const quiet = /const wasAccurate = \(lastFix\.accuracy_m \?\? 999\) <= 10;/.test(g) &&
+      /if \(roundActive \|\| !wasAccurate\) \{/.test(g);
+    return selfHeals && quiet;
+  })(),
+  'hard clear restarts the watch + takes a one-shot; benign stationary clears stay out of the log');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
