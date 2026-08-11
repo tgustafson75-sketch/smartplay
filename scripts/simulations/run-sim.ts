@@ -8722,6 +8722,29 @@ check('LOCK: a coach note can never be silently dropped — setter reports, ever
   })(),
   'setter writes activeSession + history and returns landed; swing-detail keeps the draft on failure; SmartMotion holds a pre-ingest note and flushes it');
 
+// "There's a section for coach's note, but not for MY OWN feedback. And we had that at one point.
+// Like, how did that feel?" The feel field existed in SmartMotion review but never in the library,
+// so a swing opened later had a place for a COACH's words and none for the player's. And
+// setSessionFeel carried the IDENTICAL history-only defect as setSessionCoachNote — the twin that
+// gets missed when only the reported instance is fixed.
+check('LOCK: the player\'s own feel is capturable in the library, and its setter reports like the coach note',
+  (() => {
+    const store = read('store/cageStore.ts');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    // the twin setter must have the SAME fix, not just the reported one
+    const twinFixed = /setSessionFeel: \(sessionId: string, note: string \| null\) => boolean;/.test(store) &&
+      /setSessionFeel: \(sessionId, note\) => \{[\s\S]{0,800}?activeSession: isActive && s\.activeSession/.test(store);
+    // the card exists in the library and is actually rendered
+    const cardExists = /function FeelNoteCard\(/.test(detail) &&
+      /<FeelNoteCard\s*\n?\s*sessionId=\{session\.id\}/.test(detail) &&
+      /initialNote=\{session\.feel_note \?\? null\}/.test(detail);
+    // and it never discards the player's words on a failed save
+    const safeSave = /const landed = setSessionFeel\(sessionId, draft\);/.test(detail) &&
+      /if \(!landed\) \{/.test(detail);
+    return twinFixed && cardExists && safeSave;
+  })(),
+  'setSessionFeel fixed like its twin, FeelNoteCard rendered in the library, draft preserved on a failed save');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

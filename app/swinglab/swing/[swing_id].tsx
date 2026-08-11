@@ -3250,6 +3250,18 @@ export default function SwingDetail() {
                 initialNote={session.coach_note ?? null}
               />
 
+              {/* 2026-08-10 (Tim — "there's a section for coach's note, but not for MY OWN feedback.
+                  And we had that at one point. Like, how did that feel?"). The feel field existed in
+                  the SmartMotion review screen but was never carried into the library, so a swing
+                  opened later had a place for a COACH's words and none for the player's. His own read
+                  of a swing is first-class data — the caddie reconciles feel against the measured read
+                  ("you felt a slice; the face was 4° open") and that only works if he can record it
+                  wherever he reviews. Same component shape as the coach note, distinct field. */}
+              <FeelNoteCard
+                sessionId={session.id}
+                initialNote={session.feel_note ?? null}
+              />
+
               {/* 2026-05-25 — Fix AJ Phase 2: spoken commentary card.
                   Whisper transcript of the recorded mp4's audio so the
                   user can see what they narrated ("this is Chris's
@@ -3675,6 +3687,92 @@ function CageTargetingSlot({ session }: { session: import('../../../store/cageSt
  * Empty save clears the note (setSessionCoachNote treats empty/null
  * as a delete).
  */
+/**
+ * 2026-08-10 (Tim — "how did that feel?") — the PLAYER's own read of the swing, distinct from the
+ * coach's note. Deliberately a sibling of CoachNoteCard rather than a shared component: the two
+ * carry different voices and different fields (feel_note vs coach_note), and the caddie treats them
+ * differently — the player's feel gets reconciled against the measured read, a coach's note is
+ * instruction. Same save discipline: the setter reports, and a miss keeps the draft on screen.
+ */
+function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
+  const { colors } = useTheme();
+  const setSessionFeel = useCageStore(s => s.setSessionFeel);
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(initialNote ?? '');
+
+  React.useEffect(() => {
+    if (!editing) setDraft(initialNote ?? '');
+  }, [initialNote, editing]);
+
+  const onSave = () => {
+    // Same save discipline as the coach note: the setter reports, and a miss keeps the draft on
+    // screen rather than closing over words we just lost.
+    const landed = setSessionFeel(sessionId, draft);
+    if (!landed) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore
+          .getState().show("Couldn't attach that to this swing — it's still here, try again.");
+      } catch { /* best-effort */ }
+      return;
+    }
+    setEditing(false);
+  };
+
+  if (!editing && !initialNote) {
+    return (
+      <TouchableOpacity
+        style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
+        onPress={() => setEditing(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Add how the swing felt"
+      >
+        <View style={coachNoteStyles.headerRow}>
+          <Ionicons name="body-outline" size={16} color={colors.accent} />
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>HOW IT FELT</Text>
+        </View>
+        <Text style={[coachNoteStyles.placeholder, { color: colors.text_muted }]}>
+          Your read, in your words — &ldquo;felt good, sliced right, need to finish all the way around&rdquo;.
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <View style={coachNoteStyles.headerRow}>
+        <Ionicons name="body-outline" size={16} color={colors.accent} />
+        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>HOW IT FELT</Text>
+      </View>
+      {editing ? (
+        <>
+          <TextInput
+            style={[coachNoteStyles.input, { color: colors.text_primary, borderColor: colors.border }]}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Felt good — sliced right, need to finish all the way around."
+            placeholderTextColor={colors.text_muted}
+            multiline
+            autoFocus
+          />
+          <View style={coachNoteStyles.actionsRow}>
+            <TouchableOpacity onPress={() => { setDraft(initialNote ?? ''); setEditing(false); }} accessibilityRole="button">
+              <Text style={[coachNoteStyles.label, { color: colors.text_muted }]}>CANCEL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onSave} accessibilityRole="button">
+              <Text style={[coachNoteStyles.label, { color: colors.accent }]}>SAVE</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <TouchableOpacity onPress={() => setEditing(true)} accessibilityRole="button">
+          <Text style={[coachNoteStyles.body, { color: colors.text_primary }]}>{initialNote}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
   const { colors } = useTheme();
   const setSessionCoachNote = useCageStore(s => s.setSessionCoachNote);

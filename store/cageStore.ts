@@ -630,7 +630,9 @@ interface CageState {
   /** 2026-06-13 — toggle a swing as a saved highlight (star) for its round's scorecard. */
   toggleSessionStarred: (sessionId: string) => void;
   /** Feels engine — store the player's stated feel on the session. */
-  setSessionFeel: (sessionId: string, note: string | null) => void;
+  /** 2026-08-10 — returns false when the session exists in neither collection (see
+   *  setSessionCoachNote — same defect, same fix). */
+  setSessionFeel: (sessionId: string, note: string | null) => boolean;
   /** 2026-06-24 — Smart Tempo. Persist (or clear with null) the computed
    *  backswing:downswing tempo result on a session so it shows later. */
   setSessionTempo: (sessionId: string, tempo: import('../services/smartTempo').TempoResult | null) => void;
@@ -1462,15 +1464,32 @@ export const useCageStore = create<CageState>()(
           ),
         })),
 
-      setSessionFeel: (sessionId, note) =>
-        set(s => ({
-          sessionHistory: s.sessionHistory.map(session =>
-            session.id !== sessionId ? session : {
-              ...session,
-              feel_note: note && note.trim().length > 0 ? note.trim() : null,
-            }
-          ),
-        })),
+      /**
+       * 2026-08-10 — IDENTICAL defect to setSessionCoachNote, found by checking the siblings rather
+       * than stopping at the one Tim reported: history-only, so a feel note on a just-captured
+       * (still ACTIVE) session was silently dropped. This is the pattern behind "audited a hundred
+       * times and they continue to be there" — the reported instance gets fixed, the twin doesn't.
+       */
+      setSessionFeel: (sessionId, note) => {
+        const clean = note && note.trim().length > 0 ? note.trim() : null;
+        let landed = false;
+        set(s => {
+          const inHistory = s.sessionHistory.some(x => x.id === sessionId);
+          const isActive = s.activeSession?.id === sessionId;
+          landed = inHistory || isActive;
+          return {
+            sessionHistory: inHistory
+              ? s.sessionHistory.map(session =>
+                  session.id !== sessionId ? session : { ...session, feel_note: clean })
+              : s.sessionHistory,
+            activeSession: isActive && s.activeSession
+              ? { ...s.activeSession, feel_note: clean }
+              : s.activeSession,
+          };
+        });
+        if (!landed) console.warn('[cageStore] feel note had nowhere to land — unknown session', sessionId);
+        return landed;
+      },
 
       setSessionThumbnail: (sessionId, uri) =>
         set(s => ({
