@@ -1753,9 +1753,31 @@ export default function SwingDetail() {
   // exactly — same guard, same cast. recommendDrill returns null for 'none'
   // or an unmapped issue, so a genuinely-empty/un-analyzed swing still shows
   // the placeholder (no fabricated drill).
+  /**
+   * 2026-08-10 (Tim, reading a good swing in the library — "I got a good read, but then it didn't
+   * give me for the first time ever any drill. It says 'drill suggestions will appear here once
+   * swing analysis is available', but I'm reading the rest of the swing analysis").
+   *
+   * The chain only knew two places to look: the persisted drill, then session.primary_issue. But the
+   * elite fault engine writes the named fault to the SHOT's perShotAnalysis.primary_fault, and on a
+   * single-swing capture the session-level primary_issue can be null while that shot-level fault is
+   * populated — so every other card on the screen rendered from the shot analysis while the drill
+   * card alone looked at the session and found nothing. The placeholder was telling him analysis
+   * wasn't available on a screen full of analysis.
+   *
+   * primary_fault uses the SAME vocabulary as the drill map (over_the_top, early_extension,
+   * chicken_wing, reverse_pivot…), so it resolves directly. detected_issue is the last resort, and
+   * recommendDrill still returns null for 'none' or an unmapped id — a genuinely unanalyzed swing
+   * keeps the honest placeholder rather than getting a fabricated drill.
+   */
   const drillRecommendation =
     session.drill_recommendation ??
-    (session.primary_issue ? recommendDrill(session.primary_issue.issue_id as never) : null);
+    (session.primary_issue ? recommendDrill(session.primary_issue.issue_id as never) : null) ??
+    (session.primary_issue?.primary_fault ? recommendDrill(session.primary_issue.primary_fault as never) : null) ??
+    (shot?.perShotAnalysis?.primary_fault ? recommendDrill(shot.perShotAnalysis.primary_fault as never) : null) ??
+    (shot?.perShotAnalysis?.detected_issue && shot.perShotAnalysis.detected_issue !== 'none'
+      ? recommendDrill(shot.perShotAnalysis.detected_issue as never)
+      : null);
 
   // 2026-06-13 (Phase 2) — capture-kind identity. Every library entry now wears a
   // badge that says WHAT it is — a live Smart Motion capture, an uploaded Coach
