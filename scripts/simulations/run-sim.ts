@@ -8745,6 +8745,23 @@ check('LOCK: the player\'s own feel is capturable in the library, and its setter
   })(),
   'setSessionFeel fixed like its twin, FeelNoteCard rendered in the library, draft preserved on a failed save');
 
+// "If I say I'm gonna use an eighteen degree driving iron, DON'T ASK ME WHICH IRON. Add that, put it
+// in the bag, and correlate distances." Only WEDGE lofts (46-64) parsed, so a driving iron fell to
+// null and the caddie interrogated him. Changing the bag mid-round must cost one sentence.
+check('LOCK: driving/utility irons parse by name and by loft, into the right club FAMILY',
+  (() => {
+    const c = read('services/clubRecognition.ts');
+    const named = /saysDrivingIron/.test(c) && /driving\|utility/.test(c.replace(/\s+/g, ''))
+      || /\\b\(driving\|utility/.test(c);
+    const byLoft = /const longLoft = p\.match/.test(c);
+    // loft must route to the right family, not blanket-iron everything
+    const families = /club_type: 'hybrid'/.test(c) && /club_type: 'wood'/.test(c) && /club_type: 'iron'/.test(c);
+    // a named driving iron with no loft must still resolve — never a dead end
+    const noDeadEnd = /if \(saysDrivingIron\) return \{ club_id: '3I'/.test(c);
+    return named && byLoft && families && noDeadEnd;
+  })(),
+  'driving/utility iron by name and loft, hybrid/wood lofts stay in their own families, no dead end without a loft');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

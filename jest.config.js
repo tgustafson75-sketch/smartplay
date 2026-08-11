@@ -28,6 +28,12 @@ module.exports = {
         '^expo-image-picker$': '<rootDir>/__tests__/mocks/expoImagePicker.js',
         '^expo-video-thumbnails$': '<rootDir>/__tests__/mocks/expoVideoThumbnails.js',
         '^expo-file-system(/legacy)?$': '<rootDir>/__tests__/mocks/expoFileSystem.js',
+        '^@sentry/react-native$': '<rootDir>/__tests__/mocks/sentry.js',
+        '^react-native$': '<rootDir>/__tests__/mocks/reactNative.js',
+        // Scoped, not catch-all: a blanket '^expo-.*' mapper stubbed modules that existing tests
+        // relied on for real behavior and hung quick-round-disambiguation. Only the modules pure
+        // services actually pull in transitively are stubbed.
+        '^expo-location$': '<rootDir>/__tests__/mocks/expoGeneric.js',
       },
     },
     {

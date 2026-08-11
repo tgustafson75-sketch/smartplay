@@ -237,6 +237,43 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
   // Bare "wedge" → ambiguous, return null so caller can prompt
   if (/\bwedge\b/.test(p)) return null;
 
+  /**
+   * 2026-08-10 (Tim — "you need to be able to change the bag on the fly. I can't be, like, Arccos —
+   * switch, I still two weeks later haven't had time to set up. But if I say I'm gonna use an
+   * eighteen degree driving iron, DON'T ASK ME WHICH IRON. Add that, put it in the bag, and
+   * correlate distances").
+   *
+   * DRIVING / UTILITY IRONS, by name and by loft. Nothing here parsed them: only WEDGE lofts
+   * (46-64°) were handled, so "18 degree driving iron" fell straight through to null and the caddie
+   * asked which iron — the exact interrogation he's describing. A driving iron is a real club a lot
+   * of players put in on a windy day, and swapping it in mid-round has to cost one sentence.
+   *
+   * Loft → slot uses standard iron lofts (3I≈20°, 4I≈23°, 5I≈26°, 6I≈29°), picking the nearest
+   * slot we actually carry — an 18° driving iron sits closest to the 3-iron. When a loft is spoken
+   * with "hybrid" or "wood" instead, it maps into those families by their own standard lofts, so
+   * "19 degree hybrid" doesn't get filed as an iron.
+   */
+  const longLoft = p.match(/\b(1[4-9]|2[0-9]|3[0-2])\s*(?:degrees?|deg\b|°)/);
+  const saysDrivingIron = /\b(driving|utility|driver'?s?)\s*iron\b|\bdi\b|\butility\b/.test(p);
+  if (longLoft && (saysDrivingIron || /\b(iron|hybrid|wood)\b/.test(p))) {
+    const loft = Number(longLoft[1]);
+    if (/\bhybrid|rescue\b/.test(p)) {
+      // 2H≈17, 3H≈19, 4H≈22, 5H≈25
+      const id: ClubId = loft <= 18 ? '2H' : loft <= 20 ? '3H' : loft <= 23 ? '4H' : '5H';
+      return { club_id: id, club_type: 'hybrid' };
+    }
+    if (/\bwood\b/.test(p)) {
+      // 3W≈15, 5W≈18, 7W≈21
+      const id: ClubId = loft <= 16 ? '3W' : loft <= 19 ? '5W' : '7W';
+      return { club_id: id, club_type: 'wood' };
+    }
+    // Irons (incl. driving/utility irons): nearest standard iron loft.
+    const id: ClubId = loft <= 21 ? '3I' : loft <= 24 ? '4I' : loft <= 27 ? '5I' : loft <= 30 ? '6I' : '7I';
+    return { club_id: id, club_type: 'iron' };
+  }
+  // Named driving iron with no loft spoken — a driving iron is a 2/3-iron by convention.
+  if (saysDrivingIron) return { club_id: '3I', club_type: 'iron' };
+
   // Hybrids: "3 hybrid", "4h", "rescue 3"
   const hyb = p.match(/\b([2-5])\s*(?:h|hybrid|rescue)\b/);
   if (hyb) return { club_id: `${hyb[1]}H` as ClubId, club_type: 'hybrid' };
