@@ -265,6 +265,38 @@ type SmContact = {
   reportedMishit: 'fat' | 'thin' | 'topped' | null;
 };
 
+
+/**
+ * 2026-08-10 (Tim — "you can see the club as easily as you can see the body… maybe we need to put a
+ * Zoom where, if I put it back that far, how do we then zoom in and take advantage?").
+ *
+ * The player's bounding box across the swing, in normalized frame coords, from the pose frames we
+ * already computed. Fed to detectClubPath so it can CROP to the player and spend its pixel budget
+ * there instead of downscaling an acre of empty fairway — the difference between a ~6px clubhead
+ * and a ~40px one. Uses the union across ALL frames so the box covers address through finish.
+ * Null when pose is unavailable or too weak to trust, which simply leaves the old behavior.
+ */
+function bodyBoundsFromPose(frames: PoseFrame[] | null): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (!frames?.length) return null;
+  let minX = 1, minY = 1, maxX = 0, maxY = 0, seen = 0;
+  for (const f of frames) {
+    for (const k of f.keypoints ?? []) {
+      // Only confident joints — a flickering low-score keypoint on the horizon would balloon the box.
+      if ((k.score ?? 0) < 0.4) continue;
+      if (!Number.isFinite(k.x) || !Number.isFinite(k.y)) continue;
+      if (k.x < 0 || k.x > 1 || k.y < 0 || k.y > 1) continue;
+      if (k.x < minX) minX = k.x;
+      if (k.x > maxX) maxX = k.x;
+      if (k.y < minY) minY = k.y;
+      if (k.y > maxY) maxY = k.y;
+      seen++;
+    }
+  }
+  if (seen < 8) return null;
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
 function deriveVerdict(
   a: SwingAnalysis | null,
   analyzing: boolean,
@@ -1565,7 +1597,10 @@ export default function SmartMotion() {
     // between frames (swing-detail has this; this surface lacked it). The concurrent-decode crash is
     // primarily closed at the source now: detectClubPath extracts from a PRIVATE COPY and, on copy
     // failure, returns no arc rather than decoding the file ExoPlayer is playing (clubPath.ts).
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, shouldAbort: () => cancelled })
+    // 2026-08-10 — hand the pose-derived body box in so the tracker ZOOMS to the player (see
+    // clubPath.roiFromBodyBounds). On an on-course clip shot from well back this is the difference
+    // between a detectable clubhead and a 6-pixel smudge.
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a

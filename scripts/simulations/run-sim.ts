@@ -8576,6 +8576,30 @@ check('LOCK: scorecard ingest takes MULTIPLE photos and merges them without dama
   })(),
   'multi-select picker + merge (gap-fill only, never overwrite), 2000px for legibility, partial-failure tolerant, wired into add-course');
 
+// "The club trace does not work. It is not showing at all… you can see the club as easily as you can
+// see the body… maybe we need to put a Zoom." His clip: player ~15% of frame height, whole frame
+// downscaled to 640px, clubhead ~6px. Nothing finds a 6px object — the arc-shape gates that had been
+// retuned for weeks were never the binding constraint. Crop to the player and spend pixels there.
+check('LOCK: club trace ZOOMS to the player (pose-derived crop) instead of downscaling the frame',
+  (() => {
+    const cp = read('services/swing/clubPath.ts');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const roi = /export function roiFromBodyBounds/.test(cp) && /ROI_PAD_TOP/.test(cp);
+    // the crop must be UPSCALED to the send width — that IS the zoom
+    // multi-line object literal — match across whitespace rather than pinning the formatting
+    const zooms = /actions\.push\(\{\s*crop:/.test(cp) && /actions\.push\(\{ resize: \{ width: DOWNSCALE_W \} \}\)/.test(cp);
+    // detections come back in CROP space and MUST be mapped to full-frame or the arc draws in the
+    // wrong place — every gate and the renderer reason in full-frame coords
+    const mapsBack = /const fx = roi \? roi\.x \+ pos\.x \* roi\.w : pos\.x;/.test(cp) &&
+      /const fy = roi \? roi\.y \+ pos\.y \* roi\.h : pos\.y;/.test(cp);
+    // must NOT crop when the player already fills the frame (would clip the arc)
+    const safe = /if \(bh >= 0\.55\) return null;/.test(cp);
+    // and the caller has to actually supply the bounds, or the zoom never engages
+    const wired = /function bodyBoundsFromPose/.test(sm) && /bodyBounds: bodyBoundsFromPose\(poseFrames\)/.test(sm);
+    return roi && zooms && mapsBack && safe && wired;
+  })(),
+  'pose-derived ROI crop + upscale, detections mapped back to full-frame, no crop when the player already fills the frame, wired from SmartMotion');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

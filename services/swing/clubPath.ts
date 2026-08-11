@@ -135,11 +135,79 @@ async function frameAt(videoUri: string, timeMs: number): Promise<Frame | null> 
   }
 }
 
-async function downscaled(frame: Frame): Promise<string | null> {
+/**
+ * 2026-08-10 (Tim, from an on-course swing — "swing trace does not work, the club trace does not
+ * work, it is not showing at all… you can see the club as easily as you can see the body… maybe we
+ * need to put a Zoom where, if I put it back that far, which could happen on the course, how do we
+ * then zoom in and take advantage?").
+ *
+ * He identified the fix himself, and his screenshot proves the diagnosis. In that frame the club is
+ * unmistakable — a dark shaft and head against bright fairway — and the pose skeleton draws cleanly
+ * on his body. But he fills roughly 15% of the frame height, because the phone was set well back
+ * and low. We then DOWNSCALED the whole 1080p frame to 640px wide before asking the model to find
+ * the clubhead. At that size he is ~100px tall and the clubhead is FIVE OR SIX PIXELS. Nothing can
+ * find a 6px object; the gates below were never the binding constraint.
+ *
+ * It is the same resolution ceiling as the satellite tiles earlier today, and the same fix: stop
+ * shrinking the whole picture, CROP to what matters and spend the pixels there. We already know
+ * where the player is — the pose skeleton is reliable, which is exactly why the body overlay works
+ * while the club trace doesn't. So crop to the player's bounds plus a generous margin for the arc
+ * (the club sweeps far outside the body — well above the head at the top, and low and wide through
+ * impact), then send THAT at full DOWNSCALE_W. The player goes from ~15% of the frame to most of
+ * it, and the clubhead from ~6px to ~40px.
+ *
+ * Detections come back normalized to the CROP, so they're mapped back to full-frame coordinates
+ * before anything downstream sees them. Everything after this point — the gates, the renderer —
+ * keeps working in full-frame space, unchanged.
+ */
+export type Roi = { x: number; y: number; w: number; h: number };
+
+/** Margin multipliers around the body box. Asymmetric because the arc is: the club goes far above
+ *  the head at the top of the backswing and sweeps wide to both sides through impact and finish. */
+const ROI_PAD_X = 1.1;   // ±110% of body width each side
+const ROI_PAD_TOP = 0.9; // 90% of body height above the head
+const ROI_PAD_BOTTOM = 0.35;
+
+/** Body bounds (normalized) → the crop rect to send, clamped to the frame. Null when the box is
+ *  already large (the player fills the frame — cropping would gain nothing and could clip the arc). */
+export function roiFromBodyBounds(b: { minX: number; minY: number; maxX: number; maxY: number } | null): Roi | null {
+  if (!b) return null;
+  const bw = b.maxX - b.minX;
+  const bh = b.maxY - b.minY;
+  if (!(bw > 0) || !(bh > 0)) return null;
+  // Already big in frame → the existing full-frame path is fine.
+  if (bh >= 0.55) return null;
+  const x = Math.max(0, b.minX - bw * ROI_PAD_X);
+  const y = Math.max(0, b.minY - bh * ROI_PAD_TOP);
+  const x2 = Math.min(1, b.maxX + bw * ROI_PAD_X);
+  const y2 = Math.min(1, b.maxY + bh * ROI_PAD_BOTTOM);
+  const w = x2 - x;
+  const h = y2 - y;
+  if (!(w > 0.05) || !(h > 0.05)) return null;
+  return { x, y, w, h };
+}
+
+async function downscaled(frame: Frame, roi?: Roi | null): Promise<string | null> {
   try {
+    const actions: ImageManipulator.Action[] = [];
+    if (roi) {
+      actions.push({
+        crop: {
+          originX: Math.round(roi.x * frame.width),
+          originY: Math.round(roi.y * frame.height),
+          width: Math.max(1, Math.round(roi.w * frame.width)),
+          height: Math.max(1, Math.round(roi.h * frame.height)),
+        },
+      });
+      // Always resize the CROP up/down to the send width — this is the "zoom": the same pixel
+      // budget now covers the player instead of an acre of empty fairway.
+      actions.push({ resize: { width: DOWNSCALE_W } });
+    } else if (frame.width > DOWNSCALE_W) {
+      actions.push({ resize: { width: DOWNSCALE_W } });
+    }
     const manip = await ImageManipulator.manipulateAsync(
       frame.uri,
-      frame.width > DOWNSCALE_W ? [{ resize: { width: DOWNSCALE_W } }] : [],
+      actions,
       { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
     );
     // 2026-07-30 (audit A7) — delete the manipulator's temp output; we only use the base64, so the .uri
@@ -174,10 +242,19 @@ export async function detectClubPath(args: {
   // pulling frames: a MediaMetadataRetriever must never run concurrently with ExoPlayer decoding
   // the SAME file (native SIGSEGV to the launcher, uncatchable from JS = the "crash after replay").
   shouldAbort?: () => boolean;
+  /**
+   * 2026-08-10 — the player's body bounds in normalized full-frame coords, from the pose pass that
+   * already ran. Supplying them turns on the ZOOM crop (see roiFromBodyBounds): we send a tight,
+   * upscaled view of the player instead of a shrunken whole frame, so the clubhead is ~40px rather
+   * than ~6px. Omit it and behavior is exactly as before.
+   */
+  bodyBounds?: { minX: number; minY: number; maxX: number; maxY: number } | null;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
   const { videoUri, startMs, endMs, shouldAbort } = args;
+  const roi = roiFromBodyBounds(args.bodyBounds ?? null);
+  if (roi) console.log('[clubPath] ZOOM crop active —', JSON.stringify({ x: +roi.x.toFixed(3), y: +roi.y.toFixed(3), w: +roi.w.toFixed(3), h: +roi.h.toFixed(3) }));
   if (startMs == null || endMs == null || !(endMs > startMs)) return null;
   if (shouldAbort?.()) return null; // don't even start if already playing
 
@@ -243,7 +320,7 @@ export async function detectClubPath(args: {
     if (shouldAbort?.()) { await cleanup(frames, null); sharedCopy?.release(); return null; }
     const f = await frameAt(workUri, o);
     frames.push(f);
-    b64s.push(f ? await downscaled(f) : null);
+    b64s.push(f ? await downscaled(f, roi) : null);
   }
 
   const usable: { idx: number; base64: string; tMs: number }[] = [];
@@ -275,7 +352,12 @@ export async function detectClubPath(args: {
       const u = usable[i];
       if (!u || !pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
       if (!(pos.x >= 0 && pos.x <= 1 && pos.y >= 0 && pos.y <= 1)) return;
-      points.push({ x: pos.x, y: pos.y, tMs: u.tMs });
+      // Detections are normalized to whatever we SENT. With the zoom crop active that's the crop,
+      // so map back into full-frame space before anything downstream (gates, renderer) sees them —
+      // they all reason in full-frame coordinates and must stay that way.
+      const fx = roi ? roi.x + pos.x * roi.w : pos.x;
+      const fy = roi ? roi.y + pos.y * roi.h : pos.y;
+      points.push({ x: fx, y: fy, tMs: u.tMs });
     });
     // Already in time order. Drop exact-duplicate positions (a static repeat read).
     const deduped = points.filter((p, i) =>

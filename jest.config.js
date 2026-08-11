@@ -26,6 +26,8 @@ module.exports = {
         // services/courseImport (where the scorecard merge lives) from the logic suite.
         '^expo-image-manipulator$': '<rootDir>/__tests__/mocks/expoImageManipulator.js',
         '^expo-image-picker$': '<rootDir>/__tests__/mocks/expoImagePicker.js',
+        '^expo-video-thumbnails$': '<rootDir>/__tests__/mocks/expoVideoThumbnails.js',
+        '^expo-file-system(/legacy)?$': '<rootDir>/__tests__/mocks/expoFileSystem.js',
       },
     },
     {
