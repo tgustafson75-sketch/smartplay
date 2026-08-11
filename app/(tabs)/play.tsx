@@ -46,7 +46,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
 import { locateNearbyCourses } from '../../services/courseDownloadEngine';
-import { getBundledHoles } from '../../data/courses';
+import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
@@ -115,6 +115,10 @@ const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
   return uri ? { uri } : null;
 };
 
+/** A thumbnail satelliteThumb() produced — safe to re-derive when the centroid moves. */
+const isSatelliteThumb = (t: CourseSummary['thumbnail']): boolean =>
+  !!t && typeof t === 'object' && 'uri' in t && typeof t.uri === 'string' && t.uri.includes('mapbox');
+
 /**
  * 2026-08-10 (Tim — "make sure my thumbnails in the Play tab ALWAYS work and populate when we add a
  * new course, and that you get CORRECT thumbnails").
@@ -162,7 +166,7 @@ const courseThumb = (c: { id?: string; thumbnail?: ImageSourcePropType | { uri: 
   return null;
 };
 
-const LOCAL_COURSES: CourseSummary[] = [
+const LOCAL_COURSES_RAW: CourseSummary[] = [
   // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two 18s + Pruneridge (Santa Clara, CA)
   // 9-hole par-30. OSM-built geometry (point-in-polygon split for Coyote's interleaved courses).
   // 2026-08-07 (Tim — playing it in an hour). Berlin Country Club (Berlin, MA) 9-hole par 33.
@@ -314,19 +318,22 @@ const LOCAL_COURSES: CourseSummary[] = [
     lat: 36.5090, lng: -86.8853,
   },
   {
-    // Gleneagles is scorecard-only; approx Plano coords for the card + proximity only.
+    // Gleneagles is scorecard-only (no hole geometry to derive a centroid from), so the literal is
+    // load-bearing. 2026-08-11: the old "approx Plano coords" were 5.1km off — geocoding the club
+    // itself puts it on Campbell Road, which is what the engine needs to find any holes at all.
+    // Kings and Queens share one 36-hole property, so they share a centroid.
     id: 'local:gleneagles-kings',
     club_name: "Gleneagles — King's",
     location: 'Plano, TX',
-    rating: 74.7, slope: 143, isLocal: true, thumbnail: satelliteThumb(33.0280, -96.7550),
-    lat: 33.0280, lng: -96.7550,
+    rating: 74.7, slope: 143, isLocal: true, thumbnail: satelliteThumb(33.028737, -96.809567),
+    lat: 33.028737, lng: -96.809567,
   },
   {
     id: 'local:gleneagles-queens',
     club_name: "Gleneagles — Queen's",
     location: 'Plano, TX',
-    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(33.0280, -96.7550),
-    lat: 33.0280, lng: -96.7550,
+    rating: null, slope: null, isLocal: true, thumbnail: satelliteThumb(33.028737, -96.809567),
+    lat: 33.028737, lng: -96.809567,
   },
   {
     // Querencia scorecard-only; approx Los Cabos coords for the card + proximity only.
@@ -540,6 +547,34 @@ const LOCAL_COURSES: CourseSummary[] = [
     lng: -80.2868,
   },
 ];
+
+/**
+ * 2026-08-11 — real hole geometry outranks a hand-typed centroid.
+ *
+ * Three of these literals were wrong, one by 6.8km (it pointed at a different golf course), which
+ * broke the engine build, the distance sort AND the satellite thumbnail for those courses. Rather
+ * than correcting three numbers and waiting for the next one to be mistyped, the centroid is derived
+ * from each course's own tee/green coordinates and the literal is kept only where there is no
+ * geometry to derive from — the four scorecard-only courses. See getBundledCourseCentroid.
+ *
+ * The thumbnail is rebuilt from the derived point too. A course whose centroid was wrong was showing
+ * an aerial of the wrong place, and fixing the coordinate without the image would leave that behind.
+ */
+const LOCAL_COURSES: CourseSummary[] = LOCAL_COURSES_RAW.map(c => {
+  const derived = getBundledCourseCentroid(c.id);
+  if (!derived) return c;
+  const moved = c.lat == null || c.lng == null ||
+    Math.abs(derived.lat - c.lat) > 0.002 || Math.abs(derived.lng - c.lng) > 0.002;
+  return {
+    ...c,
+    lat: derived.lat,
+    lng: derived.lng,
+    // Only re-derive a thumbnail that was BUILT from the stale point. Courses with real bundled
+    // hole photography keep theirs — those are pictures of the course, not of a coordinate.
+    thumbnail: moved && isSatelliteThumb(c.thumbnail) ? satelliteThumb(derived.lat, derived.lng) : c.thumbnail,
+  };
+});
+
 
 // 2026-06-02 — Fix GO: HAYES_OPEN_COURSE_IDS removed alongside the pinned card
 // (courses remain reachable via normal discovery).

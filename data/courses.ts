@@ -188,6 +188,51 @@ export const getCourseList = (): { id: string; name: string; par: number; yards:
     yards: c.totalYards,
   }));
 
+/**
+ * 2026-08-11 — the course centroid must be DERIVED, never hand-typed.
+ *
+ * Every bundled course also carried a hand-entered lat/lng used for the distance sort, the Play-tab
+ * thumbnail, and (since yesterday) the pre-round preview. Checking each literal against the mean of
+ * that course's own tee/green coordinates found three that were wrong, and one badly:
+ *
+ *   greenhill       6803m off — the literal was sitting on TATNUCK COUNTRY CLUB, a different course
+ *   westlake-cc-nj  3326m off
+ *   echo-hills      2649m off
+ *
+ * Independently confirmed: OSM puts "Green Hill Golf Course" 31m from the derived centroid and
+ * Tatnuck 854m from the literal. Echo Hills and Westlake agree with OSM to 13m and 110m.
+ *
+ * That explains why those courses reported "OSM unavailable" — the engine searches a 1.5km radius
+ * around the centroid, so a 3-7km error queries empty ground and finds no course to build. It also
+ * means the satellite thumbnail was showing the wrong course entirely.
+ *
+ * A hand-typed literal has no way to be checked at the moment it's typed. Real hole geometry is the
+ * better authority whenever we have it, so this derives the centroid from it and leaves the literal
+ * as the fallback for the four scorecard-only courses that have no coordinates at all.
+ */
+const centroidCache = new Map<string, { lat: number; lng: number } | null>();
+
+export function getBundledCourseCentroid(courseId: string): { lat: number; lng: number } | null {
+  const id = courseId.replace(/^local:/, '');
+  const cached = centroidCache.get(id);
+  if (cached !== undefined) return cached;
+
+  const course = COURSES.find(c => c.id === id);
+  const pts: { lat: number; lng: number }[] = [];
+  for (const h of course?.holes ?? []) {
+    // 0/0 is this file's "no coordinate" marker, and a tee dropped by validateBundledTees lands
+    // there too — averaging it in would drag the centroid toward the Gulf of Guinea.
+    if (Math.abs(h.middleLat) > 0.001 && Math.abs(h.middleLng) > 0.001) pts.push({ lat: h.middleLat, lng: h.middleLng });
+    if (Math.abs(h.teeLat) > 0.001 && Math.abs(h.teeLng) > 0.001) pts.push({ lat: h.teeLat, lng: h.teeLng });
+  }
+  // One stray coordinate shouldn't define a course. Three points is the floor for a usable mean.
+  const result = pts.length >= 3
+    ? { lat: pts.reduce((a, p) => a + p.lat, 0) / pts.length, lng: pts.reduce((a, p) => a + p.lng, 0) / pts.length }
+    : null;
+  centroidCache.set(id, result);
+  return result;
+}
+
 // ─── COURSE DATA ──────────────────────────
 
 // Phase AW — Palms par/distance from golfcourseapi (id=20620 "White"
