@@ -408,12 +408,67 @@ async function readPersistedCache(courseId: string): Promise<CourseGeometry | nu
   }
 }
 
+/** How many holes in this geometry actually carry a usable green — the measure of "is this real". */
+export function mappedHoleCount(geo: CourseGeometry | null | undefined): number {
+  if (!geo?.holes?.length) return 0;
+  return geo.holes.filter(h => h.green != null).length;
+}
+
+/**
+ * 2026-08-10 (Tim, after the round — "most of it didn't load correctly, and if the course doesn't
+ * load correctly the whole app doesn't work").
+ *
+ * A course that loaded FINE five minutes ago must not be erased by one bad fetch. The upstream
+ * geometry depends on free community Overpass mirrors; even with three of them and a retry, a
+ * measured 1-in-6 of production calls still comes back with zero greens. That response used to be
+ * written straight over a perfectly good cached course — so a single unlucky refresh turned a
+ * working course into an empty one, and it STAYED empty because the empty version was now the cache.
+ *
+ * So the cache never accepts a downgrade: a write with fewer mapped holes than what's already stored
+ * is dropped. Real improvements (more holes mapped, refreshed detail) still land normally, and a
+ * course we have nothing for is still written the first time.
+ */
 async function writePersistedCache(geo: CourseGeometry): Promise<void> {
   try {
+    const incoming = mappedHoleCount(geo);
+    if (incoming === 0) {
+      const existing = await readPersistedCache(geo.course_id);
+      if (mappedHoleCount(existing) > 0) {
+        console.warn(`[courseGeometry] refusing to overwrite ${mappedHoleCount(existing)} mapped holes with an EMPTY read for ${geo.course_id} — keeping the good cache`);
+        return;
+      }
+    } else {
+      const existing = await readPersistedCache(geo.course_id);
+      const had = mappedHoleCount(existing);
+      if (had > incoming) {
+        console.warn(`[courseGeometry] refusing to downgrade ${geo.course_id}: cached ${had} mapped holes, incoming only ${incoming}`);
+        return;
+      }
+    }
     await AsyncStorage.setItem(cacheKey(geo.course_id), JSON.stringify(geo));
   } catch (e) {
     console.warn('[courseGeometry] cache write failed:', e);
   }
+}
+
+
+/**
+ * Commit a freshly-fetched geometry to BOTH caches, refusing a downgrade in either.
+ * The in-memory cache needs the same guard as disk: without it an empty read still wins for the
+ * rest of the session, so the course stays broken until the app restarts even though the good
+ * copy is safe on disk.
+ */
+async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<CourseGeometry> {
+  const incoming = mappedHoleCount(geo);
+  const inMem = memCache.get(courseId);
+  if (mappedHoleCount(inMem) > incoming) {
+    console.warn(`[courseGeometry] keeping the better in-memory copy of ${courseId} (${mappedHoleCount(inMem)} vs ${incoming} mapped holes)`);
+    await writePersistedCache(geo); // still guarded on disk; a no-op when it would downgrade
+    return inMem as CourseGeometry;
+  }
+  memCache.set(courseId, geo);
+  await writePersistedCache(geo);
+  return geo;
 }
 
 /**
@@ -617,9 +672,7 @@ export async function fetchCourseGeometry(
     // and SmartVision's getHoleGeometry(courseId='local:sunnyvale')
     // would miss the cache forever.
     geo.course_id = courseId;
-    memCache.set(courseId, geo);
-    await writePersistedCache(geo);
-    return geo;
+    return await commitGeometry(courseId, geo);
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
     return persisted ?? buildBundledGeometry(courseId) ?? null;
@@ -692,8 +745,7 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
     const geo = (await res.json()) as CourseGeometry;
     geo.fetched_at = Date.now();
     geo.course_id = courseId;
-    memCache.set(courseId, geo);
-    await writePersistedCache(geo);
+    await commitGeometry(courseId, geo);
     console.log('[courseGeometry] background refresh ok:', courseId);
   } catch (e) {
     console.warn('[courseGeometry] background refresh exception:', e instanceof Error ? e.message : String(e), courseId);

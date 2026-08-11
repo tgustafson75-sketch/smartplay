@@ -8504,6 +8504,27 @@ check('LOCK: vision is SEEDED from known coords — skips the search, orients fr
   })(),
   'known coords skip the search, surveyed tee owns orientation, drifting vision detail is discarded, seeded reads survive a vision miss, detail pass wired');
 
+// Overpass throttles ~1-in-6 even across three mirrors, and that empty response used to be written
+// straight over a good cached course — a transient upstream hiccup became PERMANENT local damage.
+check('LOCK: the geometry cache never accepts a downgrade (empty read cannot erase a loaded course)',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    const measured = /export function mappedHoleCount/.test(g) && /h\.green != null/.test(g);
+    const diskGuard = /refusing to overwrite/.test(g) && /refusing to downgrade/.test(g);
+    // the in-memory cache needs the SAME guard or the course stays broken until app restart
+    const memGuard = /async function commitGeometry/.test(g) && /keeping the better in-memory copy/.test(g);
+    // and every fetch path must commit through it rather than setting caches directly
+    // Exactly ONE unguarded set+write may exist — the one INSIDE commitGeometry, after its checks.
+    // A second occurrence means a fetch path is writing the caches directly again, which is what
+    // let an empty read erase a loaded course.
+    const directWrites = (g.match(/memCache\.set\(courseId, geo\);\s*\n\s*await writePersistedCache\(geo\);/g) ?? []).length;
+    const noDirectWrites = directWrites === 1;
+    // the asset mapper that made this module testable at all must stay
+    const testable = /imageAsset/.test(read('jest.config.js'));
+    return measured && diskGuard && memGuard && noDirectWrites && testable;
+  })(),
+  'downgrade-proof disk + memory caches committed through one path; image-asset mapper keeps the module testable');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

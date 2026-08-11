@@ -16,6 +16,12 @@ module.exports = {
       moduleNameMapper: {
         '^@react-native-async-storage/async-storage$':
           '<rootDir>/__tests__/mocks/asyncStorage.ts',
+        // 2026-08-10 — bundled image assets resolve to numeric ids under React Native; plain node
+        // tried to PARSE the JPEG/PNG bytes, so any module transitively importing course imagery
+        // ("Invalid or unexpected token") was unreachable from the logic suite. See the mock's
+        // header: that shadow is where two of today's shipped bugs were hiding.
+        '\\.(jpg|jpeg|png|gif|webp|svg|mp3|mp4|wav|m4a)$':
+          '<rootDir>/__tests__/mocks/imageAsset.js',
       },
     },
     {
