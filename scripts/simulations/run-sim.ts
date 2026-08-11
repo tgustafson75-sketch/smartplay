@@ -8538,8 +8538,16 @@ check('LOCK: a successful course build is persisted server-side and survives a l
     // the public path must STILL force ai_vision — this must not become a spoofing hole
     const shareStillLocked = /const source = 'ai_vision';/.test(c);
     // write-back only when substantially mapped, and never blocking the response
+    // 2026-08-10 — the write must be AWAITED, not fire-and-forget. Verified in production: a Vercel
+    // function freezes once it responds, so a post-response write was killed partway and persisted
+    // only holes 2-11 — a PARTIAL course made permanent, which is worse than none. It must also be
+    // batched (one upsert, parallel recomputes) so it completes inside the request, and bounded so
+    // a slow database can't become a slow round.
     const persists = /recordServerBuild\(db, cloudKey \?\? courseId/.test(g) &&
-      /mappedNow >= CLOUD_COMPLETE_MIN/.test(g) && /void \(async \(\) => \{/.test(g);
+      /mappedNow >= CLOUD_COMPLETE_MIN/.test(g) &&
+      /await Promise\.race\(\[persist,/.test(g) &&
+      !/void \(async \(\) => \{[\s\S]{0,400}?recordServerBuild/.test(g) &&
+      /upsert\(payload, \{ onConflict: 'course_id,hole,contributor_hash' \}\)/.test(c);
     // and a thin live build serves the STORED one instead of an empty course
     const fallsBack = /storedMapped > mappedNow/.test(g) && /source: 'stored_build'/.test(g);
     return writer && shareStillLocked && persists && fallsBack;

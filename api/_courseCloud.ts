@@ -144,30 +144,56 @@ export async function recordServerBuild(
   courseId: string,
   holes: SharedHoleInput[],
 ): Promise<number> {
-  let written = 0;
-  for (const h of holes) {
-    const hole = Math.trunc(Number(h.hole));
-    if (!Number.isFinite(hole) || hole < 1 || hole > 36) continue;
-    if (!hasUsableCoords(h)) continue;
-    const row = {
-      course_id: courseId,
-      hole,
-      contributor_hash: SERVER_CONTRIBUTOR,
-      tee_lat: num(h.tee_lat), tee_lng: num(h.tee_lng),
-      green_lat: num(h.green_lat), green_lng: num(h.green_lng),
-      green_front_lat: num(h.green_front_lat), green_front_lng: num(h.green_front_lng),
-      green_back_lat: num(h.green_back_lat), green_back_lng: num(h.green_back_lng),
-      source: 'osm',
-      // High but not absolute: a bundled/curated course and an on-foot walk still outrank this.
-      confidence: 0.85,
-    };
-    const { error } = await db.from(REPORTS).upsert(row, { onConflict: 'course_id,hole,contributor_hash' });
-    if (error) { console.warn('[courseCloud] server build upsert failed', courseId, hole, error.message); continue; }
-    written++;
-    await recomputeCanonical(db, courseId, hole, { par: num(h.par), yardage: num(h.yardage) });
+  /**
+   * 2026-08-10 — BATCHED, and the batching is the point, not an optimisation.
+   *
+   * The first version wrote hole-by-hole (an upsert plus a canonical recompute per hole, so ~36
+   * sequential round trips) from a fire-and-forget task started AFTER the response was sent.
+   * Verified against production: only holes 2-11 ever landed, a few more per invocation. A Vercel
+   * function is FROZEN once it responds, so the tail of that loop was simply killed mid-write —
+   * which is worse than not persisting at all, because it produces a permanent PARTIAL course.
+   *
+   * One upsert for every row, then the canonical recomputes in parallel, makes the whole write
+   * fast enough to complete inside the request rather than racing the freeze.
+   */
+  const rows = holes
+    .map((h) => {
+      const hole = Math.trunc(Number(h.hole));
+      if (!Number.isFinite(hole) || hole < 1 || hole > 36) return null;
+      if (!hasUsableCoords(h)) return null;
+      return {
+        course_id: courseId,
+        hole,
+        contributor_hash: SERVER_CONTRIBUTOR,
+        tee_lat: num(h.tee_lat), tee_lng: num(h.tee_lng),
+        green_lat: num(h.green_lat), green_lng: num(h.green_lng),
+        green_front_lat: num(h.green_front_lat), green_front_lng: num(h.green_front_lng),
+        green_back_lat: num(h.green_back_lat), green_back_lng: num(h.green_back_lng),
+        source: 'osm',
+        // High but not absolute: a bundled/curated course and an on-foot walk still outrank this.
+        confidence: 0.85,
+        _meta: { par: num(h.par), yardage: num(h.yardage) },
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null);
+
+  if (rows.length === 0) return 0;
+
+  const payload = rows.map(({ _meta, ...row }) => { void _meta; return row; });
+  const { error } = await db.from(REPORTS).upsert(payload, { onConflict: 'course_id,hole,contributor_hash' });
+  if (error) {
+    console.warn('[courseCloud] server build batch upsert failed', courseId, error.message);
+    return 0;
   }
-  if (written > 0) console.log(`[courseCloud] SERVER BUILD persisted ${written} holes for ${courseId} — this course no longer depends on Overpass`);
-  return written;
+
+  // Canonical recompute per hole, in parallel. Failures here are individually non-fatal: the raw
+  // reports are already stored, so a later build re-derives the canonical rows.
+  await Promise.all(
+    rows.map(r => recomputeCanonical(db, courseId, r.hole, r._meta).catch(() => undefined)),
+  );
+
+  console.log(`[courseCloud] SERVER BUILD persisted ${rows.length} holes for ${courseId} — this course no longer depends on Overpass`);
+  return rows.length;
 }
 
 /** Recompute the merged canonical row for one hole from all its reports. */

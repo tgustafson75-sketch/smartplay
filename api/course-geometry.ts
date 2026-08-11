@@ -1180,18 +1180,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * course is served from there — for every user, not just whoever triggered the good build. A
      * course has to build successfully exactly ONCE, ever.
      *
-     * Deliberately fire-and-forget: persistence must never slow down or fail the response the
-     * player is waiting on. And gated on being substantially mapped, so a partial build can never
-     * become the permanent record.
+     * AWAITED, not fire-and-forget — and that was a real bug, caught in production rather than
+     * reasoned about. The first version started this AFTER responding; a Vercel function is FROZEN
+     * once it responds, so the write was killed partway and only holes 2-11 ever landed, a few more
+     * per invocation. A truncated write is worse than none: it makes a PARTIAL course permanent.
+     * Now the write is batched (one upsert + parallel canonical recomputes) so it completes inside
+     * the request, and it is bounded so persistence can still never hang the player's response.
+     *
+     * Gated on being substantially mapped, so a thin build can never become the permanent record.
      */
     const mappedNow = holesWithPolygons.filter(h => h.tee && h.green).length;
     if (mappedNow >= CLOUD_COMPLETE_MIN) {
-      void (async () => {
-        try {
-          const db = getSmartPlaySupabase();
-          if (!db) return;
+      try {
+        const db = getSmartPlaySupabase();
+        if (db) {
           const { recordServerBuild } = await import('./_courseCloud');
-          await recordServerBuild(db, cloudKey ?? courseId, holesWithPolygons.map(h => ({
+          const persist = recordServerBuild(db, cloudKey ?? courseId, holesWithPolygons.map(h => ({
             hole: h.hole_number,
             par: h.par,
             yardage: h.yardage,
@@ -1200,10 +1204,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             green_front_lat: h.green_front?.lat ?? null, green_front_lng: h.green_front?.lng ?? null,
             green_back_lat: h.green_back?.lat ?? null, green_back_lng: h.green_back?.lng ?? null,
           })));
-        } catch (e) {
-          console.warn('[course-geometry] server build persist failed (non-fatal):', e instanceof Error ? e.message : e);
+          // Bounded: a slow database must not become a slow round. The reports are upserted first,
+          // so even a timeout here leaves the data recoverable on the next build.
+          await Promise.race([persist, new Promise(r => setTimeout(r, 6_000))]);
         }
-      })();
+      } catch (e) {
+        console.warn('[course-geometry] server build persist failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
     } else {
       /**
        * The build came back thin — almost always a throttled Overpass, measured at ~1-in-6 in
