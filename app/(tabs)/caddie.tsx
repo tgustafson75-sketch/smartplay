@@ -1565,12 +1565,11 @@ export default function CaddieTab() {
           // logScore is also the per-tap edit primitive, so only advance the
           // spiral on the FIRST score for this hole (a genuine completion) —
           // snapshot the prior score (>0) BEFORE logScore overwrites it.
-          const alreadyScored = (useRoundStore.getState().scores[targetHole] ?? 0) > 0;
+          // 2026-08-11 (adversarial audit) — the 4th of four sites that re-accumulated the mental
+          // state right after logScore, discarding the value logScore had just DERIVED from the
+          // scorecard. Deriving at the one funnel is the fix; every one of these had to go, or the
+          // last writer wins and the fix is inert exactly where it matters.
           logScore(targetHole, rounded);
-          if (!alreadyScored) {
-            const targetPar = useRoundStore.getState().courseHoles.find(c => c.hole === targetHole)?.par ?? 4;
-            useRelationshipStore.getState().updateMentalState(rounded, targetPar);
-          }
         } else {
           // Score missing — fall back to manual modal so Tim can finish entry.
           setShowShotCard(true);
@@ -2809,7 +2808,11 @@ export default function CaddieTab() {
     // 2026-08-06 (tester Matt Abid) — a 9-hole round ends at roundStartHole + 8 (front: 9, back: 18).
     const maxHole = nineHoleMode ? ((roundStartHole || 1) + 8) : getCourseHoleCount(useRoundStore.getState().activeCourseId, courseHoles.length);
 
-    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(holeScore, par ?? 4);
+// 2026-08-11 (adversarial audit) — REMOVED. roundStore.logScore now DERIVES the mental state from
+// the scorecard at the single seam every score path funnels through. This call ran immediately
+// AFTER logScore and re-accumulated on top of it, so the old per-surface tally won and the derived
+// value was discarded — my "forget the last three" fix did nothing on the paths Tim actually uses.
+// It also passed `par ?? 4`, which made a par on a par-5 read as a bogey.
 
     if (currentHole >= maxHole) {
       clearShotPending();

@@ -114,11 +114,12 @@ export const logScoreHandler: IntentHandler = {
     // overwrites it; skip updateMentalState on a re-log/edit.
     const alreadyScored = (round.scores[hole] ?? 0) > 0;
     round.logScore(hole, strokes);
-    if (!alreadyScored) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { useRelationshipStore } = require('../../store/relationshipStore') as typeof import('../../store/relationshipStore');
-      useRelationshipStore.getState().updateMentalState(strokes, par ?? 4);
-    }
+// 2026-08-11 (adversarial audit) — REMOVED. roundStore.logScore now DERIVES the mental state from
+// the scorecard at the single seam every score path funnels through. This call ran immediately
+// AFTER logScore and re-accumulated on top of it, so the old per-surface tally won and the derived
+// value was discarded — my "forget the last three" fix did nothing on the paths Tim actually uses.
+// It also passed `par ?? 4`, which made a par on a par-5 read as a bogey.
+    void alreadyScored;
     track('log_score_voice', { hole, strokes, par });
     const label = scoreLabel(strokes, par);
     const holePart = hole === round.currentHole ? `Got it` : `Got it, hole ${hole}`;

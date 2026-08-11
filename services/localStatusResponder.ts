@@ -55,6 +55,49 @@ import { playsLikeDistance } from '../utils/playsLike';
 // OFFLINE from the persisted book, not a network fetch. [[course-book-cns]]
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 
+/**
+ * 2026-08-11 (adversarial audit) — ONE bag builder for every spoken reply in this file.
+ *
+ * The gap-wedge defect lived here TWICE: the club reply and the reach reply each did their own
+ * `Object.entries(bagDistances())`, so a sparse bag made "your longest club" a gap wedge in both.
+ * I fixed the first and the sim guard caught the second — which is the exact half-work pattern this
+ * audit exists to stop. One builder now, so a third reader cannot reintroduce it.
+ *
+ * The standard ladder is ALWAYS the baseline; the player's real numbers override it club by club.
+ * `measured` reports which entries are genuinely his, so a reply can never call a chart average
+ * "your" carry.
+ */
+function spokenBag(): { entries: [string, number][]; measured: Set<string> } {
+  const merged = new Map<string, number>(STANDARD_SPOKEN_LADDER);
+  const measured = new Set<string>();
+  for (const [club, yds] of Object.entries(bagDistances())) {
+    if (typeof yds === 'number' && yds > 0) {
+      const label = SPOKEN_LADDER_LABEL[club] ?? club;
+      merged.set(label, yds);
+      measured.add(label);
+    }
+  }
+  return { entries: [...merged.entries()] as [string, number][], measured };
+}
+
+/**
+ * 2026-08-11 — the standard carry ladder this responder falls back on, and the ClubName→label map.
+ * Deliberately mirrors services/cnsShotRead so the SPOKEN club and the on-screen club can't disagree
+ * — two ladders in two files is how the same bug got fixed four times and stayed alive in a fifth.
+ */
+const STANDARD_SPOKEN_LADDER: readonly (readonly [string, number])[] = [
+  ['Driver', 250], ['3 Wood', 225], ['5 Wood', 210], ['Hybrid', 195],
+  ['4 Iron', 185], ['5 Iron', 175], ['6 Iron', 165], ['7 Iron', 155],
+  ['8 Iron', 145], ['9 Iron', 130], ['PW', 115], ['GW', 100], ['SW', 85], ['LW', 70],
+];
+const SPOKEN_LADDER_LABEL: Record<string, string> = {
+  Driver: 'Driver', '3W': '3 Wood', '5W': '5 Wood', '7W': '5 Wood',
+  '2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid',
+  '3I': '4 Iron', '4I': '4 Iron', '5I': '5 Iron', '6I': '6 Iron',
+  '7I': '7 Iron', '8I': '8 Iron', '9I': '9 Iron',
+  PW: 'PW', AW: 'GW', GW: 'GW', SW: 'SW', LW: 'LW',
+};
+
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 
 /**
@@ -610,7 +653,18 @@ export function deadEndLine(language: LocalReplyLanguage = 'en'): string {
 // is empty (track shots first) or the distance is unavailable (GPS/green missing).
 function clubCallReply(lang: LocalReplyLanguage): LocalReplyResult {
   const round = useRoundStore.getState();
-  const bag = Object.entries(bagDistances()) as [string, number][];
+  /**
+   * 2026-08-11 (adversarial audit) — the FIFTH producer of the gap-wedge bug, and the one the caddie
+   * SPEAKS. bagDistances() returns only clubs we have data for, so with a single logged gap wedge
+   * `longest` below IS that wedge, and a 324-yard shot said "that's past your GW (95) — lay up and
+   * leave a wedge." Same defect as clubStatsStore.inferClub, equipment_distance_modifier,
+   * cnsShotRead and the offline read; I fixed four and called it closed, twice.
+   *
+   * Same fix as the others, and the model Tim stated: a COMPLETE standard bag is always the
+   * baseline, and his own numbers override it club by club. `measured` tracks which entries are
+   * genuinely his, so the spoken lines below can't claim a chart average as his carry.
+   */
+  const { entries: bag } = spokenBag();
   if (bag.length === 0) {
     return { text: L[lang].noBag, queryType: 'club_recommend' };
   }
@@ -690,7 +744,9 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
 // player's LONGEST real club. Honest — only real bag carries, never a fabricated one.
 function reachReply(lang: LocalReplyLanguage): LocalReplyResult {
   const round = useRoundStore.getState();
-  const bag = Object.entries(bagDistances()) as [string, number][];
+  // 2026-08-11 — SIXTH instance of the sparse-bag defect, found by the guard written for the fifth.
+  // "Can I reach?" measured against a one-club bag answered from a gap wedge.
+  const { entries: bag } = spokenBag();
   if (bag.length === 0) return { text: L[lang].noBag, queryType: 'reach' };
   if (typeof round.currentHole !== 'number' || round.currentHole <= 0) {
     return { text: L[lang].noFix, queryType: 'reach' };

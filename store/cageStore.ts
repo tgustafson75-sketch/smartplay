@@ -1491,52 +1491,88 @@ export const useCageStore = create<CageState>()(
         return landed;
       },
 
+      /**
+       * 2026-08-11 (adversarial audit) — the SAME history-only defect as setSessionCoachNote and
+       * setSessionFeel. A write against a just-captured (still ACTIVE) session matched nothing and
+       * was silently dropped; a no-op map is indistinguishable from a successful save, which is why
+       * this class keeps surviving audits. Fixing the two Tim reported and leaving the twins is
+       * exactly the half-work pattern — so all four are done together here.
+       */
       setSessionThumbnail: (sessionId, uri) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, thumbnailUri: uri || null }
           ),
+          activeSession: s.activeSession?.id === sessionId && s.activeSession
+            ? { ...s.activeSession, thumbnailUri: uri || null }
+            : s.activeSession,
         })),
 
       // 2026-06-24 — Smart Tempo result writer. Mirrors the other session
       // patch setters; null clears.
+      /**
+       * 2026-08-11 (adversarial audit) — the SAME history-only defect as setSessionCoachNote and
+       * setSessionFeel. A write against a just-captured (still ACTIVE) session matched nothing and
+       * was silently dropped; a no-op map is indistinguishable from a successful save, which is why
+       * this class keeps surviving audits. Fixing the two Tim reported and leaving the twins is
+       * exactly the half-work pattern — so all four are done together here.
+       */
       setSessionTempo: (sessionId, tempo) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, tempo_result: tempo ?? null }
           ),
+          activeSession: s.activeSession?.id === sessionId && s.activeSession
+            ? { ...s.activeSession, tempo_result: tempo ?? null }
+            : s.activeSession,
         })),
       // 2026-06-29 (Tim) — SmartMotion shot-map writer; mirrors the tempo writer.
+      /**
+       * 2026-08-11 (adversarial audit) — the SAME history-only defect as setSessionCoachNote and
+       * setSessionFeel. A write against a just-captured (still ACTIVE) session matched nothing and
+       * was silently dropped; a no-op map is indistinguishable from a successful save, which is why
+       * this class keeps surviving audits. Fixing the two Tim reported and leaving the twins is
+       * exactly the half-work pattern — so all four are done together here.
+       */
       setSessionShotMap: (sessionId, shotMap) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session =>
             session.id !== sessionId ? session : { ...session, smart_motion_shot_map: shotMap ?? null }
           ),
+          activeSession: s.activeSession?.id === sessionId && s.activeSession
+            ? { ...s.activeSession, smart_motion_shot_map: shotMap ?? null }
+            : s.activeSession,
         })),
 
       // 2026-05-27 — Fix EO: cage targeting setters. Defensive normalize:
       // coord values are clamped to [0,1] before persist so a renderer
       // bug or weird gesture never writes off-frame coords that would
       // render the overlay outside the video viewport.
-      setSessionBallArea: (sessionId, area) =>
+      /**
+       * 2026-08-11 (adversarial audit) — same history-only defect as its siblings; a ball area marked
+       * on a just-captured (still ACTIVE) session was silently dropped. Normalisation hoisted so the
+       * two collections can't drift apart in how they clamp.
+       */
+      setSessionBallArea: (sessionId, area) => {
+        const normalized = area == null ? null : (() => {
+          const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+          return {
+            x: clamp01(area.x),
+            y: clamp01(area.y),
+            // 2026-07-10 (audit SM1) — area.r is optional on the CV/auto shape; an undefined r made
+            // this NaN and crashed CageTargetingOverlay (white screen). Default to a sane radius.
+            r: Number.isFinite(area.r) ? Math.max(0.01, Math.min(0.5, area.r)) : 0.08,
+          };
+        })();
         set(s => ({
-          sessionHistory: s.sessionHistory.map(session => {
-            if (session.id !== sessionId) return session;
-            if (area == null) return { ...session, ball_area_norm: null };
-            const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-            return {
-              ...session,
-              ball_area_norm: {
-                x: clamp01(area.x),
-                y: clamp01(area.y),
-                // 2026-07-10 (audit SM1) — area.r is optional on the CV/auto shape; an
-                // undefined r made this NaN and crashed CageTargetingOverlay (white screen).
-                // Default to a sane radius when it's missing/non-finite.
-                r: Number.isFinite(area.r) ? Math.max(0.01, Math.min(0.5, area.r)) : 0.08,
-              },
-            };
-          }),
-        })),
+          sessionHistory: s.sessionHistory.map(session =>
+            session.id !== sessionId ? session : { ...session, ball_area_norm: normalized }
+          ),
+          activeSession: s.activeSession?.id === sessionId && s.activeSession
+            ? { ...s.activeSession, ball_area_norm: normalized }
+            : s.activeSession,
+        }));
+      },
       setSessionTarget: (sessionId, target) =>
         set(s => ({
           sessionHistory: s.sessionHistory.map(session => {

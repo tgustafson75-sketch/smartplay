@@ -280,12 +280,10 @@ function dispatchOne(a: AnyAction): void {
       const alreadyScored = (round.scores[targetHole] ?? 0) > 0;
       round.logScore(targetHole, rounded);
       if (!alreadyScored) {
-        try {
-          const targetPar = round.courseHoles.find((c) => c.hole === targetHole)?.par ?? 4;
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          (require('../../store/relationshipStore') as typeof import('../../store/relationshipStore'))
-            .useRelationshipStore.getState().updateMentalState(rounded, targetPar);
-        } catch { /* mental-state is best-effort */ }
+        // 2026-08-11 (adversarial audit) — REMOVED. roundStore.logScore now DERIVES the mental state
+        // from the scorecard at the one seam every score path funnels through. This ran right after
+        // logScore and re-accumulated over it, so the per-surface tally won and the derived value was
+        // thrown away — the "forget the last three" fix was inert on this path too.
       }
       break;
     }

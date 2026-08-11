@@ -752,12 +752,18 @@ export default function SmartVisionScreen() {
                 par: geo?.par ?? null,
                 yardage: geo?.yardage ?? null,
                 courseId,
-                // 2026-08-10 (Tim — "once you get the OSM and you get the coordinates, then you
-                // zoom on the available tiles, and you orient it correctly"). Hand vision the
-                // coordinates we ALREADY have. It then skips searching entirely, zooms straight to
-                // the real green, and only reads DETAIL — green edge, tee pad, fairway, hazards —
-                // with orientation taken from the surveyed tee→green axis, never from the model.
-                knownGreen: geo?.green ?? null,
+                /**
+                 * 2026-08-11 (adversarial audit) — knownGreen is deliberately NOT passed here.
+                 *
+                 * This whole branch is gated on `!geo || !geo.green`, so `geo?.green` is null by
+                 * definition: passing it implied a seeded read that could never happen and made the
+                 * seeding look more wired than it was. The SEEDED path is the detail pass below,
+                 * which runs when a green DOES exist. Here vision is genuinely searching, because
+                 * nothing knows where the green is yet — that is the honest description of this call.
+                 *
+                 * knownTee still helps: municipal courses often have a real tee with a null green,
+                 * and a surveyed tee anchors orientation even while the green is being found.
+                 */
                 knownTee: geo?.tee ?? null,
               });
             } catch (e) {

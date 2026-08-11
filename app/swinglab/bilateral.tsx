@@ -53,6 +53,44 @@ function frameUri(s: CageSession | null): string | null {
   return s.thumbnailUri ?? s.primary_issue?.visual_reference_path ?? null;
 }
 
+
+/**
+ * 2026-08-11 (adversarial audit) — HOISTED out of BilateralReview's body.
+ *
+ * FrameTile was defined INSIDE the parent component, so every parent render created a brand-new
+ * function identity. React compares component TYPE by identity, so both tiles were unmounted and
+ * remounted on each render: `imgErr` reset, the resolved uri was recomputed, and the image reloaded
+ * from disk — a flicker on a screen whose whole job is to show two frames side by side.
+ *
+ * It also calls hooks (useResolvedImageUri, useState). A hook-bearing component redefined every
+ * render is the single most common source of "Rendered more hooks than during the previous render",
+ * which is an open crash in this app. This is not proof of that crash's origin — it is in a
+ * different screen — but it is the same defect class and had to go regardless.
+ *
+ * Reads its own theme rather than closing over the parent's, which is what makes hoisting safe.
+ */
+function FrameTile({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) {
+  const { colors } = useTheme();
+  // 2026-07-06 (elite audit) — thumbnails/fault frames are persisted as ABSOLUTE file:// paths and
+  // iOS regenerates the container UUID on every native build, so re-anchor at read instead of
+  // trusting the stored prefix.
+  const uri = useResolvedImageUri(frameUri(session));
+  const [imgErr, setImgErr] = useState(false);
+  return (
+    <View style={[styles.tile, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <Text style={[styles.tileLabel, { color: colors.accent }]}>{fallbackLabel}</Text>
+      {uri && !imgErr ? (
+        <Image source={{ uri }} style={styles.tileImg} resizeMode="cover" onError={() => setImgErr(true)} />
+      ) : (
+        <View style={[styles.tileImg, styles.tilePlaceholder]}>
+          <Ionicons name="image-outline" size={22} color={colors.text_muted} />
+          <Text style={[styles.tilePlaceholderText, { color: colors.text_muted }]}>{imgErr ? 'unavailable' : 'no frame'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function BilateralReview() {
   const { a, b } = useLocalSearchParams<{ a?: string; b?: string }>();
   const router = useRouter();
@@ -118,27 +156,6 @@ export default function BilateralReview() {
     );
   };
 
-  // Side-by-side biplane strip: the two angles' representative frames together.
-  const FrameTile = ({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) => {
-    // 2026-07-06 (elite audit) — thumbnails/fault frames are persisted as
-    // ABSOLUTE file:// paths and iOS regenerates the container UUID on every
-    // native build, so re-anchor at read instead of trusting the stored prefix.
-    const uri = useResolvedImageUri(frameUri(session));
-    const [imgErr, setImgErr] = useState(false);
-    return (
-      <View style={[styles.tile, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-        <Text style={[styles.tileLabel, { color: colors.accent }]}>{fallbackLabel}</Text>
-        {uri && !imgErr ? (
-          <Image source={{ uri }} style={styles.tileImg} resizeMode="cover" onError={() => setImgErr(true)} />
-        ) : (
-          <View style={[styles.tileImg, styles.tilePlaceholder]}>
-            <Ionicons name="image-outline" size={22} color={colors.text_muted} />
-            <Text style={[styles.tilePlaceholderText, { color: colors.text_muted }]}>{imgErr ? 'unavailable' : 'no frame'}</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

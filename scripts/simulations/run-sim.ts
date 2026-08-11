@@ -8959,6 +8959,45 @@ check('LOCK: scorecard layout diagrams are read AND injected where the caddie re
   })(),
   'layout read from the card map (null when absent), merged non-destructively, injected into hole notes the brain already reads');
 
+// ADVERSARIAL AUDIT (Tim: "assume you only half-assed it"). Five real defects in my OWN last-96h
+// work. Each is the same shape: the reported instance fixed, its twins left alive.
+check('LOCK: adversarial-audit fixes — 5th club producer, mental-state overwrite, twin setters, inline component',
+  (() => {
+    const lsr = read('services/localStatusResponder.ts');
+    const cage = read('store/cageStore.ts');
+    const bil = read('app/swinglab/bilateral.tsx');
+    const rs = read('store/roundStore.ts');
+
+    // 1) the FIFTH club producer — the offline voice line the caddie SPEAKS
+    // The defect lived here TWICE (club reply + reach reply). One shared builder now, and the
+    // sparse read must appear exactly ONCE — inside that builder — so a third reply can't
+    // reintroduce it by copying the old line.
+    const fifth = /STANDARD_SPOKEN_LADDER/.test(lsr) && /SPOKEN_LADDER_LABEL/.test(lsr) &&
+      /function spokenBag\(\)/.test(lsr) &&
+      (lsr.match(/for \(const \[club, yds\] of Object\.entries\(bagDistances\(\)\)\)/g) ?? []).length === 1 &&
+      !/const bag = Object\.entries\(bagDistances\(\)\) as \[string, number\]\[\];/.test(lsr) &&
+      (lsr.match(/const \{ entries: bag \} = spokenBag\(\);/g) ?? []).length === 2;
+
+    // 2) mental state: NOTHING may re-accumulate after logScore derives it
+    const files = ['app/(tabs)/caddie.tsx', 'services/intents/logScoreHandler.ts',
+                   'services/voice/conversationalToolDispatch.ts'];
+    const noOverwrite = files.every(f => !/(?<!\/\/ *)\.updateMentalState\(/.test(read(f)));
+    const derives = /recomputeMentalState\(played\)/.test(rs);
+
+    // 3) every session setter writes activeSession too — no more history-only twins
+    const setterMisses = [...cage.matchAll(/^      (setSession\w+|toggleSession\w+): \(/gm)]
+      .filter(m => {
+        const seg = cage.slice(m.index ?? 0, (m.index ?? 0) + 1400);
+        return seg.includes('sessionHistory') && !seg.slice(0, 1200).includes('activeSession');
+      });
+
+    // 4) no hook-bearing component defined inside another component's body
+    const hoisted = /^function FrameTile\(/m.test(bil) && !/  const FrameTile = \(/.test(bil);
+
+    return fifth && noOverwrite && derives && setterMisses.length === 0 && hoisted;
+  })(),
+  '5th club ladder merged from standard; zero updateMentalState callers left; all session setters write activeSession; FrameTile hoisted out of render');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
