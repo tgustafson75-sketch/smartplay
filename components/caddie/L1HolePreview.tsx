@@ -18,7 +18,7 @@ import { getBundledHoles, COURSES } from '../../data/courses';
 import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
-import { getHoleImageryUrl } from '../../services/mapboxImagery';
+import { getHoleImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -117,6 +117,9 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   const activeCourse = useRoundStore(s => s.activeCourse);
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
+  // 2026-08-11 — the selected course's OWN centroid, captured at selection. Lets the preview draw an
+  // aerial immediately instead of waiting on (or failing with) a geometry build.
+  const previewCourseCoords = useRoundStore(s => s.previewCourseCoords);
   const _homeCourseName = usePlayerProfileStore(s => s.homeCourse);
   const previewCourseId_resolved: string | null =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
@@ -275,11 +278,26 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       } catch { /* no bundled coords */ }
     }
 
-    if (!green) return null;
+    const reqW = Math.round(Math.max(320, Math.min(W, 1280)));
+    const reqH = Math.round(Math.max(240, Math.min(H, 1280)));
+
+    // 3) No hole geometry yet (or ever) — but we DO know where the course is. Draw the course
+    //    centroid rather than a placeholder. This is what removes the green screen as a class:
+    //    a selected course can always show itself, and the hole-framed tile below replaces this
+    //    the moment geometry lands.
+    if (!green) {
+      if (!previewCourseCoords) return null;
+      try {
+        return getCenteredImageryUrl({
+          lat: previewCourseCoords.lat, lng: previewCourseCoords.lng,
+          zoom: 15, width: reqW, height: reqH,
+        });
+      } catch { return null; }
+    }
     try {
       return getHoleImageryUrl(
         { courseId: id, holeNumber: 1, tee, green, par, yardage },
-        { width: Math.round(Math.max(320, Math.min(W, 1280))), height: Math.round(Math.max(240, Math.min(H, 1280))) },
+        { width: reqW, height: reqH },
       );
     } catch {
       return null;
@@ -288,7 +306,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     // (getHoleGeometry) rather than React state, so the tick is the only signal that the cache has
     // changed. Removing it re-breaks the green screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewCourseId_resolved, W, H, tick]);
+  }, [previewCourseId_resolved, previewCourseCoords, W, H, tick]);
 
   // Player dot refresh tick
   useEffect(() => {

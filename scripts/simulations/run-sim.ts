@@ -8283,7 +8283,10 @@ check('LOCK: L1HolePreview falls back to the same Mapbox hole tile SmartVision r
   (() => {
     const s = read('components/caddie/L1HolePreview.tsx');
     return (
-      /import \{ getHoleImageryUrl \} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
+      // 2026-08-11 — the import now also pulls getCenteredImageryUrl (the course-centroid fallback
+      // that removes the green screen when hole geometry hasn't landed). Assert the tile builder is
+      // imported, not the exact import list.
+      /import \{[^}]*getHoleImageryUrl[^}]*\} from '\.\.\/\.\.\/services\/mapboxImagery'/.test(s) &&
       /aerialTileUrl/.test(s) &&
       // the tile is a FALLBACK: captured shot and curated bundle still win, in that order
       /capturedUri \? \(\{ uri: capturedUri \}[\s\S]{0,160}?curatedImage \?\? \(aerialTileUrl/.test(s) &&
@@ -9035,6 +9038,31 @@ check('LOCK: the engine replaces bundled coords that fail their own scorecard �
     return gated && safeFallback;
   })(),
   'untrustworthy bundled coords yield to an engine build; a failed build falls back to them rather than to nothing');
+
+// "For the TENTH time, Connecticut National is still a green screen and has no thumbnail in the Play
+// tab." Both surfaces could only learn WHERE a course is from the geometry cache, so a searched
+// course showed nothing until a multi-second build landed — and nothing at all if it failed. The
+// course record we already fetched carries lat/lng; the search payload (verified live) does not.
+check('LOCK: a selected course can always draw itself — centroid captured at selection',
+  (() => {
+    const rs = read('store/roundStore.ts');
+    const play = read('app/(tabs)/play.tsx');
+    const prev = read('components/caddie/L1HolePreview.tsx');
+    // the store holds the centroid, and an id-only call can't wipe it
+    const stored = /previewCourseCoords: \{ lat: number; lng: number \} \| null;/.test(rs) &&
+      /setPreviewCourse: \(id, coords\) => set\(\{/.test(rs) &&
+      /coords !== undefined \|\| id == null/.test(rs);
+    // both selection paths supply it — API courses from the record, bundled from the summary
+    const passed = /useRoundStore\.getState\(\)\.setPreviewCourse\(c\.id, cCoords\);/.test(play) &&
+      /setPreviewCourse\(\s*s\.id,/.test(play);
+    // the preview draws the centroid when hole geometry isn't there yet
+    const draws = /if \(!previewCourseCoords\) return null;/.test(prev) &&
+      /getCenteredImageryUrl\(\{/.test(prev);
+    // and the thumbnail resolves coords from cached geometry for searched courses
+    const thumb = /const geo = getCachedGeometry\(c\.id\);/.test(play);
+    return stored && passed && draws && thumb;
+  })(),
+  'course centroid captured at selection; preview and thumbnail no longer depend on geometry timing');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

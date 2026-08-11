@@ -53,6 +53,7 @@ import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
+import { getCachedGeometry } from '../../services/courseGeometryService';
 import PALMS_IMAGES from '../../data/palmsImages';
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
@@ -132,13 +133,33 @@ const satelliteThumb = (lat: number, lng: number): { uri: string } | null => {
  * thumbnails before ([[mapboxImagery]] carries the same guard). An unverifiable coord returns null
  * and keeps the honest placeholder — a WRONG picture of someone else's course is worse than none.
  */
-const courseThumb = (c: { thumbnail?: ImageSourcePropType | { uri: string } | null; lat?: number | null; lng?: number | null } | null | undefined):
+const courseThumb = (c: { id?: string; thumbnail?: ImageSourcePropType | { uri: string } | null; lat?: number | null; lng?: number | null } | null | undefined):
   ImageSourcePropType | { uri: string } | null => {
   if (!c) return null;
   if (c.thumbnail) return c.thumbnail;
-  if (c.lat == null || c.lng == null) return null;
-  if (!isValidGolfCoord(c.lat, c.lng)) return null;
-  return satelliteThumb(c.lat, c.lng);
+  if (c.lat != null && c.lng != null && isValidGolfCoord(c.lat, c.lng)) return satelliteThumb(c.lat, c.lng);
+  /**
+   * 2026-08-11 (Tim — "no thumbnail in the Play tab" on Connecticut National).
+   *
+   * A SEARCHED course carries no coordinates: verified against the live API, the search payload
+   * returns only address/city/state — normalizeSearchResult isn't dropping them, they were never
+   * there. So the coord path above can't fire and every searched course rendered the generic
+   * placeholder.
+   *
+   * But by the time a row is on screen we often DO know where the course is, from the geometry we
+   * fetched for it. Reading that here costs nothing (a synchronous cache read) and gives a real
+   * aerial to exactly the courses that had none.
+   */
+  if (c.id) {
+    try {
+      const geo = getCachedGeometry(c.id);
+      const h = geo?.holes?.find(x => x.green) ?? null;
+      if (h?.green && isValidGolfCoord(h.green.lat, h.green.lng)) {
+        return satelliteThumb(h.green.lat, h.green.lng);
+      }
+    } catch { /* cache miss — fall through to the honest placeholder */ }
+  }
+  return null;
 };
 
 const LOCAL_COURSES: CourseSummary[] = [
@@ -1105,7 +1126,11 @@ export default function PlayTab() {
       // chosen course BEFORE the user taps Start Round. Distinct from
       // pendingStartCourseId — which triggers an auto-launch round when
       // the Caddie tab sees it. previewCourseId is a render-only hint.
-      useRoundStore.getState().setPreviewCourse(s.id);
+      // Bundled courses carry a centroid on the summary — pass it for the same reason.
+      useRoundStore.getState().setPreviewCourse(
+        s.id,
+        s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : null,
+      );
       // 2026-07-23 (Tim) — build SmartVision hole imagery on selection: warm course
       // geometry + per-hole satellite tiles now so the maps are instant (and offline)
       // before the round starts. Fire-and-forget, once-per-session per course.
@@ -1140,7 +1165,19 @@ export default function PlayTab() {
       const c = await getCourse(resolveId);
       if (c) {
         setSelected(c);
-        useRoundStore.getState().setPreviewCourse(c.id);
+        // 2026-08-11 — hand the course's OWN coordinates to the preview surfaces straight away.
+        // They previously had to wait on a geometry build to know where the course was, which is
+        // why a searched course showed a green screen and a blank thumbnail while (or if) that
+        // build completed. The record we just fetched already carries lat/lng.
+        const cLat = c.location?.latitude, cLng = c.location?.longitude;
+        const cCoords =
+          typeof cLat === 'number' && typeof cLng === 'number' &&
+          Number.isFinite(cLat) && Number.isFinite(cLng) &&
+          Math.abs(cLat) <= 90 && Math.abs(cLng) <= 180 &&
+          !(Math.abs(cLat) < 0.001 && Math.abs(cLng) < 0.001)
+            ? { lat: cLat, lng: cLng }
+            : null;
+        useRoundStore.getState().setPreviewCourse(c.id, cCoords);
         try {
           const courseLocation =
             typeof c.location?.latitude === 'number' &&

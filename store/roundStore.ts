@@ -603,7 +603,22 @@ interface RoundState {
    *  surfaces (SmartVision preview, L1HolePreview) resolve the course
    *  the user is currently considering. Overwritten on next selection. */
   previewCourseId: string | null;
-  setPreviewCourse: (id: string | null) => void;
+  /**
+   * 2026-08-11 (Tim — "for the tenth time, Connecticut National is STILL a green screen and has no
+   * thumbnail in the Play tab").
+   *
+   * The course's own coordinates, captured the moment it is selected. Every pre-round surface —
+   * the SmartVision preview, the Play-tab thumbnail — needed a position to draw an aerial, and the
+   * only source was the GEOMETRY CACHE. So they showed nothing until a multi-second geometry fetch
+   * landed, and nothing at all if it failed: a green screen and a blank thumbnail on a course whose
+   * latitude and longitude we were already holding in the record we'd just fetched.
+   *
+   * Holding the centroid here decouples "where is this course" from "have we built its holes yet".
+   * A selected course can always draw itself immediately, and the hole-accurate tile refines it
+   * later when geometry arrives.
+   */
+  previewCourseCoords: { lat: number; lng: number } | null;
+  setPreviewCourse: (id: string | null, coords?: { lat: number; lng: number } | null) => void;
   /** Pre-beta — pending round factors set on the Play tab alongside the
    *  course pick. Caddie reads these when consuming the pendingStart
    *  signal so the round launches with the user's strategy/mental/format
@@ -2072,7 +2087,13 @@ export const useRoundStore = create<RoundState>()(
       pendingStartCourseId: null,
       setPendingStartCourse: (id) => set({ pendingStartCourseId: id }),
       previewCourseId: null,
-      setPreviewCourse: (id) => set({ previewCourseId: id }),
+      previewCourseCoords: null,
+      setPreviewCourse: (id, coords) => set({
+        previewCourseId: id,
+        // Only overwrite the coords when the caller supplies them (or when clearing the course), so
+        // a later id-only call can't wipe a good centroid we already captured.
+        ...(coords !== undefined || id == null ? { previewCourseCoords: coords ?? null } : {}),
+      }),
       pendingStartFactors: null,
       setPendingStartFactors: (f) => set({ pendingStartFactors: f }),
 
