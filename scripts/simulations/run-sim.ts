@@ -8790,6 +8790,27 @@ check('LOCK: geometry fetch outlives a slow server, and a raw course id is never
   })(),
   '30s geometry timeouts on both paths; course name resolved from the cache, raw id never rendered');
 
+// "STILL showing a gap wedge for a 324 yard shot" → then: "why are we basing it on EVIDENCE? We know
+// a standard golf yardage bag, use that as the DEFAULT if we don't have a user-specific one."
+// He was right. The ladder was built only from clubs with evidence, so ONE logged wedge meant a
+// one-club ladder and every distance resolved to it. A complete standard bag must always be present.
+check('LOCK: club selection starts from a COMPLETE standard bag, personalised per club',
+  (() => {
+    const e = read('services/distance/equipment_distance_modifier.ts');
+    // the full industry ladder is built FIRST, then user numbers overlay it club by club
+    const fullBag = /for \(const club of getIndustryClubOrderByCarryDesc\(\)\)/.test(e) &&
+      /rowByKey\.set\(key, \{ key, \.\.\.value \}\);/.test(e) &&
+      /const rowByKey = new Map/.test(e);
+    // "take enough club" means the SHORTEST club that reaches — searching the DESC list returned the
+    // longest, i.e. the driver on every shot it could cover
+    const conservative = /const ascending = \[\.\.\.sorted\]\.reverse\(\);/.test(e) &&
+      /const conservative = ascending\.find/.test(e);
+    // and sparse/absurd evidence can still never claim a shot it cannot reach
+    const gate = /REACH_FLOOR/.test(e) && /REACH_CEILING/.test(e);
+    return fullBag && conservative && gate;
+  })(),
+  'complete standard bag baseline + per-club personalisation, shortest-club-that-reaches, reach floor/ceiling');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
