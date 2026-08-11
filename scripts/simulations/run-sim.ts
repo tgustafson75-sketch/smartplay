@@ -8857,6 +8857,27 @@ check('LOCK: measured clubs map onto the ladder label — never a duplicate, nev
   })(),
   'ClubName→ladder-label mapping so a measured club replaces its chart twin instead of duplicating it');
 
+// "The skeleton's back to showing up PRE-SWING again on playback… it'll start before the swing or
+// the user's even in the frame." interpolateFrame CLAMPED, so outside the pose window it returned
+// the address (or finish) frame and drew a skeleton over walk-up footage and empty grass.
+check('LOCK: the skeleton is drawn ONLY inside the pose window, never clamped onto other footage',
+  (() => {
+    const pi = read('services/swing/poseInterpolate.ts');
+    const ov = read('components/swinglab/SwingBodyOverlay.tsx');
+    const windowed =
+      /POSE_EDGE_TOLERANCE_MS/.test(pi) &&
+      /if \(timeMs < first - POSE_EDGE_TOLERANCE_MS\) return null;/.test(pi) &&
+      /if \(timeMs > last \+ POSE_EDGE_TOLERANCE_MS\) return null;/.test(pi);
+    // The pure module must stay importable by the logic suite. Assert on real IMPORT statements —
+    // a prose mention of react-native in the header comment is fine and tripped this guard once.
+    const pure = !/^\s*import .*from '(react-native|react-native-svg)'/m.test(pi);
+    // and the component must USE it rather than keeping a private copy that can drift
+    const wired = /import \{ interpolateFrame \} from '\.\.\/\.\.\/services\/swing\/poseInterpolate'/.test(ov) &&
+      !/^function interpolateFrame\(/m.test(ov);
+    return windowed && pure && wired;
+  })(),
+  'pose-window bounds with an edge tolerance, in a pure testable module the overlay imports');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

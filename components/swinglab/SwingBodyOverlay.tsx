@@ -30,6 +30,10 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G } from 'react-native-svg';
 import type { PoseFrame, Keypoint } from '../../services/poseAnalysisApi';
 import { cleanArc, catmullRomBezier, catmullRomPoint, type ArcPoint } from '../../services/swing/smoothArc';
+// 2026-08-11 — pose-window interpolation lives in a PURE module so it can be tested (this file
+// imports react-native-svg, which the logic suite cannot load). See poseInterpolate for the fix
+// that stops an address skeleton being drawn over a player who hasn't walked into frame yet.
+import { interpolateFrame } from '../../services/swing/poseInterpolate';
 
 const SKELETON_EDGES: [string, string][] = [
   ['left_shoulder', 'right_shoulder'],
@@ -154,44 +158,6 @@ function speedHeatColor(t: number): string {
     r = lerp(0xea, 0xef, k); g = lerp(0xb3, 0x44, k); b = lerp(0x08, 0x44, k);
   }
   return `rgb(${r},${g},${b})`;
-}
-
-function interpolateFrame(frames: PoseFrame[], timeMs: number): PoseFrame | null {
-  if (frames.length === 0) return null;
-  if (frames.length === 1) return frames[0];
-  const sorted = [...frames].sort((a, b) => a.timestampMs - b.timestampMs);
-  if (timeMs <= sorted[0].timestampMs) return sorted[0];
-  if (timeMs >= sorted[sorted.length - 1].timestampMs) return sorted[sorted.length - 1];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i];
-    const b = sorted[i + 1];
-    if (timeMs >= a.timestampMs && timeMs <= b.timestampMs) {
-      const span = b.timestampMs - a.timestampMs;
-      const t = span > 0 ? (timeMs - a.timestampMs) / span : 0;
-      // 2026-08-06 (Tim — mechanics "super tight", "the skeleton slides robotically"). Smooth the skeleton
-      // between sparse anchors with CATMULL-ROM (through the neighboring frames) instead of a straight
-      // chord, so the body — and the grip end of the blue shaft — tracks the real motion between anchors
-      // instead of sliding in a straight line. Endpoints clamp (degrade to ~linear).
-      const p0 = sorted[i - 1] ?? a;
-      const p3 = sorted[i + 2] ?? b;
-      const blended: Keypoint[] = a.keypoints.map(ka => {
-        const kb = b.keypoints.find(p => p.name === ka.name);
-        if (!kb) return ka;
-        const k0 = p0.keypoints.find(p => p.name === ka.name) ?? ka;
-        const k3 = p3.keypoints.find(p => p.name === ka.name) ?? kb;
-        // 2026-08-06 (analysis audit) — CENTRIPETAL eval (was uniform CR, which overshoots the true top of
-        // the swing between sparse anchors — flinging the joint above the real position). Same curve family
-        // as the drawn trace, so the grip end of the blue shaft stays consistent with the clubhead marker.
-        const pt = catmullRomPoint(
-          { x: k0.x, y: k0.y, t: 0 }, { x: ka.x, y: ka.y, t: 0 },
-          { x: kb.x, y: kb.y, t: 0 }, { x: k3.x, y: k3.y, t: 0 }, t,
-        );
-        return { name: ka.name, x: pt.x, y: pt.y, score: Math.min(ka.score, kb.score) };
-      });
-      return { timestampMs: timeMs, keypoints: blended };
-    }
-  }
-  return sorted[sorted.length - 1];
 }
 
 function computeBBox(frames: PoseFrame[]): { x: number; y: number; w: number; h: number } | null {
