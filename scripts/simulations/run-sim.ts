@@ -8410,6 +8410,49 @@ check('LOCK: hole geometry derives in two passes — locate wide, then trace on 
   })(),
   'locate-wide → trace-tight, fails safe to the wide read, projection bound to its own tile, timeout sized for two passes');
 
+// "Most of it didn't load correctly" — production returned green 0/18 with tee 18/18, because the
+// whole engine hung off ONE free Overpass endpoint and read a throttled EMPTY as "no greens exist".
+// UNKNOWN must stay distinguishable from NONE, or an outage masquerades as an unmapped course.
+check('LOCK: Overpass has mirrors, and unknown-greens never fills tees (parking-lot hole lines)',
+  (() => {
+    const s = read('api/course-geometry.ts');
+    const mirrors = /const OVERPASS_MIRRORS = \[/.test(s) && (s.match(/api\/interpreter'/g) ?? []).length >= 3;
+    const walker = /async function overpassQuery\(/.test(s) && /expectElements/.test(s);
+    // fetchOsmFeatures must be able to say "unknown"
+    const nullable = /async function fetchOsmFeatures\(centroid: Loc, feature: 'green' \| 'tee'\): Promise<Loc\[\] \| null>/.test(s);
+    // a tee is meaningless without a green to orient it against
+    const noOrphanTees = /const greensUnknown = greensRes == null;/.test(s) &&
+      /const osmTees: Loc\[\] = greensUnknown \? \[\] : \(teesRes \?\? \[\]\);/.test(s);
+    // and the osmOnly path must 503 (retryable) rather than 404 (genuinely unmapped) on an outage
+    const retryable = /osmGreens == null[\s\S]{0,200}?503[\s\S]{0,120}?retryable: true/.test(s);
+    return mirrors && walker && nullable && noOrphanTees && retryable;
+  })(),
+  '3 Overpass mirrors + empty-is-throttling retry; unknown greens suppress tee fill; outage returns retryable 503');
+
+// "I got a par with two putt" was logged as a 2 — an eagle. Numbers must never outrank a NAMED
+// score, and putt counts must be stripped before any number hunting. The parsing must also stay in
+// a PURE module: while it lived in the handler (which imports roundStore → image assets) the logic
+// suite could not load it, which is why this survived so long.
+check('LOCK: score utterances read the WHOLE context — named score beats stray numbers',
+  (() => {
+    const p = read('services/intents/scoreParse.ts');
+    const h = read('services/intents/logScoreHandler.ts');
+    // "Pure" means it IMPORTS nothing — a prose mention of roundStore in the header comment is
+    // fine, an actual import is what would make it unloadable by the logic suite again.
+    const pure = /export function resolveStrokes/.test(p) && !/^\s*import\s/m.test(p);
+    const stripsPutts = /export function stripNonScoreClauses/.test(p) && /putt\(\?:s\|ed\|ing\)\?/.test(p);
+    // named score wins when present
+    const precedence = /if \(mentionsScoreName\(paramStrokes\) \|\| mentionsScoreName\(rawText\)\)/.test(p);
+    // earliest number by POSITION, not lowest by value
+    const byPosition = /m\.index < best\.idx/.test(p);
+    // handler delegates rather than keeping a second copy
+    const wired = /resolveStrokes\(params\.strokes, intent\.raw_text, par\)/.test(h) && !/const words: Record<string, number>/.test(h);
+    // and the putt count spoken in the same breath is captured, not re-asked
+    const puttsRead = /export function parsePutts/.test(p) && /parsePutts\(intent\.raw_text\)/.test(h);
+    return pure && stripsPutts && precedence && byPosition && wired && puttsRead;
+  })(),
+  'pure parser, putt clauses stripped, named score outranks numbers, earliest-by-position, putts captured from the same utterance');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

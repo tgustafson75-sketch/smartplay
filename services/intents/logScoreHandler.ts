@@ -1,6 +1,9 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { track } from '../analytics';
+// 2026-08-10 — score-utterance parsing lives in a PURE module so it is reachable from the logic
+// test suite (this file imports roundStore → bundled image assets, which jest can't load).
+import { resolveStrokes, parsePutts } from './scoreParse';
 
 /**
  * 2026-05-19 — Score-by-voice intent. The shot-by-shot logShotHandler
@@ -14,64 +17,6 @@ import { track } from '../analytics';
  * "on hole N". Strokes must be 1..12 (gates against transcription
  * artifacts like "score me one hundred").
  */
-
-function parseStrokes(raw: unknown): number | null {
-  if (typeof raw === 'number') {
-    return Number.isInteger(raw) && raw >= 1 && raw <= 12 ? raw : null;
-  }
-  if (typeof raw !== 'string') return null;
-  const s = raw.trim().toLowerCase();
-  // Digit form first.
-  const m = s.match(/\b(\d{1,2})\b/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (n >= 1 && n <= 12) return n;
-  }
-  // Word forms.
-  const words: Record<string, number> = {
-    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
-    seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
-  };
-  for (const [word, n] of Object.entries(words)) {
-    if (new RegExp(`\\b${word}\\b`, 'i').test(s)) return n;
-  }
-  return null;
-}
-
-/**
- * 2026-05-21 — Fix P: par-relative score name parser. Resolves "par",
- * "bogey", "birdie", "double bogey", etc. against the known par for
- * the current hole. Returns null when par is unknown or no score name
- * matches. The classifier emits these as string `strokes` values
- * ("par", "bogey", "birdie", "eagle", "double_bogey", "triple_bogey");
- * we also accept the natural-language verbatim ("made par",
- * "I bogeyed", "triple", etc.) as a fallback via the raw_utterance.
- *
- * Order of checks matters — "double_bogey" is matched before "bogey"
- * so a phrase like "double bogey" doesn't resolve to just bogey.
- */
-function parseScoreName(raw: unknown, par: number | null): number | null {
-  if (par == null) return null;
-  if (typeof raw !== 'string') return null;
-  const s = raw.trim().toLowerCase();
-  // Canonical token names emitted by the classifier (strict matches first).
-  if (s === 'eagle') return Math.max(1, par - 2);
-  if (s === 'birdie') return Math.max(1, par - 1);
-  if (s === 'par') return par;
-  if (s === 'bogey') return par + 1;
-  if (s === 'double_bogey' || s === 'double-bogey') return par + 2;
-  if (s === 'triple_bogey' || s === 'triple-bogey') return par + 3;
-  // Loose natural-language matches (longer phrases first so "double
-  // bogey" doesn't mismatch on the inner "bogey"). Bounded by Math.min
-  // to the handler's 1..12 valid range.
-  if (/\b(triple[\s-]?bogey|tripled|triple)\b/.test(s)) return Math.min(12, par + 3);
-  if (/\b(double[\s-]?bogey|doubled|double)\b/.test(s)) return Math.min(12, par + 2);
-  if (/\b(eagled|eagle)\b/.test(s)) return Math.max(1, par - 2);
-  if (/\b(birdied|birdie)\b/.test(s)) return Math.max(1, par - 1);
-  if (/\bpar\b/.test(s)) return par;
-  if (/\b(bogeyed|bogey)\b/.test(s)) return Math.min(12, par + 1);
-  return null;
-}
 
 function parseHole(raw: unknown, fallback: number): number {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 18) return raw;
@@ -145,10 +90,10 @@ export const logScoreHandler: IntentHandler = {
     // for "par" / "bogey" / "birdie" / "double_bogey" / "triple_bogey"
     // / "eagle" — both as the classifier's canonical string strokes
     // value AND as a verbatim hit on the user's utterance.
-    let strokes = parseStrokes(params.strokes) ?? parseStrokes(intent.raw_text);
-    if (strokes == null) {
-      strokes = parseScoreName(params.strokes, par) ?? parseScoreName(intent.raw_text, par);
-    }
+    // 2026-08-10 — one resolver reads the WHOLE utterance (see services/intents/scoreParse.ts):
+    // a NAMED score beats a stray number, and putt counts / distances are stripped before any
+    // number hunting. "I got a par with two putts" is a par, not an eagle.
+    const strokes = resolveStrokes(params.strokes, intent.raw_text, par);
     if (strokes == null) {
       // Genuine ambiguity — classifier saw a log_score but couldn't
       // pin a number or score name. ONE brief clarifier; the user's
@@ -182,9 +127,12 @@ export const logScoreHandler: IntentHandler = {
       : `${holePart} — ${strokes}.`;
 
     // If the classifier already extracted num_putts, log them now and skip the follow-up.
+    // 2026-08-10 — also read the putt count out of the UTTERANCE, not just the classifier param.
+    // "I got a par with two putts" states both facts; discarding the second and then asking
+    // "how many putts?" is what made this exchange feel robotic.
     const inlinePutts = typeof params.num_putts === 'number' && params.num_putts >= 0 && params.num_putts <= 6
       ? params.num_putts
-      : null;
+      : parsePutts(intent.raw_text);
     if (inlinePutts !== null) {
       round.logPutts(hole, inlinePutts);
       track('log_putts_voice', { hole, putts: inlinePutts, source: 'inline' });

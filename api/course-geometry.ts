@@ -19,7 +19,89 @@ const CLOUD_COMPLETE_MIN = 8;
  */
 
 const BASE = 'https://api.golfcourseapi.com';
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+/**
+ * 2026-08-10 (Tim, after the round — "you did not build this course engine correctly because most
+ * of it didn't load correctly. And if the course doesn't load correctly the whole app doesn't work").
+ *
+ * He's right, and here is the measurement. Pulling Connecticut National's geometry from production
+ * returned tee 18/18 and **green 0/18** — no greens, no bearings, no front/back, no polygons. The
+ * course "loaded" and was empty.
+ *
+ * ROOT CAUSE: the entire engine hung off ONE call to ONE free community Overpass endpoint, with no
+ * retry, no mirror, and no cache. overpass-api.de rate-limits and times out constantly — that is
+ * normal for it, not exceptional. When the greens query came back empty the code treated empty as a
+ * legitimate answer ("this course has no greens"), filled tees against nothing, and returned HTTP
+ * 200 as if it had succeeded. A flaky third party was therefore indistinguishable from a real
+ * result, and the client happily cached the emptiness.
+ *
+ * Three mirrors, all running the same public Overpass API, tried in order with a retry. If the
+ * first is throttled the next usually isn't — which is the difference between a course loading on
+ * the first tee and not loading at all.
+ */
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+const OVERPASS_URL = OVERPASS_MIRRORS[0];
+
+/**
+ * POST an Overpass query, walking the mirrors until one answers with elements.
+ *
+ * `expectElements` is the important argument: for a query we EXPECT to return data (a course's
+ * greens), an empty result is far more likely to be a throttled mirror than a course with no
+ * greens, so it keeps walking. For genuinely optional queries (water hazards on a dry course) an
+ * empty answer is real and we stop. Returns null when every mirror failed — which the caller must
+ * treat as "unknown", never as "none".
+ */
+async function overpassQuery(
+  query: string,
+  label: string,
+  opts: { expectElements?: boolean } = {},
+): Promise<OsmElement[] | null> {
+  let lastErr = '';
+  for (let attempt = 0; attempt < OVERPASS_MIRRORS.length; attempt++) {
+    const url = OVERPASS_MIRRORS[attempt];
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    try {
+      // 2026-05-17 — explicit Accept + User-Agent. Without these Overpass returns 406 Not
+      // Acceptable from undici-based fetch environments (verified against production from Vercel).
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+          'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
+        },
+        body: 'data=' + encodeURIComponent(query),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        // 429 (throttled) and 504 (query timeout) are the two Overpass says constantly.
+        lastErr = `HTTP ${res.status}`;
+        console.warn(`[course-geometry] Overpass ${label} ${lastErr} from mirror ${attempt + 1}`);
+        continue;
+      }
+      const data = (await res.json()) as { elements?: OsmElement[] };
+      const elements = data.elements ?? [];
+      if (elements.length === 0 && opts.expectElements && attempt < OVERPASS_MIRRORS.length - 1) {
+        lastErr = 'empty';
+        console.warn(`[course-geometry] Overpass ${label} returned EMPTY from mirror ${attempt + 1} — trying next (empty is usually throttling, not absence)`);
+        continue;
+      }
+      if (attempt > 0) console.log(`[course-geometry] Overpass ${label} served by mirror ${attempt + 1}`);
+      return elements;
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e instanceof Error ? e.message : 'exception';
+      console.warn(`[course-geometry] Overpass ${label} mirror ${attempt + 1} failed: ${lastErr}`);
+    }
+  }
+  console.error(`[course-geometry] Overpass ${label}: ALL mirrors failed (${lastErr})`);
+  return null;
+}
 const TIMEOUT_MS = 10_000;
 const OVERPASS_TIMEOUT_MS = 15_000;
 const EARTH_RADIUS_M = 6_371_000;
@@ -111,28 +193,16 @@ async function fetchOsmPolygons(centroid: Loc, feature: string): Promise<OsmPoly
   relation[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
 );
 out geom;`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
   try {
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
-      },
-      body: 'data=' + encodeURIComponent(query),
-      signal: controller.signal,
+    // Greens and tees are the load-bearing features — an empty answer for those is treated as a
+    // throttled mirror and retried elsewhere. Bunkers/water/fairway can genuinely be absent.
+    const elements = await overpassQuery(query, `polygons:${feature}`, {
+      expectElements: feature === 'green' || feature === 'tee',
     });
-    clearTimeout(timer);
-    if (!res.ok) {
-      console.warn('[course-geometry] OSM polygons', feature, 'status', res.status);
-      return [];
-    }
-    const data = (await res.json()) as { elements?: OsmElement[] };
+    if (elements == null) return [];
     const out: OsmPolygon[] = [];
     let practiceFiltered = 0;
-    for (const el of data.elements ?? []) {
+    for (const el of elements) {
       if (isPracticeFeature(el.tags)) {
         practiceFiltered++;
         continue;
@@ -157,7 +227,6 @@ out geom;`;
     console.log(`[course-geometry] OSM ${feature} polygons: ${out.length} (filtered ${practiceFiltered} practice)`);
     return out;
   } catch (e) {
-    clearTimeout(timer);
     console.warn('[course-geometry] OSM polygons exception:', e);
     return [];
   }
@@ -178,24 +247,13 @@ async function fetchOsmHoleWays(centroid: Loc): Promise<OsmHoleWay[]> {
   way[golf=hole](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
 );
 out geom;`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
   try {
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
-      },
-      body: 'data=' + encodeURIComponent(query),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const data = (await res.json()) as { elements?: OsmElement[] };
+    // Hole-ways are the BEST source (real ref + par), so an empty answer is worth retrying
+    // elsewhere before we fall back to centroid-pairing guesswork.
+    const elements = await overpassQuery(query, 'hole-ways', { expectElements: true });
+    if (elements == null) return [];
     const out: OsmHoleWay[] = [];
-    for (const el of data.elements ?? []) {
+    for (const el of elements) {
       if (!el.geometry || el.geometry.length < 2) continue;
       // 2026-08-08 (verification wave) — same practice filter as every sibling fetcher. A practice
       // golf=hole way with a numeric ref would pair to the nearest REAL green and steal that row.
@@ -207,44 +265,27 @@ out geom;`;
     console.log(`[course-geometry] OSM hole-ways: ${out.length} (${out.filter(h => h.ref != null).length} with ref)`);
     return out;
   } catch (e) {
-    clearTimeout(timer);
     console.warn('[course-geometry] OSM hole-ways exception:', e);
     return [];
   }
 }
 
-async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[]> {
+/** Returns null when EVERY Overpass mirror failed — 'unknown', which callers must not confuse with 'none'. */
+async function fetchOsmFeatures(centroid: Loc, feature: 'green' | 'tee'): Promise<Loc[] | null> {
   const query = `[out:json][timeout:20];
 (
   way[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
   relation[golf=${feature}](around:${OSM_SEARCH_RADIUS_M},${centroid.lat},${centroid.lng});
 );
 out geom;`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
   try {
-    // 2026-05-17 — explicit Accept + User-Agent. Without these Overpass
-    // returns 406 Not Acceptable from undici-based fetch environments
-    // (verified against production: status 406 from Vercel us-east-1).
-    // The Overpass docs ask for a User-Agent; the Accept header tells
-    // their content negotiator we'll take JSON.
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'User-Agent': 'SmartPlayCaddie/1.0 (https://api.smartplaycaddie.com)',
-      },
-      body: 'data=' + encodeURIComponent(query),
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) {
-      console.warn('[course-geometry] OSM Overpass', feature, 'status', res.status);
-      return [];
-    }
-    const data = (await res.json()) as { elements?: OsmElement[] };
-    const elements = data.elements ?? [];
+    // Greens and tees are load-bearing: an empty answer is far more likely to be a throttled
+    // mirror than a course genuinely without them, so overpassQuery keeps walking.
+    const elements = await overpassQuery(query, `features:${feature}`, { expectElements: true });
+    // null = every mirror failed. Returning [] here would be a LIE — "this course has no greens" —
+    // and that lie is what let the engine fill tees against nothing and draw a hole from the
+    // parking lot to the clubhouse. UNKNOWN must stay distinguishable from NONE.
+    if (elements == null) return null;
     const centroids: Loc[] = [];
     let practiceFiltered = 0;
     for (const el of elements) {
@@ -267,9 +308,8 @@ out geom;`;
     console.log(`[course-geometry] OSM ${feature} count: ${centroids.length} (filtered ${practiceFiltered} practice)`);
     return centroids;
   } catch (e) {
-    clearTimeout(timer);
     console.warn('[course-geometry] OSM Overpass exception:', e);
-    return [];
+    return null;
   }
 }
 
@@ -785,19 +825,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fetchOsmFeatures(centroid, 'green'),
       fetchOsmFeatures(centroid, 'tee'),
     ]);
+    // 2026-08-10 — distinguish UNKNOWN (every mirror failed) from NONE. 503 tells the client this is
+    // transient and worth retrying; 404 means we genuinely looked and this course isn't mapped.
+    // Serving [] for either was what let an outage masquerade as an unmapped course.
+    if (osmGreens == null) {
+      return res.status(503).json({ error: 'OSM unavailable — geometry unknown, retry', retryable: true });
+    }
     if (osmGreens.length === 0) {
       return res.status(404).json({ error: 'No OSM greens found near centroid' });
     }
+    const osmTeesSafe = osmTees ?? [];
 
     // 2026-05-17 — Min-cost pairing replaces greedy nearest-neighbor.
     // The previous greedy approach mis-paired SJM H1's tee to a closer
     // (wrong) green that yielded 73y; min-cost considers global tee↔
     // green distances and assigns the cheapest valid pair first, with
     // a 65y floor that rejects implausible practice-area pairings.
-    const matchedPairs = minCostPairs(osmTees, osmGreens);
+    const matchedPairs = minCostPairs(osmTeesSafe, osmGreens);
     type Pair = { tee: Loc | null; green: Loc };
     const pairsByGreen = new Map<number, Loc>();
-    for (const [ti, gi] of matchedPairs) pairsByGreen.set(gi, osmTees[ti]);
+    for (const [ti, gi] of matchedPairs) pairsByGreen.set(gi, osmTeesSafe[ti]);
     let pairs: Pair[] = osmGreens.map((g, gi) => ({
       tee: pairsByGreen.get(gi) ?? null,
       green: g,
@@ -983,10 +1030,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const nullTees = holes.filter(h => !h.tee).length;
     if (centroid && (nullGreens > 0 || nullTees > 0)) {
       console.log(`[course-geometry] OSM fallback triggered: ${nullGreens} null greens, ${nullTees} null tees`);
-      const [osmGreens, osmTees] = await Promise.all([
+      const [greensRes, teesRes] = await Promise.all([
         nullGreens > 0 ? fetchOsmFeatures(centroid, 'green') : Promise.resolve([] as Loc[]),
         nullTees > 0 ? fetchOsmFeatures(centroid, 'tee') : Promise.resolve([] as Loc[]),
       ]);
+
+      /**
+       * 2026-08-10 (Tim — "one of the holes went from the parking lot to the clubhouse as the line").
+       *
+       * THAT LINE IS BUILT HERE, and this is how. When the greens query fails (Overpass throttled —
+       * production returned green 0/18 while tees returned 18/18), the old code read the failure as
+       * "no greens exist", left every green null, and then went right on filling TEES. A tee with no
+       * green still gets rendered as a hole line from that tee to whatever the map falls back to —
+       * and OSM golf=tee features near a clubhouse include the practice tee and the pads by the
+       * car park. Hence a hole drawn from the parking lot to the clubhouse.
+       *
+       * A tee is only meaningful RELATIVE to its green. So if greens are UNKNOWN, we do not fill
+       * tees at all — there is nothing to orient them against, and half a hole is worse than none.
+       */
+      const greensUnknown = greensRes == null;
+      const osmGreens: Loc[] = greensRes ?? [];
+      const osmTees: Loc[] = greensUnknown ? [] : (teesRes ?? []);
+      if (greensUnknown) {
+        console.warn('[course-geometry] greens UNKNOWN (all Overpass mirrors failed) — skipping tee fill so no hole is drawn without a green to orient it');
+      }
 
       const usedGreens = new Set<number>();
       const usedTees = new Set<number>();
