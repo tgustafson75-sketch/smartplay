@@ -51,13 +51,56 @@ const STANDARD_LADDER: readonly (readonly [string, number])[] = [
 /** Closest club to the plays-like number — prefers the player's real bag, falls
  *  back to the standard ladder. Pushes a learned-carry "why" line when real. */
 function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[]): string | null {
-  const real = Object.entries(bag).filter(([, d]) => typeof d === 'number' && (d as number) > 0) as [string, number][];
+  /**
+   * 2026-08-11 (Tim — "the caddie suggestion in SmartVision is STILL showing a gap wedge for a 324
+   * yard shot") — THE THIRD instance of the same defect, and the one actually on his screen.
+   *
+   * This built its ladder from `bag` ALONE whenever the player had logged anything at all. With a
+   * single logged club — say a gap wedge at 95 — `real.length` is 1, so `longest` and `shortest` are
+   * both that wedge, and a 324-yard shot takes the "past your longest" branch and returns the GAP
+   * WEDGE with the line "past your gap wedge — lay up and leave a wedge". That is verbatim the
+   * "324y to pin · past you…" chip in his screenshot.
+   *
+   * Same fix as clubStatsStore.inferClub and equipment_distance_modifier, and the same principle he
+   * stated: the STANDARD LADDER IS ALWAYS PRESENT, and the player's real numbers override it club by
+   * club. A sparse bag can then never collapse the ladder, and the bag-extreme lines ("past your
+   * driver", "less than a full lob wedge") stay honest because they're measured against a real bag
+   * instead of against the one club we happen to have seen.
+   */
+  const merged = new Map<string, number>();
+  for (const [club, yds] of STANDARD_LADDER) merged.set(club, yds);
+  // Track which clubs are the PLAYER'S OWN number vs. the chart, so the spoken "why" can't claim a
+  // standard-ladder figure as his measured carry ([[illustration-data-points]] — real signals only).
+  const measured = new Set<string>();
+  for (const [club, d] of Object.entries(bag)) {
+    if (typeof d === 'number' && d > 0) { merged.set(club, d); measured.add(club); }
+  }
+  const real = [...merged.entries()] as [string, number][];
   if (real.length > 0) {
     let best: [string, number] | null = null;
     let longest = real[0];
     let shortest = real[0];
     for (const entry of real) {
-      if (!best || Math.abs(entry[1] - playsLikeYards) < Math.abs(best[1] - playsLikeYards)) best = entry;
+      /**
+       * 2026-08-11 — the player's OWN club wins a tie against a chart club.
+       *
+       * Merging the standard ladder in (so a sparse bag can't collapse it) introduced a subtle
+       * regression the sim caught: at 165 yards a CHART 6-iron (165) tied his MEASURED 7-iron (165)
+       * and won on iteration order. A chart average must never outrank a number the player has
+       * actually produced — that is the whole point of learning his bag. Ties, and near-ties within
+       * a yard, go to the measured club.
+       */
+      const dNew = Math.abs(entry[1] - playsLikeYards);
+      const dBest = best ? Math.abs(best[1] - playsLikeYards) : Infinity;
+      const newIsMeasured = measured.has(entry[0]);
+      const bestIsMeasured = best ? measured.has(best[0]) : false;
+      const better =
+        dNew < dBest - 1 ? true
+        : dNew > dBest + 1 ? false
+        : newIsMeasured && !bestIsMeasured ? true      // near-tie: measured beats chart
+        : !newIsMeasured && bestIsMeasured ? false
+        : dNew < dBest;                                 // same provenance: closest wins
+      if (!best || better) best = entry;
       if (entry[1] > longest[1]) longest = entry;
       if (entry[1] < shortest[1]) shortest = entry;
     }
@@ -69,14 +112,21 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
       const BEYOND_MARGIN = 8;   // matches localStatusResponder.clubBeyond
       const PARTIAL_MARGIN = 12; // under the shortest = a partial, not a full carry
       if (playsLikeYards > longest[1] + BEYOND_MARGIN) {
-        why.unshift(`past your ${longest[0].toLowerCase()} (${Math.round(longest[1])}) — lay up and leave a wedge`);
+        // "past your driver" is only true of a club he's actually shown us. Against a chart value it
+        // would be a guess dressed as a fact, so the line drops to a neutral one.
+        why.unshift(measured.has(longest[0])
+          ? `past your ${longest[0].toLowerCase()} (${Math.round(longest[1])}) — lay up and leave a wedge`
+          : `that's past a full ${longest[0].toLowerCase()} — lay up and leave a wedge`);
         return longest[0];
       }
       if (playsLikeYards < shortest[1] - PARTIAL_MARGIN) {
         why.unshift(`less than a full ${shortest[0].toLowerCase()} — partial swing`);
         return shortest[0];
       }
-      why.push(`your ${best[0].toLowerCase()} carries ~${Math.round(best[1])}`);
+      void measured;
+      // Only call it HIS carry when it actually is; otherwise stay silent on the number rather than
+      // passing a chart average off as measured.
+      if (measured.has(best[0])) why.push(`your ${best[0].toLowerCase()} carries ~${Math.round(best[1])}`);
       return best[0];
     }
   }

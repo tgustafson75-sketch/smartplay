@@ -1103,6 +1103,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // drop the TEE (keep the green — F/M/B yardages off live GPS stay correct) and clear the
       // bearing, so the hole degrades to "no drawn axis" instead of a lie. Same tenet as
       // [[illustration-data-points]]: real signals or nothing, never fabricate.
+      /**
+       * 2026-08-11 (Tim — F/M/B showing dashes / identical numbers on his round).
+       *
+       * REAL GREEN DEPTH. The centroid fill above sets green_front and green_back to the green's
+       * CENTRE, because a centroid is all it has. That makes FRONT, MIDDLE and BACK the same number
+       * — three yardages that look like three yardages and are actually one. On a 30-yard green
+       * that is up to two clubs of error presented as precision, which is worse than showing nothing.
+       *
+       * We usually DO have the real shape: fetchOsmPolygons('green') returns the actual green rings.
+       * So for every hole whose green matches a polygon, take front and back as the polygon vertices
+       * nearest to and farthest from the TEE — the same method the hole-ways path already uses. Holes
+       * with no polygon keep the centroid, and the honest consequence is that F and B equal M there.
+       */
+      try {
+        const greenRings = await fetchOsmPolygons(centroid, 'green');
+        if (greenRings.length > 0) {
+          let depthFilled = 0;
+          for (const h of holes) {
+            if (!h.green || !h.tee) continue;
+            // Match the ring whose centroid IS this hole's green (the fill used those centroids).
+            const ring = greenRings.find(g => haversineYards(g.centroid, h.green!) < 12);
+            if (!ring || ring.polygon.length < 3) continue;
+            let front = ring.centroid, back = ring.centroid;
+            let dF = Infinity, dB = -Infinity;
+            for (const p of ring.polygon) {
+              const d = haversineYards(h.tee, p);
+              if (d < dF) { dF = d; front = p; }
+              if (d > dB) { dB = d; back = p; }
+            }
+            h.green_front = front;
+            h.green_back = back;
+            depthFilled++;
+          }
+          console.log(`[course-geometry] real green depth (front/back from polygon) on ${depthFilled}/${holes.length} holes`);
+        }
+      } catch (e) {
+        console.warn('[course-geometry] green-depth pass failed (non-fatal):', e instanceof Error ? e.message : e);
+      }
+
       let rejected = 0;
       for (const h of holes) {
         if (!h.tee || !h.green || !(h.yardage > 0)) continue;

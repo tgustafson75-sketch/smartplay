@@ -256,6 +256,16 @@ const pt = (lat: unknown, lng: unknown): { lat: number; lng: number } | null => 
 };
 const confBucket = bucketConfidence;
 
+/** Tee→green heading in degrees (0=N, 90=E). The hole's axis, derived — never stored. */
+function bearingDeg(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+  const x =
+    Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) -
+    Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
 /**
  * Read the merged canonical geometry for a course. Returns null when the community DB has
  * nothing for it (caller falls back to the golfcourseapi/OSM proxy). Never throws.
@@ -280,7 +290,21 @@ export async function readSharedGeometry(db: Db, courseId: string): Promise<Shar
         green,
         green_front: pt(r.green_front_lat, r.green_front_lng),
         green_back: pt(r.green_back_lat, r.green_back_lng),
-        bearing_deg: null,
+        /**
+         * 2026-08-11 (Tim — "the orientation of the holes is still completely wrong", after the
+         * server data was verified correct).
+         *
+         * THE ORIENTATION BUG SURVIVED HERE. Once a course is served from the stored build — which
+         * is now the normal path for any course that has ever built successfully — this projection
+         * hardcoded bearing_deg to null. So every hole arrived with tee and green coordinates but NO
+         * AXIS, and the renderer had nothing to orient against. Verified against production:
+         * bearing_deg was 0/18 on Connecticut National while green and tee were 18/18.
+         *
+         * Bearing is DERIVED, not stored — it is just the tee→green heading — so there was never a
+         * reason to null it. Computing it here means the stored path carries the same orientation
+         * the live path does, which is the whole point of the stored path being equivalent.
+         */
+        bearing_deg: tee && green ? bearingDeg(tee, green) : null,
         hazards: [],
         fairway_centerline: [],
         green_outline: [],

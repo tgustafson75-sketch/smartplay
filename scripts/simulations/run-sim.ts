@@ -8811,6 +8811,30 @@ check('LOCK: club selection starts from a COMPLETE standard bag, personalised pe
   })(),
   'complete standard bag baseline + per-club personalisation, shortest-club-that-reaches, reach floor/ceiling');
 
+// PASS 2 of the three-pass course-data audit. Two defects found in what production was ACTUALLY
+// serving, both invisible to earlier greps because the code "looked right":
+//   - the STORED build hardcoded bearing_deg to null, so every hole arrived with coordinates and NO
+//     AXIS once a course was served from storage — which is the normal path now. Measured: 0/18
+//     bearings on Connecticut National while tee and green were 18/18. That is the orientation bug
+//     Tim kept reporting AFTER the pairing fix was verified correct.
+//   - green_front/green_back were the green CENTROID, so FRONT/MIDDLE/BACK were the same number
+//     three times: fake precision worth up to two clubs on a deep green.
+check('LOCK: stored geometry carries a derived bearing, and F/M/B has real green depth',
+  (() => {
+    const cc = read('api/_courseCloud.ts');
+    const cg = read('api/course-geometry.ts');
+    // bearing is DERIVED (tee→green), never stored, so the stored path must compute it
+    const bearing = /function bearingDeg\(/.test(cc) &&
+      /bearing_deg: tee && green \? bearingDeg\(tee, green\) : null,/.test(cc) &&
+      !/^\s*bearing_deg: null,$/m.test(cc);
+    // front/back come from the real green ring, nearest/farthest from the TEE
+    const depth = /real green depth \(front\/back from polygon\)/.test(cg) &&
+      /const ring = greenRings\.find\(g => haversineYards\(g\.centroid, h\.green!\) < 12\)/.test(cg) &&
+      /if \(d < dF\) \{ dF = d; front = p; \}/.test(cg);
+    return bearing && depth;
+  })(),
+  'stored builds carry orientation; front/back derived from the green polygon rather than echoing the centroid');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
