@@ -8878,6 +8878,27 @@ check('LOCK: the skeleton is drawn ONLY inside the pose window, never clamped on
   })(),
   'pose-window bounds with an edge tolerance, in a pure testable module the overlay imports');
 
+// "A couple of our courses still have the GOLF SHOT screenshots in them. We need to check all of
+// them." All 30 bundled sets were fingerprinted by dimensions and the outliers inspected: three
+// carried another app's UI (Golfshot/Golf Pad info buttons, yardage overlays, green rings, player
+// dots, cut-out-on-white). They must never be bundled again — Metro ships what is `require`d.
+check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
+  (() => {
+    const li = read('data/localCourseImages.ts');
+    // the three third-party folders must have ZERO requires anywhere in the registry
+    const noRequires = !/require\('\.\.\/assets\/courses\/(doral-gold|webster-dudley|rancho-california)\//.test(li);
+    // and their maps must still EXIST (exported, empty) so consumers don't break
+    const stillExported =
+      /export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li) &&
+      /export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li) &&
+      /export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li);
+    // the intermediate WD const was the sneaky one — it kept the requires alive after the export
+    // was emptied, so the files would still have shipped.
+    const noIntermediate = !/const WD = \{\s*\n\s*1: require/.test(li);
+    return noRequires && stillExported && noIntermediate;
+  })(),
+  'third-party hole imagery unregistered (no requires => not bundled), maps still exported empty so consumers are unaffected');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

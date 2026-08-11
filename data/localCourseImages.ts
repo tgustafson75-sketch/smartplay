@@ -68,26 +68,8 @@ export const LAKES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 };
 
 // Rancho California — imported from V3, renamed rancho-h{n}.jpg → hole-{nn}.jpg.
-export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/rancho-california/hole-01.jpg'),
-  2:  require('../assets/courses/rancho-california/hole-02.jpg'),
-  3:  require('../assets/courses/rancho-california/hole-03.jpg'),
-  4:  require('../assets/courses/rancho-california/hole-04.jpg'),
-  5:  require('../assets/courses/rancho-california/hole-05.jpg'),
-  6:  require('../assets/courses/rancho-california/hole-06.jpg'),
-  7:  require('../assets/courses/rancho-california/hole-07.jpg'),
-  8:  require('../assets/courses/rancho-california/hole-08.jpg'),
-  9:  require('../assets/courses/rancho-california/hole-09.jpg'),
-  10: require('../assets/courses/rancho-california/hole-10.jpg'),
-  11: require('../assets/courses/rancho-california/hole-11.jpg'),
-  12: require('../assets/courses/rancho-california/hole-12.jpg'),
-  13: require('../assets/courses/rancho-california/hole-13.jpg'),
-  14: require('../assets/courses/rancho-california/hole-14.jpg'),
-  15: require('../assets/courses/rancho-california/hole-15.jpg'),
-  16: require('../assets/courses/rancho-california/hole-16.jpg'),
-  17: require('../assets/courses/rancho-california/hole-17.jpg'),
-  18: require('../assets/courses/rancho-california/hole-18.jpg'),
-};
+// THIRD-PARTY (Golfshot-derived) — intentionally empty; see the note above.
+export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Phase BL — Crystal Springs Golf Course, Burlingame CA (18 holes).
 export const CRYSTAL_SPRINGS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
@@ -330,45 +312,39 @@ export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> =
 // screenshots (2216-2224 → holes 1-9). 2026-07-07 — reprocessed (tighter crop +
 // unfade + vivid color) and extended to 18: the course plays 18 as the NINE TWICE
 // (scorecard-confirmed), so holes 10-18 show the same aerials as 1-9.
-const WD = {
-  1: require('../assets/courses/webster-dudley/hole-01.jpg'),
-  2: require('../assets/courses/webster-dudley/hole-02.jpg'),
-  3: require('../assets/courses/webster-dudley/hole-03.jpg'),
-  4: require('../assets/courses/webster-dudley/hole-04.jpg'),
-  5: require('../assets/courses/webster-dudley/hole-05.jpg'),
-  6: require('../assets/courses/webster-dudley/hole-06.jpg'),
-  7: require('../assets/courses/webster-dudley/hole-07.jpg'),
-  8: require('../assets/courses/webster-dudley/hole-08.jpg'),
-  9: require('../assets/courses/webster-dudley/hole-09.jpg'),
-} as Record<number, ImageSourcePropType>;
-export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  ...WD,
-  10: WD[1], 11: WD[2], 12: WD[3], 13: WD[4], 14: WD[5],
-  15: WD[6], 16: WD[7], 17: WD[8], 18: WD[9],
-};
+// 2026-08-11 — EMPTIED: these are Golf Pad hole-view screenshots (third-party app UI), per the
+// note below. Metro bundles what is required, so dropping the requires removes them from the
+// shipped app. Webster/Dudley renders from our own Mapbox tiles instead.
+const WD: Record<number, ImageSourcePropType> = {};
+
+// THIRD-PARTY (Golf Pad-derived) — intentionally empty; see the note below.
+export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-18 — Trump National Doral, GOLD course (Miami FL). 18 holes, cropped from Tim's
 // Golf Pad hole-view captures (aerial + flight line + green distance).
-export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/doral-gold/hole-01.jpg'),
-  2:  require('../assets/courses/doral-gold/hole-02.jpg'),
-  3:  require('../assets/courses/doral-gold/hole-03.jpg'),
-  4:  require('../assets/courses/doral-gold/hole-04.jpg'),
-  5:  require('../assets/courses/doral-gold/hole-05.jpg'),
-  6:  require('../assets/courses/doral-gold/hole-06.jpg'),
-  7:  require('../assets/courses/doral-gold/hole-07.jpg'),
-  8:  require('../assets/courses/doral-gold/hole-08.jpg'),
-  9:  require('../assets/courses/doral-gold/hole-09.jpg'),
-  10: require('../assets/courses/doral-gold/hole-10.jpg'),
-  11: require('../assets/courses/doral-gold/hole-11.jpg'),
-  12: require('../assets/courses/doral-gold/hole-12.jpg'),
-  13: require('../assets/courses/doral-gold/hole-13.jpg'),
-  14: require('../assets/courses/doral-gold/hole-14.jpg'),
-  15: require('../assets/courses/doral-gold/hole-15.jpg'),
-  16: require('../assets/courses/doral-gold/hole-16.jpg'),
-  17: require('../assets/courses/doral-gold/hole-17.jpg'),
-  18: require('../assets/courses/doral-gold/hole-18.jpg'),
-};
+/**
+ * 2026-08-11 (Tim — "a couple of our courses still have the GOLF SHOT screenshots in them. We need
+ * to check all of them").
+ *
+ * I fingerprinted all 30 bundled course image sets by dimensions and inspected the outliers. Three
+ * are THIRD-PARTY renderings, not our own imagery:
+ *
+ *   doral-gold        (1024x1536) — Golfshot's UI is visible: their "i" info button, their yardage
+ *                                   overlay ("354"), their black/cyan green rings, their blue
+ *                                   player dot, on their cut-out-on-white hole treatment.
+ *   webster-dudley    (545x1415)  — same: black/cyan rings, white "352" overlay, blue dot.
+ *   rancho-california (1024x1536) — the same cut-out-on-white rendering with the UI cropped off.
+ *
+ * mariners-point is also an outlier by size but is a clean satellite crop with no third-party UI,
+ * and the 848x1280 majority (greenhill, palms, sunnyvale, …) are our own satellite crops. Those stay.
+ *
+ * Emptied rather than deleted-from-disk: Metro bundles what is `require`d, so removing the requires
+ * takes this content out of the shipped app immediately. These courses now render from our OWN
+ * Mapbox satellite tiles, which the geometry work this week made reliable — they carry real
+ * tee/green coords in data/courses.ts, so the tile frames correctly.
+ */
+// THIRD-PARTY (Golfshot-derived) — intentionally empty; see the note above.
+export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-18 — Pembroke Lakes Country Club (Pembroke Pines FL). 18 holes, same capture source.
 export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
