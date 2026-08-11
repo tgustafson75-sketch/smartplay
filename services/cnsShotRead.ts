@@ -48,6 +48,18 @@ const STANDARD_LADDER: readonly (readonly [string, number])[] = [
   ['8 Iron', 145], ['9 Iron', 130], ['PW', 115], ['GW', 100], ['SW', 85], ['LW', 70],
 ];
 
+/**
+ * 2026-08-11 — ClubName (the stores' vocabulary) → the STANDARD_LADDER's label. Without this the
+ * merge produces duplicates ('7I' AND '7 Iron') and the caddie speaks a store key at the player.
+ */
+const LADDER_LABEL: Record<string, string> = {
+  Driver: 'Driver', '3W': '3 Wood', '5W': '5 Wood', '7W': '5 Wood',
+  '2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid',
+  '3I': '4 Iron', '4I': '4 Iron', '5I': '5 Iron', '6I': '6 Iron',
+  '7I': '7 Iron', '8I': '8 Iron', '9I': '9 Iron',
+  PW: 'PW', AW: 'GW', GW: 'GW', SW: 'SW', LW: 'LW',
+};
+
 /** Closest club to the plays-like number — prefers the player's real bag, falls
  *  back to the standard ladder. Pushes a learned-carry "why" line when real. */
 function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[]): string | null {
@@ -73,7 +85,16 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
   // standard-ladder figure as his measured carry ([[illustration-data-points]] — real signals only).
   const measured = new Set<string>();
   for (const [club, d] of Object.entries(bag)) {
-    if (typeof d === 'number' && d > 0) { merged.set(club, d); measured.add(club); }
+    if (typeof d === 'number' && d > 0) {
+      // 2026-08-11 (re-check) — TWO VOCABULARIES. bagDistances() keys are ClubName ('7I', '3W'),
+      // the ladder is labelled ('7 Iron', '3 Wood'). Merging raw would ADD '7I':165 next to the
+      // chart's '7 Iron':155 — the same club twice, skewing the bag extremes and letting the
+      // spoken line read "7I" instead of "7 iron". Map onto the ladder's label so a measured club
+      // REPLACES its chart counterpart, which is what "override club by club" has to mean.
+      const label = LADDER_LABEL[club] ?? club;
+      merged.set(label, d);
+      measured.add(label);
+    }
   }
   const real = [...merged.entries()] as [string, number][];
   if (real.length > 0) {

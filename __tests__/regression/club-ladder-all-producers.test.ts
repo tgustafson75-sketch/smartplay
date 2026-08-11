@@ -96,3 +96,41 @@ describe('all producers agree on a long shot', () => {
     }
   });
 });
+
+/**
+ * 2026-08-11 (re-check, before moving on) — the two CLUB VOCABULARIES.
+ *
+ * Caught by re-reading my own fix rather than by a failure: bagDistances() keys are ClubName
+ * ('7I', '3W'); STANDARD_LADDER is labelled ('7 Iron', '3 Wood'). Merging raw ADDED '7I':165 beside
+ * the chart's '7 Iron':155 — the same club twice. That skews the bag extremes ("past your longest")
+ * and lets the caddie speak a store key at the player. A measured club must REPLACE its chart
+ * counterpart, which is what "override club by club" has to mean.
+ */
+describe('the two club vocabularies must not duplicate a club', () => {
+  const readWith = (bag: Record<string, number>, yards: number) =>
+    composeShotRead({ rawYards: yards, playsLikeYards: yards, bag } as never);
+
+  it('a measured 7I replaces the chart 7 Iron rather than sitting beside it', () => {
+    const r = readWith({ '7I': 165 }, 165);
+    // The spoken club must be the readable LABEL, never the store key.
+    expect(r?.club).toBe('7 Iron');
+    expect(r?.club).not.toBe('7I');
+  });
+
+  it('speaks a readable club label, not a store key, at every distance', () => {
+    for (const y of [95, 150, 165, 250, 324]) {
+      const club = readWith({ '7I': 165, GW: 95 }, y)?.club ?? '';
+      expect(club).not.toMatch(/^\d[IHW]$/); // '7I', '3W', '4H' are store keys
+    }
+  });
+
+  it('the measured number is what gets used for that club', () => {
+    // 7I measured at 165 must win at 165 over the chart's 7 Iron (155).
+    const r = readWith({ '7I': 165 }, 165);
+    expect(r?.why.some((w: string) => /carries ~165/.test(w))).toBe(true);
+  });
+
+  it('still never puts a wedge on a long shot with the vocabulary mapping in play', () => {
+    expect((readWith({ GW: 95 }, 324)?.club ?? '').toLowerCase()).not.toContain('gw');
+  });
+});

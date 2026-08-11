@@ -8839,6 +8839,24 @@ check('LOCK: stored geometry carries a derived bearing, and F/M/B has real green
   })(),
   'stored builds carry orientation; front/back derived from the green polygon rather than echoing the centroid');
 
+// Re-check pass (Tim: "go back and check your work one more time"). Found by re-reading my own fix,
+// not by a failure: bagDistances() keys are ClubName ('7I'), STANDARD_LADDER is labelled ('7 Iron').
+// Merging raw ADDED the same club twice — skewing the bag extremes and letting the caddie speak a
+// store key at the player. A measured club must REPLACE its chart counterpart.
+check('LOCK: measured clubs map onto the ladder label — never a duplicate, never a store key spoken',
+  (() => {
+    const c = read('services/cnsShotRead.ts');
+    return (
+      /const LADDER_LABEL: Record<string, string>/.test(c) &&
+      /const label = LADDER_LABEL\[club\] \?\? club;/.test(c) &&
+      /merged\.set\(label, d\);/.test(c) &&
+      /measured\.add\(label\);/.test(c) &&
+      // and the raw-key merge must not come back
+      !/merged\.set\(club, d\); measured\.add\(club\);/.test(c)
+    );
+  })(),
+  'ClubName→ladder-label mapping so a measured club replaces its chart twin instead of duplicating it');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
