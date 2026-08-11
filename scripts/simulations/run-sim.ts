@@ -8998,6 +8998,25 @@ check('LOCK: adversarial-audit fixes — 5th club producer, mental-state overwri
   })(),
   '5th club ladder merged from standard; zero updateMentalState callers left; all session setters write activeSession; FrameTile hoisted out of render');
 
+// TOTAL QA PASS (Tim: "check my courses… make sure the measuring tool lines up on the green and the
+// tee box"). Comparing every bundled hole's stored tee→green against its OWN scorecard distance
+// found 35 of 452 holes contradicting themselves — Westlake NJ 14/14, Echo Hills 7/8, Greenhill
+// 14/16 long holes — all measuring a near-constant ~150y regardless of hole length. A tee 150y from
+// the green on a 416y hole draws the wrong line and reports a wrong number with total confidence.
+check('LOCK: bundled tees are validated against the scorecard before anything can measure from them',
+  (() => {
+    const c = read('data/courses.ts');
+    const validates = /function validateBundledTees\(/.test(c) &&
+      /measured > h\.distance \* 1\.35 \|\| measured < h\.distance \* 0\.65/.test(c) &&
+      // the GREEN must survive — live F/M/B depends on it; only the contradictory TEE is dropped
+      /teeLat: 0, teeLng: 0,/.test(c);
+    // and it must run at the SINGLE seam every consumer already uses, not at some call sites
+    const atSeam = /return validateBundledTees\(course\?\.holes \?\? \[\]\);/.test(c) &&
+      !/return course\?\.holes \?\? \[\];/.test(c);
+    return validates && atSeam;
+  })(),
+  'bundled tee/green pairs validated against their own scorecard at getBundledHoles; contradictory tees dropped, greens kept');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

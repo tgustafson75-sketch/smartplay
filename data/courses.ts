@@ -90,7 +90,64 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
   if (!courseId.startsWith('local:')) return [];
   const slug = courseId.slice('local:'.length);
   const course = COURSES.find(c => c.id === slug);
-  return course?.holes ?? [];
+  return validateBundledTees(course?.holes ?? []);
+}
+
+/**
+ * 2026-08-11 (Tim — "make sure the measuring tool lines up on the green and the tee box"). QA pass
+ * over every bundled course, comparing each hole's stored tee→green against its OWN scorecard
+ * distance. 35 of 452 holes disagreed by more than a third, concentrated in three courses:
+ *
+ *   WESTLAKE_NJ   14/14 holes measure ~145-163y — on cards of 288-510y
+ *   ECHO_HILLS     7/8  holes measure ~146-155y — on cards of 221-322y
+ *   GREENHILL     14/16 long holes ~0.4x card (its PAR 3s are correct at ~1.0x)
+ *
+ * The tell is that the measured distance is nearly CONSTANT (~150y) regardless of hole length: the
+ * stored "tee" on those holes is not a tee, it's a point about 150 yards out — most likely where a
+ * green-view capture was centred. Greenhill's par-3s being right fits exactly: on a 140-185y hole,
+ * a point 150y from the green IS the tee.
+ *
+ * A tee that is 150y from the green on a 416-yard hole makes the measuring tool draw the wrong line,
+ * point the hole the wrong way, and report a wrong number — with total confidence. That is worse
+ * than having no tee at all, so a hole whose own numbers contradict itself gives up its tee and
+ * keeps its green: live GPS front/middle/back stay correct, and the hole length falls back to the
+ * scorecard, which is the honest source. Same rule the server applies to OSM pairs.
+ */
+function validateBundledTees(holes: CourseHole[]): CourseHole[] {
+  let dropped = 0;
+  const out = holes.map((h) => {
+    const okc = (la?: number, ln?: number) =>
+      la != null && ln != null && Number.isFinite(la) && Number.isFinite(ln) &&
+      la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
+    if (!okc(h.teeLat, h.teeLng) || !okc(h.middleLat, h.middleLng) || !(h.distance > 0)) return h;
+    const measured = haversineYardsLocal(
+      { lat: h.teeLat, lng: h.teeLng },
+      { lat: h.middleLat, lng: h.middleLng },
+    );
+    if (measured > h.distance * 1.35 || measured < h.distance * 0.65) {
+      dropped++;
+      return {
+        ...h,
+        teeLat: 0, teeLng: 0,
+        note: h.note && h.note.trim() ? h.note : 'tee needs field calibration',
+      };
+    }
+    return h;
+  });
+  if (dropped > 0) {
+    console.log(`[courses] ${dropped} bundled tee(s) disagreed with the scorecard by >35% — dropped so the measure tool can't draw a wrong line`);
+  }
+  return out;
+}
+
+/** Local haversine in YARDS — kept here so data/ has no dependency on utils/. */
+function haversineYardsLocal(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000 * 1.09361;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const p1 = toRad(a.lat), p2 = toRad(b.lat);
+  const dPhi = p2 - p1, dLam = toRad(b.lng - a.lng);
+  const x = Math.sin(dPhi / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLam / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
 /**
