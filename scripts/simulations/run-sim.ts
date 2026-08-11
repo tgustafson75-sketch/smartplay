@@ -8828,9 +8828,13 @@ check('LOCK: stored geometry carries a derived bearing, and F/M/B has real green
       /bearing_deg: tee && green \? bearingDeg\(tee, green\) : null,/.test(cc) &&
       !/^\s*bearing_deg: null,$/m.test(cc);
     // front/back come from the real green ring, nearest/farthest from the TEE
+    // The rings must come from the SAME Overpass call as the fill. A separate second query for
+    // them was verified empty in production (throttling), so bearings landed while F/M/B stayed
+    // three copies of one number — the fix looked shipped and did nothing.
     const depth = /real green depth \(front\/back from polygon\)/.test(cg) &&
-      /const ring = greenRings\.find\(g => haversineYards\(g\.centroid, h\.green!\) < 12\)/.test(cg) &&
-      /if \(d < dF\) \{ dF = d; front = p; \}/.test(cg);
+      /const \[greenRingsRes, teesRes\] = await Promise\.all\(\[/.test(cg) &&
+      /const ring = ringByCentroid\.find\(g => haversineYards\(g\.centroid, h\.green!\) < 12\)/.test(cg) &&
+      !/const greenRings = await fetchOsmPolygons\(centroid, 'green'\);/.test(cg);
     return bearing && depth;
   })(),
   'stored builds carry orientation; front/back derived from the green polygon rather than echoing the centroid');

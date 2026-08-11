@@ -1030,10 +1030,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const nullTees = holes.filter(h => !h.tee).length;
     if (centroid && (nullGreens > 0 || nullTees > 0)) {
       console.log(`[course-geometry] OSM fallback triggered: ${nullGreens} null greens, ${nullTees} null tees`);
-      const [greensRes, teesRes] = await Promise.all([
-        nullGreens > 0 ? fetchOsmFeatures(centroid, 'green') : Promise.resolve([] as Loc[]),
+      /**
+       * 2026-08-11 — fetch the green POLYGONS (not just centroids) in the same round trip.
+       *
+       * The first version of the depth pass made a SECOND Overpass call for the rings, and verified
+       * against production it usually came back empty — Overpass throttles, which is the whole
+       * reason this engine has been fragile. Result: bearings landed but front/middle/back were
+       * still three copies of one number. Fetching rings here gives us the centroid (for the fill)
+       * AND the shape (for real green depth) from ONE query that we were making anyway.
+       */
+      const [greenRingsRes, teesRes] = await Promise.all([
+        nullGreens > 0 ? fetchOsmPolygons(centroid, 'green') : Promise.resolve([] as OsmPolygon[]),
         nullTees > 0 ? fetchOsmFeatures(centroid, 'tee') : Promise.resolve([] as Loc[]),
       ]);
+      // Centroids for the existing fill logic; rings kept alongside for the depth pass below.
+      const greensRes: Loc[] | null = greenRingsRes.length > 0 ? greenRingsRes.map(g => g.centroid) : null;
+      const ringByCentroid = greenRingsRes;
 
       /**
        * 2026-08-10 (Tim — "one of the holes went from the parking lot to the clubhouse as the line").
@@ -1116,30 +1128,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * nearest to and farthest from the TEE — the same method the hole-ways path already uses. Holes
        * with no polygon keep the centroid, and the honest consequence is that F and B equal M there.
        */
-      try {
-        const greenRings = await fetchOsmPolygons(centroid, 'green');
-        if (greenRings.length > 0) {
-          let depthFilled = 0;
-          for (const h of holes) {
-            if (!h.green || !h.tee) continue;
-            // Match the ring whose centroid IS this hole's green (the fill used those centroids).
-            const ring = greenRings.find(g => haversineYards(g.centroid, h.green!) < 12);
-            if (!ring || ring.polygon.length < 3) continue;
-            let front = ring.centroid, back = ring.centroid;
-            let dF = Infinity, dB = -Infinity;
-            for (const p of ring.polygon) {
-              const d = haversineYards(h.tee, p);
-              if (d < dF) { dF = d; front = p; }
-              if (d > dB) { dB = d; back = p; }
-            }
-            h.green_front = front;
-            h.green_back = back;
-            depthFilled++;
+      /**
+       * 2026-08-11 (Tim — F/M/B showing one number three times).
+       *
+       * REAL GREEN DEPTH. The centroid fill can only set green_front and green_back to the green's
+       * CENTRE, so FRONT, MIDDLE and BACK were identical — fake precision worth up to two clubs on a
+       * deep green, which is worse than showing nothing. Using the rings fetched above, front and
+       * back become the polygon vertices nearest to and farthest from the TEE: the same method the
+       * hole-ways path already used. Holes with no matching ring keep the centroid and honestly
+       * show F = M = B.
+       */
+      if (ringByCentroid.length > 0) {
+        let depthFilled = 0;
+        for (const h of holes) {
+          if (!h.green || !h.tee) continue;
+          const ring = ringByCentroid.find(g => haversineYards(g.centroid, h.green!) < 12);
+          if (!ring || ring.polygon.length < 3) continue;
+          let front = ring.centroid, back = ring.centroid;
+          let dF = Infinity, dB = -Infinity;
+          for (const pt of ring.polygon) {
+            const d = haversineYards(h.tee, pt);
+            if (d < dF) { dF = d; front = pt; }
+            if (d > dB) { dB = d; back = pt; }
           }
-          console.log(`[course-geometry] real green depth (front/back from polygon) on ${depthFilled}/${holes.length} holes`);
+          h.green_front = front;
+          h.green_back = back;
+          depthFilled++;
         }
-      } catch (e) {
-        console.warn('[course-geometry] green-depth pass failed (non-fatal):', e instanceof Error ? e.message : e);
+        console.log(`[course-geometry] real green depth (front/back from polygon) on ${depthFilled}/${holes.length} holes`);
       }
 
       let rejected = 0;
