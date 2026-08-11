@@ -18,11 +18,32 @@ export interface CourseImportHole {
   yardage: number | null;
   handicap: number | null;
 }
+
+/**
+ * 2026-08-11 (Tim — "on the scorecards, a lot of times it'll have a course layout that gives us some
+ * kind of references to work from. Make sure that's ingested correctly. Injection and logic are key").
+ *
+ * What the printed course MAP tells us that the table cannot: which way a hole BENDS, and what's
+ * drawn on it. A caddie who knows the 4th doglegs left says so on the tee; the yardage table can
+ * never know that. Null when the card has no diagram — most don't, and that's a fine answer.
+ */
+export type CourseHoleShape = 'straight' | 'dogleg_left' | 'dogleg_right';
+export interface CourseLayoutHazard {
+  kind: 'water' | 'bunker';
+  side: 'left' | 'right' | 'center' | 'greenside';
+}
+export interface CourseLayoutHole {
+  hole: number;
+  shape: CourseHoleShape | null;
+  hazards: CourseLayoutHazard[];
+}
 export interface CourseImportResult {
   course_name: string | null;
   tee_name: string | null;
   location: string | null;
   holes: CourseImportHole[];
+  /** Per-hole shape + drawn hazards, read from the card's layout map. Null when there is no map. */
+  layout?: CourseLayoutHole[] | null;
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];
 }
@@ -84,7 +105,30 @@ export function mergeCourseImports(parts: CourseImportResult[]): CourseImportRes
   }
 
   const holes = [...byHole.values()].sort((a, b) => a.hole - b.hole);
-  return { course_name, tee_name, location, holes, confidence: worst, warnings };
+
+  /**
+   * 2026-08-11 — merge the LAYOUT the same way as the table: first good reading of a hole wins, so a
+   * clear front-nine map is never overwritten by a blurrier second photo of the same card. Layout is
+   * genuinely optional; when no photo carried a map this stays null rather than becoming an empty
+   * array that later reads as "we looked and there are no hazards".
+   */
+  const layoutByHole = new Map<number, CourseLayoutHole>();
+  for (const p of parts) {
+    for (const l of p?.layout ?? []) {
+      const n = Math.trunc(Number(l?.hole));
+      if (!Number.isFinite(n) || n < 1 || n > 18) continue;
+      const existing = layoutByHole.get(n);
+      if (!existing) {
+        layoutByHole.set(n, { hole: n, shape: l.shape ?? null, hazards: Array.isArray(l.hazards) ? l.hazards : [] });
+      } else {
+        if (existing.shape == null && l.shape != null) existing.shape = l.shape;
+        if (existing.hazards.length === 0 && Array.isArray(l.hazards)) existing.hazards = l.hazards;
+      }
+    }
+  }
+  const layout = layoutByHole.size > 0 ? [...layoutByHole.values()].sort((a, b) => a.hole - b.hole) : null;
+
+  return { course_name, tee_name, location, holes, layout, confidence: worst, warnings };
 }
 
 /**
@@ -156,12 +200,20 @@ export function saveCourseFromParse(result: CourseImportResult): string {
   const holes: CustomCourseHole[] = result.holes
     .filter((h) => typeof h.hole === 'number')
     .sort((a, b) => a.hole - b.hole)
-    .map((h) => ({
-      hole: h.hole,
-      par: h.par ?? 4,
-      distance: h.yardage ?? null,
-      handicap: h.handicap ?? null,
-    }));
+    .map((h) => {
+      // 2026-08-11 — attach the layout read for this hole, when the card had a map. Kept per-hole
+      // (rather than a parallel array) so every consumer that already walks holes gets the shape and
+      // hazards for free, with no second lookup to forget.
+      const lay = result.layout?.find((l) => l.hole === h.hole) ?? null;
+      return {
+        hole: h.hole,
+        par: h.par ?? 4,
+        distance: h.yardage ?? null,
+        handicap: h.handicap ?? null,
+        shape: lay?.shape ?? null,
+        hazards: lay?.hazards?.length ? lay.hazards : null,
+      };
+    });
   const course = useCustomCourseStore.getState().addCustomCourse({
     name: result.course_name?.trim() || 'My Course',
     teeName: result.tee_name ?? null,

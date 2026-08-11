@@ -98,3 +98,59 @@ describe('a bad photo cannot damage a good one', () => {
     expect(merged.confidence).toBe('high');
   });
 });
+
+/**
+ * 2026-08-11 (Tim) — "Remember, on the scorecards, a lot of times it'll have a course layout that
+ * gives us some kind of references to work from. Make sure that's ingested correctly. Injection and
+ * logic are key."
+ *
+ * The importer read the TABLE only. The printed map is the one place a scorecard says which way a
+ * hole BENDS — the yardage row can never tell you that — so a caddie on an unmapped course had no
+ * way to know the 4th doglegs left. Layout is optional by design: most cards have no usable map, and
+ * null is the correct answer there rather than an empty array that reads as "no hazards exist".
+ */
+describe('course-layout diagram ingestion', () => {
+  const withLayout = (over: Partial<CourseImportResult>): CourseImportResult =>
+    part({ holes: [{ hole: 1, par: 4, yardage: 410, handicap: 5 }], ...over });
+
+  it('carries shape and hazards through the merge', () => {
+    const merged = mergeCourseImports([
+      withLayout({ layout: [{ hole: 1, shape: 'dogleg_right', hazards: [{ kind: 'water', side: 'left' }] }] }),
+    ]);
+    expect(merged.layout?.[0]).toMatchObject({ hole: 1, shape: 'dogleg_right' });
+    expect(merged.layout?.[0].hazards[0]).toMatchObject({ kind: 'water', side: 'left' });
+  });
+
+  it('a card with NO diagram yields null, not an empty array', () => {
+    // Empty would read downstream as "we looked and there are no hazards" — a different claim.
+    expect(mergeCourseImports([withLayout({})]).layout).toBeNull();
+  });
+
+  it('first good reading wins — a blurrier second photo cannot overwrite a clear map', () => {
+    const clear = withLayout({ layout: [{ hole: 1, shape: 'dogleg_left', hazards: [{ kind: 'bunker', side: 'right' }] }] });
+    const blurry = withLayout({ layout: [{ hole: 1, shape: 'straight', hazards: [] }] });
+    const merged = mergeCourseImports([clear, blurry]);
+    expect(merged.layout?.[0].shape).toBe('dogleg_left');
+    expect(merged.layout?.[0].hazards).toHaveLength(1);
+  });
+
+  it('fills a gap the first photo could not read', () => {
+    const noShape = withLayout({ layout: [{ hole: 1, shape: null, hazards: [] }] });
+    const hasShape = withLayout({ layout: [{ hole: 1, shape: 'dogleg_right', hazards: [{ kind: 'water', side: 'right' }] }] });
+    const merged = mergeCourseImports([noShape, hasShape]);
+    expect(merged.layout?.[0].shape).toBe('dogleg_right');
+    expect(merged.layout?.[0].hazards).toHaveLength(1);
+  });
+
+  it('front-nine and back-nine maps merge into one 18-hole layout', () => {
+    const front = withLayout({ layout: [{ hole: 1, shape: 'straight', hazards: [] }] });
+    const back = withLayout({ layout: [{ hole: 10, shape: 'dogleg_left', hazards: [] }] });
+    const merged = mergeCourseImports([front, back]);
+    expect(merged.layout?.map(l => l.hole)).toEqual([1, 10]);
+  });
+
+  it('drops out-of-range hole numbers from the diagram read', () => {
+    const junk = withLayout({ layout: [{ hole: 0, shape: 'straight', hazards: [] }, { hole: 44, shape: 'straight', hazards: [] }] });
+    expect(mergeCourseImports([junk]).layout).toBeNull();
+  });
+});

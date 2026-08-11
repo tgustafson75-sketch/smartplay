@@ -20,6 +20,15 @@ export interface CustomCourseHole {
   distance: number | null;
   /** Stroke index / handicap from the card, if read. */
   handicap?: number | null;
+  /**
+   * 2026-08-11 (Tim — "a lot of times it'll have a course layout that gives us some kind of
+   * references to work from"). Read from the card's printed MAP, not the table: which way the hole
+   * bends and what's drawn on it. This is the only thing a scorecard can tell us about SHAPE, and
+   * it's what lets the caddie say "this one turns left" on a course we've never mapped.
+   * Absent when the card had no diagram — which is most cards, and is a fine answer.
+   */
+  shape?: 'straight' | 'dogleg_left' | 'dogleg_right' | null;
+  hazards?: { kind: 'water' | 'bunker'; side: 'left' | 'right' | 'center' | 'greenside' }[] | null;
 }
 
 export interface CustomCourse {

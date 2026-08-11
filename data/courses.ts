@@ -31,6 +31,29 @@ export const getCourse = (
  * Returns empty array when the slug isn't known. Pure read; no side
  * effects on the round store.
  */
+
+/**
+ * 2026-08-11 — turn a scorecard-diagram read into the one-line note a caddie would actually say.
+ * "Doglegs left · water right · bunkers greenside". Empty string when the card had no map, so a
+ * course with no diagram reads exactly as it did before rather than gaining a hollow note.
+ */
+function describeHoleLayout(
+  shape: 'straight' | 'dogleg_left' | 'dogleg_right' | null,
+  hazards: { kind: 'water' | 'bunker'; side: 'left' | 'right' | 'center' | 'greenside' }[] | null,
+): string {
+  const parts: string[] = [];
+  if (shape === 'dogleg_left') parts.push('doglegs left');
+  else if (shape === 'dogleg_right') parts.push('doglegs right');
+  // 'straight' is the default expectation — saying it adds nothing, so it stays unsaid.
+  for (const kind of ['water', 'bunker'] as const) {
+    const sides = [...new Set((hazards ?? []).filter(h => h.kind === kind).map(h => h.side))];
+    if (sides.length === 0) continue;
+    const label = kind === 'water' ? 'water' : 'bunkers';
+    parts.push(`${label} ${sides.join(' and ')}`);
+  }
+  return parts.join(' · ');
+}
+
 export function getBundledHoles(courseId: string | null | undefined): CourseHole[] {
   if (!courseId) return [];
   // 2026-07-01 (Tim) — custom courses built from a scorecard photo (customCourseStore). Yardage-
@@ -41,7 +64,11 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cc = require('../store/customCourseStore').useCustomCourseStore.getState().getCustomCourse(courseId) as
-        | { holes: { hole: number; par: number; distance: number | null; handicap?: number | null }[] }
+        | { holes: {
+              hole: number; par: number; distance: number | null; handicap?: number | null;
+              shape?: 'straight' | 'dogleg_left' | 'dogleg_right' | null;
+              hazards?: { kind: 'water' | 'bunker'; side: 'left' | 'right' | 'center' | 'greenside' }[] | null;
+            }[] }
         | null;
       if (!cc) return [];
       return cc.holes.map((h) => ({
@@ -50,7 +77,13 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
         distance: h.distance ?? 0,
         front: 0, back: 0,
         teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
-        note: '', estimated: true,
+        // 2026-08-11 (Tim — "the course layout gives us some kind of references to work from…
+        // INJECTION and logic are key"). Ingesting the card's map is only half the job; it has to
+        // reach the caddie. `note` is the field every hole consumer already reads, so composing the
+        // shape + drawn hazards into it here means the brain, the hole brief and the yardage book all
+        // get it with no second wiring to forget. Empty when the card had no diagram.
+        note: describeHoleLayout(h.shape ?? null, h.hazards ?? null),
+        estimated: true,
       }));
     } catch { return []; }
   }

@@ -8935,6 +8935,30 @@ check('LOCK: a five-minute GPS gap RESTARTS the watch instead of waiting passive
   })(),
   'hard clear restarts the watch + takes a one-shot; benign stationary clears stay out of the log');
 
+// "On the scorecards, a lot of times it'll have a course layout that gives us some kind of references
+// to work from. Make sure that's ingested correctly. INJECTION and logic are key." The importer read
+// the table only — the printed map is the one place a card says which way a hole BENDS.
+check('LOCK: scorecard layout diagrams are read AND injected where the caddie reads them',
+  (() => {
+    const api = read('api/course-import.ts');
+    const svc = read('services/courseImport.ts');
+    const courses = read('data/courses.ts');
+    // read: shape + drawn hazards, and explicitly null when there is no diagram
+    const reads = /COURSE LAYOUT DIAGRAM/.test(api) &&
+      /dogleg_left/.test(api) && /"layout": null/.test(api) &&
+      // the extra array needs headroom or the whole JSON truncates and the parse fails
+      /maxTokens: 3500/.test(api);
+    // merged like the table: first good reading wins, null (not []) when no card had a map
+    const merges = /const layoutByHole = new Map<number, CourseLayoutHole>/.test(svc) &&
+      /layoutByHole\.size > 0 \? \[\.\.\.layoutByHole\.values\(\)\]/.test(svc) &&
+      /if \(existing\.shape == null && l\.shape != null\)/.test(svc);
+    // INJECTION — it must land on the field every hole consumer already reads
+    const injected = /function describeHoleLayout\(/.test(courses) &&
+      /note: describeHoleLayout\(h\.shape \?\? null, h\.hazards \?\? null\)/.test(courses);
+    return reads && merges && injected;
+  })(),
+  'layout read from the card map (null when absent), merged non-destructively, injected into hole notes the brain already reads');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

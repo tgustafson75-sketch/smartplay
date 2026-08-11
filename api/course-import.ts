@@ -17,6 +17,12 @@ Rules:
 - Pick ONE tee to read yardages from. Prefer WHITE (or the middle / regular tee) when several are visible; report which tee in "tee_name".
 - "hole" is 1-18. "par" is 3/4/5 (occasionally 6). "yardage" is the hole distance in yards for the chosen tee. "handicap" is the stroke index 1-18 if present.
 - Do NOT invent holes. If only 9 holes are visible, return 9.
+
+COURSE LAYOUT DIAGRAM (2026-08-11 — Tim: "on the scorecards, a lot of times it'll have a course layout that gives us some kind of references to work from. Make sure that's ingested correctly").
+Many cards print a small MAP of the course beside the table — each hole drawn as a corridor from tee to green, often with water in blue, bunkers as pale blobs, and the hole number beside it. When such a diagram is present, read the SHAPE of each hole from it. This is the only place a scorecard tells us which way a hole BENDS, and a caddie who knows a hole doglegs left can say so on the tee.
+- "shape": "straight" | "dogleg_left" | "dogleg_right" — the direction the fairway bends as PLAYED (standing on the tee looking at the green). Read it from the drawn corridor, not from the hole's position on the page.
+- "hazards": what is DRAWN on that hole, each as { "kind": "water" | "bunker", "side": "left" | "right" | "center" | "greenside" }. Only what you can actually see on the diagram.
+- If there is NO layout diagram on this card, return "layout": null. Do not infer shapes from the yardage table — a long hole is not necessarily a dogleg. An empty answer is correct and expected; most cards have no usable diagram.
 - Ignore the score columns entirely — this is about the course, not a played round.
 
 Output ONLY this JSON, no preamble, no code fences:
@@ -25,6 +31,7 @@ Output ONLY this JSON, no preamble, no code fences:
   "tee_name": "<the tee you read, e.g. White, or null>",
   "location": "<city/state if visible, else null>",
   "holes": [ { "hole": 1, "par": 4, "yardage": 410, "handicap": 5 } ],
+  "layout": [ { "hole": 1, "shape": "dogleg_right", "hazards": [ { "kind": "water", "side": "left" } ] } ] or null,
   "confidence": "high|medium|low",
   "warnings": ["..."]
 }`;
@@ -51,10 +58,34 @@ const SCHEMA: StructuredSchema = {
           additionalProperties: false,
         },
       },
+      layout: {
+        type: ['array', 'null'],
+        items: {
+          type: 'object',
+          properties: {
+            hole: { type: 'integer' },
+            shape: { type: ['string', 'null'], enum: ['straight', 'dogleg_left', 'dogleg_right', null] },
+            hazards: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  kind: { type: 'string', enum: ['water', 'bunker'] },
+                  side: { type: 'string', enum: ['left', 'right', 'center', 'greenside'] },
+                },
+                required: ['kind', 'side'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['hole', 'shape', 'hazards'],
+          additionalProperties: false,
+        },
+      },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
       warnings: { type: 'array', items: { type: 'string' } },
     },
-    required: ['course_name', 'tee_name', 'location', 'holes', 'confidence', 'warnings'],
+    required: ['course_name', 'tee_name', 'location', 'holes', 'layout', 'confidence', 'warnings'],
     additionalProperties: false,
   },
   gemini: {
@@ -74,6 +105,27 @@ const SCHEMA: StructuredSchema = {
             handicap: { type: 'INTEGER', nullable: true },
           },
           required: ['hole', 'par', 'yardage', 'handicap'],
+        },
+      },
+      layout: {
+        type: 'ARRAY',
+        nullable: true,
+        items: {
+          type: 'OBJECT',
+          properties: {
+            hole: { type: 'INTEGER' },
+            shape: { type: 'STRING', nullable: true, enum: ['straight', 'dogleg_left', 'dogleg_right'] },
+            hazards: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  kind: { type: 'STRING', enum: ['water', 'bunker'] },
+                  side: { type: 'STRING', enum: ['left', 'right', 'center', 'greenside'] },
+                },
+              },
+            },
+          },
         },
       },
       confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
@@ -105,8 +157,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!imageB64) return res.status(400).json({ error: 'image_b64 required' });
     if (imageB64.length > 9_000_000) return res.status(413).json({ error: 'image too large; resize to ~1280px on long edge' });
 
-    const userText = 'Extract the COURSE LAYOUT (par + yardage + handicap per hole) from this scorecard. Return JSON per the schema in your instructions.';
-    const visionOpts = { maxTokens: 2000, temperature: 0.1, forceJSON: true, schema: SCHEMA };
+    const userText =
+      'Extract the course table (par + yardage + handicap per hole) from this scorecard. ' +
+      'If the card ALSO prints a course-layout MAP, read each hole\'s shape (straight / dogleg left / ' +
+      'dogleg right) and any water or bunkers drawn on it into "layout". If there is no map, layout is null. ' +
+      'Return JSON per the schema in your instructions.';
+    // 2026-08-11 — layout adds up to 18 more objects with nested hazard arrays; 2000 tokens would
+    // truncate the JSON mid-array and fail the whole parse (the same failure mode that made
+    // course-ai-search read as broken when its description outgrew a 400-token budget).
+    const visionOpts = { maxTokens: 3500, temperature: 0.1, forceJSON: true, schema: SCHEMA };
     const images = [{ b64: imageB64, mimeType: imageMediaType }];
 
     let raw = '';
