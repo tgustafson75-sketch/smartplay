@@ -14,6 +14,7 @@
  */
 
 import { create } from 'zustand';
+import { STANDARD_CARRY_YARDS, ROLL_YARDS as SHARED_ROLL_YARDS } from '../services/standardBag';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
@@ -52,12 +53,11 @@ export function clubIdToClubName(id: string | null | undefined): ClubName | null
 // 5H (206) one yard from 3I (205) → inferClub coin-flipped between a 5-hybrid and a 3-iron. Driver/
 // woods/hybrids lowered to sit in sensible gaps above the irons; irons + wedges unchanged. Real logged
 // shots + My Bag entries still override this fallback the moment they exist.
-const STANDARD_YARDS: Record<ClubName, number> = {
-  Driver: 245, '3W': 233, '5W': 223, '7W': 213,
-  '2H': 215, '3H': 210, '4H': 197, '5H': 183,
-  '3I': 205, '4I': 190, '5I': 175, '6I': 162, '7I': 148, '8I': 135, '9I': 122,
-  PW: 110, AW: 104, GW: 98, SW: 86, LW: 74, Putter: 0,
-};
+// 2026-08-12 — the standard bag moved to services/standardBag.ts so SmartMotion's carry estimate,
+// the caddie's spoken ladder and this plausibility band all quote the SAME numbers. Three private
+// copies had drifted (Driver 245 / 250 / 230), which is how the caddie could say a driver goes 250
+// while the swing card said the same swing carried 198.
+const STANDARD_YARDS: Record<ClubName, number> = STANDARD_CARRY_YARDS;
 
 export interface ClubStat {
   club: ClubName;
@@ -74,11 +74,7 @@ export interface ClubStat {
  * vice-versa) so the caddie never quotes a tee→rest total as the carry the player must FLY a hazard.
  * Deliberately conservative. (Reconcile with smartfinder.estimateCarryTotal's rollout if they drift.)
  */
-const ROLL_YARDS: Record<ClubName, number> = {
-  Driver: 28, '3W': 22, '5W': 19, '7W': 17, '2H': 16, '3H': 15, '4H': 13, '5H': 12,
-  '3I': 12, '4I': 10, '5I': 9, '6I': 8, '7I': 6, '8I': 5, '9I': 5,
-  PW: 4, AW: 4, GW: 4, SW: 3, LW: 2, Putter: 0,
-};
+const ROLL_YARDS: Record<ClubName, number> = SHARED_ROLL_YARDS;
 
 /**
  * 2026-08-10 (Tim — "164-yard shot and the caddie defaults to gap wedge") — the PLAUSIBILITY BAND.

@@ -105,3 +105,58 @@ describe('bad bundled geometry must not outrank the engine', () => {
     expect(src).toContain("upstreamId = '__osm_only__';");
   });
 });
+
+/**
+ * 2026-08-12 (Tim) — "Check shot trace, I don't think you actually fixed the guards so it will work,
+ * and damn near every golf app and video has post-shot shot trace that shows and approximates ball
+ * flight. This probably contributes to missing target/shot maps on analysis cards."
+ *
+ * He was right on both counts. The guard was `showSkeleton` — the POSE-SKELETON toggle, defaulted
+ * OFF in June because interpolating a sparse 5-frame pose over moving video looked laggy. The ball
+ * reads were gated on the same flag "so this defaults BOTH overlays off". A rendering decision about
+ * the skeleton silently switched off shot trace for everyone who never taps the Motion chip.
+ *
+ * The overlay that DRAWS the trace never required the flag (it renders on isReview && showResults),
+ * so the renderer sat there ready while the producer never ran. And his downstream guess was exact:
+ * the persisted shot map stores `trace: ballTrace ? … : null`, so no Motion tap meant no trace AND
+ * no shot map on the analysis card.
+ */
+describe('shot trace computes without the pose-skeleton toggle', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs2 = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path2 = require('path') as typeof import('path');
+  const sm = fs2.readFileSync(path2.join(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf8');
+
+  it('the ball-departure read no longer requires showSkeleton', () => {
+    expect(sm).not.toContain('if (!showSkeleton || !clipUri || !ballArea) return;');
+    expect(sm).toContain('if (!clipUri || !ballArea) return;');
+  });
+
+  it('neither ball effect still lists showSkeleton as a dependency', () => {
+    // A stale dep would re-run the effect on toggle and reintroduce the coupling by the back door.
+    expect(sm).not.toContain('}, [showSkeleton, clipUri, ballArea, segments, selectedSwing]);');
+    expect(sm).not.toContain('}, [showSkeleton, clipUri, ballArea, segments, selectedSwing, angle, isPutt]);');
+  });
+
+  it('both ball reads survive — departure AND the multi-point path', () => {
+    // buildShotTrace needs the path points for the solid measured line; departure alone is one line.
+    expect(sm).toContain('void detectBallDeparture(');
+    expect(sm).toContain('void detectBallPath(');
+  });
+
+  it('the trace still only draws for a DTL, non-putt swing', () => {
+    // Decoupling from the skeleton must not start drawing flight on a face-on view or a putt.
+    expect(sm).toContain("if (angle !== 'down_the_line' || isPutt) { setBallPathPoints(null); return; }");
+    expect(sm).toContain("if (angle !== 'down_the_line' || isPutt) return null;");
+  });
+
+  it('the shot map still carries the trace it now actually receives', () => {
+    // This is the analysis-card link Tim guessed at: no trace computed → trace: null persisted.
+    expect(sm).toContain('trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null');
+  });
+
+  it('the overlay that draws it never depended on the toggle', () => {
+    expect(sm).toContain("{isReview && showResults && shotTrace && shotTrace.tier !== 'none' ? (");
+  });
+});

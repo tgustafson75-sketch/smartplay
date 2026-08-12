@@ -1459,7 +1459,27 @@ export default function SmartMotion() {
   // default path stays a single fast analyzeSwing call; the verifier only runs
   // once the user opens Motion, so it never competes with the core read.
   useEffect(() => {
-    if (!showSkeleton || !clipUri || !ballArea) return;
+    /**
+     * 2026-08-12 (Tim) — "Check shot trace, I don't think you actually fixed the guards so it will
+     * work, and damn near every golf app and video has post-shot shot trace that shows and
+     * approximates ball flight. This probably contributes to missing target/shot maps on analysis
+     * cards."
+     *
+     * He was right, and the guard was `showSkeleton`. That flag is the POSE-SKELETON toggle, which
+     * was defaulted OFF in June because interpolating a sparse 5-frame pose over moving video
+     * looked laggy. The ball reads were gated on the same flag "so this defaults BOTH overlays off"
+     * — so a rendering decision about the skeleton silently switched off shot trace for everyone
+     * who never taps the Motion chip, which is everyone.
+     *
+     * The overlay that DRAWS the trace never required the flag (it renders on isReview &&
+     * showResults). So the renderer was sitting there ready and the producer never ran — the trace
+     * wasn't broken, it was never computed. That also starves the analysis card's shot map, which
+     * is downstream of these same points.
+     *
+     * Ball flight has nothing to do with the pose skeleton. Decoupled: the skeleton keeps its
+     * off-by-default rendering preference, the ball reads always run for a DTL non-putt swing.
+     */
+    if (!clipUri || !ballArea) return;
     // 2026-06-14 (Tim) — compute departure for the SELECTED swing (its own strike),
     // cached per index, so each reel tab shows its own trace (was first-strike-only).
     const seg = segments[selectedSwing];
@@ -1539,7 +1559,7 @@ export default function SmartMotion() {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, ballArea, segments, selectedSwing]);
+  }, [clipUri, ballArea, segments, selectedSwing]);
 
   // 2026-06-25 (Shot Tracing, Tim) — MULTI-FRAME ball-path detection. Samples a
   // short sequence of post-impact frames and locates the ball in each it can (api/
@@ -1550,7 +1570,10 @@ export default function SmartMotion() {
   // (never competes with the core analysis pass). Honest: detectBallPath returns
   // null on any failure / no-server, and an empty result → no trace + a note.
   useEffect(() => {
-    if (!showSkeleton || !clipUri || !ballArea) return;
+    // 2026-08-12 — decoupled from showSkeleton with the departure read above; the multi-point path
+    // is the SOLID measured part of the trace, and gating it on the pose toggle meant the trace was
+    // never computed for anyone who didn't tap Motion. See the note on the departure effect.
+    if (!clipUri || !ballArea) return;
     if (angle !== 'down_the_line' || isPutt) { setBallPathPoints(null); return; }
     const seg = segments[selectedSwing];
     const strikeMs = seg?.strikeMs ?? firstStrikeMsRef.current;
@@ -1574,7 +1597,7 @@ export default function SmartMotion() {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, ballArea, segments, selectedSwing, angle, isPutt]);
+  }, [clipUri, ballArea, segments, selectedSwing, angle, isPutt]);
 
   // 2026-07-07 (Tim — real clubhead swing arc) — on the Motion step, run the clubhead
   // detector across the SELECTED swing's window. Unlike the ball path this is NOT

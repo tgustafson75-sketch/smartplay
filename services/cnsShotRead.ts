@@ -19,6 +19,7 @@
  */
 
 import type { WeatherSnapshot } from './weatherService';
+import { STANDARD_LADDER as SHARED_LADDER, CLUB_LABEL as SHARED_CLUB_LABEL } from './standardBag';
 import { playsLikeDistance } from '../utils/playsLike';
 
 export interface ShotRead {
@@ -42,11 +43,10 @@ export interface ShotRead {
 
 // Standard carry ladder — the honest fallback when the player hasn't logged a
 // real bag yet. Used only when `bag` is empty so we never go silent on club.
-const STANDARD_LADDER: readonly (readonly [string, number])[] = [
-  ['Driver', 250], ['3 Wood', 225], ['5 Wood', 210], ['Hybrid', 195],
-  ['4 Iron', 185], ['5 Iron', 175], ['6 Iron', 165], ['7 Iron', 155],
-  ['8 Iron', 145], ['9 Iron', 130], ['PW', 115], ['GW', 100], ['SW', 85], ['LW', 70],
-];
+// 2026-08-12 — was a private copy that disagreed with the other two standard tables (Driver 250 here
+// vs 245 in clubStatsStore vs 230 in equipment_intelligence). Now derived from THE standard bag, so
+// what the caddie SAYS a club goes and what the swing card reports for that club are one number.
+const STANDARD_LADDER = SHARED_LADDER;
 
 /**
  * 2026-08-11 — ClubName (the stores' vocabulary) → the STANDARD_LADDER's label. Without this the

@@ -19,6 +19,7 @@
  */
 
 import { getIndustryAverageCarryYards } from '../knowledge/equipment/equipment_intelligence';
+import { standardCarryFor } from '../standardBag';
 import type { ClubId } from '../clubRecognition';
 
 // Map our ClubId codes onto labels the equipment table understands (it covers
@@ -31,26 +32,35 @@ const CLUB_LABEL: Partial<Record<ClubId, string>> = {
   PW: 'pw', GW: 'gw', AW: 'gw', SW: 'sw', LW: 'lw',
 };
 
-/** Skill scale on the industry carries: scratch (≤2) ≈ full, a higher handicap
- *  carries shorter. Bounded so it never collapses. Default handicap 18 → ~0.86. */
-function handicapFactor(handicap: number | null | undefined): number {
-  const h = typeof handicap === 'number' ? handicap : 18;
-  return Math.max(0.78, Math.min(1, 1 - Math.max(0, h - 2) * 0.009));
-}
-
-/** Best estimate of a club's FULL carry (yards): a learned average wins; otherwise the
- *  industry table scaled by handicap. Null for putter / unknown / no club. */
+/**
+ * Best estimate of a club's FULL carry (yards). A learned/verified player average always wins;
+ * otherwise THE standard bag — the same table the caddie quotes.
+ *
+ * 2026-08-12 (Tim — "make sure SmartMotion planned distance also correlates to the player's bag
+ * and/or verified/played distances"). It used a third private table (equipment_intelligence) and
+ * then scaled it by handicap, so with no logged data the caddie said his driver goes 245 and this
+ * said the same swing carried 198. Two numbers for one club in one session is worse than either
+ * number being slightly off, so the baseline is now shared.
+ *
+ * The handicap scaling went with it, deliberately. It only ever applied to the DEFAULT — and the
+ * caddie's recommendation, which the player acts on, has never been handicap-scaled. Scaling one
+ * surface and not the other is precisely what made them disagree. Real measured carries override
+ * per club as soon as they exist, which is the honest way to personalise this. `handicap` stays in
+ * the signature (callers pass it) but no longer silently shrinks the estimate.
+ */
 export function fullCarryYards(
   club: ClubId | null,
-  handicap?: number | null,
+  _handicap?: number | null,
   learnedAvgCarryYds?: number | null,
 ): number | null {
   if (!club || club === 'unknown' || club === 'PT') return null;
   if (learnedAvgCarryYds != null && learnedAvgCarryYds > 0) return Math.round(learnedAvgCarryYds);
+  // ClubId codes ARE the standard bag's keys for everything except the few the bag doesn't carry.
+  const direct = standardCarryFor(club);
+  if (direct != null) return direct;
   const label = CLUB_LABEL[club];
   const industry = label ? getIndustryAverageCarryYards(label) : null;
-  if (industry == null) return null;
-  return Math.round(industry * handicapFactor(handicap));
+  return industry == null ? null : Math.round(industry);
 }
 
 /** Estimated carry for a PARTIAL-effort shot: effort% × full carry. Null when we

@@ -1424,7 +1424,9 @@ check('Pre-record ball box: default box + verifier gated to Motion step + acoust
     /title=\{placeBallMode \? 'Tap your ball' : 'Ball box'\}/.test(smSrc) &&
     // 2026-06-14 — departure effect is now per-swing (cached by index, recomputed off
     // the SELECTED swing's strike); deps dropped `ballDeparture` (the old run-once guard).
-    /\[showSkeleton, clipUri, ballArea, segments, selectedSwing\]/.test(smSrc) &&
+    // 2026-08-12 — and dropped `showSkeleton`: the pose-skeleton toggle must not decide whether
+    // shot trace gets computed (it was silently switching trace + the shot map off by default).
+    /\[clipUri, ballArea, segments, selectedSwing\]/.test(smSrc) &&
     // 2026-06-15 (Tim) — video-located segments (peakDb EXACTLY 0, ~±1s) no longer go
     // DARK; they ATTEMPT departure and accept ONLY a high-confidence, clearly-departed
     // read (degrade+flag), so a clearly-departed daytime ball still traces while a
@@ -1561,16 +1563,20 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
   'gradient fade + glass cards + panel hidden while placing the ball box');
 
 // ─── 2026-06-09: SmartMotion unstack + workflow fixes ──────────────────────
-check('Motion OFF by default (lag fix) — toggle still gates compute/render',
-  // 2026-06-15 — Tim: body-trace/skeleton OFF by default (it interpolates a sparse
-  // 5-frame pose onto the moving video → laggy). The ball-departure compute is gated
-  // on showSkeleton too, so default-off keeps BOTH overlays + their compute off; the
-  // Motion chip toggles it ON to process on demand. Toggle-gates still hold.
+// 2026-08-12 (Tim — "check shot trace, I don't think you actually fixed the guards so it will work").
+// This guard USED to assert the bug: that the ball-departure compute was gated on showSkeleton. That
+// coupling meant a rendering preference about the POSE SKELETON (defaulted off in June for lag)
+// silently switched off shot trace — and, downstream, the analysis card's shot map — for everyone who
+// never taps the Motion chip. The skeleton keeps its off-by-default rendering; the ball reads no
+// longer ride on it.
+check('Motion (pose skeleton) OFF by default — but it no longer gates the ball reads',
   /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
     /Motion overlay/.test(smSrc) &&
-    // 2026-07-04 (drift reconcile) — the compute gate grew clipUri/ballArea guards.
-    /if \(!showSkeleton \|\| !clipUri \|\| !ballArea\) return;/.test(smSrc) && /\{showSkeleton \? \(/.test(smSrc),
-  'skeleton/body-trace overlay defaults OFF (no lag) but is fully toggle-gated — process on demand');
+    /\{showSkeleton \? \(/.test(smSrc) &&
+    // the ball reads run for any DTL non-putt swing, skeleton or not
+    !/if \(!showSkeleton \|\| !clipUri \|\| !ballArea\) return;/.test(smSrc) &&
+    /if \(!clipUri \|\| !ballArea\) return;/.test(smSrc),
+  'the pose skeleton still defaults OFF (no lag) and is toggle-gated, but shot trace + shot map no longer depend on that toggle');
 
 check('Smart Motion icons feel tapped — haptic + spring wobble (TactilePressable)',
   // 2026-06-13 — Tim: every Smart Motion icon should buzz + wobble on tap. A single
@@ -1899,11 +1905,19 @@ check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fal
       /case 'club_distance':/.test(read('services/intents/queryStatusHandler.ts'));
     // (b) chart calibration: Driver is no longer the scratch-level 275, and 5H no longer collides
     //     with 3I (was 206 vs 205). Both copies (store + recommendation) match.
+    // 2026-08-12 — the chart itself moved to services/standardBag.ts. Asserting the literal in each
+    // consumer was asserting the DUPLICATION; there were four copies and they had drifted to three
+    // different driver numbers. Assert the calibration once, at the source, and that the consumers
+    // read it rather than declaring their own.
+    const bag = read('services/standardBag.ts');
     const cs = read('store/clubStatsStore.ts');
     const br = read('services/bagRecommendation.ts');
+    const cns = read('services/cnsShotRead.ts');
     const okChart =
-      /Driver: 245,/.test(cs) && /'5H': 183,/.test(cs) && !/Driver: 275/.test(cs) &&
-      /Driver: 245,/.test(br) && /'5H': 183,/.test(br);
+      /Driver: 245,/.test(bag) && /'5H': 183,/.test(bag) && !/Driver: 275/.test(bag) &&
+      /const STANDARD_YARDS: Record<ClubName, number> = STANDARD_CARRY_YARDS;/.test(cs) &&
+      /const STANDARD_YARDS: Record<ClubName, number> = STANDARD_CARRY_YARDS;/.test(br) &&
+      /const STANDARD_LADDER = SHARED_LADDER;/.test(cns);
     return okRouting && okChart;
   })(),
   'a mid-handicapper can ask "how far do I hit my 7 iron" (offline), flip persona/theme/cart/ghost offline, and the pre-data bag chart is internally consistent (no Driver=275, no 5H≈3I collision)');
@@ -6969,13 +6983,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     const learned = fullCarryYards('7I', 18, 142);   // learned avg wins over the table
     const putt = estimateCarryYards('PT', 80, 18);   // putter → null (no carry)
     const noClub = estimateCarryYards(null, 80, 18);
-    check('SmartMotion: carry estimate = club × effort % (reuses club math, handicap-scaled)',
-      typeof full7i === 'number' && full7i > 100 && full7i < 150 &&     // high-handicap 7i ~125-130
+    // 2026-08-12 (Tim — "make sure SmartMotion planned distance also correlates to the player's bag
+    // and/or verified/played distances"). The handicap scaling is GONE and this guard changed with
+    // it: it used to assert that SmartMotion quotes a SHORTER default than the caddie does, which is
+    // the disagreement itself (caddie "your driver goes 245" vs card "you carried 198"). The default
+    // is now the shared standard bag, identical on every surface; personalisation comes from real
+    // measured carries, which still override.
+    check('SmartMotion: carry estimate = the SHARED standard bag × effort %, learned carry wins',
+      full7i === 148 &&                                                 // the one standard-bag 7i
+        scratch7i === full7i &&                                         // handicap no longer scales the default
         half7i != null && Math.abs(half7i - Math.round(full7i * 0.5)) <= 1 &&
-        (scratch7i ?? 0) > full7i &&                                     // scratch carries farther
-        learned === 142 &&                                              // real learned avg wins
+        learned === 142 &&                                              // real learned avg still wins
         putt === null && noClub === null,                               // honest nulls
-      `7-iron full carry @hcp18 ~${full7i}y (high-handicap baseline from the industry table scaled by handicap); 50% effort ~${half7i}y; scratch carries farther (${scratch7i}y); a learned ${learned}y average overrides the table; putter/no-club → null (no fabricated yardage)`);
+      `7-iron full carry ${full7i}y — the same number the caddie quotes (services/standardBag.ts), not a separately handicap-scaled one; 50% effort ~${half7i}y; a learned ${learned}y average overrides it; putter/no-club → null`);
   }
 
   check('SmartMotion: DTL readout shows the carry estimate + cycling badge + icon set',
