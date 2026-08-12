@@ -20,6 +20,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { useWorkoutStore } from '../../store/workoutStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -76,6 +77,22 @@ export default function PreroundWarmUp() {
       if (stretchStep && completed.has(stretchStep.id)) {
         usePracticePointsStore.getState().awardPracticePoints({ key: 'preround:stretch', label: 'Pre-Round Stretch', swings: 0, now });
       }
+      /**
+       * 2026-08-12 (Tim — "tie in exercise tracking and warm ups pre round to performance metrics").
+       *
+       * This block already awarded points and recorded a practice session, but neither of those can
+       * answer "did I score better on the rounds I warmed up for" — points aren't timestamped
+       * against a tee time and practice sessions aren't strokes. The warm-up now also lands in the
+       * workout ledger with its real completion time, which is what computeWarmupPerformance pairs
+       * against each round's first tee.
+       */
+      useWorkoutStore.getState().logCompleted({
+        kind: 'preround_warmup',
+        title: 'Pre-Round Warm Up',
+        exercises: plan.steps.filter((st) => completed.has(st.id)).map((st) => st.title),
+        durationMin: plan.allocated > 0 ? plan.allocated : plan.minutes,
+        at: now,
+      });
       try { void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch { /* non-fatal */ }
       useToastStore.getState().show('Warm-up logged — you\'re prepped.');
     } catch (e) {

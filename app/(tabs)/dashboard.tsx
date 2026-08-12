@@ -49,10 +49,12 @@ import { useClubStatsStore, CLUB_ORDER, clubIdToClubName } from '../../store/clu
 import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
+import { computeWarmupPerformance } from '../../services/practice/warmupPerformance';
 import { useCageStore, resolvePlayerName } from '../../store/cageStore';
 import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { useToastStore } from '../../store/toastStore';
 import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
@@ -263,6 +265,36 @@ export default function Dashboard() {
     void Share.share({ message: body, title: `Training for: ${faultLabel}` }).catch(() => {});
   }, [swingFault, faultWorkouts, faultLabel]);
 
+  /**
+   * 2026-08-12 (Tim — "I asked multiple times to tie in exercise tracking and warm ups pre round to
+   * performance metrics") — MARK DONE, the write this card never had.
+   *
+   * The card has prescribed exercises for a diagnosed fault since July, and there was no way to tell
+   * the app you'd done them: the workout ledger could only be filled by importing a SmartPump export.
+   * So the correlation rail below charted training against scoring while being structurally unable
+   * to see the training this very card recommended.
+   *
+   * Logged against TODAY with the fault in the title, so the ledger records what was trained and for
+   * which fault — not just that some minutes happened.
+   */
+  const logCompletedWorkout = useWorkoutStore((s) => s.logCompleted);
+  const [loggedFaultWorkAt, setLoggedFaultWorkAt] = useState<number | null>(null);
+  const onMarkWorkoutsDone = useCallback(() => {
+    if (!swingFault || faultWorkouts.length === 0) return;
+    const ok = logCompletedWorkout({
+      kind: 'in_app_exercise',
+      title: `Swing training — ${faultLabel}`,
+      exercises: faultWorkouts.map((e) => e.name),
+    });
+    // Confirm only on a real write; a deduped double-tap must not claim a second session.
+    if (ok) {
+      setLoggedFaultWorkAt(Date.now());
+      useToastStore.getState().show('Logged — this now counts toward your training trend.');
+    } else {
+      useToastStore.getState().show('Already logged for this set.');
+    }
+  }, [swingFault, faultWorkouts, faultLabel, logCompletedWorkout]);
+
   // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
   // vs. score-vs-par per round. Third correlation rail alongside practice + points.
   // Honest: association, never causation; quiet until enough on both sides.
@@ -294,6 +326,22 @@ export default function Dashboard() {
     }
     return list;
   }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf]);
+  /**
+   * 2026-08-12 (Tim) — WARM-UP vs SCORE, the question the trend tabs above structurally can't answer.
+   *
+   * Those chart weekly EFFORT against weekly SCORE, which is the right shape for training volume and
+   * the wrong one for a warm-up: a warm-up belongs to ONE round, and the honest question is a paired
+   * comparison — the rounds you warmed up for versus the ones you walked straight onto the tee.
+   * Reported in strokes, because that's the only unit a golfer feels.
+   */
+  const warmupPerf = useMemo(
+    () => computeWarmupPerformance({
+      warmups: workoutHistory.filter((w) => w.source === 'preround_warmup').map((w) => ({ completedAt: w.date })),
+      rounds: roundHistory.map((r) => ({ startedAt: r.startedAt, scoreVsPar: r.scoreVsPar })),
+    }),
+    [workoutHistory, roundHistory],
+  );
+
   const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training'>('practice');
   const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
 
@@ -956,6 +1004,17 @@ export default function Dashboard() {
             <Text style={[styles.impactHeadline, { color: activeProgress.hasEnough ? colors.text_primary : colors.text_muted }]}>
               {activeProgress.headline}
             </Text>
+            {/* 2026-08-12 — the warm-up answer sits beside the trend because it's the same question
+                asked the only way a warm-up can honestly be measured: round by round, in strokes.
+                Silent until there are 3+ rounds on BOTH sides — a one-round "improvement" is noise. */}
+            {warmupPerf.enough && !!warmupPerf.headline && (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginTop: 8 }}>
+                <Ionicons name="fitness-outline" size={14} color={colors.accent} style={{ marginTop: 1 }} />
+                <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 17, flex: 1 }}>
+                  {warmupPerf.headline}
+                </Text>
+              </View>
+            )}
             {activeProgress.hasEnough && (
               <TrendChart
                 // Primary = the OUTCOME (score vs par, lower is better → green when dropping). Overlay = the
@@ -1000,9 +1059,27 @@ export default function Dashboard() {
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>TRAIN YOUR SWING</Text>
-              <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Export these exercises">
-                <Ionicons name="share-outline" size={18} color={colors.accent} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <TouchableOpacity
+                  onPress={onMarkWorkoutsDone}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={loggedFaultWorkAt ? 'Logged — tap to log again' : 'Mark these exercises done'}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+                >
+                  <Ionicons
+                    name={loggedFaultWorkAt ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                    size={18}
+                    color={loggedFaultWorkAt ? colors.accent : colors.text_muted}
+                  />
+                  <Text style={{ color: loggedFaultWorkAt ? colors.accent : colors.text_muted, fontSize: 11, fontWeight: '800' }}>
+                    {loggedFaultWorkAt ? 'LOGGED' : 'MARK DONE'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Export these exercises">
+                  <Ionicons name="share-outline" size={18} color={colors.accent} />
+                </TouchableOpacity>
+              </View>
             </View>
             <Text style={[styles.impactHeadline, { color: colors.text_primary, textTransform: 'capitalize' }]}>{faultLabel}</Text>
             <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 2, marginBottom: 8 }]}>Exercises that help this fault</Text>
