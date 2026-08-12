@@ -852,7 +852,8 @@ export default function CaddieAvatar({
     (voiceState === 'thinking' || isThinking) ? STATE_ICONS.thinking :
     voiceState === 'speaking'              ? STATE_ICONS.speaking : null;
   const stateLabel =
-    voiceState === 'arming'                ? 'Getting ready' :
+    // 2026-08-12 — arming is deliberately indistinguishable from idle here; see BrandHeader.
+    voiceState === 'arming'                ? 'Tap to talk' :
     voiceState === 'listening'             ? 'Listening' :
     (voiceState === 'thinking' || isThinking) ? 'Thinking'  :
     voiceState === 'speaking'              ? 'Speaking'  :

@@ -163,18 +163,30 @@ describe('both voice paths judge "that was a question" identically', () => {
 });
 
 describe('the arming state is honest everywhere it surfaces', () => {
+  /**
+   * 2026-08-12 (Tim) — "there's something when you first tap the mic that comes up real quick, you
+   * can't even read it. I have a feeling it's unnecessary."
+   *
+   * That was mine. 'arming' originally painted its own label ("ONE SEC…"), and on a fast audio-
+   * session open the state lasts ~150ms — long enough to flicker, far too short to read, which
+   * reads as a glitch rather than a state. The state must EXIST (it's what stops us claiming to
+   * listen before the mic is live) but it must be INVISIBLE: identical to idle, with the tap's
+   * haptic as the acknowledgement and the halo lighting only when we genuinely are listening.
+   */
   it('never renders as LISTENING in the cockpit header', () => {
     const src = read('components/caddie/cockpit/BrandHeader.tsx');
-    const arming = src.indexOf("voiceState === 'arming' ? 'ONE SEC…'");
-    const listening = src.indexOf("voiceState === 'listening' ? 'LISTENING…'");
-    // Order matters: the arming branch must be evaluated first or it can never be reached.
-    expect(arming).toBeGreaterThan(-1);
-    expect(arming).toBeLessThan(listening);
+    expect(src).not.toContain("'ONE SEC…'");
+    // LISTENING… must be reachable ONLY from the listening state.
+    expect(src).toContain("{voiceState === 'listening' ? 'LISTENING…'");
   });
 
-  it('does not tell the user to "tap when done" before recording starts', () => {
-    const src = read('components/caddie/cockpit/AskCaddieButton.tsx');
-    expect(src).toContain("arming:    'One sec…'");
+  it('arming paints exactly like idle — no flash the user cannot read', () => {
+    const btn = read('components/caddie/cockpit/AskCaddieButton.tsx');
+    expect(btn).toContain("arming:    'Tap to ask Caddie'");
+    expect(btn).toContain("idle:      'Tap to ask Caddie'");
+    // ...and it must NOT invite speech before the mic is live.
+    expect(btn).not.toContain("arming:    'Tap when done'");
+    expect(read('components/CaddieAvatar.tsx')).toContain("voiceState === 'arming'                ? 'Tap to talk' :");
   });
 
   it('counts as busy, so a second tap cannot start a competing session', () => {

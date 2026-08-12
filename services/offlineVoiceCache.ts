@@ -60,8 +60,8 @@ function norm(text: string): string {
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-const TEXT_TO_LINE = new Map<string, { slug: string; language: Lang }>();
-for (const l of OFFLINE_LINES) TEXT_TO_LINE.set(norm(l.text), { slug: l.slug, language: l.language });
+const TEXT_TO_LINE = new Map<string, { slug: string; language: Lang; text: string }>();
+for (const l of OFFLINE_LINES) TEXT_TO_LINE.set(norm(l.text), { slug: l.slug, language: l.language, text: l.text });
 
 // 2026-07-24 (audit) — key by PERSONA too. The /api/voice render depends on the persona, so a clip
 // cached for Kevin must NOT be served after a switch to Tank (it would play in the old caddie's voice).
@@ -70,12 +70,40 @@ function personaSlug(persona: string): string {
   return (persona || 'kevin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'kevin';
 }
 
-function cacheKey(slug: string, gender: Gender, persona: string): string {
-  return `${personaSlug(persona)}:${gender}:${slug}`;
+/**
+ * 2026-08-12 (Tim, three times in a row) — "tell me again how you fixed the 'we're off the course
+ * right now' message… I'm still getting the same thing."
+ *
+ * I hadn't fixed it. The TEXT was fixed on 2026-08-06, when he asked for that line to be reverted
+ * for reading robotic — DEAD_END_PRACTICE.en became "Good moment to sharpen your tempo or short
+ * game". The sentence he kept hearing does not exist anywhere in this codebase.
+ *
+ * It was coming off his own phone. The cache filename was keyed by SLUG only
+ * (`offline_voice_kevin_male_off_course_en.mp3`), so the mp3 rendered from the OLD wording stayed on
+ * disk under the same name forever. TEXT_TO_LINE maps the NEW text to the same slug, finds that
+ * file, and plays six-day-old audio. Editing a line could never take effect on a device that had
+ * already cached it — for ANY of these lines, not just this one.
+ *
+ * The fingerprint is now part of the identity: change the words and the filename changes with them,
+ * so the old clip is simply no longer found and a fresh one is rendered. Non-cryptographic and short
+ * — it only has to notice that a string differs. [[no-deferred-wiring-placeholders]]
+ */
+function textFingerprint(text: string): string {
+  let h = 5381;
+  const t = norm(text);
+  for (let i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+  return h.toString(36);
 }
 
-function fileFor(slug: string, gender: Gender, persona: string): File {
-  return new File(Paths.cache, `offline_voice_${personaSlug(persona)}_${gender}_${slug}.mp3`);
+function cacheKey(slug: string, gender: Gender, persona: string, text: string): string {
+  return `${personaSlug(persona)}:${gender}:${slug}:${textFingerprint(text)}`;
+}
+
+function fileFor(slug: string, gender: Gender, persona: string, text: string): File {
+  return new File(
+    Paths.cache,
+    `offline_voice_${personaSlug(persona)}_${gender}_${slug}_${textFingerprint(text)}.mp3`,
+  );
 }
 
 /** Minimum plausible mp3 size — mirrors the speak() path's small-payload guard so a truncated/empty
@@ -93,8 +121,8 @@ const cachedKeys = new Set<string>();
 export function resolveCachedOfflineClipUri(text: string, gender: Gender, persona: string): string | null {
   const line = TEXT_TO_LINE.get(norm(text));
   if (!line) return null;
-  if (!cachedKeys.has(cacheKey(line.slug, gender, persona))) return null;
-  return fileFor(line.slug, gender, persona).uri;
+  if (!cachedKeys.has(cacheKey(line.slug, gender, persona, line.text))) return null;
+  return fileFor(line.slug, gender, persona, line.text).uri;
 }
 
 let warmInFlight: Promise<void> | null = null;
@@ -109,9 +137,9 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
   warmInFlight = (async () => {
     const apiBase = getApiBaseUrl();
     for (const line of OFFLINE_LINES) {
-      const key = cacheKey(line.slug, gender, persona);
+      const key = cacheKey(line.slug, gender, persona, line.text);
       if (cachedKeys.has(key)) continue;
-      const file = fileFor(line.slug, gender, persona);
+      const file = fileFor(line.slug, gender, persona, line.text);
       // Already on disk from a prior session → register and skip the network.
       try {
         if (file.exists && (file.size ?? 0) >= MIN_CLIP_BYTES) { cachedKeys.add(key); continue; }
@@ -130,6 +158,28 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
         cachedKeys.add(key);
       } catch { /* offline or transient — leave uncached, retry next warm */ }
     }
+    /**
+     * 2026-08-12 — delete clips whose wording has since changed.
+     *
+     * Fingerprinting the filename stops a stale clip being PLAYED, but the old mp3 still sits in the
+     * cache directory. On Tim's phone that file is a recording of a sentence he asked us to stop
+     * saying six days ago, so leaving it there is both waste and a landmine for the next person who
+     * reads the cache folder and believes the app still says it. Sweep anything matching our naming
+     * scheme that isn't in the CURRENT expected set — across personas and genders, since a persona
+     * switch orphans clips too.
+     */
+    try {
+      const expected = new Set<string>();
+      for (const g of ['male', 'female'] as Gender[]) {
+        for (const l of OFFLINE_LINES) expected.add(fileFor(l.slug, g, persona, l.text).name);
+      }
+      for (const entry of Paths.cache.list()) {
+        const name = entry.name;
+        if (!name.startsWith(`offline_voice_${personaSlug(persona)}_`) || !name.endsWith('.mp3')) continue;
+        if (expected.has(name)) continue;
+        try { (entry as File).delete(); } catch { /* best-effort — a locked file is harmless */ }
+      }
+    } catch { /* listing unavailable — the fingerprint alone already prevents stale playback */ }
   })().finally(() => { warmInFlight = null; });
   return warmInFlight;
 }
@@ -141,5 +191,9 @@ export function __resetOfflineVoiceCache(): void {
 
 /** Test seam: register a slug as cached (used to assert resolve behavior without disk/network). */
 export function __markCachedForTest(slug: string, gender: Gender, persona = 'kevin'): void {
-  cachedKeys.add(cacheKey(slug, gender, persona));
+  // Look the CURRENT text up by slug so a test registration carries the same fingerprint the resolve
+  // path computes — otherwise the seam would register a key that can never be hit.
+  const line = OFFLINE_LINES.find((l) => l.slug === slug);
+  if (!line) return;
+  cachedKeys.add(cacheKey(slug, gender, persona, line.text));
 }

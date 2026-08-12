@@ -99,10 +99,13 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
             <Text style={{ color: colors.text_primary }}> CADDIE</Text>
           </Text>
           <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {/* 'arming' gets its own line: the tap registered, but we are NOT recording yet, so
-                claiming LISTENING… here is what made the user speak into a dead mic. */}
-            {voiceState === 'arming' ? 'ONE SEC…'
-              : voiceState === 'listening' ? 'LISTENING…'
+            {/* 2026-08-12 (Tim — "there's something when you first tap the mic that comes up real
+                quick, you can't even read it") — that was this, and it was mine. 'arming' needs to
+                exist (it stops us claiming to listen before the mic is live) but it must not PAINT:
+                on a fast audio-session open it lasts ~150ms, which reads as a glitch, not a state.
+                It renders exactly as idle — the tap's haptic is the acknowledgement, and the halo
+                simply doesn't light until we are genuinely listening. */}
+            {voiceState === 'listening' ? 'LISTENING…'
               : voiceState === 'thinking' ? 'THINKING…'
               : (voiceState === 'speaking' || voiceState === 'proactive') ? 'SPEAKING…'
               : 'TAP TO TALK · REAL-TIME CADDIE'}

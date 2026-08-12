@@ -1619,12 +1619,66 @@ export const speak = async (
       const expectedFloorMs = chars * 28;
       const looksTruncated = loaded && dur > 0 && chars > 30 && dur < expectedFloorMs;
       if (looksTruncated) {
-        console.log('[voice] speak clip looks TRUNCATED (weak signal) — dur', dur, 'ms <', expectedFloorMs, 'floor for', chars, 'chars; device-TTS fallback');
+        /**
+         * 2026-08-12 (Tim's field log, and the answer to "then it went to robot voice").
+         *
+         * His device received 5,760 bytes for 80 characters and played 360ms of it. The same request
+         * from a healthy connection returns 52-63 KB, three times running, in ~1.4s — so the server
+         * was fine and the DOWNLOAD was cut short on a weak link. (His transcribe probes were timing
+         * out in the same minute, which is the same weak link seen from the other side.)
+         *
+         * Detecting that and dropping straight to device TTS was the honest thing to do, but it
+         * surrenders the persona voice to a TRANSIENT failure — and the robot voice is precisely what
+         * reads as broken. A truncated download is the most retryable failure there is: same URL,
+         * same body, and the server is demonstrably healthy.
+         *
+         * So: re-fetch ONCE and re-check. A second truncation means the link really can't carry it,
+         * and device TTS is right. Bounded to one retry so a genuinely bad connection can't stack
+         * attempts in front of a player waiting to be spoken to. [[voice-one-voice-invariant]]
+         */
+        console.log('[voice] speak clip looks TRUNCATED — dur', dur, 'ms <', expectedFloorMs, 'floor for', chars, 'chars; refetching once');
         logVoiceSilentFail('speak_truncated_clip', { speechId: myId, durMs: dur, expectedFloorMs, chars, bytes: arrayBuffer.byteLength, textHead: text.slice(0, 40) });
         try { await sound.unloadAsync(); } catch {}
         if (myId !== currentSpeechId) { notifyCaption(null); notifySpeaking(false); return; }
-        await deviceSpeakFallback(text, language, myId, effectiveGender);
-        return;
+
+        let recovered = false;
+        try {
+          const retryRes = await fetch(apiUrl + '/api/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel, voice: customVoice }),
+            // Tight budget: this is a recovery attempt on a link we already know is weak, and the
+            // player is waiting. Slower than this and device TTS is genuinely the kinder answer.
+            signal: AbortSignal.timeout(8000),
+          });
+          if (retryRes.ok && myId === currentSpeechId) {
+            const retryBuf = await retryRes.arrayBuffer();
+            // Only bother loading it if it's plausibly bigger than the truncated one.
+            if (retryBuf.byteLength > arrayBuffer.byteLength) {
+              const retryFile = new File(Paths.cache, `kevin_voice_${Date.now()}_r.mp3`);
+              retryFile.write(new Uint8Array(retryBuf));
+              await new Promise<void>((resolve) => setTimeout(resolve, 0));
+              if (myId === currentSpeechId) {
+                const again = await Audio.Sound.createAsync({ uri: retryFile.uri }, { shouldPlay: true, volume: snapshotVolume });
+                const aDur = (again.status as { durationMillis?: number }).durationMillis ?? 0;
+                if ((again.status as { isLoaded?: boolean }).isLoaded === true && aDur >= expectedFloorMs) {
+                  console.log('[voice] truncation retry RECOVERED —', aDur, 'ms,', retryBuf.byteLength, 'bytes');
+                  sound = again.sound;
+                  status = again.status;
+                  recovered = true;
+                } else {
+                  try { await again.sound.unloadAsync(); } catch {}
+                }
+              }
+            }
+          }
+        } catch { /* retry failed — fall through to device TTS, which always works */ }
+
+        if (!recovered) {
+          if (myId !== currentSpeechId) { notifyCaption(null); notifySpeaking(false); return; }
+          await deviceSpeakFallback(text, language, myId, effectiveGender);
+          return;
+        }
       }
       if (looksDead) {
         console.log('[voice] speak first load looked dead — unloading and retrying with forced audio reset', { isLoaded: loaded, dur });

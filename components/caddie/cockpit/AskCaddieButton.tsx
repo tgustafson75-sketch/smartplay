@@ -30,9 +30,11 @@ export interface AskCaddieButtonProps {
 
 const LABEL: Record<VoiceState, string> = {
   idle:      'Tap to ask Caddie',
-  // 2026-08-11 — the mic isn't recording yet during 'arming'; saying "tap when done" here invites
-  // the user to start talking into a dead mic, which is what was cutting off his first words.
-  arming:    'One sec…',
+  // 2026-08-11 — the mic isn't recording yet during 'arming', so this must NOT say "tap when done"
+  // and invite the user to talk into a dead mic. 2026-08-12 — but it must not announce itself
+  // either: the state usually lasts ~150ms and a label that appears and vanishes reads as a glitch.
+  // Same words as idle → no visible transition, and still no false invitation to speak.
+  arming:    'Tap to ask Caddie',
   listening: 'Tap when done',
   thinking:  'Thinking…',
   speaking:  'Tap to interrupt',
