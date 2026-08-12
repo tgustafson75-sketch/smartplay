@@ -2430,8 +2430,49 @@ export default function SmartMotion() {
         // deriveSwingTempo pass when the dense frames genuinely can't produce an honest ratio.
         const { tempoFromPoseFrames } = await import('../../services/poseAnalysisApi');
         const dense = tempoFromPoseFrames(biomech.frames, seg.strikeMs, impactSource);
-        const t = dense.ratio != null ? dense : await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
+        let t = dense.ratio != null ? dense : await deriveSwingTempo(clipUri, seg.strikeMs, { impactSource });
         if (cancelled) return;
+        /**
+         * 2026-08-12 (Tim — "why the hell doesn't the watch work correctly? I don't get any metrics
+         * out of it… now that I have yardage on it I actually wear it while I swing").
+         *
+         * The watch DOES detect swings and DOES store them — the IMU bridge boots at launch and
+         * writes every swing to watchStore.sessionSwings. Nothing ever read them. Two files each
+         * believed the other had done the wiring: watchSwingBridge's header says the analysis layer
+         * "already promotes club speed / tempo / smash… no further wiring needed", while
+         * swingMetricsService lists 'watch' as a RESERVED slot, "declared, not yet emitted —
+         * SmartMotion plumbing is the missing piece". Neither side built it.
+         *
+         * TEMPO is the honest thing to take from the wrist: backswing and downswing are TIMES,
+         * measured directly by the IMU, needing no conversion or calibration. A 3:1 tempo is 3:1
+         * whether a camera or a wrist measured it.
+         *
+         * Club speed is deliberately NOT taken. peakWristSpeed is WRIST speed, and turning it into
+         * clubhead speed needs a lever constant we have not calibrated — watchWristInterpretation
+         * says so in its own header. Inventing one would be a fabricated "measured" number.
+         *
+         * Used only as a FALLBACK, and only when the watch swing is close in time to this strike:
+         * the camera read is richer (it carries the kinematic sequence), so the wrist fills the gap
+         * rather than overriding a good read. [[illustration-data-points]]
+         */
+        if (t.ratio == null) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const ws = require('../../store/watchStore') as typeof import('../../store/watchStore');
+            const swings = ws.useWatchStore.getState().sessionSwings ?? [];
+            const last = swings.length > 0 ? swings[swings.length - 1] : null;
+            // 90s: comfortably covers recording, reviewing and opening the read, without letting a
+            // swing from an earlier session attach itself to this one.
+            const fresh = last && typeof (last as { at?: number }).at === 'number'
+              ? Date.now() - ((last as { at?: number }).at as number) < 90_000
+              : true;
+            if (last && fresh && last.tempoRatio > 0 && last.backswingMs > 0 && last.downswingMs > 0) {
+              console.log('[smartmotion] camera gave no tempo — using the watch IMU read', last.tempoRatio);
+              t = { ...t, ratio: last.tempoRatio, backswingMs: last.backswingMs, downswingMs: last.downswingMs };
+            }
+
+          } catch { /* no watch data — stay honest and show nothing */ }
+        }
         // Only cache a real read; never poison the key with a transient NO_TEMPO (P2).
         if (t.ratio != null) tempoCacheRef.current[cacheKey] = t;
         setTempo(t);
