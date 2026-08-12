@@ -3,7 +3,7 @@ import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/v
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine } from './voiceService';
 import { conversationalBrainTurn } from './conversationalBrain';
-import { prewarmVoice } from './voiceWarmup';
+import { prewarmVoice, abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
@@ -564,7 +564,12 @@ async function openSession() {
   // re hot. 2026-06-16 — FORCE (bypass the 30s dedupe): a tap to talk is an explicit
   // signal the user is about to use voice, so warm the chain NOW even if a passive
   // warmup ran recently — it overlaps the capture and removes the cold-first-tap lag.
-  if (settings.voiceEnabled) prewarmVoice(true);
+  /**
+   * 2026-08-12 — was `prewarmVoice(true)`. Same reversal as the on-screen mic: firing five warmup
+   * POSTs here saturated the per-host connection pool at exactly the moment the earbud turn needed
+   * it. Release them instead. See services/voiceWarmup for the millisecond-level evidence.
+   */
+  abortVoiceWarmup();
 
   // Audio routing safety: if route is the phone speaker AND the user hasn't
   // opted into "Voice on phone speaker", suppress TTS — show text instead.

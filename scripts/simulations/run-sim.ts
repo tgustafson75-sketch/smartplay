@@ -5853,8 +5853,11 @@ check('API base URL — one resolver, single custom-domain host, no *.vercel.app
 // the "thinking forever → took too long" first turn. Now the voice hook warms on
 // mount of any voice surface AND on app foreground.
 const vcWarmSrc = read('hooks/useVoiceCaddie.ts');
+// 2026-08-12 — the import now also pulls abortVoiceWarmup: a real turn RELEASES warmup connections
+// instead of firing five more (which was saturating OkHttp's per-host limit and timing the user's own
+// transcribe out on our budget — see __tests__/regression/warmup-must-not-starve-the-turn).
 check('Voice warmup fires on voice-surface mount + app foreground (not just greeting)',
-  /import \{ prewarmVoice \} from '\.\.\/services\/voiceWarmup'/.test(vcWarmSrc) &&
+  /import \{ prewarmVoice, abortVoiceWarmup \} from '\.\.\/services\/voiceWarmup'/.test(vcWarmSrc) &&
     /AppState\.addEventListener\('change'/.test(vcWarmSrc) &&
     /next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vcWarmSrc) &&
     /voiceEnabled\) prewarmVoice\(\)/.test(vcWarmSrc),

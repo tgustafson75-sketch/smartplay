@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
-import { prewarmVoice } from '../services/voiceWarmup';
+import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
 import { getActiveCaddie } from '../services/caddieResolver';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
@@ -2468,7 +2468,14 @@ export const useVoiceCaddie = ({
     // speaks (~3-5s of recording + transcription), so by the time the utterance
     // reaches /api/kevin the Lambda is hot — killing the first-turn delay.
     // prewarmVoice is idempotent + 30s-deduped, so a rapid re-tap is free.
-    try { prewarmVoice(true); } catch { /* non-fatal */ }
+    /**
+     * 2026-08-12 — was `prewarmVoice(true)`: five MORE warmup POSTs fired at the instant the user
+     * tapped, to "heat the chain overlapping the speech window". On Android that saturates OkHttp's
+     * five-per-host limit and the user's own transcribe queues behind it, timing out on our budget
+     * without ever reaching the network. The optimisation was causing the failure it was added to
+     * prevent. A real turn now RELEASES warmup connections instead of adding to them.
+     */
+    try { abortVoiceWarmup(); } catch { /* non-fatal */ }
 
     // 2026-07-18 (Tim — haptic feedback so you feel the caddie mic register your tap). Best-effort,
     // wrapped — never blocks or affects the voice flow.
@@ -2687,7 +2694,9 @@ export const useVoiceCaddie = ({
     // connection, fine after ~20s." 2026-06-16 — FORCE past the dedupe: an explicit
     // capture tap means voice is imminent, so warm now even if a passive warm ran
     // recently (overlaps the speech, kills cold-first-tap lag).
-    if (useSettingsStore.getState().voiceEnabled) prewarmVoice(true);
+    // 2026-08-12 — same reversal as above: hand the connection slots to the capture, don't compete
+    // with it. See services/voiceWarmup for the timing evidence.
+    abortVoiceWarmup();
     try {
       // Phase BM — cache the mic permission grant in a module-level flag so
       // every subsequent tap skips the 30-80ms IPC roundtrip to the OS
