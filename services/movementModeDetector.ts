@@ -26,7 +26,21 @@ import { subscribe as subscribeGps, getLastFix } from './gpsManager';
 
 export type MovementMode = 'stationary' | 'walking' | 'cart' | 'unknown';
 
-const CART_SPEED_MS = 6.0;      // sustained > 6 m/s = cart
+/**
+ * 2026-08-12 (threshold audit) — 6.0 m/s is 13.4 mph SUSTAINED, which is at or above what most
+ * golf carts are governed to (12-15 mph flat out) and far above what one averages in play, where
+ * every leg ends in a stop, a turn, or a cart-path detour. Requiring three of five samples above
+ * that meant a player riding all eighteen was usually classified as WALKING.
+ *
+ * That matters beyond a label: the caddie reads movement mode for pace and for how far it expects
+ * you to be from your next shot, so a cart round was being reasoned about as a walking round.
+ *
+ * 3.0 m/s (6.7 mph) is the honest divider. Walking is 1.3-1.5 m/s even at a brisk clip, so this
+ * sits at roughly twice walking pace — comfortably clear of a fast walker, comfortably below a
+ * cart's real cruising speed, with margin on both sides rather than a ceiling almost nothing
+ * reaches.
+ */
+const CART_SPEED_MS = 3.0;      // sustained > 3 m/s (~6.7 mph) = riding, not walking
 const WALK_SPEED_MIN_MS = 1.0;  // sustained > 1 m/s but <= cart = walking
 const SPEED_WINDOW = 5;         // rolling-sample window
 const SUSTAIN_NEEDED = 3;       // 3 of 5 must agree to flip the mode
