@@ -111,11 +111,15 @@ describe('the scorecard decides WHICH course, and can veto', () => {
 });
 
 describe('courses that could only ever ask OpenStreetMap', () => {
-  it('Doral now has an upstream hint — the commercial API lists Golden Palm by name', () => {
-    // Tim: "isn't Doral one of the most famous courses right now?" It is; we simply never asked the
-    // source that has it. With no hint, resolveLocalCourseId returned null and the engine fell
-    // straight to OSM-only, where Golden Palm's holes do not exist.
-    expect(svc).toContain("'doral-gold': { search: 'Trump National Doral Golden Palm'");
+  it('Doral was PULLED from the bundled set rather than shipped without hole GPS', () => {
+    // Tim: "isn't Doral one of the most famous courses right now?" It is — and the card is easy to
+    // get; the commercial API lists all four courses by name. Hole GPS is the scarce thing, and no
+    // source has Golden Palm's. Rather than ship a course whose map we cannot draw honestly (or,
+    // worse, draw Blue Monster's holes on it), it is out of the bundled catalog entirely.
+    expect(svc).not.toContain("'doral-gold'");
+    expect(read('data/courses.ts')).not.toContain("doral-gold");
+    expect(read('app/(tabs)/play.tsx')).not.toContain('doral-gold');
+    expect(read('data/localCourseImages.ts')).not.toContain("'doral-gold'");
   });
 
   it('the other scorecard-only courses got hints too', () => {

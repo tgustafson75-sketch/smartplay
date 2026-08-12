@@ -87,9 +87,10 @@ const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
    * get information?"). It isn't hard — we were only ever asking OpenStreetMap, and had no hint here
    * so resolveLocalCourseId returned null and the engine fell straight to OSM-only. The commercial
    * API lists all four Doral courses BY NAME, Golden Palm included; OSM maps the neighbours' holes
-   * and not ours. These hints are the scorecard-only courses that had no upstream mapping at all.
+   * and not ours. (Doral itself was pulled from the bundled set on 12 Aug — the card is available
+   * but no source has its hole GPS, so there was nothing honest to render.) These hints are the
+   * remaining scorecard-only courses that had no upstream mapping at all.
    */
-  'doral-gold': { search: 'Trump National Doral Golden Palm', expectedCity: 'miami' },
   'shadow-lakes': { search: 'Shadow Lakes Golf Club', expectedCity: 'brentwood' },
   'webster-dudley': { search: 'Dudley Hill Golf Club', expectedCity: 'dudley' },
   'legacy-springfield': { search: 'The Legacy Golf Course', expectedCity: 'springfield' },

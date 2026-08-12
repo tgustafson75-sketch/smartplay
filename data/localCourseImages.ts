@@ -262,9 +262,8 @@ export type LocalCourseSlug =
   | 'spessard-holland'
   // 2026-07-06 — Webster/Dudley (MA) 9-hole, from Tim's Golf Pad hole-views.
   | 'webster-dudley'
-  // 2026-07-18 — Trump National Doral (Gold course), Miami FL + Pembroke Lakes CC,
+  // 2026-07-18 — Pembroke Lakes CC,
   // Pembroke Pines FL. 18 holes each, cropped from Tim's Golf Pad hole-view captures.
-  | 'doral-gold'
   | 'pembroke-pines'
   // 2026-07-23 — Highland Links (Truro MA, Dad's course), Miccosukee G&CC + Killian Greens
   // (Miami FL), Redlands CC (CA). 18 aerials each, cropped from the GPS-app hole-view
@@ -320,31 +319,8 @@ const WD: Record<number, ImageSourcePropType> = {};
 // THIRD-PARTY (Golf Pad-derived) — intentionally empty; see the note below.
 export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-// 2026-07-18 — Trump National Doral, GOLD course (Miami FL). 18 holes, cropped from Tim's
+
 // Golf Pad hole-view captures (aerial + flight line + green distance).
-/**
- * 2026-08-11 (Tim — "a couple of our courses still have the GOLF SHOT screenshots in them. We need
- * to check all of them").
- *
- * I fingerprinted all 30 bundled course image sets by dimensions and inspected the outliers. Three
- * are THIRD-PARTY renderings, not our own imagery:
- *
- *   doral-gold        (1024x1536) — Golfshot's UI is visible: their "i" info button, their yardage
- *                                   overlay ("354"), their black/cyan green rings, their blue
- *                                   player dot, on their cut-out-on-white hole treatment.
- *   webster-dudley    (545x1415)  — same: black/cyan rings, white "352" overlay, blue dot.
- *   rancho-california (1024x1536) — the same cut-out-on-white rendering with the UI cropped off.
- *
- * mariners-point is also an outlier by size but is a clean satellite crop with no third-party UI,
- * and the 848x1280 majority (greenhill, palms, sunnyvale, …) are our own satellite crops. Those stay.
- *
- * Emptied rather than deleted-from-disk: Metro bundles what is `require`d, so removing the requires
- * takes this content out of the shipped app immediately. These courses now render from our OWN
- * Mapbox satellite tiles, which the geometry work this week made reliable — they carry real
- * tee/green coords in data/courses.ts, so the tile frames correctly.
- */
-// THIRD-PARTY (Golfshot-derived) — intentionally empty; see the note above.
-export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-18 — Pembroke Lakes Country Club (Pembroke Pines FL). 18 holes, same capture source.
 export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
@@ -716,7 +692,6 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
   'killian-greens': KILLIAN_GREENS_HOLE_IMAGES,
   'redlands-cc': REDLANDS_CC_HOLE_IMAGES,
   'webster-dudley': WEBSTER_DUDLEY_HOLE_IMAGES,
-  'doral-gold': DORAL_GOLD_HOLE_IMAGES,
   'pembroke-pines': PEMBROKE_PINES_HOLE_IMAGES,
   'palms': PALMS_HOLE_IMAGES,
   'lakes': LAKES_HOLE_IMAGES,
@@ -810,8 +785,6 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   'westlake-cc-nj':   { lat: 40.0828,    lng: -74.3196 },
   // 2026-06-21 — Greenhill Golf Course, Worcester MA.
   'greenhill':        { lat: 42.2677,    lng: -71.8562 },
-  // 2026-07-18 — Trump National Doral (Gold), Miami FL (golfcourseapi id 29427).
-  'doral-gold':       { lat: 25.812008,  lng: -80.3377 },
   // 2026-07-18 — Pembroke Lakes CC, Pembroke Pines FL (golfcourseapi id 29669).
   'pembroke-pines':   { lat: 26.019337,  lng: -80.2868 },
 };
@@ -839,14 +812,7 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   const c = courseName.toLowerCase();
   if (c.includes('crystal') && c.includes('spring')) return 'crystal-springs';
   if (c.includes('mariner')) return 'mariners-point';
-  // 2026-07-18 — Doral + Pembroke. Pembroke MUST precede the generic 'lakes' match below,
-  // since the course is "Pembroke LAKES" and would otherwise resolve to the Menifee 'lakes'.
-  // 2026-07-24 (full-app audit, root A) — Doral is a MULTI-COURSE resort; we only bundle GOLD.
-  // Resolve to 'doral-gold' ONLY when the name confirms Gold, so a "Doral Blue Monster" round
-  // doesn't inherit the Gold centroid (satellite tile centered on the wrong course) + Gold hole
-  // calibration lines. A non-Gold/ambiguous Doral returns null → the tile centers on the player's
-  // live GPS and no wrong overlay lines are drawn (honest degrade). Canonical local: id unaffected.
-  if (c.includes('doral')) return c.includes('gold') ? 'doral-gold' : null;
+  // Pembroke MUST precede the generic 'lakes' match below.
   if (c.includes('pembroke')) return 'pembroke-pines';
   if (c.includes('palms')) return 'palms';
   if (c.includes('lakes') && !c.includes('palms')) return 'lakes';
@@ -909,13 +875,9 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   const c = courseName.toLowerCase();
   if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
-  // 2026-07-18 — Doral + Pembroke. Pembroke precedes the 'lakes' match (course is "Pembroke Lakes").
-  // 2026-07-24 (full-app audit, root A) — Doral is a MULTI-COURSE resort (Blue Monster, Gold, Silver,
-  // Red, Great White). We only bundle GOLD imagery, so match it ONLY when the name confirms Gold —
-  // otherwise a "Doral Blue Monster" round rendered GOLD holes as if they were its own course. A
-  // non-Gold or ambiguous Doral returns null → satellite / AI-vision geometry (honest, no wrong crop).
-  // The canonical id path (getLocalHoleImageById on local:doral-gold) is unaffected — it's name-free.
-  if (c.includes('doral')) return c.includes('gold') ? (DORAL_GOLD_HOLE_IMAGES[holeNumber] ?? null) : null;
+  // Pembroke precedes the 'lakes' match (the course is "Pembroke Lakes").
+  // 2026-08-12 — Doral removed from the bundled set: Golden Palm has no hole GPS in ANY source, so
+  // there was nothing honest to render. A Doral round now falls through to live satellite geometry.
   if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
   // "palms" check must follow "lakes" handling — Tim's home-course label
   // is often "Menifee Lakes — Palms" which contains both words. Without

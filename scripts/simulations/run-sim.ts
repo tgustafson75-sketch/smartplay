@@ -3809,17 +3809,17 @@ check('Recap view-hole shows the saved static hole image when no shots logged',
 // rendered GOLD hole imagery + centroid + calibration lines onto a "Doral Blue Monster" round —
 // the wrong course shown as if it were the player's. Lock the gold-required guard on BOTH name
 // resolvers so a non-Gold Doral degrades honestly (satellite / live-GPS tile, no wrong crop/lines).
-check('Course identity: a non-Gold Doral never inherits Gold imagery/centroid (dual-identity fix)',
-  (() => {
-    const img = read('data/localCourseImages.ts');
-    return (
-      // Hole imagery: only returns Gold crops when the name confirms Gold.
-      /if \(c\.includes\('doral'\)\) return c\.includes\('gold'\) \? \(DORAL_GOLD_HOLE_IMAGES\[holeNumber\] \?\? null\) : null;/.test(img) &&
-      // Slug (drives satellite centroid + hole calibration): gold-required, else null.
-      /if \(c\.includes\('doral'\)\) return c\.includes\('gold'\) \? 'doral-gold' : null;/.test(img)
-    );
-  })(),
-  'a Doral round that is NOT the Gold course falls through to satellite/live-GPS geometry instead of rendering Gold holes, Gold centroid, and Gold calibration lines as its own');
+// 2026-08-12 — Doral was PULLED from the bundled catalog (Tim's call). The dual-identity guard it
+// used to need is moot: there is no Gold imagery, centroid or hole data left to inherit. What matters
+// now is that the removal was COMPLETE — a half-removed course is how a stale centroid or an orphaned
+// image map survives and resurfaces.
+check('Doral fully removed from the bundled catalog (no orphaned centroid / imagery / holes)',
+  !/doral-gold/.test(read('data/courses.ts')) &&
+    !/doral-gold/.test(read('app/(tabs)/play.tsx')) &&
+    !/'doral-gold'/.test(read('data/localCourseImages.ts')) &&
+    !/DORAL_GOLD_HOLE_IMAGES/.test(read('data/localCourseImages.ts')) &&
+    !/DORAL_GOLD_HOLES/.test(read('data/courses.ts')),
+  'no source has Golden Palm hole GPS, so the course is out rather than rendered from a neighbouring course');
 
 // 2026-07-27 (tester UX — wrong-course trap). Starting a round by voice for a course NOT in our
 // bundle resolves through golfcourseapi, which returns MANY hits for a common name. The handler used
@@ -8935,10 +8935,9 @@ check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
   (() => {
     const li = read('data/localCourseImages.ts');
     // the three third-party folders must have ZERO requires anywhere in the registry
-    const noRequires = !/require\('\.\.\/assets\/courses\/(doral-gold|webster-dudley|rancho-california)\//.test(li);
+    const noRequires = !/require\('\.\.\/assets\/courses\/(webster-dudley|rancho-california)\//.test(li);
     // and their maps must still EXIST (exported, empty) so consumers don't break
     const stillExported =
-      /export const DORAL_GOLD_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li) &&
       /export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li) &&
       /export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = \{\};/.test(li);
     // the intermediate WD const was the sneaky one — it kept the requires alive after the export

@@ -642,12 +642,11 @@ function AppNavigator() {
     void import('../data/courseBookSeeds').then((m) => m.seedBundledCourseBooks()).catch(() => undefined);
     // 2026-07-01 — Cloud backup boot: re-hydrate the Supabase session (so a
     // still-signed-in user keeps auto-backing-up) and install the AppState
-    // auto-backup listener. Both are inert until the cloud is configured +
-    // the user is signed in. Fire-and-forget; never blocks boot.
+    // auto-backup listener. Inert until a Backup ID is configured. Fire-and-forget; never blocks boot.
     void (async () => {
       try {
-        const cb = await import('../services/cloudSync/cloudBackup');
-        await cb.refreshCloudSession();
+        // 2026-08-12 — the Supabase session refresh went with the deleted OTP backup path; the
+        // server-mediated backup needs no account, only the Backup ID the user sets in Settings.
         const ab = await import('../services/cloudSync/autoBackup');
         ab.initAutoBackup();
       } catch { /* best-effort — backup is additive */ }

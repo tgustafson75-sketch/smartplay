@@ -7,34 +7,38 @@
  *   • explicitly after a round ends (scheduleBackup() from endRound),
  * each debounced + fingerprint-gated so an unchanged snapshot never re-uploads.
  *
- * Fully inert until the cloud is configured AND the user is signed in.
+ * Fully inert until a Backup ID + passphrase are configured in Settings.
  */
 
 import { AppState, type AppStateStatus } from 'react-native';
-import { isCloudConfigured } from './cloudClient';
-import { backupNow, useCloudBackupStore, fetchCloudSnapshot } from './cloudBackup';
-// 2026-07-06 — server-mediated backup (no client Supabase key). Fires alongside the
-// legacy OTP path; either that is configured OR a Backup ID is set → we back up.
+/**
+ * 2026-08-12 — the Supabase email-account ("OTP") backup path was DELETED, not disabled.
+ *
+ * It was a complete second implementation of backup that could never run: signing in was the only
+ * thing that could set a user id, and requestLoginCode/verifyLoginCode had zero callers anywhere in
+ * the app — no screen ever read its store. So every call returned `not_signed_in`, forever.
+ *
+ * It also cost more than dead weight. During the readiness pass I read that code as if it were live
+ * and reported an App Store BLOCKER (Apple 5.1.1(v) requires in-app account deletion for any app
+ * offering account creation) — for accounts the app cannot create. Dead code that looks live is
+ * worse than no code, because it makes you wrong about your own app.
+ *
+ * The working path stays: server-mediated backup keyed by a Backup ID + passphrase the user sets in
+ * Settings → Backup & Restore, which needs no account at all. [[server-mediated-backup]]
+ */
 import { serverBackupConfigured, serverBackupNow } from './serverBackup';
 
 const DEBOUNCE_MS = 4000;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let appStateSub: { remove: () => void } | null = null;
 
-function canBackup(): boolean {
-  if (!isCloudConfigured()) return false;
-  const s = useCloudBackupStore.getState();
-  return !!s.userId && s.autoBackupEnabled;
-}
-
-/** True when EITHER backup path can run. */
+/** True when backup can run — a Backup ID + passphrase are set and auto-backup is on. */
 function anyBackupPossible(): boolean {
-  return canBackup() || serverBackupConfigured();
+  return serverBackupConfigured();
 }
 
-/** Fire whichever backup paths are configured (both are safe no-ops otherwise). */
+/** Fire the backup if it's configured (a safe no-op otherwise). */
 function runBackups(): void {
-  if (canBackup()) void backupNow();
   if (serverBackupConfigured()) void serverBackupNow();
 }
 
@@ -65,32 +69,3 @@ export function initAutoBackup(): void {
   });
 }
 
-/**
- * Whether a restore should be OFFERED: the user is signed in, a cloud backup
- * exists, and the device looks freshly-installed (no rounds locally). Used to
- * prompt "Restore your data?" after sign-in on a new phone.
- */
-export async function shouldOfferRestore(): Promise<{ offer: boolean; updatedAt: string | null }> {
-  if (!canBackup() && !useCloudBackupStore.getState().userId) return { offer: false, updatedAt: null };
-  try {
-    const fetched = await fetchCloudSnapshot();
-    if (!fetched) return { offer: false, updatedAt: null };
-    // "Fresh device" heuristic: no rounds persisted locally yet.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default as {
-      getItem: (k: string) => Promise<string | null>;
-    };
-    const localRounds = await AsyncStorage.getItem('round-store-v1');
-    let empty = true;
-    if (localRounds) {
-      try {
-        const parsed = JSON.parse(localRounds);
-        const hist = parsed?.state?.roundHistory;
-        empty = !Array.isArray(hist) || hist.length === 0;
-      } catch { empty = true; }
-    }
-    return { offer: empty, updatedAt: fetched.updatedAt };
-  } catch {
-    return { offer: false, updatedAt: null };
-  }
-}
