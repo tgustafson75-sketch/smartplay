@@ -381,6 +381,20 @@ interface RoundState {
   activeCourseId: string | null; // golfcourseapi course_id; null for local/manual rounds
   courseLocation: ShotLocation | null;
   recentCourseIds: string[]; // last 5 API course IDs played
+  /**
+   * 2026-08-12 (Tim, an hour before a league round — "where the hell did Wachusett go? It's not
+   * even on my list anymore") — the last known NAME/LOCATION for each recent course id.
+   *
+   * The Play tab rehydrated recents by calling getCourse(id) for every id at mount, and SILENTLY
+   * DROPPED any course whose lookup failed. So a network blip at app start — which is precisely
+   * when that effect runs, and precisely what today's warmup connection-starvation bug caused —
+   * made a real recent course disappear from the list entirely, while its id sat happily in
+   * recentCourseIds. The data was never lost; the app just stopped being able to name it.
+   *
+   * Caching the name means the list is drawable with no network at all. A course you played
+   * yesterday must not vanish because a fetch timed out this morning.
+   */
+  recentCourseMeta: Record<string, { club_name: string; location: string }>;
   courseHoles: CourseHole[];
   nineHoleMode: boolean;
   // 2026-08-08 (verification wave) — TRUE only when runStartRound expanded a 9-hole course to 18 (twice
@@ -712,6 +726,8 @@ interface RoundState {
   setClub: (club: string) => void;
   setMentalState: (state: string) => void;
   logScore: (hole: number, score: number) => void;
+  /** Cache a recent course's name so the Play tab can list it with no network. */
+  rememberRecentCourseMeta: (id: string, meta: { club_name: string; location: string }) => void;
   /** Set the caddie's risk posture. `bySelf` marks a caddie-initiated ease rather than a player choice. */
   setRiskMode: (mode: RiskMode, bySelf?: boolean) => void;
   /** Per-hole stats for the CURRENT round — derived, never fabricated. Empty until holes are scored. */
@@ -824,6 +840,7 @@ export const useRoundStore = create<RoundState>()(
       activeCourseId: null,
       courseLocation: null,
       recentCourseIds: [],
+      recentCourseMeta: {},
       courseHoles: [],
       nineHoleMode: false,
       twiceAround: false,
@@ -2388,6 +2405,14 @@ export const useRoundStore = create<RoundState>()(
         });
       },
 
+      rememberRecentCourseMeta: (id, meta) => {
+        if (!id || !meta?.club_name) return;
+        const prev = get().recentCourseMeta[id];
+        if (prev && prev.club_name === meta.club_name && prev.location === meta.location) return;
+        // Bounded: only ever the ids we actually keep as recents, so this can't grow.
+        set((s) => ({ recentCourseMeta: { ...s.recentCourseMeta, [id]: meta } }));
+      },
+
       logScore: (hole, score) => {
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
@@ -2938,6 +2963,7 @@ export const useRoundStore = create<RoundState>()(
         activeCourseId: s.activeCourseId,
         courseLocation: s.courseLocation,
         recentCourseIds: s.recentCourseIds,
+        recentCourseMeta: s.recentCourseMeta,
         // Persist the last previewed/selected course so a cold start
         // restores the user's pick instead of defaulting to Menifee.
         previewCourseId: s.previewCourseId,

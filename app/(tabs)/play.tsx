@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { pickTeeSet } from '../../services/teeSelection';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet,
   Image, ActivityIndicator, Alert, type ImageSourcePropType,
@@ -670,6 +671,10 @@ export default function PlayTab() {
   const searchSeqRef = useRef<number>(0);
 
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
+  const recentCourseMeta = useRoundStore(s => s.recentCourseMeta);
+  const rememberRecentCourseMeta = useRoundStore(s => s.rememberRecentCourseMeta);
+  // The player's Preferred Tee — recents should quote the same tee set the course screen will.
+  const preferredTee = usePlayerProfileStore(s => s.preferredTee);
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   // 2026-07-27 (tester UX) — opening a searched/API course can fail (network) or return null. The
@@ -764,20 +769,39 @@ export default function PlayTab() {
         const c = await getCourse(id);
         if (cancelled) return;
         if (c) {
-          const tee = c.tees[0];
+          const tee = pickTeeSet(c.tees, preferredTee);
+          const location = [c.location.city, c.location.state].filter(Boolean).join(', ');
           out.push({
             id: c.id,
             club_name: c.club_name,
-            location: [c.location.city, c.location.state].filter(Boolean).join(', '),
+            location,
             rating: tee?.course_rating ?? null,
             slope: tee?.slope_rating ?? null,
           });
+          // Remember the name so this course can be listed with no network next time.
+          rememberRecentCourseMeta(c.id, { club_name: c.club_name, location });
+        } else {
+          /**
+           * 2026-08-12 (Tim — "where the hell did Wachusett go? It's not even on my list anymore")
+           *
+           * THE BUG: a failed lookup used to silently drop the course. This effect runs at MOUNT,
+           * which is exactly when the network is busiest (and exactly when today's warmup
+           * connection-starvation bug was choking these calls), so one blip erased a real course he
+           * was about to play — while its id sat untouched in recentCourseIds.
+           *
+           * A course you played does not stop existing because a fetch timed out. Fall back to the
+           * cached name; it stays listed and selectable, and selecting it re-fetches the detail.
+           */
+          const cached = recentCourseMeta[id];
+          if (cached) {
+            out.push({ id, club_name: cached.club_name, location: cached.location, rating: null, slope: null });
+          }
         }
       }
       if (!cancelled) setRecentCourses(out);
     })();
     return () => { cancelled = true; };
-  }, [recentCourseIds]);
+  }, [recentCourseIds, recentCourseMeta, preferredTee]);
 
   // Phase 407 — GPS-driven default sort. When userPosition is known,
   // sort the combined catalog ascending by distance from the player.
@@ -1230,7 +1254,10 @@ export default function PlayTab() {
           await fetchCourseGeometry(c.id, { courseLocation });
           // Build SmartVision hole imagery on selection for searched/API courses too —
           // geometry (just fetched) + per-hole satellite tiles, persisted for offline.
-          const teeHoles = c.tees[0]?.holes ?? [];
+          // 2026-08-12 — the player's Preferred Tee, not just the first set. This is the tee whose
+          // HOLES become the round, so taking tees[0] here quoted back-tee yardages to a player who
+          // had chosen front. Same fix as the course screen; this surface was missed.
+          const teeHoles = pickTeeSet(c.tees, preferredTee)?.holes ?? [];
           if (teeHoles.length > 0) {
             void prefetchCourseImagery({
               courseId: c.id,
@@ -1239,7 +1266,7 @@ export default function PlayTab() {
               holes: teeHoles.map((h, i) => ({ hole: h.hole_number ?? i + 1, par: h.par ?? 4, distance: h.yardage ?? 0 })),
             });
           }
-          const tee = c.tees[0];
+          const tee = pickTeeSet(c.tees, preferredTee);
           if (tee) {
             const url = getCourseImageryUrl({
               courseId: c.id,
@@ -1880,13 +1907,13 @@ export default function PlayTab() {
                   <Text style={styles.selectedSub} numberOfLines={1}>
                     {[selected.location.city, selected.location.state].filter(Boolean).join(', ')}
                   </Text>
-                  {selected.tees[0] && (
+                  {pickTeeSet(selected.tees, preferredTee) && (
                     <Text style={styles.selectedStats} numberOfLines={1}>
                       {/* 2026-07-26 (deep audit S3) — don't fabricate "18 holes" when a searched tee returns
                           an empty hole list (could be a 9-hole course); show the count only when real. */}
-                      {selected.tees[0].holes.length ? `${selected.tees[0].holes.length} holes · ` : ''}Par {selected.tees[0].par_total}
-                      {selected.tees[0].course_rating != null && ` · Rating ${selected.tees[0].course_rating.toFixed(1)}`}
-                      {selected.tees[0].slope_rating != null && ` · Slope ${selected.tees[0].slope_rating}`}
+                      {pickTeeSet(selected.tees, preferredTee)!.holes.length ? `${pickTeeSet(selected.tees, preferredTee)!.holes.length} holes · ` : ''}Par {pickTeeSet(selected.tees, preferredTee)!.par_total}
+                      {pickTeeSet(selected.tees, preferredTee)!.course_rating != null && ` · Rating ${pickTeeSet(selected.tees, preferredTee)!.course_rating!.toFixed(1)}`}
+                      {pickTeeSet(selected.tees, preferredTee)!.slope_rating != null && ` · Slope ${pickTeeSet(selected.tees, preferredTee)!.slope_rating}`}
                     </Text>
                   )}
                 </View>
