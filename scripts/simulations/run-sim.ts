@@ -9090,6 +9090,23 @@ check('LOCK: a selected course can always draw itself — centroid captured at s
   })(),
   'course centroid captured at selection; preview and thumbnail no longer depend on geometry timing');
 
+// Tim: "Make sure the measuring tool lines up on the green and the tee box." A scorecard yardage is
+// the measuring tool's expected answer, so bundled geometry that can't reproduce its own card is not
+// ground truth. greenhill/westlake/echo-hills were 51%/61%/40% out and still outranked the engine,
+// because the trust test COUNTED coordinates instead of checking them — 16 of 18 present was enough.
+check('LOCK: bundled geometry outranks the engine only if it reproduces its own scorecard',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    const accuracy = /const measurable = bundled\.holes\.filter/.test(g) &&
+      /Math\.abs\(measured - h\.yardage!\) \/ h\.yardage!/.test(g) &&
+      /return mean <= 0\.25;/.test(g);
+    const presence = /if \(withTee < Math\.ceil\(bundled\.holes\.length \* 0\.5\)\) return false;/.test(g);
+    const noDemoteOnNoEvidence = /if \(measurable\.length < 3\) return true;/.test(g);
+    const keepsFallback = /bundledFallback = bundled \?\? null;/.test(g);
+    return accuracy && presence && noDemoteOnNoEvidence && keepsFallback;
+  })(),
+  'trust is measured against the card, not counted; too-little-evidence never demotes; bundled stays the fallback');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

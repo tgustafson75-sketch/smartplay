@@ -294,6 +294,19 @@ function isGeoCoord(lat?: number, lng?: number): lat is number {
   return typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
     && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001);
 }
+/**
+ * Yards between two coordinates. Used to ask whether bundled geometry can reproduce its own
+ * scorecard — the same question the on-course measuring tool asks.
+ */
+function haversineYards(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const x =
+    Math.sin(rad(b.lat - a.lat) / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lng - a.lng) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x)) * 1.09361;
+}
+
 function buildBundledGeometry(courseId: string): CourseGeometry | null {
   if (!courseId) return null;
   if (bundledGeomCache.has(courseId)) return bundledGeomCache.get(courseId) ?? null;
@@ -778,10 +791,40 @@ async function fetchCourseGeometryInner(
        * gets a turn. Bundled remains the fallback if the engine can't build.
        */
       const bundled = buildBundledGeometry(courseId);
+      /**
+       * 2026-08-11 (QA pass) — this used to count PRESENCE of coordinates, which is not the same
+       * question as whether they're right, and the difference was hiding real breakage.
+       *
+       * Tim: "the measuring tool does not often land correctly on the teebox and green." Measuring
+       * every bundled hole's tee→green distance against its own scorecard yardage found three
+       * courses badly out — greenhill 51% mean error, westlake 61%, echo-hills 40%, with holes like
+       * Greenhill 1 measuring 150y against a 374y card. Their GREENS are good (the derived centroid
+       * matched OSM to 31m); the stored TEES are not, and re-pairing them doesn't rescue it.
+       *
+       * All three sailed through the old check, because 16 of 18 holes did have both coordinates.
+       * So the app kept serving coordinates that fail their own scorecard, on the exact courses
+       * where the engine builds perfectly — Greenhill from its corrected centroid returns 18 holes
+       * with 18 greens and 18 tees.
+       *
+       * A scorecard yardage IS the measuring tool's expected answer, so it's the honest test:
+       * bundled geometry is ground truth only when it can reproduce the card.
+       */
       const bundledIsTrustworthy = (() => {
         if (!bundled?.holes?.length) return false;
         const withTee = bundled.holes.filter(h => h.tee && h.green).length;
-        return withTee >= Math.ceil(bundled.holes.length * 0.5);
+        if (withTee < Math.ceil(bundled.holes.length * 0.5)) return false;
+
+        // Does the geometry reproduce the card? Compare only holes carrying a real card yardage.
+        const measurable = bundled.holes.filter(h => h.tee && h.green && (h.yardage ?? 0) > 50);
+        if (measurable.length < 3) return true; // too little to judge — don't demote on no evidence
+        const errs = measurable.map(h => {
+          const measured = haversineYards(h.tee!, h.green!);
+          return Math.abs(measured - h.yardage!) / h.yardage!;
+        });
+        const mean = errs.reduce((a, b) => a + b, 0) / errs.length;
+        // 25% mean is deliberately generous: honest tee-marker variance and green-centre choice run
+        // well under 10% (the good courses here measure 0.1-3%). 25% only catches genuine breakage.
+        return mean <= 0.25;
       })();
       if (bundled && bundledIsTrustworthy) {
         memCache.set(courseId, bundled);
