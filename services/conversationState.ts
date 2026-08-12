@@ -55,6 +55,13 @@ export function recordUserTurn(text: string): void {
   if (!text || !text.trim()) return;
   evictIfStale();
   buffer.push({ role: 'user', text: text.trim(), timestamp: Date.now() });
+  // 2026-08-12 — the round trace captures the whole DIALOGUE here, at the one chokepoint every
+  // voice path already funnels through, rather than at each call site (which is how half of them
+  // would have been missed). Truncated: a trace is for reading, not transcription.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./roundTrace') as typeof import('./roundTrace')).trace('voice', 'said', { text: text.trim().slice(0, 120) });
+  } catch { /* non-fatal */ }
   if (buffer.length > MAX_TURNS) buffer = buffer.slice(-MAX_TURNS);
   lastActivityAt = Date.now();
 }
@@ -64,6 +71,10 @@ export function recordKevinTurn(text: string): void {
   if (!text || !text.trim()) return;
   evictIfStale();
   buffer.push({ role: 'kevin', text: text.trim(), timestamp: Date.now() });
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./roundTrace') as typeof import('./roundTrace')).trace('voice', 'turn_reply', { text: text.trim().slice(0, 120) });
+  } catch { /* non-fatal */ }
   if (buffer.length > MAX_TURNS) buffer = buffer.slice(-MAX_TURNS);
   lastActivityAt = Date.now();
 }

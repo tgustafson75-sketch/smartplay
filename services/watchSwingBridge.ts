@@ -121,6 +121,12 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
       const hole = rs.isRoundActive ? rs.currentHole : null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('./roundTrace') as typeof import('./roundTrace')).trace('watch', 'swing', {
+          hole, club, tempo: Math.round((e.tempoRatio ?? 0) * 100) / 100, wrist,
+        });
+      } catch { /* non-fatal */ }
       useWatchStore.getState().recordSwing({
         hole,
         backswingMs: Math.round(e.backswingMs ?? 0),

@@ -967,6 +967,14 @@ export const useRoundStore = create<RoundState>()(
       },
 
       startRound: (course, holes, options) => {
+        // 2026-08-12 — begin the round trace automatically. Zero setup: the round IS the signal
+        // that we want a trace ([[hands-free-zero-setup-is-the-product]]).
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
+          rt.startRoundTrace(course || 'round');
+          rt.trace('round', 'start', { course, holes: holes?.length ?? 0, nineHole: !!options?.nineHole });
+        } catch { /* tracing never blocks a round */ }
         const courseId = options.courseId ?? null;
         const courseLocation = options.courseLocation ?? null;
         // 2026-08-06 (tester Matt Abid) — resolve the starting hole (front nine = 1, back nine = 10),
@@ -1656,6 +1664,16 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts },
           // Snapshot per-hole stats while courseHoles (par) is still in memory — see holeStats.
           holeStats: get().getHoleStats(),
+          // 2026-08-12 — mail the round trace. Fire-and-forget AFTER the record is assembled, so a
+          // slow or failed send can never delay or block saving the round itself.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          ...(() => { try {
+            const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
+            rt.trace('round', 'end', { holes: scoredEntries.length, score: scoredEntries.reduce((a, [, sc]) => a + sc, 0) });
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const prof = (require('./playerProfileStore') as typeof import('./playerProfileStore')).usePlayerProfileStore.getState();
+            void rt.sendRoundTrace(prof.email || 'tester');
+          } catch { /* tracing never blocks the round record */ } return {}; })(),
           // 2026-08-12 — and the watch's tempo story, for the same reason: the swings live only in
           // memory, so this is the last moment it can be captured. Null when no watch was worn.
           tempoStory: (() => {
@@ -2237,6 +2255,11 @@ export const useRoundStore = create<RoundState>()(
         })),
 
       setCurrentHole: (hole) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../services/roundTrace') as typeof import('../services/roundTrace'))
+            .trace('round', 'hole', { hole });
+        } catch { /* non-fatal */ }
         const state = get();
         // 2026-05-22 — Fix T diagnostics. Any call to setCurrentHole now
         // logs a single line with the source (best-effort via Error().stack
@@ -2414,6 +2437,11 @@ export const useRoundStore = create<RoundState>()(
       },
 
       logScore: (hole, score) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../services/roundTrace') as typeof import('../services/roundTrace'))
+            .trace('shot', 'score', { hole, score });
+        } catch { /* non-fatal */ }
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
         // "scratch that" restores both the prior score and the hole we were on.

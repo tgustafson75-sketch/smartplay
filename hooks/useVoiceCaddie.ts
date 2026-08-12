@@ -1774,6 +1774,12 @@ export const useVoiceCaddie = ({
       // (A2) a typed question routed to the same offline caddie, else a nudge.
       const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number, getOk = false, getMs = -1) => {
         const elapsedMs = Date.now() - txStart;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../services/roundTrace') as typeof import('../services/roundTrace')).trace('error', 'transcribe_fail', {
+            reason: name, elapsedMs, pingOk, pingMs, getOk, getMs,
+          });
+        } catch { /* non-fatal */ }
         console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs, 'getOk', getOk, 'getMs', getMs);
         logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs, getOk, getMs });
         try { Vibration.vibrate(120); } catch {}
@@ -2752,6 +2758,10 @@ export const useVoiceCaddie = ({
       // was invited to talk several hundred milliseconds before anything could be captured, and the
       // opening words were lost. 'arming' releases VAD exactly the same way (its gate is
       // voiceState === 'idle') while telling the UI to hold the invitation until we're really live.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../services/roundTrace') as typeof import('../services/roundTrace')).trace('voice', 'turn_start');
+      } catch { /* non-fatal */ }
       wrappedOnVoiceStateChange('arming');
       await new Promise<void>(r => setTimeout(r, 80));
 

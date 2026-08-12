@@ -840,6 +840,12 @@ async function fetchCourseGeometryInner(
         // well under 10% (the good courses here measure 0.1-3%). 25% only catches genuine breakage.
         return mean <= 0.25;
       })();
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('./roundTrace') as typeof import('./roundTrace')).trace('course', 'bundled_check', {
+          courseId, trusted: bundledIsTrustworthy, holes: bundled?.holes?.length ?? 0,
+        });
+      } catch { /* non-fatal */ }
       if (bundled && bundledIsTrustworthy) {
         memCache.set(courseId, bundled);
         void writePersistedCache(bundled).catch(() => undefined);
