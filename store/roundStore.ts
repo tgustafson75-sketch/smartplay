@@ -429,6 +429,12 @@ interface RoundState {
   penalties: Record<number, number>;
   /** The caddie's current risk posture. Set by the player (voice or tap) or eased by the caddie. */
   riskMode: RiskMode;
+  /**
+   * When the CADDIE eased the posture itself (spiraling read), so a surface can say so ONCE.
+   * Null when the posture is where the player put it. A caddie that quietly turns conservative and
+   * never mentions it reads as having lost faith in you. [[feels-like-a-real-caddie]]
+   */
+  riskEasedAt: number | null;
   shots: ShotResult[];
   // 2026-07-25 (voice "undo / scratch that") — transient, single-depth snapshot of the
   // most-recent scoring mutation so a misheard/mis-logged score, putt, or shot can be
@@ -828,6 +834,7 @@ export const useRoundStore = create<RoundState>()(
       putts: {},
       penalties: {},
       riskMode: 'normal',
+      riskEasedAt: null,
       shots: [],
       lastMutation: null,
       currentRoundPhotos: [],
@@ -1048,6 +1055,7 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           riskMode: 'normal',
+      riskEasedAt: null,
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -1447,6 +1455,7 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           riskMode: 'normal',
+      riskEasedAt: null,
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -1778,6 +1787,7 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           riskMode: 'normal',
+      riskEasedAt: null,
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -2295,7 +2305,9 @@ export const useRoundStore = create<RoundState>()(
       setRiskMode: (mode, bySelf) => {
         if (mode !== 'safe' && mode !== 'normal' && mode !== 'aggressive') return;
         if (get().riskMode === mode) return;
-        set({ riskMode: mode });
+        // A player-set posture clears the ease marker: once they've chosen, the caddie has nothing
+        // to announce and must not narrate their own decision back at them.
+        set({ riskMode: mode, riskEasedAt: bySelf ? Date.now() : null });
         console.log('[round] risk posture →', mode, bySelf ? '(caddie eased)' : '(player)');
       },
 

@@ -1036,6 +1036,32 @@ export default function CaddieTab() {
     });
   }, [apiUrl]);
 
+  /**
+   * 2026-08-12 (Tim — mental state / mental coaching "dynamics") — SAY the ease.
+   *
+   * When the mental read turns 'spiraling' the caddie eases its own posture to safe, which changes
+   * the club it hands you. Doing that silently is the thing that reads as having lost faith in you,
+   * so it says it once, in its own voice, and frames it as a plan rather than a verdict on you.
+   *
+   * Announced ONCE per ease (the timestamp is the key) and only for a caddie-initiated change —
+   * riskEasedAt is null whenever the player set the posture themselves, so the caddie never narrates
+   * the player's own decision back at them.
+   */
+  const riskEasedAt = useRoundStore((s) => s.riskEasedAt);
+  const announcedEaseRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!riskEasedAt || announcedEaseRef.current === riskEasedAt) return;
+    if (!isRoundActive) return;
+    announcedEaseRef.current = riskEasedAt;
+    const line = "Let's take the trouble out of play for a bit — I'll give you the club that covers it, and we'll pick our spot to be aggressive again.";
+    setCaddieResponse(line);
+    const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
+    if (ve) {
+      setVoiceState('proactive');
+      speak(line, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState('idle'));
+    }
+  }, [riskEasedAt, isRoundActive, apiUrl]);
+
   // Phase AT follow-up — L4 long-press inline expand for SmartVision
   // and SmartFinder removed; both icons now live inside the green-arrow
   // dropdown row and short-tap routes to their full screens.

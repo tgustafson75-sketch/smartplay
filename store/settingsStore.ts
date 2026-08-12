@@ -264,7 +264,6 @@ interface SettingsState {
   /** 2026-07-06 — epoch ms of the last cold app-open. Lets Index throttle the
    *  greeting so it doesn't replay its ~4s hello on every rapid reopen (the
    *  range/course open-close-open pattern). Hydrated → readable synchronously. */
-  lastAppOpenAt: number;
   // Phase AW — SmartVision imagery source.
   // 'curated' = bundled hole screenshots (always works, no GPS required).
   // 'gps'     = live Mapbox satellite tile + draggable F/M/B markers
@@ -531,7 +530,6 @@ export const useSettingsStore = create<SettingsState>()(
       feelCaptureEnabled: false,
       voiceOnPhoneSpeaker: true,
       kevinGreetingEnabled: true,
-      lastAppOpenAt: 0,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
       environmentMode: 'cage' as const,
@@ -1061,7 +1059,6 @@ export const useSettingsStore = create<SettingsState>()(
         feelCaptureEnabled: s.feelCaptureEnabled,
         voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         kevinGreetingEnabled: s.kevinGreetingEnabled,
-        lastAppOpenAt: s.lastAppOpenAt,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
         environmentMode: s.environmentMode,
