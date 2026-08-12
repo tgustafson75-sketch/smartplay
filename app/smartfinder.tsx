@@ -52,7 +52,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
-import { computeDistance } from '../services/rangefinder';
+import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -607,6 +607,28 @@ function CameraSmartFinder({
 
   // 2026-06-17 — Scene read extracted so both the eye button and the
   // auto-read voice trigger can call the same code path.
+  /**
+   * 2026-08-12 — grab a still for the hands-free rangefinder. Same capture recipe as the scene read
+   * (1024px, JPEG) so the vision model sees a frame it can resolve a flagstick in; the overlay owns
+   * the measuring logic but the CameraView ref lives up here.
+   */
+  const captureFrameBase64 = useCallback(async (): Promise<string | null> => {
+    if (!cameraRef.current) return null;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.6, skipProcessing: true });
+      if (!photo?.uri) return null;
+      const IM = await import('expo-image-manipulator');
+      const manip = await IM.manipulateAsync(
+        photo.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.7, format: IM.SaveFormat.JPEG, base64: true },
+      );
+      return manip.base64 ?? null;
+    } catch {
+      return null; // capture failed — the caller keeps whatever read it had
+    }
+  }, []);
+
   const runSceneRead = useCallback(async () => {
     if (sceneReading || !cameraRef.current) return;
     setSceneReading(true);
@@ -733,6 +755,7 @@ function CameraSmartFinder({
               locked={locked}
               onTargetYardsChange={setSceneTargetYards}
               onHeadingUpdate={onHeadingUpdate}
+              captureFrameBase64={captureFrameBase64}
             />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
@@ -1170,6 +1193,7 @@ function TargetCameraOverlay({
   locked,
   onTargetYardsChange,
   onHeadingUpdate,
+  captureFrameBase64,
 }: {
   yards: GreenYardages;
   gps: GPSQualityReading;
@@ -1180,6 +1204,8 @@ function TargetCameraOverlay({
   locked?: boolean;
   onTargetYardsChange?: (yards: number | null) => void;
   onHeadingUpdate?: (h: number) => void;
+  /** Grab a still from the live camera as base64 — the parent owns the CameraView ref. */
+  captureFrameBase64?: () => Promise<string | null>;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1334,6 +1360,52 @@ function TargetCameraOverlay({
     return () => sub.remove();
   }, [onHeadingUpdate]);
 
+  /**
+   * 2026-08-12 (Tim — wire the rangefinder before launch) — HANDS-FREE HEIGHT RANGING.
+   *
+   * The tap read above is the camera-TILT rangefinder, which is unreliable exactly where golf
+   * targets live: near the horizon, where a fraction of a degree of pitch error moves the projected
+   * point hundreds of yards. That is Tim's 2026-06-23 report — "moving the target never gets
+   * accurate, defaults to 250 or 10" — and the plausibility gate below it can only suppress a bad
+   * number, never produce a good one.
+   *
+   * Ranging off a KNOWN-HEIGHT object has none of that failure mode. It uses no pitch, no heading
+   * and no GPS — only how tall a flagstick (2.13m) or a person (1.75m) looks in the frame. The
+   * server finds the reference so the player doesn't have to tap its top and base.
+   *
+   * Deliberately a CORRECTION, not a replacement: it runs after the tap read, and only overwrites
+   * when the vision model actually found a reference AND the resulting angular size is big enough
+   * to trust. Anything less and we keep what we had. The manual two-tap path is untouched.
+   */
+  const heightScanRef = useRef(0);
+  const runHeightRangeScan = useCallback(async () => {
+    if (!captureFrameBase64) return;
+    const token = ++heightScanRef.current;
+    const b64 = await captureFrameBase64();
+    if (!b64 || token !== heightScanRef.current) return;
+    const { scanForMeasureReference } = await import('../services/measureScan');
+    const scan = await scanForMeasureReference(b64);
+    // A later tap started its own scan while this one was in flight — that frame is stale now.
+    if (token !== heightScanRef.current) return;
+    if (!scan.found || !scan.top || !scan.base || !scan.real_height_m) return;
+    const ranged = computeHeightRangedDistance({
+      top_y_normalized: scan.top.y,
+      base_y_normalized: scan.base.y,
+      real_height_m: scan.real_height_m,
+    });
+    // Below ~0.8 degrees of angular height the read is tap/detection-noise sensitive — the maths
+    // reports that as 'low' and we decline it rather than show a confident-looking wrong number.
+    if (ranged.unmeasurable || ranged.confidence === 'low') return;
+    if (lastYardsRef.current !== ranged.distance_yards) {
+      lastYardsRef.current = ranged.distance_yards;
+      setTargetYards(ranged.distance_yards);
+    }
+    setReticleConfidence(ranged.confidence);
+    setHeightRangeRef(scan.kind);
+  }, [captureFrameBase64]);
+  /** Which known-size object the last accepted read measured off — shown so the number is explainable. */
+  const [heightRangeRef, setHeightRangeRef] = useState<'flagstick' | 'person' | null>(null);
+
   const onTargetPointNormalized = useCallback((point: { xNorm: number; yNorm: number }) => {
     const fix = getLastFix();
     if (!fix) {
@@ -1346,6 +1418,7 @@ function TargetCameraOverlay({
       lng: fix.location.lng,
       accuracy: fix.accuracy_m ?? 10,
     };
+    setHeightRangeRef(null); // a new tap is a fresh tilt read until a scan says otherwise
     const result = computeDistance({
       user_position: userPos,
       compass_heading: headingRef.current,
@@ -1396,6 +1469,10 @@ function TargetCameraOverlay({
       // so the elevation lookup tracks the aim point without per-pixel churn.
       setTargetLoc(target);
     }
+    // Ask the vision brain for a known-height reference in the live frame; if it finds one, it
+    // supersedes this tilt read (see runHeightRangeScan). Fire-and-forget — the tilt number is
+    // already on screen, so a slow or failed scan simply leaves it there.
+    void runHeightRangeScan();
     const nextBearing = bearingDegrees(fix.location, target);
     if (lastBearingRef.current !== nextBearing) {
       lastBearingRef.current = nextBearing;
@@ -1649,6 +1726,14 @@ function TargetCameraOverlay({
                   <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
                 </View>
               </View>
+              {/* 2026-08-12 — when the distance came from HEIGHT ranging rather than camera tilt, say
+                  so and name what it measured off. The number is only trustworthy because of that
+                  reference, so hiding it would make a better read look like the same old guess. */}
+              {heightRangeRef && (
+                <Text style={styles.targetIntelLine}>
+                  Ranged off {heightRangeRef === 'flagstick' ? 'the flagstick' : 'a person'} — no tilt needed
+                </Text>
+              )}
               {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
               {/* 2026-06-25 — Honest REAL-elevation line. Shown ONLY when we have a
                   real read (hasData) that actually moves the number (≥1yd ≈ 3ft). */}

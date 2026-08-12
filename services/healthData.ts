@@ -28,7 +28,6 @@ export type HealthPermissionKey =
   | 'steps'
   | 'distance'
   | 'heartRate'
-  | 'exercise'
   | 'activeCalories';
 
 export interface HealthSnapshot {
@@ -63,7 +62,6 @@ const HC_RECORD_TYPE: Record<HealthPermissionKey, string> = {
   steps: 'Steps',
   distance: 'Distance',
   heartRate: 'HeartRate',
-  exercise: 'ExerciseSession',
   activeCalories: 'ActiveCaloriesBurned',
 };
 

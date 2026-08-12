@@ -1674,7 +1674,9 @@ export default function Settings() {
                     return;
                   }
                   const result = await health.requestHealthPermissions([
-                    'steps', 'distance', 'heartRate', 'exercise', 'activeCalories',
+                    // 2026-08-12 — 'exercise' dropped: it was requested and never read. Asking for data we
+                    // don't touch is exactly what draws a store-review question.
+                    'steps', 'distance', 'heartRate', 'activeCalories',
                   ]);
                   setHasAskedHealthPermission(true);
                   if (result.granted.length > 0) {
