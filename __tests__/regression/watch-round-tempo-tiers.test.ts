@@ -81,6 +81,21 @@ describe('TIER 2 — the per-hole line stays quiet unless something changed', ()
 describe('TIER 3 — the end-of-round compilation', () => {
   const holes = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
 
+  it('WORKS ON A NINE-HOLE ROUND — a league round is not a truncated eighteen', () => {
+    // 2026-08-12: Tim played a nine-hole men's league at Wachusett. The original 9-hole floor plus a
+    // fixed 6-hole "late" window meant a nine would either never qualify or leave 3 holes of
+    // baseline against 6 of closing — not a comparison. The window is now a THIRD of the round.
+    const nine = [1,2,3,4,5,6,7,8,9].flatMap(h => onHole(h, h <= 6 ? 3.0 : 2.3, 2));
+    const story = roundTempoStory(nine);
+    expect(story.enough).toBe(true);
+    expect(story.quickenedBy!).toBeGreaterThan(0);
+    expect(story.headline).toContain('quickened');
+  });
+
+  it('still needs a real arc — under six holes there is nothing to compare', () => {
+    expect(roundTempoStory([1,2,3,4].flatMap(h => onHole(h, 3.0, 2))).enough).toBe(false);
+  });
+
   it('stays quiet on a short or watch-less round', () => {
     expect(roundTempoStory([]).enough).toBe(false);
     expect(roundTempoStory(onHole(1, 3)).enough).toBe(false);

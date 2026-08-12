@@ -36,16 +36,32 @@ export interface RoundSwing {
 
 /** Swings needed on a hole before its tempo means anything. One swing is an anecdote. */
 const MIN_SWINGS_PER_HOLE = 2;
-/** Swings needed across the round before a baseline is trustworthy. */
-const MIN_SWINGS_FOR_BASELINE = 8;
+/**
+ * Swings needed across the round before a baseline is trustworthy.
+ *
+ * 2026-08-12 — lowered from 8 for NINE-HOLE rounds. Tim is playing a nine-hole men's league
+ * tonight, and a nine-hole round is a first-class case, not a truncated eighteen: leagues, twilight
+ * and quick rounds are most of what a time-constrained golfer actually plays
+ * ([[time-constrained-golfer-lens]]). At 8 the read would almost never fire on nine holes, because
+ * the watch only sees full swings — putts and short chips don't register — so a nine-hole round
+ * realistically produces 6-12 detected swings, not 18.
+ */
+const MIN_SWINGS_FOR_BASELINE = 6;
 /**
  * How far off baseline a hole must run to be worth mentioning, as a fraction. Tempo naturally varies
  * hole to hole — a wedge is not a driver — so a small wobble is noise. 18% is roughly the difference
  * between a 3.0 and a 2.5, which a player can actually feel.
  */
 const NOTABLE_DEVIATION = 0.18;
-/** The closing stretch we compare against the early baseline. */
-const LATE_HOLES = 6;
+/**
+ * The closing stretch compared against the early baseline — a THIRD of the round, not a fixed six.
+ *
+ * 2026-08-12 — fixed-6 was written for eighteen holes. On a nine-hole round it would have swallowed
+ * two thirds of the round as "late", leaving three holes of baseline to compare against, which is
+ * not a comparison. A third is the same shape at either length: holes 13-18 of an eighteen, holes
+ * 7-9 of a nine.
+ */
+const lateHoleCount = (playedHoles: number): number => Math.max(3, Math.round(playedHoles / 3));
 
 const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
 const usable = (s: RoundSwing): boolean =>
@@ -136,9 +152,11 @@ export function roundTempoStory(swings: RoundSwing[]): RoundTempoStory {
   const byHole = groupSwingsByHole(swings);
   const holes = [...byHole.keys()].sort((a, b) => a - b);
   const all = (swings ?? []).filter(usable);
-  if (all.length < MIN_SWINGS_FOR_BASELINE || holes.length < 9) return NOT_ENOUGH;
+  // 2026-08-12 — six holes, not nine: a nine-hole league round must qualify. Below six there isn't
+  // enough of an arc for "early vs late" to mean anything at any round length.
+  if (all.length < MIN_SWINGS_FOR_BASELINE || holes.length < 6) return NOT_ENOUGH;
 
-  const lateStart = holes[Math.max(0, holes.length - LATE_HOLES)];
+  const lateStart = holes[Math.max(0, holes.length - lateHoleCount(holes.length))];
   const early: number[] = [];
   const late: number[] = [];
   for (const h of holes) {
