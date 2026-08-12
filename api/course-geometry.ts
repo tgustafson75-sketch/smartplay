@@ -241,6 +241,137 @@ out geom;`;
  * hole-ways are absent/untagged (the minority of mapped courses).
  */
 type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
+/**
+ * 2026-08-12 (Tim's QA — "make sure every course engine renders correctly") — pick ONE COURSE.
+ *
+ * The old dedup kept the LONGEST way per hole number. That is right for the case it was written for
+ * (OSM splits a single hole into segments at path crossings, all sharing ref+par) and catastrophic
+ * for the case nobody handled: a multi-course facility, where TWO courses each have a hole "1".
+ * Longest-wins then picks per hole whichever course's hole happens to be longer, and the engine
+ * emits a CHIMERA — hole 1 from one course, hole 2 from its neighbour.
+ *
+ * Measured live at Trump National Doral (four 18s on one property): 41 hole-ways within the 1500m
+ * radius, and 17 of 18 hole numbers had 2-3 candidates. The build "succeeded" with 18/18 and was
+ * wrong. Our own catalog has three more of these — Palms/Lakes 780m apart, Coyote Creek
+ * Tournament/Valley 1033m, Gleneagles King's/Queen's sharing a centroid exactly — and the known
+ * "hole 8 walks 965 yards from hole 7's green" anomaly at Palms is this bug, recorded months ago as
+ * a suspicion. Wrong yardages mid-round is the worst thing this app can hand a player.
+ *
+ * Two signals separate a real course from a chimera, and both are free:
+ *
+ *   PROXIMITY — the course the caller asked for is the one nearest the centroid they sent.
+ *   CONTINUITY — a real course is a WALK. Hole N's green sits beside hole N+1's tee, a few dozen
+ *   yards apart. Jumping between courses costs hundreds of yards, every time.
+ *
+ * So this is a shortest-path over hole numbers: each ref is a column of candidates, the cost of
+ * stepping from one hole to the next is the walk between them, and the entry cost is how far the
+ * hole sits from the requested centroid. Viterbi over ~18 columns of ≤4 candidates is trivial, and
+ * being exact rather than greedy matters — one greedy mistake at hole 1 drags the whole route onto
+ * the wrong course.
+ */
+function chooseCoherentHoleWays(
+  holeWays: OsmHoleWay[],
+  centroid: Loc,
+  holeCount: number,
+  wayLen: (w: OsmHoleWay) => number,
+  /** The requested course's scorecard, indexed by hole-1. 0/absent where unknown. */
+  cardYards: number[] = [],
+): OsmHoleWay[] {
+  const ends = (w: OsmHoleWay): [Loc, Loc] => [w.pts[0], w.pts[w.pts.length - 1]];
+  /** Closest approach between two holes — green-to-next-tee without needing to know which end is which. */
+  const gap = (a: OsmHoleWay, b: OsmHoleWay): number => {
+    const [a0, a1] = ends(a); const [b0, b1] = ends(b);
+    return Math.min(
+      haversineYards(a0, b0), haversineYards(a0, b1),
+      haversineYards(a1, b0), haversineYards(a1, b1),
+    );
+  };
+  const midpoint = (w: OsmHoleWay): Loc => w.pts[Math.floor(w.pts.length / 2)];
+
+  // Candidates per hole number, with OSM's split segments collapsed first: two ways for the same ref
+  // whose endpoints nearly touch are one hole cut in half, so keep the longer. Ways for the same ref
+  // that are far apart are DIFFERENT COURSES and must both survive to be chosen between.
+  const SAME_HOLE_YD = 120;
+  const byRef = new Map<number, OsmHoleWay[]>();
+  for (const w of holeWays) {
+    if (w.ref == null || w.ref < 1 || w.ref > holeCount) continue;
+    const bucket = byRef.get(w.ref) ?? [];
+    const twin = bucket.findIndex(o => gap(o, w) <= SAME_HOLE_YD);
+    if (twin >= 0) { if (wayLen(w) > wayLen(bucket[twin])) bucket[twin] = w; }
+    else bucket.push(w);
+    byRef.set(w.ref, bucket);
+  }
+  const refs = [...byRef.keys()].sort((a, b) => a - b);
+  if (refs.length === 0) return [];
+  const ambiguous = refs.filter(r => (byRef.get(r) ?? []).length > 1).length;
+  if (ambiguous === 0) return refs.map(r => byRef.get(r)![0]);
+
+  // Walking between consecutive holes should cost tens of yards. Anything past this is a transfer to
+  // another course; cap it so one unavoidable long walk can't dominate the whole route's score.
+  const TRANSFER_PENALTY_YD = 600;
+  const step = (a: OsmHoleWay, b: OsmHoleWay) => Math.min(gap(a, b), TRANSFER_PENALTY_YD);
+
+  // Viterbi. Entry cost = distance from the requested centroid, which is what distinguishes two
+  // neighbouring courses that are each internally coherent (Palms vs Lakes).
+  /**
+   * The scorecard is the strongest signal available, and the only one that identifies WHICH course
+   * a set of holes belongs to rather than merely that it hangs together. Measured live: the route
+   * chosen at Greenhill matches its card to 7.9% and Berlin CC to 3.7%, while the best route
+   * available at Doral matches the Gold card by 43.5% — because Golden Palm is not in OSM at all
+   * and every candidate there belongs to Blue Monster, Red Tiger or Silver Fox.
+   */
+  const cardErr = (w: OsmHoleWay): number => {
+    const card = cardYards[(w.ref ?? 0) - 1] ?? 0;
+    if (!(card > 50)) return 0;
+    return Math.abs(haversineYards(w.pts[0], w.pts[w.pts.length - 1]) - card);
+  };
+
+  let prevRow = (byRef.get(refs[0]) ?? []).map(w => ({
+    cost: haversineYards(midpoint(w), centroid) + cardErr(w),
+    path: [w] as OsmHoleWay[],
+  }));
+  for (let i = 1; i < refs.length; i++) {
+    const cands = byRef.get(refs[i]) ?? [];
+    prevRow = cands.map(w => {
+      let best = prevRow[0];
+      let bestCost = Infinity;
+      for (const st of prevRow) {
+        const c = st.cost + step(st.path[st.path.length - 1], w) + cardErr(w);
+        if (c < bestCost) { bestCost = c; best = st; }
+      }
+      return { cost: bestCost, path: [...best.path, w] };
+    });
+  }
+  const winner = prevRow.reduce((a, b) => (b.cost < a.cost ? b : a));
+
+  /**
+   * REJECT rather than serve another course's holes.
+   *
+   * A coherent route is not necessarily OUR route. At Doral the winning route is a perfectly real
+   * golf course — just not the one the player is standing on. Handing them Blue Monster's yardages
+   * on the Gold is worse than handing them nothing, because they'd act on it.
+   *
+   * 25% mean matches the bundled-geometry trust gate for the same reason: honest tee-marker and
+   * green-centre variance runs under 10% (Greenhill 7.9%, Berlin 3.7%), so this only fires on a
+   * genuinely different course. Only applied when we actually HAVE a card to check against —
+   * absence of a scorecard is not evidence of a mismatch.
+   */
+  const checkable = winner.path.filter(w => (cardYards[(w.ref ?? 0) - 1] ?? 0) > 50);
+  if (checkable.length >= 3) {
+    const meanErr = checkable.reduce((acc, w) => {
+      const card = cardYards[(w.ref ?? 0) - 1];
+      return acc + Math.abs(haversineYards(w.pts[0], w.pts[w.pts.length - 1]) - card) / card;
+    }, 0) / checkable.length;
+    if (meanErr > 0.25) {
+      console.log(`[course-geometry] hole-ways REJECTED — best route misses the scorecard by ${(meanErr * 100).toFixed(0)}% over ${checkable.length} holes; these belong to another course on this property`);
+      return [];
+    }
+    console.log(`[course-geometry] hole-way route matches the scorecard to ${(meanErr * 100).toFixed(1)}%`);
+  }
+  console.log(`[course-geometry] hole-way disambiguation: ${refs.length} refs, ${ambiguous} ambiguous → picked one coherent route (cost ${Math.round(winner.cost)}y)`);
+  return winner.path;
+}
+
 async function fetchOsmHoleWays(centroid: Loc): Promise<OsmHoleWay[]> {
   const query = `[out:json][timeout:20];
 (
@@ -704,6 +835,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const holeCountQ = Number(req.query.holeCount);
   const holeCount: number =
     isFinite(holeCountQ) && holeCountQ >= 1 && holeCountQ <= 18 ? Math.round(holeCountQ) : 18;
+  /**
+   * 2026-08-12 — the caller's SCORECARD, comma-separated by hole ("484,565,428,…"), 0 where unknown.
+   *
+   * This is what lets the engine tell WHICH course a set of OSM holes belongs to at a multi-course
+   * facility. Walk-continuity proves a route hangs together; only the card proves it's ours. See
+   * chooseCoherentHoleWays — it both steers the choice and rejects a route that matches no better
+   * than a different course on the same property would.
+   */
+  const cardYards: number[] = String(req.query.cardYards ?? '')
+    .split(',')
+    .map(v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.round(n) : 0; })
+    .slice(0, 18);
   // 2026-05-17 — Polygon mode for Bluegolf-style hole rendering.
   // When set, alongside the standard tee/green centroid fetch we also
   // pull full polygons for fairway, bunker, water_hazard, etc., and
@@ -756,13 +899,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (let i = 1; i < w.pts.length; i++) len += haversineYards(w.pts[i - 1], w.pts[i]);
       return len;
     };
-    const byRef = new Map<number, OsmHoleWay>();
-    for (const w of holeWays) {
-      if (w.ref == null || w.ref < 1 || w.ref > holeCount) continue;
-      const prev = byRef.get(w.ref);
-      if (!prev || wayLen(w) > wayLen(prev)) byRef.set(w.ref, w);
-    }
-    const refWays = [...byRef.values()];
+    const refWays = chooseCoherentHoleWays(holeWays, centroid, holeCount, wayLen, cardYards);
     if (refWays.length >= 3 && greenPolys.length >= 3) {
       const nearestGreen = (p: Loc): { poly: OsmPolygon; d: number } | null => {
         let best: OsmPolygon | null = null; let bd = Infinity;

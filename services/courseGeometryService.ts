@@ -79,7 +79,20 @@ type LocalCourseHint = {
 const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
   sunnyvale: { search: 'Sunnyvale Golf Course', expectedCity: 'sunnyvale' },
   'san-jose-muni': { search: 'San Jose Municipal Golf Course', expectedCity: 'san jose' },
-  'rancho-california': { search: 'Rancho California Golf Club', expectedCity: 'temecula' },
+  // 2026-08-12 — the course is The Golf Club at Rancho California in MURRIETA, not Temecula (its
+  // centroid was 7.96km out for the same reason). A wrong expectedCity silently fails the match.
+  'rancho-california': { search: 'The Golf Club at Rancho California', expectedCity: 'murrieta' },
+  /**
+   * 2026-08-12 (Tim — "isn't Doral one of the most famous courses right now, how is it this hard to
+   * get information?"). It isn't hard — we were only ever asking OpenStreetMap, and had no hint here
+   * so resolveLocalCourseId returned null and the engine fell straight to OSM-only. The commercial
+   * API lists all four Doral courses BY NAME, Golden Palm included; OSM maps the neighbours' holes
+   * and not ours. These hints are the scorecard-only courses that had no upstream mapping at all.
+   */
+  'doral-gold': { search: 'Trump National Doral Golden Palm', expectedCity: 'miami' },
+  'shadow-lakes': { search: 'Shadow Lakes Golf Club', expectedCity: 'brentwood' },
+  'webster-dudley': { search: 'Dudley Hill Golf Club', expectedCity: 'dudley' },
+  'legacy-springfield': { search: 'The Legacy Golf Course', expectedCity: 'springfield' },
   'crystal-springs': { search: 'Crystal Springs Golf Course', expectedCity: 'burlingame' },
   'mariners-point': { search: 'Mariners Point Golf Center', expectedCity: 'foster city' },
   // 2026-05-28 — Westlake Country Club, Jackson NJ. golfcourseapi
@@ -891,6 +904,29 @@ async function fetchCourseGeometryInner(
   if (holeCount != null) {
     params.set('holeCount', String(holeCount));
   }
+  /**
+   * 2026-08-12 — send the SCORECARD when we have one.
+   *
+   * At a multi-course facility (Doral's four 18s, Palms/Lakes, Coyote Creek, Gleneagles) OSM holds
+   * several hole-ways tagged "ref=1", and nothing about the geometry says which course is ours. The
+   * card does: measured live, the route the engine picks matches Greenhill's card to 7.9% and
+   * Berlin's to 3.7%, while the best route available at Doral misses the Gold card by 43.5% —
+   * because Golden Palm isn't in OSM and every candidate there belongs to a neighbouring course.
+   * Scorecard-only courses (coords 0/0) still carry real yardages, which is exactly the case that
+   * needs this most.
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+    const card = getBundledHoles(courseId);
+    if (card.length >= 3) {
+      const byHole: number[] = [];
+      for (const h of card) if (h.hole >= 1 && h.hole <= 18) byHole[h.hole - 1] = h.distance > 50 ? h.distance : 0;
+      if (byHole.some(y => y > 0)) {
+        params.set('cardYards', Array.from({ length: byHole.length }, (_, i) => byHole[i] ?? 0).join(','));
+      }
+    }
+  } catch { /* no bundled card — the engine falls back to geometry-only selection */ }
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
     // Course Cloud read-first: OSM-only means the proxy is WEAK for this course (no golfcourseapi
