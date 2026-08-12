@@ -834,8 +834,9 @@ export default function Dashboard() {
             (tee shots with NO penalty logged). That is NOT a fairway-hit
             signal — `outcome === 'clean'` only means "no penalty," so a
             tee shot into the rough still counts as clean. We have no real
-            fairway-in-regulation data (HoleStats.fairwayHit is never
-            populated), so the tile is labelled CLEAN TEE % (dashboard
+            fairway-in-regulation data — a per-hole stats record was scaffolded for it in 2026
+            and never populated by anything, so it was removed in the 08-12 store sweep rather
+            than left looking like a source — so the tile is labelled CLEAN TEE % (dashboard
             i18n key fairway_pct) — what the data actually supports — not
             a fabricated FAIRWAY HIT %. */}
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.shot_stats')}</Text>

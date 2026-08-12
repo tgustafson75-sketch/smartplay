@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { pickTeeSet } from '../../services/teeSelection';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
   useWindowDimensions,
@@ -53,6 +55,9 @@ import type { Course } from '../../types/course';
  * Mapbox (Palms uses curated bundled screenshots as the override).
  */
 export default function CourseDetailScreen() {
+  // 2026-08-12 — the player's Preferred Tee (Settings → Profile). Drives which tee set's yardages
+  // this course renders and, downstream, the numbers the caddie clubs off.
+  const preferredTee = usePlayerProfileStore((st) => st.preferredTee);
   const { course_id } = useLocalSearchParams<{ course_id: string }>();
   const router = useRouter();
   // useWindowDimensions subscribes to device-config changes — Galaxy Z Fold
@@ -270,7 +275,10 @@ export default function CourseDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     if (!course) return;
-    const tee = course.tees[0];
+    // 2026-08-12 — honour the player's Preferred Tee instead of always taking tees[0]. See
+    // services/teeSelection: the setting existed and nothing read it, so front-tee players were
+    // quoted back-tee yardages and the caddie clubbed them off those numbers.
+    const tee = pickTeeSet(course.tees, preferredTee);
     if (!tee) {
       setContentLoading(false);
       return;
@@ -322,7 +330,7 @@ export default function CourseDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course]);
 
-  const tee = course?.tees[0] ?? null;
+  const tee = pickTeeSet(course?.tees, preferredTee);
   // Local-curated branding: when the user picked a `local:*` slug we
   // honor that intent for display + bundled-image lookup, even though
   // the API returns the same parent club for both Menifee Lakes layouts.

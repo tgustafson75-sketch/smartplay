@@ -210,14 +210,6 @@ export interface ShotResult {
   kevin_adhered?: boolean | null;
 }
 
-export interface HoleStats {
-  hole: number;
-  score: number;
-  putts: number;
-  penalties: number;
-  fairwayHit: boolean | null;
-  girHit: boolean | null;
-}
 
 /**
  * 2026-07-25 — one revertible scoring action, captured just before it mutates state.
@@ -385,13 +377,11 @@ interface RoundState {
   } | null;
   club: string | null;
   mentalState: string;
-  riskMode: 'safe' | 'normal' | 'aggressive';
 
   scores: Record<number, number>;
   putts: Record<number, number>;
   penalties: Record<number, number>;
   shots: ShotResult[];
-  holeStats: HoleStats[];
   // 2026-07-25 (voice "undo / scratch that") — transient, single-depth snapshot of the
   // most-recent scoring mutation so a misheard/mis-logged score, putt, or shot can be
   // reverted by voice. NOT persisted (absent from partialize) — undo is an in-the-moment
@@ -659,7 +649,6 @@ interface RoundState {
   clearUserStatedYardage: () => void;
   setClub: (club: string) => void;
   setMentalState: (state: string) => void;
-  setRiskMode: (mode: 'safe' | 'normal' | 'aggressive') => void;
   logScore: (hole: number, score: number) => void;
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
@@ -783,12 +772,10 @@ export const useRoundStore = create<RoundState>()(
       userStatedYardage: null,
       club: null,
       mentalState: 'neutral',
-      riskMode: 'normal',
       scores: {},
       putts: {},
       penalties: {},
       shots: [],
-      holeStats: [],
       lastMutation: null,
       currentRoundPhotos: [],
       roundStartTime: null,
@@ -1008,7 +995,6 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           shots: [],
-          holeStats: [],
           lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
@@ -1016,7 +1002,6 @@ export const useRoundStore = create<RoundState>()(
           roundNumber: prev.roundNumber + 1,
           active_ghost: null,
           mentalState: 'neutral',
-          riskMode: 'normal',
           currentLocationType: 'unknown',
           currentTeeBox: null,
         });
@@ -1408,7 +1393,6 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           shots: [],
-          holeStats: [],
           lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
@@ -1431,7 +1415,6 @@ export const useRoundStore = create<RoundState>()(
           // 2026-06-07 (audit M2) — clear per-round caddie/location state so
           // the NEXT round doesn't inherit the prior round's tone/tags.
           mentalState: 'neutral',
-          riskMode: 'normal',
           currentLocationType: 'unknown',
           currentTeeBox: null,
           active_ghost: null,
@@ -1738,7 +1721,6 @@ export const useRoundStore = create<RoundState>()(
           putts: {},
           penalties: {},
           shots: [],
-          holeStats: [],
           lastMutation: null,
           currentRoundPhotos: [],
           emotionalLog: [],
@@ -1761,7 +1743,6 @@ export const useRoundStore = create<RoundState>()(
           // 2026-06-07 (audit M2) — clear per-round caddie/location state so
           // the next round starts neutral (matches discardRound).
           mentalState: 'neutral',
-          riskMode: 'normal',
           currentLocationType: 'unknown',
           currentTeeBox: null,
           active_ghost: null,
@@ -2244,7 +2225,6 @@ export const useRoundStore = create<RoundState>()(
       clearUserStatedYardage: () => set({ userStatedYardage: null }),
       setClub: (club) => set({ club, clubSetAt: Date.now() }),
       setMentalState: (state) => set({ mentalState: state }),
-      setRiskMode: (mode) => set({ riskMode: mode }),
 
       logScore: (hole, score) => {
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
@@ -2801,21 +2781,20 @@ export const useRoundStore = create<RoundState>()(
         putts: s.putts,
         penalties: s.penalties,
         shots: s.shots,
-        holeStats: s.holeStats,
         roundNumber: s.roundNumber,
         // 2026-07-01 (re-audit) — compact older rounds so this single row can't grow
         // past Android's ~2MB read limit and brick the whole history. See helper.
         roundHistory: compactHistoryForPersist(s.roundHistory),
         active_ghost: s.active_ghost,
         recentInsights: s.recentInsights,
-        // Audit follow-up (2026-05-13) — these five fields were
-        // initialized in the store and mutated during gameplay but were
-        // missing from partialize, so a crash mid-round dropped them.
-        // mentalState + riskMode affect caddie tone; currentRoundPhotos
-        // is captured memories; roundStartTime is needed by recap;
-        // emotionalLog feeds future pattern detection.
+        // Audit follow-up (2026-05-13) — these fields were initialized in the store and mutated
+        // during gameplay but were missing from partialize, so a crash mid-round dropped them.
+        // mentalState affects caddie tone; currentRoundPhotos is captured memories; roundStartTime
+        // is needed by recap; emotionalLog feeds future pattern detection.
+        // 2026-08-12 — riskMode removed alongside them: it was persisted here and read by nothing,
+        // with a setter no screen or voice path ever called. A caddie posture the player could not
+        // set and the caddie never consulted. See the store-field sweep.
         mentalState: s.mentalState,
-        riskMode: s.riskMode,
         currentRoundPhotos: s.currentRoundPhotos,
         roundStartTime: s.roundStartTime,
         roundEndTime: s.roundEndTime,

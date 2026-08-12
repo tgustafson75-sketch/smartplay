@@ -243,7 +243,6 @@ interface SettingsState {
   // (e.g. 'smartmotion', 'cage_mode'). Persisted via the standard
   // settings rehydration path so opens carry across launches.
   introOpens: Record<string, number>;
-  fillerEnabled: boolean;
   // Phase O — earbud tap-to-talk control
   earbudTapToTalk: boolean;
   // 2026-05-24 v1.2.1 — Glasses Mode. Owner-gated toggle that pre-
@@ -397,7 +396,6 @@ interface SettingsState {
   markTutorialSeen: (key: string) => void;
   incrementIntroOpen: (key: string) => void;
   resetTutorials: () => void;
-  setFillerEnabled: (v: boolean) => void;
   setEarbudTapToTalk: (v: boolean) => void;
   setGlassesMode: (v: boolean) => void;
   setFeelCaptureEnabled: (v: boolean) => void;
@@ -524,7 +522,6 @@ export const useSettingsStore = create<SettingsState>()(
       distance_unit: 'yards' as const,
       tutorialsSeen: {},
       introOpens: {},
-      fillerEnabled: true,
       // 2026-06-04 — Hands-free / BT tap-to-talk default OFF.
       // The native media-key bridge is still a future APK path, so
       // new installs start in the safer state and users opt in from
@@ -748,7 +745,6 @@ export const useSettingsStore = create<SettingsState>()(
           introOpens: { ...s.introOpens, [key]: (s.introOpens?.[key] ?? 0) + 1 },
         })),
       resetTutorials: () => set({ tutorialsSeen: {} }),
-      setFillerEnabled: (v) => set({ fillerEnabled: v }),
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
       setGlassesMode: (v) => set({ glassesMode: v }),
       setFeelCaptureEnabled: (v) => set({ feelCaptureEnabled: v }),
@@ -1060,7 +1056,6 @@ export const useSettingsStore = create<SettingsState>()(
         distance_unit: s.distance_unit,
         tutorialsSeen: s.tutorialsSeen,
         introOpens: s.introOpens,
-        fillerEnabled: s.fillerEnabled,
         earbudTapToTalk: s.earbudTapToTalk,
         glassesMode: s.glassesMode,
         feelCaptureEnabled: s.feelCaptureEnabled,
