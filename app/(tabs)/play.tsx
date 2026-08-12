@@ -1038,9 +1038,24 @@ export default function PlayTab() {
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (trimmed.length < 3) return;
-    // Append the optional City/State hint to sharpen the golfcourseapi match.
+    /**
+     * 2026-08-12 (Tim, an hour before playing — "Where the hell did Wachusett go? It's still not
+     * showing") — THE CITY/STATE HINT WAS ERASING REAL COURSES.
+     *
+     * This used to append the hint to the query: `${name} ${loc}`. The upstream does a literal NAME
+     * match, not a fielded search, so the hint doesn't sharpen anything — it makes the name wrong.
+     * Measured against the live API:
+     *
+     *     q="Wachusett"                  → 1 hit
+     *     q="Wachusett MA"               → 0 hits
+     *     q="Wachusett West Boylston MA" → 0 hits
+     *
+     * So any player with a location hint set could not find a course that plainly exists. Searching
+     * the NAME is the reliable call; the hint is only useful for choosing between several courses
+     * with the same name, which is a filter over results, not a change to the question.
+     */
     const loc = locationQueryRef.current.trim();
-    const effective = loc ? `${trimmed} ${loc}` : trimmed;
+    const effective = trimmed;
     // Skip the network call if this exact query is already in flight or
     // was the last completed search — prevents the debounce from re-firing
     // for trailing whitespace / cursor moves.
@@ -1073,7 +1088,20 @@ export default function PlayTab() {
           rating: null,
           slope: null,
         }));
-      const merged = [...localMatches, ...mapped];
+      /**
+       * The hint now RANKS rather than restricts: courses whose location contains it float to the
+       * top, and everything else still shows. A hint that matches nothing costs the player nothing,
+       * which is the opposite of the old behaviour.
+       */
+      const locLower = loc.toLowerCase();
+      const ranked = locLower
+        ? [...mapped].sort((a, b) => {
+            const am = a.location.toLowerCase().includes(locLower) ? 0 : 1;
+            const bm = b.location.toLowerCase().includes(locLower) ? 0 : 1;
+            return am - bm;
+          })
+        : mapped;
+      const merged = [...localMatches, ...ranked];
       setResults(merged);
       const err = found.find(r => r._error);
       // Only surface the connectivity error when we have NOTHING to show — a bundled match makes
@@ -1084,7 +1112,10 @@ export default function PlayTab() {
       // spinner up while it runs (~2-4s) so there's no empty-state flicker. Skip when a bundled
       // course already matched.
       else if (merged.length === 0) {
-        const ai = await aiSearchCourse(effective);
+        // The AI identifier is the one caller that genuinely benefits from the hint — it reasons
+        // over context rather than matching a literal string, so "Wachusett, MA" helps it. Only the
+        // literal course-DB search must get the bare name.
+        const ai = await aiSearchCourse(loc ? `${effective} ${loc}` : effective);
         if (mySeq === searchSeqRef.current) setAiResult(ai);
       }
     } catch (e) {
