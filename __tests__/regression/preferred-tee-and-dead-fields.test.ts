@@ -80,30 +80,75 @@ describe('Preferred Tee finally selects a tee', () => {
   });
 });
 
-describe('the inert fields are gone, not just unused', () => {
-  it('riskMode is removed from state, setter and persistence', () => {
-    const rs = read('store/roundStore.ts');
-    expect(rs).not.toContain("riskMode: 'safe' | 'normal' | 'aggressive';");
-    expect(rs).not.toContain('setRiskMode');
-    expect(rs).not.toContain('riskMode: s.riskMode,');
+describe('what was inert is now wired, not deleted', () => {
+  /**
+   * 2026-08-12 (Tim, correcting me) — "don't just delete when you find something adds value if
+   * wired like it should have been. A huge part of the app is mental state and mental coaching…
+   * Per hole stats matter especially for history, ghost rounds, and progress tracking."
+   *
+   * He was right. I had removed riskMode and holeStats because nothing referenced them — but "no
+   * producer" is a reason to BUILD the producer when the thing has value, not to delete the shape.
+   * Both are restored with real producers and real consumers. fillerEnabled stayed deleted: a
+   * speech-filler toggle with no filler system behind it had nothing to wire to.
+   */
+  const rs = read('store/roundStore.ts');
+
+  it('risk posture has a player producer — you can just tell the caddie', () => {
+    const pre = read('services/localIntentPrecheck.ts');
+    expect(pre).toContain("setting_name: 'risk_mode', new_value: 'safe'");
+    expect(pre).toContain("setting_name: 'risk_mode', new_value: 'aggressive'");
+    expect(read('services/intents/changeSettingHandler.ts')).toContain("case 'risk_mode': {");
   });
 
-  it('holeStats and its orphaned type are removed', () => {
-    const rs = read('store/roundStore.ts');
-    expect(rs).not.toContain('holeStats');
-    expect(rs).not.toContain('export interface HoleStats');
+  it('risk posture has a CADDIE producer — the mental read moves it', () => {
+    // This is the "dynamics" — a player three-plus bad holes deep shouldn't still be attacking pins.
+    expect(rs).toContain("if (mental === 'spiraling' && get().riskMode === 'normal') {");
+    expect(rs).toContain("get().setRiskMode('safe', true);");
   });
 
-  it('fillerEnabled is removed from state, setter and the backup allowlist', () => {
-    const ss = read('store/settingsStore.ts');
-    expect(ss).not.toContain('fillerEnabled');
-    expect(ss).not.toContain('setFillerEnabled');
+  it('never overrides a posture the player chose', () => {
+    // The ease-off only fires from 'normal'. Ask for aggressive and you keep aggressive.
+    expect(rs).toContain("get().riskMode === 'normal'");
   });
 
-  it('the dashboard no longer cites a type that no longer exists', () => {
-    // The comment explained an honest product gap (no real fairway-in-regulation data) by pointing
-    // at HoleStats.fairwayHit. Deleting the type without the comment leaves a phantom citation.
-    expect(read('app/(tabs)/dashboard.tsx')).not.toContain('HoleStats.fairwayHit');
+  it('risk posture reaches the actual club, not just the wording', () => {
+    const cns = read('services/cnsShotRead.ts');
+    expect(cns).toContain('risk: ShotRiskMode = \'normal\'');
+    expect(cns).toContain('const postureBreak =');
+    // Only breaks NEAR-TIES — a posture must never hand you a club that doesn't fit the shot.
+    expect(cns).toContain('// a posture must never hand you a club that doesn\'t fit the shot.');
+  });
+
+  it('every shot-read caller passes it — one unwired caller is a silent half-fix', () => {
+    for (const f of ['app/smartvision.tsx', 'app/smartfinder.tsx', 'services/localStatusResponder.ts']) {
+      expect(read(f)).toContain('risk: useRoundStore.getState().riskMode');
+    }
+  });
+
+  it('per-hole stats are DERIVED, with a real producer', () => {
+    expect(rs).toContain('getHoleStats: () => {');
+    expect(rs).toContain('score - putts <= par - 2');
+  });
+
+  it('GIR returns null rather than false when par or putts are unknown', () => {
+    // Otherwise a course with no card silently reports every hole as a miss, and an unrecorded
+    // putt count would call every bogey a green in regulation.
+    expect(rs).toContain("typeof par === 'number' && par > 0 && s.putts[hole] != null");
+  });
+
+  it('fairwayHit stays null — we still have no honest fairway signal', () => {
+    // outcome === 'clean' means "no penalty", not "found the fairway".
+    expect(rs).toContain('fairwayHit: null,');
+  });
+
+  it('the stats are frozen onto the round record while par is still in memory', () => {
+    // courseHoles is cleared at round end, so deriving later would make GIR permanently unknowable.
+    expect(rs).toContain('holeStats: get().getHoleStats(),');
+    expect(rs).toContain('holeStats?: HoleStats[];');
+  });
+
+  it('fillerEnabled stayed deleted — there was no filler system to wire it to', () => {
+    expect(read('store/settingsStore.ts')).not.toContain('fillerEnabled');
   });
 
   it('the honest CLEAN TEE % labelling survives the cleanup', () => {

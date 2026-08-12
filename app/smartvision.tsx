@@ -1583,6 +1583,8 @@ export default function SmartVisionScreen() {
     const bearing = (teeCoord && greenCoord) ? bearingDegrees(teeCoord, greenCoord) : null;
     try {
       return composeShotRead({
+      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
+      risk: useRoundStore.getState().riskMode,
         rawYards: yardages.middle,
         weather: null,
         shotBearingDeg: bearing,

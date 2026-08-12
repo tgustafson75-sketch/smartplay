@@ -19,7 +19,7 @@ export const changeSettingHandler: IntentHandler = {
   intent_type: 'change_setting',
 
   parameter_schema: {
-    setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units, imagery',
+    setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units, imagery, risk_mode',
     new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)',
   },
 
@@ -50,6 +50,28 @@ export const changeSettingHandler: IntentHandler = {
     const settings = useSettingsStore.getState();
 
     switch (setting) {
+      /**
+       * 2026-08-12 (Tim — mental state / mental coaching "dynamics") — the caddie's risk posture.
+       *
+       * Lives on the ROUND, not in settings, because it changes hole to hole and resets with the
+       * round. Reaches the club pick through composeShotRead (near-ties only), so telling your
+       * caddie to play it safe actually changes what it hands you rather than just how it talks.
+       */
+      case 'risk_mode': {
+        const v = String(rawValue ?? '').toLowerCase();
+        if (v !== 'safe' && v !== 'normal' && v !== 'aggressive') {
+          return clarify('Safe, normal, or aggressive?');
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { useRoundStore } = require('../../store/roundStore') as typeof import('../../store/roundStore');
+        useRoundStore.getState().setRiskMode(v as 'safe' | 'normal' | 'aggressive');
+        const line =
+          v === 'safe' ? "Playing it safe — I'll give you the club that covers it."
+          : v === 'aggressive' ? "Aggressive it is — I'll give you the club that just gets there."
+          : "Back to normal — closest club to the number.";
+        return ack(line, ['risk_mode:' + v]);
+      }
+
       case 'theme': {
         const v = String(rawValue ?? '').toLowerCase();
         if (v !== 'light' && v !== 'dark' && v !== 'system') {

@@ -721,6 +721,8 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
   const playerLoc = { lat: fix.lat, lng: fix.lng };
   const rawYards = Math.round(haversineYards(playerLoc, green.middle));
   const read = composeShotRead({
+      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
+      risk: useRoundStore.getState().riskMode,
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
@@ -763,6 +765,8 @@ function reachReply(lang: LocalReplyLanguage): LocalReplyResult {
   const playerLoc = { lat: fix.lat, lng: fix.lng };
   const rawYards = Math.round(haversineYards(playerLoc, green.middle));
   const read = composeShotRead({
+      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
+      risk: useRoundStore.getState().riskMode,
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),

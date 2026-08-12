@@ -212,6 +212,42 @@ export interface ShotResult {
 
 
 /**
+ * 2026-08-12 (Tim — "per hole stats matter, especially for history, ghost rounds, and progress
+ * tracking") — restored and DERIVED rather than re-scaffolded.
+ *
+ * The original was a field initialised in four places and never populated by anything, so I removed
+ * it in the store sweep. That was the wrong call: the shape was right, it just had no producer.
+ *
+ * It has one now, and it fabricates nothing. Score, putts and penalties are already captured per
+ * hole. GIR is genuinely derivable from them by its standard definition — a green hit in regulation
+ * means you reached it with two strokes left for putting — so it needs no new capture and is honest.
+ *
+ * fairwayHit stays NULL, deliberately and until a real signal exists. `outcome === 'clean'` means
+ * "no penalty logged", not "found the fairway" — a tee shot into the rough is clean. Deriving FIR
+ * from it would be exactly the fabricated stat the dashboard already refuses to show.
+ * [[illustration-data-points]]
+ */
+export interface HoleStats {
+  hole: number;
+  score: number;
+  putts: number;
+  penalties: number;
+  /** Null until a real fairway signal exists — never derived from penalty-free tee shots. */
+  fairwayHit: boolean | null;
+  /** Green in regulation: reached with 2 strokes left to putt. Null when par is unknown. */
+  girHit: boolean | null;
+}
+
+/**
+ * 2026-08-12 — the caddie's risk posture, restored WITH a producer and consumers.
+ *
+ * Tim: "A huge part of the app is mental state and mental coaching, hence the dynamics being in
+ * play." Risk posture is where that becomes an actual club, which is why it belongs in the round and
+ * not in settings — it changes hole to hole, and it changes with how the round is going.
+ */
+export type RiskMode = 'safe' | 'normal' | 'aggressive';
+
+/**
  * 2026-07-25 — one revertible scoring action, captured just before it mutates state.
  *  - score: restores the prior hole score (and prior currentHole, since the first score
  *           on a hole can auto-advance) — deleting the entry when there was no prior score.
@@ -270,6 +306,16 @@ export interface RoundRecord {
   // FIX M14 — round goal (e.g. "break 90") persisted onto the record so recap
   // and tee-goal evaluation can read it without live store access.
   goal?: string | null;
+  /**
+   * 2026-08-12 (Tim — "per hole stats matter, especially for history, ghost rounds, and progress
+   * tracking") — the derived per-hole record, frozen onto the round at completion.
+   *
+   * Persisted rather than re-derived on read, because derivation needs `courseHoles` for par and
+   * that is cleared when the round ends. Without this snapshot, GIR would be computable DURING a
+   * round and permanently unknowable afterwards — exactly backwards for history and progress.
+   * Optional: rounds that predate this omit it.
+   */
+  holeStats?: HoleStats[];
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
   // 2026-05-17 — Phase 413 — wearable / health-data round enrichment.
@@ -381,6 +427,8 @@ interface RoundState {
   scores: Record<number, number>;
   putts: Record<number, number>;
   penalties: Record<number, number>;
+  /** The caddie's current risk posture. Set by the player (voice or tap) or eased by the caddie. */
+  riskMode: RiskMode;
   shots: ShotResult[];
   // 2026-07-25 (voice "undo / scratch that") — transient, single-depth snapshot of the
   // most-recent scoring mutation so a misheard/mis-logged score, putt, or shot can be
@@ -650,6 +698,10 @@ interface RoundState {
   setClub: (club: string) => void;
   setMentalState: (state: string) => void;
   logScore: (hole: number, score: number) => void;
+  /** Set the caddie's risk posture. `bySelf` marks a caddie-initiated ease rather than a player choice. */
+  setRiskMode: (mode: RiskMode, bySelf?: boolean) => void;
+  /** Per-hole stats for the CURRENT round — derived, never fabricated. Empty until holes are scored. */
+  getHoleStats: () => HoleStats[];
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
   logShot: (shot: ShotResult) => void;
@@ -775,6 +827,7 @@ export const useRoundStore = create<RoundState>()(
       scores: {},
       putts: {},
       penalties: {},
+      riskMode: 'normal',
       shots: [],
       lastMutation: null,
       currentRoundPhotos: [],
@@ -994,6 +1047,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+          riskMode: 'normal',
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -1392,6 +1446,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+          riskMode: 'normal',
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -1565,6 +1620,8 @@ export const useRoundStore = create<RoundState>()(
           mode: s.mode,
           scores: { ...s.scores },
           putts: { ...s.putts },
+          // Snapshot per-hole stats while courseHoles (par) is still in memory — see holeStats.
+          holeStats: get().getHoleStats(),
           shots: [...persistedShots],
           selectedTee: s.selectedTee,
           transportMode: s.transportMode,
@@ -1720,6 +1777,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+          riskMode: 'normal',
           shots: [],
           lastMutation: null,
           currentRoundPhotos: [],
@@ -2226,6 +2284,58 @@ export const useRoundStore = create<RoundState>()(
       setClub: (club) => set({ club, clubSetAt: Date.now() }),
       setMentalState: (state) => set({ mentalState: state }),
 
+      /**
+       * 2026-08-12 — risk posture, with a real producer.
+       *
+       * `bySelf` distinguishes the caddie easing off after a rough stretch from the player asking
+       * for it. That matters: a caddie that quietly turns conservative and never says so reads as
+       * having lost confidence in you, so the calling surface can speak the change when it's ours
+       * and stay silent when it's yours. [[feels-like-a-real-caddie]]
+       */
+      setRiskMode: (mode, bySelf) => {
+        if (mode !== 'safe' && mode !== 'normal' && mode !== 'aggressive') return;
+        if (get().riskMode === mode) return;
+        set({ riskMode: mode });
+        console.log('[round] risk posture →', mode, bySelf ? '(caddie eased)' : '(player)');
+      },
+
+      /**
+       * Per-hole stats for the round so far — DERIVED from what was actually captured.
+       *
+       * GIR uses the standard definition (reached the green with two strokes left to putt), which
+       * follows from score, putts and par without any new capture. It returns null rather than false
+       * when par is unknown, so a course with no card can't silently report every hole as missed.
+       *
+       * fairwayHit stays null: we have no honest fairway signal, and inferring one from a
+       * penalty-free tee shot would be the fabricated stat the dashboard already refuses to show.
+       */
+      getHoleStats: () => {
+        const s = get();
+        const holes = Object.keys(s.scores)
+          .map(Number)
+          .filter((h) => Number.isFinite(h) && (s.scores[h] ?? 0) > 0)
+          .sort((a, b) => a - b);
+        return holes.map((hole) => {
+          const score = s.scores[hole] ?? 0;
+          const putts = s.putts[hole] ?? 0;
+          const par = s.courseHoles.find((h) => h.hole === hole)?.par;
+          // Needs a real par AND a real putt count: with putts unrecorded, score - 0 <= par - 2
+          // would call every bogey a green in regulation.
+          const girHit =
+            typeof par === 'number' && par > 0 && s.putts[hole] != null
+              ? score - putts <= par - 2
+              : null;
+          return {
+            hole,
+            score,
+            putts,
+            penalties: s.penalties[hole] ?? 0,
+            fairwayHit: null,
+            girHit,
+          };
+        });
+      },
+
       logScore: (hole, score) => {
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
@@ -2256,6 +2366,24 @@ export const useRoundStore = create<RoundState>()(
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const relMod = require('./relationshipStore') as typeof import('./relationshipStore');
           relMod.useRelationshipStore.getState().recomputeMentalState(played);
+          /**
+           * 2026-08-12 (Tim — "a huge part of the app is mental state and mental coaching, hence the
+           * dynamics being in play") — the mental read now MOVES something.
+           *
+           * A player three-plus bad holes deep does not need the caddie still attacking pins. When
+           * the read turns 'spiraling' the caddie eases its own posture to safe, which reaches the
+           * club pick through composeShotRead. Marked bySelf so the surface can SAY it rather than
+           * quietly clubbing differently — a caddie that silently turns conservative and never
+           * mentions it reads as having lost faith in you.
+           *
+           * It never overrides a posture the PLAYER chose: if they asked to be aggressive, they get
+           * aggressive, and the caddie says its piece some other way. Easing back out is deliberately
+           * NOT automatic — recovering confidence is the player's call, not a counter's.
+           */
+          const mental = relMod.useRelationshipStore.getState().currentMentalState;
+          if (mental === 'spiraling' && get().riskMode === 'normal') {
+            get().setRiskMode('safe', true);
+          }
         } catch { /* non-fatal — the emotional read must never break scoring */ }
         // 2026-05-22 — Ghost Rounds. Push the just-logged score into the
         // active ghost match so the per-hole delta + running overall
@@ -2795,6 +2923,7 @@ export const useRoundStore = create<RoundState>()(
         // with a setter no screen or voice path ever called. A caddie posture the player could not
         // set and the caddie never consulted. See the store-field sweep.
         mentalState: s.mentalState,
+        riskMode: s.riskMode,
         currentRoundPhotos: s.currentRoundPhotos,
         roundStartTime: s.roundStartTime,
         roundEndTime: s.roundEndTime,

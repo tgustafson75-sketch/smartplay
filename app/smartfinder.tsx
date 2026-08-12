@@ -1596,6 +1596,8 @@ function TargetCameraOverlay({
     catch { return null; }
   }, [activeHoleForLine, activeCourseForLine]);
   const shotRead = useMemo(() => composeShotRead({
+      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
+      risk: useRoundStore.getState().riskMode,
     rawYards: targetYards,
     weather,
     shotBearingDeg: targetBearing ?? shotBearingDeg,

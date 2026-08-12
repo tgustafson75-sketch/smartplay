@@ -80,6 +80,30 @@ const PATTERNS: Pattern[] = [
     rx: /\b(?:mark\s+(?:the\s+)?(?:green|pin|flag)|(?:i'?m|im|i\s+am|we'?re|we\s+are)\s+(?:on|at)\s+(?:the\s+)?(?:center|middle)\s+of\s+the\s+green|(?:i'?m|im|i\s+am)\s+(?:on|at)\s+(?:the\s+)?(?:pin|flag))\b/i,
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'mark_green' }),
   },
+  /**
+   * 2026-08-12 (Tim — "a huge part of the app is mental state and mental coaching, hence the
+   * dynamics being in play") — RISK POSTURE, spoken.
+   *
+   * The posture was previously settable by nothing, which is why it read as dead. This is the
+   * player's half: telling your caddie to play it safe or go at it is the most natural thing on a
+   * golf course, and it must work OFFLINE and instantly — you say it standing over the ball, often
+   * with no signal. Deterministic patterns, no cloud round-trip.
+   *
+   * Deliberately narrow: "safe" alone is far too common in golf speech ("safe side", "that's safe")
+   * to hijack, so each pattern needs an explicit instruction verb or the word "play".
+   */
+  {
+    rx: /\b(?:(?:let'?s|lets|i(?:'| a)?m\s+going\s+to|we'?ll)\s+play\s+(?:it\s+)?safe|play\s+(?:it\s+)?safe|(?:go|be|stay|keep\s+it)\s+conservative|conservative\s+mode|dial\s+(?:it\s+)?back)\b/i,
+    build: (raw) => intent(raw, 'change_setting', { setting_name: 'risk_mode', new_value: 'safe' }),
+  },
+  {
+    rx: /\b(?:(?:let'?s|lets|we'?ll)\s+(?:be|get|go)\s+aggressive|be\s+aggressive|go\s+aggressive|aggressive\s+mode|(?:let'?s|lets)\s+attack|go\s+(?:for\s+it|at\s+it)|(?:i'?m|im)\s+going\s+for\s+it)\b/i,
+    build: (raw) => intent(raw, 'change_setting', { setting_name: 'risk_mode', new_value: 'aggressive' }),
+  },
+  {
+    rx: /\b(?:(?:back\s+to|play)\s+normal|normal\s+mode|(?:standard|regular)\s+(?:mode|play))\b/i,
+    build: (raw) => intent(raw, 'change_setting', { setting_name: 'risk_mode', new_value: 'normal' }),
+  },
   // ── DISTANCE / YARDAGE (most specific first) ──────────────
   {
     rx: /\b(front\s+(?:edge|of)|to\s+the\s+front|yards?\s+to\s+(?:the\s+)?front)\b/i,

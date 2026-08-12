@@ -62,7 +62,22 @@ const LADDER_LABEL: Record<string, string> = {
 
 /** Closest club to the plays-like number — prefers the player's real bag, falls
  *  back to the standard ladder. Pushes a learned-carry "why" line when real. */
-function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[]): string | null {
+/**
+ * 2026-08-12 (Tim — "a huge part of the app is mental state and mental coaching, hence the dynamics
+ * being in play") — RISK POSTURE, the point where that becomes an actual club.
+ *
+ * A posture that only tints the caddie's wording is decoration. This is where safe / normal /
+ * aggressive changes the recommendation itself, in the way a real caddie would: when you're between
+ * clubs, safe takes the one that comfortably covers and aggressive takes the one that just reaches.
+ * Normal is unchanged — nearest club wins, exactly as before.
+ *
+ * Deliberately only breaks TIES rather than shifting the target yardage. Nudging the number would
+ * make a 150-yard shot secretly a 158-yard shot, and every downstream line ("your 7 iron carries
+ * ~155") would then be quoting a distance the player never faced. [[illustration-data-points]]
+ */
+export type ShotRiskMode = 'safe' | 'normal' | 'aggressive';
+
+function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[], risk: ShotRiskMode = 'normal'): string | null {
   /**
    * 2026-08-11 (Tim — "the caddie suggestion in SmartVision is STILL showing a gap wedge for a 324
    * yard shot") — THE THIRD instance of the same defect, and the one actually on his screen.
@@ -115,11 +130,19 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
       const dBest = best ? Math.abs(best[1] - playsLikeYards) : Infinity;
       const newIsMeasured = measured.has(entry[0]);
       const bestIsMeasured = best ? measured.has(best[0]) : false;
+      // Posture only speaks on a NEAR-TIE (within a yard): safe prefers the club that covers the
+      // number, aggressive the one that just reaches. Outside a tie the closest club still wins —
+      // a posture must never hand you a club that doesn't fit the shot.
+      const postureBreak =
+        risk === 'safe' ? (entry[1] > (best?.[1] ?? -Infinity) ? true : false)
+        : risk === 'aggressive' ? (entry[1] < (best?.[1] ?? Infinity) ? true : false)
+        : null;
       const better =
         dNew < dBest - 1 ? true
         : dNew > dBest + 1 ? false
         : newIsMeasured && !bestIsMeasured ? true      // near-tie: measured beats chart
         : !newIsMeasured && bestIsMeasured ? false
+        : postureBreak !== null ? postureBreak         // near-tie, same provenance: posture decides
         : dNew < dBest;                                 // same provenance: closest wins
       if (!best || better) best = entry;
       if (entry[1] > longest[1]) longest = entry;
@@ -171,6 +194,11 @@ export function composeShotRead(input: {
   holeLineNote?: string | null;
   /** Nearest hazard ahead + its yards from the player. */
   nearestHazard?: { label: string; yards: number } | null;
+  /**
+   * The caddie's risk posture for this shot (roundStore.riskMode). Only breaks near-ties between
+   * clubs — see pickClub. Omitted → 'normal', so every existing caller is unchanged.
+   */
+  risk?: ShotRiskMode;
   /** Competitive/ghost round → surface past performance; otherwise hide it. */
   isCompetition?: boolean;
   /** Past-performance one-liner for this hole (only used when isCompetition). */
@@ -207,7 +235,7 @@ export function composeShotRead(input: {
   if (Math.abs(elevYds) >= 2) why.push(`${Math.abs(elevYds)} ${elevYds > 0 ? 'uphill' : 'downhill'}`);
 
   // 2) Club — the answer. Pushes a learned-carry why line when the bag is real.
-  const club = pickClub(playsLikeYards, bag, why);
+  const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal');
 
   // 3) Hazard — only when it's actually in play for this shot (ahead, within reach).
   let hazardNote: string | null = null;
