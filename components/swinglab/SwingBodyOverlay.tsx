@@ -322,7 +322,25 @@ export default function SwingBodyOverlay({
     return { x: P[P.length - 1].x, y: P[P.length - 1].y };
   }, [useClub, tracePts, currentTimeMs]);
 
-  if (!live) return null;
+  /**
+   * 2026-08-12 (Tim — "I keep saying SmartMotion needs to be perfect, and this needs to be fixed").
+   *
+   * This used to be a bare `if (!live) return null` — one missing pose frame and the ENTIRE overlay
+   * disappeared, clubhead arc included. Two ways that bites, both of them exactly when the arc
+   * matters most:
+   *
+   *   - the arc is now drawn without the skeleton, so `frames` can legitimately be empty and there
+   *     is no `live` frame to find at all;
+   *   - even with pose, interpolateFrame deliberately returns null outside the ±400ms pose window
+   *     (drawing an address pose over walk-up footage was its own bug), so the arc used to vanish
+   *     the moment playback ran past the analysed swing.
+   *
+   * The arc is a path through time. It does not depend on the pose at THIS instant — only the
+   * skeleton and the blue club shaft do. So the bail now applies to those, and the trace survives.
+   */
+  const canDrawTrace = showTrace && (traceSegments.length > 0 || clubDots.length > 0);
+  if (!live && !canDrawTrace) return null;
+
   // Aligned mode draws in true frame space and matches the video resizeMode;
   // fallback self-fits to the keypoint bbox.
   let sx = 1, sy = 1, vb: string, par: string, strokeBase: number;
@@ -332,6 +350,8 @@ export default function SwingBodyOverlay({
     par = resizeMode === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet';
     strokeBase = Math.max(aligned.fw, aligned.fh);
   } else {
+    // No true frame dims: the bbox fallback is keypoint-derived, so without pose there is no honest
+    // space to draw the arc into. Better nothing than a misregistered club path.
     if (!bbox) return null;
     vb = `${bbox.x} ${bbox.y} ${bbox.w} ${bbox.h}`;
     par = 'xMidYMid meet';
@@ -349,7 +369,9 @@ export default function SwingBodyOverlay({
   // blue clubhead dot, drawn ON TOP so it reads as the club extending off the hands. Only when a real
   // clubhead path is detected (useClub) and we have both endpoints this frame — honest, never faked.
   const CLUB_BLUE = '#4EA8FF';
-  const gripKps = [getKp(live, 'left_wrist'), getKp(live, 'right_wrist')].filter(Boolean) as Keypoint[];
+  // `live` can be null now (arc-only render, or playback outside the pose window) — the club SHAFT
+  // needs a grip and so simply doesn't draw, while the arc above is unaffected.
+  const gripKps = (live ? [getKp(live, 'left_wrist'), getKp(live, 'right_wrist')] : []).filter(Boolean) as Keypoint[];
   const grip = gripKps.length
     ? { x: (gripKps.reduce((s, k) => s + k.x, 0) / gripKps.length) * sx, y: (gripKps.reduce((s, k) => s + k.y, 0) / gripKps.length) * sy }
     : null;
@@ -378,7 +400,7 @@ export default function SwingBodyOverlay({
         {showTrace && clubDots.map((d, i) => (
           <Circle key={`club-${i}`} cx={d.x} cy={d.y} r={sw * 1.1} fill="#FFFFFF" fillOpacity={0.95} stroke="#88F700" strokeWidth={sw * 0.4} />
         ))}
-        {showSkeleton && (
+        {showSkeleton && live && (
           <G>
             {SKELETON_EDGES.map(([a, b]) => {
               const ka = getKp(live, a);

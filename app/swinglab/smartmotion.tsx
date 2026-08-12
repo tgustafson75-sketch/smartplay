@@ -1605,7 +1605,20 @@ export default function SmartMotion() {
   // detectClubPath returns null on any failure / no-server, and the overlay falls back
   // to the hand/tempo trace when there aren't enough clearly-detected clubhead points.
   useEffect(() => {
-    if (!showSkeleton || !clipUri) { setClubArcPoints(null); return; }
+    /**
+     * 2026-08-12 (Tim — "continue on that club arc render path, I wanna see it. I keep saying
+     * SmartMotion needs to be perfect").
+     *
+     * Same coupling that hid the ball trace: this was gated on `showSkeleton`, the POSE-SKELETON
+     * toggle, which defaults off because interpolating a sparse pose over moving video looked laggy.
+     * So the clubhead arc — the thing he has asked about more than any other single feature — only
+     * ever computed for someone who first tapped a chip labelled "Motion".
+     *
+     * Nothing about clubhead detection needs the skeleton. It needs the clip and the swing window,
+     * both of which exist here regardless, and the pose frames it uses for the ROI zoom are
+     * extracted whenever a review opens — NOT behind the toggle. So decoupling costs no accuracy.
+     */
+    if (!clipUri) { setClubArcPoints(null); return; }
     const seg = segments[selectedSwing];
     if (!seg || typeof seg.startMs !== 'number' || typeof seg.endMs !== 'number' || !(seg.endMs > seg.startMs)) {
       setClubArcPoints(null);
@@ -1638,7 +1651,7 @@ export default function SmartMotion() {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [showSkeleton, clipUri, segments, selectedSwing]);
+  }, [clipUri, segments, selectedSwing, poseFrames]);
 
   // Compose the tiered multi-point shot trace from the measured positions +
   // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
@@ -4195,14 +4208,28 @@ export default function SmartMotion() {
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
         ) : null}
 
-        {/* Attached skeletal overlay — real keypoints tracked to playback. */}
-        {isReview && showResults && showSkeleton && poseFrames && poseFrames.length > 0 ? (
+        {/* Attached skeletal overlay — real keypoints tracked to playback.
+            2026-08-12 (Tim — "continue on that club arc render path, I wanna see it") — this used to
+            render ONLY when the Motion chip was on, which meant the clubhead arc was invisible by
+            default even once it had been detected. The arc and the skeleton are separate things: the
+            arc is the money shot, the skeleton is a diagnostic overlay he deliberately defaulted off
+            because it looked laggy. So the overlay now mounts when EITHER is available, and each
+            draws on its own terms — skeleton only with the toggle and real pose frames, the arc
+            whenever a real clubhead path was detected on a confirmed strike.
+            The arc is drawn by SwingBodyOverlay rather than a second component on purpose: the
+            de-spiking, centripetal Catmull-Rom smoothing and speed-heat colouring already live there
+            and took several passes to get right. A parallel implementation would drift from it.
+            [[smartmotion-clubhead-trace-root-cause]] — clubhead-or-NOTHING; never a wrist fallback. */}
+        {isReview && showResults && (
+          (showSkeleton && poseFrames && poseFrames.length > 0) ||
+          (clubArcPoints != null && clubArcPoints.length >= 3)
+        ) ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <SwingBodyOverlay
-              frames={poseFrames}
+              frames={poseFrames ?? []}
               currentTimeMs={playbackMs}
-              showSkeleton
-              showTrace={showSkeleton && shotConfirmed}
+              showSkeleton={!!(showSkeleton && poseFrames && poseFrames.length > 0)}
+              showTrace={shotConfirmed}
               // 2026-08-06 — matches the review <Video> CONTAIN mode (video containment) so the skeleton
               // letterboxes with the frame instead of cropping.
               resizeMode="contain"
