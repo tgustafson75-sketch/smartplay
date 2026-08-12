@@ -7,7 +7,7 @@ import { prewarmVoice } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
-import { useRoundStore } from '../store/roundStore';
+import { useRoundStore, voicePuttsHole } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { voiceCommandRouter } from './intents';
 import { subscribeEarbudTap } from './earbudControl';
@@ -44,6 +44,7 @@ import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { screenContextForPrompt } from './screenContext';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
+import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from './pendingPuttAsk';
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
@@ -737,6 +738,32 @@ async function openSession() {
     // instantly — no cloud round-trip, no brain detour that loops on "want me to
     // watch your swing?"). It also covers the usual high-frequency phrases. On a
     // miss it falls through to the cloud classifier exactly as before.
+    /**
+     * 2026-08-12 — the open putt question, on the earbud / global-mic path too.
+     *
+     * Tim answers the caddie hands-free as often as by tapping, and this path runs its own
+     * classification, so without this a bare "two" here becomes a score exactly as it did on the
+     * tap path. Same shared state and strict parser as the on-screen mic.
+     */
+    if (isAwaitingPutts()) {
+      const answered = parsePuttAnswer(utterance);
+      if (answered !== null) {
+        const rs = useRoundStore.getState();
+        rs.logPutts(awaitingPuttsHole() ?? voicePuttsHole(rs), answered);
+        clearAwaitingPutts();
+        const line = `Got it — ${answered} putt${answered !== 1 ? 's' : ''}.`;
+        if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
+        if (settings.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+          await stopSpeaking().catch(() => {});
+          await speak(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+            .catch((e) => console.log('[listeningSession] putt-answer speak failed', e));
+        }
+        setSessionStateMirror('idle');
+        return;
+      }
+      clearAwaitingPutts();
+    }
+
     let intent: VoiceIntent | null = precheckLocalIntent(utterance);
     // Local-first health metric ([[self-growing-agent-architecture]]) — a precheck hit
     // answered without the cloud classifier. Pure observation; never gates the flow.

@@ -145,6 +145,15 @@ export const logScoreHandler: IntentHandler = {
       };
     }
 
+    /**
+     * 2026-08-12 — record that a putt question is OPEN, and for which hole.
+     *
+     * Without this, the player's "two" reaches the score parser on any path except the auto
+     * follow-up loop and is read as a two on the hole — an eagle that overwrites the bogey he just
+     * logged correctly. See services/pendingPuttAsk.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).markAwaitingPutts(hole);
     return {
       success: true,
       voice_response: `${scoreText} How many putts?`,

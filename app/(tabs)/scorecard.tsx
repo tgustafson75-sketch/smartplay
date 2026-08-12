@@ -66,6 +66,7 @@ export default function Scorecard() {
   const courseHoles = useRoundStore(s => s.courseHoles);
   const scores = useRoundStore(s => s.scores);
   const putts = useRoundStore(s => s.putts);
+  const logPutts = useRoundStore(s => s.logPutts);
   const shots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
   const nineHoleMode = useRoundStore(s => s.nineHoleMode);
@@ -531,12 +532,46 @@ export default function Scorecard() {
           );
         })}
       </ScrollView>
+      {/**
+        * 2026-08-12 (Tim) — "leave a little indicator on holes where they didn't indicate the putt,
+        * so on the scorecard you're able to tap there and edit it to update the putts."
+        *
+        * There was no way to record putts here at all — only the caddie could, by voice. That
+        * matters beyond tidiness: greens-in-regulation is derived as (score − putts) ≤ par − 2, so a
+        * hole with no putt count contributes NOTHING to GIR, and the scorecard quietly under-reports
+        * the player's game. Not mandatory, deliberately — an unanswered hole stays honestly unknown
+        * rather than being filled with a guessed two.
+        */}
+      <View style={styles.chipsRow}>
+        <Text style={[styles.holeSub, { color: c.text_muted, alignSelf: 'center', marginRight: 6 }]}>
+          {t('scorecard.putts_label')}
+        </Text>
+        {([0, 1, 2, 3, 4] as const).map(n => {
+          const active = (viewPutts as Record<number, number>)[hole] === n;
+          return (
+            <TouchableOpacity
+              key={`putt-${n}`}
+              style={[styles.puttChip, { borderColor: active ? c.accent : c.border, backgroundColor: active ? c.accent : 'transparent' }]}
+              onPress={() => { logPutts(hole, n); }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${n} putts on hole ${hole}`}
+            >
+              <Text style={{ color: active ? '#0a0a0a' : c.text_secondary, fontSize: 13, fontWeight: '800' }}>{n}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 
   const renderHoleRow = (h: typeof viewCourseHoles[number]) => {
     const score = (viewScores as Record<number, number>)[h.hole] ?? 0;
-    const holePutts = (viewPutts as Record<number, number>)[h.hole] ?? 0;
+    // undefined = never recorded (which is NOT the same as zero putts — a hole-out from off the
+    // green is a real 0). GIR can only be derived when the count actually exists.
+    const holePuttsRaw = (viewPutts as Record<number, number>)[h.hole];
+    const holePuttsRecorded = holePuttsRaw != null;
+    const holePutts = holePuttsRaw ?? 0;
     const isCurrent = h.hole === currentHole && isRoundActive;
     const hasScore = score > 0;
     const diff = hasScore ? score - h.par : 0;
@@ -569,9 +604,15 @@ export default function Scorecard() {
             <Text style={[styles.holeMeta, { color: c.text_secondary }]}>
               {t('scorecard.hole_par', { par: h.par })}{h.distance > 0 ? t('scorecard.hole_dist', { dist: h.distance }) : ''}
             </Text>
-            {holePutts > 0 && (
+            {holePuttsRecorded ? (
               <Text style={[styles.holeSub, { color: c.text_muted }]}>{t('scorecard.n_putts', { count: holePutts })}</Text>
-            )}
+            ) : hasScore ? (
+              /* Scored, but no putt count — so this hole can't contribute to greens in regulation.
+                 A quiet dot rather than a warning: it's an invitation, not a chore. */
+              <Text style={[styles.holeSub, { color: c.text_muted, opacity: 0.75 }]}>
+                • {t('scorecard.add_putts')}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={styles.holeRight}>
@@ -1154,6 +1195,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderRadius: 12,
     paddingVertical: 10, paddingHorizontal: 16,
     minWidth: 64,
+  },
+  // 2026-08-12 — putt chips: deliberately smaller and quieter than the score chips. Recording putts
+  // is optional, so it must read as an offer beside the primary action, not a second demand.
+  puttChip: {
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderRadius: 10,
+    paddingVertical: 6, minWidth: 38,
   },
   scoreChipScore: { fontSize: 22, fontWeight: '900', color: '#ffffff', letterSpacing: -0.5 },
   scoreChipLabel: { fontSize: 10, fontWeight: '800', color: '#ffffff', letterSpacing: 0.5, marginTop: 2 },

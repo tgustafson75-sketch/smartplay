@@ -8236,7 +8236,12 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       /const resolved = resolveYardage\(currentHole\)/.test(vc) &&              // #1 voice how-far uses shared resolver
-      /logPutts\(voicePuttsHole\(useRoundStore\.getState\(\)\), parsed\)/.test(vc) && // #2 putts -> scored hole
+      // #2 putts land on the SCORED hole, not the nav hole. 2026-08-12 — now stronger: the hole is
+      // captured when the caddie ASKS (awaitingPuttsHole), with voicePuttsHole as the fallback, so an
+      // answer given after a hole change still lands where the score did.
+      /awaitingPuttsHole\(\) \?\? voicePuttsHole\(rs\)/.test(vc) &&
+      // ...and the answer is intercepted on EVERY surface before anything can read it as a score.
+      /isAwaitingPutts\(\)/.test(vc) && /isAwaitingPutts\(\)/.test(read('services/listeningSession.ts')) &&
       /getActiveCaddieForPillar\('cage'\)/.test(sm) &&                          // #3 narration = active caddie
       /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)
     );

@@ -39,6 +39,7 @@ import type { ToolAction } from '../app/api/kevin+api';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';
+import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from '../services/pendingPuttAsk';
 import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -1458,27 +1459,18 @@ export const useVoiceCaddie = ({
           return;
         }
 
-        // Bug fix: when Kevin's last reply asked "How many putts?" and the
-        // user responds with a small number, intercept it here and call
-        // logPutts directly — don't route to the brain (which says "noted"
-        // but never persists the count).
-        const PUTT_WORDS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5 };
-        const turns = getRecentTurns();
-        const lastKevinTurn = [...turns].reverse().find(t => t.role === 'kevin');
-        const lastKevinText = lastKevinTurn?.text ?? '';
-        const awaitingPutts = /putt/i.test(lastKevinText) && /\?/.test(lastKevinText);
-        if (awaitingPutts) {
-          const lower = trimmed.toLowerCase();
-          const num = parseInt(lower, 10);
-          const parsed = Number.isFinite(num) && num >= 0 && num <= 10
-            ? num
-            : (PUTT_WORDS[lower] !== undefined ? PUTT_WORDS[lower] : null);
+        /**
+         * The follow-up loop's own putt intercept now uses the SHARED open-question state and
+         * parser (services/pendingPuttAsk) rather than sniffing the caddie's last line for the word
+         * "putt". Two copies of "is a putt question open?" is how the original fix ended up covering
+         * one path — this one — and missing every other. [[no-half-fixes-enforce-every-surface]]
+         */
+        if (isAwaitingPutts()) {
+          const parsed = parsePuttAnswer(trimmed);
           if (parsed !== null) {
-            // 2026-08-10 (logic-universality fix #2) — putts follow the SCORED hole (voicePuttsHole),
-            // not the raw nav currentHole. After 'I made a 5' auto-advances the hole, this English
-            // shortcut used to land the putts on the NEW hole — the exact bug voicePuttsHole prevents
-            // everywhere else.
-            useRoundStore.getState().logPutts(voicePuttsHole(useRoundStore.getState()), parsed);
+            const rs = useRoundStore.getState();
+            rs.logPutts(awaitingPuttsHole() ?? voicePuttsHole(rs), parsed);
+            clearAwaitingPutts();
             recordUserTurn(trimmed);
             const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
             onResponseReceived(confirmLine);
@@ -1489,6 +1481,7 @@ export const useVoiceCaddie = ({
             wrappedOnVoiceStateChange('idle');
             return;
           }
+          clearAwaitingPutts();
         }
 
         // 2026-07-27 — the caddie just asked WHICH of several matching courses (voice quick-round
@@ -2149,6 +2142,43 @@ export const useVoiceCaddie = ({
         wrappedOnVoiceStateChange('idle');
         isProcessingRef.current = false;
         return;
+      }
+
+      /**
+       * 2026-08-12 (Tim) — "I'll say I got a bogey, it says how many putts, I say two… and it could
+       * say you got an eagle, and then you have to argue to get it fixed."
+       *
+       * THE OPEN PUTT QUESTION, answered on ANY path. The previous fix lived inside
+       * runFollowUpListenLoop, so it only worked when the mic auto-reopened — tap to answer, or
+       * answer after the loop timed out, and a bare "two" reached the score parser and overwrote a
+       * correctly-logged bogey with an eagle.
+       *
+       * This runs BEFORE the bypasses, the local precheck and the classifier, because every one of
+       * them will happily read a bare number as a score. Strict parse: only a bare number or an
+       * explicit putt phrase is claimed, so "no, I made a five" still falls through and the player
+       * can always correct the caddie. [[no-half-fixes-enforce-every-surface]]
+       */
+      if (isAwaitingPutts()) {
+        const answered = parsePuttAnswer(transcript);
+        if (answered !== null) {
+          const rs = useRoundStore.getState();
+          const hole = awaitingPuttsHole() ?? voicePuttsHole(rs);
+          rs.logPutts(hole, answered);
+          clearAwaitingPutts();
+          recordUserTurn(transcript);
+          const line = `Got it — ${answered} putt${answered !== 1 ? 's' : ''}.`;
+          onResponseReceived(line);
+          recordKevinTurn(line);
+          wrappedOnVoiceStateChange('speaking');
+          await stopSpeaking();
+          await speakResponse(line);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+        // Anything that isn't a putt count means the moment has passed — a player who answers a
+        // different question has moved on, and leaving the flag up would swallow their next number.
+        clearAwaitingPutts();
       }
 
       const bypass = checkBypasses(transcript);

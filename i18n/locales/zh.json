@@ -101,7 +101,9 @@
     "kevins_take": "KEVIN 的看法",
     "stop": "停止",
     "listen": "收听",
-    "competition_round": "比赛轮"
+    "competition_round": "比赛轮",
+    "putts_label": "推杆",
+    "add_putts": "添加推杆"
   },
   "dashboard": {
     "title": "面板",

@@ -101,7 +101,9 @@
     "kevins_take": "OPINIÓN DE KEVIN",
     "stop": "Parar",
     "listen": "Escuchar",
-    "competition_round": "Ronda de Competición"
+    "competition_round": "Ronda de Competición",
+    "putts_label": "Putts",
+    "add_putts": "añadir putts"
   },
   "dashboard": {
     "title": "Panel",

@@ -57,6 +57,10 @@ export const logPuttsHandler: IntentHandler = {
 
     const putts = parsePutts(params.num_putts) ?? parsePutts(intent.raw_text);
     if (putts === null) {
+      // 2026-08-12 — same open-question marker as logScoreHandler, so a bare number answered on ANY
+      // surface lands as putts rather than a score. See services/pendingPuttAsk.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).markAwaitingPutts(hole);
       return {
         success: false,
         voice_response: "How many putts? Tell me a number.",
@@ -66,6 +70,8 @@ export const logPuttsHandler: IntentHandler = {
     }
 
     round.logPutts(hole, putts);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).clearAwaitingPutts();
     track('log_putts_voice', { hole, putts });
 
     const reply = putts === 0

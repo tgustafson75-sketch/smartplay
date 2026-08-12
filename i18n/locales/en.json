@@ -101,7 +101,9 @@
     "kevins_take": "KEVIN'S TAKE",
     "stop": "Stop",
     "listen": "Listen",
-    "competition_round": "Competition Round"
+    "competition_round": "Competition Round",
+    "putts_label": "Putts",
+    "add_putts": "add putts"
   },
   "dashboard": {
     "title": "Dashboard",
