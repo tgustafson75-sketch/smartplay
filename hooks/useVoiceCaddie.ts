@@ -78,6 +78,10 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 // below ends a normal question far sooner; this is only the wandered-away backstop / the cap on
 // metering-less OEMs. 18s of m4a is still comfortably under the 3.5MB upload guard.
 const MAX_RECORD_MS = 18_000;
+/** 2026-08-12 — how long a capture may hold the mic having heard NO speech before standing down.
+ *  Long enough to think before answering the caddie's question; short enough that a mic the user
+ *  never asked for isn't live (and lighting the OS indicator) for the full wall-clock cap. */
+const NO_SPEECH_STANDDOWN_MS = 7_000;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
 // launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
@@ -772,6 +776,14 @@ export const useVoiceCaddie = ({
   const smartVision = useSmartVision();
 
   // ── CLEAR AUTO STOP ───────────────────────
+
+  /**
+   * 2026-08-12 (Tim) — did this capture ever hear a human? The metering callback's `micHasSpoken`
+   * is a local inside the START branch, so the STOP branch had no way to ask. Mirrored here because
+   * "the user tapped to stop a recording that heard NOTHING" is a completely different event from
+   * "the user finished speaking", and the app was treating them the same. See the STOP branch.
+   */
+  const micHasSpokenRef = useRef(false);
 
   const clearAutoStop = () => {
     if (autoStopTimer.current) {
@@ -2528,9 +2540,37 @@ export const useVoiceCaddie = ({
 
     if (isProcessingRef.current) return;
 
-    // ── STOP and process ──────────────────
+    /**
+     * ── STOP and process ──────────────────
+     *
+     * 2026-08-12 (Tim, correcting me) — "this happened even if I didn't tap during speech. This is
+     * when I just waited and did nothing then tapped and tried." And: "from the little mic indicator
+     * on my phone it has always seemed to, for a tiny second, indicate the mic opens when the app
+     * starts, but I've never mentioned it."
+     *
+     * That indicator is the app opening the mic BY ITSELF. The Caddie tab's proactive opener calls
+     * handleMicPress() in its .finally() — hands-free is the product, so it hands you the mic when
+     * it finishes talking. But if you don't answer, that capture just sits there recording silence:
+     * the silence-VAD auto-stop requires micHasSpoken, so with nobody talking nothing closes it
+     * until the 18s wall-clock cap.
+     *
+     * So you wait, then tap — and your tap lands HERE, on an open recording, and is read as "I'm
+     * done, process this". It processes several seconds of silence, gets an empty transcript back,
+     * and reports a failure. Your second tap starts fresh and works. That is the whole of "the first
+     * time talking to Caddie is a fail", and it fires whether or not you tapped during speech.
+     *
+     * The same applies if that auto-opened recording died underneath us (an audio-session
+     * reconfigure from a later speak() kills it — which is the "mic opens for a tiny second" tell):
+     * stopAndUnloadAsync throws, and the old code went idle, so the tap did nothing at all.
+     *
+     * A tap on a capture that never heard a human is not "process this". It means "I want to talk
+     * NOW". Both cases now throw the silence away and open a fresh capture instead of failing.
+     * [[hands-free-zero-setup-is-the-product]] [[caddie-failsafe-no-walls]]
+     */
     if (recordingRef.current) {
       clearAutoStop();
+      // Set when this stop turns out to be a false one; we then fall through to START a real capture.
+      let restartFresh = false;
       // Flip state to 'thinking' IMMEDIATELY so the badge's listening
       // halo unmounts the instant the user taps stop — without this,
       // the halo keeps pulsing for the 100-500ms that stopAndUnloadAsync
@@ -2569,13 +2609,24 @@ export const useVoiceCaddie = ({
           // 2026-06-16 — was a silent console.log (gone in prod). A first-ask glitch
           // that produces an empty/clipped recording lands HERE; now it's logged so we
           // can tell "cold-mic empty recording" from a transcribe/network failure.
+          // Deliberately NOT restarted: sub-300ms is the stray double-tap signature (tap-tap), and
+          // reopening the mic there would leave it hot after the user meant to close it.
           console.log('[voice] tap-record too short (', durationMs, 'ms), skipping transcribe');
           logVoiceSilentFail('tap_capture_too_short', { source: 'handleMicPress', durationMs });
           wrappedOnVoiceStateChange('idle');
           return;
         }
 
-        await processAudioUri(uri);
+        if (!micHasSpokenRef.current) {
+          // The mic was open a real length of time and heard NO speech — this is the auto-opened
+          // capture the user never answered. Their tap means "start listening", so don't ship
+          // silence to Whisper and report a failure for it.
+          console.log('[voice] tap ended a capture that heard nothing (', durationMs, 'ms) — starting a fresh one');
+          logVoiceSilentFail('tap_ended_silent_capture', { source: 'handleMicPress', durationMs });
+          restartFresh = true;
+        } else {
+          await processAudioUri(uri);
+        }
 
       } catch (err) {
         console.log('[voice] stop error:', err);
@@ -2584,9 +2635,12 @@ export const useVoiceCaddie = ({
         // this STOP branch, re-threw, and never recorded again — mic dead until
         // remount. Null the ref so the next tap starts a fresh recording.
         recordingRef.current = null;
-        wrappedOnVoiceStateChange('idle');
+        // 2026-08-12 — and the tap that found the dead recording must still DO something. Going
+        // idle here is why the first tap "did nothing" and the second one worked.
+        restartFresh = true;
       }
-      return;
+      if (!restartFresh) return;
+      // fall through to START — one fresh capture, no recursion, so a broken mic can't loop
     }
 
     // ── START recording ───────────────────
@@ -2674,6 +2728,7 @@ export const useVoiceCaddie = ({
       // tap to end. The MAX_RECORD_MS wall-clock cap is the wandered-away
       // backstop.
       let micHasSpoken = false;
+      micHasSpokenRef.current = false; // fresh capture — nothing heard yet
       let micLastLoudAt = Date.now();
       // 2026-07-30 — when the user FIRST crossed the speech threshold, so the poll below can tell a
       // quick command (short silence window) from a mid-sentence pause (long window) — the adaptive VAD.
@@ -2687,6 +2742,7 @@ export const useVoiceCaddie = ({
           if (metering > MIC_SPEECH_DETECT_DB) {
             if (!micHasSpoken) micSpeechStartAt = Date.now();
             micHasSpoken = true;
+            micHasSpokenRef.current = true;
           }
           if (metering > MIC_SILENCE_DB_THRESHOLD) micLastLoudAt = Date.now();
         },
@@ -2741,6 +2797,28 @@ export const useVoiceCaddie = ({
         if (!recordingRef.current) return;
         if (Date.now() - recordStartedAt >= MAX_RECORD_MS) {
           void hardStopAndProcess().catch(() => undefined);
+          return;
+        }
+        /**
+         * 2026-08-12 (Tim — "I just waited and did nothing"). A capture the app opened ITSELF (the
+         * proactive opener hands over the mic) used to hold the microphone for the full 18s
+         * wall-clock cap when nobody answered, because the silence endpoint below requires
+         * micHasSpoken. That's a hot mic the user didn't ask for, the iOS indicator lit the whole
+         * time, and then the cap fires and ships 18 seconds of silence to Whisper as a failed turn.
+         *
+         * If nothing is heard at all within NO_SPEECH_STANDDOWN_MS, the caddie simply stands down:
+         * close the mic, no transcribe, no error, no announcement. It offered, you didn't answer.
+         * A capture that HAS heard speech is untouched — the adaptive endpoint below owns that.
+         */
+        if (!micHasSpoken && Date.now() - recordStartedAt >= NO_SPEECH_STANDDOWN_MS) {
+          clearAutoStop();
+          const rec = recordingRef.current;
+          recordingRef.current = null;
+          console.log('[voice] no speech heard — standing the mic down quietly');
+          void (async () => {
+            try { await rec.stopAndUnloadAsync(); } catch { /* already gone */ }
+            wrappedOnVoiceStateChange('idle');
+          })();
           return;
         }
         if (micHasSpoken) {
