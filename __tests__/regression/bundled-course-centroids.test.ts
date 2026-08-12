@@ -135,3 +135,45 @@ describe('the engine searches from the same corrected centroid the UI draws', ()
     }
   });
 });
+
+/**
+ * 2026-08-11 (continued QA) — the scorecard-only courses, which have no hole geometry to derive
+ * from, so their hand-typed literal is load-bearing and had to be verified externally.
+ *
+ * Three more were wrong, and the comments on two of them show why "close enough" reasoning fails
+ * here: Rancho's literal was annotated "any error <500m is invisible at city scale". It was 7.96km
+ * out, in a different TOWN — and since the geometry engine searches ~1.5km around this exact point,
+ * the error was the difference between building the course and reporting "OSM unavailable".
+ *
+ *   rancho-california  7959m — Temecula, but the course is in MURRIETA
+ *   legacy-springfield 4850m — the literal was Springfield's town centre
+ *   webster-dudley     1659m — self-described "approx town-center" placeholder
+ */
+describe('scorecard-only courses point at their actual course', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { LOCAL_COURSE_CENTROIDS } = require('../../data/localCourseImages');
+
+  // Independently sourced 2026-08-11: OSM golf_course polygons and the US Census address geocoder,
+  // which agreed with each other to 170m on Rancho.
+  const truth: Record<string, { lat: number; lng: number }> = {
+    'rancho-california': { lat: 33.562359, lng: -117.145761 }, // Census: 39500 Robert Trent Jones Pkwy
+    'webster-dudley': { lat: 42.047568, lng: -71.924881 },     // OSM: Dudley Hill GC at Nichols College
+  };
+
+  it.each(Object.keys(truth))('%s — the engine searches from the real course', slug => {
+    expect(haversineM(LOCAL_COURSE_CENTROIDS[slug], truth[slug])).toBeLessThan(500);
+  });
+
+  it('rancho-california is no longer in the wrong town', () => {
+    // The old literal. A ~1.5km OSM search centered here found nothing, for months.
+    expect(haversineM(LOCAL_COURSE_CENTROIDS['rancho-california'], { lat: 33.4910, lng: -117.1390 }))
+      .toBeGreaterThan(5000);
+  });
+
+  it('shadow-lakes keeps its literal — it is the club street address, verified', () => {
+    // Nominatim resolves "401 W Country Club Dr, Brentwood CA" to exactly this point. OSM has no
+    // polygon for the club (it closed in 2018 and reopened), which is absence of data, not an error.
+    expect(haversineM(LOCAL_COURSE_CENTROIDS['shadow-lakes'], { lat: 37.929130, lng: -121.752225 }))
+      .toBeLessThan(50);
+  });
+});

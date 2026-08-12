@@ -314,8 +314,8 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     id: 'local:legacy-springfield',
     club_name: 'The Legacy',
     location: 'Springfield, TN',
-    rating: 73.3, slope: 131, isLocal: true, thumbnail: satelliteThumb(36.5090, -86.8853),
-    lat: 36.5090, lng: -86.8853,
+    rating: 73.3, slope: 131, isLocal: true, thumbnail: satelliteThumb(36.484065, -86.840790),
+    lat: 36.484065, lng: -86.840790,
   },
   {
     // Gleneagles is scorecard-only (no hole geometry to derive a centroid from), so the literal is
@@ -375,11 +375,13 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     slope: 127,
     isLocal: true,
     thumbnail: (RANCHO_CALIFORNIA_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    // Phase 407 — Rancho lacks hole-1 tee coords in courses.ts; use
-    // approximate clubhouse centroid from public records. Good enough
-    // for distance-sort (any error <500m is invisible at city scale).
-    lat: 33.4910,
-    lng: -117.1390,
+    // 2026-08-11 — the old "approximate clubhouse centroid, any error <500m is invisible" was 7.96km
+    // out and in the WRONG TOWN: the course is The Golf Club at Rancho California in MURRIETA
+    // (39500 Robert Trent Jones Pkwy), not Temecula. That error is far from invisible — the geometry
+    // engine searches ~1.5km around this point, which is why Rancho reported "OSM unavailable".
+    // OSM's golf_course polygon and the US Census geocode of the street address agree to 170m.
+    lat: 33.560927,
+    lng: -117.144702,
   },
   {
     id: 'local:crystal-springs',
@@ -517,8 +519,10 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     slope: null,
     isLocal: true,
     thumbnail: (WEBSTER_DUDLEY_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
-    lat: 42.0479,
-    lng: -71.9048,
+    // 2026-08-11 — was an "approx town-center" placeholder (its own comment said so), 1.66km from
+    // the course. OSM has the real thing: "Dudley Hill Golf Club at Nichols College".
+    lat: 42.047568,
+    lng: -71.924881,
   },
   // 2026-07-18 — Trump National Doral (Gold/"Golden Palm"), Miami FL. 18 cropped aerials +
   // real par/yardage (golfcourseapi id 29574). Coords = resort center; refine on-site.

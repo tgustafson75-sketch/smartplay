@@ -786,7 +786,10 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   'redlands-cc':      { lat: 34.0250333, lng: -117.1514339 },
   'palms':            { lat: 33.6953922, lng: -117.1504551 },
   'lakes':            { lat: 33.6913348, lng: -117.1573364 },
-  'rancho-california':{ lat: 33.4910,    lng: -117.1390 },
+  // 2026-08-11 — was 7.96km out and in the wrong TOWN (Temecula vs Murrieta). OSM's golf_course
+  // polygon for "The Golf Club at Rancho California" and the Census geocode of 39500 Robert Trent
+  // Jones Pkwy agree to 170m. The old point is why this course reported "OSM unavailable".
+  'rancho-california':{ lat: 33.560927,  lng: -117.144702 },
   'crystal-springs':  { lat: 37.5560947, lng: -122.3829982 },
   'mariners-point':   { lat: 37.5731586, lng: -122.2823681 },
   'san-jose-muni':    { lat: 37.3771789, lng: -121.8881051 },
@@ -797,9 +800,9 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   'echo-hills':       { lat: 33.7475,    lng: -116.9719 },
   // 2026-07-06 — Spessard Holland (golfcourseapi id 30168; matches OSM greens).
   'spessard-holland': { lat: 28.04947,   lng: -80.55063 },
-  // 2026-07-06 — Webster/Dudley (MA) 9-hole. Approx town-center; refine on-site
-  // via Mark Location (hole GPS wasn't in the screenshots).
-  'webster-dudley':   { lat: 42.0479,    lng: -71.9048 },
+  // 2026-07-06 — Webster/Dudley (MA) 9-hole. 2026-08-11: the "approx town-center" placeholder was
+  // 1.66km from the course; OSM has it as "Dudley Hill Golf Club at Nichols College".
+  'webster-dudley':   { lat: 42.047568,  lng: -71.924881 },
   // 2026-05-28 — Westlake Country Club, 1 Westlake Blvd, Jackson NJ
   // 08527. Approximate centroid from the property landmark; refine
   // on-site via Mark Location when Tim plays there. The 800m detect
