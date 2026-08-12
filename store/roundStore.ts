@@ -316,6 +316,14 @@ export interface RoundRecord {
    * Optional: rounds that predate this omit it.
    */
   holeStats?: HoleStats[];
+  /**
+   * 2026-08-12 — TIER 3 of the watch read: the end-of-round tempo compilation.
+   *
+   * Frozen onto the record because the watch's session swings are in-memory only (watchStore
+   * partialize keeps deviceName), so this is the ONE moment the story can be written down. Absent
+   * on rounds played without the watch, which is most of them.
+   */
+  tempoStory?: { baseline: number | null; earlyAvg: number | null; lateAvg: number | null; headline: string } | null;
   // Phase R — round memory photos captured during play, displayed in recap collage.
   round_photos?: RoundPhoto[];
   // 2026-05-17 — Phase 413 — wearable / health-data round enrichment.
@@ -1631,6 +1639,38 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts },
           // Snapshot per-hole stats while courseHoles (par) is still in memory — see holeStats.
           holeStats: get().getHoleStats(),
+          // 2026-08-12 — and the watch's tempo story, for the same reason: the swings live only in
+          // memory, so this is the last moment it can be captured. Null when no watch was worn.
+          tempoStory: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const ws = (require('./watchStore') as typeof import('./watchStore')).useWatchStore.getState();
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const rd = require('../services/round/roundSwingRead') as typeof import('../services/round/roundSwingRead');
+              const story = rd.roundTempoStory(ws.sessionSwings ?? []);
+              if (!story.enough || !story.headline) return null;
+              /**
+               * ...and route it to the CADDIE, not just the recap card. getTopObservations feeds the
+               * brain prompt, so a tempo that went late becomes something the caddie KNOWS about you
+               * next time rather than a line you read once. Typed 'mental' deliberately: tempo
+               * degrading under fatigue is a state reading, not a swing fault.
+               * [[caddie-brain-lens]] [[self-growing-agent-architecture]]
+               */
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const rel = (require('./relationshipStore') as typeof import('./relationshipStore')).useRelationshipStore.getState();
+                if (story.quickenedBy != null && Math.abs(story.quickenedBy) > 0.2) {
+                  rel.addObservation({
+                    type: 'mental',
+                    content: story.quickenedBy > 0
+                      ? 'tempo quickens over the closing holes'
+                      : 'tempo slows over the closing holes',
+                  });
+                }
+              } catch { /* observation is additive — never block the round record */ }
+              return { baseline: story.baseline, earlyAvg: story.earlyAvg, lateAvg: story.lateAvg, headline: story.headline };
+            } catch { return null; }
+          })(),
           shots: [...persistedShots],
           selectedTee: s.selectedTee,
           transportMode: s.transportMode,

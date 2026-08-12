@@ -54,6 +54,8 @@ import { useCageStore, resolvePlayerName } from '../../store/cageStore';
 import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { useWatchStore } from '../../store/watchStore';
+import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
 import TrendChart from '../../components/charts/TrendChart';
 import { getDrillEntry } from '../../data/drillCatalog';
@@ -341,6 +343,22 @@ export default function Dashboard() {
     }),
     [workoutHistory, roundHistory],
   );
+
+  /**
+   * 2026-08-12 (Tim) — TIER 2 of the watch read: the per-hole line on the active-round card.
+   *
+   * Deliberately NOT a tempo number every hole. A golfer mid-round does not need a stat readout, and
+   * thinking about your tempo ratio over the ball is how you play worse. This speaks only when the
+   * hole ran genuinely off the player's OWN baseline for this round — which is what a caddie does.
+   * Silent is the normal state. [[feels-like-a-real-caddie]]
+   */
+  const watchSwings = useWatchStore((s) => s.sessionSwings);
+  const holeTempo = useMemo(() => {
+    if (!isRoundActive) return null;
+    const rs = useRoundStore.getState();
+    const baseline = roundTempoBaseline(watchSwings);
+    return holeTempoFlag(watchSwings, rs.currentHole, baseline);
+  }, [isRoundActive, watchSwings]);
 
   const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training'>('practice');
   const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
@@ -777,6 +795,15 @@ export default function Dashboard() {
                 <Text style={[styles.activeStatLabel, { color: colors.text_muted }]}>{t('dashboard.holes')}</Text>
               </View>
             </View>
+            {/* The watch's read on THIS hole — only when it's off the player's own baseline. */}
+            {holeTempo && (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginTop: 10 }}>
+                <Ionicons name="watch-outline" size={14} color={colors.accent} style={{ marginTop: 1 }} />
+                <Text style={{ color: colors.text_secondary, fontSize: 12, lineHeight: 17, flex: 1 }}>
+                  {holeTempo.text}
+                </Text>
+              </View>
+            )}
           </View>
         ) : (
           <TouchableOpacity

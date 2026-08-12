@@ -18,6 +18,16 @@ export interface SwingMetrics {
   clubHeadSpeedEst: number;
   timestamp: number;
   club: string;
+  /**
+   * 2026-08-12 — the hole this swing happened on, tagged at CAPTURE by watchSwingBridge from the
+   * live round. Absent when the swing wasn't during a round (range, cage, practice).
+   *
+   * Tagged here rather than reconstructed later because the round moves on: by the time anything
+   * reads these, `currentHole` is wherever the player now is, not where they were swinging.
+   * Grouping by hole is the whole basis of the per-hole and end-of-round reads
+   * (services/round/roundSwingRead).
+   */
+  hole?: number | null;
   // 2026-07-29 — which wrist the watch was on when this swing was captured. Lead = steering wrist
   // (cleaner club-speed proxy); trail = release wrist (better casting/early-release signal). Tagged so
   // lead/trail data is never pooled and the interpretation can branch. Defaults 'lead'.

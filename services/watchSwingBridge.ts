@@ -116,7 +116,13 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       // Which wrist the watch is on (persistent setting, default 'lead', toggled in Settings). Tags the
       // swing so lead/trail data never pools + drives the per-wrist interpretation below.
       const wrist = useSettingsStore.getState().watchWrist ?? 'lead';
+      // 2026-08-12 — stamp the HOLE at capture. The round moves on, so reconstructing this later
+      // would attach the swing to wherever the player has since walked. Null off-course.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+      const hole = rs.isRoundActive ? rs.currentHole : null;
       useWatchStore.getState().recordSwing({
+        hole,
         backswingMs: Math.round(e.backswingMs ?? 0),
         downswingMs: Math.round(e.downswingMs ?? 0),
         tempoRatio: e.tempoRatio ?? 0,
