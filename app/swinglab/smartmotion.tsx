@@ -2066,6 +2066,33 @@ export default function SmartMotion() {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
             mem.useCaddieMemoryStore.getState().recordSwingFault({ fault: learnedFault, nowMs: Date.now() });
+            /**
+             * 2026-08-12 (Tim — "the sports psychologist, the mental coach, the swing coach, the
+             * caddie, everything now back to the center where we started").
+             *
+             * The swing coach had no line to the mental side. The relationship store carries hero
+             * moments and a `firstPureShot` milestone — the caddie noticing "that one was yours" —
+             * and NOTHING anywhere called addHeroMoment. A whole mental-game surface with no
+             * producer, while the one place in the app that can actually SEE a pure strike said
+             * nothing to it.
+             *
+             * Recorded ONLY on evidence: the model's contact read says clean AND no fault was
+             * learned from the swing. A "hero moment" handed out for a mediocre swing is worse than
+             * none — it's the caddie flattering you, which is the opposite of a coach you trust.
+             * [[feels-like-a-real-caddie]] [[illustration-data-points]]
+             */
+            if (!learnedFault && a.contact_read === 'clean') {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const rel = require('../../store/relationshipStore') as typeof import('../../store/relationshipStore');
+              rel.useRelationshipStore.getState().addHeroMoment({
+                clipUri: clipUri ?? null,
+                hole: 0, // range/cage swing — not tied to a hole
+                club: club ? clubIdToClubName(club) ?? String(club) : '',
+                courseName: '',
+                conditions: angle === 'down_the_line' ? 'down the line' : 'face on',
+                carlosNote: null,
+              });
+            }
           } catch { /* non-fatal */ }
           const sessionId = ingestedSessionIdRef.current;
           if (sessionId) {
