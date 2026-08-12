@@ -13,6 +13,7 @@ import {
   speakFromBase64,
   stopSpeaking,
   isSpeaking,
+  isSpeakingUserInitiated,
   playLocalFile,
   captureUtterance,
   isCapturing,
@@ -2462,7 +2463,32 @@ export const useVoiceCaddie = ({
       if ((require('../services/smartMotionRecordBus') as typeof import('../services/smartMotionRecordBus')).isSmartMotionActive()) return;
     } catch { /* guard is best-effort */ }
 
-    if (isSpeaking()) {
+    /**
+     * 2026-08-12 (Tim — "First time talking to Caddie is still a fail months later… I really
+     * believe it has an initial trap door"). It did, and this was it.
+     *
+     * ANY tap during speech was treated as "interrupt": stop the audio, return, mic never opens.
+     * That's correct when the caddie is answering something you asked — you tapped to shut it up.
+     * It is wrong when the caddie spoke FIRST, because then your tap means "I'm answering you",
+     * and the app silently ate the turn. You tap, the voice stops, nothing happens, you tap again.
+     *
+     * A cold launch is exactly when this bites: the Caddie tab opens with proactive speech (the
+     * get-to-know opener, the persona opener, briefings, nudges), so the FIRST tap of a session is
+     * the one most likely to land during unsolicited speech. Months of "the first time always
+     * fails" with nothing wrong in the network path — because the network was never reached.
+     *
+     * Now: speech the caddie volunteered is stopped and we FALL THROUGH to open the mic, which is
+     * what a real caddie does when you start talking over them. Speech you asked for still ends
+     * the turn as before. [[feels-like-a-real-caddie]] [[hands-free-zero-setup-is-the-product]]
+     */
+    if (isSpeaking() && !isSpeakingUserInitiated()) {
+      devLog('[voice] tap during UNSOLICITED speech — stopping and opening the mic');
+      // Suppress the in-flight caller's follow-up loop, same as the interrupt path, so it can't
+      // reopen the mic underneath the recording we're about to start.
+      userInterruptedRef.current = true;
+      await stopSpeaking();
+      // deliberately NO return — fall through to the START branch below
+    } else if (isSpeaking()) {
       // 2026-06-06 — Tim's report: tapping to interrupt mid-speech
       // "gets stuck and I have to restart the app." Root cause: the
       // processAudioUri (or intent-router-success) await chain was

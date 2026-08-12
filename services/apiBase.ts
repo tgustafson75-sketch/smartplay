@@ -162,11 +162,61 @@ export function isConnectionWarmed(): boolean {
   return connectionWarmed;
 }
 
+/**
+ * 2026-08-12 (Tim, testing on 5G) — "Shouldn't the very first thing be checking signal and adjusting
+ * accordingly? If verified signal, guard error states."
+ *
+ * Right. The app cannot read the radio — NetInfo/expo-network are native modules and adding one
+ * breaks OTA on every install in the field — but it does not need to. What matters isn't the number
+ * of bars, it's whether OUR host answers, and every cloud round-trip already measures exactly that.
+ * We just threw the measurement away, keeping a single boolean.
+ *
+ * So we keep the evidence: when the backend last answered, and how fast. That turns "are we online?"
+ * from a guess into a recent observation, and it lets the failure copy stop blaming the user's
+ * network when we have proof the network was fine seconds ago — which is the whole of his complaint:
+ * five bars of 5G and the caddie saying it can't connect.
+ */
+let lastRoundTripOkAt = 0;
+let lastRoundTripMs = -1;
+
+/** Record a cloud round-trip that succeeded, and how long it took. */
+export function noteRoundTripOk(ms?: number): void {
+  lastRoundTripOkAt = Date.now();
+  if (typeof ms === 'number' && ms >= 0) lastRoundTripMs = ms;
+}
+
+export type ConnectionEvidence = {
+  /** ms since the backend last answered us, or null if it never has this session. */
+  agoMs: number | null;
+  /** Latency of that last successful round-trip, or -1 if unmeasured. */
+  lastMs: number;
+  /** The host answered recently enough that blaming the user's connection would be a lie. */
+  provenRecently: boolean;
+  /** Answered, but slowly — be patient with budgets rather than declaring failure. */
+  slow: boolean;
+};
+
+/** How recent a success still counts as proof. A minute covers a normal turn plus think time. */
+const PROOF_WINDOW_MS = 60_000;
+/** Above this, the host is reachable but the link is weak — widen budgets, don't fail. */
+const SLOW_MS = 2_500;
+
+export function getConnectionEvidence(): ConnectionEvidence {
+  const agoMs = lastRoundTripOkAt ? Date.now() - lastRoundTripOkAt : null;
+  return {
+    agoMs,
+    lastMs: lastRoundTripMs,
+    provenRecently: agoMs !== null && agoMs < PROOF_WINDOW_MS,
+    slow: lastRoundTripMs > SLOW_MS,
+  };
+}
+
 /** Flip the warmed flag after any successful cloud round-trip (transcribe/brain), so subsequent
  *  turns take the fast path even if the background warm ping hadn't landed yet. */
 export function markConnectionWarmed(): void {
   connectionWarmed = true;
   healedThisSession = true;
+  noteRoundTripOk();
 }
 
 export function warmBackendConnection(): Promise<void> {
@@ -180,9 +230,14 @@ export function warmBackendConnection(): Promise<void> {
       if (connectionWarmed) return;
       if (d) await new Promise((r) => setTimeout(r, d));
       try {
+        // Time it: the boot warm-up is our FIRST look at the link, so this is where "adjust
+        // accordingly" starts. A host that answers in 200ms and one that takes 4s are both
+        // "reachable", and the voice path should not treat them the same.
+        const t0 = Date.now();
         if (await pingHost(activeBase, 5000)) {
           connectionWarmed = true;
           healedThisSession = true;
+          noteRoundTripOk(Date.now() - t0);
           return;
         }
       } catch { /* keep retrying */ }

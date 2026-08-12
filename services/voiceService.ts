@@ -838,6 +838,31 @@ export const stopSpeaking = async (): Promise<void> => {
 
 export const isSpeaking = (): boolean => currentSound !== null;
 
+/**
+ * 2026-08-12 (Tim — "First time talking to Caddie is still a fail months later… I really believe it
+ * has an initial trap door").
+ *
+ * It does, and this is the flag that opens it. handleMicPress treats ANY tap during speech as
+ * "interrupt": it stops the audio and RETURNS without opening the mic. That is right when the caddie
+ * is answering something you asked — you tapped to shut it up. It is wrong when the caddie spoke
+ * FIRST, because then your tap means "I'm answering you", and the app silently ate your turn. The
+ * Caddie tab opens with proactive speech on a cold launch, so the very first tap of a session is the
+ * most likely one to land during unsolicited speech — hence "the first time is always a fail".
+ *
+ * A real caddie who is mid-sentence when you start talking stops and listens. They don't stop and
+ * stare at you. [[feels-like-a-real-caddie]]
+ *
+ * True only while the CURRENT utterance is one the user asked for (speak/playLocalFile called with
+ * { userInitiated: true }). Proactive openers, briefings, nudges and fillers leave it false.
+ */
+let currentSpeechWasUserInitiated = false;
+export const isSpeakingUserInitiated = (): boolean =>
+  currentSound !== null && currentSpeechWasUserInitiated;
+/** Record who asked for the utterance that is about to play. */
+export const markSpeechOrigin = (userInitiated: boolean): void => {
+  currentSpeechWasUserInitiated = !!userInitiated;
+};
+
 // 2026-06-13 — OFFLINE / network-fail spoken fallback (Tim's Lakes round went
 // MUTE on weak signal — ~18 speak_catch "Network request failed"). When /api/voice
 // can't be reached, speak the line on the DEVICE so the caddie isn't a dead void.
@@ -1027,6 +1052,9 @@ export const playLocalFile = async (
     }
 
     currentSound = sound;
+    // Who asked for this utterance — see isSpeakingUserInitiated. A tap during speech the caddie
+    // volunteered means "I'm answering you", not "be quiet".
+    markSpeechOrigin(!!opts?.userInitiated);
     await applyCustomRate(sound);
 
     // Phase V.7 — prefer the actual decoded duration; fall back to caller-
@@ -1185,6 +1213,9 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     }
 
     currentSound = sound;
+    // Who asked for this utterance — see isSpeakingUserInitiated. A tap during speech the caddie
+    // volunteered means "I'm answering you", not "be quiet".
+    markSpeechOrigin(!!opts?.userInitiated);
     await applyCustomRate(sound);
 
     // Phase V.7 — derive timeout from actual decoded duration so longer
@@ -1644,6 +1675,9 @@ export const speak = async (
     }
 
     currentSound = sound;
+    // Who asked for this utterance — see isSpeakingUserInitiated. A tap during speech the caddie
+    // volunteered means "I'm answering you", not "be quiet".
+    markSpeechOrigin(!!opts?.userInitiated);
     // 2026-05-27 — Fix EX: inline the rate-apply with the snapshot so
     // a mid-flight persona switch can't desync rate from voice ID.
     if (snapshotRate !== 1.0) {

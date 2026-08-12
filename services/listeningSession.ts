@@ -43,7 +43,7 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { buildFullPracticeContext } from './tutorialContext';
 import { screenContextForPrompt } from './screenContext';
-import { getApiBaseUrl, isConnectionWarmed } from './apiBase';
+import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
@@ -458,14 +458,33 @@ function pickOpener(): string {
 // error string is spoken. Same string is also returned server-side
 // by api/kevin's outer catch (Fix I shape C) so the contract is
 // consistent across all failure surfaces.
+/**
+ * 2026-08-12 (Tim, on 5G) — "we have the five G signal, but it's saying we can't connect… If
+ * verified signal, guard error states."
+ *
+ * This single line was spoken for EVERY failure in this module — a handler throwing, the brain
+ * returning empty, a slow turn — and every one of them blamed the user's connection. On full signal
+ * that isn't just wrong, it's the app telling him his phone is broken when the phone is fine.
+ *
+ * Blaming the network now requires evidence that the network is at fault. getConnectionEvidence()
+ * knows when our host last answered: if it answered seconds ago, the connection is provably not the
+ * problem and we say something true instead. [[caddie-failsafe-no-walls]]
+ */
 const FAILURE_FALLBACK: Record<string, string> = {
   en: "I'm having trouble connecting — try that again.",
   es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
   zh: '我连接遇到问题——请再试一次。',
 };
+/** Connection is provably fine — own the failure instead of blaming their signal. */
+const FAILURE_ON_US: Record<string, string> = {
+  en: "That one got away from me — say it again?",
+  es: 'Esa se me escapó — ¿me lo repites?',
+  zh: '这句我没跟上——再说一次好吗？',
+};
 function failureFallbackFor(lang: string | null | undefined): string {
   const key = (lang ?? 'en').toLowerCase().slice(0, 2);
-  return FAILURE_FALLBACK[key] ?? FAILURE_FALLBACK.en;
+  const pool = getConnectionEvidence().provenRecently ? FAILURE_ON_US : FAILURE_FALLBACK;
+  return pool[key] ?? pool.en;
 }
 
 /**
