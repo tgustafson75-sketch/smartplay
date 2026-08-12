@@ -106,7 +106,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // → distance_m = Δt_s × sound_speed / 2
   const deltaSec = detection.deltaMs / 1000;
   const distanceMeters = (deltaSec * SOUND_SPEED_MPS) / 2;
-  const distanceYards = Math.round(distanceMeters * 1.0936 * 10) / 10;
+  // 2026-08-12 (audit) — was 1.0936; every other conversion in the app uses 1.09361. A hand-typed
+  // constant that disagrees with its thirteen siblings is how a number drifts, even when the error
+  // is small. One value, everywhere.
+  const distanceYards = Math.round(distanceMeters * 1.09361 * 10) / 10;
 
   // Ball speed heuristic.
   // Peak factor: linear in dBFS over [-10, -40] → [1.0×, 0.0×], clamped to [0.5, 1.05].

@@ -181,7 +181,20 @@ const NOISE_FLOOR_MIN_DB = -60;      // ignore the -160 "no-signal" sentinel rea
 const NOISE_FLOOR_FALL_ALPHA = 0.15; // settle down to a quieter ambient in ~1.5s
 const NOISE_FLOOR_RISE_ALPHA = 0.02; // rise slowly so the user's speech can't inflate it
 const SILENCE_MARGIN_DB = 12;        // voice must clear ambient by this to count as "still talking"
-const SPEECH_MARGIN_DB = 18;         // and by this to confirm "they spoke at least once"
+/**
+ * 2026-08-12 (audit — divergent constants) — this was 18 while the VAD hook that OPENS the mic uses
+ * 14 for the same question. That asymmetry is a bug with a very specific symptom: VAD hears you at
+ * 14dB over ambient and opens a capture, then this refuses to count the same voice as speech, so
+ * `hasSpoken` never flips — the capture stands down or returns silence, and the caddie says it
+ * didn't catch you. The mic opened FOR speech it then declined to recognise.
+ *
+ * The invariant: whatever threshold decides to OPEN the mic must be at least as strict as the one
+ * that decides someone SPOKE. Otherwise the app can promise a listen it cannot honour. Matched to
+ * the VAD's 14 so anything loud enough to open the mic is loud enough to count.
+ * (SILENCE_MARGIN_DB stays lower at 12 — ending a sentence should be easier than starting one, or a
+ * trailing-off word clips the capture.)
+ */
+const SPEECH_MARGIN_DB = 14;         // and by this to confirm "they spoke at least once"
 
 /**
  * Record audio for up to {timeoutMs}, transcribe, and return the text.
