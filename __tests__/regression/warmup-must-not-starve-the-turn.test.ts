@@ -64,7 +64,10 @@ describe('a real turn RELEASES warmup connections instead of adding more', () =>
   });
 
   it('warmup fetches are actually cancellable — an abort with no signal does nothing', () => {
-    expect(warm).toContain('AbortSignal.any([signal, AbortSignal.timeout(WARMUP_TIMEOUT_MS)])');
+    // 2026-08-12 — was AbortSignal.any(), which Hermes lacks: it threw "undefined is not a function"
+    // at boot. Same property, hand-rolled from an AbortController this engine definitely has.
+    expect(warm).toContain('signal: linkedTimeoutSignal(signal, WARMUP_TIMEOUT_MS)');
+    expect(warm).toContain('function linkedTimeoutSignal(');
   });
 
   /** A real CALL, not a mention of it in a comment explaining why it was removed. */

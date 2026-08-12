@@ -96,6 +96,23 @@ let warmupAbort: AbortController | null = null;
  * Called at every point the user actually asks for something. Warmups are opportunistic by
  * definition; the moment there is real work, they are pure competition for the same five slots.
  */
+/**
+ * A signal that aborts when EITHER the batch is cancelled or the per-request budget expires.
+ *
+ * Hand-rolled because AbortSignal.any() is absent in Hermes. Plain AbortController plus a listener
+ * and a timer — all of which this engine has had for years.
+ */
+function linkedTimeoutSignal(outer: AbortSignal, ms: number): AbortSignal {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => { try { ctl.abort(); } catch { /* already aborted */ } }, ms);
+  const onOuter = () => { clearTimeout(timer); try { ctl.abort(); } catch { /* already aborted */ } };
+  if (outer.aborted) onOuter();
+  else outer.addEventListener('abort', onOuter, { once: true });
+  // Stop the timer once the request settles either way, so a finished fetch leaves nothing pending.
+  ctl.signal.addEventListener('abort', () => clearTimeout(timer), { once: true });
+  return ctl.signal;
+}
+
 export function abortVoiceWarmup(): void {
   if (!warmupAbort) return;
   try { warmupAbort.abort(); } catch { /* already settled */ }
@@ -132,7 +149,12 @@ export function prewarmVoice(force = false): void {
         body: JSON.stringify({ mode: 'warmup' }),
         // 8s, not 15: a warmup that takes longer than the user's patience has warmed nothing in
         // time, and it holds one of only five per-host connection slots the whole while.
-        signal: AbortSignal.any([signal, AbortSignal.timeout(WARMUP_TIMEOUT_MS)]),
+        // 2026-08-12 — NOT AbortSignal.any(): that is a recent API and Hermes does not have it, so
+        // calling it threw "undefined is not a function" at BOOT (prewarmVoice runs from _layout).
+        // AbortSignal.timeout IS present — it's used in 78 other places here — but `.any` was used
+        // exactly once, by me, today. The lesson: an API used nowhere else in this codebase is
+        // unproven on this engine, however standard it looks.
+        signal: linkedTimeoutSignal(signal, WARMUP_TIMEOUT_MS),
       }).catch(() => {
         // Silent — warmup is opportunistic.
       });

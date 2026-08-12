@@ -173,11 +173,19 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
       for (const g of ['male', 'female'] as Gender[]) {
         for (const l of OFFLINE_LINES) expected.add(fileFor(l.slug, g, persona, l.text).name);
       }
-      for (const entry of Paths.cache.list()) {
-        const name = entry.name;
-        if (!name.startsWith(`offline_voice_${personaSlug(persona)}_`) || !name.endsWith('.mp3')) continue;
-        if (expected.has(name)) continue;
-        try { (entry as File).delete(); } catch { /* best-effort — a locked file is harmless */ }
+      // 2026-08-12 — readDirectoryAsync, not Paths.cache.list(): the latter was used exactly once
+      // here (by me, today) and nowhere else in the app, so it was unproven on this engine. This is
+      // the pattern clipStorageGc already uses successfully.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
+      const dir = FS.cacheDirectory;
+      if (dir) {
+        const names = await FS.readDirectoryAsync(dir).catch(() => [] as string[]);
+        for (const name of names) {
+          if (!name.startsWith(`offline_voice_${personaSlug(persona)}_`) || !name.endsWith('.mp3')) continue;
+          if (expected.has(name)) continue;
+          await FS.deleteAsync(dir + name, { idempotent: true }).catch(() => { /* locked file is harmless */ });
+        }
       }
     } catch { /* listing unavailable — the fingerprint alone already prevents stale playback */ }
   })().finally(() => { warmInFlight = null; });
