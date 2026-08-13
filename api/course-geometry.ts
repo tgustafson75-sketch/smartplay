@@ -909,7 +909,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         return best ? { poly: best, d: bd } : null;
       };
-      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc }> = [];
+      const rows: Array<{ ref: number; par: number; parEstimated: boolean; tee: Loc; green: Loc; front: Loc; back: Loc; ring: Loc[] }> = [];
       for (const w of refWays.sort((a, b) => (a.ref! - b.ref!))) {
         const A = w.pts[0]; const B = w.pts[w.pts.length - 1];
         const gA = nearestGreen(A); const gB = nearestGreen(B);
@@ -926,7 +926,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const center = haversineYards(tee, greenEnd.poly.centroid);
         const par = w.par ?? (center <= 215 ? 3 : center >= 460 ? 5 : 4);
-        rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back });
+        rows.push({ ref: w.ref!, par, parEstimated: w.par == null, tee, green: greenEnd.poly.centroid, front, back, ring: greenEnd.poly.polygon });
       }
       if (rows.length >= 3) {
         const holes = rows.map(r => ({
@@ -941,7 +941,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           hazards: [],
           fairway_centerline: [],
           green_outline: [],
-          green_polygon: null as Loc[] | null,
+          /**
+           * 2026-08-13 (audit C3, isolated) — the ring we ALREADY matched, instead of null.
+           *
+           * Four courses built live against the deployed engine came back with green_polygon empty on
+           * every hole, and I could not tell from code whether that was an engine bug or OSM simply
+           * not having the rings. Querying Overpass directly with this file's own query settled it:
+           * Kettle Brook returns 20 green polygons with full 24-point rings in 6s. The data was always
+           * there.
+           *
+           * This path fetched those rings, used them to pick the green and to derive front/back, and
+           * then dropped them on the floor — the polygon augmentation block lives only on the
+           * speculative pairing path below, and this branch returns before it. So the BETTER path
+           * produced the poorer payload.
+           *
+           * green_polygon is the field consumers actually read (smartAnalysisEngine's `polygonsKnown`,
+           * the orchestrator's completeness score). green_outline stays reserved for the vision
+           * derivation path that populates it.
+           */
+          green_polygon: r.ring as Loc[] | null,
           // 2026-08-09 (course-engine audit C1) — the `estimated` flag drives the "AI ESTIMATE — not
           // surveyed" badge + the 45% confidence cap, which are about COORDINATE provenance. These coords
           // are REAL (community-mapped golf=hole ways + polygon-derived greens), so estimated:false even
