@@ -49,6 +49,7 @@ import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '.
 import { locateNearbyCourses } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
+import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prefetchCourseImagery } from '../../services/roundPrefetch';
@@ -596,6 +597,26 @@ export default function PlayTab() {
   const endRound = useRoundStore(s => s.endRound);
   const discardRound = useRoundStore(s => s.discardRound);
   const homeCourse = usePlayerProfileStore(s => s.homeCourse);
+
+  /**
+   * 2026-08-13 — courseThumb() falls back to reading the geometry cache (getCachedGeometry) to give a
+   * SEARCHED course a real aerial: those records carry no coordinates of their own, so the cache is
+   * the only place a thumbnail can come from. But it is a module-level cache read during RENDER, so
+   * when the geometry for a course actually arrived, nothing re-rendered this tab and every one of
+   * those rows kept the generic placeholder — the same shape as the STATIC-yardage defect.
+   *
+   * Resolved through a callback keyed on `completions` rather than a bare subscription, so the
+   * dependency is visible at all six call sites instead of being an invisible re-render that the next
+   * person deletes as unused.
+   */
+  const geometryCompletions = useGeometryStatusStore(st => st.completions);
+  const thumbFor = useCallback(
+    (c: Parameters<typeof courseThumb>[0]) => courseThumb(c),
+    // completions is a real input to the RESULT (it says the cache courseThumb reads has changed),
+    // even though it is not an argument.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [geometryCompletions],
+  );
 
   // Pre-beta — legacy round factors restored to the Play tab so the user
   // picks strategy + mental + format BEFORE the round fires. The Play tab
@@ -1478,7 +1499,7 @@ export default function PlayTab() {
         {heroCourse && (() => {
           // 2026-08-10 — was an inline private fallback; now the shared resolver, so the hero and
           // the rows below it can never disagree about a course's thumbnail.
-          const thumb = courseThumb(heroCourse);
+          const thumb = thumbFor(heroCourse);
           const dist = distanceLabelById[heroCourse.id];
           const vsPar = (n: number | null) => n == null ? null : n === 0 ? 'E' : n > 0 ? `+${n}` : `${n}`;
           const info: string[] = [];
@@ -1672,8 +1693,8 @@ export default function PlayTab() {
                 activeOpacity={0.85}
               >
                 <View style={styles.localThumb}>
-                  {courseThumb(c) ? (
-                    <Image source={courseThumb(c) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+                  {thumbFor(c) ? (
+                    <Image source={thumbFor(c) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
                   ) : (
                     <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
                       <AppIcon name="golf-outline" size={20} color="#00C896" />
@@ -1784,8 +1805,8 @@ export default function PlayTab() {
                 {/* 2026-08-10 — these GPS-located rows always carry real coords from the locator,
                     so they get a true satellite thumbnail instead of the old pin placeholder. */}
                 <View style={styles.localThumb}>
-                  {courseThumb(r) ? (
-                    <Image source={courseThumb(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+                  {thumbFor(r) ? (
+                    <Image source={thumbFor(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
                   ) : (
                     <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
                       <AppIcon name="location-outline" size={20} color="#00C896" />
@@ -1874,8 +1895,8 @@ export default function PlayTab() {
             onPress={() => selectSummary(r)}
           >
             <View style={styles.localThumb}>
-              {courseThumb(r) ? (
-                <Image source={courseThumb(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
+              {thumbFor(r) ? (
+                <Image source={thumbFor(r) as ImageSourcePropType} style={styles.localThumbImg} resizeMode="cover" />
               ) : (
                 <View style={[styles.localThumbImg, styles.thumbPlaceholder]}>
                   <AppIcon name="golf-outline" size={20} color="#00C896" />
@@ -1921,9 +1942,9 @@ export default function PlayTab() {
                     <Image source={selectedLocalThumb as ImageSourcePropType} style={styles.selectedThumbImg} resizeMode="cover" />
                   ) : selectedHero ? (
                     <Image source={{ uri: selectedHero }} style={styles.selectedThumbImg} resizeMode="cover" />
-                  ) : courseThumb({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) ? (
+                  ) : thumbFor({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) ? (
                     <Image
-                      source={courseThumb({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) as ImageSourcePropType}
+                      source={thumbFor({ lat: selected.location.latitude ?? null, lng: selected.location.longitude ?? null }) as ImageSourcePropType}
                       style={styles.selectedThumbImg}
                       resizeMode="cover"
                     />
