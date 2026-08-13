@@ -30,6 +30,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
+import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
@@ -572,6 +573,19 @@ export default function CaddieTab() {
     })();
     return () => { cancelled = true; };
   }, [currentHole, isRoundActive]);
+  /**
+   * 2026-08-13 (Tim's Wachusett round) — SUBSCRIBE to geometry status.
+   *
+   * These two lines are the whole fix for "yardage showed static the entire round". The geometry
+   * service published nothing when a build finished, so the screen never learned that the green
+   * coordinates it had been waiting for had arrived. `completions` bumps on every finished build and
+   * is a dependency of the yardage memos below — the moment greens land, yardage re-resolves and
+   * lifts itself off the static-card tier on its own. `building` drives an honest MAPPING badge, so a
+   * temporary state stops looking identical to a permanent failure.
+   */
+  const geometryBuilding = useGeometryStatusStore((st) => st.building);
+  const geometryCompletions = useGeometryStatusStore((st) => st.completions);
+
   const liveYardage = useMemo(() => {
     if (yardageMode !== 'live' || !isRoundActive) return null;
     try {
@@ -588,7 +602,9 @@ export default function CaddieTab() {
     // from a cache the Mark handler writes; without it, the data-strip
     // middle yardage was stale until next hole change (Phase BG fix).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yardageMode, isRoundActive, currentHole, markTick]);
+    // Same reason as the resolver memo below: a finished geometry build is new information for the
+    // LIVE tier too — it is the tier that needs the green coordinate.
+  }, [yardageMode, isRoundActive, currentHole, markTick, geometryCompletions]);
 
   // 2026-05-25 — Fix L: route the displayed yardage through the unified
   // resolver so userStatedYardage (Tier 3 voice anchor) AND static-card
@@ -608,7 +624,9 @@ export default function CaddieTab() {
       return resolveYardage(currentHole);
     } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick, userStatedYardage]);
+    // geometryCompletions: re-resolve when a course map finishes building. Without it this memo
+    // holds the static-card answer for the rest of the round even after the greens arrive.
+  }, [isRoundActive, currentHole, markTick, userStatedYardage, geometryCompletions]);
 
   const displayYardage = resolvedYardage?.value ?? liveYardage ?? currentYardage;
 
@@ -631,7 +649,10 @@ export default function CaddieTab() {
     } catch { return null; }
     // markTick listed as a re-render signal — same rationale as liveYardage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick]);
+    // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
+    // pass added this to the two yardage memos only; the guard below caught the other three. Same
+    // defect, five places.
+  }, [isRoundActive, currentHole, markTick, geometryCompletions]);
 
   // 2026-06-25 — Wire REAL elevation into the caddie HUD's plays-like. Player =
   // live GPS fix; target = the current hole's green (resolveGreenCoords). The
@@ -648,7 +669,10 @@ export default function CaddieTab() {
       return fix ? { lat: fix.location.lat, lng: fix.location.lng } : null;
     } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick]);
+    // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
+    // pass added this to the two yardage memos only; the guard below caught the other three. Same
+    // defect, five places.
+  }, [isRoundActive, currentHole, markTick, geometryCompletions]);
   const elevGreenCoord = useMemo(() => {
     if (!isRoundActive) return null;
     try {
@@ -659,7 +683,10 @@ export default function CaddieTab() {
       return mid ? { lat: mid.lat, lng: mid.lng } : null;
     } catch { return null; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRoundActive, currentHole, markTick]);
+    // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
+    // pass added this to the two yardage memos only; the guard below caught the other three. Same
+    // defect, five places.
+  }, [isRoundActive, currentHole, markTick, geometryCompletions]);
   const caddieElevation = useElevationDeltaStatus(elevPlayerCoord, elevGreenCoord);
 
   const playsLikeYardage = useMemo(() => {
@@ -3618,7 +3645,7 @@ export default function CaddieTab() {
              showing a bare STATIC that reads as "this is as good as it gets". */
           yardageSource={displayYardage == null ? null
             : liveYardage != null ? 'live'
-            : isGeometryBuilding(useRoundStore.getState().activeCourseId) ? 'building'
+            : geometryBuilding[useRoundStore.getState().activeCourseId ?? ''] ? 'building'
             : 'static'}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in

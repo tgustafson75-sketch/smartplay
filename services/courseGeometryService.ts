@@ -372,6 +372,16 @@ export function isGeometryBuilding(courseId: string | null | undefined): boolean
   return !!courseId && inflight.has(courseId);
 }
 
+/**
+ * Lazy accessor — the store is imported through a require so this service stays usable from non-React
+ * contexts and avoids a module cycle (the store must not pull the geometry service back in).
+ */
+function geometryStatus() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('../store/geometryStatusStore') as typeof import('../store/geometryStatusStore'))
+    .useGeometryStatusStore.getState();
+}
+
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
   const c = memCache.get(courseId) ?? buildBundledGeometry(courseId);
   const direct = c?.holes.find(h => h.hole_number === holeNumber);
@@ -697,6 +707,7 @@ export async function purgeCourseGeometry(courseId?: string): Promise<void> {
     if (courseId) {
       memCache.delete(courseId);
       inflight.delete(courseId);
+      geometryStatus().markDone(courseId);
       await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
       console.log('[courseGeometry] purged', courseId);
       return;
@@ -725,8 +736,15 @@ export async function fetchCourseGeometry(
    */
   const pending = inflight.get(courseId);
   if (pending) return pending;
-  const run = fetchCourseGeometryInner(courseId, options).finally(() => { inflight.delete(courseId); });
+  // 2026-08-13 — `inflight` still owns dedupe; it now also PUBLISHES so the UI can see the build.
+  // Deleting from a module-level Map told nobody, which is why a finished build never lifted the
+  // STATIC badge or re-ran the yardage resolver. See store/geometryStatusStore.ts.
+  const run = fetchCourseGeometryInner(courseId, options).finally(() => {
+    inflight.delete(courseId);
+    geometryStatus().markDone(courseId);
+  });
   inflight.set(courseId, run);
+  geometryStatus().markBuilding(courseId);
   return run;
 }
 
