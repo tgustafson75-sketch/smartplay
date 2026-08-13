@@ -37,6 +37,7 @@ interface GeometryStatusState {
   completions: number;
   markBuilding: (courseId: string) => void;
   markDone: (courseId: string) => void;
+  markCommitted: (courseId: string) => void;
 }
 
 export const useGeometryStatusStore = create<GeometryStatusState>()((set, get) => ({
@@ -59,6 +60,28 @@ export const useGeometryStatusStore = create<GeometryStatusState>()((set, get) =
       delete next[courseId];
       return { building: next, completions: s.completions + 1 };
     });
+  },
+
+  /**
+   * 2026-08-13, second pass — NEW GEOMETRY LANDED, independent of any build lifecycle.
+   *
+   * The original store wired the *build* (markBuilding/markDone) and missed the path that actually
+   * runs most often. `fetchCourseGeometry` is stale-while-revalidate: a persisted entry older than a
+   * week is returned IMMEDIATELY and the real refresh is fired detached (`void
+   * refreshGeometryInBackground`). So the outer promise settles — and markDone fires — carrying the
+   * STALE geometry. Seconds later the refresh calls commitGeometry with the fresh greens and, before
+   * this, told nobody. Same defect as the one this store was created to fix, one layer down, and on
+   * the path a RETURNING player takes every time: any course last seen more than 7 days ago.
+   *
+   * markDone couldn't be reused here — it clears `building`, and a background refresh is not the
+   * in-flight build. Firing it would lift the BUILDING badge while a real build was still running.
+   * This bumps `completions` only: re-derive everything geometry-shaped, touch no build state.
+   *
+   * Called from commitGeometry — the single point where new geometry enters the cache — so every
+   * writer notifies by construction rather than by remembering to.
+   */
+  markCommitted: () => {
+    set((s) => ({ completions: s.completions + 1 }));
   },
 }));
 

@@ -555,6 +555,21 @@ async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<Co
   }
   memCache.set(courseId, geo);
   await writePersistedCache(geo);
+  /**
+   * 2026-08-13, second pass — publish HERE, not at the build boundary.
+   *
+   * The build boundary (fetchCourseGeometry's .finally) misses the stale-while-revalidate path
+   * entirely: that returns the week-old entry immediately and refreshes detached, so markDone fired
+   * for the STALE answer and the fresh greens landed silently. Every geometry-derived memo in the
+   * app kept the stale yardage for the rest of the round.
+   *
+   * commitGeometry is the one place new geometry enters the cache, so notifying here covers the
+   * background refresh, the forward fetch, and anything written later — by construction.
+   *
+   * Deliberately NOT on the early-return above: that path keeps the better in-memory copy, so what
+   * readers can see did not change and a bump would be a render for nothing.
+   */
+  geometryStatus().markCommitted(courseId);
   return geo;
 }
 
@@ -1055,6 +1070,12 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
           bundled.course_id = courseId;
           memCache.set(courseId, bundled);
           await writePersistedCache(bundled);
+          // Deliberately NOT routed through commitGeometry: that keeps whichever copy has more mapped
+          // holes, and scrambled OSM synthesis can carry MORE holes than the correct bundled data —
+          // which is the exact regression the DISCO-F2 note above exists to prevent. Bundled must win
+          // here. So publish directly: this is the detached path, nothing downstream awaits it, and a
+          // silent write here is the same defect as the one below.
+          geometryStatus().markCommitted(courseId);
           return;
         }
         upstreamId = '__osm_only__';
