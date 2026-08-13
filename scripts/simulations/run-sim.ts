@@ -8199,17 +8199,31 @@ check('Club trace renders without per-frame dims: video-size aligned fallback + 
 // plane delta from the REAL clubhead arc, DTL-only, self-referential (viewpoint-robust). STAGED +
 // unit-tested (geometry directionally locked); the angle threshold/sign is PROVISIONAL pending a real
 // DTL over-the-top clip. Wires into the verdict tomorrow after that calibration.
-check('Club-path read: DTL-gated plane geometry exists + is provisional (staged for calibration)',
+// 2026-08-13 (audit — S1) — this was "staged for calibration" on 08-10 and still had ZERO production
+// consumers three days later, while over-the-top was being called from SHOULDER TILT, a body proxy.
+// Staged is a legitimate state; staged-and-forgotten is how a finished measurement rots. The read is
+// now CONSUMED, hedged while provisional, and the lock asserts the wire rather than memorialising the
+// gap — a check that only says "it exists" lets it quietly go unused again.
+check('Club-path read: DTL-gated plane geometry, provisional-honest, and actually WIRED',
   (() => {
     const cpr = read('services/swing/clubPathRead.ts');
-    return (
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    const built = (
       /export function readClubPath/.test(cpr) &&
       /if \(angle !== 'down_the_line'\) return EMPTY/.test(cpr) &&      // face-on refused, not fabricated
       /classification = 'over_the_top'/.test(cpr) && /classification = 'shallow'/.test(cpr) &&
       /provisional: true/.test(cpr)
     );
+    // Consumed, and fed the SELF-CORRECTED angle from the biomech read — not the user's toggle, which
+    // they can get wrong in daylight and would otherwise silently suppress the whole measurement.
+    const wired = (
+      /import \{ readClubPath \} from '\.\.\/\.\.\/\.\.\/services\/swing\/clubPathRead';/.test(detail) &&
+      /readClubPath\(clubArcPoints, activeBiomech\?\.angle \?\? null\)/.test(detail) &&
+      /clubPlane\.classification && clubPlane\.planeDeltaDeg != null/.test(detail)
+    );
+    return built && wired;
   })(),
-  'the club-path plane read is built + DTL-gated + honest (null when unmeasurable), staged for real-clip calibration before it becomes a headline fault');
+  'the club-plane read is built, DTL-gated, honest when unmeasurable — and consumed on the swing detail with the angle-corrected read');
 
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain

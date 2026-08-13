@@ -37,6 +37,7 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
 import { detectClubPath } from '../../../services/swing/clubPath';
+import { readClubPath } from '../../../services/swing/clubPathRead';
 // 2026-06-23 — Fix: the swing-detail DrillCard showed the "appear once analysis
 // is available" placeholder even when analysis SUCCEEDED with a detected fault,
 // because it read only the separately-stored session.drill_recommendation (null
@@ -551,6 +552,23 @@ export default function SwingDetail() {
   // the overlay, so the library shows the true clubhead path (falls back to the
   // honest wrist trace when the head can't be seen). One server pass per swing.
   const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
+  /**
+   * 2026-08-13 (audit — S1) — the club-plane read, derived here rather than persisted.
+   *
+   * Both inputs already exist on this screen: the clubhead arc above (stored with the session or
+   * live-extracted) and the camera angle from the biomech read. That angle matters — readClubPath
+   * refuses anything that isn't down-the-line, and computeBiomechanics already CROSS-CHECKS the
+   * user's angle toggle against the pose geometry and self-corrects a confident disagreement. So a
+   * player who filmed DTL with the toggle left on face-on still gets this read; the toggle can't
+   * silently cost them the measurement.
+   *
+   * Pure and cheap, so there is nothing to persist and nothing to keep in sync — it recomputes from
+   * whatever arc is on screen.
+   */
+  const clubPlane = useMemo(
+    () => readClubPath(clubArcPoints, activeBiomech?.angle ?? null),
+    [clubArcPoints, activeBiomech?.angle],
+  );
   // 2026-08-10 (Tim — "haven't seen the club trace in a week"). ROOT: the swing-arc overlay only draws
   // the clubhead trace in ALIGNED frame space (viewBox = the real frame dims); when the pose frames
   // don't carry frameW/frameH the skeleton falls back to a self-fit bbox but the club (full-frame
@@ -3315,6 +3333,29 @@ export default function SwingDetail() {
                   )}
                   {activeBiomech.verdicts.sequencing && (
                     <Text style={[styles.biomechRow, { color: colors.text_primary }]}>• {activeBiomech.verdicts.sequencing}</Text>
+                  )}
+                  {/*
+                    2026-08-13 (audit — S1). The club-plane read was built, unit-tested and then never
+                    connected to anything: over-the-top was being called from SHOULDER TILT, a body
+                    proxy, while the real measurement sat unused. Every input it needs was already
+                    here — the clubhead arc (stored or live-extracted above) and the camera angle that
+                    computeBiomechanics already SELF-CORRECTS from the pose geometry, so a wrong angle
+                    toggle can't suppress it.
+
+                    Shown as a measurement with its delta, hedged while `provisional` — the threshold
+                    still wants a known over-the-top DTL clip to calibrate. That is the honest register
+                    for this: a medium-confidence read from the club itself beats a confident one from
+                    the shoulders, and refusing to show it at all was the worst of the three.
+                  */}
+                  {clubPlane.classification && clubPlane.planeDeltaDeg != null && (
+                    <Text style={[styles.biomechRow, { color: colors.text_primary }]}>
+                      • Club plane: {clubPlane.classification === 'over_the_top'
+                        ? `steeper coming down (+${clubPlane.planeDeltaDeg}°)`
+                        : clubPlane.classification === 'shallow'
+                          ? `shallower coming down (${clubPlane.planeDeltaDeg}°)`
+                          : `on plane (${clubPlane.planeDeltaDeg >= 0 ? '+' : ''}${clubPlane.planeDeltaDeg}°)`}
+                      {clubPlane.provisional ? ' — measured from your clubhead arc, still being calibrated' : ''}
+                    </Text>
                   )}
                 </View>
               )}
