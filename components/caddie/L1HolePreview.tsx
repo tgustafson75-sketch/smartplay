@@ -19,6 +19,7 @@ import { HoleBrandBadge } from './HoleBrandBadge';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 import { getHoleImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
+import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -176,6 +177,9 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return () => { cancelled = true; };
   }, [isRoundActive, previewCourseId_resolved]);
 
+  // 2026-08-13 — subscribe so a finished geometry build re-runs the effect below.
+  const geometryCompletions = useGeometryStatusStore((st) => st.completions);
+
   useEffect(() => {
     let cancelled = false;
     if (!activeCourseId) { setGeometry(null); return; }
@@ -188,7 +192,12 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       setGeometry(getHoleGeometry(activeCourseId, currentHole));
     });
     return () => { cancelled = true; };
-  }, [activeCourseId, currentHole]);
+    // 2026-08-13 — re-read when a course map finishes building. Geometry lands ASYNCHRONOUSLY and,
+    // until now, nothing told this screen it had arrived (see store/geometryStatusStore.ts). This
+    // effect re-fetches on its own so it may already self-heal, but depending on the completion
+    // signal makes it certain rather than incidental — the same gap left the caddie tab showing a
+    // STATIC yardage for Tim's entire round.
+  }, [activeCourseId, currentHole, geometryCompletions]);
 
   /**
    * 2026-08-10 (Tim, playing Connecticut National — "back at the main caddy tab, I still get green

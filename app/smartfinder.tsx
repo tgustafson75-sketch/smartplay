@@ -58,6 +58,7 @@ import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../utils/playsLike';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
+import { useGeometryStatusStore } from '../store/geometryStatusStore';
 import type { WeatherSnapshot } from '../services/weatherService';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
@@ -152,6 +153,9 @@ export default function SmartFinder() {
     return () => { cancelled = true; clearTimeout(firstTickTimer); clearInterval(id); };
   }, [currentHole]);
 
+  // 2026-08-13 — subscribe so a finished geometry build re-runs the effect below.
+  const geometryCompletions = useGeometryStatusStore((st) => st.completions);
+
   useEffect(() => {
     let cancelled = false;
     if (!geoCourseId) {
@@ -172,7 +176,12 @@ export default function SmartFinder() {
       console.log('[smartfinder] geometry fetch failed (non-fatal)', err);
     });
     return () => { cancelled = true; };
-  }, [geoCourseId, currentHole]);
+    // 2026-08-13 — re-read when a course map finishes building. Geometry lands ASYNCHRONOUSLY and,
+    // until now, nothing told this screen it had arrived (see store/geometryStatusStore.ts). This
+    // effect re-fetches on its own so it may already self-heal, but depending on the completion
+    // signal makes it certain rather than incidental — the same gap left the caddie tab showing a
+    // STATIC yardage for Tim's entire round.
+  }, [geoCourseId, currentHole, geometryCompletions]);
 
   const playedHoles = useMemo(() => courseHoles.map(h => h.hole).sort((a, b) => a - b), [courseHoles]);
   const idx = playedHoles.indexOf(currentHole);
