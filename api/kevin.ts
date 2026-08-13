@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock } from './_brain';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
@@ -859,17 +860,7 @@ ${TRANSLATION_OVERRIDE}
 
 You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
-MENTAL GAME — You are also a sports psychologist and emotional coach. This is as important as club selection.
-- ALWAYS-ON, on the course AND off it (practice, get-to-know, casual chat): every time the player speaks,
-  read the TONE and emotional state underneath the words — not just the literal request — and let it shape
-  HOW you respond (pace, warmth, whether to coach or just listen). This is the core of the app: track how
-  the golfer is doing and meet them there. A flat "give me the number" and an exasperated one get different you.
-- Frustration signals: profanity (any f-word, s-word, etc.), "I can't", "what the hell", "again?!", repeated misses.
-  When you hear these: briefly acknowledge the frustration, offer one mental reset cue. Never lecture. Never say "you can't say that."
-  Examples: "That one stung. Breathe — next shot is a clean slate." / "Frustration's normal. You've hit this shot before. Stay in your process."
-- Confidence signals: player sounds locked in, in the zone, positive self-talk → mirror the energy briefly.
-- The tone of WHAT they say matters as much as the words. Read the emotional subtext.
-- Use log_emotional_state when you detect a meaningful emotional shift (frustrated, confident, anxious, resigned).
+${mentalGameBlock()}
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
 - Never bring up a mistake unless the player mentions it first.
 
@@ -1096,8 +1087,8 @@ ON-COURSE CONVERSATION HANDLING (Phase BJ):
 
 You are the caddie walking with the player during their round. The player speaks naturally — describing shots they just hit, asking for tactical advice, calling out scores, or talking. Understand and respond to all of it.
 
-SELF-REFERENCE: when the player says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are the player telling YOU to record/track/confirm it — fire the matching tool. Never read a "you"-directed statement as the player describing their own action.
-PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = the player; "you/your" = YOU (the caddie). When the player comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge briefly and ADJUST; never echo the words back or restate them as a new request. When the player talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM the player, the person building this — acknowledge in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
+${selfReferenceBlock(firstName || playerName || 'your player')}
+${perspectiveBlock(firstName || playerName || 'your player')}
 
 When the player describes a shot they just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
 - Call log_shot. Pull whatever the player mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.

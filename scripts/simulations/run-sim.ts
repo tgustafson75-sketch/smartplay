@@ -1399,13 +1399,34 @@ check('Custom caddie inherits the base persona\'s BRAIN character (not hardcoded
   })(),
   'the custom caddie\'s brain personality is the CHOSEN base persona (Tank/Serena/Harry/Kevin), not always Kevin — name stays custom, character is inherited');
 
-check('Mental-game tone reading is explicitly ALWAYS-ON (on and off round)',
+check('Mental-game tone reading is ALWAYS-ON, from ONE owner both brains import',
   // 2026-07-30 (Tim — "make sure the caddie when listening processes the tone and emotions of the golfer…
-  // original intent, track user state and help the mental game"). The MENTAL GAME block already reads
-  // emotional subtext + logs state; now it's explicitly always-on, including off-round conversation.
-  /ALWAYS-ON, on the course AND off it/.test(read('api/pipecat-turn.ts')) &&
-    /read the TONE and emotional state underneath the words/.test(read('api/pipecat-turn.ts')),
-  'the caddie reads the golfer\'s tone/emotional state on EVERY turn — course, practice, get-to-know, casual — and lets it shape the response, per the app\'s core mental-game intent');
+  // original intent, track user state and help the mental game"). The MENTAL GAME block reads emotional
+  // subtext + logs state, always-on, including off-round conversation.
+  //
+  // 2026-08-13 (one-brain pass) — this check used to read pipecat-turn.ts for the literal text, and it
+  // passed the whole time the block was DUPLICATED into kevin.ts: the earlier "move" copied it and
+  // deleted nothing, so the two were free to drift and the guard couldn't see it. Measured before the
+  // fix, they were byte-identical at 1,248 chars — pure duplication waiting to diverge.
+  //
+  // Now the block has one owner (api/_brain.ts) and both transports import it, so the guard asserts the
+  // SHAPE — the text exists once, and neither brain restates it — rather than the presence of a string
+  // in one file.
+  (() => {
+    const core = read('api/_brain.ts');
+    const kevin = read('api/kevin.ts');
+    const pipecat = read('api/pipecat-turn.ts');
+    const owned = /export function mentalGameBlock\(\)/.test(core) &&
+      /ALWAYS-ON, on the course AND off it/.test(core) &&
+      /read the TONE and emotional state underneath the words/.test(core);
+    const bothImport = /from '\.\/_brain'/.test(kevin) && /from '\.\/_brain'/.test(pipecat) &&
+      /\$\{mentalGameBlock\(\)\}/.test(kevin) && /\$\{mentalGameBlock\(\)\}/.test(pipecat);
+    // and neither may restate it inline again — restating is how the duplicate got there the first time
+    const noInlineCopy = !/ALWAYS-ON, on the course AND off it/.test(kevin) &&
+      !/ALWAYS-ON, on the course AND off it/.test(pipecat);
+    return owned && bothImport && noInlineCopy;
+  })(),
+  'the caddie reads the golfer\'s tone/emotional state on EVERY turn — from one shared block both brains import, with no inline copy in either');
 
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',

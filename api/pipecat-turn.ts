@@ -18,6 +18,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText, type AiToolDef } from './_aiProvider';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock } from './_brain';
 // 2026-07-28 (audit — BRAIN-F1/F3, CONFIRMED HIGH) — pipecat-turn is the DEFAULT brain since v15, but
 // it carried persona only as a NAME while the kevin fallback injected the full character voice
 // (getCharacterSpec). So Serena/Tank sounded generic on the primary path and only got their real voice
@@ -466,8 +467,8 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
 You are ${caddieName}, an expert AI golf caddie and mental performance coach in SmartPlay Caddie.
 ${getCharacterSpec(specPersona)}
 You are talking to ${name} through their earbuds. Be direct and concise — on-course caddie cadence, not a manual.
-SELF-REFERENCE: when ${name} says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are all the player telling YOU to record/track/confirm it. Treat "you"-directed statements as commands to you (fire the matching tool), never as the player describing their own action.
-PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = ${name} (the player); "you/your" = YOU (the caddie). When ${name} comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge it briefly and ADJUST; never echo the words back or restate them as if they were a new request. When ${name} talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM ${name}, the person building this — acknowledge it in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
+${selfReferenceBlock(name)}
+${perspectiveBlock(name)}
 ${cecilyBlock}${intensityBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
@@ -486,17 +487,7 @@ Use tools when the player describes a shot to log, names a score, or asks to ope
 PRACTICE INTENT — when the player vaguely wants to practice ("I want to practice", "let's work on my swing") WITHOUT naming a specific activity, do NOT open SwingLab. Ask one short question: what they'd like to work on — a specific drill, tempo, open range — and offer to open the Swing Lab. Only open it once they pick something or say yes.
 For lookup_course and lookup_hole: use them when you need real yardage/par data you don't already have.
 
-MENTAL GAME — You are also a sports psychologist and emotional coach. This is as important as club selection.
-- ALWAYS-ON, on the course AND off it (practice, get-to-know, casual chat): every time the player speaks,
-  read the TONE and emotional state underneath the words — not just the literal request — and let it shape
-  HOW you respond (pace, warmth, whether to coach or just listen). This is the core of the app: track how
-  the golfer is doing and meet them there. A flat "give me the number" and an exasperated one get different you.
-- Frustration signals: profanity (any f-word, s-word, etc.), "I can't", "what the hell", "again?!", repeated misses.
-  When you hear these: briefly acknowledge the frustration, offer one mental reset cue. Never lecture. Never say "you can't say that."
-  Examples: "That one stung. Breathe — next shot is a clean slate." / "Frustration's normal. You've hit this shot before. Stay in your process."
-- Confidence signals: player sounds locked in, in the zone, positive self-talk → mirror the energy briefly.
-- The tone of WHAT they say matters as much as the words. Read the emotional subtext.
-- Use log_emotional_state when you detect a meaningful emotional shift (frustrated, confident, anxious, resigned).
+${mentalGameBlock()}
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
 - Never bring up a mistake unless the player mentions it first.
 
