@@ -75,11 +75,27 @@ export interface BallFitInput {
  *   tour     : 275y+         (compresses a tour ball fully)
  */
 export type SpeedTier = 'slow' | 'moderate' | 'fast' | 'tour';
+
+/**
+ * The carry boundaries themselves, exported so the CNS Ball Fit screen shares them.
+ *
+ * 2026-08-13 (audit) — these two engines answer the same question on two screens and disagreed about
+ * where "slow" ends: this file used 210, services/cnsBallFitting.ts used 215. A player carrying his
+ * driver 212 was told "moderate" in the SwingLab Fit Profile and "a low-compression ball loads easier
+ * at your speed" on the caddie Ball Fit screen — from the same number, in one of the most common
+ * amateur bands. They already agreed at 250; only the low edge drifted.
+ *
+ * The two READS stay separate on purpose (this one is generic-category and stricter; the CNS one names
+ * representative balls). Only the thresholds are shared, because the boundary is a fact about golf, not
+ * a presentation choice.
+ */
+export const SPEED_BAND_CARRY_YDS = { slow: 210, fast: 250, tour: 275 } as const;
+
 export function speedTierFromCarry(carry: number | null | undefined): SpeedTier | null {
   if (typeof carry !== 'number' || !Number.isFinite(carry) || carry <= 0) return null;
-  if (carry < 210) return 'slow';
-  if (carry < 250) return 'moderate';
-  if (carry < 275) return 'fast';
+  if (carry < SPEED_BAND_CARRY_YDS.slow) return 'slow';
+  if (carry < SPEED_BAND_CARRY_YDS.fast) return 'moderate';
+  if (carry < SPEED_BAND_CARRY_YDS.tour) return 'fast';
   return 'tour';
 }
 

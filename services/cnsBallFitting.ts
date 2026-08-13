@@ -19,6 +19,10 @@
  * fit" caveat. See memory: caddie-brain-lens, self-growing-agent-architecture.
  */
 
+// Type-only surface aside, the ONE thing shared with the SwingLab read: the carry boundaries. Keeping
+// this module otherwise pure/sync/offline-safe as documented above.
+import { SPEED_BAND_CARRY_YDS } from './ballFitting';
+
 export type BallProfile = 'tour' | 'distance' | 'soft-feel' | 'value';
 
 export interface BallFit {
@@ -100,9 +104,13 @@ export function composeBallFit(input: BallFitInput): BallFit {
   // 1) Speed band from driver carry.
   if (carry != null) {
     signals++;
-    if (carry >= 250) {
+    // 2026-08-13 (audit) — boundaries imported, not restated. This screen used 215 for the low edge
+    // while the SwingLab Fit Profile used 210, so a 212-yard driver carry got "moderate" on one screen
+    // and "you need a low-compression ball" on the other. The two READS stay different by design; the
+    // band boundary is a fact about golf, so it has one owner. See services/ballFitting.ts.
+    if (carry >= SPEED_BAND_CARRY_YDS.fast) {
       score.tour += 2; why.tour!.push(`your driver carries ~${Math.round(carry)} — enough speed to compress a tour ball`);
-    } else if (carry >= 215) {
+    } else if (carry >= SPEED_BAND_CARRY_YDS.slow) {
       score.tour += 1; score['soft-feel'] += 1;
     } else {
       // Slower speed compresses a soft, low-compression ball better than a firm tour ball.

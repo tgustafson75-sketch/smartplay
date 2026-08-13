@@ -8275,6 +8275,27 @@ check('LOCK: a timed-out course build is re-asked, BOUNDED, and only when nothin
   })(),
   'a timeout schedules a bounded re-ask through the deduped entry point, only when there is no bundled/persisted copy to show');
 
+// 2026-08-13 (audit) — two ball-fit engines answer the same question on two screens, and they
+// disagreed about where "slow" ends: ballFitting used 210, cnsBallFitting used 215. A 212-yard driver
+// carry read "moderate" in the SwingLab Fit Profile and "a low-compression ball loads easier at your
+// speed" on the caddie Ball Fit screen — same number, one of the most common amateur bands. The two
+// READS stay separate by design (generic categories vs representative balls); the boundary is a fact
+// about golf, so it gets one owner.
+check('LOCK: both ball-fit reads share ONE set of speed-band boundaries',
+  (() => {
+    const bf = read('services/ballFitting.ts');
+    const cns = read('services/cnsBallFitting.ts');
+    const owner = /export const SPEED_BAND_CARRY_YDS = \{ slow: 210, fast: 250, tour: 275 \} as const;/.test(bf) &&
+      /if \(carry < SPEED_BAND_CARRY_YDS\.slow\) return 'slow';/.test(bf);
+    const shares = /import \{ SPEED_BAND_CARRY_YDS \} from '\.\/ballFitting';/.test(cns) &&
+      /carry >= SPEED_BAND_CARRY_YDS\.fast/.test(cns) &&
+      /carry >= SPEED_BAND_CARRY_YDS\.slow/.test(cns);
+    // and the old inlined edge must not creep back into the CNS read
+    const noRelapse = !/carry >= 215/.test(cns) && !/carry >= 250/.test(cns);
+    return owner && shares && noRelapse;
+  })(),
+  'one owner for the carry speed bands; the CNS ball fit imports them instead of inlining its own edge');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
