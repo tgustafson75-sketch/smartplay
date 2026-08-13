@@ -455,7 +455,7 @@ export function tryLocalReply(
   if (!round.isRoundActive) {
     // Off-course — no round state to query. Brain handles practice /
     // hypothetical chatter via the on-course/off-course dialogue mode
-    // we wired earlier (api/kevin.ts + api/brain.ts).
+    // we wired earlier (api/kevin.ts + api/pipecat-turn.ts).
     return null;
   }
 

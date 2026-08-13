@@ -12,7 +12,7 @@
  *   - data/landmarks/<course>.json — per-hole landmarks (currently
  *     Palms only; expandable by dropping a new JSON in)
  *
- * Consumers: api/kevin.ts + api/brain.ts inject the resolved text
+ * Consumers: api/kevin.ts + api/pipecat-turn.ts inject the resolved text
  * into the system prompt. ON-COURSE always for the current hole.
  * OFF-COURSE when the most-recent user message mentions a known
  * course (substring match against course id / name) AND optionally
