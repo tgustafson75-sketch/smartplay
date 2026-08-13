@@ -49,10 +49,20 @@ const ISSUE_TO_DRILL: Record<CanonicalIssue, { drill_id: string; drill_name: str
     drill_name: 'Pump Drill',
     reason: "Pump Drill is the move here — it'll fix the sequencing that's causing the early extension. Lower body leads, hips rotate around the spine, butt stays back.",
   },
+  /**
+   * 2026-08-13 — was the Pump Drill, same as early_extension: one drill answering the two most common
+   * amateur faults, which is why it was the only drill Tim ever saw.
+   *
+   * Step-and-swing trains the same transition — lower body leads, club drops instead of being thrown —
+   * but it ENDS IN A FINISH by construction. That matters here specifically: his reported limitation
+   * with the pump drill was not finishing the swing, and not being certain how to perform it. The pump
+   * drill is still listed on the fault's catalog page as an alternative; it is no longer the only
+   * thing offered.
+   */
   over_the_top: {
-    drill_id: 'pump',
-    drill_name: 'Pump Drill',
-    reason: "Pump Drill — feel the hands lead the clubhead on the way down. Twenty pumps, then a ball. The over-the-top fades quickly when the sequence is right.",
+    drill_id: 'step',
+    drill_name: 'Step-and-Swing',
+    reason: "Step-and-Swing — feet together, step toward the target to start down, and swing all the way through to a finish over your lead leg. The step forces the lower body to lead, which is the thing that's throwing the club over the top.",
   },
   chicken_wing: {
     drill_id: 'one-handed',

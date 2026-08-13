@@ -124,8 +124,14 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     ],
     missPattern: 'Pull, pull-slice, or steep-and-fat contact',
     drills: [
+      // 2026-08-13 (Tim, from his own practice — "the step and swing drill has helped me better than
+      // the pump drill I'm always getting suggested"). Listed FIRST because it is the one that carries
+      // a FINISH: his stated limitation with pump-and-pause was not finishing the swing, and not being
+      // sure exactly how to perform it. This drill ends over the lead leg by construction, so the
+      // sequencing fix and the finish are the same motion.
+      { name: 'Step-and-swing',   steps: 'Start with your feet together (or trail foot back). As you start down, STEP toward the target with your lead foot, then swing all the way through to a full finish over that lead leg, trail heel up. Half swings first, then keep the feel with a normal stance.' },
       { name: 'Headcover gate',   steps: 'Place a headcover just outside your trail foot. Swing without hitting it — forces the club to drop inside on the way down.' },
-      { name: 'Pump-and-pause',   steps: 'Take a half backswing, pause, then "pump" three times feeling the club shallow before any rotation. Then swing for real.' },
+      { name: 'Pump-and-pause',   steps: 'Take a half backswing, pause, then "pump" three times feeling the club shallow before any rotation. On the fourth, swing through to a full finish.' },
       { name: 'Trail-elbow tuck', steps: 'Tuck a glove or alignment stick under your trail armpit. Make slow swings keeping it pinned through transition.' },
     ],
     videoCategory: 'swing_path',
@@ -217,6 +223,9 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
     drills: [
       { name: 'Wall drill',       steps: 'Stand with your butt touching a wall. Make swings keeping butt on the wall through impact. Most players will feel this in the trail glute.' },
       { name: 'Chair behind you', steps: 'Place a chair right behind your butt at address. Swing without pushing into the chair — forces hip depth.' },
+      // Early extension is a sequencing failure as much as a posture one — the same step drill that
+      // fixes the transition also stops the stall that pushes the hips toward the ball.
+      { name: 'Step-and-swing',   steps: 'Feet together, then STEP toward the target to start the downswing and swing through to a full finish over the lead leg. Forces the lower body to lead instead of the hips thrusting in.' },
     ],
     videoCategory: 'posture',
     cardImage: CARD_POSTURE,

@@ -87,6 +87,11 @@ const PICKER_DRILLS: CageDrillContext[] = [
   { id: 'impact',      title: 'Impact Position', steps: ['Set impact bag.', 'Slow swing to impact.', 'Check hands ahead, weight forward.', 'Hold position 5 sec.'], tip: 'Shaft lean = distance.' },
   { id: 'gate',        title: 'Gate Drill',      steps: ['Place tees 1" wider than clubhead.', 'Swing through without hitting either tee.', 'Adjust path until clean.'], tip: 'Path doesn\'t lie.' },
   { id: 'pump',        title: 'Pump Drill',      steps: ['Take club to top.', 'Pump down to hip height 3x.', '4th pump finishes through.'], tip: 'Hands lead clubhead.' },
+  // 2026-08-13 (Tim) — the step drill existed as coaching knowledge (drill.step-through) and was
+  // already associated with over-the-top, but was in nothing that could RECOMMEND or run it. It is
+  // the transition drill that ends in a full finish by construction, which is exactly what he said
+  // the pump drill never taught him.
+  { id: 'step',        title: 'Step-and-Swing',  steps: ['Feet together, or trail foot back.', 'Step toward the target to start down.', 'Swing through to a full finish over the lead leg.', 'Then keep the feel with a normal stance.'], tip: 'Lower body leads; finish over the front foot.' },
   { id: 'one-handed',  title: 'One-Handed Swings', steps: ['Trail hand: 10 slow swings.', 'Lead hand: 10 slow swings.', 'Both hands: feel the balance.'], tip: 'Reveals dominant hand.' },
 ];
 
