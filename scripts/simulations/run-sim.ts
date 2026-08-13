@@ -8367,11 +8367,20 @@ check('LOCK: Play-tab thumbnails resolve through the single courseThumb() helper
     const s = read('app/(tabs)/play.tsx');
     // the resolver exists and refuses unverifiable coords (no 0,0 ocean tiles)
     const resolver = /const courseThumb = \(/.test(s) && /isValidGolfCoord\(c\.lat, c\.lng\)/.test(s);
-    // every surface goes through it: hero, nearby-local rows, GPS-located rows, search rows, selected card
-    const uses = (s.match(/courseThumb\(/g) ?? []).length;
+    // 2026-08-13 — the surfaces now call `thumbFor`, a component-level callback that wraps
+    // courseThumb and is keyed on the geometry store's `completions`. courseThumb reads the geometry
+    // cache during RENDER (it's the only thumbnail source a searched course has, since those records
+    // carry no coords), so without that key nothing re-rendered when geometry landed and the rows
+    // held the placeholder. Count the resolver the surfaces actually call — the lock is "one
+    // resolver, every surface", not the identifier's spelling.
+    const uses = (s.match(/thumbFor\(/g) ?? []).length;
+    const oneResolver = /const thumbFor = useCallback\(/.test(s) && /=> courseThumb\(c\)/.test(s);
+    // and it must stay subscribed: an unkeyed wrapper silently reopens the stale-thumbnail hole
+    const subscribed = /useGeometryStatusStore\(st => st\.completions\)/.test(s) &&
+      /\[geometryCompletions\],/.test(s);
     // and no surface renders a raw `.thumbnail` behind the resolver's back
     const noRawThumb = !/\{c\.thumbnail \? \(/.test(s) && !/source=\{c\.thumbnail as/.test(s);
-    return resolver && uses >= 8 && noRawThumb;
+    return resolver && oneResolver && subscribed && uses >= 8 && noRawThumb;
   })(),
   'courseThumb() is the only thumbnail path, coord-guarded, used at every Play-tab surface');
 
@@ -8838,9 +8847,15 @@ check('LOCK: geometry fetch outlives a slow server, and a raw course id is never
     const timeouts = (g.match(/AbortSignal\.timeout\(30_000\)/g) ?? []).length >= 2 &&
       !/AbortSignal\.timeout\(12_000\)/.test(g);
     // a machine id is never a name — and pipeline labels aren't either
-    const svName = /const derivedCourseLabel = \(\(\) => \{/.test(sv) &&
+    // 2026-08-13 — was an IIFE, now a useMemo keyed on the geometry store's `completions`. The name
+    // it resolves comes FROM the geometry build (`course_name`), so resolving it once during render
+    // meant the pre-round path asked before the build landed, got '', and never re-derived. Accept
+    // either form for the declaration, and require the key — the empty label was the same defect
+    // class as the raw id, just failing quietly instead of loudly.
+    const svName = /const derivedCourseLabel = (\(\(\) => \{|useMemo\()/.test(sv) &&
       /return ''; \/\/ never the raw id/.test(sv) &&
-      /name !== 'Course Cloud'/.test(sv);
+      /name !== 'Course Cloud'/.test(sv) &&
+      /\}, \[effectiveCourseId, geometryCompletions\]\);/.test(sv);
     const prevName = /getCachedGeometry\(previewCourseId_resolved\)/.test(prev) &&
       !/if \(previewCourseId_resolved\) return previewCourseId_resolved;/.test(prev);
     return timeouts && svName && prevName;
