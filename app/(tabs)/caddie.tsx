@@ -29,6 +29,7 @@ import { clearScreenContext, getScreenContext } from '../../services/screenConte
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useKeepAwake } from 'expo-keep-awake';
 import CaddieAvatar, { VoiceState } from '../../components/CaddieAvatar';
+import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill';
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
@@ -868,6 +869,41 @@ export default function CaddieTab() {
   // not a stale closure captured when the timer armed.
   const voiceStateRef = useRef<VoiceState>('idle');
   useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
+
+  /**
+   * 2026-08-12 (Tim) — "tap the earbud, it should be EXACTLY like you're touching the caddie avatar,
+   * even with the reaction where it reacts on that screen like it's been touched… I need the unified
+   * voice, the unified brain, the unified app. Everything is everything. I've said this so many times."
+   *
+   * He was right, and the cause was structural rather than a bug in either path. ONE interaction was
+   * being modelled by TWO state machines that could not see each other:
+   *
+   *   on-screen mic  → `voiceState`, a LOCAL useState in this component (line above)
+   *   earbud / global mic → services/listeningSession, a module-level service
+   *
+   * A service cannot reach a component's local state, so an earbud turn ran start to finish — mic
+   * open, transcribe, brain, reply — while the avatar on this screen sat at 'idle'. That is exactly
+   * the report: "the caddie tab is not moving at all." Nothing was broken; the two halves were never
+   * connected ([[unconnected-halves-not-broken-code]]).
+   *
+   * The fix is to stop treating them as two sources. The avatar now renders ONE state derived from
+   * both, so the same turn looks the same however it was started.
+   *
+   * The on-screen path WINS when it is active: it owns the mic in that case, and its 'arming' step is
+   * a real state the earbud path has no equivalent of. Otherwise the earbud session drives the avatar.
+   *
+   * 'opening' maps to 'idle' deliberately — the mic is not live yet, and painting a pre-listening
+   * state is the flicker Tim reported twice ("that little micro when I tap"). The state still exists
+   * and still gates a second tap; it just doesn't show. Same rule both paths.
+   */
+  const earbudState = useListeningSessionStore((st) => st.state);
+  const effectiveVoiceState: VoiceState =
+    voiceState !== 'idle'
+      ? voiceState
+      : earbudState === 'listening' ? 'listening'
+      : earbudState === 'thinking' ? 'thinking'
+      : earbudState === 'responding' ? 'speaking'
+      : 'idle';
   const [appActive, setAppActive] = useState(true);
   const [kevinEmotion, setKevinEmotion] = useState<string | null>(null);
   const [openingPrompt, setOpeningPrompt] = useState('');
@@ -2995,7 +3031,7 @@ export default function CaddieTab() {
   if (cockpitMode) {
     return (
       <CockpitCaddieScreen
-        voiceState={voiceState}
+        voiceState={effectiveVoiceState}
         caddieResponse={caddieResponse}
         onMicPress={handleMicPress}
         // 2026-06-23 — pass the SAME paywall-gated openers the standard
@@ -3086,7 +3122,7 @@ export default function CaddieTab() {
                   persona={caddiePersonality}
                   isOnCourse={isRoundActive}
                   isCageMode={false}
-                  voiceState={voiceState}
+                  voiceState={effectiveVoiceState}
                   hud={NULL_HUD}
                   openingPrompt=""
                   caddieResponse=""
@@ -3134,7 +3170,7 @@ export default function CaddieTab() {
                 persona={caddiePersonality}
                 isOnCourse={isRoundActive}
                 isCageMode={false}
-                voiceState={voiceState}
+                voiceState={effectiveVoiceState}
                 hud={NULL_HUD}
                 openingPrompt=""
                 caddieResponse=""
@@ -3179,7 +3215,7 @@ export default function CaddieTab() {
             persona={caddiePersonality}
             isOnCourse={isRoundActive}
             isCageMode={false}
-            voiceState={voiceState}
+            voiceState={effectiveVoiceState}
             hud={NULL_HUD}
             openingPrompt=""
             caddieResponse=""

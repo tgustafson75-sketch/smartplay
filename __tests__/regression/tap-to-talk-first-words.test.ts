@@ -194,3 +194,84 @@ describe('the arming state is honest everywhere it surfaces', () => {
     expect(read('components/CaddieAvatar.tsx')).toContain("busy: voiceState === 'arming' ||");
   });
 });
+
+/**
+ * 2026-08-12 (Tim, reporting it a second time) — "that little micro when I tap, and it goes from
+ * listening to thinking, there's still that little state in there, that little glitch that you
+ * broke and put in there that needs to be fixed."
+ *
+ * He was right, and it was mine twice over. I removed the 'arming' label on the ON-SCREEN mic and
+ * missed the path he actually uses: the earbud/global mic runs a SEPARATE state machine whose
+ * 'opening' state painted "One sec…" in the status strip. Worse, holding 'opening' through the
+ * awaited verbal cue — the correct fix for not claiming to listen before the mic is live — made that
+ * pill appear for about a second on EVERY earbud tap.
+ *
+ * Two state machines for one interaction is why fixing one surface didn't fix the flicker. Both must
+ * hold the same rule: the pre-listening state EXISTS (it gates taps and stops the false invitation
+ * to speak) and must NOT PAINT.
+ */
+describe('neither voice path paints its pre-listening state', () => {
+  it('the on-screen mic arming state is invisible', () => {
+    expect(read('components/caddie/cockpit/AskCaddieButton.tsx')).toContain("arming:    'Tap to ask Caddie'");
+    expect(read('components/caddie/cockpit/BrandHeader.tsx')).not.toContain("'ONE SEC…'");
+  });
+
+  it('the earbud path opening state renders NO label — so no pill at all', () => {
+    const strip = read('components/caddie/CaddieStatusStrip.tsx');
+    expect(strip).not.toContain("label = 'One sec…'");
+    // The strip bails when there's no label, so nothing flashes.
+    expect(strip).toContain('if (!label) return null;');
+  });
+
+  it('and the global mic neither shows nor announces it', () => {
+    const g = read('components/GlobalCaddieMic.tsx');
+    expect(g).not.toContain("state === 'opening' ? STATE_ICONS.listening");
+    expect(g).not.toContain("state === 'opening' ? 'Listening'");
+  });
+
+  it('but the state still EXISTS and still gates a second tap', () => {
+    // Removing the paint must not remove the guard — that would reopen the double-tap race.
+    expect(read('components/caddie/CaddieMicBadge.tsx')).toContain("listeningState === 'opening' || listeningState === 'listening'");
+    expect(read('services/listeningSession.ts')).toContain("if (state !== 'opening') return;");
+  });
+});
+
+/**
+ * 2026-08-12 (Tim) — "tap the earbud, it should be EXACTLY like you're touching the caddie avatar,
+ * even with the reaction where it reacts on that screen… I need the unified voice, the unified brain,
+ * the unified app. Everything is everything."
+ *
+ * The avatar's state was a LOCAL useState in the caddie tab; the earbud path is a module-level
+ * service. A service cannot write a component's local state, so an earbud turn ran to completion with
+ * the avatar frozen at idle. Two state machines, one interaction — nothing broken, never connected.
+ */
+describe('one interaction, one state — earbud and on-screen agree', () => {
+  const tab = () => read('app/(tabs)/caddie.tsx');
+
+  it('the caddie tab reads the earbud session state', () => {
+    expect(tab()).toContain("useListeningSessionStore((st) => st.state)");
+  });
+
+  it('every avatar renders the UNIFIED state, never the local-only one', () => {
+    const t = tab();
+    expect(t).toContain('const effectiveVoiceState: VoiceState =');
+    expect(t).toContain('voiceState={effectiveVoiceState}');
+    // No avatar may still be wired to the local-only state — that is the half-fix this guards.
+    expect(t).not.toMatch(/voiceState=\{voiceState\}/);
+  });
+
+  it('an earbud turn drives listening/thinking/speaking on screen', () => {
+    const t = tab();
+    expect(t).toContain("earbudState === 'listening' ? 'listening'");
+    expect(t).toContain("earbudState === 'thinking' ? 'thinking'");
+    expect(t).toContain("earbudState === 'responding' ? 'speaking'");
+  });
+
+  it("but 'opening' stays invisible — that is the flicker, and it must not come back here either", () => {
+    expect(tab()).not.toMatch(/earbudState === 'opening' \? '(listening|arming|thinking)'/);
+  });
+
+  it('the on-screen path still wins while it owns the mic', () => {
+    expect(tab()).toContain("voiceState !== 'idle'\n      ? voiceState".replace('\n', '\n'));
+  });
+});

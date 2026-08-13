@@ -51,7 +51,22 @@ export function CaddieStatusStrip({ floating = false, bottomOffset = 120 }: { fl
   if (cap && ttsCaptions) { label = cap; icon = speaking ? 'volume-medium' : 'chatbox-ellipses'; speakingStyle = true; }
   else if (state === 'thinking') { label = 'Thinking…'; icon = 'ellipsis-horizontal'; }
   else if (state === 'listening') { label = 'Listening…'; icon = 'mic'; }
-  else if (state === 'opening') { label = 'One sec…'; icon = 'ellipsis-horizontal'; }
+  /**
+   * 2026-08-12 (Tim, twice) — "that little micro when I tap, and it goes from listening to thinking,
+   * there's still that little state in there, that little glitch that you broke and put in there."
+   *
+   * He's right, and it was mine twice over. 'opening' used to paint "One sec…" — and on 08-12 I made
+   * it WORSE by holding 'opening' through the awaited verbal cue (so the app would stop claiming to
+   * listen before the mic was live). That fix was correct; showing it was not. The pill now appeared
+   * on EVERY earbud tap for about a second, which is exactly the flicker he keeps reporting.
+   *
+   * 'opening' now produces NO label, so the strip stays hidden until we are genuinely listening.
+   * `if (!label) return null` below means no pill renders at all — no flash to read. The tap's haptic
+   * is the acknowledgement. The state still exists and still gates taps; it just says nothing.
+   *
+   * Same call as the on-screen mic's 'arming': the state must exist, it must not paint.
+   */
+  // else if (state === 'opening') — deliberately silent; see above.
   if (!label) return null;
 
   return (

@@ -105,12 +105,15 @@ function CaddieStateCue() {
   const icon =
     state === 'listening' ? STATE_ICONS.listening :
     (state === 'thinking' || state === 'responding') ? STATE_ICONS.thinking :
-    state === 'opening' ? STATE_ICONS.listening : null;
+    // 2026-08-12 — no icon while opening: the mic is not live yet, and a glyph that appears for a
+    // few hundred milliseconds reads as a glitch rather than a state. See CaddieStatusStrip.
+    state === 'opening' ? null : null;
   const label =
     state === 'listening' ? 'Listening' :
     state === 'thinking' ? 'Thinking' :
     state === 'responding' ? 'Speaking' :
-    state === 'opening' ? 'Listening' : '';
+    // ...and it must not ANNOUNCE "Listening" to a screen reader before the mic is open either.
+    state === 'opening' ? '' : '';
   if (!icon) return null;
   return (
     <View style={styles.cue} pointerEvents="none">
