@@ -1,0 +1,57 @@
+/**
+ * THE tool-action contract — the single definition of what the caddie can ask the app to DO.
+ *
+ * 2026-08-13 (Tim: "no fucking way you just fixed that… I'll bet you find shit you missed.") — he
+ * was right, and this was the miss. `ToolAction` lived inside app/api/kevin+api.ts, the DEPRECATED
+ * Expo dev-server twin of the canonical brain, and the three live voice hooks (useVoiceCaddie,
+ * useKevin, usePipecatVoice) all imported it from there.
+ *
+ * So the shipping client was typed against a brain it never talks to. The twin's own header listed
+ * six ways it had drifted from canonical since 2026-05-26 — including a tool the real brain does not
+ * emit — and TypeScript happily agreed with the drifted copy, because the drifted copy WAS the type.
+ * A deprecated file cannot be deleted while three live hooks depend on it, which is exactly how it
+ * survived eleven weeks of audits: every attempt to remove it broke the build, so it stayed.
+ *
+ * The contract now lives here, owned by neither brain. Both brains and the client import it, so a
+ * tool cannot exist on one side of the wire and not the other.
+ */
+export type ToolAction =
+  | { type: 'open_smartvision' }
+  | { type: 'open_smartfinder' }
+  | { type: 'open_swinglab' }
+  | { type: 'log_score'; hole?: number; score: number }
+  | { type: 'record_swing' }
+  | { type: 'log_shot'; direction?: string; contactQuality?: string; outcome?: string; feel?: string; club?: string; hole?: number; shot_number?: number; distance_yards?: number }
+  // 2026-07-04 (Tim — compound "parse anything into context") — a PRE-shot plan the
+  // player declared (club/yardage/shot/hole) that sets context + confirms, not a log.
+  | { type: 'plan_shot'; club?: string; distance_yards?: number; shot_number?: number; hole?: number; target?: string }
+  // 2026-07-04 (Tim — verbal reminders) — "remind me to work on putting Thursday" → a
+  // SmartPlan reminder.
+  | { type: 'set_reminder'; text: string; when?: string }
+  | { type: 'log_emotional_state'; state: string; valence: 'positive' | 'neutral' | 'negative' }
+  // 2026-06-26 — voice "log this issue" → a real issue-log entry (owner-gated client-side)
+  | { type: 'log_issue'; note: string }
+  // Phase R — generic in-app navigation for voice handlers (swing detail, library)
+  | { type: 'open_url'; url: string }
+  // 2026-06-04 — Tool-handler navigation deferred to the client so the
+  // caller can await speak BEFORE the destination screen mounts. Previously
+  // openToolHandler.ts called router.push synchronously inside the handler,
+  // which raced TTS for screens that claim audio/camera resources on mount
+  // (SmartMotion quick-record, Coach Mode, cage mode, SmartFinder).
+  | { type: 'navigate'; path: string }
+  // navigate_replace uses router.replace instead of router.push so the
+  // back button doesn't return to the active-caddie screen after round end.
+  | { type: 'navigate_replace'; path: string }
+  // 2026-06-22 — SmartMotion voice layer: Kevin configures the drill or closes SwingLab.
+  | { type: 'configure_drill'; club?: string; shot_count?: number }
+  | { type: 'close_swinglab' }
+  // SmartVision voice calibration — user stands at tee/green and says "mark tee/green"
+  | { type: 'mark_tee' }
+  | { type: 'mark_green' }
+  // 2026-06-29 (Tim) — switch the active caddie persona by voice ("switch to Harry").
+  | { type: 'switch_caddie'; personality: 'kevin' | 'serena' | 'harry' | 'tank' }
+  // 2026-06-29 (Tim) — voice sets the SmartMotion camera angle ("down the line"/"face on"/"putting").
+  | { type: 'set_angle'; angle: 'down_the_line' | 'face_on' | 'putt' }
+  | { type: 'set_golfer'; name: string };
+
+// ── POST handler ──────────────────────────────────────────────────────────────

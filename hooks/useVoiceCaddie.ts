@@ -35,7 +35,7 @@ import { voiceCommandRouter } from '../services/intents';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
-import type { ToolAction } from '../app/api/kevin+api';
+import type { ToolAction } from '../types/toolAction';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';

@@ -8,7 +8,7 @@ import { useRelationshipStore } from '../store/relationshipStore';
 import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
-import type { ToolAction } from '../app/api/kevin+api';
+import type { ToolAction } from '../types/toolAction';
 import { buildFullPracticeContext } from '../services/tutorialContext';
 import { getGreenYardagesSync } from '../services/smartFinderService';
 import { useSmartFinderStore } from '../store/smartFinderStore';

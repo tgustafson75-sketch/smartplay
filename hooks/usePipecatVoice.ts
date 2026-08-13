@@ -25,7 +25,7 @@ import { devLog } from '../services/devLog';
 // mic and the earbud/badge path keep the same conversation + reset together.
 import { getPipecatHistory, setPipecatHistory, clearPipecatHistory } from '../services/voice/pipecatHistory';
 import { useConversationLog } from '../store/conversationLogStore';
-import type { ToolAction } from '../app/api/kevin+api';
+import type { ToolAction } from '../types/toolAction';
 
 // Simplified history entry — persisted in a ref, sent to /turn each call
 export interface ConversationMessage {

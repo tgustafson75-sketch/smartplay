@@ -1,5 +1,5 @@
 import type { ShotResult } from '../store/roundStore';
-import type { ToolAction } from '../app/api/kevin+api';
+import type { ToolAction } from './toolAction';
 
 export type IntentConfidence = 'high' | 'medium' | 'low';
 

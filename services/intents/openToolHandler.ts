@@ -1,5 +1,5 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import type { ToolAction } from '../../app/api/kevin+api';
+import type { ToolAction } from '../../types/toolAction';
 // 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
 // classifier-name map below stays (existing tool routes), but any tool_name or
 // raw transcript that matches a catalog alias also routes deterministically —

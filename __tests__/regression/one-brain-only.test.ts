@@ -14,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 
 const API = path.join(__dirname, '..', '..', 'api');
+const APP_API = path.join(__dirname, '..', '..', 'app', 'api');
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
 
 /** Endpoints allowed to answer a caddie turn. Adding a name here is a deliberate act. */
@@ -46,7 +47,31 @@ describe('there is a fixed, shrinking set of answering brains', () => {
     expect(ALLOWED_BRAINS.length).toBeLessThanOrEqual(2);
   });
 
-  it('the deprecated brain endpoint and its dev twin are GONE, not just unused', () => {
+  /**
+   * 2026-08-13 — Tim: "no fucking way you just fixed that. I'll bet you find shit you missed."
+   * He was right. The first version of this guard scanned api/ ONLY, and there is a WHOLE SECOND
+   * DIRECTORY of endpoints: app/api/*+api.ts, the Expo Router dev-server twins. 11 files, 2,591
+   * lines — including app/api/kevin+api.ts, a 620-line duplicate of the canonical brain whose own
+   * header LISTED six behavioural drifts (missing lookup tools, no vision, no tier classifier, no
+   * prompt caching, no OpenAI fallback, extra open_url action) and left them open since 2026-05-26.
+   *
+   * It was dev-only — getApiBaseUrl() returns PRIMARY_HOST when EXPO_PUBLIC_API_URL is empty, so prod
+   * never reached it. That is precisely why it rotted: unreachable in prod, so nobody fixed the drift,
+   * while every LOCAL test of the caddie silently exercised a different brain than the one shipped.
+   *
+   * A guard that only looks where you remember to look is not a guard. This one scans both trees.
+   */
+  it('no drifted BRAIN twin hides in the dev-server tree either', () => {
+    const twins = fs.existsSync(APP_API) ? fs.readdirSync(APP_API) : [];
+    for (const f of twins) {
+      const src = fs.readFileSync(path.join(APP_API, f), 'utf8');
+      const isBrain = /runAgenticLoop|response_text/.test(src) && /persona/i.test(src) && /history/.test(src);
+      expect({ file: f, isBrain }).toEqual({ file: f, isBrain: false });
+    }
+  });
+
+  it('the deprecated brain endpoint and its dev twins are GONE, not just unused', () => {
+    expect(fs.existsSync(path.join(APP_API, 'kevin+api.ts'))).toBe(false);
     expect(fs.existsSync(path.join(API, 'brain.ts'))).toBe(false);
     expect(fs.existsSync(path.join(__dirname, '..', '..', 'app', 'api', 'brain+api.ts'))).toBe(false);
   });
