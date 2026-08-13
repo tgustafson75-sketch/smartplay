@@ -70,6 +70,7 @@ import { getApiBaseUrl } from '../services/apiBase';
 import { registerSmartVisionRead } from '../services/visionReadBus';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSmartVisionSignalStore } from '../store/smartVisionSignalStore';
+import { useGeometryStatusStore } from '../store/geometryStatusStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 // 2026-06-06 — Phase 4.3: reactive reads of marked tee/green geo
 // anchors. When both exist for a Mode 2 (curated bundled-image) hole,
@@ -426,7 +427,17 @@ export default function SmartVisionScreen() {
    * store, and otherwise fall back to EMPTY so downstream renders its honest empty state rather
    * than a key nobody can read.
    */
-  const derivedCourseLabel = (() => {
+  /**
+   * 2026-08-13 — this resolved once, during render, off a module-level cache.
+   *
+   * The name comes from the geometry build (`course_name`), so on the pre-round path it is normally
+   * asked for BEFORE the build lands: getCachedGeometry returns null, the label resolves to '', and
+   * nothing re-derived it when the real name arrived moments later. The screen then sat on its empty
+   * course label for as long as it stayed open. Keyed on `completions` now, so the name appears when
+   * the build that carries it commits.
+   */
+  const geometryCompletions = useGeometryStatusStore(st => st.completions);
+  const derivedCourseLabel = useMemo(() => {
     const id = effectiveCourseId;
     if (!id) return '';
     if (id.startsWith('local:')) return id.slice('local:'.length).replace(/-/g, ' ');
@@ -445,7 +456,10 @@ export default function SmartVisionScreen() {
       } catch { /* fall through */ }
     }
     return ''; // never the raw id
-  })();
+    // The custom-course leg reads a store snapshot rather than subscribing; that name is written at
+    // creation, long before this screen opens, so it cannot arrive late the way geometry does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveCourseId, geometryCompletions]);
   const courseId = effectiveCourseId;
   // 2026-05-17 — Resolve courseName from courseId FIRST, not from the
   // user's homeCourse. The previous cascade fell through to
