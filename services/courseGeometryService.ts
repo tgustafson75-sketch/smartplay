@@ -360,6 +360,18 @@ export function getCachedGeometry(courseId: string): CourseGeometry | null {
 }
 
 /** Returns a single hole's geometry from cache (or bundled coords), or null if none exists. */
+/**
+ * 2026-08-12 — is a build for this course in flight right now?
+ *
+ * Exists so the UI can say "MAPPING…" instead of "STATIC" while the course map is genuinely being
+ * built. Tim played a whole round on a silent STATIC badge with no idea the app was working on it:
+ * a temporary condition that looks identical to a permanent failure is a broken promise, even when
+ * the code is doing exactly the right thing.
+ */
+export function isGeometryBuilding(courseId: string | null | undefined): boolean {
+  return !!courseId && inflight.has(courseId);
+}
+
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
   const c = memCache.get(courseId) ?? buildBundledGeometry(courseId);
   const direct = c?.holes.find(h => h.hole_number === holeNumber);

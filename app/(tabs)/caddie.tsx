@@ -123,7 +123,7 @@ import { conversationalLoggingOrchestrator } from '../../services/conversational
 import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import QuickLogShotSheet from '../../components/QuickLogShotSheet';
-import { fetchCourseGeometry } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, isGeometryBuilding } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
@@ -3578,7 +3578,12 @@ export default function CaddieTab() {
           // only when yardageMode='live' AND GPS resolved a haversine yards
           // value; otherwise we're rendering the static scorecard yardage
           // and the user deserves to know.
-          yardageSource={displayYardage == null ? null : (liveYardage != null ? 'live' : 'static')}
+          /* 2026-08-12 — three states, not two: a course still being mapped says so rather than
+             showing a bare STATIC that reads as "this is as good as it gets". */
+          yardageSource={displayYardage == null ? null
+            : liveYardage != null ? 'live'
+            : isGeometryBuilding(useRoundStore.getState().activeCourseId) ? 'building'
+            : 'static'}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in
           // the data bar, scoring goes in the expandable tool arrow"

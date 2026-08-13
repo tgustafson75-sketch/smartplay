@@ -667,7 +667,23 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
     return { front: null, middle: null, back: null, hole_number: hole, reason: 'no_hole' };
   }
   const syncFix = getLastFixInternal();
+  /**
+   * 2026-08-12 (Tim, after Wachusett) — "the whole time the yardage showed STATIC even though I
+   * would refresh the GPS. You shouldn't be able to be in a live round and have it show static.
+   * That's a broken connection right there."
+   *
+   * He's right that it should never sit silently on static. Traced here so the next round says
+   * exactly WHY — no fix, no geometry, or no hole — rather than leaving us to infer it. This is the
+   * single funnel every yardage read passes through, so one call covers every surface.
+   */
+  const traceReason = (reason: string, extra?: Record<string, string | number | boolean | null>) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('./roundTrace') as typeof import('./roundTrace')).trace('gps', 'yardage', { hole, reason, ...extra });
+    } catch { /* non-fatal */ }
+  };
   if (!syncFix) {
+    traceReason('no_fix');
     // 2026-06-07 GPS-audit #5: surface no-fix explicitly so UI can
     // tell the user GPS isn't ready, not "course data missing".
     return staticYardages(hData, hole, 'no_fix');
@@ -676,9 +692,11 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   if (!front && !middle && !back) {
     // Live tee-relative estimate (updates as you walk) before the frozen scorecard number.
     const est = estimatedFromTee(hData, hole, syncFix);
-    if (est) return est;
+    if (est) { traceReason('estimated_from_tee'); return est; }
+    traceReason('no_green_coords', { courseId: round.activeCourseId ?? 'none' });
     return staticYardages(hData, hole);
   }
+  traceReason('ok', { source });
   const yards = {
     front: front ? Math.round(haversineYards(syncFix.location, front)) : null,
     middle: middle ? Math.round(haversineYards(syncFix.location, middle)) : null,

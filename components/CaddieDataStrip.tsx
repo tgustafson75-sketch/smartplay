@@ -40,7 +40,16 @@ export interface CaddieDataStripProps {
   // from live GPS or from the scorecard. Shown as a small pill in the
   // strip's top-right corner so users never confuse the static fallback
   // for a live reading. null = pre-round / no data shown yet.
-  yardageSource?: 'live' | 'static' | null;
+  /**
+   * 2026-08-12 (Tim, after Wachusett) — "it started building some hole views, but it took a while,
+   * and I didn't get any status updates what was going on… the whole time the yardage showed
+   * static."
+   *
+   * 'building' is the missing third state. The app was doing the right thing — fetching the course
+   * map — and said nothing, so a temporary condition looked like a permanent failure. STATIC on a
+   * course we're still mapping is not a status, it's a shrug.
+   */
+  yardageSource?: 'live' | 'static' | 'building' | null;
   // 2026-05-19 — Running round totals. When at least one hole has been
   // scored, the strip swaps the STROKE cell for SCORE (e.g. "12 +1")
   // so the user sees the round total without leaving the Caddie tab.
@@ -440,9 +449,10 @@ export default function CaddieDataStrip({
               style={[
                 styles.sourcePillText,
                 yardageSource === 'live' ? styles.sourcePillTextLive : styles.sourcePillTextStatic,
+                yardageSource === 'building' ? { opacity: 0.9 } : null,
               ]}
             >
-              {yardageSource === 'live' ? 'LIVE' : 'STATIC'}
+              {yardageSource === 'live' ? 'LIVE' : yardageSource === 'building' ? 'MAPPING…' : 'STATIC'}
             </Text>
           </View>
         )}
