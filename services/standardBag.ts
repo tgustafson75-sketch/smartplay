@@ -83,3 +83,75 @@ export function standardCarryFor(club: string | null | undefined): number | null
   const y = STANDARD_CARRY_YARDS[club as StandardClub];
   return typeof y === 'number' && y > 0 ? y : null;
 }
+
+/**
+ * 2026-08-12 (Tim's Arccos screenshot, after Wachusett) — CALIBRATE the chart to the player.
+ *
+ * His real bag against our defaults:
+ *
+ *   Driver 253 vs 245 (+8)   7i 163 vs 148 (+15)   PW 138 vs 110 (+28)
+ *   9i     147 vs 122 (+25)  GW  128 vs  98 (+30)  SW 116 vs  86 (+30)
+ *
+ * Long clubs within a few yards; WEDGES OUT BY THIRTY. So before he logged anything, a 130-yard
+ * shot got him a gap wedge — a club he actually hits 128, from a chart that thought it went 98.
+ * That is the gap-wedge complaint he raised over and over, and the screenshot is where it came from.
+ *
+ * The per-club override already works once a club has data. The hole is the clubs that DON'T: they
+ * sat on a generic chart while the player's own measured clubs proved the chart was wrong for him by
+ * 20%. We had the evidence and ignored it for every club we hadn't seen.
+ *
+ * So: derive ONE scale factor from whatever the player has actually produced, and apply it to the
+ * rest. Note this is NOT a driver-length scale — his driver is +3% while his wedges are +30%, so
+ * scaling everything from the big stick would have fixed nothing. The ratio has to come from the
+ * clubs themselves, whichever ones we happen to know.
+ *
+ * Conservative by construction: needs 2+ measured clubs, ignores the putter, clamps to 0.8-1.3x
+ * (beyond that it's bad data, not a long hitter), and any club with real data still wins outright —
+ * this only ever fills in the unknowns. [[self-growing-agent-architecture]]
+ */
+const MIN_CLUBS_TO_CALIBRATE = 2;
+const SCALE_MIN = 0.8;
+const SCALE_MAX = 1.3;
+
+/**
+ * The player's personal scale against the standard chart, or null when we can't honestly claim one.
+ * `measured` maps club key → the player's real carry.
+ */
+export function personalBagScale(measured: Partial<Record<string, number>>): number | null {
+  const ratios: number[] = [];
+  for (const [club, yards] of Object.entries(measured ?? {})) {
+    if (club === 'Putter' || typeof yards !== 'number' || yards <= 0) continue;
+    const std = STANDARD_CARRY_YARDS[club as StandardClub];
+    if (!std || std <= 0) continue;
+    const r = yards / std;
+    // A single implausible sample must not drag the whole bag — same discipline as the
+    // club-distance plausibility band.
+    if (r >= 0.5 && r <= 2) ratios.push(r);
+  }
+  if (ratios.length < MIN_CLUBS_TO_CALIBRATE) return null;
+  // Median, not mean: one mis-attributed shot shouldn't move the factor.
+  const sorted = [...ratios].sort((a, b) => a - b);
+  const mid = sorted.length % 2
+    ? sorted[(sorted.length - 1) / 2]
+    : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  return Math.max(SCALE_MIN, Math.min(SCALE_MAX, mid));
+}
+
+/**
+ * What this player should be assumed to carry `club`, given what they've actually produced.
+ *
+ * Real data wins. Otherwise the chart, scaled to them. Falls back to the raw chart when there isn't
+ * enough evidence to scale — never invents a factor from one club.
+ */
+export function personalCarryFor(
+  club: string | null | undefined,
+  measured: Partial<Record<string, number>>,
+): number | null {
+  if (!club) return null;
+  const own = measured?.[club];
+  if (typeof own === 'number' && own > 0) return Math.round(own);
+  const std = standardCarryFor(club);
+  if (std == null) return null;
+  const scale = personalBagScale(measured);
+  return scale == null ? std : Math.round(std * scale);
+}

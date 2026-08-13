@@ -19,7 +19,7 @@
  */
 
 import type { WeatherSnapshot } from './weatherService';
-import { STANDARD_LADDER as SHARED_LADDER, CLUB_LABEL as SHARED_CLUB_LABEL } from './standardBag';
+import { STANDARD_LADDER as SHARED_LADDER, CLUB_LABEL as SHARED_CLUB_LABEL, personalBagScale } from './standardBag';
 import { playsLikeDistance } from '../utils/playsLike';
 
 export interface ShotRead {
@@ -94,8 +94,17 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
    * driver", "less than a full lob wedge") stay honest because they're measured against a real bag
    * instead of against the one club we happen to have seen.
    */
+  /**
+   * 2026-08-12 (Tim's Arccos bag vs our chart) — scale the chart to THIS player.
+   *
+   * His measured wedges sat 30 yards above our defaults while his driver was within 8, so a 130-yard
+   * shot got him a gap wedge from a chart that thought GW went 98 when he hits it 128. Any club he
+   * HAS logged still wins outright below; this only fills the ones he hasn't, using the ratio his
+   * own clubs prove. See services/standardBag.personalBagScale.
+   */
+  const bagScale = personalBagScale(bag as Partial<Record<string, number>>) ?? 1;
   const merged = new Map<string, number>();
-  for (const [club, yds] of STANDARD_LADDER) merged.set(club, yds);
+  for (const [club, yds] of STANDARD_LADDER) merged.set(club, Math.round(yds * bagScale));
   // Track which clubs are the PLAYER'S OWN number vs. the chart, so the spoken "why" can't claim a
   // standard-ladder figure as his measured carry ([[illustration-data-points]] — real signals only).
   const measured = new Set<string>();
