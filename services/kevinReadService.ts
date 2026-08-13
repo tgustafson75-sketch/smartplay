@@ -20,6 +20,7 @@
 import { useRoundStore } from '../store/roundStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getApiBaseUrl } from './apiBase';
+import { useSettingsStore } from '../store/settingsStore';
 
 const MAX_ROUNDS = 5;
 const MAX_SHOTS = 60;
@@ -68,7 +69,15 @@ export async function generateKevinRead(): Promise<void> {
     const res = await fetch(apiUrl + '/api/kevin-read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rounds: recentRounds, shots: allShots }),
+      // 2026-08-13 (one-voice pass) — send the caddie the player actually chose. Without this the
+      // endpoint had no persona at all and spoke as Kevin to everyone, so a Serena/Harry/Tank player
+      // read a dashboard assessment in the wrong caddie's voice, naming the wrong caddie.
+      // caddiePersonality, NOT voiceGender — gender folds Tank and Harry back into Kevin.
+      body: JSON.stringify({
+        rounds: recentRounds,
+        shots: allShots,
+        persona: useSettingsStore.getState().caddiePersonality,
+      }),
       // Tight timeout — this is opportunistic; we don't block UX on it.
       signal: AbortSignal.timeout(15_000),
     });

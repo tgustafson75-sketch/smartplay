@@ -8296,6 +8296,32 @@ check('LOCK: both ball-fit reads share ONE set of speed-band boundaries',
   })(),
   'one owner for the carry speed bands; the CNS ball fit imports them instead of inlining its own edge');
 
+// 2026-08-13 (one-voice pass) — api/kevin-read.ts declared "You are Kevin ... in Kevin's voice" and
+// received no persona at all, so a player who chose Serena, Harry or Tank read a dashboard assessment
+// in the wrong caddie's voice, naming the wrong caddie. Not drift between two prompts — a surface that
+// COULDN'T speak as the caddie the player picked.
+//
+// The guard forbids the SHAPE: no server prompt may name a shipped persona as its own identity. Task
+// prompts ("You are a swing analyst", "You are reading a scorecard") are untouched and should be —
+// a JSON coordinate detector has no business being Kevin.
+check('LOCK: no endpoint hardcodes WHICH caddie it is — identity comes from the player\'s choice',
+  (() => {
+    const files = [
+      'api/kevin-read.ts', 'api/recap.ts', 'api/briefing.ts', 'api/lie-analysis.ts',
+      'api/swing-question.ts', 'api/kevin.ts', 'api/pipecat-turn.ts', 'api/meta-voice.ts',
+    ];
+    const noHardcodedIdentity = files.every((f) => !/You are (Kevin|Serena|Harry|Tank)\b/.test(read(f)));
+    // and the read that was broken must resolve the name the same way recap.ts does, from the body
+    const kr = read('api/kevin-read.ts');
+    const resolves = /getCaddieName\(personaInput\)/.test(kr) &&
+      /body\.persona === 'string' \? body\.persona : \(body\.voiceGender \?\? 'male'\)/.test(kr);
+    // a server that accepts a persona nobody sends is still broken — the client must send it, and it
+    // must send caddiePersonality (voiceGender folds Tank and Harry back into Kevin).
+    const clientSends = /persona: useSettingsStore\.getState\(\)\.caddiePersonality/.test(read('services/kevinReadService.ts'));
+    return noHardcodedIdentity && resolves && clientSends;
+  })(),
+  'no endpoint names its own caddie; kevin-read resolves persona from the body and the client sends caddiePersonality');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.

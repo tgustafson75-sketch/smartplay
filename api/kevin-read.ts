@@ -21,8 +21,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
-const SYSTEM_PROMPT = `You are Kevin, an elite AI golf caddie. Based on this player's recent round data, give a 2-3 sentence honest prevailing tendency assessment. Speak directly to the player in Kevin's voice — confident, direct, encouraging. Focus on patterns: what's working, what's costing strokes, one actionable tendency. No bullet points. Natural speech. Never quote the data verbatim; talk about it like a caddie noticing patterns walking next to the player.`;
+/**
+ * 2026-08-13 (one-voice pass) — the identity here used to be hardcoded to one caddie by name.
+ *
+ * This endpoint never received a persona, so a player who chose Serena, Harry or Tank got their
+ * dashboard read written as Kevin — in Kevin's register, naming Kevin. Not a drift between two
+ * prompts: a surface that could not speak as the caddie the player actually picked.
+ *
+ * Built the same way api/recap.ts already does it (body.persona, falling back to voiceGender), so
+ * there is one established pattern for persona on the server rather than a second invention.
+ */
+function systemPromptFor(caddie: string, spec: string): string {
+  return `You are ${caddie}, an elite AI golf caddie. Based on this player's recent round data, give a 2-3 sentence honest prevailing tendency assessment. Speak directly to the player in ${caddie}'s voice. Focus on patterns: what's working, what's costing strokes, one actionable tendency. No bullet points. Natural speech. Never quote the data verbatim; talk about it like a caddie noticing patterns walking next to the player.
+
+WHO YOU ARE:
+${spec}`;
+}
 
 const DEFAULT_FALLBACKS = [
   'Swing easy, hit it far. Play one shot at a time.',
@@ -59,6 +75,9 @@ interface RoundLite {
 interface KevinReadRequest {
   shots?: ShotLite[];
   rounds?: RoundLite[];
+  /** Prefer `persona`; `voiceGender` is the older fallback. Same contract as api/recap.ts. */
+  persona?: string;
+  voiceGender?: VoiceGender;
 }
 
 function summarizeShots(shots: ShotLite[]): string {
@@ -153,7 +172,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ].join('\n');
 
     const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
-    const text = await completeText(provider, 'fast', SYSTEM_PROMPT, [{ role: 'user', content: userPrompt }], { maxTokens: 200 });
+    // Prefer body.persona; fall back to voiceGender, which folds male → Kevin. Same resolution order
+    // as api/recap.ts so the two can't answer as different caddies for the same player.
+    const personaInput: Persona | VoiceGender =
+      (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
+    const caddieName = getCaddieName(personaInput);
+    const systemPrompt = systemPromptFor(caddieName, getCharacterSpec(personaInput));
+    const text = await completeText(provider, 'fast', systemPrompt, [{ role: 'user', content: userPrompt }], { maxTokens: 200 });
 
     if (!text) {
       return res.status(200).json({ text: pickFallback(), source: 'fallback_empty_response' });
