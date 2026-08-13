@@ -61,13 +61,30 @@ describe('there is a fixed, shrinking set of answering brains', () => {
    *
    * A guard that only looks where you remember to look is not a guard. This one scans both trees.
    */
-  it('no drifted BRAIN twin hides in the dev-server tree either', () => {
-    const twins = fs.existsSync(APP_API) ? fs.readdirSync(APP_API) : [];
-    for (const f of twins) {
-      const src = fs.readFileSync(path.join(APP_API, f), 'utf8');
-      const isBrain = /runAgenticLoop|response_text/.test(src) && /persona/i.test(src) && /history/.test(src);
-      expect({ file: f, isBrain }).toEqual({ file: f, isBrain: false });
-    }
+  /**
+   * 2026-08-13, second bet, also lost — "I'll bet you did it again." I had.
+   *
+   * I deleted the ONE drifted twin I'd been shown and left TEN more of the identical pattern sitting
+   * beside it, every one of them drifted from its canonical:
+   *
+   *     meta-voice 188 vs 692 · putting-analysis 221 vs 527 · parse-shot 139 vs 268
+   *     voice-intent 475 vs 714 · preround 166 vs 93 (the TWIN was bigger)
+   *
+   * api/voice-intent.ts even carried the instruction "Before committing, diff both files" — manual
+   * synchronisation of two copies, adopted as written policy. That is the disease, not a workaround.
+   *
+   * They were dev-server-only, which is exactly why they rotted: unreachable in prod so nobody fixed
+   * them, while every LOCAL test ran against different code than ships. All deleted. Dev already
+   * reaches the real API (getApiBaseUrl returns PRIMARY_HOST when EXPO_PUBLIC_API_URL is empty), so
+   * nothing was keeping them alive but habit.
+   *
+   * This guard forbids the SHAPE, not the ten files. A twin cannot come back one at a time.
+   */
+  it('the dev-server twin pattern is gone and cannot return', () => {
+    const twins = fs.existsSync(APP_API)
+      ? fs.readdirSync(APP_API).filter(f => f.endsWith('+api.ts'))
+      : [];
+    expect(twins).toEqual([]);
   });
 
   it('the deprecated brain endpoint and its dev twins are GONE, not just unused', () => {
