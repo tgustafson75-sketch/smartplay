@@ -24,7 +24,7 @@ import { getFirstTeeHint } from '../../services/voiceOnboardingService';
 import { ROUND_MODE_LABELS } from '../../types/patterns';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
-import { getCachedCourseIntelligenceSync } from '../../services/courseIntelligenceService';
+import { awaitCourseIntelligence } from '../../services/courseIntelligenceService';
 
 type Phase = 'thinking' | 'speaking' | 'done';
 
@@ -145,10 +145,23 @@ export default function BriefingScreen() {
           }),
         }));
 
-      // Fix M4 — read course intelligence from in-memory cache (populated at round start by roundPrefetch)
-      const courseIntelligence = activeCourseId
-        ? getCachedCourseIntelligenceSync(activeCourseId) ?? undefined
-        : undefined;
+      /**
+       * Fix M4 — course intelligence, populated at round start by roundPrefetch.
+       *
+       * 2026-08-13 — this was a SYNCHRONOUS read of that prefetch's in-memory mirror, taken the
+       * moment this screen mounted. roundPrefetch fires the intelligence call fire-and-forget at
+       * round start and it is a web search plus an LLM pass, so the briefing almost always got here
+       * first, read null, and generated the pre-round briefing with NO course grounding — silently,
+       * once, with no retry. The screen showed a normal briefing; it was just a generically-informed
+       * one, on the surface whose entire job is knowing this course.
+       *
+       * Now it joins the prefetch's in-flight call rather than racing it. Bounded at 4s: this sits
+       * inside the loading state the screen already shows for generateBriefing below, so the wait is
+       * hidden, and if the search really is slow we generate ungrounded exactly as before rather
+       * than making the player stare at a spinner. Never STARTS a fetch — if nothing was prefetched
+       * there is nothing to wait for.
+       */
+      const courseIntelligence = (await awaitCourseIntelligence(activeCourseId, 4_000)) ?? undefined;
 
       // Fix M16 — most recent round reflection from caddie memory
       const memState = useCaddieMemoryStore.getState();

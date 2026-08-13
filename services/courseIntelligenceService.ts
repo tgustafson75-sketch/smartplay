@@ -92,7 +92,64 @@ export function getCachedCourseIntelligenceSync(courseId: string): string | null
  * forget safe — never throws. Updates the in-memory mirror so the sync
  * accessor sees the value on subsequent calls.
  */
+/**
+ * 2026-08-13 — ANTI-RACE, mirroring fetchCourseGeometry's `inflight` map.
+ *
+ * This call is a web search plus an LLM pass: the single most expensive fetch in the round-start
+ * path. It had no dedupe, so every additional caller started its OWN. roundPrefetch fires it
+ * fire-and-forget at round start, which meant nothing else could safely ask for the result — asking
+ * doubled the cost — and so the briefing screen read a sync cache mirror instead and silently
+ * accepted an empty answer. One promise per course makes joining the in-flight call free.
+ */
+const inflight: Map<string, Promise<CourseIntelligenceResult>> = new Map();
+
 export async function fetchCourseIntelligence(
+  input: CourseIntelligenceInput,
+): Promise<CourseIntelligenceResult> {
+  const { courseId, courseName } = input;
+  if (!courseId || !courseName) {
+    return { intelligence: null, source: 'error', cached_at: Date.now() };
+  }
+  const pending = inflight.get(courseId);
+  if (pending) return pending;
+  const run = fetchCourseIntelligenceInner(input).finally(() => {
+    inflight.delete(courseId);
+  });
+  inflight.set(courseId, run);
+  return run;
+}
+
+/**
+ * Join an intelligence fetch that is already running, bounded by `timeoutMs`.
+ *
+ * Returns the cached brief immediately when there is one, joins the in-flight call when there is
+ * one, and otherwise returns null WITHOUT starting a fetch — a caller that merely wants to use the
+ * result should never be the reason a web search happens.
+ */
+export async function awaitCourseIntelligence(
+  courseId: string | null | undefined,
+  timeoutMs: number,
+): Promise<string | null> {
+  if (!courseId) return null;
+  const ready = getCachedCourseIntelligenceSync(courseId);
+  if (ready) return ready;
+  const pending = inflight.get(courseId);
+  if (!pending) return null;
+  // The timer is cleared on BOTH outcomes. Left dangling it keeps a timeout alive past every
+  // briefing that resolved promptly — harmless-looking, and the reason a test runner reports the
+  // process as still busy after the work is done.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    return await Promise.race([pending.then((r) => r.intelligence ?? null), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchCourseIntelligenceInner(
   input: CourseIntelligenceInput,
 ): Promise<CourseIntelligenceResult> {
   const { courseId, courseName, location } = input;
