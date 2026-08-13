@@ -8254,6 +8254,27 @@ check('LOCK: the pump drill has ONE rep protocol, imported — never five',
   })(),
   'one owner for the pump protocol (data/drillProtocols.ts); every surface imports it and no file restates a competing rep count');
 
+// 2026-08-13 (live audit) — six real builds against the deployed engine: 2.6s, 3.2s, 6.4s, 80s, 80s
+// and one past 120s. The client aborts at 30s, so about half the courses around Tim failed on device
+// having ALREADY done the work — the serverless function runs to completion and persists a successful
+// build to Course Cloud, which the handler reads before the OSM path on any later request. The
+// geometry arrived; nothing asked for it again.
+check('LOCK: a timed-out course build is re-asked, BOUNDED, and only when nothing is showable',
+  (() => {
+    const g = read('services/courseGeometryService.ts');
+    const scheduled = /const timedOut = e instanceof Error && \(e\.name === 'TimeoutError' \|\| e\.name === 'AbortError'\);/.test(g) &&
+      /if \(timedOut && !fallback\) scheduleGeometryRecheck\(courseId, options\);/.test(g);
+    // BOUNDED is the property that matters most: an unbounded background retry on a player's battery
+    // would be a worse defect than the one this fixes.
+    const bounded = /const RECHECK_DELAYS_MS = \[[^\]]+\] as const;/.test(g) &&
+      /if \(attempt >= RECHECK_DELAYS_MS\.length\) return;/.test(g);
+    // and it must go back through the PUBLIC entry point so the in-flight dedupe still applies —
+    // a re-ask that bypassed it would race a real user request and double the Overpass load.
+    const deduped = /void fetchCourseGeometry\(courseId, options\)/.test(g);
+    return scheduled && bounded && deduped;
+  })(),
+  'a timeout schedules a bounded re-ask through the deduped entry point, only when there is no bundled/persisted copy to show');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.

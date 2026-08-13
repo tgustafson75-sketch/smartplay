@@ -1032,8 +1032,59 @@ async function fetchCourseGeometryInner(
     return await commitGeometry(courseId, geo);
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);
-    return persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
+    const fallback = persisted ?? bundledFallback ?? buildBundledGeometry(courseId) ?? null;
+    /**
+     * 2026-08-13 (live audit) — a TIMEOUT is not a failed build, it is a build we stopped listening to.
+     *
+     * Measured against the deployed engine: six real courses returned in 2.6s, 3.2s, 6.4s, 80s, 80s and
+     * one past 120s. The client aborts at 30s, so roughly half the courses around Tim fail on device —
+     * and they fail having ALREADY done the work. The server function runs to completion regardless of
+     * the client hanging up, and a successful build is persisted to Course Cloud, which the handler
+     * reads BEFORE the golfcourseapi/OSM path on any later request.
+     *
+     * So the geometry does arrive. Nothing ever asked for it again. One bounded re-ask converts "this
+     * course doesn't work" into "this course took a minute", and the second request is a cloud read
+     * rather than a rebuild. commitGeometry publishes on arrival, so the screen updates itself.
+     *
+     * Only when we have NOTHING to show — with a bundled or persisted copy in hand the player already
+     * has a usable course and a surprise swap underneath them is worse than staying put.
+     */
+    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    if (timedOut && !fallback) scheduleGeometryRecheck(courseId, options);
+    return fallback;
   }
+}
+
+/**
+ * Delays for the bounded post-timeout re-ask, in ms. Sized from the measured slow builds (80-120s):
+ * the first re-ask covers a build that was nearly done when we hung up, the second covers the worst
+ * observed case. Two attempts, then we stop — a course OSM genuinely cannot answer for must not turn
+ * into a background retry loop on the player's battery.
+ */
+const RECHECK_DELAYS_MS = [30_000, 90_000] as const;
+const recheckAttempts: Map<string, number> = new Map();
+
+function scheduleGeometryRecheck(
+  courseId: string,
+  options?: { courseLocation?: { lat: number; lng: number } | null },
+): void {
+  const attempt = recheckAttempts.get(courseId) ?? 0;
+  if (attempt >= RECHECK_DELAYS_MS.length) return;
+  recheckAttempts.set(courseId, attempt + 1);
+  const delay = RECHECK_DELAYS_MS[attempt];
+  console.log(`[courseGeometry] build timed out for ${courseId} — re-asking in ${delay / 1000}s (attempt ${attempt + 1}/${RECHECK_DELAYS_MS.length})`);
+  setTimeout(() => {
+    // Straight back through the public entry point, so the in-flight dedupe still applies and a real
+    // user-driven request happening at the same moment shares this one rather than racing it.
+    void fetchCourseGeometry(courseId, options)
+      .then((geo) => {
+        if (geo && mappedHoleCount(geo) > 0) {
+          recheckAttempts.delete(courseId); // landed — let a future session start fresh
+          console.log(`[courseGeometry] re-ask landed for ${courseId}: ${mappedHoleCount(geo)} mapped holes`);
+        }
+      })
+      .catch(() => undefined);
+  }, delay);
 }
 
 /**
