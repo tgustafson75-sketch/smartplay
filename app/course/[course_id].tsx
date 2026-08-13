@@ -21,6 +21,7 @@ import { getCourse as getLocalCourseData } from '../../data/courses';
 import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
 import { holeNoteFromStats } from '../../services/holeNote';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
+import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
@@ -86,7 +87,21 @@ export default function CourseDetailScreen() {
   const [content, setContent] = useState<CourseContent | null>(getCachedContent(course_id ?? ''));
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(true);
-  const [geometryReady, setGeometryReady] = useState(false);
+  /**
+   * 2026-08-13 — replaces a local `geometryReady` boolean that was set true in three places and then
+   * never changed again: a ONE-SHOT flag for "the first geometry attempt finished."
+   *
+   * That covered the initial fetch and nothing after it. The hole-photo memo below resolves every
+   * thumbnail through getHoleGeometry, so once the flag latched true the grid never re-derived —
+   * geometry landing later (above all the stale-while-revalidate background refresh, which returns
+   * a week-old entry immediately and commits the real greens minutes afterward) left the placeholders
+   * up for the life of the screen. The dep array made it look handled.
+   *
+   * `completions` is strictly broader: it bumps on the initial build's completion too — including
+   * when that build FAILS, since markDone fires from a .finally — so nothing the flag covered is
+   * lost. Replaced rather than added: two sources of "is geometry ready" is how they drift apart.
+   */
+  const geometryCompletions = useGeometryStatusStore((st) => st.completions);
   // 2026-06-14 (audit — honesty) — true when we're showing the generic
   // 18×par-4×380y placeholder layout (un-catalogued local course, no per-hole
   // data fetched yet). Surfaced as a banner so the fabricated numbers aren't
@@ -205,7 +220,7 @@ export default function CourseDetailScreen() {
           setCourse(stubCourse);
           setLayoutEstimated(!realHoles); // flag the generic placeholder layout (audit)
           setLoading(false);
-          setGeometryReady(true); // bundled images don't need API geometry
+          // (bundled images need no API geometry; setCourse above already re-runs the photo memo)
         }
         // Background enrichment — don't await, don't block UI on it.
         void searchCourses(friendly).then(found => {
@@ -263,10 +278,10 @@ export default function CourseDetailScreen() {
       }
       try {
         await fetchCourseGeometry(realId, { courseLocation: fetchedCourseLocation });
-        if (!cancelled) setGeometryReady(true);
       } catch (e) {
+        // Success and failure both bump `completions` — markDone fires from a .finally — so the photo
+        // memo re-derives either way and the placeholder is never left waiting on a flag.
         console.log('[course-detail] geometry warm failed:', e);
-        if (!cancelled) setGeometryReady(true); // unblock the hero placeholder
       }
     })();
     return () => { cancelled = true; };
@@ -426,7 +441,7 @@ export default function CourseDetailScreen() {
       return url ? { hole_number: h.hole_number, url, bundled: null, yardage: h.yardage } : null;
     }).filter((x): x is { hole_number: number; url: string; bundled: ImageSourcePropType | null; yardage: number } => x !== null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tee, course, displayClubName, geometryReady, captures]);
+  }, [tee, course, displayClubName, geometryCompletions, captures]);
 
   // Phase 405b — heroSource useMemo + getCourseImageryUrl fallback
   // were removed in the V3-reference redesign. The page no longer
