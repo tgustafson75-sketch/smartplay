@@ -1,11 +1,116 @@
 # SmartPlay Caddie — Master Compendium
 
-**Generated:** 2026-05-17
-**Bundle head:** `fdf96f5` (Voice path: fix listening-pill small-talk drop + filler-clip queue latency)
-**Channel state:** `preview` OTA `3c6020d6` on `1.0.0` runtime
-**Repo:** `/Users/timothyg/Documents/smartplay`
+**Last verified:** 2026-08-13
+**Head:** `760d5a3c`
+**Repo:** `/Users/timothyg/smartplay`
+**Build health (measured 2026-08-13):** `tsc --noEmit` 0 errors · jest **946/946** across 75 suites · sim harness **746/746, Failed: 0** · `expo lint` 196 problems / 4 errors, all pre-existing unescaped-entity errors in one file
+**Scale:** 103 app routes · 71 API endpoints · 237 service modules
 
-This is the single authoritative snapshot of where SmartPlay Caddie actually is. Architecture, phases shipped, decisions made, current capabilities, deferred items, known issues, file organization, dependencies. Read this and you should understand the complete current state without needing to dig through git history or audit docs.
+> ### ⚠️ Read this before trusting any section below
+>
+> Sections 2 and 8 (the phase log and the beta-readiness verdict) were written **2026-05-17** and have
+> **not** been re-verified. There are **1,898 commits** between that snapshot and this one. Treat them
+> as history, not as current state.
+>
+> Section 1A below is the part that was verified on 2026-08-13, by running the code and calling the
+> deployed API — not by reading it. Where something was checked live it says so, and where it wasn't it
+> says that too.
+
+This is the authoritative snapshot of where SmartPlay Caddie actually is. Read this and you should
+understand the current state without digging through git history or audit docs — but read the dated
+verification markers, because a compendium that quietly ages is how "I was told it was built" happens.
+
+---
+
+## 1A. Verified state — 2026-08-13 full audit
+
+Method: audit the **journeys**, not the files, and prove claims by using the thing. The course engine
+was tested by building six real courses against the live deployed API; module wiring was tested by
+enumerating consumers repo-wide, not by reading a file and assuming.
+
+### Course-building engine — **BUILT AND WORKING** (Tier C, live-verified)
+
+The question "is the course engine actually built?" is answered: **yes.** Verified end to end against
+`https://api.smartplaycaddie.com`:
+
+Course Cloud (Supabase, migration `0006_course_geometry.sql`) read first → golfcourseapi proxy → OSM
+Overpass across **3 mirrors with retry** → coherent `golf=hole` way selection → polygon assignment →
+**server-side persistence of its own builds** (`recordServerBuild`) → crowd contributions ranked by
+source (`bundled > osm > user_walk > ai_vision`). Plus a per-hole AI-vision fallback (`api/hole-scan`).
+No stubs anywhere in the path.
+
+Live builds performed 2026-08-13:
+
+| course | result |
+|---|---|
+| Kettle Brook, Paxton MA | 3.2s · 18/18 greens + tees · real yardage profile |
+| Blackstone National, Sutton MA | 6.4s · 18/18 · par 3s at 162/171/207, par 5s at 559/571 |
+| Green Hill, Worcester MA | 2.6s · 18/18 (bundled as `local:greenhill`) |
+| Pebble Beach (probe) | 82s · 18/18 |
+| Pakachoag, Auburn MA | 80s · 9 holes, geometry wrong (see below) |
+| **Pine Ridge, N. Oxford MA** | **no response after 120s** |
+
+Discovery is also live: `api/course-locate` returned 20 correctly golf-filtered courses around
+Worcester in 1.1s.
+
+**Two OSM build paths, and they are not equal.** `osm_holeways` (real `golf=hole` ways) is accurate and
+fast. The fallback tee↔green **pairing** path is speculative — it already self-labels
+`estimated: true` / confidence `low`, which drives the "AI ESTIMATE — not surveyed" badge and a 45%
+confidence cap, so its coordinates are never presented as surveyed.
+
+### Fixed 2026-08-13
+
+| commit | fix |
+|---|---|
+| `6336649b` | Geometry **writes** publish, not just builds — stale-while-revalidate committed fresh greens silently, on the path every returning player takes (course last seen 7+ days) |
+| `3b4607d5` | Course screen re-derives hole photos on every geometry arrival (was a one-shot flag) |
+| `fff765a9` | Play-tab thumbnails re-resolve when geometry lands |
+| `867cadf3` | SmartVision course label resolves when the build carrying it commits |
+| `20689eff` | Pre-round briefing **joins** the course-intelligence prefetch instead of racing it to null — it was generating with no course grounding, silently, every time |
+| `b90c84c1` | Par **derived from measurement** on both OSM paths (the pairing path hardcoded 4, emitting an 84-yard "par 4"); pairing path gets real F/M/B depth from the green ring it already matched |
+| `ea50d7f9` | **Club-plane read wired** — over-the-top was being called from shoulder tilt while the real clubhead-arc measurement sat unused |
+| `bfd0d57e` | **Step-and-swing made recommendable** — existed as knowledge, was in nothing that could serve it |
+| `3e7372db` | **One owner for the pump drill protocol** — it was authored in five files with five different rep counts |
+| `95d63952` | A timed-out course build is **re-asked** (bounded) — the server already finished and persisted it; nothing ever asked again |
+| `760d5a3c` | Ball fit: one owner for the speed bands — the two screens disagreed for a 212-yard driver carry |
+
+### Verified healthy (no action needed)
+
+- **SwingLab**: all 19 cards have real render sites; all 13 tools-menu routes resolve; all 10 drill
+  deep-links resolve against the 17-entry `DRILL_CATALOG`.
+- **Setup Check** is live (`SETUP_CHECK_ENABLED = true`) — camera → 1024px resize → vision → card.
+- **Shot shapes** are connected to measured data (`getShotShape` / `readActualLaunch` /
+  `compareShotShape`, backed by `ballDeparture.ts`), with an explicit honesty boundary: launch height
+  and direction only, never carry-to-roll.
+- **Swing trace / arc drawing** is wired and live (`clubPath`, `smartTrace`, `ballTrace`,
+  `swingSegmentation` → smartmotion + swing detail).
+- **Camera-angle self-correction** works: an explicit DTL/face-on toggle is cross-checked against
+  `inferCameraAngle` and a confident disagreement **self-corrects to the pose geometry**, so a wrong
+  toggle on the course cannot silently cost the player their analysis.
+- **Shaft flex** (`recommendFlex`) is real and honestly gated — only off a *measured* driver carry,
+  returns null without one, and the copy says "not a launch-monitor fitting."
+- Ball fitting is deliberately **directional**, and both engines say so; neither measures spin or
+  compression and neither claims to.
+
+### Still open after this audit
+
+- **Pine Ridge, N. Oxford: the server hangs past 120s.** A total-budget problem in the Overpass mirror
+  walk. `95d63952` makes it *recoverable*, not fast.
+- **The polygon layer delivers nothing.** With `withPolygons=1`, `green_outline`, `green_polygon`,
+  `fairway_centerline` and `hazards` were empty on 4/4 courses built. F/M/B survives via
+  `green_front`/`green_back`/`bearing_deg`. **Not isolated** — could be an engine bug or genuinely
+  absent OSM data. Suspicious, not proven.
+- **`services/swing/poseMotion.ts`** (`deriveSwingAnchors`) — behaviourally tested in the sim, **zero
+  production consumers** since 2026-07-21. Its sibling `poseMotionSampler.ts` was already deleted for
+  exactly this.
+- **`defaultWakeWordOn`** in `services/trustLevelService.ts` — zero consumers repo-wide; an orphaned
+  flag for a feature that does not exist.
+- **The club-plane read is `provisional`.** It ships hedged; the exact angle threshold and sign still
+  want a known over-the-top DTL clip to calibrate.
+- **Nothing in this audit is device-verified.** One exception, reported by Tim on 2026-08-13: the voice
+  path ran cold-open to an intelligent Serena reply in under 30 seconds — **PATH 4 is Tier C.**
+
+---
 
 ---
 
@@ -508,6 +613,17 @@ Cold launch with persisted non-default settings. Paths: 1 (cold-launch hydration
 ---
 
 ## 7. Known Issues + Deferred Items
+
+> **This list is from 2026-05-17 and has not been re-verified.** The current, checked open items are in
+> §1A "Still open after this audit". Deliberately not restated here — two lists of open issues is how
+> they start disagreeing, which is a defect this project has now fixed in four separate places.
+>
+> One entry below WAS re-verified on 2026-08-13 and is still accurate: the wake-word gate. Confirmed
+> not built (`docs/audit-100-functional-state.md`: "Wake word | DEFERRED | Not built"), shipped in
+> `4ca61406` and reverted in `b4b6b9a6` for silently dropping caddie greetings. Worth knowing *why* it
+> failed: it was never a wake word, it was a transcript filter — the mic still opened and still
+> transcribed everything, then discarded the text if it lacked a name. A real one needs an on-device
+> hotword engine, and there is no such dependency in the project.
 
 ### Documented Limitations
 - **Audio routing detection** (`services/audioRoutingService.ts`) — always returns `'unknown'`. Native event listener not built. `'unknown'` does NOT match `'phone_speaker'` so `isVoiceAllowed` gate doesn't trip; default behavior is "play voice on whatever's active."
