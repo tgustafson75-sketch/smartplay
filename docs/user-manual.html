@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SmartPlay Caddie — User Manual</title>
+<style>
+  @page { size: letter; margin: 16mm 15mm 18mm 15mm; }
+
+  :root{
+    --green:#00A87A;      /* print-safe of #00C896 */
+    --green-light:#E6F7F2;
+    --amber:#B4820F;
+    --sky:#1E7FA8;
+    --ink:#14201C;
+    --body:#33413C;
+    --muted:#6B7A75;
+    --rule:#DCE5E1;
+    --panel:#F6F9F8;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{
+    margin:0; color:var(--body); background:#fff;
+    font:11pt/1.55 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  /* ---------- cover ---------- */
+  .cover{ height:245mm; display:flex; flex-direction:column; justify-content:center; page-break-after:always; }
+  .brand{ font-size:9.5pt; letter-spacing:.28em; text-transform:uppercase; color:var(--green); font-weight:700; }
+  .cover h1{ font-size:40pt; line-height:1.02; margin:14px 0 0; color:var(--ink); letter-spacing:-.02em; font-weight:700; }
+  .cover .sub{ font-size:14pt; color:var(--muted); margin-top:14px; max-width:120mm; line-height:1.45; }
+  .cover .rule{ width:64px; height:4px; background:var(--green); border-radius:2px; margin:26px 0; }
+  .cover .meta{ font-size:9.5pt; color:var(--muted); margin-top:auto; padding-top:28px; border-top:1px solid var(--rule); }
+  .cover .meta b{ color:var(--body); font-weight:600; }
+
+  /* ---------- structure ---------- */
+  section{ page-break-before:always; }
+  section.run-on{ page-break-before:auto; }
+  h2{
+    page-break-after:avoid; break-after:avoid;
+    font-size:19pt; color:var(--ink); margin:0 0 4px; letter-spacing:-.01em; font-weight:700;
+    padding-bottom:8px; border-bottom:2px solid var(--green);
+  }
+  .lede{ color:var(--muted); font-size:10.5pt; margin:8px 0 20px; }
+  h3{ font-size:12.5pt; color:var(--ink); margin:22px 0 7px; font-weight:700;
+      page-break-after:avoid; break-after:avoid; }
+  h3:first-of-type{ margin-top:16px; }
+  p{ margin:0 0 10px; }
+  ul,ol{ margin:0 0 12px; padding-left:20px; }
+  li{ margin:0 0 5px; }
+  b,strong{ color:var(--ink); font-weight:600; }
+  a{ color:var(--sky); text-decoration:none; }
+
+  .say{
+    display:inline-block; background:var(--green-light); color:#046B51;
+    border-radius:4px; padding:1px 7px; font-weight:600; white-space:nowrap;
+  }
+
+  /* ---------- components ---------- */
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:11px; margin:14px 0 4px;
+         page-break-inside:avoid; break-inside:avoid; }
+  .card{
+    border:1px solid var(--rule); border-left:3px solid var(--green); border-radius:6px;
+    padding:11px 13px; background:#fff; page-break-inside:avoid;
+  }
+  .card h4{ margin:0 0 4px; font-size:11pt; color:var(--ink); font-weight:700; }
+  .card p{ margin:0; font-size:9.8pt; color:var(--body); }
+  .card .tag{ display:block; font-size:8pt; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+
+  table{ width:100%; border-collapse:collapse; margin:12px 0 16px; font-size:10pt; page-break-inside:avoid; }
+  th{ text-align:left; background:var(--panel); color:var(--ink); font-weight:700; font-size:9pt;
+      letter-spacing:.06em; text-transform:uppercase; padding:8px 10px; border-bottom:2px solid var(--rule); }
+  td{ padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  td:first-child{ white-space:nowrap; font-weight:600; color:var(--ink); }
+  tr:last-child td{ border-bottom:none; }
+
+  .steps{ page-break-inside:avoid; counter-reset:s; list-style:none; padding:0; margin:12px 0 16px; }
+  .steps li{ counter-increment:s; position:relative; padding-left:32px; margin-bottom:9px; page-break-inside:avoid; }
+  .steps li::before{
+    content:counter(s); position:absolute; left:0; top:-1px;
+    width:21px; height:21px; border-radius:50%; background:var(--green); color:#fff;
+    font-size:9.5pt; font-weight:700; display:flex; align-items:center; justify-content:center;
+  }
+
+  .note{
+    border-radius:6px; background:var(--panel); border:1px solid var(--rule);
+    border-left:3px solid var(--sky); padding:11px 13px; margin:14px 0; font-size:10pt;
+    page-break-inside:avoid;
+  }
+  .note.warn{ border-left-color:var(--amber); }
+  .note .label{ display:block; font-size:8pt; letter-spacing:.13em; text-transform:uppercase;
+                color:var(--muted); font-weight:700; margin-bottom:4px; }
+  .note p:last-child{ margin-bottom:0; }
+
+  .toc{ margin:20px 0 0; }
+  .toc div{ display:flex; align-items:baseline; padding:8px 0; border-bottom:1px solid var(--rule); font-size:11pt; }
+  .toc .n{ color:var(--green); font-weight:700; width:30px; }
+  .toc .t{ color:var(--ink); font-weight:600; }
+  .toc .d{ color:var(--muted); margin-left:auto; font-size:9.5pt; }
+
+  .newpage{ page-break-before:always; }
+  .footer{ margin-top:26px; padding-top:12px; border-top:1px solid var(--rule);
+           font-size:9pt; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">SmartPlay Caddie</div>
+  <h1>Your caddie,<br>in your pocket.</h1>
+  <div class="rule"></div>
+  <div class="sub">
+    A complete guide to playing smarter golf — reading the shot, talking to your caddie,
+    and turning your own swing into something you can actually work on.
+  </div>
+  <div class="meta">
+    <b>User Manual</b> &nbsp;·&nbsp; Version 1.0 &nbsp;·&nbsp; August 2026<br>
+    Questions? <b>support@smartplaycaddie.com</b>
+  </div>
+</div>
+
+<section class="run-on">
+  <h2>What's inside</h2>
+  <div class="toc">
+    <div><span class="n">1</span><span class="t">Getting started</span><span class="d">Your caddie, the five tabs</span></div>
+    <div><span class="n">2</span><span class="t">Playing a round</span><span class="d">Start, play, log, finish</span></div>
+    <div><span class="n">3</span><span class="t">Talking to your caddie</span><span class="d">Voice, tap, hands-free</span></div>
+    <div><span class="n">4</span><span class="t">Knowing your number</span><span class="d">SmartVision, F/M/B, lie</span></div>
+    <div><span class="n">5</span><span class="t">Working on your swing</span><span class="d">SwingLab, drills, analysis</span></div>
+    <div><span class="n">6</span><span class="t">Your bag and your ball</span><span class="d">Gapping, flex, ball fit</span></div>
+    <div><span class="n">7</span><span class="t">Settings worth knowing</span><span class="d">Presence, cart, theme</span></div>
+    <div><span class="n">8</span><span class="t">When something looks wrong</span><span class="d">Fixes and honest limits</span></div>
+  </div>
+
+  <div class="note">
+    <span class="label">A promise about numbers</span>
+    <p>SmartPlay tells you where a number came from. A measured yardage reads differently
+    from an estimate, and anything built from limited data is labelled as such. If the app
+    can't know something, it says so rather than inventing it — you should be able to trust
+    the numbers you're given precisely because you're told when not to.</p>
+  </div>
+</section>
+
+<section>
+  <h2>1 · Getting started</h2>
+  <p class="lede">Pick who's on your bag, then learn where things live.</p>
+
+  <h3>Choose your caddie</h3>
+  <p>Your caddie is a personality, not a setting. They all know the same golf — they just talk
+  to you differently. Switch any time, on or off the course.</p>
+
+  <div class="grid">
+    <div class="card"><span class="tag">Balanced</span><h4>Kevin</h4><p>The default. Straightforward, encouraging, gets to the point without rushing you.</p></div>
+    <div class="card"><span class="tag">Calm &amp; analytical</span><h4>Serena</h4><p>Measured and precise. Explains the reasoning behind the number.</p></div>
+    <div class="card"><span class="tag">Wise &amp; measured</span><h4>Harry</h4><p>The traditional caddie. Talks in "we" and "let's" — every shot is a partnership.</p></div>
+    <div class="card"><span class="tag">Direct</span><h4>Tank</h4><p>Intense, no fluff. Enabled from Owner Tools when you want it.</p></div>
+  </div>
+
+  <p style="margin-top:12px">Say <span class="say">Switch to Serena</span> or <span class="say">Switch back to Kevin</span> at any time.
+  You can also build a <b>custom caddie</b> — your own face and name, backed by Kevin, Serena or Tank's manner.</p>
+
+  <h3>The five tabs</h3>
+  <table>
+    <tr><th>Tab</th><th>What it's for</th></tr>
+    <tr><td>Play</td><td>Find a course, set up your round, and start playing.</td></tr>
+    <tr><td>Caddie</td><td>Your caddie's home. Talk to them, and manage the round in progress.</td></tr>
+    <tr><td>SwingLab</td><td>Practice tools, swing video, drills and your swing library.</td></tr>
+    <tr><td>Scorecard</td><td>The card for the round you're playing.</td></tr>
+    <tr><td>Dashboard</td><td>Your stats, recent rounds and handicap over time.</td></tr>
+  </table>
+
+  <div class="note">
+    <span class="label">One menu, always</span>
+    <p>Everything else lives behind the <b>•••</b> button at the top right of the Caddie screen.
+    Whenever a tool is open, your caddie shrinks to a badge in the top-left corner — tap it to come back.</p>
+  </div>
+</section>
+
+<section>
+  <h2>2 · Playing a round</h2>
+  <p class="lede">From the car park to the recap.</p>
+
+  <h3>Start the round</h3>
+  <ol class="steps">
+    <li>Open the <b>Play</b> tab and search for your course, or tap one of the nearby courses it's already found.</li>
+    <li>Pick your round mode — <b>Break 100 / 90 / 80</b>, or <b>Free Play</b>. This changes how your caddie advises, not what it measures.</li>
+    <li>Add any notes you want your caddie to know. Tap the mic icon to dictate instead of typing.</li>
+    <li>Tap <b>Start Round</b>. You'll land on the Caddie tab with your first hole ready.</li>
+  </ol>
+
+  <div class="note">
+    <span class="label">First time on a course?</span>
+    <p>SmartPlay builds the hole map for courses it hasn't seen, using public mapping data. Most courses
+    are ready in a few seconds. A few take longer — if yours isn't ready straight away, keep playing and
+    it will fill itself in. You don't have to do anything.</p>
+  </div>
+
+  <h3>While you play</h3>
+  <p>Your caddie follows along by GPS, tracks your shots and knows what hole you're on. Ask for anything
+  you'd ask a real caddie: <span class="say">What have I got?</span> <span class="say">What's my score?</span>
+  <span class="say">What hole am I on?</span></p>
+
+  <h3>If a shot gets missed</h3>
+  <p>GPS isn't perfect. When a shot doesn't register, add it by hand — it takes about ten seconds.</p>
+  <ol class="steps">
+    <li>Tools menu → <b>Log shot</b>.</li>
+    <li>Tap <b>↺ Use fresh GPS fix</b> to pin exactly where you are.</li>
+    <li>Confirm the hole, then pick the club, outcome and direction.</li>
+    <li><b>Save.</b> Your caddie catches up immediately.</li>
+  </ol>
+
+  <h3>Riding rather than walking</h3>
+  <p>Say <span class="say">Cart mode on</span> and shot detection tightens up, so the cart's movement
+  isn't mistaken for a shot. Saying <span class="say">Walking mode</span> puts it back.</p>
+
+  <h3>Finishing</h3>
+  <ul>
+    <li><b>Save &amp; end</b> — locks the round, updates your handicap, and generates your recap.</li>
+    <li><b>Discard</b> — throws it away completely. Nothing is recorded.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3 · Talking to your caddie</h2>
+  <p class="lede">Three ways in. Use whichever suits the moment.</p>
+
+  <table>
+    <tr><th>Method</th><th>How</th><th>Best for</th></tr>
+    <tr><td>Tap to talk</td><td>Tap your caddie's face or the mic badge, speak, then tap again when you're done.</td><td>Most situations — it's the most reliable.</td></tr>
+    <tr><td>Earbuds</td><td>Tap your earbud control and speak.</td><td>Walking between shots without taking the phone out.</td></tr>
+    <tr><td>Hands-free</td><td>Settings → Voice → <b>Active Listening</b> → ON.</td><td>Practice and range sessions.</td></tr>
+  </table>
+
+  <h3>Things worth trying</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">On the shot</span><h4>"What's the smart play?"</h4><p>The whole point of the app — the decision, not just the distance.</p></div>
+    <div class="card"><span class="tag">Distance</span><h4>"How far to the front?"</h4><p>Front, middle and back, adjusted for your round.</p></div>
+    <div class="card"><span class="tag">Tools</span><h4>"Open SmartVision"</h4><p>Any tool can be opened by voice.</p></div>
+    <div class="card"><span class="tag">Trouble</span><h4>"Check my lie"</h4><p>Opens TightLie to read your lie from a photo.</p></div>
+    <div class="card"><span class="tag">Your game</span><h4>"How am I hitting my 7 iron?"</h4><p>Answers from your own logged shots.</p></div>
+    <div class="card"><span class="tag">Anything</span><h4>"I'm struggling out here today."</h4><p>Your caddie reads tone, not just commands.</p></div>
+  </div>
+
+  <div class="note">
+    <span class="label">If you get cut off mid-sentence</span>
+    <p>Your caddie decides you've finished when you go quiet. Trailing off softly at the end of a
+    sentence can end the turn early. Speaking through to the end of your thought at a steady volume
+    keeps it listening — and tapping to end the turn always works.</p>
+  </div>
+</section>
+
+<section>
+  <h2>4 · Knowing your number</h2>
+  <p class="lede">Distance is the easy part. The number that's actually useful is the one that accounts for the day.</p>
+
+  <h3>SmartVision — see the hole</h3>
+  <p>Open it from the Tools menu or say <span class="say">Open SmartVision</span>. You get the hole from
+  above, with your position live on it.</p>
+  <table>
+    <tr><th>Marker</th><th>Meaning</th></tr>
+    <tr><td>T</td><td>The tee.</td></tr>
+    <tr><td>Y</td><td>Your target or layup. Drag it anywhere — the carry number follows.</td></tr>
+    <tr><td>P</td><td>The pin.</td></tr>
+    <tr><td>F / M / B</td><td>Front, middle and back of the green.</td></tr>
+  </table>
+  <p>Dragging <b>Y</b> is the fastest way to answer "can I get there?" — put it on the bunker and read the carry.</p>
+
+  <h3>Plays-like distance</h3>
+  <p>Raw yardage ignores the hill you're standing on and the wind in your face. Your caddie factors in
+  elevation, conditions and how <em>you</em> actually hit the club — not a chart of how a tour player hits it.</p>
+
+  <h3>TightLie — read the lie</h3>
+  <p>Say <span class="say">Check my lie</span> or <span class="say">What's the play?</span> and then photograph
+  the ball. You'll get an honest read on what's realistic from there — including when the answer is to
+  take your medicine and pitch out.</p>
+</section>
+
+<section>
+  <h2>5 · Working on your swing</h2>
+  <p class="lede">SwingLab is the practice half of the app. Film a swing, get one clear thing to work on.</p>
+
+  <h3>What's in there</h3>
+  <table>
+    <tr><th>Tool</th><th>What it does</th></tr>
+    <tr><td>SmartMotion</td><td>Film one swing, get analysis straight away.</td></tr>
+    <tr><td>Drills</td><td>A catalog of faults, each with fixes and instructor video.</td></tr>
+    <tr><td>Range Mode</td><td>A whole range, studio or cage session in one go.</td></tr>
+    <tr><td>Swing Library</td><td>Every swing you've filmed, with body overlay and club trace.</td></tr>
+    <tr><td>Setup Check</td><td>Photograph your address position and get one adjustment.</td></tr>
+    <tr><td>Arena</td><td>Bag distances, tempo trainer and putting clock.</td></tr>
+  </table>
+
+  <h3>Filming a swing that reads well</h3>
+  <ol class="steps">
+    <li>Set the phone so your whole body and the ball are in frame — the app tells you when you're framed.</li>
+    <li>Film <b>down the line</b> (behind you, looking at the target) for path and plane. Film <b>face on</b> for weight and tempo.</li>
+    <li>Swing. Analysis runs on its own.</li>
+  </ol>
+  <div class="note">
+    <span class="label">Don't worry about the angle toggle</span>
+    <p>If you film down the line with the toggle set to face on, the app works out the real angle from
+    the video and corrects itself. You won't get a wrong reading because you couldn't see the screen in
+    bright sun.</p>
+  </div>
+
+  <h3 class="newpage">What you get back</h3>
+  <p>One <b>primary issue</b> — the thing worth fixing first — plus body measurements, your club's path
+  traced through the swing, and a drill matched to what was found. You'll also see a <b>club plane</b>
+  reading: whether the club came down steeper or shallower than it went back, measured from your actual
+  clubhead, not guessed from your shoulders.</p>
+
+  <h3>Two drills worth knowing</h3>
+  <div class="grid">
+    <div class="card">
+      <span class="tag">Transition &amp; sequence</span><h4>Step-and-Swing</h4>
+      <p>Feet together. Step toward the target to start down, then swing through to a full finish over
+      your lead leg. Forces the lower body to lead — and it ends in a real finish, which is the half
+      most transition drills skip.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Shallowing</span><h4>Pump Drill</h4>
+      <p>Club to the top. Pump down to hip height three times, feeling the lower body start and the club
+      drop behind you. On the fourth, swing through to a full finish.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>6 · Your bag and your ball</h2>
+  <p class="lede">Advice is only as good as knowing how far you actually hit it.</p>
+
+  <h3>Learning your distances</h3>
+  <p>Every logged shot teaches your caddie your real carry — not the chart. This matters more than it
+  sounds: if your wedges fly further than standard and your driver doesn't, generic advice hands you the
+  wrong club all day. Once a club has enough shots behind it, your caddie uses your number instead.</p>
+
+  <h3>Fit Profile</h3>
+  <p>Your carry ladder from longest to shortest, the gaps between clubs, and the clubs you actually own
+  cross-referenced against those gaps — so it can tell the difference between a gap you should fill and
+  one you already have a club for.</p>
+
+  <h3>Ball Fit and shaft flex</h3>
+  <p>Both answer from what the app can genuinely read — your speed band from a measured driver carry,
+  your handicap, and how you use your short game.</p>
+  <div class="note warn">
+    <span class="label">An honest limit</span>
+    <p>SmartPlay does not measure spin, compression or launch. It says so on the screen. These reads are
+    a sensible starting point and a good sleeve to try — they are not a launch-monitor fitting, and
+    they'll tell you to confirm with a fitter rather than pretending otherwise.</p>
+  </div>
+</section>
+
+<section>
+  <h2>7 · Settings worth knowing</h2>
+  <p class="lede">Most defaults are fine. These four are worth a look.</p>
+
+  <table>
+    <tr><th>Setting</th><th>Why you'd change it</th></tr>
+    <tr><td>Caddie presence</td><td><b>Quiet</b> keeps your caddie silent until you tap. <b>Active</b> lets them lead — offering the read before you ask.</td></tr>
+    <tr><td>Active Listening</td><td>Hands-free. Excellent on the range, and it means the phone is listening while it's on.</td></tr>
+    <tr><td>Cart mode</td><td>Turn on when riding so cart movement isn't logged as a shot.</td></tr>
+    <tr><td>Theme</td><td>Light, Dark or System. Dark reads better in low sun.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>8 · When something looks wrong</h2>
+  <p class="lede">Common situations, and what's actually happening.</p>
+
+  <table>
+    <tr><th>What you see</th><th>What to do</th></tr>
+    <tr><td>Yardage says STATIC</td><td>The hole map is still building. Keep playing — it switches to live yardage on its own once the greens land.</td></tr>
+    <tr><td>Course won't load</td><td>Give it a minute. If the map is slow to build, the app asks again by itself. If a course never builds, tell your caddie and play from the scorecard yardages.</td></tr>
+    <tr><td>An estimated hole map</td><td>When a hole is marked as an estimate, treat it as a guide rather than a surveyed number. It's labelled precisely so you know which is which.</td></tr>
+    <tr><td>Caddie cut you off</td><td>Speak through to the end of your sentence, or tap to end the turn yourself.</td></tr>
+    <tr><td>A shot didn't register</td><td>Tools → Log shot → fresh GPS fix. Ten seconds and your caddie is caught up.</td></tr>
+    <tr><td>Something's plainly broken</td><td>Say <span class="say">Log this — [what's wrong]</span> and it is saved with the context of what you were doing.</td></tr>
+  </table>
+
+  <h3>What SmartPlay doesn't claim</h3>
+  <p>Being useful matters more than sounding certain. The app works with a phone, a watch, your camera
+  and public data — not radar. So it measures what it can measure, estimates what it can reasonably
+  estimate and labels it, and stays quiet about the rest. Where it says "estimated," "directional" or
+  "still being calibrated," take it at its word — that's the app being straight with you, and it's why
+  the unlabelled numbers are worth trusting.</p>
+
+  <div class="footer">
+    <b>SmartPlay Caddie</b> · User Manual v1.0 · August 2026<br>
+    Help and feedback: <b>support@smartplaycaddie.com</b>
+  </div>
+</section>
+
+</body>
+</html>
