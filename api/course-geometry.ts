@@ -1004,10 +1004,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ...pairs.filter(p => p.tee == null),
     ].slice(0, holeCount);
 
-    const holes = pairs.map((p, i) => ({
+    const holes = pairs.map((p, i) => {
+      const yardage = p.tee ? Math.round(haversineYards(p.tee, p.green)) : 0;
+      /**
+       * 2026-08-13 (audit) — par DERIVED from the measured distance, with the same rule the hole-way
+       * path above already uses. It was hardcoded to 4, which emitted internally impossible holes: a
+       * live Pakachoag build returned nine "par 4" holes of 84-164 yards.
+       *
+       * The estimate badge on this path was already honest that the COORDINATES are synthesized, and
+       * that is the important half. But "par 4" on an 84-yard hole is not an uncertain reading, it is
+       * a self-contradictory one — and a card that contradicts itself is what makes a player stop
+       * believing the numbers that ARE right.
+       *
+       * No tee paired means no measurement, so keep the neutral 4 rather than inferring par from a 0.
+       */
+      const par = !p.tee ? 4 : yardage <= 215 ? 3 : yardage >= 460 ? 5 : 4;
+      return {
       hole_number: i + 1,
-      par: 4,
-      yardage: p.tee ? Math.round(haversineYards(p.tee, p.green)) : 0,
+      par,
+      yardage,
       tee: p.tee,
       green: p.green,
       green_front: p.green,
@@ -1027,7 +1042,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fairway_polygons: [] as Loc[][],
       bunkers: [] as AssignedPolygon[],
       water_hazards: [] as AssignedPolygon[],
-    }));
+      };
+    });
 
     // 2026-05-17 — Augment with polygon data when requested. Pulls
     // full polygons for green/tee/fairway/bunker/water_hazard in
@@ -1050,7 +1066,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const m = greenPolys.find(p =>
             haversineYards(p.centroid, h.green!) < 15,
           );
-          if (m) h.green_polygon = m.polygon;
+          if (m) {
+            h.green_polygon = m.polygon;
+            /**
+             * 2026-08-13 (audit) — derive FRONT/BACK from the polygon we just matched.
+             *
+             * This path seeds green_front and green_back to the green CENTROID, so front, middle and
+             * back all read the same number: the F/M/B panel renders three identical yardages and the
+             * green has no depth. The hole-way path already does this properly; here the polygon was
+             * being attached for the overlay and then not used for the one number a player actually
+             * plays to. Only runs when a tee exists — front/back are meaningless without something to
+             * measure from.
+             */
+            if (h.tee) {
+              let front = m.centroid; let back = m.centroid;
+              let dF = Infinity; let dB = -Infinity;
+              for (const pt of m.polygon) {
+                const d = haversineYards(h.tee, pt);
+                if (d < dF) { dF = d; front = pt; }
+                if (d > dB) { dB = d; back = pt; }
+              }
+              h.green_front = front;
+              h.green_back = back;
+            }
+          }
         }
         if (h.tee) {
           const m = teePolys.find(p =>

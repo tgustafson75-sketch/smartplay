@@ -8911,6 +8911,25 @@ check('LOCK: stored geometry carries a derived bearing, and F/M/B has real green
   })(),
   'stored builds carry orientation; front/back derived from the green polygon rather than echoing the centroid');
 
+// 2026-08-13 (live audit — I built four real courses against the deployed engine instead of reading
+// it). Pakachoag came back as NINE PAR 4s of 84-164 yards. The estimate badge was already honest that
+// this path's coordinates are synthesized — that half was fixed on 08-09 — but par was hardcoded to 4,
+// so the card contradicted itself. An 84-yard par 4 is not an uncertain reading, it is an impossible
+// one, and it is what makes a player stop believing the numbers that ARE right.
+check('LOCK: a built hole\'s par is MEASURED, never assumed — no path emits a hardcoded par',
+  (() => {
+    const cg = read('api/course-geometry.ts');
+    // Neither OSM path may emit a literal par. Both derive from the tee→green distance.
+    const noHardcoded = !/^\s*par: 4,\s*$/m.test(cg);
+    const holeWayDerives = /const par = w\.par \?\? \(center <= 215 \? 3 : center >= 460 \? 5 : 4\);/.test(cg);
+    const pairingDerives = /const par = !p\.tee \? 4 : yardage <= 215 \? 3 : yardage >= 460 \? 5 : 4;/.test(cg);
+    // and the speculative pairing path must stop echoing the centroid for front AND back once it has
+    // matched a real green ring — three identical yardages is a green with no depth.
+    const pairingDepth = /h\.green_front = front;/.test(cg) && /h\.green_back = back;/.test(cg);
+    return noHardcoded && holeWayDerives && pairingDerives && pairingDepth;
+  })(),
+  'par derived from measured distance on both OSM paths; the pairing path gives F/M/B real depth from the matched ring');
+
 // Re-check pass (Tim: "go back and check your work one more time"). Found by re-reading my own fix,
 // not by a failure: bagDistances() keys are ClubName ('7I'), STANDARD_LADDER is labelled ('7 Iron').
 // Merging raw ADDED the same club twice — skewing the bag extremes and letting the caddie speak a
