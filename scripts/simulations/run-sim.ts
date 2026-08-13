@@ -8225,6 +8225,35 @@ check('Club-path read: DTL-gated plane geometry, provisional-honest, and actuall
   })(),
   'the club-plane read is built, DTL-gated, honest when unmeasurable — and consumed on the swing detail with the angle-corrected read');
 
+// 2026-08-13 (Tim — "not finishing the swing in the pump drill, or kind of not knowing exactly how to
+// do it, has been my limitation"). That read as coaching copy and was actually a data defect: the drill
+// was independently authored in FIVE files with FIVE rep counts — 3-then-swing, 4th-finishes,
+// two-or-three-hit-on-the-third, twenty pumps, and 15-20. He wasn't failing to follow it; the app was
+// telling him five different things. Same many-authors class as the caddie identity and the geometry
+// writers, landing on the instruction meant to fix his swing.
+check('LOCK: the pump drill has ONE rep protocol, imported — never five',
+  (() => {
+    const proto = read('data/drillProtocols.ts');
+    const owner = /export const PUMP_DRILL: DrillProtocol/.test(proto) && /pumps: 3/.test(proto);
+    const consumers = [
+      'components/CageSessionOverlay.tsx',
+      'services/coachKnowledge.ts',
+      'services/knowledgeBase/modules/drills.ts',
+      'data/drillCatalog.ts',
+    ].every((f) => /PUMP_DRILL/.test(read(f)));
+    // The five counts that were simultaneously live must not reappear. Restating the protocol is the
+    // failure mode, so the guard forbids the STRINGS, not just a missing import.
+    const noRelapse = [
+      'components/CageSessionOverlay.tsx',
+      'services/coachKnowledge.ts',
+      'services/knowledgeBase/modules/drills.ts',
+      'data/drillCatalog.ts',
+      'services/drillRecommendation.ts',
+    ].every((f) => !/Twenty pumps|15-20 slow pumps|two or three times|hit on the third/i.test(read(f)));
+    return owner && consumers && noRelapse;
+  })(),
+  'one owner for the pump protocol (data/drillProtocols.ts); every surface imports it and no file restates a competing rep count');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.

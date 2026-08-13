@@ -49,6 +49,7 @@ import ClubPickerModal from './cage/ClubPickerModal';
 // the multi-shot validation constants are owned by the shared detector
 // in services/acousticImpactDetector now.
 import { METER_INTERVAL_MS } from '../constants/cageDetection';
+import { PUMP_DRILL } from '../data/drillProtocols';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,9 @@ const PICKER_DRILLS: CageDrillContext[] = [
   { id: 'alignment',   title: 'Alignment Check', steps: ['Set alignment sticks parallel.', 'Verify shoulder line.', 'Hit 10 with check before each.'], tip: 'Most amateurs aim right.' },
   { id: 'impact',      title: 'Impact Position', steps: ['Set impact bag.', 'Slow swing to impact.', 'Check hands ahead, weight forward.', 'Hold position 5 sec.'], tip: 'Shaft lean = distance.' },
   { id: 'gate',        title: 'Gate Drill',      steps: ['Place tees 1" wider than clubhead.', 'Swing through without hitting either tee.', 'Adjust path until clean.'], tip: 'Path doesn\'t lie.' },
-  { id: 'pump',        title: 'Pump Drill',      steps: ['Take club to top.', 'Pump down to hip height 3x.', '4th pump finishes through.'], tip: 'Hands lead clubhead.' },
+  // Steps come from data/drillProtocols — this drill is described in several registers and used to
+  // give a different rep count in each. See that file's header.
+  { id: 'pump',        title: 'Pump Drill',      steps: [...PUMP_DRILL.steps], tip: 'Hands lead clubhead.' },
   // 2026-08-13 (Tim) — the step drill existed as coaching knowledge (drill.step-through) and was
   // already associated with over-the-top, but was in nothing that could RECOMMEND or run it. It is
   // the transition drill that ends in a full finish by construction, which is exactly what he said

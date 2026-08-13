@@ -14,6 +14,7 @@
  * metric; when the metric is null (angle can't see it), the fault simply isn't diagnosable.
  */
 import type { SwingBiomechanics } from './poseAnalysisApi';
+import { PUMP_DRILL } from '../data/drillProtocols';
 
 export type SwingMetricKey =
   | 'weightShiftPct' | 'shoulderTurnDeg' | 'hipTurnDeg'
@@ -107,7 +108,9 @@ export const COACH_FAULTS: CoachFault[] = [
     isFixed: (m) => { const v = num(m.sequencingScore); return v != null && v >= 68; },
     why: "When your shoulders and arms fire first from the top, the club comes over the top and steep — that's the classic slice/pull. The fix is letting the lower body lead.",
     feel: "From the top, feel the club almost WAIT while your lead hip starts to clear — lower body first, then arms. Smooth change of direction, not a lunge.",
-    drill: { name: 'Pump drill', how: "Swing to the top, then pump down halfway two or three times feeling the hips start the move and the club drop behind you — then hit on the third." },
+    // `how` is imported, not restated — this drill was described with a different rep count in five
+    // files. See data/drillProtocols.ts.
+    drill: { name: 'Pump drill', how: PUMP_DRILL.how },
     checkpoint: 'Your lower body starts the downswing before your shoulders (a smooth, in-sequence change of direction).',
     ballFlight: 'slices, pulls, and steep, glancing contact.',
     win: "Beautiful — that came from the ground up. Feel how much more effortless it was?",

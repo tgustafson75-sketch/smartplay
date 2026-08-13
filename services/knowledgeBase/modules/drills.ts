@@ -19,6 +19,7 @@
  */
 
 import type { KBEntry } from '../schema';
+import { PUMP_DRILL } from '../../../data/drillProtocols';
 
 const MODULE = 'drills';
 
@@ -68,14 +69,17 @@ export const DRILLS: KBEntry[] = [
     module: MODULE,
     topic: 'pump / shallowing transition drill',
     aliases: ['pump drill', 'transition drill', 'shallowing drill', 'how do i shallow the club', 'stop casting drill'],
+    // The rep protocol is imported rather than restated — this drill carried a different count in
+    // five separate files, which is why Tim could never tell how it was actually meant to be done.
+    // See data/drillProtocols.ts.
     principle:
-      'A slow-motion rehearsal of the downswing transition that trains the club to SHALLOW (drop to the inside) as the lower body leads — curing over-the-top, casting and steep. From the top, make small "pump" motions: start the lower body, feel the club drop behind you, return to the top, repeat 15-20 times, then hit a ball keeping that feel. Fixes: over-the-top, casting, steep, early extension.',
+      `A slow-motion rehearsal of the downswing transition that trains the club to SHALLOW (drop to the inside) as the lower body leads — curing over-the-top, casting and steep. ${PUMP_DRILL.how} Fixes: over-the-top, casting, steep, early extension.`,
     appSignals: ['pose_biomech'],
     honesty: 'coaching_only',
     cnsPersonalize: ['tendencies'],
     coachingCues: [
-      'first: 15-20 slow pumps — lower body starts, club drops behind you',
-      'next: from the last pump, swing through and hit a ball with that feel',
+      `first: ${PUMP_DRILL.pumps} slow pumps — lower body starts, club drops behind you`,
+      'next: on the following one, swing through to a FULL FINISH with that feel',
       'feel: the trail elbow leads into the slot; the club shallows, not throws',
     ],
     related: ['fault.over-the-top', 'fault.casting', 'fault.steep', 'fs.transition.casting', 'fs.transition.over-the-top'],

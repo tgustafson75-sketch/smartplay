@@ -18,6 +18,7 @@
 
 import type { ImageSourcePropType } from 'react-native';
 import type { IssueCategory } from './instructorVideos';
+import { PUMP_DRILL } from './drillProtocols';
 
 export type CanonicalIssue =
   | 'club_face_open'
@@ -131,7 +132,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
       // sequencing fix and the finish are the same motion.
       { name: 'Step-and-swing',   steps: 'Start with your feet together (or trail foot back). As you start down, STEP toward the target with your lead foot, then swing all the way through to a full finish over that lead leg, trail heel up. Half swings first, then keep the feel with a normal stance.' },
       { name: 'Headcover gate',   steps: 'Place a headcover just outside your trail foot. Swing without hitting it — forces the club to drop inside on the way down.' },
-      { name: 'Pump-and-pause',   steps: 'Take a half backswing, pause, then "pump" three times feeling the club shallow before any rotation. On the fourth, swing through to a full finish.' },
+      { name: 'Pump-and-pause',   steps: PUMP_DRILL.how },
       { name: 'Trail-elbow tuck', steps: 'Tuck a glove or alignment stick under your trail armpit. Make slow swings keeping it pinned through transition.' },
     ],
     videoCategory: 'swing_path',
