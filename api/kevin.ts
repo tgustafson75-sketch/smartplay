@@ -36,22 +36,22 @@ const VOICE_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fab
 const AI_TOOLS: AiToolDef[] = [
   {
     name: 'open_smartvision',
-    description: 'Open the SmartVision tool — a visual hole layout / overhead view / hole map showing the green, fairway, hazards, and yardages. Trigger this when Tim says ANY of: "show me the hole", "let me see the layout", "what does the hole look like", "show the green", "pull up the map", "see the layout", "show me what I\'m looking at", "what am I looking at", "give me a look at this", or any phrasing meaning he wants the visual map of the hole.',
+    description: 'Open the SmartVision tool — a visual hole layout / overhead view / hole map showing the green, fairway, hazards, and yardages. Trigger this when the player says ANY of: "show me the hole", "let me see the layout", "what does the hole look like", "show the green", "pull up the map", "see the layout", "show me what I\'m looking at", "what am I looking at", "give me a look at this", or any phrasing meaning they want the visual map of the hole.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_smartfinder',
-    description: 'Open the SmartFinder — a precise distance-locking tool / rangefinder / yardage finder. Trigger this when Tim says ANY of: "rangefinder", "use the rangefinder", "let me see the rangefinder", "lock the distance", "find the yardage", "how far is it" (when used with "let me see" or "show me"), "give me a precise distance", "let me lock that", or any phrasing meaning he wants to use a rangefinder-style tool. THIS TOOL IS THE RANGEFINDER. The word "rangefinder" should always trigger this.',
+    description: 'Open the SmartFinder — a precise distance-locking tool / rangefinder / yardage finder. Trigger this when the player says ANY of: "rangefinder", "use the rangefinder", "let me see the rangefinder", "lock the distance", "find the yardage", "how far is it" (when used with "let me see" or "show me"), "give me a precise distance", "let me lock that", or any phrasing meaning they want to use a rangefinder-style tool. THIS TOOL IS THE RANGEFINDER. The word "rangefinder" should always trigger this.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'open_swinglab',
-    description: 'Open the GENERIC SwingLab hub. Call this ONLY when Tim wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If he names a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so he lands ON that feature, not the hub. For a VAGUE "I want to practice", ASK what he wants, then navigate once he picks.',
+    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If they name a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so they lands ON that feature, not the hub. For a VAGUE "I want to practice", ASK what they want, then navigate once they picks.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'navigate',
-    description: 'Take Tim DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER he asks to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when Tim names a destination — open_swinglab only drops him on the generic hub and makes him hunt. If you are unsure which feature he means, ask a one-line clarifying question first.',
+    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when the player names a destination — open_swinglab only drops them on the generic hub and makes them hunt. If you are unsure which feature they mean, ask a one-line clarifying question first.',
     parameters: {
       type: 'object',
       properties: {
@@ -62,11 +62,11 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_score',
-    description: 'Log the score for a specific hole. Trigger when Tim names a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here", "triple on 7"). Pass `hole` ONLY if Tim names a specific hole; otherwise omit it (the client uses currentHole).',
+    description: 'Log the score for a specific hole. Trigger when the player names a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here", "triple on 7"). Pass `hole` ONLY if the player names a specific hole; otherwise omit it (the client uses currentHole).',
     parameters: {
       type: 'object',
       properties: {
-        hole:  { type: 'number', description: 'Hole number (1-18). Omit when Tim is talking about the hole he is currently on.' },
+        hole:  { type: 'number', description: 'Hole number (1-18). Omit when the player is talking about the hole they are currently on.' },
         score: { type: 'number', description: 'Strokes taken on the hole' },
       },
       required: ['score'],
@@ -74,7 +74,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_shot',
-    description: 'Log a shot Tim just hit, capturing EVERY detail he mentioned — never drop one: club, hole, which shot on the hole, how far it went, direction, contact quality, where it ended up, and how it felt. Use whenever Tim describes a shot he made ("I hit 7-iron 150 to the green", "pulled it left, in the trees", "striped it", "my second shot on 3 came up short", "felt rushed"). Pass only the fields Tim mentioned — omit anything he did not say.',
+    description: 'Log a shot the player just hit, capturing EVERY detail they mentioned — never drop one: club, hole, which shot on the hole, how far it went, direction, contact quality, where it ended up, and how it felt. Use whenever the player describes a shot they made ("I hit 7-iron 150 to the green", "pulled it left, in the trees", "striped it", "my second shot on 3 came up short", "felt rushed"). Pass only the fields the player mentioned — omit anything they did not say.',
     parameters: {
       type: 'object',
       properties: {
@@ -82,18 +82,18 @@ const AI_TOOLS: AiToolDef[] = [
           type: 'string',
           description: "Club the player used for this shot (e.g. '7I', 'Driver', 'PW'). Include if player mentioned it or if Kevin recommended it.",
         },
-        hole:           { type: 'number', description: 'Hole number IF Tim named one (e.g. "on hole 3" -> 3). Omit to use the current hole.' },
+        hole:           { type: 'number', description: 'Hole number IF the player named one (e.g. "on hole 3" -> 3). Omit to use the current hole.' },
         shot_number:    { type: 'number', description: 'Which shot on the hole IF he said it (e.g. "my second shot" -> 2).' },
         distance_yards: { type: 'number', description: 'How far the shot went / the yardage he gave for it, in yards.' },
         direction: {
           type: 'string',
           enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],
-          description: 'Shot direction or shape if Tim mentioned it',
+          description: 'Shot direction or shape if the player mentioned it',
         },
         contactQuality: {
           type: 'string',
           enum: ['fat', 'thin', 'pure', 'toe', 'heel', 'topped'],
-          description: 'Contact quality if Tim mentioned it',
+          description: 'Contact quality if the player mentioned it',
         },
         outcome: {
           type: 'string',
@@ -108,13 +108,13 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_emotional_state',
-    description: 'Note Tim\'s emotional or mental state when he expresses it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me", "this is fun"). Pass valence as positive/neutral/negative. Use only when Tim actually voices a feeling, not on every sentence.',
+    description: 'Note the player\'s emotional or mental state when they express it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me", "this is fun"). Pass valence as positive/neutral/negative. Use only when the player actually voices a feeling, not on every sentence.',
     parameters: {
       type: 'object',
       properties: {
         state: {
           type: 'string',
-          description: 'Free text describing the emotional state Tim expressed',
+          description: 'Free text describing the emotional state the player expressed',
         },
         valence: {
           type: 'string',
@@ -127,7 +127,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'log_issue',
-    description: 'Capture an app issue / bug / feedback into the in-app ISSUE LOG when Tim explicitly asks you to record it. Trigger on: "log this", "log an issue", "log a bug", "report a bug", "note this", "make a note", "save this for later", "I have feedback", "remember this issue", "this is broken", "this doesn\'t work" — followed by what to log. Pass `note` = the issue description with the wake phrase stripped (e.g. "log an issue: the first response lags" → note:"the first response lags"). This is NOT a conversational "noted" — it writes a real, reviewable issue-log entry. Use whenever he wants something logged for later review.',
+    description: 'Capture an app issue / bug / feedback into the in-app ISSUE LOG when the player explicitly asks you to record it. Trigger on: "log this", "log an issue", "log a bug", "report a bug", "note this", "make a note", "save this for later", "I have feedback", "remember this issue", "this is broken", "this doesn\'t work" — followed by what to log. Pass `note` = the issue description with the wake phrase stripped (e.g. "log an issue: the first response lags" → note:"the first response lags"). This is NOT a conversational "noted" — it writes a real, reviewable issue-log entry. Use whenever they want something logged for later review.',
     parameters: {
       type: 'object',
       properties: {
@@ -141,7 +141,7 @@ const AI_TOOLS: AiToolDef[] = [
   // did nothing. Mirrored from api/pipecat-turn.ts so the fallback reaches parity.
   {
     name: 'plan_shot',
-    description: 'Tim states his PLAN for a shot he is ABOUT to hit — the club, the yardage, and/or which shot on the hole. Examples: "I am going to use a 5 wood for my second shot on hole 3 with 210 yards to go", "hitting 7 iron here", "I have 150 to the pin, going with a smooth 8". This SETS the club + yardage context — it does NOT log a completed shot (use log_shot for a shot already hit). Capture EVERY detail he gave.',
+    description: 'The player states their PLAN for a shot they are ABOUT to hit — the club, the yardage, and/or which shot on the hole. Examples: "I am going to use a 5 wood for my second shot on hole 3 with 210 yards to go", "hitting 7 iron here", "I have 150 to the pin, going with a smooth 8". This SETS the club + yardage context — it does NOT log a completed shot (use log_shot for a shot already hit). Capture EVERY detail they gave.',
     parameters: {
       type: 'object',
       properties: {
@@ -155,7 +155,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_reminder',
-    description: 'Set a reminder Tim asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if he said WHEN, the natural when-phrase. Saved to his SmartPlan reminders.',
+    description: 'Set a reminder the player asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if they said WHEN, the natural when-phrase. Saved to their SmartPlan reminders.',
     parameters: {
       type: 'object',
       properties: {
@@ -167,7 +167,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'configure_drill',
-    description: 'Configure the SmartMotion drill session Tim just described — set the club and number of swings. Call this whenever he says what he wants to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
+    description: 'Configure the SmartMotion drill session the player just described — set the club and number of swings. Call this whenever they say what they want to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
     parameters: {
       type: 'object',
       properties: {
@@ -178,12 +178,12 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'close_swinglab',
-    description: 'Close SmartMotion / SwingLab and return to the caddie screen. Use when Tim says "close", "done", "go back", or "that\'s enough" while SmartMotion is open.',
+    description: 'Close SmartMotion / SwingLab and return to the caddie screen. Use when the player says "close", "done", "go back", or "that\'s enough" while SmartMotion is open.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'set_angle',
-    description: 'Set the SmartMotion camera angle when Tim says how he wants to film his swing: "down the line" / "DTL", "face on" / "face-on", or "putting" / "putt". Use ONLY when SmartMotion is open (he is at the capture screen).',
+    description: 'Set the SmartMotion camera angle when the player says how they want to film their swing: "down the line" / "DTL", "face on" / "face-on", or "putting" / "putt". Use ONLY when SmartMotion is open (they are at the capture screen).',
     parameters: {
       type: 'object',
       properties: { angle: { type: 'string', enum: ['down_the_line', 'face_on', 'putt'], description: 'The camera angle to set.' } },
@@ -192,7 +192,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_golfer',
-    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when Tim says he is filming someone else, or himself again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
+    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when the player says they are filming someone else, or themselves again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
     parameters: {
       type: 'object',
       properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or "me" for the user themselves.' } },
@@ -201,7 +201,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'switch_caddie',
-    description: 'Switch the active caddie persona when Tim asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
+    description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
     parameters: {
       type: 'object',
       properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry', 'tank'], description: 'The caddie to switch to.' } },
@@ -210,7 +210,7 @@ const AI_TOOLS: AiToolDef[] = [
   },
   {
     name: 'record_swing',
-    description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when Tim says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning he wants the camera to capture his next swing.',
+    description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when the player says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning they want the camera to capture their next swing.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {
@@ -1094,33 +1094,33 @@ Rules:
 
 ON-COURSE CONVERSATION HANDLING (Phase BJ):
 
-You are the caddie walking with Tim during his round. Tim speaks naturally — describing shots he just hit, asking for tactical advice, calling out scores, or talking. Understand and respond to all of it.
+You are the caddie walking with the player during their round. The player speaks naturally — describing shots they just hit, asking for tactical advice, calling out scores, or talking. Understand and respond to all of it.
 
-SELF-REFERENCE: when Tim says "you" or "your", he means YOU, the caddie/app — not himself. "Log that for you", "did you get my score?", "you have my shot?" are Tim telling YOU to record/track/confirm it — fire the matching tool. Never read a "you"-directed statement as Tim describing his own action.
-PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = Tim (the player); "you/your" = YOU (the caddie). When Tim comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge briefly and ADJUST; never echo the words back or restate them as a new request. When Tim talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM Tim, the person building this — acknowledge in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
+SELF-REFERENCE: when the player says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are the player telling YOU to record/track/confirm it — fire the matching tool. Never read a "you"-directed statement as the player describing their own action.
+PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = the player; "you/your" = YOU (the caddie). When the player comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge briefly and ADJUST; never echo the words back or restate them as a new request. When the player talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM the player, the person building this — acknowledge in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.
 
-When Tim describes a shot he just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
-- Call log_shot. Pull whatever Tim mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.
+When the player describes a shot they just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
+- Call log_shot. Pull whatever the player mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.
 - Pass ONLY the fields he said. Don't infer fields he didn't mention.
-- Respond in ONE sentence. Bad shots get short and supportive ("Shake it off — let's see what we have left"). Good shots get recognition ("Beautiful strike"). DO NOT lecture or analyze every shot. Tim is playing, not getting a lesson.
-- PENALTY RULE: ONLY call log_shot with an outcome mentioning "penalty" when Tim is actively reporting he took a penalty RIGHT NOW ("I took a penalty", "add a penalty stroke"). NEVER call log_shot when Tim is ASKING ABOUT penalties ("what's a penalty stroke?", "if I took a penalty", "penalty stroke rules") — those are rules conversations, not shot reports. Penalty mentioned in any non-reporting context is conversational.
+- Respond in ONE sentence. Bad shots get short and supportive ("Shake it off — let's see what we have left"). Good shots get recognition ("Beautiful strike"). DO NOT lecture or analyze every shot. The player is playing, not getting a lesson.
+- PENALTY RULE: ONLY call log_shot with an outcome mentioning "penalty" when the player is actively reporting they took a penalty RIGHT NOW ("I took a penalty", "add a penalty stroke"). NEVER call log_shot when the player is ASKING ABOUT penalties ("what's a penalty stroke?", "if I took a penalty", "penalty stroke rules") — those are rules conversations, not shot reports. Penalty mentioned in any non-reporting context is conversational.
 
-When Tim reports a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here"):
-- Call log_score with the strokes value. Pass hole ONLY if Tim named a specific hole; otherwise omit hole (the client uses currentHole).
+When the player reports a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here"):
+- Call log_score with the strokes value. Pass hole ONLY if the player named a specific hole; otherwise omit hole (the client uses currentHole).
 - React appropriately to par. Birdies and better get celebration ("Birdie. That's the one."). Bogey gets a neutral "moving on." Doubles+ get supportive — never sympathetic to the point of deflating him.
 
-When Tim expresses emotional state ("I'm pissed", "feeling locked in", "pressure's getting to me"):
+When the player expresses emotional state ("I'm pissed", "feeling locked in", "pressure's getting to me"):
 - Call log_emotional_state with state + valence (positive/neutral/negative).
 - Acknowledge the feeling specifically — not generic.
 - Offer ONE brief mental cue if appropriate ("Take a breath. Reset. Same swing."). DO NOT therapize. You're a caddie, not a sports psychologist.
 
-When Tim asks tactical questions ("what's my yardage", "what club", "where do I aim", "lay up or go for it", "wind"):
+When the player asks tactical questions ("what's my yardage", "what club", "where do I aim", "lay up or go for it", "wind"):
 - Use the round context (par, hole number, listed yardage) and player profile.
 - Distance + club suggestion + brief reasoning + invitation to confirm.
 - End with engagement: "What are you feeling?" or "Sound right?"
 
 PATTERN AWARENESS (Phase BJ):
-The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time Tim asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
+The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time the player asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
 CLUB & STRATEGY — USE REAL DISTANCES:
 When a [TIM'S BAG — real distances] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond his LONGEST club, it's a two-shot decision — don't tell him to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). When it's reachable, name the club that matches the number from his bag. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
@@ -1168,7 +1168,7 @@ The body may include a yardageInsight blob: { yardage, source, confidence, reaso
 - source 'gps_live' with confidence 'high' → clean GPS. Use the number with confidence, no qualifier.
 - source 'gps_live' with confidence 'med' → GPS okay, mild hedge optional ("Reading 168, fix is decent").
 - source 'static_card' → GPS is soft / warming up; the number is the tee→green scorecard distance. ALWAYS state this honestly: "Reading 168 from the static card right now — GPS hasn't locked. Once I get a fresh fix I'll dial it in."
-- source 'none' → no yardage available. OWN it — you're getting the GPS back; do NOT put the question on the player. Say something like "GPS is reacquiring — one sec and I'll have your number." If he VOLUNTEERS a rangefinder number, take it, but never ask him to do your job. (2026-07-08, Tim: the caddie asking HIM the distance is the single worst failure — it's the reason this app exists.)
+- source 'none' → no yardage available. OWN it — you're getting the GPS back; do NOT put the question on the player. Say something like "GPS is reacquiring — one sec and I'll have your number." If they VOLUNTEERS a rangefinder number, take it, but never ask them to do your job. (2026-07-08, the player: the caddie asking HIM the distance is the single worst failure — it's the reason this app exists.)
 Use the \`reason\` field as a guide for the natural language of the hedge — it's already written caddie-style. NEVER assert a static-card number as truth — the player needs to know it's a tee number, not their current position.
 
 ${is_proactive ? `PROACTIVE CONTEXT: You are speaking up on your own — the player did not ask a question. This is an observation, a nudge, or a check-in you chose to offer. Keep it to one sentence. Natural. Not a reminder, not a tip. Something a real caddie would say as they walk between holes.` : ''}
