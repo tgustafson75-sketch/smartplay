@@ -125,7 +125,23 @@ async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
   const to = process.env.ISSUE_REPORT_EMAIL_TO || 't.gustafson75@gmail.com';
   const from = gmailUser ? `SmartPlay Issues <${gmailUser}>` : (process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>');
   const reporter = rows[0]?.reporter || 'beta tester';
-  const subject = `SmartPlay issue log — ${reporter} (${rows.length} new)`;
+  /**
+   * 2026-08-13 — put the anonymous install id in the SUBJECT.
+   *
+   * Tim couldn't tell whether incoming reports were his own or a tester's, because the From/To are
+   * always his Gmail (SMTP sends as the account) and every tester who skipped the email field arrives
+   * as the same literal string, "beta tester". Two people and one person twice were indistinguishable.
+   *
+   * The id is the cheapest possible fix: distinct ids in the inbox = distinct installs, countable at a
+   * glance without opening anything. Rides in `context` so it needed no schema change.
+   */
+  const installId = (() => {
+    const ctx = rows[0]?.context as { installId?: unknown } | null | undefined;
+    const v = ctx && typeof ctx === 'object' ? ctx.installId : null;
+    return typeof v === 'string' && v.trim() ? v.trim() : null;
+  })();
+  const who = installId ? `${reporter} · ${installId}` : reporter;
+  const subject = `SmartPlay issue log — ${who} (${rows.length} new)`;
   const block = (r: StoredRow) => {
     const ctx = (r.context ?? {}) as { route?: string; persona?: string; isRoundActive?: boolean; currentHole?: number; courseId?: string };
     const where = ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round';
@@ -134,7 +150,7 @@ async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
       : '';
     return `• ${r.text}\n  [${r.reported_at ?? ''} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${where}]${det}`;
   };
-  const text = `Reporter: ${reporter}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;
+  const text = `Reporter: ${reporter}\nInstall: ${installId ?? 'unknown (pre-2026-08-13 build)'}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;
 
   // Primary: Gmail SMTP (Tim's Google account, App Password — no extra accounts).
   if (gmailUser && gmailPass) {

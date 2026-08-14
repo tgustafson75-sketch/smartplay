@@ -13,6 +13,7 @@ import { useIssueLogStore, type IssueLogEntry } from '../store/issueLogStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
+import { getInstallId } from './installId';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 const AUTOSEND_DEBOUNCE_MS = 4000;
@@ -96,13 +97,25 @@ export async function autoSendIssues(): Promise<boolean> {
   // breadcrumbs stay device-side for owner-log review and never clutter the issue email.
   const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id) && isReportable(e));
   if (unsent.length === 0) return false;
+  /**
+   * 2026-08-13 — attach the anonymous install id HERE, at the single send point, rather than at each
+   * of the ~10 places that write an issue entry. One place to be right, and every entry carries it
+   * whichever subsystem logged it.
+   *
+   * It rides inside `context` deliberately: that is already a JSON column server-side, so this needs
+   * no migration and cannot break the insert. The reporting path was verified working end-to-end today
+   * and is not worth risking for a field.
+   */
+  const installId = await getInstallId();
   const payload = {
     entries: unsent.map(e => ({
       id: e.id,
       text: e.text,
       reporter,
       platform: Platform.OS,
-      context: e.context,
+      context: installId
+        ? { ...(e.context && typeof e.context === 'object' ? e.context : {}), installId }
+        : e.context,
       details: e.details ?? null,
       timestamp: e.timestamp,
     })),

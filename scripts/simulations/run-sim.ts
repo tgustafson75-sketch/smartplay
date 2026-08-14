@@ -8414,6 +8414,31 @@ check('LOCK: the putt read line is OPTIONAL, and is never sold as the actual rol
   })(),
   'readLine stays optional and omitted-when-unsure; the overlay is labelled the READ not the roll, renders only with real inputs, and shares one frame-time owner');
 
+// 2026-08-13 (Tim — "I am getting automatic [reports] but they have my email on them. I wonder if they
+// are actually other people's"). He could not tell, and the data was the reason: a report's only
+// identity was `email || 'beta tester'`, so every tester who skipped the email field arrived as the
+// same literal string. Five people and one person five times were indistinguishable, which made "is
+// anyone actually using this?" unanswerable.
+check('LOCK: issue reports carry an anonymous install id, attached once, with no schema risk',
+  (() => {
+    const svc = read('services/installId.ts');
+    const exp = read('services/issueLogExport.ts');
+    const api = read('api/issue-report.ts');
+    // ONE owner that mints and persists it
+    const owned = /export async function getInstallId/.test(svc) && /AsyncStorage\.setItem\(KEY/.test(svc);
+    // attached at the single SEND point, not at each of the ~10 entry writers
+    const attachedOnce = /const installId = await getInstallId\(\);/.test(exp) &&
+      (exp.match(/getInstallId\(\)/g) ?? []).length === 1;
+    // it must ride INSIDE context: that column is already JSON, so this needs no migration and cannot
+    // break the insert. Verified live against the deployed endpoint before shipping.
+    const noSchemaRisk = /\.\.\.\(e\.context && typeof e\.context === 'object' \? e\.context : \{\}\), installId/.test(exp);
+    // and the owner has to be able to SEE it without opening the mail
+    const surfaced = /const who = installId \? `\$\{reporter\} · \$\{installId\}` : reporter;/.test(api) &&
+      /Install: \$\{installId \?\? 'unknown/.test(api);
+    return owned && attachedOnce && noSchemaRisk && surfaced;
+  })(),
+  'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and the email surfaces it in the subject');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
