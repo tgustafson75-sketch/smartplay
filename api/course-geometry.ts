@@ -61,9 +61,29 @@ async function overpassQuery(
 ): Promise<OsmElement[] | null> {
   let lastErr = '';
   for (let attempt = 0; attempt < OVERPASS_MIRRORS.length; attempt++) {
+    /**
+     * 2026-08-13 (live audit) — TOTAL budget check, before committing to another mirror.
+     *
+     * Pine Ridge in North Oxford returned nothing at all after 120 seconds. The arithmetic explains
+     * it: 15s per mirror x 3 mirrors, walked SEQUENTIALLY, is 45s for ONE query — and the handler runs
+     * several query stages in sequence (hole-ways, then the five-way polygon batch). A course that
+     * loses every mirror on every stage runs past two minutes with nothing to show.
+     *
+     * Nobody is waiting by then. The client aborts at 30s, so past that the only value in continuing
+     * is persisting the build to Course Cloud for the re-ask to collect — and that value disappears
+     * entirely if the function never returns at all.
+     *
+     * So: bail out rather than start a mirror we cannot finish, and never let one attempt run past
+     * what is left. Whatever HAS been gathered still gets returned.
+     */
+    const budgetLeft = overpassBudgetLeftMs();
+    if (budgetLeft < OVERPASS_MIN_ATTEMPT_MS) {
+      console.warn(`[course-geometry] Overpass ${label}: total budget spent (${budgetLeft}ms left) — stopping the mirror walk at attempt ${attempt + 1}`);
+      break;
+    }
     const url = OVERPASS_MIRRORS[attempt];
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), Math.min(OVERPASS_TIMEOUT_MS, budgetLeft));
     try {
       // 2026-05-17 — explicit Accept + User-Agent. Without these Overpass returns 406 Not
       // Acceptable from undici-based fetch environments (verified against production from Vercel).
@@ -104,6 +124,28 @@ async function overpassQuery(
 }
 const TIMEOUT_MS = 10_000;
 const OVERPASS_TIMEOUT_MS = 15_000;
+/**
+ * 2026-08-13 — wall-clock ceiling for ALL Overpass work in one request.
+ *
+ * Sized from measured live builds: the good ones finished in 2.6-6.4s, the slow-but-successful ones
+ * took ~80s, and the pathological one (Pine Ridge) never returned inside 120s. 70s keeps the slow
+ * successes intact while guaranteeing the handler comes back with SOMETHING — a partial build, or an
+ * honest 503 the client's bounded re-ask can retry — instead of hanging until the platform kills it.
+ */
+const OVERPASS_TOTAL_BUDGET_MS = 70_000;
+/** Don't start a mirror we can't give a fair shot; below this, stop walking. */
+const OVERPASS_MIN_ATTEMPT_MS = 2_000;
+/**
+ * Deadline for the current request, stamped at the top of the handler. Module-level is safe here:
+ * a Vercel Node function serves one request at a time per instance. Zero means "not stamped" (a unit
+ * test or a direct helper call), which falls back to the per-attempt timeout and behaves as before.
+ */
+let overpassDeadlineMs = 0;
+function overpassBudgetLeftMs(): number {
+  return overpassDeadlineMs === 0
+    ? OVERPASS_TIMEOUT_MS
+    : Math.max(0, overpassDeadlineMs - Date.now());
+}
 const EARTH_RADIUS_M = 6_371_000;
 const OSM_SEARCH_RADIUS_M = 1500;
 
@@ -781,6 +823,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // hammers Overpass with NO throttle: a curl loop could burn the quota / get the UA banned. IP-based
   // rate limit (generous — a real round pulls one course); same pattern as every AI route.
   if (!allowInference(req, res, 'course-geometry', 30)) return;
+  // Start the Overpass wall-clock for THIS request. Without this stamp the budget check is inert and
+  // the mirror walk is unbounded again — which is the whole defect.
+  overpassDeadlineMs = Date.now() + OVERPASS_TOTAL_BUDGET_MS;
   // ── Course Cloud read-first ──────────────────────────────────────────────
   // Serve crowd-sourced geometry only when the client signals the proxy is WEAK for this course
   // (cloudFirst=1 — sent for OSM-only local courses with no golfcourseapi id). This prevents the

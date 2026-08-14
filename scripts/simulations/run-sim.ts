@@ -8365,6 +8365,27 @@ check('LOCK: speed training is runnable, and its copy never claims radar',
   })(),
   'the speed drill is in the catalog with a speed focus, runnable in a cage session, visible on the grid, and quotes no radar-grade number');
 
+// 2026-08-13 (live audit) — Pine Ridge, North Oxford returned NOTHING after 120s. The arithmetic:
+// 15s per mirror x 3 mirrors walked sequentially = 45s for ONE query, and the handler runs several
+// query stages in sequence. A course that loses every mirror on every stage runs past two minutes.
+// Nobody is waiting by then — the client aborts at 30s — and a handler that never returns cannot even
+// persist a partial build for the re-ask to collect.
+check('LOCK: Overpass work is bounded by a TOTAL request budget, not just per-attempt',
+  (() => {
+    const g = read('api/course-geometry.ts');
+    const budget = /const OVERPASS_TOTAL_BUDGET_MS = [0-9_]+;/.test(g) &&
+      /function overpassBudgetLeftMs\(\)/.test(g);
+    // the clock must actually be STARTED — an unstamped deadline makes the check inert and the walk
+    // unbounded again, which is the defect wearing the fix's clothes.
+    const stamped = /overpassDeadlineMs = Date\.now\(\) \+ OVERPASS_TOTAL_BUDGET_MS;/.test(g);
+    // and it must be consulted BEFORE committing to a mirror, and cap that attempt to what's left
+    const enforced = /const budgetLeft = overpassBudgetLeftMs\(\);/.test(g) &&
+      /if \(budgetLeft < OVERPASS_MIN_ATTEMPT_MS\)/.test(g) &&
+      /Math\.min\(OVERPASS_TIMEOUT_MS, budgetLeft\)/.test(g);
+    return budget && stamped && enforced;
+  })(),
+  'the mirror walk stops when the request budget is spent, and no single attempt outlives what remains');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
