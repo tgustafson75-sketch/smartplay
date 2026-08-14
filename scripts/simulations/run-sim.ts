@@ -9282,9 +9282,20 @@ check('LOCK: a five-minute GPS gap RESTARTS the watch instead of waiting passive
     const g = read('services/gpsManager.ts');
     const selfHeals = /stale_hard_clear_restart_watch/.test(g) &&
       /await restartWatch\(\);[\s\S]{0,120}?await getOneShotFix\(\)/.test(g);
-    // and a stationary phone with a good fix and no round must not spam the owner log
+    /**
+     * 2026-08-14 — tightened after the first real tester reports came in. The old condition here was
+     * `roundActive || !wasAccurate`, which still logged with NO round whenever accuracy was unknown —
+     * and a hand-placed mark has unknown accuracy by definition, so a manual mark outside a round
+     * reported a GPS fault every cycle, forever. Three of the four inbound reports were exactly that.
+     *
+     * A GPS fault only means something when a round depends on the fix, and a position the player
+     * placed by hand is not a satellite reading that can go stale. Both paths now require an active
+     * round and skip manual marks.
+     */
     const quiet = /const wasAccurate = \(lastFix\.accuracy_m \?\? 999\) <= 10;/.test(g) &&
-      /if \(roundActive \|\| !wasAccurate\) \{/.test(g);
+      /if \(roundActive && !isManualMark\) \{/.test(g) &&
+      // the degrade path must be equally quiet, or the noise just moves
+      /if \(!isBenignStationaryStale && !isManualMark && roundActive\) \{/.test(g);
     return selfHeals && quiet;
   })(),
   'hard clear restarts the watch + takes a one-shot; benign stationary clears stay out of the log');
