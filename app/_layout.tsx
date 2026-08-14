@@ -716,6 +716,34 @@ function AppNavigator() {
   // wrong (no currentRoundId, no roundStartTime, no activeCourse,
   // or roundStartTime older than 8 hours). discardRound zeroes all
   // in-round state without writing a RoundRecord.
+  /**
+   * 2026-08-14 — ONE-TIME rescue for a wedged active round.
+   *
+   * Tim's Berlin round left the app re-entering the same stuck state on every launch: the round is
+   * persisted, so restarting restores it, re-runs its geometry fetch and wedges again. Four restarts
+   * changed nothing because the bad state is SAVED, not in the bundle — and the boot guard below only
+   * fires at 8 hours, so a round from this morning kept coming back.
+   *
+   * Runs once, ever, keyed by the flag below. It FINALIZES the round into history (the same path the
+   * guard below uses for an aged round with scores) rather than discarding it, because the alternative
+   * being offered was "clear app data and lose everything". A round is worth saving; a phone that
+   * cannot open its app is not.
+   */
+  useEffect(() => whenRoundStoreHydrated(() => {
+    const FLAG = 'rescue_wedged_round_2026_08_14';
+    void (async () => {
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        if (await AsyncStorage.getItem(FLAG)) return;      // already rescued — never again
+        await AsyncStorage.setItem(FLAG, '1');             // set FIRST, so a crash can't loop the rescue
+        const s = useRoundStore.getState();
+        if (!s.isRoundActive) return;
+        console.log('[rescue] closing a wedged active round, preserving it in history');
+        try { s.endRound(); } catch { try { s.discardRound(); } catch { /* nothing left to try */ } }
+      } catch { /* the rescue is best-effort; it must never itself block boot */ }
+    })();
+  }), []);
+
   useEffect(() => whenRoundStoreHydrated(() => {
     const s = useRoundStore.getState();
     if (!s.isRoundActive) return;
