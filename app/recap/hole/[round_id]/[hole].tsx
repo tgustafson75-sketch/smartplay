@@ -90,11 +90,21 @@ export default function HoleShotMapScreen() {
    * because a fast waggle and a fast swing both say the same thing about the player's rhythm. So this
    * reports what the wrist measured on this hole and never claims "this was your shot".
    */
-  const watchSwings = useWatchStore(s => s.sessionSwings);
-  const swingsForHole = useMemo(
-    () => groupSwingsByHole(watchSwings as unknown as RoundSwing[]).get(hole) ?? [],
-    [watchSwings, hole],
-  );
+  const liveWatchSwings = useWatchStore(s => s.sessionSwings);
+  const swingsForHole = useMemo(() => {
+    /**
+     * 2026-08-14 — the SAVED swings win for a finished round.
+     *
+     * watchStore holds sessionSwings in memory only, so a recap opened after the app restarted (the
+     * normal case — you look at the round later) would find nothing. endRound now snapshots them onto
+     * the record; the live session is the fallback for a round still in progress, and for rounds that
+     * finished before this shipped.
+     */
+    const source: RoundSwing[] = record?.watchSwings?.length
+      ? (record.watchSwings as RoundSwing[])
+      : (liveWatchSwings as unknown as RoundSwing[]);
+    return groupSwingsByHole(source).get(hole) ?? [];
+  }, [record?.watchSwings, liveWatchSwings, hole]);
 
   // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — the saved
   // static hole image for a bundled course, so the hole view shows the hole even

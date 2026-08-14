@@ -289,6 +289,13 @@ export interface RoundRecord {
   scores: Record<number, number>;
   putts: Record<number, number>;
   shots: ShotResult[];
+  /**
+   * 2026-08-14 — watch swings captured during this round, tagged to their hole at capture time.
+   * Optional: absent on imports, on rounds played without the watch, and on every round that predates
+   * this. Stored because watchStore keeps them in memory only, so they would otherwise be gone by the
+   * time anyone opens the recap.
+   */
+  watchSwings?: { timestamp: number; tempoRatio: number; hole: number | null; club: string | null }[];
   // 2026-06-13 — tee played, persisted onto the record so tee-box score goals
   // (services/goals/teeScoreGoal) can evaluate "break 90 from the reds" honestly.
   // Optional: rounds that predate this (and imports) read as 'unspecified' = untagged.
@@ -1664,6 +1671,34 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts },
           // Snapshot per-hole stats while courseHoles (par) is still in memory — see holeStats.
           holeStats: get().getHoleStats(),
+          /**
+           * 2026-08-14 (Tim, after a round where View hole was empty) — snapshot the watch swings ONTO
+           * the record, for the same reason holeStats is snapshotted above: they only exist in memory.
+           *
+           * watchStore deliberately persists `deviceName` only, so `sessionSwings` dies with the app.
+           * The swings were being captured correctly and tagged with their hole all along — they just
+           * evaporated before anyone opened the recap, which is normally after the round and often
+           * after the app has been backgrounded or killed. Surfacing them without persisting them
+           * would only have worked if the player looked before closing the app.
+           *
+           * Kept to the fields the recap actually reads (hole, club, tempo, timestamp) rather than the
+           * full IMU payload — axisCapture holds per-frame gyro arrays that have no consumer yet and
+           * would bloat durable storage for every round forever.
+           */
+          watchSwings: (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const w = require('./watchStore') as typeof import('./watchStore');
+              return w.useWatchStore.getState().sessionSwings
+                .filter(sw => sw.hole != null)
+                .map(sw => ({
+                  timestamp: sw.timestamp,
+                  tempoRatio: sw.tempoRatio,
+                  hole: sw.hole ?? null,
+                  club: sw.club ?? null,
+                }));
+            } catch { return undefined; }
+          })(),
           // 2026-08-12 — mail the round trace. Fire-and-forget AFTER the record is assembled, so a
           // slow or failed send can never delay or block saving the round itself.
           // eslint-disable-next-line @typescript-eslint/no-require-imports
