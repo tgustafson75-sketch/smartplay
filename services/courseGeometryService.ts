@@ -1068,6 +1068,22 @@ function scheduleGeometryRecheck(
   courseId: string,
   options?: { courseLocation?: { lat: number; lng: number } | null },
 ): void {
+  /**
+   * 2026-08-14 — do NOT re-ask for a course we can already draw.
+   *
+   * Tim, mid-round at Berlin: the badge sat on "MAPPING…" instead of settling. Each re-ask calls
+   * fetchCourseGeometry, which calls markBuilding, which relights that badge — so a course whose
+   * build was slow or failing showed MAPPING for minutes on a timer I added, long after the app had
+   * perfectly good bundled geometry to play from.
+   *
+   * A re-ask is only worth anything when we have NOTHING. If servable geometry is already in the
+   * cache, the player is not waiting on us and the badge should say so.
+   */
+  const existing = memCache.get(courseId);
+  if (existing && cacheIsServable(existing)) {
+    recheckAttempts.delete(courseId);
+    return;
+  }
   const attempt = recheckAttempts.get(courseId) ?? 0;
   if (attempt >= RECHECK_DELAYS_MS.length) return;
   recheckAttempts.set(courseId, attempt + 1);

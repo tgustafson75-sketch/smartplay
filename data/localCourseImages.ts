@@ -270,6 +270,7 @@ export type LocalCourseSlug =
   // screenshots that anchored these courses — the SEAMLESS BACKUP when the Mapbox satellite
   // tile doesn't render (so SmartVision never shows a blank green screen).
   | 'highland-links'
+  | 'berlin-cc'
   | 'miccosukee'
   | 'killian-greens'
   | 'redlands-cc'
@@ -756,6 +757,10 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   'nashboro':          { lat: 36.0888711, lng: -86.6363585 },
   'hermitage-pr':      { lat: 36.2298354, lng: -86.6409463 },
   'highland-links':   { lat: 42.0366308, lng: -70.0589550 },
+  // 2026-08-14 — Berlin CC was BUNDLED with full per-hole coords but missing here, so any path
+  // that needs a centroid (the engine fallback) had none and could not build. Computed from its own
+  // bundled tee/green coords, so it agrees with the data it is meant to back up.
+  'berlin-cc':        { lat: 42.4059000, lng: -71.6291000 },
   'miccosukee':       { lat: 25.7113237, lng: -80.4219701 },
   'killian-greens':   { lat: 25.6747540, lng: -80.3600897 },
   'redlands-cc':      { lat: 34.0250333, lng: -117.1514339 },
