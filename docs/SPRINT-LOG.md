@@ -2218,3 +2218,90 @@ Root cause of "robot voice" bug: Anthropic credits limited → brain fails → T
 2. **Path 1 ONBOARD + Path 3 CAGE MIN VERIFY** — not yet verified on device.
 3. **`course-intelligence.ts`** — still on Anthropic web_search tool (no migration path yet; needs a Gemini-compatible web-search approach). Guard added this session prevents auth error leakage; functional Anthropic dependency remains.
 4. **Medium audit findings** deferred: raw provider error messages in 13 file catch blocks; `owner-triage.ts` unauthenticated with unsanitized AI prompt; `kevin.ts` 60s budget overrun calculation; `kevin-read.ts` silent fallback 200; `smartmotion.ts` fabricated 200 on catch.
+
+---
+
+## Day N — 2026-08-13 (full audit + one-brain/one-voice pass)
+
+Long session. The theme was the same defect class every time: **work that exists but nothing can
+reach** — knowledge with no delivery, measurements with no consumer, content authored in five places.
+
+### Shipped
+
+**Course engine — PROVEN BUILT (Tier C, live).** Tim's standing doubt ("I was told it was built eight
+times") is answered: six real courses built against the deployed API. Kettle Brook 3.2s, Blackstone
+National 6.4s, Green Hill 2.6s — all 18/18 greens + tees with real yardage profiles. Discovery
+(`api/course-locate`) returned 20 correctly-filtered Worcester courses in 1.1s.
+
+Then fixed what the live builds exposed:
+- `b90c84c1` par DERIVED from measurement on both OSM paths (the pairing path hardcoded 4, emitting an
+  84-yard "par 4"); pairing path gets real F/M/B depth from the ring it already matched
+- `2978b0a7` the hole-way path was DISCARDING the green ring it fetched — isolated by querying Overpass
+  directly (Kettle Brook returns 20 rings; the data was always there)
+- `95d63952` a timed-out build is re-asked, bounded — the server already finished and persisted it
+- `2ddb2d4e` total Overpass budget (70s). 15s x 3 mirrors sequential = 45s per query, several stages =
+  Pine Ridge hung past 120s
+
+**Observable geometry (morning).** `6336649b` `3b4607d5` `fff765a9` `867cadf3` — geometry WRITES now
+publish, not just builds. The stale-while-revalidate path committed fresh greens silently on the path
+every returning player takes.
+
+**`20689eff` pre-round briefing** was generating with NO course grounding, silently, every time — it
+read the intelligence cache synchronously while roundPrefetch was still fetching. Now joins the
+in-flight call (needed dedupe added first).
+
+**Drills.** `bfd0d57e` step-and-swing made recommendable (existed as knowledge, nothing could serve it).
+`3e7372db` ONE owner for the pump protocol — it was authored in five files with five different rep
+counts, which is why Tim never knew how to do it.
+
+**`ea50d7f9` club-plane read WIRED** — over-the-top was being called from shoulder tilt while the real
+clubhead-arc measurement sat unused since 08-10.
+
+**One voice.** `5fa15a52` kevin-read declared "You are Kevin" and received no persona — every Serena /
+Harry / Tank player read a dashboard assessment in the wrong caddie's voice. `7de19eec` kevin.ts
+hardcoded "Tim" in 34 live prompt strings including the tool descriptions.
+
+**One brain.** `c1c50239` shared behavioural core extracted to `api/_brain.ts`. Measured first: MENTAL
+GAME byte-identical (1,248 chars), SELF-REFERENCE 83%, PERSPECTIVE 92%.
+
+**`f504f5b5` speed training** — the metrics engine (club speed / ball speed / smash, with an honest
+source hierarchy) already existed; DRILL_CATALOG had no speed entry.
+
+**Docs.** `8e9f8b7f` compendium verified + staleness-marked. `7bbd2d10` `91d1d27f` customer-facing user
+manual → `~/Desktop/SmartPlay-Caddie-User-Manual.pdf`.
+
+### Verified on device (Z Fold)
+
+- **PATH 4 VOICE — Tier C.** Tim, cold open, first time ever: intelligent Serena reply in **under 30
+  seconds**. The only device-verified thing today.
+- Everything else: **Tier A (compiled) + B (code-traced)**. tsc 0 · jest 946/946 · sim 750/750.
+
+### Open / carried forward
+
+1. **Deploy required.** The last three course-engine fixes are SERVER-side — par, green rings, Overpass
+   budget. They do nothing until the next Vercel deploy. Not OTA.
+2. **Brain merge remainder** — 4 genuinely pipecat-only capabilities: `register_bag` + its prompt line,
+   SIM ROUND narration, get-to-know interview suppression. `conversationalBrain` falls back to
+   `/api/kevin`, so a player on that fallback silently loses all four. Blocked on unifying the tool-call
+   shape client-side (`kevin` returns `toolAction`, pipecat returns `tool_actions`).
+3. **Pine Ridge still doesn't build** — its mirrors fail. 2ddb2d4e makes it a bounded failure, not a
+   working course.
+4. **`poseMotion.ts`** (`deriveSwingAnchors`) — sim-tested, zero production consumers since 2026-07-21.
+5. **`defaultWakeWordOn`** — orphaned flag, zero consumers, for a feature that isn't built.
+6. **Club-plane read is `provisional`** — wants a known over-the-top DTL clip to calibrate threshold/sign.
+7. **Harry — deliberate HOLD** (Tim's call). Full character spec, in no picker. Not dead code; parked.
+
+### Notes / method
+
+- **Lexical searches are not ground truth.** Cost me three wrong claims today, all caught before or just
+  after shipping: called Pakachoag "confidently wrong" (it was already badged low-confidence), said the
+  camera-angle self-correct didn't run (it does), and listed four personas in a customer PDF from
+  `type Persona` instead of the picker (it's three — Kevin, Serena, My Caddie).
+- **The brain diff is why the last merge attempt failed.** Probing by VARIABLE NAME said 9 pipecat-only
+  capabilities; probing by CAPABILITY said 4. Five were false positives.
+- **Guards must fail.** Two guards written today passed while the bug was reintroduced and had to be
+  rewritten — including the old mental-game lock, which passed the entire time that block was duplicated.
+  Every new lock this session was verified RED then GREEN.
+- **The handoff doc had three claims that don't survive checking**: a sim ratchet named "Only ONE file
+  declares who the caddie is" (doesn't exist), "26 authors of the caddie's voice" (8 declare an identity;
+  the rest are task prompts), and pipecat framed as a dead transport (it's the DEFAULT brain).

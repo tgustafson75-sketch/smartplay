@@ -8,6 +8,45 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ CURRENT STATE — 2026-08-13. Read this block; the rest of this file is older.
+>
+> The dated material below ("Day 5 — 2026-05-24") is **months stale** and describes a different point
+> in the project. It is kept for continuity, not as current truth. **Today's detail is the
+> 2026-08-13 entry at the bottom of [SPRINT-LOG.md](SPRINT-LOG.md);** the verified architecture snapshot
+> is §1A of [MASTER_COMPENDIUM.md](MASTER_COMPENDIUM.md).
+>
+> **Health (measured 2026-08-13):** tsc 0 · jest **946/946** (75 suites) · sim **750/750** ·
+> lint 196 problems / 4 pre-existing errors. Head `2ddb2d4e`.
+>
+> **The course-building engine IS built** — proven live, not code-traced: six real courses built against
+> the deployed API (Kettle Brook 3.2s, Blackstone National 6.4s, Green Hill 2.6s, all 18/18 greens+tees).
+> Stop re-litigating this one.
+>
+> **PATH 4 VOICE is Tier C (device-verified)** — 2026-08-13, cold open, intelligent Serena reply under 30
+> seconds. It is the ONLY device-verified item. Everything else is Tier A/B.
+>
+> **⚠️ A DEPLOY IS OWED.** The last three course-engine fixes are SERVER-side (par derivation, green
+> rings, Overpass budget). They do nothing until the next Vercel deploy — they are not OTA.
+>
+> **P0 queue, in order:**
+> 1. **Deploy + re-verify** the three server fixes against a live build (rebuild Pakachoag: pars should
+>    stop being nine par-4s; rebuild Kettle Brook: `green_polygon` should be populated).
+> 2. **Brain merge remainder** — 4 pipecat-only capabilities (`register_bag` + prompt line, SIM ROUND,
+>    interview suppression). `conversationalBrain` falls back to `/api/kevin`, so a player on the
+>    fallback silently loses all four. BLOCKED on unifying the client tool-call shape: kevin returns
+>    `toolAction`, pipecat returns `tool_actions`.
+> 3. **Device verification** of the day's work — nothing but voice has been on hardware.
+>
+> **Standing holds / do not "fix":**
+> - **Harry** — deliberate hold (Tim's call 2026-08-13). Full character spec, in no picker. Parked, not dead.
+> - **Task prompts are not the caddie identity.** 8 files declare a caddie identity; the other "You are…"
+>   prompts are scorecard readers, coordinate detectors, ball trackers. Do NOT collapse those into the persona.
+>
+> **Method note that keeps paying off:** verify what a grep tells you before reporting it. Three wrong
+> claims on 2026-08-13 came from lexical searches — including a customer-facing PDF that listed four
+> personas because it was written from `type Persona` instead of the picker (it's three: Kevin, Serena,
+> My Caddie).
+
 - **Sprint:** Two-week consolidation sprint, started 2026-05-20. Target: app ready by June. **Day 5 — 2026-05-24.**
 
 ### OTA CHANNEL RULE (discovered 2026-06-17) — read every session
