@@ -159,7 +159,34 @@ function armStaleHardTimer(): void {
       // weak/unknown accuracy, where the degrade is actionable. Keeps the log readable for review.
       const lastAcc = lastFix.accuracy_m ?? null;
       const isBenignStationaryStale = lastAcc != null && lastAcc <= 10;
-      if (!isBenignStationaryStale) {
+      /**
+       * 2026-08-14 (first real tester reports, install spc-354v54zoaxak) — three of the four inbound
+       * reports were this event firing on nothing:
+       *
+       *   gps_error: stale_degrade   sinceMs 60000  · lastAccuracy_m null · lastSource user_mark · roundActive false
+       *
+       * Two reasons it should never have been logged, and the existing guard above catches neither:
+       *
+       * 1. lastSource 'user_mark' is a position the PLAYER placed by hand. It has no accuracy by
+       *    definition, so `lastAcc != null` is always false and it can never qualify as benign — a
+       *    manual mark therefore logs a GPS error every 60s, forever, by construction. It isn't a GPS
+       *    signal problem at all; there is no satellite reading to go stale.
+       * 2. With no round active nothing downstream consumes the fix, so its staleness is not
+       *    actionable — it is noise in a log whose whole value is being readable.
+       *
+       * Tim already reported this class once ("fired repeatedly at GOOD accuracy... these are noise")
+       * and the fix then only covered accurate fixes. Same complaint, second time, because the guard
+       * was written for the instance rather than the shape. The DEGRADE itself still happens either
+       * way — this only decides whether it is worth telling anyone about.
+       */
+      const isManualMark = lastFix.source === 'user_mark';
+      const roundActive = (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
+        } catch { return false; }
+      })();
+      if (!isBenignStationaryStale && !isManualMark && roundActive) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_degrade', {
@@ -196,7 +223,14 @@ function armStaleHardTimer(): void {
               return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
             } catch { return false; }
           })();
-          if (roundActive || !wasAccurate) {
+          /**
+           * 2026-08-14 — same correction as the degrade above. `roundActive || !wasAccurate` still
+           * logged with NO round whenever accuracy was unknown, and a hand-placed mark has unknown
+           * accuracy by definition — so a manual mark with no round logged here too. A GPS fault
+           * report only means something when a round is depending on the fix.
+           */
+          const isManualMark = lastFix.source === 'user_mark';
+          if (roundActive && !isManualMark) {
             try {
               // eslint-disable-next-line @typescript-eslint/no-require-imports
               require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
