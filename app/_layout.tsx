@@ -729,20 +729,32 @@ function AppNavigator() {
    * being offered was "clear app data and lose everything". A round is worth saving; a phone that
    * cannot open its app is not.
    */
-  useEffect(() => whenRoundStoreHydrated(() => {
+  useEffect(() => {
     const FLAG = 'rescue_wedged_round_2026_08_14';
     void (async () => {
       try {
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
         if (await AsyncStorage.getItem(FLAG)) return;      // already rescued — never again
         await AsyncStorage.setItem(FLAG, '1');             // set FIRST, so a crash can't loop the rescue
-        const s = useRoundStore.getState();
-        if (!s.isRoundActive) return;
-        console.log('[rescue] closing a wedged active round, preserving it in history');
-        try { s.endRound(); } catch { try { s.discardRound(); } catch { /* nothing left to try */ } }
-      } catch { /* the rescue is best-effort; it must never itself block boot */ }
+        /**
+         * Operates on the PERSISTED JSON directly, deliberately NOT through the store.
+         *
+         * The first version of this went through whenRoundStoreHydrated and did nothing, because
+         * hydration finishing is exactly what is in doubt — I gated the rescue behind the thing it
+         * was meant to rescue. Editing the saved record needs no store, no hydration and no working
+         * UI: flip isRoundActive off, leave roundHistory untouched, write it back.
+         */
+        const raw = await AsyncStorage.getItem('round-store-v1');
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as { state?: Record<string, unknown> };
+        if (!parsed?.state || parsed.state.isRoundActive !== true) return;
+        parsed.state.isRoundActive = false;
+        parsed.state.currentRoundId = null;
+        await AsyncStorage.setItem('round-store-v1', JSON.stringify(parsed));
+        console.log('[rescue] cleared the wedged active round from persisted state; history preserved');
+      } catch { /* best-effort; it must never itself block boot */ }
     })();
-  }), []);
+  }, []);
 
   useEffect(() => whenRoundStoreHydrated(() => {
     const s = useRoundStore.getState();
