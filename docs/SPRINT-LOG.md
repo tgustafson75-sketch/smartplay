@@ -2305,3 +2305,36 @@ manual → `~/Desktop/SmartPlay-Caddie-User-Manual.pdf`.
 - **The handoff doc had three claims that don't survive checking**: a sim ratchet named "Only ONE file
   declares who the caddie is" (doesn't exist), "26 authors of the caddie's voice" (8 declare an identity;
   the rest are task prompts), and pipecat framed as a dead transport (it's the DEFAULT brain).
+
+### Addendum — same session: PuttWatch read line + reporting-pipeline audit
+
+**`a001fe5b` putt read line.** The analysis may now return optional `readLine` (ball / hole / apex as
+normalized coords + frame index); the client re-extracts that one still from the stored clip and draws
+ball → apex → hole over it. Fully additive — `readLine` is absent from the schema's root `required`, the
+card's new props are optional, and the overlay returns null without complete inputs, so a putt where the
+hole isn't visible renders exactly the card that worked before.
+- The deferred "PuttWatch v2" note was STALE: putt-specific analysis is already shipped and Phase K
+  already routes putts around the swing analyzer (`videoUpload.ts:304`). 2 of the 3 metrics it listed
+  (shoulder pendulum, tempo) were already in the prompt.
+- HONESTY: this is the READ, not the roll. `services/putting/puttRoll.ts` computes the real thing from a
+  tracked path and **nothing feeds it one** — so puttRoll AND greenRollStore are both waiting on data
+  that never arrives. The caption says so on screen.
+
+**Reporting pipeline — VERIFIED WORKING (Tier C, live).** Tim: "I've yet to get an error report from
+anyone else so not sure if they are really set up to send." Traced and probed end to end:
+- Sentry IS initialised — hardcoded DSN fallback at `app/_layout.tsx:110`, so it works without the env
+  var. (`services/analytics.ts:5` checks only `EXPO_PUBLIC_SENTRY_DSN`, so it can disagree about whether
+  Sentry is configured — cosmetic divergence, noted not fixed.)
+- Auto-capture is broad: crashes, analysis failures, frame-extraction failures, voice errors, voice
+  misses, GPS degradation.
+- `shareDiagnostics` defaults **true**; `autoSendIssues` is NOT owner-gated.
+- Every auto-captured kind IS in `REPORTABLE_KINDS` (`addAppEvent` defaults to `analysis_error`).
+- **Live probe to `/api/issue-report` returned `{ok:true, stored:1, new:1, emailed:true}`.**
+
+So the path is healthy and default-on. Zero reports most likely means zero testers actively using it —
+NOT a broken pipeline. Definitive check: an audit-probe email was delivered to Tim during this session.
+If it did not arrive, the email leg is broken despite the endpoint claiming `emailed:true`.
+
+**App Store blockers — still 404 (checked live 2026-08-13):** `smartplaycaddie.com/privacy`,
+`/terms`, `/support` all return 404. Hard requirement, **Oct 1 target, ~7 weeks out.** Nothing in the
+codebase can fix this; it needs pages published.
