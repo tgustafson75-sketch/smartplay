@@ -7,6 +7,8 @@ import { useRoundStore } from '../../../../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../../../../services/courseGeometryService';
 import { getLocalHoleImageById, getLocalHoleImage } from '../../../../data/localCourseImages';
 import type { ShotResult } from '../../../../store/roundStore';
+import { useWatchStore } from '../../../../store/watchStore';
+import { groupSwingsByHole, type RoundSwing } from '../../../../services/round/roundSwingRead';
 
 /**
  * Per-hole shot map screen. Reachable from the recap surface via the "View hole" affordance.
@@ -72,6 +74,27 @@ export default function HoleShotMapScreen() {
   }, [courseId, hole]);
 
   const shotsForHole = allShots.filter(s => s.hole === hole);
+  /**
+   * 2026-08-14 (Tim — "if you look at the round summary it has 'view this hole', but it doesn't
+   * populate… that should capture the shots, and the swings that were captured, the club and the
+   * metrics").
+   *
+   * The swings were already there. watchSwingBridge stamps `hole` on every swing at CAPTURE
+   * (services/watchSwingBridge.ts:123) and services/round/roundSwingRead groups them — but the only
+   * surface reading any of it was the dashboard tempo flag. The round summary, the scorecard and this
+   * screen never showed a single one.
+   *
+   * Tempo is what gets shown per swing, and club speed deliberately is NOT. That is roundSwingRead's
+   * own argument, not a shortcut: an IMU cannot tell a rehearsal from the real one, and an
+   * uncalibrated wrist speed on course is a number nobody should act on. Tempo survives the ambiguity
+   * because a fast waggle and a fast swing both say the same thing about the player's rhythm. So this
+   * reports what the wrist measured on this hole and never claims "this was your shot".
+   */
+  const watchSwings = useWatchStore(s => s.sessionSwings);
+  const swingsForHole = useMemo(
+    () => groupSwingsByHole(watchSwings as unknown as RoundSwing[]).get(hole) ?? [],
+    [watchSwings, hole],
+  );
 
   // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — the saved
   // static hole image for a bundled course, so the hole view shows the hole even
@@ -88,7 +111,10 @@ export default function HoleShotMapScreen() {
     );
   }
 
-  if (shotsForHole.length === 0) {
+  // 2026-08-14 — swings alone are enough to have something to show. The old gate returned the empty
+  // state on `shotsForHole.length === 0`, which hid the watch data completely for anyone who hadn't
+  // turned on auto shot detection (it defaults OFF) — the exact case Tim hit at his last round.
+  if (shotsForHole.length === 0 && swingsForHole.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
@@ -124,6 +150,30 @@ export default function HoleShotMapScreen() {
         prevDisabled={prevHole == null}
         nextDisabled={nextHole == null}
       />
+      {swingsForHole.length > 0 ? (
+        <View style={styles.swingBlock}>
+          <Text style={styles.swingHeader}>
+            WATCH · {swingsForHole.length} SWING{swingsForHole.length === 1 ? '' : 'S'} ON THIS HOLE
+          </Text>
+          {swingsForHole.map((s, i) => (
+            <View key={`${s.timestamp}-${i}`} style={styles.swingRow}>
+              <Text style={styles.swingClub}>{s.club || '—'}</Text>
+              <Text style={styles.swingMetric}>
+                {s.tempoRatio ? `${Math.round(s.tempoRatio * 10) / 10}:1 tempo` : 'tempo —'}
+              </Text>
+            </View>
+          ))}
+          {/*
+            Says what this is, because the watch cannot tell a rehearsal from the real one. Reporting
+            these as "your shots" would be a claim the data doesn't support — every waggle looks like a
+            swing to an IMU.
+          */}
+          <Text style={styles.swingNote}>
+            Every swing the watch measured here — practice swings included. Tempo is the honest on-course
+            reading; club speed needs a calibrated capture in Smart Motion.
+          </Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -136,4 +186,10 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
   emptyText: { color: '#6b7280', textAlign: 'center', fontSize: 14 },
+  swingBlock: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18, gap: 6 },
+  swingHeader: { color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1.3 },
+  swingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  swingClub: { color: '#ffffff', fontSize: 14, fontWeight: '800', minWidth: 74 },
+  swingMetric: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  swingNote: { color: '#6b7280', fontSize: 11, marginTop: 4, lineHeight: 15 },
 });

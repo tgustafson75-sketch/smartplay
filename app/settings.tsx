@@ -1249,9 +1249,15 @@ export default function Settings() {
             value={interactiveRound}
             onValueChange={confirmToggle('Interactive Round', setInteractiveRound)}
           />
+          {/* 2026-08-14 (Tim, after a round where nothing populated) — the toggle was here and fairly
+              described, but it never said what you LOSE by leaving it off. Off means no shots are
+              recorded unless you log them yourself, so View hole and the recap come up empty and it
+              reads like a broken screen rather than a setting. Kept OFF by default — it genuinely can
+              over-count on a cart round, and silently flipping a data-quality default the day someone
+              plays is worse than telling them plainly. */}
           <ToggleRow
             label="Auto Shot Detection"
-            sub="GPS auto-logs each shot's spot. Off by default — can over-count on cart rounds."
+            sub="GPS auto-logs where each shot was hit. OFF by default — it can over-count on cart rounds. While it's off, nothing is recorded unless you log shots by voice, so View hole and the round recap will have no shots to show."
             value={autoShotDetection}
             onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
           />
@@ -1491,8 +1497,13 @@ export default function Settings() {
                 Galaxy Watch swing capture{watchBridgeAvailable ? '' : ' · needs latest build'}
               </Text>
               <Text style={subStyle}>
+                {/* 2026-08-14 (Tim — "I could not find a spot to turn on catching swing metrics during a
+                    live round with my watch"). This copy only ever mentioned Smart Motion, so there was
+                    nothing here that looked like the round setting he was hunting for — and no round
+                    setting existed to find, because this one already covers it. It captures during
+                    rounds too, tagged to the hole you were on; say so. */}
                 {watchBridgeAvailable
-                  ? `Streams swing tempo + club speed from the watch's motion sensor into Smart Motion as a truth-grade reading.${watchConnected ? ' Watch connected.' : ' Open the SmartPlay watch app on your Galaxy Watch to start sending.'}`
+                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed.${watchConnected ? ' Watch connected.' : ' Open the SmartPlay watch app on your Galaxy Watch to start sending.'}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
