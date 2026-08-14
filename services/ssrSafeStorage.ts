@@ -53,7 +53,49 @@ function reportPersistFailure(key: string, err: unknown): void {
 }
 
 const guardedStorage: StateStorage = {
-  getItem: (name) => (AsyncStorage as unknown as StateStorage).getItem(name),
+  /**
+   * 2026-08-14 (Tim's round — app opened to a white screen, no splash greeting, and taps landed but
+   * did nothing; rolling the bundle back changed nothing).
+   *
+   * READS were unguarded while writes were guarded, and that asymmetry is the whole bug. A single
+   * corrupt or unparseable persisted value made rehydration reject, and _layout.tsx gates SEVEN
+   * effects behind whenRoundStoreHydrated() — the greeting, the round lifecycle, GPS. When hydration
+   * never reports finished, none of them ever run: the shell paints (so a text input still takes a
+   * tap) and nothing behind it is alive. A white, dead app.
+   *
+   * It also explains why rolling back the OTA did nothing. The bad value is on the DEVICE, so every
+   * bundle reads the same poison — the app could not recover itself, and there was no way out from
+   * inside the UI because the UI was what died.
+   *
+   * A store that cannot read its saved state must start EMPTY, not take the app down with it. Losing
+   * one store's history is a bad day; an app that will not open is a brick. Returning null makes
+   * zustand fall back to initial state and re-persist cleanly on the next write.
+   */
+  getItem: async (name) => {
+    try {
+      const raw = await (AsyncStorage as unknown as StateStorage).getItem(name);
+      if (raw == null) return null;
+      /**
+       * VALIDATE THE JSON HERE, not downstream. zustand's createJSONStorage runs JSON.parse on
+       * whatever this returns, and a throw there happens OUTSIDE this try — which is exactly the hole
+       * that let one truncated write take the whole app down. Parsing it ourselves means the value
+       * either round-trips or never leaves this function.
+       *
+       * A partial write is the realistic cause: AsyncStorage is not atomic across a process kill, so
+       * a round saved while Android was reclaiming memory can land as half a JSON object.
+       */
+      JSON.parse(raw);
+      return raw;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log('[persist] getItem FAILED for', name, '— starting this store EMPTY:', msg);
+      try {
+        // Best-effort: drop the unreadable value so it cannot poison every future launch.
+        await (AsyncStorage as unknown as StateStorage).removeItem(name);
+      } catch { /* nothing more we can do; null below still keeps the app alive */ }
+      return null;
+    }
+  },
   setItem: async (name, value) => {
     try {
       await (AsyncStorage as unknown as StateStorage).setItem(name, value);
