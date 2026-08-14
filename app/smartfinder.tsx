@@ -176,11 +176,22 @@ export default function SmartFinder() {
       console.log('[smartfinder] geometry fetch failed (non-fatal)', err);
     });
     return () => { cancelled = true; };
-    // 2026-08-13 — re-read when a course map finishes building. Geometry lands ASYNCHRONOUSLY and,
-    // until now, nothing told this screen it had arrived (see store/geometryStatusStore.ts). This
-    // effect re-fetches on its own so it may already self-heal, but depending on the completion
-    // signal makes it certain rather than incidental — the same gap left the caddie tab showing a
-    // STATIC yardage for Tim's entire round.
+    // FETCHES. Course + hole ONLY — never geometryCompletions. See the re-read effect below.
+  }, [geoCourseId, currentHole]);
+
+  /**
+   * 2026-08-14 — RE-READ on completion, kept separate from the fetch above.
+   *
+   * Same defect as components/caddie/L1HolePreview.tsx, and the same fix. Depending on
+   * `completions` while also fetching closed a loop the moment commitGeometry started publishing:
+   * fetch → commit → completions++ → re-run → fetch. It is invisible with a warm cache and starts on
+   * the first real build at a course, which is exactly where the rangefinder gets used.
+   *
+   * Reading the cache is free and idempotent. Fetching is what closed the circuit.
+   */
+  useEffect(() => {
+    if (!geoCourseId) return;
+    setGeometry(getHoleGeometry(geoCourseId, currentHole));
   }, [geoCourseId, currentHole, geometryCompletions]);
 
   const playedHoles = useMemo(() => courseHoles.map(h => h.hole).sort((a, b) => a - b), [courseHoles]);

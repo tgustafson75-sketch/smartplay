@@ -192,11 +192,34 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       setGeometry(getHoleGeometry(activeCourseId, currentHole));
     });
     return () => { cancelled = true; };
-    // 2026-08-13 — re-read when a course map finishes building. Geometry lands ASYNCHRONOUSLY and,
-    // until now, nothing told this screen it had arrived (see store/geometryStatusStore.ts). This
-    // effect re-fetches on its own so it may already self-heal, but depending on the completion
-    // signal makes it certain rather than incidental — the same gap left the caddie tab showing a
-    // STATIC yardage for Tim's entire round.
+    // FETCHES. Keyed on course + hole ONLY — never on geometryCompletions. See the re-read effect
+    // below for why that separation is not a style choice.
+  }, [activeCourseId, currentHole]);
+
+  /**
+   * 2026-08-14 — RE-READ on completion. Deliberately separate from the fetch above.
+   *
+   * Tim's round at Berlin: white screens at the course, and when it did load the app was a brick —
+   * loaded but unresponsive to any tap. That is the signature of the JS thread being pegged, and this
+   * is what pegged it.
+   *
+   * On 2026-08-13 I made commitGeometry publish `markCommitted`, which bumps `completions`. This
+   * effect fetched geometry AND depended on `completions`, so the circuit closed:
+   *
+   *     fetch → commit → completions++ → effect re-runs → fetch → commit → ...
+   *
+   * At a desk it never showed: the cache is warm, fetchCourseGeometry returns the memory hit and
+   * commits nothing, so the loop never starts. AT A COURSE it starts on the first real build. And it
+   * does not necessarily settle — a build the client judges SUSPECT (zero mapped holes) is discarded
+   * on the next read and refetched, so fetch → commit → bump → discard → fetch spins without bound,
+   * burning the JS thread and the network together.
+   *
+   * The completion signal must therefore cause a RE-READ of what already landed, never another
+   * fetch. Reading is free and idempotent; fetching is what closed the loop.
+   */
+  useEffect(() => {
+    if (!activeCourseId) return;
+    setGeometry(getHoleGeometry(activeCourseId, currentHole));
   }, [activeCourseId, currentHole, geometryCompletions]);
 
   /**

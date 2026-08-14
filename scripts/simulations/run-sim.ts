@@ -8439,6 +8439,42 @@ check('LOCK: issue reports carry an anonymous install id, attached once, with no
   })(),
   'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and the email surfaces it in the subject');
 
+// 2026-08-14 (Tim's round at Berlin — white screens at the course, and when it loaded the app was a
+// brick: loaded but unresponsive to any tap). That is the JS thread pegged, and this is what pegged it.
+//
+// On 08-13 commitGeometry began publishing markCommitted, which bumps `completions`. Two effects —
+// the caddie tab's hole preview and SmartFinder — both FETCHED geometry and DEPENDED on completions,
+// so the circuit closed: fetch → commit → completions++ → re-run → fetch. Invisible at a desk (warm
+// cache commits nothing) and it starts on the first real build AT A COURSE. Worse, a build the client
+// judges SUSPECT (zero mapped holes) is discarded and refetched, so it need not settle at all.
+//
+// The signal must cause a RE-READ, never another fetch. This guard forbids the shape everywhere.
+check('LOCK: no effect both FETCHES geometry and depends on the completion signal',
+  (() => {
+    const files = [
+      'app/smartfinder.tsx', 'app/smartvision.tsx', 'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx',
+      'app/course/[course_id].tsx', 'components/caddie/L1HolePreview.tsx',
+    ];
+    for (const f of files) {
+      const s = read(f);
+      // walk every useEffect; flag any whose dep array carries the completion signal AND whose body
+      // calls fetchCourseGeometry. Reading (getHoleGeometry/getCachedGeometry) is fine and expected.
+      let i = s.indexOf('useEffect(');
+      while (i !== -1) {
+        const seg = s.slice(i, i + 3000);
+        const dep = seg.match(/\}, \[([^\]]*)\]\);/);
+        if (dep) {
+          const deps = dep[1];
+          const body = seg.slice(0, dep.index);
+          if (/geometryCompletions/.test(deps) && /fetchCourseGeometry\(/.test(body)) return false;
+        }
+        i = s.indexOf('useEffect(', i + 1);
+      }
+    }
+    return true;
+  })(),
+  'geometry completion re-reads the cache; it never re-triggers a fetch, so commit -> bump -> fetch cannot loop');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
