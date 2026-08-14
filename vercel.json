@@ -10,13 +10,6 @@
       }
     },
     {
-      "src": "api/brain.ts",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 30
-      }
-    },
-    {
       "src": "api/voice-intent.ts",
       "use": "@vercel/node",
       "config": {
@@ -111,7 +104,7 @@
       "src": "api/course-geometry.ts",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 30
+        "maxDuration": 90
       }
     },
     {
