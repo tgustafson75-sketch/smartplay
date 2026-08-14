@@ -96,6 +96,9 @@ const PICKER_DRILLS: CageDrillContext[] = [
   // the pump drill never taught him.
   { id: 'step',        title: 'Step-and-Swing',  steps: ['Feet together, or trail foot back.', 'Step toward the target to start down.', 'Swing through to a full finish over the lead leg.', 'Then keep the feel with a normal stance.'], tip: 'Lower body leads; finish over the front foot.' },
   { id: 'one-handed',  title: 'One-Handed Swings', steps: ['Trail hand: 10 slow swings.', 'Lead hand: 10 slow swings.', 'Both hands: feel the balance.'], tip: 'Reveals dominant hand.' },
+  // 2026-08-13 (speed work) — runnable speed session. Short and rest-heavy on purpose: speed work is
+  // neurological, so long sets just add fatigue reps that train the opposite of what you came for.
+  { id: 'speed',       title: 'Driver Speed',    steps: ['3 swings at 80% — full rest between.', '3 at 90% — chase the swish past the ball.', '3 at 100% — hold a balanced finish 3 sec.', 'Sloppy finish = stop the set.'], tip: 'Speed you can\'t repeat isn\'t speed you own.' },
 ];
 
 export default function CageSessionOverlay({ onComplete, onCancel, drill }: Props) {

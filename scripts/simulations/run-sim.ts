@@ -8343,6 +8343,28 @@ check('LOCK: no endpoint hardcodes WHICH caddie it is — identity comes from th
   })(),
   'no endpoint names its own caddie; kevin-read resolves persona from the body and the client sends caddiePersonality');
 
+// 2026-08-13 (speed work) — the metrics engine already computed club speed, ball speed and smash with
+// an honest source hierarchy, and the KB already knew about overspeed bursts (focus.driver_speed). But
+// DRILL_CATALOG had no speed entry, so the caddie could TALK about speed training and nothing could
+// recommend or run it. Exactly the gap step-and-swing had this morning.
+check('LOCK: speed training is runnable, and its copy never claims radar',
+  (() => {
+    const cat = read('data/drillCatalog.ts');
+    const overlay = read('components/CageSessionOverlay.tsx');
+    const idx = read('app/drills/index.tsx');
+    // reachable: in the catalog, a real practice descriptor, and NOT hidden from the grid
+    const inCatalog = /id: 'driver_speed'/.test(cat) && /focus: 'speed'/.test(cat);
+    const notHidden = !/HIDDEN_DRILL_IDS[^\n]*driver_speed/.test(idx);
+    const runnable = /\{ id: 'speed',/.test(overlay);
+    // HONEST: SmartPlay owns no radar. The entry may talk about effort, tempo and trend — it may not
+    // quote a clubhead-speed number, which would be a fabricated measurement dressed as coaching.
+    const seg = cat.slice(cat.indexOf("id: 'driver_speed'"));
+    const entry = seg.slice(0, seg.indexOf('videoCategory'));
+    const noFakeNumber = !/\d+\s*mph/i.test(entry) && !/radar/i.test(entry.replace(/not own radar/i, ''));
+    return inCatalog && notHidden && runnable && noFakeNumber;
+  })(),
+  'the speed drill is in the catalog with a speed focus, runnable in a cage session, visible on the grid, and quotes no radar-grade number');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.

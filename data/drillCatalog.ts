@@ -46,7 +46,12 @@ export type CanonicalIssue =
   | 'tank_caddie_practice'
   // 2026-06-13 (#5) — Tempo isn't a fault, it's the flagship practice drill:
   // tie tempo to swing %. Lives on the Drills surface like the rest.
-  | 'tempo_consistency';
+  | 'tempo_consistency'
+  // 2026-08-13 (speed work) — like tempo, speed is a PRACTICE focus rather than a fault. The knowledge
+  // already existed (focus.driver_speed in the KB: "overspeed bursts") and the metrics engine already
+  // reads club speed / ball speed / smash — but nothing could RECOMMEND or RUN a speed session, so the
+  // caddie could only talk about it. Same gap step-and-swing had.
+  | 'driver_speed';
 
 // 2026-06-13 (#5) — optional "practice in Smart Motion" descriptor. When set, the
 // drill detail screen shows a "Practice this drill" button that opens Smart Motion
@@ -60,7 +65,9 @@ export type CanonicalIssue =
 //   posture    — hip depth / standing-up / spine tilt (early extension, reverse pivot)
 //   connection — lead-arm extension / chicken-wing, towel-under-arm connection
 //   contact    — descending strike, hands-ahead (chipping)
-export type DrillFocus = 'tempo' | 'path' | 'grip' | 'posture' | 'connection' | 'contact';
+// 2026-08-13 — 'speed' added. services/practice/sessionPlan.ts already had a 'speed' emphasis, so the
+// practice planner could describe a speed session that the drill layer had no vocabulary for.
+export type DrillFocus = 'tempo' | 'path' | 'grip' | 'posture' | 'connection' | 'contact' | 'speed';
 export type DrillShotType = 'chip' | 'pitch' | 'full';
 export type DrillPractice = {
   /** Swings to record for this drill. Tim's rule: keep drills to 3–5. */
@@ -449,6 +456,46 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
         name: 'Tempo × Swing %',
         steps:
           'Pick an effort — 50%, then 75%, then 100%. Hit 3–5 balls and hold the SAME rhythm at every level. Your tempo ratio should barely move even as the power climbs. Most players rush the backswing when they go after it — this makes that visible.',
+      },
+    ],
+    videoCategory: 'tempo',
+    cardImage: CARD_TEMPO,
+  },
+  /**
+   * 2026-08-13 (speed work). Speed is a practice focus, not a fault — same category as Tempo above.
+   *
+   * HONESTY: SmartPlay does not own radar. What it CAN read is the tempo of the swing, an estimated
+   * ball speed (acoustic / trace), club speed from the watch IMU when the watch is on, and smash factor
+   * when both sides of it have a real source. So this drill trains speed against a TREND and against
+   * your own tempo holding up under effort — not against a launch-monitor number. The copy says that,
+   * because a speed drill that quotes a fake mph is worse than no speed drill.
+   *
+   * Overspeed protocol is deliberately short and rest-heavy: speed work is neurological, and long sets
+   * just add fatigue reps that train the opposite of what you came for.
+   */
+  {
+    id: 'driver_speed',
+    practice: { shotCount: 5, shotType: 'full', focus: 'speed', angle: 'face_on', swingPercents: [80, 90, 100] },
+    title: 'Driver Speed',
+    primary: 'Train clubhead speed in short overspeed bursts — then keep the tempo when you swing hard.',
+    commonFaults: [
+      'Backswing rushes the moment you try to add speed',
+      'Swinging harder with the arms while the lower body stays quiet',
+      'Losing balance at the finish — speed you cannot repeat is not speed you own',
+    ],
+    missPattern: 'Big dispersion and thin/heel contact on the "extra" swings',
+    drills: [
+      {
+        name: 'Overspeed bursts',
+        steps: 'Three swings at 80%, 90%, then 100% effort — full rest between each, no rushing the set. Chase SPEED, not the ball: make the swish happen past the ball, not at it. Stop the set the moment your finish gets sloppy; fatigue reps train slow.',
+      },
+      {
+        name: 'Step-and-swing for speed',
+        steps: 'The same step drill you use for transition, run at full effort. Stepping toward the target forces the lower body to lead, which is where speed actually comes from — arms alone just add tension.',
+      },
+      {
+        name: 'Hold the finish',
+        steps: 'After every speed swing, hold a balanced finish for three seconds. If you cannot, that swing was faster than you can currently control — back off one notch and build from there.',
       },
     ],
     videoCategory: 'tempo',
