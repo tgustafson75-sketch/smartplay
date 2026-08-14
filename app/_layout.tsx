@@ -730,7 +730,9 @@ function AppNavigator() {
    * cannot open its app is not.
    */
   useEffect(() => {
-    const FLAG = 'rescue_wedged_round_2026_08_14';
+    // Bumped for the fresh APK: if an earlier OTA ever managed to set the old flag without the
+    // rescue actually landing, the stale flag would silently skip it. A new key guarantees one run.
+    const FLAG = 'rescue_wedged_round_2026_08_14b';
     void (async () => {
       try {
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
