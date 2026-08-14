@@ -60,6 +60,25 @@ const PUTT_PHASES: { phase: PuttPhase; t: number }[] = [
   { phase: 'roll',           t: 0.92 },
 ];
 
+/**
+ * 2026-08-13 — index → timestamp, exported so it has ONE owner.
+ *
+ * The analysis can return a `readLine` whose coordinates belong to a specific frame, identified only
+ * by its 0-based index (the API receives bare base64 frames with no timing metadata). The client needs
+ * that frame back to draw on — and since the phase fractions above are deterministic, the time is
+ * recoverable rather than something we have to store.
+ *
+ * Exported instead of restated at the call site: a second copy of these fractions would drift the
+ * moment anyone retuned the sampling, and the line would then be drawn on the wrong still.
+ *
+ * Returns null for an index we didn't sample, so a caller can't fabricate a frame time.
+ */
+export function puttFrameTimeSec(frameIndex: number, clipDurationSec: number): number | null {
+  if (!Number.isFinite(frameIndex) || frameIndex < 0 || frameIndex >= PUTT_PHASES.length) return null;
+  if (!Number.isFinite(clipDurationSec) || clipDurationSec <= 0) return null;
+  return PUTT_PHASES[frameIndex].t * clipDurationSec;
+}
+
 const PUTT_FALLBACK_DURATION_MS = 2500;
 
 async function probeDurationMs(clipUri: string): Promise<number> {

@@ -98,6 +98,22 @@ export interface PuttingAnalysis {
 
   overallScore: number;     // 0-100
   caddieComment: string;    // persona-aware spoken summary
+  /**
+   * 2026-08-13 — OPTIONAL read line. Mirrors the field api/putting-analysis.ts may now return; see that
+   * file for the contract and the honesty boundary. Present only when the model could SEE both the ball
+   * and the hole in one frame — a putt where the hole is out of shot returns a complete analysis with
+   * this omitted, exactly as before.
+   *
+   * Points are normalized 0..1 on the frame at `frameIndex`; puttFrameTimeSec() maps that index back to
+   * a timestamp so the still can be re-extracted from the stored clip.
+   */
+  readLine?: {
+    frameIndex: number;
+    ball: { x: number; y: number };
+    hole: { x: number; y: number };
+    apex?: { x: number; y: number };
+    confidence: number;
+  };
 }
 
 export interface PuttingAnalysisInput {

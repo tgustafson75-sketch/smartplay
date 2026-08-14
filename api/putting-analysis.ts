@@ -55,6 +55,34 @@ export interface PuttingAnalysis {
   };
   overallScore: number;
   caddieComment: string;
+  /**
+   * 2026-08-13 — OPTIONAL. The read line, as points on one of the frames we sent, so the client can
+   * draw ball → apex → hole over that still.
+   *
+   * Additive on purpose: this endpoint's analysis works well today and nothing about the existing
+   * fields changes. Omitted whenever the model cannot SEE both the ball and the hole in one frame —
+   * a guessed hole position would draw a confident line to the wrong place, which is worse than
+   * drawing nothing.
+   *
+   * Coordinates are normalized 0..1 on the frame at `frameIndex` (frames are sent in chronological
+   * order, so the client maps the index back to a timestamp and re-extracts that still from the
+   * stored clip — no frame storage needed).
+   *
+   * This is the line the player SHOULD have played, derived from the same read the analysis already
+   * produces. It is NOT a trace of where the ball actually rolled — that needs real ball tracking
+   * (services/putting/puttRoll.ts, still unfed). The client must label it as the read, not the roll.
+   */
+  readLine?: {
+    /** Which frame these points belong to; 0-based, chronological. */
+    frameIndex: number;
+    /** Ball at address/start, normalized 0..1. */
+    ball: { x: number; y: number };
+    /** The hole, normalized 0..1. */
+    hole: { x: number; y: number };
+    /** High point of the break — the apex the ball should travel through. Omit on a dead-straight putt. */
+    apex?: { x: number; y: number };
+    confidence: number;
+  };
 }
 
 // ── OpenAI json_schema ────────────────────────────────────────────────────────
@@ -137,6 +165,30 @@ const PUTTING_ANALYSIS_SCHEMA: OpenAI.ResponseFormatJSONSchema = {
         },
         overallScore:   { type: 'number' },
         caddieComment:  { type: 'string' },
+        // 2026-08-13 — optional, and deliberately NOT in the root `required` list above (same
+        // treatment holeNumber already gets). A putt where the hole isn't visible must still return a
+        // complete, valid analysis; the line is a bonus, never a gate.
+        readLine: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['frameIndex', 'ball', 'hole', 'confidence'],
+          properties: {
+            frameIndex: { type: 'number' },
+            ball: {
+              type: 'object', additionalProperties: false, required: ['x', 'y'],
+              properties: { x: { type: 'number' }, y: { type: 'number' } },
+            },
+            hole: {
+              type: 'object', additionalProperties: false, required: ['x', 'y'],
+              properties: { x: { type: 'number' }, y: { type: 'number' } },
+            },
+            apex: {
+              type: 'object', additionalProperties: false, required: ['x', 'y'],
+              properties: { x: { type: 'number' }, y: { type: 'number' } },
+            },
+            confidence: { type: 'number' },
+          },
+        },
       },
     },
   },
@@ -390,6 +442,14 @@ Read every visible cue:
   - Stance width: narrow / standard / wide
   - Grip pressure cues from knuckle whitening / wrist tension: light / medium / firm
   - Head + eye stability (informs setup.quality)
+  - THE READ LINE (optional, "readLine"): if you can SEE both the ball and the hole in the SAME frame,
+    give their positions as normalized 0..1 coordinates on that frame (x from left, y from top), plus
+    the frame's 0-based index — frames are given in chronological order. Add "apex" for the high point
+    the ball should roll through on a breaking putt; omit apex on a dead-straight one. This is the line
+    they SHOULD have played, consistent with the break you reported above.
+    OMIT readLine entirely if the hole is out of frame, obscured, or you are guessing where it is. A
+    confident line drawn to the wrong place is worse than no line, and the rest of the analysis must
+    still be returned in full.
   - Green texture: grain direction, sheen, undulation → infer slope direction + severity
   - Combine visual with player's spoken read + provided course context
 
@@ -436,6 +496,14 @@ Return EXACTLY this JSON shape — no preamble, no code fences, no extra fields:
     "mentalCue": string,
     "technicalCue": string
   },
+
+  "readLine": {                      // OMIT THE WHOLE OBJECT unless ball AND hole are both visible
+    "frameIndex": integer,           // 0-based, frames are in chronological order
+    "ball": { "x": 0..1, "y": 0..1 },
+    "hole": { "x": 0..1, "y": 0..1 },
+    "apex": { "x": 0..1, "y": 0..1 } | undefined,   // omit on a straight putt
+    "confidence": integer 0..100
+  } | undefined,
 
   "overallScore": integer 0..100,
   "caddieComment": string

@@ -8386,6 +8386,34 @@ check('LOCK: Overpass work is bounded by a TOTAL request budget, not just per-at
   })(),
   'the mirror walk stops when the request budget is spent, and no single attempt outlives what remains');
 
+// 2026-08-13 (Tim — "putt analysis works pretty well so don't want to break it… would be cool to have a
+// line show after putt analysis to the hole, maybe using a photo"). The line is drawn from coordinates
+// the analysis returns, over a still re-extracted from the stored clip. Two things must stay true.
+check('LOCK: the putt read line is OPTIONAL, and is never sold as the actual roll',
+  (() => {
+    const api = read('api/putting-analysis.ts');
+    const overlay = read('components/swinglab/PuttReadLine.tsx');
+    const card = read('components/swinglab/PuttingAnalysisCard.tsx');
+    const extractor = read('services/puttFrameExtractor.ts');
+    // 1) ADDITIVE. readLine must NOT be in the schema's root `required` list — a putt where the hole is
+    //    out of frame has to return a complete, valid analysis exactly as it did before this existed.
+    const rootRequired = api.slice(api.indexOf('      required: ['), api.indexOf('      properties: {'));
+    const stillOptional = !/readLine/.test(rootRequired) && /readLine: \{/.test(api);
+    // 2) the model must be told to OMIT it rather than guess where the hole is
+    const omitsRatherThanGuesses = /OMIT readLine entirely if the hole is out of frame/.test(api);
+    // 3) HONEST. This is the read, not a trace of the roll — puttRoll.ts is still unfed, so a caption
+    //    implying "your putt" would be a claim the player cannot check.
+    const labelledAsRead = /Not a trace of your actual roll/.test(overlay);
+    // 4) the card only draws when it genuinely has both the coords and a clip
+    const guardedRender = /analysis\.readLine && clipUri \?/.test(card);
+    // 5) frame index -> time has ONE owner; a second copy of the phase fractions would drift and the
+    //    line would then be drawn over the wrong still
+    const oneOwner = /export function puttFrameTimeSec/.test(extractor) &&
+      /puttFrameTimeSec\(readLine\.frameIndex/.test(overlay);
+    return stillOptional && omitsRatherThanGuesses && labelledAsRead && guardedRender && oneOwner;
+  })(),
+  'readLine stays optional and omitted-when-unsure; the overlay is labelled the READ not the roll, renders only with real inputs, and shares one frame-time owner');
+
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.

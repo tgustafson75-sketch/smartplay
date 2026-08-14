@@ -25,12 +25,19 @@ import GlassesStatusBadge from '../GlassesStatusBadge';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { PuttingAnalysis } from '../../services/puttingAnalysisService';
+import PuttReadLine from './PuttReadLine';
 
 interface Props {
   analysis: PuttingAnalysis;
+  /**
+   * 2026-08-13 — both OPTIONAL. Supplied, and with a readLine in the analysis, the card gains the read
+   * drawn over a still from the putt. Omitted, the card is byte-for-byte what it was before.
+   */
+  clipUri?: string | null;
+  clipDurationSec?: number | null;
 }
 
-export default function PuttingAnalysisCard({ analysis }: Props) {
+export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec }: Props) {
   const { colors } = useTheme();
   const tier = scoreTier(analysis.overallScore);
   return (
@@ -127,6 +134,15 @@ export default function PuttingAnalysisCard({ analysis }: Props) {
         <Text style={[styles.coachQuote, { color: colors.text_secondary }]}>
           &quot;{analysis.caddieComment}&quot;
         </Text>
+      ) : null}
+
+      {/*
+        2026-08-13 — the read line over a still from the putt. Renders ONLY when the analysis returned
+        coordinates (it omits them whenever the hole wasn't clearly visible) AND the caller supplied the
+        clip. Every other putt renders exactly the card that worked before this existed.
+      */}
+      {analysis.readLine && clipUri ? (
+        <PuttReadLine readLine={analysis.readLine} clipUri={clipUri} clipDurationSec={clipDurationSec} />
       ) : null}
     </View>
   );

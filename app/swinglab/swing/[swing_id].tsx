@@ -3161,7 +3161,14 @@ export default function SwingDetail() {
                   through puttingAnalysisService). Granular grip /
                   stroke / read detail. */}
               {session.putting_analysis && (
-                <PuttingAnalysisCard analysis={session.putting_analysis} />
+                <PuttingAnalysisCard
+                  analysis={session.putting_analysis}
+                  /* 2026-08-13 — lets the card draw the read line over a still from this putt. Both
+                     optional: without a readLine in the analysis, or without a clip, the card renders
+                     exactly as it did before. */
+                  clipUri={shot?.clipUri ?? null}
+                  clipDurationSec={duration}
+                />
               )}
               {/* 2026-05-23 (Fix #5) — PrimaryIssueCard renders on BOTH
                   putting AND full-swing sessions. For full swings it's
