@@ -82,7 +82,21 @@ export function useVoiceActivityDetection({
   onSpeechEnd,
 }: UseVoiceActivityDetectionOptions): UseVoiceActivityDetectionResult {
   const [isListening, setIsListening] = useState(false);
-  const [currentLevel, setCurrentLevel] = useState(-160);
+  /**
+   * 2026-08-14 (Tim: "there's something you're doing with the microphone that's fucking this up").
+   * He was right, and this was it.
+   *
+   * This was React state written from setOnRecordingStatusUpdate at a 100ms progress interval — TEN
+   * state updates per second, forever, for as long as the mic is open. Every one of them re-rendered
+   * the Caddie screen, which carries the avatar, the data strip and the yardage memos. The result is
+   * a UI that paints but cannot keep up with a touch, a yardage badge that never settles, and a hot
+   * mic the whole time.
+   *
+   * Nothing consumes it. The single call site destructures `isListening` only, so ten renders a
+   * second were being spent publishing a number no one reads. A ref carries it now; the returned
+   * shape is unchanged for any future consumer, which would want it throttled rather than per-frame.
+   */
+  const currentLevelRef = useRef(-160);
 
   const recordingRef    = useRef<Audio.Recording | null>(null);
   const vadStateRef     = useRef<VADState>('IDLE');
@@ -152,7 +166,7 @@ export function useVoiceActivityDetection({
         if (!status.isRecording) return;
 
         const db = status.metering ?? -160;
-        setCurrentLevel(db);
+        currentLevelRef.current = db;
 
         // Adaptive ambient floor: fall fast toward quiet, rise slowly so speech
         // doesn't inflate it; clamp the input so a dropout can't crash the floor.
@@ -235,7 +249,7 @@ export function useVoiceActivityDetection({
       startRecording();
     } else {
       setIsListening(false);
-      setCurrentLevel(-160);
+      currentLevelRef.current = -160;
     }
   };
 
@@ -246,7 +260,7 @@ export function useVoiceActivityDetection({
     vadStateRef.current = 'IDLE';
     aboveCountRef.current = 0;
     setIsListening(false);
-    setCurrentLevel(-160);
+    currentLevelRef.current = -160;
 
     if (rec) {
       try {
@@ -269,5 +283,5 @@ export function useVoiceActivityDetection({
   // Web has no VAD recording path; return idle. AFTER all hooks so hook
   // order stays stable (rules-of-hooks).
   if (Platform.OS === 'web') return { isListening: false, currentLevel: -160 };
-  return { isListening, currentLevel };
+  return { isListening, currentLevel: currentLevelRef.current };
 }
