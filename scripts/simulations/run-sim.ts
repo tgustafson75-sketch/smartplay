@@ -7594,9 +7594,29 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /void scrubTo\(winSeek\(frac\)\)/.test(swingDetailSrc2),
     'ZoomableView gains an optional single-tap (Exclusive: double-tap-reset wins, then single-tap, then pinch/pan), wired to play/pause; native controls off + a tap-to-seek bar (now rebased to the swing window) replaces the scrubber so the tap-to-pause never fights native tap handling, and pinch-zoom + annotation are untouched');
 
-  check('Swing Library: state-aware — no full-clip re-analyze of a cage multi-swing (1-min-stuck fix)',
-    /if \(session\?\.source === 'live_cage' \|\| durationMs > 20_000\) return;/.test(swingDetailSrc2),
-    'the biomech backfill is gated off cage/long clips — a ~60s multi-swing session is no longer watched whole as one swing in the library detail (Tim\'s 1-min stuck)');
+  /**
+   * 2026-08-14 — re-pointed. This asserted the literal gate
+   * `source === 'live_cage' || durationMs > 20_000`, and the 20s half of it was scar tissue: it was
+   * added when the backfill sampled the WHOLE clip by fixed fractions, and stayed in front of the
+   * swing-window (07-25) and located-impact (08-09) fixes that made it unnecessary. Tim: a single
+   * swing with a pre-shot routine "can get to twenty six seconds", so the cap refused ordinary swings.
+   *
+   * The intent — never watch a long clip whole as one swing — is now enforced by something stronger
+   * than a length check: the backfill LOCATES the swing when the shot carries no trimmed window, so
+   * duration stops being the question and "do we know where the swing is" becomes it. Cage clips are
+   * still skipped, because several swings need partitioning rather than a wider window.
+   */
+  check('Swing Library: never analyses a clip whole — locates the swing, and still skips cage multi-swing',
+    (() => {
+      const skipsCage = /if \(session\?\.source === 'live_cage'\) return;/.test(swingDetailSrc2);
+      // and it must LOCATE a window rather than falling through to the fraction spread
+      const locatesWindow = /const \{ locateSwingWindow \} = await import\('\.\.\/\.\.\/\.\.\/services\/poseDetection'\);/.test(swingDetailSrc2) &&
+        /if \(!swingWindow\) \{/.test(swingDetailSrc2);
+      // the old length cap must NOT come back — it is what refused a 26s single swing
+      const noLengthCap = !/durationMs > 20_000/.test(swingDetailSrc2);
+      return skipsCage && locatesWindow && noLengthCap;
+    })(),
+    'the library backfill locates the swing instead of guessing by clip length; cage multi-swing still routes elsewhere');
 
   // 2026-06-14 (Tim) — Smart Motion REVIEW playback: "shows them bending to place
   // the ball / won't play / replaced the whole video." Three fixes: (1) AWAIT the

@@ -828,7 +828,26 @@ export default function SwingDetail() {
     // single-swing uploads. Extra guard: skip any implausibly-long clip
     // (a single swing is <~10s), so a long upload can't trigger it either.
     const durationMs = (session?.upload?.duration_sec ?? 3) * 1000;
-    if (session?.source === 'live_cage' || durationMs > 20_000) return;
+    /**
+     * 2026-08-14 (Tim: "by the time you step up and swing and pre-swing, they can get to twenty six
+     * seconds on a single swing") — the 20s cap is GONE.
+     *
+     * It was written when this backfill sampled the WHOLE clip by fixed fractions, so a long upload
+     * really did compute metrics off a minute of standing around. That was fixed on 2026-07-25 by
+     * threading the trimmed swing window, and again on 08-09 by threading the located impact — but the
+     * cap stayed in front of both, returning before either could run. A 26-second single swing, which
+     * is just a normal pre-shot routine, was refused by a guard protecting against a bug the code no
+     * longer has.
+     *
+     * What replaces it is below: we now REFUSE TO ANALYSE WITHOUT A WINDOW. Length stops being the
+     * question; knowing where the swing is becomes the question, which is the thing that actually
+     * mattered all along.
+     *
+     * The live_cage skip stays for now — a cage clip is genuinely several swings, and the answer to
+     * that is partitioning, not a longer window. That is the next step, kept separate so this one
+     * stays verifiable.
+     */
+    if (session?.source === 'live_cage') return;
     poseBackfillRef.current = swing_id;
     void (async () => {
       try {
@@ -850,10 +869,35 @@ export default function SwingDetail() {
         // trimmed swing window, pass it so sampling stays INSIDE the actual swing (address→finish).
         const wStart = shot.clipStartSeconds != null ? shot.clipStartSeconds * 1000 : null;
         const wEnd = shot.clipEndSeconds != null ? shot.clipEndSeconds * 1000 : null;
-        const swingWindow = (wStart != null && wEnd != null && wEnd - wStart >= 500) ? { startMs: wStart, endMs: wEnd } : null;
+        let swingWindow = (wStart != null && wEnd != null && wEnd - wStart >= 500) ? { startMs: wStart, endMs: wEnd } : null;
+        let locatedImpactMs: number | null = null;
+        /**
+         * 2026-08-14 — LOCATE the swing when the shot doesn't already carry a trimmed window.
+         *
+         * Without this, a clip with no window fell through to extractKeyFrames' fraction spread
+         * ([0.20 0.40 0.60 0.78 0.92] across the whole clip) — guessing where the swing is by
+         * position. On a 26s clip that is mostly pre-shot routine, most of those frames land on a
+         * player standing still, which is exactly the "body mechanics run before the swing even
+         * starts" complaint. The fraction spread is a LAST RESORT, not a normal path.
+         *
+         * Same locator SmartMotion and the upload path already use, so all three now answer "where is
+         * the swing" the same way instead of two of them guessing.
+         */
+        if (!swingWindow) {
+          try {
+            const { locateSwingWindow } = await import('../../../services/poseDetection');
+            const loc = await locateSwingWindow(analyzeUri, durationMs);
+            if (loc && loc.endSec > loc.startSec) {
+              swingWindow = { startMs: Math.round(loc.startSec * 1000), endMs: Math.round(loc.endSec * 1000) };
+              locatedImpactMs = Math.round(loc.swingTimeSec * 1000);
+            }
+          } catch { /* locator is best-effort — fall through to the shot's own impact below */ }
+        }
         // 2026-08-09 (verification wave C1) — thread the vision-located impact so the pose pass anchors
         // the stage frames on the REAL strike instead of the 65%-of-window fraction (~1.1s late).
-        const backfillImpactMs = typeof shot.locatedImpactSec === 'number' && shot.locatedImpactSec > 0 ? shot.locatedImpactSec * 1000 : null;
+        const backfillImpactMs = typeof shot.locatedImpactSec === 'number' && shot.locatedImpactSec > 0
+          ? shot.locatedImpactSec * 1000
+          : locatedImpactMs;
         const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, backfillImpactMs, resolveSwingerHandedness());
         useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
