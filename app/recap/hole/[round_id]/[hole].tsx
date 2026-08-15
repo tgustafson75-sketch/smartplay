@@ -9,6 +9,7 @@ import { getLocalHoleImageById, getLocalHoleImage } from '../../../../data/local
 import type { ShotResult } from '../../../../store/roundStore';
 import { useWatchStore } from '../../../../store/watchStore';
 import { groupSwingsByHole, type RoundSwing } from '../../../../services/round/roundSwingRead';
+import { confirmShotsWithSwings, confirmationSummary } from '../../../../services/round/shotSwingConfirm';
 
 /**
  * Per-hole shot map screen. Reachable from the recap surface via the "View hole" affordance.
@@ -106,6 +107,23 @@ export default function HoleShotMapScreen() {
     return groupSwingsByHole(source).get(hole) ?? [];
   }, [record?.watchSwings, liveWatchSwings, hole]);
 
+  /**
+   * 2026-08-14 — cross-reference the logged shots against the watch swings on this hole.
+   *
+   * Tim's design: GPS over-counts (cart stops, walking to a partner's ball) and the watch over-counts
+   * (waggles, rehearsals), but they fail in OPPOSITE directions — so a stop with a swing beside it in
+   * time is a real shot. Purely additive: this annotates shots, never filters or reorders them.
+   *
+   * MUST stay above the early returns below. The first version of this sat after them — a conditional
+   * hook, which is a render crash in the field, and the exact shape that white-screened Tim's app this
+   * morning. The rules-of-hooks lock caught it.
+   */
+  const confirmations = useMemo(
+    () => confirmShotsWithSwings(shotsForHole, swingsForHole),
+    [shotsForHole, swingsForHole],
+  );
+  const confirmLine = confirmationSummary(confirmations);
+
   // 2026-06-16 (Tim — "view hole" was blank when no shots logged) — the saved
   // static hole image for a bundled course, so the hole view shows the hole even
   // when shot tracking dropped out that round (network errors). Prefer the
@@ -153,6 +171,7 @@ export default function HoleShotMapScreen() {
       <HoleShotMap
         hole={hole}
         shots={shotsForHole}
+        confirmations={confirmations}
         geometry={geometry}
         onClose={() => router.back()}
         onPrevHole={prevHole != null ? () => router.replace(`/recap/hole/${round_id}/${prevHole}` as never) : undefined}
@@ -165,6 +184,7 @@ export default function HoleShotMapScreen() {
           <Text style={styles.swingHeader}>
             WATCH · {swingsForHole.length} SWING{swingsForHole.length === 1 ? '' : 'S'} ON THIS HOLE
           </Text>
+          {confirmLine ? <Text style={styles.swingConfirm}>{confirmLine}</Text> : null}
           {swingsForHole.map((s, i) => (
             <View key={`${s.timestamp}-${i}`} style={styles.swingRow}>
               <Text style={styles.swingClub}>{s.club || '—'}</Text>
@@ -201,5 +221,6 @@ const styles = StyleSheet.create({
   swingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   swingClub: { color: '#ffffff', fontSize: 14, fontWeight: '800', minWidth: 74 },
   swingMetric: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  swingConfirm: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   swingNote: { color: '#6b7280', fontSize: 11, marginTop: 4, lineHeight: 15 },
 });

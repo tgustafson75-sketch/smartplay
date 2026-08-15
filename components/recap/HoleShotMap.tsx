@@ -4,6 +4,7 @@ import Svg, { Circle, Line, Path, Text as SvgText, Rect } from 'react-native-svg
 import type { ShotResult, ShotLocation } from '../../store/roundStore';
 import type { HoleGeometry } from '../../services/courseGeometryService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
+import type { ShotConfirmation } from '../../services/round/shotSwingConfirm';
 
 /**
  * Phase B — Hole-level shot map.
@@ -25,6 +26,9 @@ const CANVAS_W = 320;
 const CANVAS_H = 480;
 const PAD = 30;
 
+/** Ring colour for a shot the watch corroborated — same green as the confirmed-state accent. */
+const CONFIRM_RING = '#00C896';
+
 type Props = {
   hole: number;
   shots: ShotResult[];
@@ -34,6 +38,16 @@ type Props = {
   onNextHole?: () => void;
   prevDisabled?: boolean;
   nextDisabled?: boolean;
+  /**
+   * 2026-08-14 — OPTIONAL watch confirmation, one entry per shot, same order.
+   *
+   * Omitted, this component renders exactly as it did before — that is deliberate, because every
+   * other caller (and every round played without a watch) must be untouched. Supplied, a confirmed
+   * shot gets a ring and its tempo; an unconfirmed one is drawn exactly as it always was.
+   *
+   * Never used to filter or reorder shots. A wrong match costs a badge, never a shot.
+   */
+  confirmations?: ShotConfirmation[] | null;
 };
 
 function pickAxis(shots: ShotResult[], geometry?: HoleGeometry | null): {
@@ -53,6 +67,7 @@ function pickAxis(shots: ShotResult[], geometry?: HoleGeometry | null): {
 export default function HoleShotMap({
   hole,
   shots,
+  confirmations,
   geometry,
   onClose,
   onPrevHole,
@@ -195,8 +210,23 @@ export default function HoleShotMap({
                 // Skip (but keep the index so selectedIdx still lines up) any non-finite point.
                 if (!Number.isFinite(p.sx) || !Number.isFinite(p.sy)) return null;
                 const active = selectedIdx === i;
+                // 2026-08-14 — watch-confirmed ring. Drawn UNDER the existing marker (no fill, larger
+                // radius) so the original circle keeps its exact size, colour and onPress target: the
+                // marker a player taps is unchanged whether or not a watch was involved.
+                const confirmed = confirmations?.[i]?.confirmed === true;
                 return (
                   <React.Fragment key={i}>
+                    {confirmed && (
+                      <Circle
+                        cx={p.sx}
+                        cy={p.sy}
+                        r={active ? 17 : 14}
+                        fill="none"
+                        stroke={CONFIRM_RING}
+                        strokeWidth={2}
+                        opacity={0.9}
+                      />
+                    )}
                     <Circle
                       cx={p.sx}
                       cy={p.sy}
@@ -237,6 +267,22 @@ export default function HoleShotMap({
         {selected ? (
           <>
             <Text style={styles.detailHole}>Shot {selectedIdx! + 1}</Text>
+            {/*
+              2026-08-14 — the watch line, shown only when a swing actually corroborated this shot.
+              Tempo is the honest on-course number (roundSwingRead's argument: an uncalibrated wrist
+              speed on course is not actionable), so that is what gets shown, not a fabricated mph.
+            */}
+            {confirmations?.[selectedIdx!]?.confirmed && (
+              <Text style={styles.detailConfirm}>
+                ✓ Watch confirmed
+                {confirmations[selectedIdx!].tempoRatio
+                  ? ` · ${Math.round(confirmations[selectedIdx!].tempoRatio! * 10) / 10}:1 tempo`
+                  : ''}
+                {confirmations[selectedIdx!].swingClub && confirmations[selectedIdx!].swingClub !== selected.club
+                  ? ` · watch saw ${confirmations[selectedIdx!].swingClub}`
+                  : ''}
+              </Text>
+            )}
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>CLUB</Text>
               <Text style={styles.detailValue}>{selected.club ?? '—'}</Text>
@@ -321,6 +367,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d2418', borderRadius: 10,
     borderWidth: 1, borderColor: '#1e3a28', padding: 12,
   },
+  detailConfirm: { color: '#00C896', fontSize: 12, fontWeight: '700', marginBottom: 6 },
   detailHole: { color: '#ffffff', fontSize: 14, fontWeight: '800', marginBottom: 8 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   detailLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
