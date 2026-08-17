@@ -19,6 +19,8 @@ import {
   isCapturing,
   endCaptureEarly,
   registerExternalMicCheck,
+  registerExternalMicRelease,
+  type MicReleaseVerdict,
   RECORDING_OPTIONS,
   speakDeviceNotice,
 } from '../services/voiceService';
@@ -30,7 +32,12 @@ import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
 // 2026-05-21 — Consolidation 4: routine voice traces gated through devLog.
 import { devLog } from '../services/devLog';
-import { isSessionInFlight, forceCloseSession } from '../services/listeningSession';
+import {
+  isSessionInFlight,
+  forceCloseSession,
+  getSessionState,
+  toggle as toggleListeningSession,
+} from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
@@ -58,7 +65,8 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed, getConnectionEvidence } from '../services/apiBase';
+import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
@@ -83,6 +91,9 @@ const MAX_RECORD_MS = 18_000;
  *  Long enough to think before answering the caddie's question; short enough that a mic the user
  *  never asked for isn't live (and lighting the OS indicator) for the full wall-clock cap. */
 const NO_SPEECH_STANDDOWN_MS = 7_000;
+/** 2026-08-17 — re-entry window for handleMicPress. Two calls this close together are one intent
+ *  (the app's own duplicate mic handover, or a double-tap), not "start" followed by "I'm done". */
+const MIC_PRESS_REENTRY_MS = 700;
 // 2026-06-07 — Bumped 25s → 40s and 45s → 60s. Tim still hits
 // "That took too long" on the first interaction after a fresh app
 // launch. Root cause: services/voiceWarmup pre-hits /api/transcribe
@@ -496,7 +507,12 @@ export const useVoiceCaddie = ({
   // whether THIS tap path is holding the mic, so a follow-up capture bails instead of racing the session.
   useEffect(() => {
     registerExternalMicCheck(() => recordingRef.current !== null);
-    return () => registerExternalMicCheck(null);
+    // 2026-08-17 (Tim — "the Caddie mic acts just like an earbud tap… completely broken behavior").
+    // Knowing this path held the mic wasn't enough — the listening session had no way to TAKE it.
+    // Hand it over on demand instead of letting the other path talk to a busy microphone.
+    // Indirected through a ref so this mount-once effect always calls the CURRENT implementation.
+    registerExternalMicRelease(() => releaseMicRef.current());
+    return () => { registerExternalMicCheck(null); registerExternalMicRelease(null); };
   }, []);
   const isProcessingRef = useRef(false);
   /**
@@ -785,6 +801,10 @@ export const useVoiceCaddie = ({
    * "the user finished speaking", and the app was treating them the same. See the STOP branch.
    */
   const micHasSpokenRef = useRef(false);
+  // 2026-08-17 — entry timestamp for the re-entry guard at the top of handleMicPress. See there for
+  // why 700ms: longer than the ~350ms double-fire signatures we see in the field, far shorter than
+  // any real tap → speak → tap turn.
+  const lastMicPressAtRef = useRef(0);
 
   const clearAutoStop = () => {
     if (autoStopTimer.current) {
@@ -796,6 +816,12 @@ export const useVoiceCaddie = ({
       silenceVadTimer.current = null;
     }
   };
+
+  /**
+   * 2026-08-17 — MIC HANDOVER (see voiceService.registerExternalMicRelease). Assigned below,
+   * after processAudioUri exists, so a handover can submit a real utterance rather than bin it.
+   */
+  const releaseMicRef = useRef<() => Promise<MicReleaseVerdict>>(async () => 'none');
 
   // ── CHECK BYPASS PHRASES ──────────────────
 
@@ -2448,7 +2474,18 @@ export const useVoiceCaddie = ({
       // the text bubble alone is invisible while driving. Honest about signal.
       if (aborted) {
         logTranscribeError(null, message, { source: 'process_audio_abort' });
-        const line = "Didn't catch that — say it again?";
+        /**
+         * 2026-08-17 — this said "Didn't catch that — say it again?" under a comment claiming to be
+         * "honest about signal". An aborted /api/transcribe means the microphone worked perfectly
+         * and the NETWORK didn't — the recording exists, we simply couldn't get it transcribed.
+         * Telling the player we didn't hear them sends them to repeat a sentence we already have,
+         * and hides a connection failure behind their voice. Same class of untruth as the caddie
+         * mic's "Didn't catch that" over a mic that never opened; fixed at both surfaces from the
+         * one shared source. Still device TTS — this branch exists for dead zones.
+         */
+        const line = getConnectionEvidence().provenRecently
+          ? (CADDIE_NOTICE_ON_US[language] ?? CADDIE_NOTICE_ON_US.en)
+          : (CADDIE_NOTICE_CONNECTION[language] ?? CADDIE_NOTICE_CONNECTION.en);
         onResponseReceived(line);
         if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
       } else {
@@ -2464,9 +2501,79 @@ export const useVoiceCaddie = ({
     }
   }, [language, voiceEnabled, voiceGender, currentYardage, currentHole, club, isRoundActive, roundMode, courseHoles, currentPar]);
 
+  /**
+   * 2026-08-17 — MIC HANDOVER. Give up this path's microphone so a user-initiated listening-session
+   * turn (bottom-bar mic, header badge, earbud, watch) can own it.
+   *
+   * The first version of this discarded the recording unconditionally, and that was wrong in the
+   * one case that matters most: a player who taps the avatar, starts talking, and then hits the
+   * bottom-bar mic would have had the sentence they were in the middle of deleted. Whether your
+   * words survive must not depend on which of two pictures of the same caddie you touched — that
+   * asymmetry IS the bug this whole pass exists to remove.
+   *
+   * So the handover asks what the recording actually contains:
+   *   - it heard a human  → this is a real utterance and the new tap means "I'm done". SUBMIT it,
+   *                         exactly as the STOP branch would, and tell the caller to stand down.
+   *   - it heard nothing  → an auto-opened mic the player never answered. Discard, hand it over.
+   *
+   * Teardown order matches the STOP branch: timers first (so the silence-VAD can't fire against a
+   * recording being unloaded), then the ref, then the hardware.
+   * [[no-half-fixes-enforce-every-surface]] [[feels-like-a-real-caddie]]
+   */
+  releaseMicRef.current = async (): Promise<MicReleaseVerdict> => {
+    const rec = recordingRef.current;
+    if (!rec) return 'none';
+    const heardSpeech = micHasSpokenRef.current;
+    clearAutoStop();
+    recordingRef.current = null;
+    micHasSpokenRef.current = false;
+
+    let uri: string | null = null;
+    try {
+      await rec.stopAndUnloadAsync();
+      uri = rec.getURI();
+    } catch {
+      // The recording died underneath us (an audio-session reconfigure, typically). Nothing to
+      // submit; the ref is cleared either way so the mic is genuinely free for the new owner.
+    }
+
+    if (heardSpeech && uri) {
+      console.log('[voice] mic handover — capture heard speech, submitting it instead of discarding');
+      wrappedOnVoiceStateChange('thinking');
+      void processAudioUri(uri).catch(() => {});
+      return 'submitted';
+    }
+
+    isProcessingRef.current = false;
+    wrappedOnVoiceStateChange('idle');
+    return 'discarded';
+  };
+
   // ── MAIN MIC HANDLER ─────────────────────
 
   const handleMicPress = useCallback(async () => {
+    /**
+     * 2026-08-17 (Tim's issue log: `tap_ended_silent_capture · durationMs: 334`).
+     *
+     * 334ms is not a human deciding they're finished talking. It is this handler being entered
+     * TWICE in a third of a second — the app's own two hand-the-mic-over callers (the proactive
+     * opener's .finally() and onReadyToListen) landing on top of each other, or a real double-tap
+     * from someone who tapped, saw nothing happen, and tapped again. Either way call #2 lands on
+     * the recording call #1 just opened and is read as "I'm done, process this", so the mic is
+     * torn down and rebuilt before a single word is spoken into it.
+     *
+     * The existing <300ms stray-double-tap guard sat downstream of the teardown and, at 334ms,
+     * missed this by 34 milliseconds. Guard the ENTRY instead: inside the window a second call is
+     * the same intent as the first, which is already being served. The window is deliberately
+     * shorter than any real tap-speak-tap turn, so "start" then a genuine "I'm done" is untouched.
+     */
+    const sinceLastEntry = Date.now() - lastMicPressAtRef.current;
+    if (sinceLastEntry < MIC_PRESS_REENTRY_MS) {
+      console.log('[voice] mic press ignored — re-entry', sinceLastEntry, 'ms after the last one');
+      return;
+    }
+    lastMicPressAtRef.current = Date.now();
+
     // 2026-06-23 (Tim — "first time I ask, quite a delay... always seems to
     // have been there") — fire a warm the INSTANT the mic is tapped. The
     // brain Lambda goes cold after a few idle minutes; the foreground/heartbeat
@@ -2499,6 +2606,23 @@ export const useVoiceCaddie = ({
     // 2026-07-30 (Tim — iPad "stuck listening, and tapping to stop won't stop"). A tap while a
     // hands-free/VAD listening session is in flight (or hung on a cold transcribe) means STOP — force-
     // close it so the mic can NEVER get stuck with no way out. Was a bare `return` that trapped the user.
+    /**
+     * 2026-08-17 (Tim — "I'm still seeing a difference in the logic between the Caddie mic and the
+     * Caddie tab avatar"). THE SECOND TAP MEANT TWO OPPOSITE THINGS.
+     *
+     * Tap the bottom-bar mic, speak, tap again → listeningSession.toggle() ends the capture early
+     * and SUBMITS what you said. Do the same thing but tap the AVATAR the second time → this branch
+     * force-closed the session, which runs stopCapture() and THROWS THE UTTERANCE AWAY. Same user,
+     * same sentence, same two taps; whether you were answered depended on which picture you touched.
+     *
+     * Now the avatar defers to the session's own endpoint semantics: while the mic is open a tap
+     * means "I'm done, take it" on every surface. Only a session that is thinking or speaking gets
+     * force-closed — there, a tap genuinely does mean "stop". [[no-half-fixes-enforce-every-surface]]
+     */
+    if (getSessionState() === 'listening') {
+      try { void toggleListeningSession(); } catch { /* toggle guards itself */ }
+      return;
+    }
     if (isSessionInFlight()) {
       try { forceCloseSession(); } catch { /* best-effort */ }
       isProcessingRef.current = false;

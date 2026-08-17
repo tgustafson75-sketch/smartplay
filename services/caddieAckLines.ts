@@ -14,6 +14,47 @@
 
 export const CADDIE_NOTICE_DIDNT_CATCH = "Didn't catch that.";
 
+/**
+ * 2026-08-17 (Tim — "I'm here." then instantly "I didn't catch that.") — the line for when the
+ * MICROPHONE failed, not the listening.
+ *
+ * "Didn't catch that." was spoken for a mic that was busy and never opened at all. That tells the
+ * user to repeat themselves, which cannot work, and hides a real defect behind their voice. When
+ * the caddie couldn't hold the mic, it says so and owns it. Kept short and in the same
+ * dependency-free source as the acks so offlineVoiceCache pre-renders it in the persona's REAL
+ * voice — an honest line delivered by the robot voice is still a robotic moment.
+ * [[feels-like-a-real-caddie]]
+ */
+export const CADDIE_NOTICE_MIC_TROUBLE: Record<'en' | 'es' | 'zh', string> = {
+  en: "That's on me — my mic didn't open. Tap me again.",
+  es: 'Es culpa mía — no se abrió el micrófono. Tócame otra vez.',
+  zh: '是我的问题——麦克风没有打开。再点我一次。',
+};
+
+/**
+ * 2026-08-17 — the lines for when the CONNECTION failed, shared by every path that can hit it.
+ *
+ * These lived privately inside listeningSession while useVoiceCaddie's aborted-transcribe branch
+ * spoke "Didn't catch that — say it again?" under a comment claiming to be "honest about signal".
+ * An aborted /api/transcribe means the mic worked and the network didn't; telling the player we
+ * didn't hear them sends them to repeat a sentence we already have. Same failure, same words, both
+ * paths. [[no-half-fixes-enforce-every-surface]]
+ *
+ * ON_US is the variant for when the connection is PROVABLY fine (our host answered seconds ago) —
+ * blaming a good signal is the thing Tim caught on 5G, so a failure we can't pin on the network is
+ * owned instead.
+ */
+export const CADDIE_NOTICE_CONNECTION: Record<'en' | 'es' | 'zh', string> = {
+  en: "I'm having trouble connecting — try that again.",
+  es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
+  zh: '我连接遇到问题——请再试一次。',
+};
+export const CADDIE_NOTICE_ON_US: Record<'en' | 'es' | 'zh', string> = {
+  en: 'That one got away from me — say it again?',
+  es: 'Esa se me escapó — ¿me lo repites?',
+  zh: '这句我没跟上——再说一次好吗？',
+};
+
 export const ACK_PHRASES: Record<'en' | 'es' | 'zh', string[]> = {
   en: ['Okay, got it.', 'Got it.', 'Alright.', 'Sure thing.', 'On it.', 'Copy that.', 'You got it.', 'Let me take a look.', 'Right, one sec.', 'Gotcha.'],
   es: ['Vale, entendido.', 'Entendido.', 'Muy bien.', 'Claro.', 'En ello.', 'Déjame ver.', 'Un momento.'],

@@ -1,11 +1,13 @@
 import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtterance, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
+import { logVoiceSilentFail } from './voiceErrorLog';
+import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { prewarmVoice, abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -471,17 +473,18 @@ function pickOpener(): string {
  * knows when our host last answered: if it answered seconds ago, the connection is provably not the
  * problem and we say something true instead. [[caddie-failsafe-no-walls]]
  */
-const FAILURE_FALLBACK: Record<string, string> = {
-  en: "I'm having trouble connecting — try that again.",
-  es: 'Tengo problemas para conectarme — inténtalo de nuevo.',
-  zh: '我连接遇到问题——请再试一次。',
-};
+// 2026-08-17 — the wording moved to services/caddieAckLines (the shared, dependency-free source),
+// because the tap path needs the SAME lines: its aborted-transcribe branch was speaking "Didn't
+// catch that" for what is plainly a connection failure. Two copies of a line is two chances to fix
+// only one of them.
+const FAILURE_FALLBACK: Record<string, string> = CADDIE_NOTICE_CONNECTION;
 /** Connection is provably fine — own the failure instead of blaming their signal. */
-const FAILURE_ON_US: Record<string, string> = {
-  en: "That one got away from me — say it again?",
-  es: 'Esa se me escapó — ¿me lo repites?',
-  zh: '这句我没跟上——再说一次好吗？',
-};
+const FAILURE_ON_US: Record<string, string> = CADDIE_NOTICE_ON_US;
+/** 2026-08-17 — the mic-failed line for a language, from the one shared source (see caddieAckLines). */
+function micTroubleFor(lang: 'en' | 'es' | 'zh'): string {
+  return CADDIE_NOTICE_MIC_TROUBLE[lang] ?? CADDIE_NOTICE_MIC_TROUBLE.en;
+}
+
 function failureFallbackFor(lang: string | null | undefined): string {
   const key = (lang ?? 'en').toLowerCase().slice(0, 2);
   const pool = getConnectionEvidence().provenRecently ? FAILURE_ON_US : FAILURE_FALLBACK;
@@ -610,6 +613,30 @@ async function openSession() {
   // persona render; playVerbalCue falls back to the tock until the first online warm). AWAITED before the
   // mic opens so the cue can't be self-recorded. A spoken word also survives the BT route handoff that
   // swallowed the tock. userInitiated:true so it fires even at L1/Quiet (the user just tapped).
+  /**
+   * 2026-08-17 (Tim — "it goes 'I'm here', and then right away almost goes 'I didn't catch that'").
+   *
+   * THE MIC WAS NEVER OURS TO OPEN. The Caddie tab hands its own mic to the player after proactive
+   * speech, and that recording sits open holding the microphone. A tap here then spoke the go-ahead
+   * cue — "I'm here." — and only afterwards asked for the mic, which captureUtterance refused
+   * because the tap path already had it. Nothing was recorded, and the empty result was announced
+   * as "Didn't catch that.": the caddie inviting you to speak, refusing to listen, and blaming you
+   * for the silence, in about a second.
+   *
+   * Claim the microphone BEFORE promising to listen. A deliberate tap outranks a recording the user
+   * never asked for, so take it back first and cue second — then the invitation is true when it's
+   * spoken. [[feels-like-a-real-caddie]] [[hands-free-zero-setup-is-the-product]]
+   */
+  const handover = await releaseExternalMic().catch(() => 'none' as const);
+  if (handover !== 'none') console.log(`[path4:voice] mic_handover=${handover}`);
+  if (handover === 'submitted') {
+    // The tap path was holding a capture the player had ALREADY spoken into, so this tap is the
+    // endpoint of that utterance, not the start of a new one — it is now being transcribed and
+    // answered. Opening a second turn on top would talk over the reply to the player's own words.
+    setSessionStateMirror('idle');
+    return;
+  }
+
   if (settings.voiceEnabled) {
     try { await playVerbalCue('listen', LISTENING_EARCON, LISTENING_EARCON_MS); } catch { /* non-fatal */ }
   }
@@ -627,23 +654,53 @@ async function openSession() {
   console.log('[audit:voice] listening engaged');
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
-  let utterance: string | null = null;
-  try {
-    // 2026-05-25 — Bumped 8s→12s. Open-mic users need room to express a
-    // full thought during casual conversation ("hey Kevin, how are you
-    // doing today, I've been working on my driver"). 8s was clipping
-    // mid-sentence on natural-pace speech.
-    const captureP = captureUtterance(12_000, apiUrl, settings.language);
-    cancelMic = () => {
-      // Phase V.7 — real cancel via stopCapture; the recording stops
-      // immediately and captureUtterance resolves with null.
-      void stopCapture().catch(() => {});
-    };
-    utterance = await captureP;
-  } catch (e) {
-    console.log('[listeningSession] capture failed', e);
+  /**
+   * 2026-08-17 — one capture attempt. Factored out ONLY so the recovery below can run a second,
+   * fresh one; the parameters are byte-identical to the single attempt this replaced.
+   */
+  const runCapture = async (): Promise<CaptureResult> => {
+    try {
+      // 2026-05-25 — Bumped 8s→12s. Open-mic users need room to express a
+      // full thought during casual conversation ("hey Kevin, how are you
+      // doing today, I've been working on my driver"). 8s was clipping
+      // mid-sentence on natural-pace speech.
+      const captureP = captureUtteranceDetailed(12_000, apiUrl, settings.language);
+      cancelMic = () => {
+        // Phase V.7 — real cancel via stopCapture; the recording stops
+        // immediately and captureUtterance resolves with null.
+        void stopCapture().catch(() => {});
+      };
+      return await captureP;
+    } catch (e) {
+      console.log('[listeningSession] capture failed', e);
+      return { text: null, bail: 'error', heardSpeech: false, durationMs: null };
+    } finally {
+      cancelMic = null;
+    }
+  };
+  let capture: CaptureResult = await runCapture();
+
+  /**
+   * 2026-08-17 — RESTART FRESH, ported from the tap path (useVoiceCaddie's `restartFresh`, added
+   * 2026-08-12). That path learned months ago that a mic which never opened, or one that died
+   * underneath us, means "try again" — not "tell the user we didn't hear them". The mic/earbud
+   * path never got the lesson, so identical hardware trouble ended one surface in a retry and the
+   * other in a fake apology. Same recovery, both paths now.
+   *
+   * Bounded to a SINGLE retry, and only for the two bails that mean the microphone itself failed:
+   *   - mic_busy — the handover above lost a race with another recorder; take it and try again.
+   *   - error    — the recording died mid-capture (an audio-session reconfigure, typically).
+   * A capture that genuinely heard nothing is NOT retried; re-opening the mic on a user who simply
+   * didn't speak is exactly the hot-mic behavior the standdown fix removed.
+   */
+  if (shouldRetryCapture(capture.bail) && (state as SessionState) === 'listening') {
+    console.log(`[path4:voice] capture_retry after bail=${capture.bail}`);
+    logVoiceSilentFail('listen_capture_retry', { source: 'listeningSession', bail: capture.bail });
+    if (capture.bail === 'mic_busy') await releaseExternalMic().catch(() => false);
+    capture = await runCapture();
   }
-  cancelMic = null;
+  const utterance: string | null = capture.text;
+  const bail: CaptureBail | null = capture.bail;
   // 2026-08-11 — read through the cast: the `state !== 'opening'` guard above narrows the
   // module-level `state` to 'opening' for the rest of this function, and TS can't see that
   // setSessionStateMirror('listening') reassigned it. Runtime value is 'listening' here.
@@ -652,19 +709,54 @@ async function openSession() {
   if ((state as SessionState) !== 'listening') return;
 
   if (!utterance || !utterance.trim()) {
-    // 2026-07-06 (voice-lifecycle audit #8b) — this was SILENT, so a transcribe
-    // failure was indistinguishable from the caddie ignoring you (deliberate
-    // cancels never reach here — the state check above catches them). Brief
-    // device-voice notice; device TTS so it works with no signal.
+    /**
+     * 2026-08-17 — SAY THE TRUE THING. Every no-transcript outcome used to speak the one line
+     * "Didn't catch that.", which is a statement about the user's voice. It was spoken when the mic
+     * was busy and never opened, when the recording died, and when Whisper returned a 502 — none of
+     * which the user did, and only one of which they can fix by repeating themselves.
+     *
+     * Three honest outcomes now, keyed on WHY (services/voiceService CaptureBail):
+     *   - the mic never worked  → own it, and say the mic is the problem
+     *   - the transcribe failed → the existing evidence-aware connection line (which already
+     *                             refuses to blame the network when our host answered seconds ago)
+     *   - genuinely heard nothing → "Didn't catch that.", which is now TRUE when it is spoken
+     * [[feels-like-a-real-caddie]] [[illustration-data-points]]
+     */
+    // The rule itself lives in services/voice/captureBail (pure + jest-owned), so "what may the
+    // caddie claim happened" is one tested fact rather than a chain of inline booleans that a
+    // future branch can quietly contradict.
+    const say = responseForCaptureBail(bail);
+    const micNeverOpened = say === 'mic_trouble';
+    const transcribeFailed = say === 'connection';
+    // A deliberate cancel (and an OS permission prompt) is not ours to talk over.
+    const silentBail = say === 'silent';
+
+    // 2026-08-17 — a deliberate cancel is the user doing exactly what they meant to; it is not a
+    // failure and must never reach the issue log (voice_silent_fail schedules an auto-send, so
+    // logging cancels here would have mailed Tim every time he shushed the caddie).
+    if (!silentBail) logVoiceSilentFail('listen_no_transcript', {
+      source: 'listeningSession',
+      bail,
+      // 2026-08-17 — lets a field report tell "the mic was open and the player said nothing" from
+      // "the mic was never open", which the old log could not.
+      heardSpeech: capture.heardSpeech,
+      durationMs: capture.durationMs,
+    });
+
     try {
       const settingsNow = useSettingsStore.getState();
       const lang = (['en', 'es', 'zh'] as const).includes(settingsNow.language as never) ? (settingsNow.language as 'en' | 'es' | 'zh') : 'en';
       // 2026-07-20 (bug-hunt fix) — respect the phone-speaker mute: the opener + every real
       // reply are suppressed on the phone speaker when voiceOnPhoneSpeaker is off, but this
       // device-TTS notice bypassed that gate and spoke aloud on a route the user muted.
-      if (settingsNow.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
-        const { speakDeviceNotice } = await import('./voiceService');
-        await speakDeviceNotice(CADDIE_NOTICE_DIDNT_CATCH, lang, settingsNow.voiceGender).catch(() => {});
+      if (!silentBail && settingsNow.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+        if (transcribeFailed) {
+          await speakHonestFailure(lang, settingsNow.voiceGender, apiUrl);
+        } else {
+          const { speakDeviceNotice } = await import('./voiceService');
+          const line = micNeverOpened ? micTroubleFor(lang) : CADDIE_NOTICE_DIDNT_CATCH;
+          await speakDeviceNotice(line, lang, settingsNow.voiceGender).catch(() => {});
+        }
       }
     } catch { /* notice is best-effort */ }
     setSessionStateMirror('idle');

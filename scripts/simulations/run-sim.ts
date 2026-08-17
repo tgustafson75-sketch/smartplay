@@ -3376,9 +3376,16 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   // stopSpeaking() (both subsystems) BEFORE configureAudioForRecording, so the mic
   // never records the caddie talking over the user. Centralized for ALL callers; also
   // gives clean barge-in (tap mid-response stops the caddie and listens).
+  // 2026-08-17 — the implementation moved into captureUtteranceDetailed (captureUtterance is now a
+  // thin wrapper over it, so the ~17 transcript-only callers are unchanged). Anchor the guard to the
+  // real implementation, and assert the wrapper DELEGATES — otherwise a future "fast path" in the
+  // wrapper could open a mic that never silenced the caddie and this guard would still pass.
   (() => {
     const vs = read('services/voiceService.ts');
-    return /export const captureUtterance =[\s\S]*?try \{ await stopSpeaking\(\); \} catch[\s\S]*?await configureAudioForRecording\(\)/.test(vs);
+    return (
+      /export const captureUtteranceDetailed =[\s\S]*?try \{ await stopSpeaking\(\); \} catch[\s\S]*?await configureAudioForRecording\(\)/.test(vs) &&
+      /export const captureUtterance = async \([\s\S]*?captureUtteranceDetailed\(timeoutMs, apiUrl, language\)\)\.text/.test(vs)
+    );
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
@@ -9462,6 +9469,114 @@ check('LOCK: bundled geometry outranks the engine only if it reproduces its own 
     return accuracy && presence && noDemoteOnNoEvidence && keepsFallback;
   })(),
   'trust is measured against the card, not counted; too-little-evidence never demotes; bundled stays the fallback');
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2026-08-17 — ONE MICROPHONE. Tim: "there's still a difference in the logic between the Caddie mic
+// and the Caddie tab avatar… the Caddie mic acts just like an earbud tap. It goes 'I'm here', and
+// then right away almost goes 'I didn't catch that'. Everything's supposed to be unified."
+//
+// It was: the bottom-bar mic IS listeningSession.toggle(), the same function the earbud subscribes
+// to — while the Caddie tab avatar runs useVoiceCaddie's own recorder. TWO microphone owners with
+// no arbiter. A tap on one spoke its go-ahead cue and then found the mic held by the other, and
+// reported that as the user's failure to speak.
+//
+// These guards assert ORDER and REACHABILITY, not the presence of a string — a mic-claim that sits
+// AFTER the cue is the exact bug, and it would pass any presence check.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+check('LOCK: the caddie claims the mic BEFORE it promises to listen (no cue over a busy mic)',
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    const open = ls.slice(ls.indexOf('async function openSession()'));
+    const iHandover = open.indexOf('await releaseExternalMic()');
+    const iCue = open.indexOf("playVerbalCue('listen'");
+    const iCapture = open.indexOf('captureUtteranceDetailed(');
+    // Order is the whole point: handover → cue → capture. Anything else re-opens the bug.
+    const ordered = iHandover > -1 && iCue > iHandover && iCapture > iCue;
+    // A handover that SUBMITTED a real utterance must stand this turn down, not talk over the reply.
+    const standsDown = /handover === 'submitted'[\s\S]{0,400}?setSessionStateMirror\('idle'\);[\s\S]{0,40}?return;/.test(open);
+    return ordered && standsDown;
+  })(),
+  'handover runs before the go-ahead cue and before capture; a submitted utterance stands the new turn down');
+
+check('LOCK: "Didn\'t catch that" is spoken ONLY when the mic actually heard nothing',
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    const vs = read('services/voiceService.ts');
+    // The bail reason must exist and reach the caller — a bare string|null cannot tell a busy mic
+    // from a silent user, which is what made the caddie blame the user for its own failure.
+    const typed = /export type CaptureBail/.test(read('services/voice/captureBail.ts')) &&
+      /export type \{ CaptureBail \};/.test(vs) && /return done\('mic_busy'\)/.test(vs) &&
+      /return done\('transcribe_failed'\)/.test(vs) && /done\('empty'\)/.test(vs);
+    // …and the mic-busy bail must be VISIBLE. It was invisible for months, so an empty issue log
+    // was read as a healthy mic path.
+    const logged = /logVoiceSilentFail\('capture_mic_busy'/.test(vs);
+    // The notice branch must key on the reason via the jest-owned pure rule (services/voice/
+    // captureBail), not on inline booleans a later branch can quietly contradict.
+    const cb = read('services/voice/captureBail.ts');
+    const ruleOwned = /case 'mic_busy':[\s\S]{0,120}?return 'mic_trouble';/.test(cb) &&
+      /case 'transcribe_failed':[\s\S]{0,60}?return 'connection';/.test(cb);
+    const honest = ruleOwned &&
+      /const say = responseForCaptureBail\(bail\);/.test(ls) &&
+      /micNeverOpened \? micTroubleFor\(lang\) : CADDIE_NOTICE_DIDNT_CATCH/.test(ls) &&
+      /transcribeFailed[\s\S]{0,200}?speakHonestFailure\(/.test(ls);
+    // A deliberate cancel is not a failure and must not mail Tim.
+    const cancelQuiet = /if \(!silentBail\) logVoiceSilentFail\('listen_no_transcript'/.test(ls);
+    return typed && logged && honest && cancelQuiet;
+  })(),
+  'capture reports WHY it came back empty; mic failures are owned, transcribe failures named, cancels stay silent');
+
+check('LOCK: a mic that never opened is retried, not reported as a failure to hear',
+  (() => {
+    const ls = read('services/listeningSession.ts');
+    // Ported from useVoiceCaddie's restartFresh — and BOUNDED: only the two hardware bails, one
+    // retry, and never for a capture that simply heard nothing (that would re-open a hot mic).
+    const cb = read('services/voice/captureBail.ts');
+    const retries = /if \(shouldRetryCapture\(capture\.bail\) && \(state as SessionState\) === 'listening'\)/.test(ls) &&
+      /return bail === 'mic_busy' \|\| bail === 'error';/.test(cb);
+    const reclaims = /if \(capture\.bail === 'mic_busy'\) await releaseExternalMic\(\)/.test(ls);
+    const bounded = (ls.match(/capture = await runCapture\(\);/g) ?? []).length === 1;
+    return retries && reclaims && bounded;
+  })(),
+  'mic_busy/error retry once with the mic reclaimed; a genuinely silent capture is never retried');
+
+check('LOCK: the app cannot tap its own mic twice (the 334ms double-open)',
+  (() => {
+    const v = read('hooks/useVoiceCaddie.ts');
+    const h = v.slice(v.indexOf('const handleMicPress = useCallback'));
+    const iGuard = h.indexOf('sinceLastEntry < MIC_PRESS_REENTRY_MS');
+    const iStop = h.indexOf('if (recordingRef.current) {');
+    const iStart = h.indexOf('// ── START recording');
+    // The guard has to be at the ENTRY. The prior <300ms guard sat downstream of the teardown and
+    // missed the field case by 34ms precisely because it ran after the recording was already torn down.
+    return iGuard > -1 && iStop > iGuard && iStart > iGuard &&
+      /const MIC_PRESS_REENTRY_MS = \d+;/.test(v) &&
+      /lastMicPressAtRef\.current = Date\.now\(\);/.test(h);
+  })(),
+  're-entry guard runs before the stop/start branches, so a duplicate handover cannot tear down a fresh mic');
+
+check('LOCK: a second tap means the same thing on the avatar and on the caddie mic',
+  (() => {
+    const v = read('hooks/useVoiceCaddie.ts');
+    const h = v.slice(v.indexOf('const handleMicPress = useCallback'));
+    const iSubmit = h.indexOf("getSessionState() === 'listening'");
+    const iForceClose = h.indexOf('forceCloseSession()');
+    // While the mic is open the avatar must DEFER to the session's own endpoint (submit), and that
+    // check must come FIRST — reaching forceCloseSession while listening discards the utterance,
+    // which is the asymmetry: same two taps, answered or binned depending on which icon you touched.
+    const defersFirst = iSubmit > -1 && iForceClose > iSubmit && /toggleListeningSession\(\)/.test(h);
+    // And the reverse direction: a handover of a capture that heard speech submits it.
+    const submitsSpeech = /if \(heardSpeech && uri\)[\s\S]{0,300}?processAudioUri\(uri\)[\s\S]{0,80}?return 'submitted';/.test(v);
+    // ALL THREE mic owners must be releasable. The follow-up-listen loop holds the mic through
+    // captureInProgress with no recordingRef to see, so a check that only knows the tap path would
+    // leave the original symptom alive on the path where the caddie had just asked a question.
+    const vs = read('services/voiceService.ts');
+    const bothOwners = /if \(captureInProgress\) \{[\s\S]{0,600}?endCaptureEarly\(\);[\s\S]{0,200}?stopCapture\(\)/.test(vs) &&
+      /while \(captureInProgress && Date\.now\(\) < deadline\)/.test(vs) &&
+      /currentCaptureHeardSpeech = true;/.test(vs);
+    return defersFirst && submitsSpeech && bothOwners;
+  })(),
+  'tap-while-listening submits on both surfaces; neither path can bin an utterance the other would have answered');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

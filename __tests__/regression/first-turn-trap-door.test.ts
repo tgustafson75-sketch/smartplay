@@ -25,6 +25,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../../services/caddieAckLines';
 
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
 
@@ -110,18 +111,37 @@ describe('error states do not blame a connection that is provably fine', () => {
     expect(ls).toContain('getConnectionEvidence().provenRecently ? FAILURE_ON_US : FAILURE_FALLBACK');
   });
 
+  // 2026-08-17 — the wording moved to services/caddieAckLines so the TAP path can speak the same
+  // lines: its aborted-transcribe branch was saying "Didn't catch that" for a connection failure.
+  // Assert the shared source, and that this module still routes through it.
   it('owns the failure when the host answered seconds ago', () => {
     expect(ls).toContain('FAILURE_ON_US');
-    expect(ls).toContain("That one got away from me");
+    expect(ls).toContain('CADDIE_NOTICE_ON_US');
+    expect(CADDIE_NOTICE_ON_US.en).toContain('That one got away from me');
   });
 
   it('keeps a connection message for when the connection really is the problem', () => {
-    expect(ls).toContain("I'm having trouble connecting");
+    expect(CADDIE_NOTICE_CONNECTION.en).toContain("I'm having trouble connecting");
+    expect(ls).toContain('CADDIE_NOTICE_CONNECTION');
   });
 
   it('covers every language the connection line had', () => {
-    const onUs = ls.slice(ls.indexOf('const FAILURE_ON_US'), ls.indexOf('function failureFallbackFor'));
-    for (const lang of ['en:', 'es:', 'zh:']) expect(onUs).toContain(lang);
+    for (const lang of ['en', 'es', 'zh'] as const) {
+      expect(CADDIE_NOTICE_ON_US[lang].trim().length).toBeGreaterThan(0);
+      expect(CADDIE_NOTICE_CONNECTION[lang].trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('speaks the connection line on the TAP path too, instead of blaming the mic', () => {
+    // The aborted-transcribe branch in useVoiceCaddie used to say "Didn't catch that — say it
+    // again?", which sends the player to repeat a sentence we already recorded successfully.
+    const v = read('hooks/useVoiceCaddie.ts');
+    const abortBranch = v.slice(v.indexOf("source: 'process_audio_abort'"), v.indexOf("logVoiceError('process_audio'"));
+    expect(abortBranch).toContain('CADDIE_NOTICE_CONNECTION');
+    expect(abortBranch).toContain('getConnectionEvidence().provenRecently');
+    // The spoken line must no longer be the didn't-hear-you one (prose mentioning it is fine —
+    // this looks at what is actually assigned to `line`).
+    expect(abortBranch).not.toMatch(/const line = "Didn't catch that/);
   });
 });
 

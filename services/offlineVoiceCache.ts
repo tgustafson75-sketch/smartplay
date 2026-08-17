@@ -24,7 +24,7 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { DEAD_END_PRACTICE } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 
 type Lang = 'en' | 'es' | 'zh';
 type Gender = 'male' | 'female';
@@ -41,6 +41,10 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   // voice, built from the SAME source listeningSession speaks (caddieAckLines) so they can't drift. es/zh
   // acks keep the device-TTS fallback until there are non-English testers.
   { slug: 'didnt_catch_short', language: 'en', text: CADDIE_NOTICE_DIDNT_CATCH },
+  // 2026-08-17 — the mic-failed line (spoken instead of "Didn't catch that." when the microphone
+  // never opened). Same treatment: it's a line the user hears at a bad moment, so it must not be
+  // the moment they also hear the robot voice.
+  { slug: 'mic_trouble_en', language: 'en', text: CADDIE_NOTICE_MIC_TROUBLE.en },
   ...ACK_PHRASES.en.map((text, i) => ({ slug: `ack_en_${i}`, language: 'en' as const, text })),
   // 2026-08-08 (Tim — verbal listen/got-it cues replace the earcons his Tozo T6 never hears). Rendered
   // in the persona's real voice; listeningSession resolves + plays them at tap-to-listen / tap-again.

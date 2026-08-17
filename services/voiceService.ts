@@ -3,6 +3,7 @@ import * as Speech from 'expo-speech';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
 import { logVoiceSilentFail, logVoiceError, logTranscribeError } from './voiceErrorLog';
+import type { CaptureBail } from './voice/captureBail';
 // 2026-06-07 (audit) — wire TTS into the circuit breaker so spoken replies
 // short-circuit under weak signal instead of burning the full 12s timeout
 // then going silent. Feeds the reactive connectivity signal too.
@@ -212,6 +213,10 @@ let currentRecording: Audio.Recording | null = null;
 // immediately. Reset in a finally so every exit path clears it.
 let captureInProgress = false;
 let captureCancelled = false;
+// 2026-08-17 — module-level mirror of the in-flight capture's VAD "a human spoke" flag, so a mic
+// handover can tell an utterance worth submitting from silence worth discarding. Reset at the start
+// of every capture; set by the metering callback the moment speech crosses the threshold.
+let currentCaptureHeardSpeech = false;
 // 2026-08-06 (Tim device log: voice_error capture_utterance — "Only one Recording object can be prepared
 // at a given time"). captureInProgress guards captureUtterance vs itself, and the tap path checks
 // isCapturing() before starting — but the REVERSE was unguarded: captureUtterance didn't know the tap
@@ -220,7 +225,86 @@ let captureCancelled = false;
 // captureUtterance bails when the mic is already held by the tap path. Reads the ref live (no flag to sync).
 let externalMicCheck: (() => boolean) | null = null;
 export const registerExternalMicCheck = (fn: (() => boolean) | null): void => { externalMicCheck = fn; };
-const isExternalMicActive = (): boolean => { try { return externalMicCheck?.() === true; } catch { return false; } };
+export const isExternalMicActive = (): boolean => { try { return externalMicCheck?.() === true; } catch { return false; } };
+
+/**
+ * 2026-08-17 (Tim — "everything's supposed to be unified") — MIC HANDOVER.
+ *
+ * Knowing the other recorder holds the mic (isExternalMicActive) was only ever half the story:
+ * captureUtterance could detect it and bail, but nothing could TAKE THE MIC BACK. So a tap on the
+ * caddie mic while the tap path held an unanswered auto-opened recording spoke its go-ahead cue
+ * and then died on a busy mic — "I'm here." … "Didn't catch that." — with the user's actual words
+ * going into a recording nobody was going to transcribe.
+ *
+ * A deliberate tap-to-talk outranks a recording the user never asked for. useVoiceCaddie registers
+ * a release here; the listening session calls it at the top of every user-opened turn, so there is
+ * exactly ONE microphone owner from the moment a tap lands.
+ *
+ * Deliberately NOT called from inside captureUtterance: the follow-up-listen loops call that WHILE
+ * the tap path may legitimately own a live user recording, and releasing there would throw away
+ * words the user is in the middle of speaking. Handover belongs at the explicit user-intent
+ * chokepoint only. [[no-half-fixes-enforce-every-surface]]
+ */
+export type MicReleaseVerdict =
+  /** Nothing was holding the mic. */
+  | 'none'
+  /** A capture that had heard NO speech was thrown away — the mic is yours. */
+  | 'discarded'
+  /** The capture contained real speech, so it was SUBMITTED rather than binned. The caller must
+   *  NOT open its own turn on top of it: the user's words are already being answered. */
+  | 'submitted';
+
+let externalMicRelease: (() => Promise<MicReleaseVerdict>) | null = null;
+export const registerExternalMicRelease = (fn: (() => Promise<MicReleaseVerdict>) | null): void => { externalMicRelease = fn; };
+
+/**
+ * Release whatever holds the mic so a user-initiated turn can own it.
+ *
+ * 2026-08-17 (second pass — [[run-the-second-pass-yourself]]) — the first version only knew about
+ * the TAP path's recording and missed a THIRD owner: an in-flight captureUtterance from a follow-up
+ * listen loop, which holds the mic via captureInProgress with no recordingRef to see. The caddie
+ * asks a question, opens a follow-up mic, and a tap on the caddie mic during that window could not
+ * take it back — so the "fix" would have left the original symptom alive on the exact path where
+ * the caddie had just invited the user to talk. Both owners are handled here.
+ *
+ * Same rule for both, because it's the rule the user experiences: a capture that has HEARD a human
+ * is a real utterance and gets submitted; a capture that heard nothing is discarded.
+ */
+export const releaseExternalMic = async (): Promise<MicReleaseVerdict> => {
+  let verdict: MicReleaseVerdict = 'none';
+
+  // (a) An in-flight captureUtterance (follow-up listen loop, clarification prompt, …).
+  if (captureInProgress) {
+    if (currentCaptureHeardSpeech) {
+      // Ends the capture EARLY but keeps the audio — its owner transcribes and answers it.
+      endCaptureEarly();
+      verdict = 'submitted';
+    } else {
+      await stopCapture().catch(() => {});
+      verdict = 'discarded';
+    }
+    // The owning call clears captureInProgress in its finally, a beat after we stop it. Wait for
+    // the mic to be genuinely free — handing back a "released" mic that the next capture is then
+    // refused from is the same bug wearing a different hat.
+    const deadline = Date.now() + 1500;
+    while (captureInProgress && Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, 50));
+    }
+  }
+
+  // (b) The tap path's own recording (useVoiceCaddie recordingRef).
+  if (isExternalMicActive()) {
+    try {
+      const tapVerdict = (await externalMicRelease?.()) ?? 'none';
+      if (tapVerdict !== 'none') verdict = tapVerdict === 'submitted' ? 'submitted' : verdict === 'none' ? tapVerdict : verdict;
+    } catch (e) {
+      console.log('[voice] mic handover failed', e);
+    }
+  }
+
+  if (verdict !== 'none') console.log(`[voice] mic handover — ${verdict}`);
+  return verdict;
+};
 // 2026-06-06 — Distinct from captureCancelled: this means "user
 // explicitly ended the capture (tap during a follow-up listen) — DO
 // transcribe what was recorded." captureCancelled discards the audio;
@@ -260,22 +344,59 @@ export const endCaptureEarly = (): void => {
   captureEarlyStop = true;
 };
 
-export const captureUtterance = async (
+/**
+ * 2026-08-17 (Tim — "the Caddie mic goes 'I'm here' then right away 'I didn't catch that'").
+ *
+ * captureUtterance returned a bare `string | null`, so ten different outcomes all arrived at the
+ * caller identically and every one of them was announced as the user failing to speak. The reason
+ * now travels with the result. The CaptureBail vocabulary and the rule for what may be SAID about
+ * each reason live in the dependency-free services/voice/captureBail so a jest test owns them.
+ */
+export type { CaptureBail };
+
+export interface CaptureResult {
+  /** The transcript, or null on any bail. */
+  text: string | null;
+  /** null on success; otherwise WHY there is no transcript. */
+  bail: CaptureBail | null;
+  /** True if the metering VAD ever crossed the speech threshold — i.e. a human was heard. */
+  heardSpeech: boolean;
+  /** Recording length in ms when known (null when the mic never opened). */
+  durationMs: number | null;
+}
+
+export const captureUtteranceDetailed = async (
   timeoutMs: number,
   apiUrl: string,
   language: 'en' | 'es' | 'zh' = 'en',
-): Promise<string | null> => {
+): Promise<CaptureResult> => {
+  // 2026-08-17 — hoisted above the guards so every exit path can report what was heard and how
+  // long the mic was actually open.
+  let hasSpoken = false;
+  let durationMs: number | null = null;
+  const done = (bail: CaptureBail | null, text: string | null = null): CaptureResult =>
+    ({ text, bail, heardSpeech: hasSpoken, durationMs });
+
   // 2026-06-15 (Tim) — atomic re-entry guard (see captureInProgress decl). A
   // second concurrent capture would crash the audio session ("Only one Recording
   // object"); bail quietly so the in-flight capture owns the mic.
   if (captureInProgress || isExternalMicActive()) {
     console.log('[voice] captureUtterance ignored — mic busy (capture in progress or tap recording active)');
-    return null;
+    // 2026-08-17 — this bail was INVISIBLE: no breadcrumb, and the caller spoke "Didn't catch
+    // that." So the single most common cause of "the caddie mic is broken" never appeared in the
+    // issue log at all, and every audit read the empty log as "the mic path is fine".
+    logVoiceSilentFail('capture_mic_busy', {
+      source: 'captureUtterance',
+      selfBusy: captureInProgress,
+      tapPathBusy: isExternalMicActive(),
+    });
+    return done('mic_busy');
   }
   captureInProgress = true;
   let recording: Audio.Recording | null = null;
   captureCancelled = false;
   captureEarlyStop = false;
+  currentCaptureHeardSpeech = false;
   try {
     noteAudioActivity('capture');
     // 2026-06-16 (Tim — "did the speech leak into its mouth") — silence ANY in-flight
@@ -289,7 +410,7 @@ export const captureUtterance = async (
     // stopSpeaking() (it covers both subsystems and is a near-noop when nothing plays).
     try { await stopSpeaking(); } catch { /* best-effort */ }
     const { granted } = await Audio.requestPermissionsAsync();
-    if (!granted) return null;
+    if (!granted) return done('no_permission');
     await configureAudioForRecording();
 
     // 2026-05-25 — Fix A: track silence + speech-onset via metering.
@@ -299,7 +420,6 @@ export const captureUtterance = async (
     // silence sustained ≥ SILENCE_TIMEOUT_MS).
     // 2026-06-16 — thresholds are now lifted relative to a live ambient floor
     // (noiseFloorDb) so background noise can't masquerade as "still talking".
-    let hasSpoken = false;
     let speechStartAt = 0; // when the user first crossed the speech threshold (for adaptive endpoint)
     let lastLoudAt = Date.now();
     let noiseFloorDb = NOISE_FLOOR_INIT_DB;
@@ -324,6 +444,7 @@ export const captureUtterance = async (
         if (metering > effSpeechDb) {
           if (!hasSpoken) speechStartAt = Date.now(); // first real speech — start the sentence clock
           hasSpoken = true;
+          currentCaptureHeardSpeech = true; // visible to releaseExternalMic (submit vs discard)
         }
         if (metering > effSilenceDb) lastLoudAt = Date.now();
       },
@@ -386,7 +507,7 @@ export const captureUtterance = async (
     if (captureCancelled) {
       currentRecording = null;
       try { await recording.stopAndUnloadAsync(); } catch { /* already stopped */ }
-      return null;
+      return done('cancelled');
     }
 
     currentRecording = null;
@@ -395,7 +516,6 @@ export const captureUtterance = async (
     // an unloaded status with no durationMillis. We use it below to
     // skip transcribe for stray double-taps that produced <300ms of
     // audio.
-    let durationMs: number | null = null;
     try {
       const preStopStatus = await recording.getStatusAsync();
       const d = (preStopStatus as { durationMillis?: number }).durationMillis;
@@ -403,7 +523,7 @@ export const captureUtterance = async (
     } catch { /* non-fatal; fall through to file-size check */ }
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
-    if (!uri) return null;
+    if (!uri) return done('no_uri');
 
     // 2026-06-05 — Validate the recorded audio before paying for a
     // Whisper round-trip. A stray double-tap or a mic that never opened
@@ -413,7 +533,7 @@ export const captureUtterance = async (
     // treated as "user said nothing" upstream).
     if (durationMs != null && durationMs < 300) {
       console.log('[voice] capture too short (', durationMs, 'ms), skipping transcribe');
-      return null;
+      return done('too_short');
     }
     try {
       const FS = await import('expo-file-system/legacy');
@@ -421,7 +541,7 @@ export const captureUtterance = async (
       const size = (info as { size?: number }).size ?? 0;
       if (!info.exists || size < 1024) {
         console.log('[voice] capture file too small (<1KB), skipping transcribe');
-        return null;
+        return done('too_small');
       }
       // 2026-06-06 — Vercel platform request-body limit is 4.5 MB.
       // Tim's Echo Hills round hit FUNCTION_PAYLOAD_TOO_LARGE on
@@ -433,7 +553,7 @@ export const captureUtterance = async (
       if (size > 3.5 * 1024 * 1024) {
         console.log('[voice] capture file too large (', size, 'bytes), skipping transcribe to avoid Vercel 413');
         logTranscribeError(null, `audio_too_large_${size}_bytes`, { size, source: 'captureUtterance_max_size' });
-        return null;
+        return done('too_large');
       }
     } catch (e) {
       // Non-fatal — if the file-info probe itself throws, fall through
@@ -479,14 +599,14 @@ export const captureUtterance = async (
       // silently return null and the user would see no breadcrumb.
       const body = await res.text().catch(() => null);
       logTranscribeError(res.status, body, { source: 'captureUtterance' });
-      return null;
+      return done('transcribe_failed');
     }
     const data = await res.json() as { text?: string };
     const text = (data.text ?? '').trim();
     // 2026-06-13 — ingest the user's turn into the conversation log (learning
     // input + recall). Best-effort, never blocks the transcript return.
     if (text) { try { useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ } }
-    return text || null;
+    return text ? done(null, text) : done('empty');
   } catch (err) {
     console.log('[voice] captureUtterance error:', err);
     logVoiceError('capture_utterance', err);
@@ -494,12 +614,23 @@ export const captureUtterance = async (
       try { await recording.stopAndUnloadAsync(); } catch { /* ignore */ }
     }
     currentRecording = null;
-    return null;
+    return done('error');
   } finally {
     // Always release the re-entry guard, on every exit path.
     captureInProgress = false;
   }
 };
+
+/**
+ * The original one-shot API, unchanged for the ~17 callers that only need the transcript
+ * (follow-up loops, SmartMotion, lie analysis, tournament, round notes…). Callers that must
+ * respond differently to WHY the capture came back empty use captureUtteranceDetailed.
+ */
+export const captureUtterance = async (
+  timeoutMs: number,
+  apiUrl: string,
+  language: 'en' | 'es' | 'zh' = 'en',
+): Promise<string | null> => (await captureUtteranceDetailed(timeoutMs, apiUrl, language)).text;
 
 // Phase BM — memoize last-applied audio mode so back-to-back speak calls
 // don't pay the 50-150ms setAudioModeAsync cost on every utterance.
