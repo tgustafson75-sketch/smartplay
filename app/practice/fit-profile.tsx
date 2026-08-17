@@ -15,6 +15,9 @@ import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, type ClubName } from '
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
 import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
 import { useClubBagStore } from '../../store/clubBagStore';
+import { useRoundStore } from '../../store/roundStore';
+import { clubTendencies } from '../../services/clubTendency';
+import { normalizeClub } from '../../services/clubNormalize';
 import { recommendBall } from '../../services/ballFitting';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
@@ -129,6 +132,28 @@ export default function FitProfileScreen() {
     return m;
   }, [profile.gaps]);
   const overlapSet = useMemo(() => new Set(profile.overlaps.map((o) => o.longer)), [profile.overlaps]);
+
+  /**
+   * 2026-08-17 — per-club tendency for the ladder rows. Derived from shots ALREADY logged (current
+   * round plus history — a club's character isn't a per-round fact), through the same pure module
+   * the caddie reads, so the screen and the brain can never disagree about what a club does.
+   * Carry is dropped from the label because the row already shows it; what's left is the shape.
+   */
+  const tendencyByClub = useMemo(() => {
+    const map = new Map<string, string>();
+    try {
+      const rs = useRoundStore.getState();
+      const all = [...(rs.roundHistory ?? []).flatMap((r) => r.shots ?? []), ...(rs.shots ?? [])].slice(-300);
+      for (const t of clubTendencies(all, () => null, normalizeClub)) {
+        if (!t.shape && !t.miss) continue;
+        const of = `${Math.round(t.shapeShare * t.shapeN)} of ${t.shapeN}`;
+        map.set(t.club, t.shape
+          ? (t.shape === 'straight' ? `dead straight · ${of}` : `${t.shape} · ${of}`)
+          : `misses ${t.miss}`);
+      }
+    } catch { /* tendencies are additive — the ladder renders without them */ }
+    return map;
+  }, []);
 
   const confColor = profile.confidence === 'high' ? '#3FB950' : profile.confidence === 'medium' ? '#f5a623' : '#9ca3af';
 
@@ -350,9 +375,27 @@ export default function FitProfileScreen() {
               );
             }
             const editable = !c.measured; // tracked carries win; don't let a stated value masquerade as tracked
+            /**
+             * 2026-08-17 (Tim — "this driving iron gets 215 yards and a baby fade every single time,
+             * and I'd like to see that before even looking, in the bag tendency or club properties").
+             *
+             * The ladder already answers HOW FAR. This answers WHAT IT DOES — the thing a golfer
+             * knows about their own clubs before they know their handicap. Only clubs with an
+             * established tendency show a line (services/clubTendency owns the evidence bars), so
+             * the column stays empty rather than filling with guesses about clubs barely hit.
+             * Carry is deliberately omitted here: it is already the number on the right.
+             */
+            const tendency = tendencyByClub.get(c.club) ?? null;
             const inner = (
               <>
-                <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                <View style={styles.ladderLeft}>
+                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  {tendency ? (
+                    <Text style={[styles.ladderTendency, { color: colors.text_muted }]} numberOfLines={1}>
+                      {tendency}
+                    </Text>
+                  ) : null}
+                </View>
                 <View style={styles.ladderRight}>
                   <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
                   <View style={[styles.measuredDot, { backgroundColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : 'transparent', borderColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : colors.text_muted }]} />
@@ -406,6 +449,10 @@ const styles = StyleSheet.create({
   gapText: { fontSize: 13, lineHeight: 19, marginTop: 4 },
   fitValue: { fontSize: 17, fontWeight: '800', marginBottom: 4 },
   ladderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(127,127,127,0.18)' },
+  // 2026-08-17 — the club name and its learned tendency stack on the left. flexShrink so a long
+  // tendency can never push the yardage off the right edge on a narrow phone.
+  ladderLeft: { flexShrink: 1, paddingRight: 8 },
+  ladderTendency: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   ladderClub: { fontSize: 14, fontWeight: '700' },
   ladderRight: { flexDirection: 'row', alignItems: 'center' },
   ladderYards: { fontSize: 14, fontWeight: '800' },

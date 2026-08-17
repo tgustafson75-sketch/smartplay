@@ -9766,9 +9766,15 @@ check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the bra
     // audit found in the Learning Golfer Model: a perfect chain nobody's turn reached.
     const consumed = /const tendencies = Array\.isArray\(bag\.tendencies\)/.test(turn) &&
       /\$\{tendencyLine\}/.test(turn);
-    return derives && normalized && sent && consumed;
+    // The SCREEN must read the same pure module as the brain. Two derivations of "what this club
+    // does" would eventually disagree, and the player would be shown one thing while the caddie
+    // reasoned from another — the exact drift this codebase keeps paying for.
+    const fit = read('app/practice/fit-profile.tsx');
+    const screenSharesSource = /clubTendencies\(all, \(\) => null, normalizeClub\)/.test(fit) &&
+      /from '\.\.\/\.\.\/services\/clubTendency'/.test(fit);
+    return derives && normalized && sent && consumed && screenSharesSource;
   })(),
-  'club tendencies derive per-club from logged shots, ride the context, and reach the system prompt');
+  'club tendencies derive per-club from logged shots, ride the context, reach the system prompt, and the bag screen reads the SAME module');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
