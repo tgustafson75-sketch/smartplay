@@ -9650,6 +9650,50 @@ check('LOCK: a wrist rep never claims what the wrist cannot measure',
   })(),
   'watch reps carry measured times only — no invented dwell, no putting decel claim, source always labelled');
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2026-08-17 (learning-layer audit, Phase 0) — ONE BRAIN MUST REACH BOTH CLIENT SEAMS.
+//
+// The pipecat brain emits the same tool actions regardless of which mic was used, but the two
+// client receivers had drifted: the earbud / bottom-bar path routes everything through
+// services/voice/conversationalToolDispatch, while app/(tabs)/caddie.tsx handled a subset and
+// merely LOGGED the rest. recommend_club (which stamps pendingKevinRec → kevin_rec_club on the next
+// ShotResult) and register_bag both fell in that hole on the Caddie tab.
+//
+// This guard asserts the SHAPE, not the two instances: every tool the shared dispatcher can run
+// must be reachable from the tab seam. Adding a case to one file can no longer leave the other deaf.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+check('LOCK: every brain tool the shared dispatcher runs is reachable from the caddie-tab seam too',
+  (() => {
+    const tab = read('app/(tabs)/caddie.tsx');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    const cases = (s: string) => new Set(
+      [...s.matchAll(/case '([a-z_]+)'/g)].map((m) => m[1]),
+    );
+    const dispatcherTools = cases(disp);
+    // The tab's own switch lives inside handleToolAction; scope to it so unrelated switches in the
+    // 4,900-line file can't make this pass by accident.
+    // Search the end anchor FORWARD from the start index: `const handleMicPressRef` is declared
+    // earlier in the file and its name is a prefix of `const handleMicPress`, so a plain indexOf
+    // returns the earlier offset and silently yields an empty slice.
+    const hStart = tab.indexOf('const handleToolAction');
+    const handler = tab.slice(hStart, tab.indexOf('const handleMicPress', hStart));
+    const tabTools = cases(handler);
+    // The default branch must DELEGATE — that is what makes the remainder reachable. Without it,
+    // every tool below is silently swallowed and this guard's set-math would be meaningless.
+    const defaultDelegates = /default: \{[\s\S]{0,3000}?dispatchConversationalToolActions\(\[action\]\)/.test(handler);
+    // With a delegating default, reachability is total. Report the delta for the log either way.
+    const unreachable = [...dispatcherTools].filter((t) => !tabTools.has(t));
+    if (!defaultDelegates && unreachable.length) {
+      console.log('   [seam-drift] tools the caddie tab would swallow:', unreachable.join(', '));
+    }
+    // recommend_club specifically: it is NOT in the ToolAction union, so the compiler cannot catch
+    // its absence. Pin that the dispatcher still owns it and the tab can now reach it.
+    const recClubOwned = /case 'recommend_club':/.test(disp) && /setPendingKevinRec\(/.test(disp);
+    return defaultDelegates && recClubOwned;
+  })(),
+  'the tab seam delegates unknown brain tools to the one dispatcher, so recommend_club/register_bag can no longer be dropped on one mic only');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

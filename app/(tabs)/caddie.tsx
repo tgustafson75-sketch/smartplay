@@ -1949,9 +1949,46 @@ export default function CaddieTab() {
         } catch (e) { console.log('[caddie] open_url dispatch failed:', e); }
         break;
       }
-      default:
-        // 2026-07-06 (audit L6) — log unknown tool types instead of silently swallowing.
-        console.log('[caddie] unhandled tool action type:', (action as { type?: string }).type);
+      default: {
+        /**
+         * 2026-08-17 (learning-layer audit, Phase 0) — ONE BRAIN, TWO CLIENT SEAMS, ONE OF THEM DEAF.
+         *
+         * The pipecat brain emits the same tool actions no matter which mic you used, but the two
+         * client seams that receive them had drifted apart. The earbud / bottom-bar path routes
+         * everything through services/voice/conversationalToolDispatch (listeningSession.ts:1176);
+         * this switch handled its own subset and then just LOGGED anything it didn't recognise. Two
+         * tools fell in that hole, and both are ones the Caddie tab should act on:
+         *
+         *   recommend_club — the caddie telling you which club to hit. On the earbud path it stamps
+         *     pendingKevinRec, which is what puts kevin_rec_club / kevin_adhered onto the ShotResult
+         *     that follows (roundStore.ts:204-209). Tapped from the Caddie tab, the advice was
+         *     dropped and the shot recorded as though no recommendation had been given. Every round
+         *     played through this tab has been silently discarding exactly the advice-vs-outcome
+         *     pairing the app needs to learn from — the same data on the other mic was kept.
+         *
+         *   register_bag — voice bag registration. Fixed on the service dispatcher in the 08-08
+         *     verification wave; this seam never got the case, so registering your bag by voice from
+         *     the Caddie tab confirmed out loud and wrote nothing.
+         *
+         * Neither was a typed error: recommend_club isn't in the ToolAction union (types/toolAction.ts)
+         * and usePipecatVoice casts `raw as ToolAction`, so the compiler had nothing to say. The sim
+         * guard for recommend_club only asserts the SERVICE dispatcher, so it passed throughout.
+         *
+         * Delegating the default (rather than adding two cases) fixes the SHAPE: any tool the shared
+         * dispatcher knows how to run now runs from this seam too, so the two paths cannot drift
+         * apart again one tool at a time. Every type handled above returns before reaching here, so
+         * nothing can double-dispatch; the dispatcher re-applies the get-to-know suppression and
+         * logs genuinely unknown types itself. [[no-half-fixes-enforce-every-surface]]
+         */
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
+            .dispatchConversationalToolActions([action]);
+        } catch (e) {
+          console.log('[caddie] delegated tool dispatch failed:', (action as { type?: string }).type, e);
+        }
+        break;
+      }
     }
     // Phase A.4: first-tool hint after first launch in first round.
     const hint = getFirstToolHint();
