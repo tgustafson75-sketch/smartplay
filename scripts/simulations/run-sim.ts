@@ -9749,6 +9749,27 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
+check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the brain',
+  (() => {
+    const ct = read('services/clubTendency.ts');
+    const ctx = read('services/pipecatContext.ts');
+    const turn = read('api/pipecat-turn.ts');
+    // Producer: per-club, not bag-wide. patternDetection pools miss across every club, which is why
+    // no individual club ever had a character.
+    const derives = /export function clubTendencies/.test(ct) &&
+      /export const MIN_SHAPE_SHOTS/.test(ct) && /export const DOMINANT_SHARE/.test(ct);
+    // Club identity must go through the normalizer or one club splits into several rows.
+    const normalized = /normalize\(s\?\.club \?\? null\)/.test(ct) && /cn\.normalizeClub/.test(ctx);
+    // Sent on the context...
+    const sent = /tendencies: \(\(\) => \{/.test(ctx) && /describeBagTendencies/.test(ctx);
+    // ...and READ on the server. A producer with no consumer is the exact shape the learning-layer
+    // audit found in the Learning Golfer Model: a perfect chain nobody's turn reached.
+    const consumed = /const tendencies = Array\.isArray\(bag\.tendencies\)/.test(turn) &&
+      /\$\{tendencyLine\}/.test(turn);
+    return derives && normalized && sent && consumed;
+  })(),
+  'club tendencies derive per-club from logged shots, ride the context, and reach the system prompt');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

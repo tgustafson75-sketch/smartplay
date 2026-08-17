@@ -158,6 +158,35 @@ export function buildPipecatContext() {
           return (require('../store/clubBagStore').useClubBagStore.getState().bagList() as { club_id: string }[]).map((c) => c.club_id);
         } catch { return []; }
       })(),
+      /**
+       * 2026-08-17 (Tim — "this driving iron gets two hundred and fifteen yards and a baby fade
+       * every single time. And I'd like to see that before even looking").
+       *
+       * PER-CLUB tendency, so the caddie knows a club's character without being told. Shape and
+       * direction were only ever aggregated across the WHOLE BAG (patternDetection.ts:60), so a
+       * hooked driver and a pulled wedge pooled into one number and no individual club had a
+       * character. Distances were per-club; shape was not. Now both are.
+       *
+       * Established tendencies only — clubTendency's own evidence bars decide what qualifies, so a
+       * club hit twice contributes nothing rather than a confident sentence about two shots.
+       * Reads the current round PLUS history, because a club's character is not a per-round fact.
+       */
+      tendencies: (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const ct = require('./clubTendency') as typeof import('./clubTendency');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cn = require('./clubNormalize') as typeof import('./clubNormalize');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
+          const history = (round.roundHistory ?? []).flatMap((r) => r.shots ?? []);
+          const all = [...history, ...(round.shots ?? [])].slice(-300);
+          const carryFor = (c: string) => {
+            try { return cs.hasDistance(c) ? cs.carryFor(c) : null; } catch { return null; }
+          };
+          return ct.describeBagTendencies(ct.clubTendencies(all, carryFor, cn.normalizeClub));
+        } catch { return []; }
+      })(),
     },
     // Every brain-bound setting flows through the pure brainSettings() map (tested). trustLevel is
     // computed from its own store so it stays separate.

@@ -374,6 +374,21 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
   const registeredBagLine = registered.length > 0
     ? `Registered bag (the clubs he actually carries — ONLY recommend from these): ${registered.join(', ')}.`
     : '';
+  /**
+   * 2026-08-17 (Tim — "this driving iron gets two hundred and fifteen yards and a baby fade every
+   * single time. And I'd like to see that before even looking").
+   *
+   * PER-CLUB tendency, derived on device from his own logged shots (services/clubTendency), so the
+   * caddie knows what a club DOES rather than only how far it goes. Shape was previously pooled
+   * across the whole bag, so no individual club had a character. Only established tendencies are
+   * sent — the device applies the evidence bars — so anything here is a real pattern, not a guess,
+   * and the caddie may state it plainly. Told to USE it in the club call (a club that reliably
+   * fades is the club for a right-to-left pin) rather than recite it back.
+   */
+  const tendencies = Array.isArray(bag.tendencies) ? (bag.tendencies as string[]) : [];
+  const tendencyLine = tendencies.length > 0
+    ? `How his clubs actually behave (learned from his own shots — factor this into the club call; don't recite it): ${tendencies.join('; ')}.`
+    : '';
 
   // 2026-07-01 (whole-app audit — pipecat parity with kevin) — live shot context so the default
   // brain answers "how far / what's my score / what did I note here / what have I hit" with real data.
@@ -472,6 +487,7 @@ ${perspectiveBlock(name)}
 ${cecilyBlock}${intensityBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
+${tendencyLine}
 
 ${roundSection}
 
