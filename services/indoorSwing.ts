@@ -37,6 +37,15 @@ export interface IndoorRep {
    *  (the accelerometer sharpened the through-swing bottom). 'gyro' whenever fusion is off / not fed /
    *  the refinement failed a sanity gate — so a caller can trust the number is at worst gyro-only. */
   impactSource?: 'gyro' | 'gyro+accel';
+  /**
+   * 2026-08-17 (Tim — "when you sim around or do your hotel drills, the watch should be able to
+   * pick up motion for that"). Which IMU measured this rep: the phone in your hands, or the watch
+   * on your wrist. Both are honest tempo sources — backswing and downswing are TIMES, and 3:1 is
+   * 3:1 whichever wrist-or-hand-mounted IMU counted it — but they are not interchangeable in every
+   * field (see services/swing/watchRep for what a watch rep can and cannot fill), so the reader can
+   * always tell. Absent on older persisted reps; treat undefined as 'phone'.
+   */
+  source?: 'phone' | 'watch';
 }
 
 /**
@@ -237,6 +246,7 @@ export class IndoorRepDetector {
       transition,
       transitionDwellMs,
       impactSource: refined.source,
+      source: 'phone',
     };
 
     // Putting: decel-into-the-ball read (the #1 amateur putting fault). Compare the

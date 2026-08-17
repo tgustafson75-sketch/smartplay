@@ -24,6 +24,8 @@ import {
   IndoorRepDetector, summarizeIndoorReps, INDOOR_CONFIG,
   type IndoorMode, type IndoorRep,
 } from '../../services/indoorSwing';
+import { RepDedupe } from '../../services/swing/watchRep';
+import { useWatchReps } from '../../hooks/useWatchReps';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
@@ -69,6 +71,35 @@ export default function IndoorHotelModeScreen() {
     accelSubRef.current = null;
   }, []);
 
+  /**
+   * 2026-08-17 (Tim — "you've got the phone and the watch swinging. I don't know if that would be
+   * duplicitous"). One physical swing must produce ONE rep. This gate lets whichever IMU reads it
+   * first through and drops the other's echo. See services/swing/watchRep.
+   */
+  const dedupeRef = useRef(new RepDedupe());
+
+  /** The one place a rep — from either IMU — enters the session. */
+  const acceptRep = useCallback((rep: IndoorRep) => {
+    repsRef.current = [...repsRef.current, rep];
+    setReps(repsRef.current);
+    // Tactile "got it" tick the instant a rep reads — eyes stay off the screen.
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  }, []);
+
+  /**
+   * The watch as a second rep source, live only while the drill is running. Passive by design: it
+   * reads swings the watch is already sending (the player arms capture on the watch itself) and
+   * never switches a wrist sensor on. No watch → inert, and the phone gyro path is unchanged.
+   *
+   * This is what makes the drill work when the phone ISN'T in your hands — a real club with the
+   * watch on, which is the case the phone-gyro detector could never cover.
+   */
+  useWatchReps({
+    enabled: stage === 'live',
+    mode,
+    onRep: (rep) => { if (dedupeRef.current.take('watch', Date.now())) acceptRep(rep); },
+  });
+
   const start = useCallback(() => {
     setReps([]);
     repsRef.current = [];
@@ -79,11 +110,11 @@ export default function IndoorHotelModeScreen() {
       Gyroscope.setUpdateInterval(10); // ~100Hz — the whole point of IMU tempo
       subRef.current = Gyroscope.addListener((s) => {
         const rep = detectorRef.current?.onSample({ t: Date.now(), x: s.x, y: s.y, z: s.z }) ?? null;
-        if (rep) {
-          repsRef.current = [...repsRef.current, rep];
-          setReps(repsRef.current);
-          // Tactile "got it" tick the instant a rep reads — eyes stay off the screen.
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        // 2026-08-17 — through the same cross-IMU gate as the watch, so one physical swing logs
+        // ONE rep no matter which sensor read it first. Without this every average built from these
+        // reps (the CNS tempo picture, practice points, session history) would double-count.
+        if (rep && dedupeRef.current.take('phone', Date.now())) {
+          acceptRep(rep);
         }
       });
     } catch {

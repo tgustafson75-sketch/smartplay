@@ -9578,6 +9578,78 @@ check('LOCK: a second tap means the same thing on the avatar and on the caddie m
   })(),
   'tap-while-listening submits on both surfaces; neither path can bin an utterance the other would have answered');
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2026-08-17 — THE WATCH IS A REP SOURCE, and a guard that reads a field that doesn't exist.
+//
+// Tim: "when you sim around or do your hotel drills, the watch should be able to pick up motion for
+// that… I don't know if that would be duplicitous or the information would crash."
+// ═══════════════════════════════════════════════════════════════════════════════
+
+check('LOCK: the watch-tempo fallback reads a REAL timestamp, not a field that never existed',
+  (() => {
+    const smRaw = read('app/swinglab/smartmotion.tsx');
+    const store = read('store/watchStore.ts');
+    // Assert on CODE, not prose. The comment above the fix necessarily quotes the broken expression
+    // to explain it, and a naive source-wide match reads that quotation as the bug still being
+    // present — a guard failing on its own documentation. Strip comments first.
+    const sm = smRaw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // The guard read `last.at` through a cast while watchStore stamps `timestamp` — so the typeof
+    // test was always false, the ternary always fell to its permissive branch, and the 90s window
+    // never applied. The cast is what hid it from the compiler.
+    const noPhantomField = !/\(\s*last\s+as\s+\{\s*at\?/.test(sm);
+    const readsRealField = /Date\.now\(\) - last\.timestamp < WATCH_TEMPO_MAX_AGE_MS/.test(sm);
+    const fieldExists = /^\s*timestamp: number;/m.test(store);
+    // ...and no permissive `: true` fallback left in that expression to re-open the hole.
+    const notPermissive = !/const fresh = [\s\S]{0,200}?:\s*true;/.test(sm);
+    return noPhantomField && readsRealField && fieldExists && notPermissive;
+  })(),
+  'the 90s freshness window actually applies — a stale watch swing cannot attach itself to this strike');
+
+check('LOCK: SwingSim + Hotel Mode take reps from the watch, not only the phone gyro',
+  (() => {
+    const sim = read('app/swinglab/simround.tsx');
+    const hotel = read('app/swinglab/indoor.tsx');
+    const wired = (s: string) => /useWatchReps\(\{/.test(s) && /from '\.\.\/\.\.\/hooks\/useWatchReps'/.test(s);
+    // Passive by design: a drill screen must never switch the wrist sensor on by itself — capture is
+    // armed by the player on the watch. Assert neither screen reaches for a start/stop control.
+    const passive = !/startWatchCapture|WearSwingBridge\.start/.test(sim + hotel);
+    // A watch rep must be scored as the mode the player armed, not a hardcoded one.
+    const modeCarried = /mode: armedMode/.test(sim) && /setArmedMode\(mode\)/.test(sim);
+    return wired(sim) && wired(hotel) && passive && modeCarried;
+  })(),
+  'both drill screens accept watch reps, stay passive about arming, and score them as the armed mode');
+
+check('LOCK: one physical swing logs ONE rep, whichever IMU reads it',
+  (() => {
+    const sim = read('app/swinglab/simround.tsx');
+    const hotel = read('app/swinglab/indoor.tsx');
+    const wr = read('services/swing/watchRep.ts');
+    // BOTH sources must pass through the same gate. A gate on only the watch side would still
+    // double-count whenever the watch happened to report first.
+    const bothGated = (s: string) => /dedupeRef\.current\.take\('phone'/.test(s) && /dedupeRef\.current\.take\('watch'/.test(s);
+    // Same-source reps must NEVER be suppressed — two fast reps on one IMU are two real swings.
+    const sameSourceAllowed = /if \(this\.lastSource === source\) return false;/.test(wr);
+    // Per-screen instance, not a module global two mounted surfaces would share.
+    const perScreen = /export class RepDedupe/.test(wr) && /useRef\(new RepDedupe\(\)\)/.test(sim) && /useRef\(new RepDedupe\(\)\)/.test(hotel);
+    return bothGated(sim) && bothGated(hotel) && sameSourceAllowed && perScreen;
+  })(),
+  'cross-IMU echoes are dropped at both screens; same-source reps and the dedupe window are untouched');
+
+check('LOCK: a wrist rep never claims what the wrist cannot measure',
+  (() => {
+    const wr = read('services/swing/watchRep.ts');
+    // Dwell isn't measured by the watch → 0, never a plausible-looking invention.
+    const honestDwell = /transitionDwellMs: 0,/.test(wr);
+    // The putting decel read needs a through-stroke accel profile the watch doesn't send.
+    const noThroughStroke = !/throughStroke:/.test(wr);
+    // And an unreadable swing is discarded rather than surfaced as a bad rep.
+    const discards = /if \(backswingMs <= 0 \|\| downswingMs <= 0\) return null;/.test(wr);
+    // Every rep is labelled with the IMU that produced it, both ways.
+    const labelled = /source: 'watch',/.test(wr) && /source: 'phone',/.test(read('services/indoorSwing.ts'));
+    return honestDwell && noThroughStroke && discards && labelled;
+  })(),
+  'watch reps carry measured times only — no invented dwell, no putting decel claim, source always labelled');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

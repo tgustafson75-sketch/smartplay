@@ -92,8 +92,30 @@ describe('the watch finally reaches the swing read', () => {
     expect(sm).toContain('if (t.ratio == null) {');
   });
 
+  /**
+   * 2026-08-17 — this test used to assert the exact broken expression:
+   *
+   *   expect(sm).toContain('Date.now() - ((last as { at?: number }).at as number) < 90_000');
+   *
+   * which pinned a guard that never ran. `last` is a SwingMetrics and watchStore stamps
+   * `timestamp`; there is no `at` field anywhere, so the typeof test in front of that comparison
+   * was always false and the ternary always took its permissive `: true` branch. The window never
+   * applied — the newest watch swing in the session attached to a strike no matter how old.
+   *
+   * The test was green the whole time, because it checked that the SOURCE TEXT was present rather
+   * than that the behavior held. A test that pins an expression can only ever confirm the
+   * expression is still there. Assert the property instead: it reads the real, required field
+   * (so a rename is a compile error), and no permissive fallback remains.
+   * [[grep-guards-cant-see-dead-code]]
+   */
   it('ignores a stale swing from an earlier session', () => {
-    expect(sm).toContain('Date.now() - ((last as { at?: number }).at as number) < 90_000');
+    const code = sm.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect(code).toContain('Date.now() - last.timestamp < WATCH_TEMPO_MAX_AGE_MS');
+    // The field it compares against must actually exist on the stored swing.
+    expect(read('store/watchStore.ts')).toMatch(/^\s*timestamp: number;/m);
+    // No phantom-field cast, and no `: true` escape hatch, left in the freshness expression.
+    expect(code).not.toMatch(/\(\s*last\s+as\s+\{\s*at\?/);
+    expect(code).not.toMatch(/const fresh = [\s\S]{0,200}?:\s*true;/);
   });
 
   it('does NOT push the estimate through the truth-grade measured input', () => {

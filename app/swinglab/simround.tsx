@@ -19,6 +19,8 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Polyline, Circle as SvgCircle } from 'react-native-svg';
 import { useTheme } from '../../contexts/ThemeContext';
 import { IndoorRepDetector, type IndoorRep } from '../../services/indoorSwing';
+import { RepDedupe } from '../../services/swing/watchRep';
+import { useWatchReps } from '../../hooks/useWatchReps';
 import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, type SimLie } from '../../services/simGame';
 import { useFamilyStore } from '../../store/familyStore';
 import { COURSES } from '../../data/courses';
@@ -82,6 +84,9 @@ export default function SwingSimScreen() {
   }, []);
   const [club, setClub] = useState<string>('7 Iron');
   const [armed, setArmed] = useState(false);
+  // 2026-08-17 — which mode the current arm is for, so a watch-sourced rep is scored as the same
+  // shot type the player armed (the phone path carries it in the arm() closure).
+  const [armedMode, setArmedMode] = useState<'swing' | 'putt'>('swing');
   // 2026-08-08 (Tim — "can't change club in Sim"). Voice club change: hands are ON the phone (it IS the
   // club), so tap-chips aren't reachable mid-flow. Register with the sim bus; the voice clubChangeHandler
   // resolves a spoken club here against the FULL sim bag (learned + starred standard carries).
@@ -180,6 +185,7 @@ export default function SwingSimScreen() {
   // Arm the detector for a swing or putt.
   const arm = useCallback((mode: 'swing' | 'putt') => {
     detRef.current = new IndoorRepDetector(mode);
+    setArmedMode(mode);
     // 2026-07-08 (pre-release sweep) — Gyroscope.addListener does NOT throw on a device
     // without a gyro (iOS Simulator, gyro-less hardware); it just never emits, leaving the
     // player stuck on "I'M WATCHING" with no rep and no way out. Confirm the sensor first
@@ -196,7 +202,9 @@ export default function SwingSimScreen() {
         Gyroscope.setUpdateInterval(10);
         subRef.current = Gyroscope.addListener((g) => {
           const rep = detRef.current?.onSample({ t: Date.now(), x: g.x, y: g.y, z: g.z }) ?? null;
-          if (rep) { stopSensor(); onRep(rep, mode); }
+          // 2026-08-17 — the phone rep goes through the SAME dedupe gate as the watch, so whichever
+          // IMU reads the swing first wins and the other one's echo is dropped.
+          if (rep && dedupeRef.current.take('phone', Date.now())) { stopSensor(); onRep(rep, mode); }
         });
       } catch { setArmed(false); }
     })();
@@ -205,6 +213,28 @@ export default function SwingSimScreen() {
 
   const onRepRef = useRef<(rep: IndoorRep, mode: 'swing' | 'putt') => void>(() => {});
   const onRep = useCallback((rep: IndoorRep, mode: 'swing' | 'putt') => onRepRef.current(rep, mode), []);
+
+  /**
+   * 2026-08-17 (Tim — "you've got the phone and the watch swinging. I don't know if that would be
+   * duplicitous"). It would have been: one swing, two IMUs, two shots played. This gate lets the
+   * first reader through and drops the other's echo of the same swing. See services/swing/watchRep.
+   */
+  const dedupeRef = useRef(new RepDedupe());
+
+  /**
+   * The watch as a second rep source. Live only while the screen is armed, and passive — it reads
+   * swings the watch is already sending (armed by the player on the watch itself) and never turns a
+   * wrist sensor on by itself. With no watch this is inert and the phone path is unchanged.
+   */
+  useWatchReps({
+    enabled: armed,
+    mode: armedMode,
+    onRep: (rep) => {
+      if (!dedupeRef.current.take('watch', Date.now())) return;
+      stopSensor();
+      onRep(rep, armedMode);
+    },
+  });
 
   onRepRef.current = (rep, mode) => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});

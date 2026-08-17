@@ -156,6 +156,9 @@ const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
 // the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
 // so the few extra candidates it admits are harmless; range still vision-confirms).
 const CHIP_STRIKE_THRESHOLD_DB = 18;
+/** 2026-08-17 — how recent a watch swing must be to stand in for a missing camera tempo read.
+ *  Covers recording → reviewing → opening the read; anything older belongs to another session. */
+const WATCH_TEMPO_MAX_AGE_MS = 90_000;
 // 2026-06-12 — default DTL target: straight up the frame from the ball (full-ish
 // shot). Draggable in setup so the aim line + the live effort/direction readout
 // update as you move it (geometry ↔ tempo, made interactive). x=0.5 = on the line.
@@ -2461,11 +2464,23 @@ export default function SmartMotion() {
             const ws = require('../../store/watchStore') as typeof import('../../store/watchStore');
             const swings = ws.useWatchStore.getState().sessionSwings ?? [];
             const last = swings.length > 0 ? swings[swings.length - 1] : null;
-            // 90s: comfortably covers recording, reviewing and opening the read, without letting a
-            // swing from an earlier session attach itself to this one.
-            const fresh = last && typeof (last as { at?: number }).at === 'number'
-              ? Date.now() - ((last as { at?: number }).at as number) < 90_000
-              : true;
+            /**
+             * 90s: comfortably covers recording, reviewing and opening the read, without letting a
+             * swing from an earlier session attach itself to this one.
+             *
+             * 2026-08-17 (Tim, evaluating watch↔SwingSim wiring: "I don't know if that would be
+             * duplicitous") — THIS GUARD WAS DEAD. It read `last.at` through a cast, and watchStore
+             * stamps `timestamp`; there is no `at` field anywhere on SwingMetrics. So the typeof
+             * test was always false, the ternary always fell to its permissive `: true` branch, and
+             * the window never applied — the newest watch swing in the session attached to this
+             * strike no matter how old it was. Exactly what the comment says it prevents.
+             *
+             * The cast is what hid it: `(last as { at?: number })` asserted a field into existence
+             * that the type never had, so TypeScript had nothing to complain about. Reading the
+             * REAL required field means a future rename is a compile error, not a silent no-op.
+             * [[grep-guards-cant-see-dead-code]] [[illustration-data-points]]
+             */
+            const fresh = last != null && Date.now() - last.timestamp < WATCH_TEMPO_MAX_AGE_MS;
             if (last && fresh && last.tempoRatio > 0 && last.backswingMs > 0 && last.downswingMs > 0) {
               console.log('[smartmotion] camera gave no tempo — using the watch IMU read', last.tempoRatio);
               t = { ...t, ratio: last.tempoRatio, backswingMs: last.backswingMs, downswingMs: last.downswingMs };
