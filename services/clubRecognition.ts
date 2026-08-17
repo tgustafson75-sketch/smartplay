@@ -40,6 +40,7 @@ export type ClubType = 'iron' | 'wedge' | 'hybrid' | 'wood' | 'driver' | 'putter
 
 // The pure bag-reconcile logic lives in its own dependency-free module (testable in node).
 import { reconcileClubWithBag } from './clubBagReconcile';
+import { digitizeNumberWords } from './clubNormalize';
 export { reconcileClubWithBag } from './clubBagReconcile';
 
 export interface ClubRecognitionResult {
@@ -200,14 +201,18 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
   // "three wood"). The parser below only matched digits, so every spoken-number club fell
   // through to null → the caddie asked "which club?". Normalize number-words to digits up
   // front so "seven iron" → "7 iron" flows through the existing matchers.
-  const NUM_WORDS: Record<string, string> = {
-    one: '1', two: '2', three: '3', four: '4', five: '5',
-    six: '6', seven: '7', eight: '8', nine: '9', ten: '10',
-  };
-  const p = phrase
-    .toLowerCase()
-    .trim()
-    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\b/g, (m) => NUM_WORDS[m] ?? m);
+  /**
+   * 2026-08-17 (Tim — "if I say it's an eighteen three driver iron or a fifty two or a fifty six or
+   * a fifty eight degree wedge") — this table stopped at TEN, so every loft a golfer says by name
+   * died here. The loft matchers below (wedges 46-64, driving irons 14-32) were written for exactly
+   * these phrases, and the 2026-08-10 commit that added driving-iron parsing quotes Tim saying
+   * "eighteen degree driving iron" in its own header — a sentence that could not parse, because
+   * "eighteen" never became 18. Only the typed form worked, in a voice app.
+   *
+   * Now shares services/clubNormalize.digitizeNumberWords with the token normalizer (compounds
+   * included: "fifty two" → 52), so the two parsers cannot disagree about what a number is.
+   */
+  const p = digitizeNumberWords(phrase.trim());
   if (!p) return null;
 
   // Driver

@@ -497,7 +497,17 @@ interface RoundState {
   // attribution can arbitrate "user declared 7i" vs "caddie advised 8i" by recency (advised stands
   // unless the player changed club AFTER the advice).
   clubSetAt: number | null;
-  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number } | null;
+  /**
+   * 2026-08-17 — `kind` records WHO produced this stamp, because not every writer is the caddie:
+   *   'spoken'   — the caddie's recommend_club tool: an actual club call, out loud.
+   *   'engine'   — the shot-strategy engine's recommended_club, surfaced to the player.
+   *   'inferred' — the APP guessing a club from yardage (inferClub). Useful for attributing which
+   *                club was hit, but nobody advised it, so adherence must not be measured against
+   *                it. It was flowing through this same slot and inflating the recap's "you took
+   *                my club" rate with advice that was never given.
+   * Absent on stamps persisted before this change — treated as advice, which is what they were.
+   */
+  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null;
 
   roundStartTime: number | null;
   roundNumber: number;
@@ -587,7 +597,7 @@ interface RoundState {
   clearPendingLieAnalysis: () => void;
 
   // FIX M8 — Kevin recommendation adherence tracking.
-  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number } | null) => void;
+  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null) => void;
   clearPendingKevinRec: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;

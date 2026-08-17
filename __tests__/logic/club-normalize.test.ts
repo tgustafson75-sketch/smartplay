@@ -43,3 +43,80 @@ describe('normalizeClub — honest nulls (never guess)', () => {
     expect(isFullSwingClub('hybrid')).toBe(false);
   });
 });
+
+/**
+ * 2026-08-17 (Tim — "if I say it's an eighteen three driver iron or a fifty two or a fifty six or a
+ * fifty eight degree wedge or my driver… club logic, I don't know why we've had such issues with
+ * it, but everything needs to be super super clean with it because it's the whole point of golf").
+ *
+ * The vocabulary a golfer actually speaks: lofts instead of names, spoken number-words above ten,
+ * and possessives. None of it resolved. The number-word table stopped at "ten", so the loft
+ * matchers that existed for exactly these phrases were unreachable by voice — the 2026-08-10 commit
+ * that added driving-iron loft parsing quotes "eighteen degree driving iron" in its own header, and
+ * that sentence returned null. Only the typed digits worked.
+ */
+describe('normalizeClub — the way a golfer actually says a club', () => {
+  it.each([
+    ['52', 'GW'], ['56', 'SW'], ['58', 'LW'], ['50', 'GW'], ['46', 'PW'], ['60', 'LW'],
+  ])('a BARE wedge loft resolves: %s → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['fifty two', 'GW'], ['fifty-six', 'SW'], ['fifty eight', 'LW'], ['sixty', 'LW'],
+  ])('spoken number-words above ten resolve: "%s" → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['58 degree wedge', 'LW'], ['52 degree', 'GW'], ['56 deg wedge', 'SW'],
+  ])('loft with a degree cue: "%s" → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['driving iron', '3I'], ['utility iron', '3I'],
+    ['18 degree driving iron', '3I'], ['eighteen degree driving iron', '3I'],
+    ['eighteen three driver iron', '3I'],
+  ])('driving / utility irons: "%s" → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it('a driving iron is NOT the driver, even though it contains the word', () => {
+    // "driver iron" contains "driver"; the bare-driver check must not claim it.
+    expect(normalizeClub('eighteen three driver iron')).toBe('3I');
+    expect(normalizeClub('driver')).toBe('Driver');
+  });
+
+  it.each([
+    ['my driver', 'Driver'], ['my 7 iron', '7I'], ['the pitching wedge', 'PW'],
+  ])('possessives and articles are stripped: "%s" → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['9.5 driver', 'Driver'], ['10.5', 'Driver'], ['9.5', 'Driver'],
+  ])('driver lofts survive the decimal point: "%s" → %s', (raw, expected) => {
+    // A separator collapse that ate "." turned "10.5" into "10 5" and lost the club entirely.
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['19 degree hybrid', '3H'], ['nineteen hybrid', '3H'], ['15 degree wood', '3W'],
+  ])('a loft stays in its own family: "%s" → %s', (raw, expected) => {
+    expect(normalizeClub(raw)).toBe(expected);
+  });
+
+  it('still refuses to guess when it genuinely cannot tell', () => {
+    // Guessing here would corrupt a specific club's learned distances.
+    for (const a of ['wedge', 'iron', 'hybrid', 'wood', '', 'the ball']) {
+      expect(normalizeClub(a)).toBeNull();
+    }
+  });
+
+  it('a yardage is not a club', () => {
+    // Bare two-digit loft parsing must not swallow three-digit distances.
+    expect(normalizeClub('150')).toBeNull();
+    expect(normalizeClub('215')).toBeNull();
+  });
+});

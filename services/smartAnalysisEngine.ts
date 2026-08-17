@@ -829,6 +829,9 @@ async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: 
       club: result.recommended_club ?? null,
       shape: result.shot_shape ?? null,
       aimPoint: result.aim_point ?? null,
+      // kind 'engine': a real recommendation the player is shown, just authored by the shot-strategy
+      // engine rather than spoken by the caddie. Counts as advice for adherence.
+      kind: 'engine',
     });
   } catch { /* non-fatal */ }
   // Surface the unified promptBlock onto the envelope's voice_summary

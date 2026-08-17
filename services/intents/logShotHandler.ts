@@ -142,14 +142,22 @@ export const logShotHandler: IntentHandler = {
     const shotInHoleIndex = shotsThisHole.length + 1;
     const shotInRoundIndex = round.shots.length + 1;
 
-    // FIX M8 — snapshot Kevin's pending rec before building the shot so
-    // adherence is stamped on this shot, then clear the slot.
-    const pendingRec = round.pendingKevinRec ?? null;
-    const kevinRecClub = pendingRec?.club ?? null;
-    const kevinAdhered =
-      kevinRecClub != null && parsedClub.club_id != null
-        ? parsedClub.club_id === kevinRecClub
-        : null;
+    /**
+     * FIX M8 — snapshot Kevin's pending rec before building the shot so adherence is stamped on
+     * this shot, then clear the slot.
+     *
+     * 2026-08-17 (Tim — "club logic… everything needs to be super super clean") — this computed
+     * adherence ITSELF instead of using services/shotClubResolver, which is supposed to be the one
+     * arbiter. Being a twin, it carried the same defect the arbiter did (raw `===` between club
+     * vocabularies, so "8 iron" never equalled "8I") and none of the arbiter's rules — no recency
+     * arbitration between a declared club and an advised one, and no idea that an inferred stamp
+     * isn't advice. Three shot-logging paths, three answers for the same shot. Now there is one.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resolveShotClub } = require('../shotClubResolver') as typeof import('../shotClubResolver');
+    const resolvedRec = resolveShotClub(parsedClub.club_id ?? null);
+    const kevinRecClub = resolvedRec.recClub;
+    const kevinAdhered = resolvedRec.adhered;
 
     const shot: ShotResult = {
       id: `${Date.now()}_voice`,
@@ -173,7 +181,7 @@ export const logShotHandler: IntentHandler = {
       shot_in_hole_index: shotInHoleIndex,
       shot_in_round_index: shotInRoundIndex,
       kevin_rec_club: kevinRecClub,
-      kevin_rec_shape: pendingRec?.shape ?? null,
+      kevin_rec_shape: resolvedRec.recShape,
       kevin_adhered: kevinAdhered,
     };
 

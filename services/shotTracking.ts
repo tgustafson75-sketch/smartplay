@@ -144,7 +144,9 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
     kevin_adhered: resolved.adhered,
   };
   round.logShot(shot);
-  if (resolved.recClub != null) round.clearPendingKevinRec();
+  // 2026-08-17 — clear on hadPending, not recClub: recClub is now null for an INFERRED stamp, so
+  // conditioning on it would leave an inferred stamp in the slot to be re-consumed by a later shot.
+  if (resolved.hadPending) round.clearPendingKevinRec();
 
   return { ok: true, shotDistanceYards, approachYards, distanceSource, club, shotId };
 }

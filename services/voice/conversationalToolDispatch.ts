@@ -350,7 +350,8 @@ function dispatchOne(a: AnyAction): void {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
         if (round.isRoundActive) {
-          round.setPendingKevinRec({ club: a.club.trim(), shape: typeof a.shape === 'string' && a.shape.trim() ? a.shape.trim() : null, aimPoint: null });
+          // kind 'spoken': the caddie said this club out loud. The only kind adherence is measured on.
+          round.setPendingKevinRec({ club: a.club.trim(), shape: typeof a.shape === 'string' && a.shape.trim() ? a.shape.trim() : null, aimPoint: null, kind: 'spoken' });
         }
       }
       break;

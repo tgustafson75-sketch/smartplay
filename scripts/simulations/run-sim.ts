@@ -8091,15 +8091,26 @@ check('Club attribution: advised club becomes the shot club when un-overridden, 
     const cad = read('app/(tabs)/caddie.tsx');
     const trk = read('services/shotTracking.ts');
     const rs = read('store/roundStore.ts');
+    const log = read('services/intents/logShotHandler.ts');
     return (
       /export function resolveShotClub/.test(res) &&
-      /source: 'advised', adhered: true/.test(res) &&                             // silent adherence attributes
+      // Silent adherence still attributes — but ONLY when the stamp was advice. 2026-08-17: this
+      // asserted the literal `adhered: true`, which pinned the version that also scored adherence
+      // against inferClub() guesses the caddie never spoke.
+      /source: 'advised', adhered: advice \? true : null/.test(res) &&
       /resolveShotClub\(typeof a\.club === 'string' \? a\.club : null\)/.test(disp) &&
       /resolveShotClub\(typeof a\.club === 'string' \? a\.club : null\)/.test(cad) &&
       /resolveShotClub\(opts\?\.club \?\? null\)/.test(trk) &&                  // tracked shots too
       /kevin_adhered: resolved\.adhered/.test(trk) &&
       /userStatedYardage: null, pendingKevinRec: null/.test(rs) &&                // advice dies with the hole
-      /setClub: \(club\) => set\(\{ club, clubSetAt: Date\.now\(\) \}\)/.test(rs) // recency arbitration is real
+      /setClub: \(club\) => set\(\{ club, clubSetAt: Date\.now\(\) \}\)/.test(rs) && // recency arbitration is real
+      // EVERY log site uses the one arbiter. logShotHandler computed its own adherence with a raw
+      // `===` and none of the arbiter's rules — three shot paths, three answers for one shot.
+      /const \{ resolveShotClub \} = require\('\.\.\/shotClubResolver'\)/.test(log) &&
+      /const kevinAdhered = resolvedRec\.adhered;/.test(log) &&
+      // The clear must key on hadPending, not recClub: recClub is null for an inferred stamp, so
+      // conditioning on it would leave that stamp in the slot for a later shot to re-consume.
+      /if \(resolved\.hadPending\) round\.clearPendingKevinRec\(\)/.test(trk)
     );
   })(),
   'caddie advises 8i, player hits it silently -> the 8-iron is logged, adherence stamped, and the measured distance trains the bag');
@@ -9693,6 +9704,50 @@ check('LOCK: every brain tool the shared dispatcher runs is reachable from the c
     return defaultDelegates && recClubOwned;
   })(),
   'the tab seam delegates unknown brain tools to the one dispatcher, so recommend_club/register_bag can no longer be dropped on one mic only');
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2026-08-17 (Tim — "club logic, I don't know why we've had such issues with it, but everything
+// needs to be super super clean with it because it's the whole point of golf").
+// ═══════════════════════════════════════════════════════════════════════════════
+
+check('LOCK: adherence compares clubs across VOCABULARIES, never raw string equality',
+  (() => {
+    const res = read('services/shotClubResolver.ts');
+    const cn = read('services/clubNormalize.ts');
+    const corr = read('services/intents/correctLastShotHandler.ts');
+    // The three sides speak different vocabularies: the brain's free text ("8 iron"), setClub's
+    // verbatim string, and inferClub's canonical ClubName ("8I"). `===` between them recorded a
+    // player who hit exactly the advised club as having ignored it.
+    const normalizes = /export function sameClub/.test(res) &&
+      /const na = normalizeClub\(a\);/.test(res) && /const nb = normalizeClub\(b\);/.test(res);
+    const noRawEquality = !/adhered: recClub != null \? c === recClub/.test(res) &&
+      !/round\.club === recClub/.test(res);
+    // The correction handler always normalized — which is why adherence could silently FLIP to
+    // correct if a shot happened to be corrected by voice. Both paths must agree now.
+    const correctionAgrees = /normalizeClub\(parsed\.club_id\) === normalizeClub\(kevinRecClub\)/.test(corr);
+    // Loft/number vocabulary must be shared, not duplicated, between the token and phrase parsers.
+    const sharedNumbers = /export function digitizeNumberWords/.test(cn) &&
+      /digitizeNumberWords\(phrase\.trim\(\)\)/.test(read('services/clubRecognition.ts'));
+    return normalizes && noRawEquality && correctionAgrees && sharedNumbers;
+  })(),
+  'club comparison normalizes both sides; the phrase and token parsers share one number vocabulary');
+
+check('LOCK: an app-inferred club is attribution, never "advice the player followed"',
+  (() => {
+    const res = read('services/shotClubResolver.ts');
+    const qs = read('services/intents/queryStatusHandler.ts');
+    const disp = read('services/voice/conversationalToolDispatch.ts');
+    const eng = read('services/smartAnalysisEngine.ts');
+    // inferClub(yards) is the APP guessing. It shares the pendingKevinRec slot with real advice,
+    // and adherence measured against it fed the recap's "you took my club" rate.
+    const kindsTagged = /kind: 'inferred'/.test(qs) && /kind: 'spoken'/.test(disp) && /kind: 'engine'/.test(eng);
+    const inferredExcluded = /return kind !== 'inferred';/.test(res);
+    // An inferred stamp must not be written into kevin_rec_club either — that would put a club in
+    // the caddie's mouth that they never said.
+    const recClubGated = /const recClub = advice \? pendingClub : null;/.test(res);
+    return kindsTagged && inferredExcluded && recClubGated;
+  })(),
+  'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

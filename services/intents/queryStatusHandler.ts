@@ -272,7 +272,11 @@ export const queryStatusHandler: IntentHandler = {
                     // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
                     const recClub = useClubStatsStore.getState().inferClub(yds);
-                    if (recClub) r.setPendingKevinRec({ club: recClub, shape: null, aimPoint: null });
+                    // kind 'inferred': this is inferClub(yards) — the APP picking a club from a
+                    // distance, not the caddie advising one. It still attributes which club was
+                    // hit (which is why it's stamped), but adherence must never be scored against
+                    // it: the player cannot follow advice nobody gave.
+                    if (recClub) r.setPendingKevinRec({ club: recClub, shape: null, aimPoint: null, kind: 'inferred' });
                   }
                 }
               }
