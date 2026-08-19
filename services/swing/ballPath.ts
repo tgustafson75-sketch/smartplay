@@ -110,6 +110,23 @@ function cropToFullNorm(pos: { x: number; y: number }, box: CropBox): { x: numbe
  * honest result meaning "ran, but never saw the ball" — the caller degrades to
  * no-trace + an honest note.
  */
+/**
+ * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently so we can adjust… includes the shot
+ * tracing and the body mechanics as well").
+ *
+ * When the private clip copy can't be made, this capability is GONE for the swing — and it used to go
+ * without a word. That is how the clubhead trace could be missing for a WEEK before anyone noticed:
+ * a console line on a tester's phone is invisible, so the issue log read as healthy while the feature
+ * simply wasn't there. Refusing the copy is CORRECT (decoding the file ExoPlayer is playing is the
+ * SIGSEGV vector); refusing it silently is not.
+ */
+function logCapabilityLost(stage: string, details: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, 'analysis_error');
+  } catch { /* best-effort — never throw from a failure path */ }
+}
+
 export async function detectBallPath(args: {
   videoUri: string;
   impactMs: number | null;
@@ -140,7 +157,12 @@ export async function detectBallPath(args: {
       if (info.exists && (info.size ?? 0) > 0) { ballTempCopy = dest; ballWorkUri = dest; }
     }
   } catch { /* copy failed */ }
-  if (!ballTempCopy) { console.warn('[ballPath] private copy failed — skipping to avoid a native crash'); return null; }
+  if (!ballTempCopy) {
+    console.warn('[ballPath] private copy failed — skipping to avoid a native crash');
+    // No multi-point ball trace: the shot map falls back to the single-line read, or to nothing.
+    logCapabilityLost('ballpath_no_private_copy', { impactMs: args.impactMs ?? null });
+    return null;
+  }
   let frames: (Frame | null)[];
   try {
     frames = await Promise.all(offsets.map((o) => frameAt(ballWorkUri, args.impactMs! + o)));

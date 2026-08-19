@@ -474,6 +474,24 @@ export function usePipecatVoice({
    */
   const speakDeadEnd = useCallback((reason: string) => {
     devLog('[pipecat] degrading to local line:', reason);
+    /**
+     * 2026-08-19 (Tim — "make sure we have some special logic in the issue catching and issue log.
+     * They can catch the first turn logic").
+     *
+     * This degrade was devLog-only, which means it was INVISIBLE in the issue log — the app could
+     * fall back to the canned local line on every single turn and the log would read as healthy.
+     * That is the same shape as the 08-17 busy-bail: an unlogged failure path is indistinguishable
+     * from no failure at all, and it is exactly why this took a live test to find.
+     *
+     * logVoiceSilentFail is a REPORTABLE kind, so it reaches the owner inbox, and voiceErrorLog now
+     * stamps first_turn / warmed / turn on every entry — so "the first turn always fails" is legible
+     * from the log itself instead of needing someone to reproduce it.
+     */
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog'))
+        .logVoiceSilentFail('pipecat_degrade', { reason, path: 'pipecat_audio' });
+    } catch { /* never throw from a failure path */ }
     let line = "Let's stay on this one — what are you working with?";
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -502,6 +520,12 @@ export function usePipecatVoice({
     const whisperUrl = `${getApiBaseUrl().replace(/\/+$/, '')}/api/transcribe`;
 
     onVoiceStateChange?.('thinking');
+    // 2026-08-19 — number this turn so a failure below says WHICH turn it was. "Always the 1st" and
+    // "the 1st and the 9th" are different bugs and used to look identical in the log.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog')).noteVoiceTurnStarted();
+    } catch { /* advisory */ }
 
     try {
       const formData = new FormData();

@@ -766,6 +766,37 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     finish: avgScore(address, finish, ['left_hip', 'right_hip', 'left_ankle', 'right_ankle']),
   };
 
+  /**
+   * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently… includes the shot tracing and the
+   * BODY MECHANICS as well").
+   *
+   * A read where EVERY metric came back null is not an error — each null is individually honest, and
+   * the app is deliberately built to show a dash rather than invent a number. But it is the outcome
+   * the player experiences as "it analysed my swing and told me nothing", and until now it left no
+   * trace at all: the function returned a well-formed object full of nulls and everything downstream
+   * quietly rendered empty.
+   *
+   * Logged as a diag, not an error: nothing malfunctioned, and it is expected on a bad angle, a
+   * part-framed body or a two-frame sample. But if a tester's swings are consistently coming back
+   * blank, that pattern is now visible instead of being invisible by construction — which is the
+   * whole point of asking what fails silently.
+   */
+  const measured = [
+    hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg, weightShiftPct, spineAngleDeltaDeg,
+    headDriftPxNorm, hipSlideRatio, sequencingScore, leadArmTopDeg, leadArmImpactDeg,
+    swayNorm, finishWeightPct,
+  ].filter((v) => v != null).length;
+  if (measured === 0) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('biomech_all_null', {
+        frames: frames.length,
+        angle: angle ?? null,
+        anchors: [address ? 'address' : null, top ? 'top' : null, impact ? 'impact' : null, finish ? 'finish' : null].filter(Boolean).join(','),
+      }, 'diag');
+    } catch { /* best-effort */ }
+  }
+
   return {
     hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg,
     weightShiftPct, spineAngleDeltaDeg, headDriftPxNorm, hipSlideRatio,
@@ -840,6 +871,26 @@ export async function extractPoseFramesFromVideo(
   // it on the review surface → native SIGSEGV/hang that cleared only on a retry. Everything native now
   // reads workUri (the copy); copy failure → skeleton-only degrade, never a crash. Deleted on every exit.
   let workUri = videoUri;
+  /**
+   * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently so we can adjust").
+   *
+   * Three ways this function could produce NO usable swing read and say nothing to the issue log:
+   * the private clip copy failing, zero frames coming back, and the on-device pose module being
+   * absent. All three ended in console only. A console line is invisible on a tester's phone, so the
+   * log read as healthy while the player got no measured read at all — the same shape as the 08-17
+   * busy-bail, where an unlogged path was indistinguishable from no failure.
+   *
+   * `kind` is honest about severity: a failure that costs the read is an analysis_error and reaches
+   * the owner inbox; an expected degradation on a build without the native module is a diag, kept on
+   * device only. Never throws — this is a failure path.
+   */
+  const logPose = (stage: string, details: Record<string, unknown>, kind: 'analysis_error' | 'diag' = 'analysis_error') => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, kind);
+    } catch { /* best-effort */ }
+  };
+
   // 2026-08-09 (speed #3) — shared refcounted copy (services/swing/sharedClipCopy): one copy per
   // clip serves pose + tempo + club path + ball departure. Refusal-on-failure unchanged.
   let sharedCopy: { uri: string; release: () => void } | null = null;
@@ -849,6 +900,8 @@ export async function extractPoseFramesFromVideo(
   } catch { /* acquire failed — refusal below */ }
   if (!sharedCopy) {
     console.warn('[pose] private copy failed — skipping frame extraction to avoid a native crash');
+    // Costs the ENTIRE measured read (no biomech, no skeleton, no dimensions). Was console-only.
+    logPose('pose_private_copy_failed', { videoUri: videoUri.slice(-40), windowed: !!window });
     return null;
   }
   workUri = sharedCopy.uri;
@@ -977,7 +1030,11 @@ export async function extractPoseFramesFromVideo(
         console.log('[pose] on-device densification', { anchors: positionTimes.length, total: sampleTimes.length });
       }
     }
-  } catch { /* native module absent — keep anchors only */ }
+  } catch (e) {
+    // Not a failure — the read continues on anchors alone — but it IS materially thinner, and
+    // silently so. Diag: worth seeing when a device produces sparse reads, not worth an inbox.
+    logPose('pose_densification_skipped', { reason: e instanceof Error ? e.message.slice(0, 120) : 'native module absent' }, 'diag');
+  }
 
   // Sequential — on-device runs one detector instance; cloud is polite to the rate limit.
   // (workUri = the private copy made at the top of this function; NEVER the playing original.)
@@ -992,7 +1049,12 @@ export async function extractPoseFramesFromVideo(
     sharedCopy.release();
   }
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
-  if (frames.length === 0) return null;
+  if (frames.length === 0) {
+    // Asked for N frames and got none: the swing has no measured read at all. Console-only until now,
+    // so a device failing EVERY extraction looked identical to a device that was never asked.
+    logPose('pose_zero_frames', { requested: sampleTimes.length, windowed: !!(window && window.endMs - window.startMs >= 500), durationMs: Math.round(durationMs) });
+    return null;
+  }
   return frames;
 }
 

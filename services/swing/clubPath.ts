@@ -219,6 +219,23 @@ async function downscaled(frame: Frame, roi?: Roi | null): Promise<string | null
   }
 }
 
+/**
+ * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently so we can adjust… includes the shot
+ * tracing and the body mechanics as well").
+ *
+ * When the private clip copy can't be made, this capability is GONE for the swing — and it used to go
+ * without a word. That is how the clubhead trace could be missing for a WEEK before anyone noticed:
+ * a console line on a tester's phone is invisible, so the issue log read as healthy while the feature
+ * simply wasn't there. Refusing the copy is CORRECT (decoding the file ExoPlayer is playing is the
+ * SIGSEGV vector); refusing it silently is not.
+ */
+function logCapabilityLost(stage: string, details: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, 'analysis_error');
+  } catch { /* best-effort — never throw from a failure path */ }
+}
+
 async function cleanup(frames: (Frame | null)[], tempCopy?: string | null): Promise<void> {
   await Promise.all([
     ...frames.map((f) => (f?.uri ? FileSystem.deleteAsync(f.uri, { idempotent: true }).catch(() => undefined) : Promise.resolve())),
@@ -303,7 +320,11 @@ export async function detectClubPath(args: {
   // the file ExoPlayer is playing is the exact SIGSEGV / white-screen vector. Return no arc instead —
   // skeleton-only is a fine degrade; a crash-to-launcher is not. (The old fallback assumed the caller had
   // paused playback, which is true for swing-detail but NOT for the always-looping review surface.)
-  if (!tempCopy) return null;
+  if (!tempCopy) {
+    // No arc for this swing — the skeleton renders alone and nothing said so.
+    logCapabilityLost('clubpath_no_private_copy', { videoUri: videoUri.slice(-40) });
+    return null;
+  }
 
   // 2026-07-18 (Tim — crash mp4: hard crash to home during swing playback) — extract frames
   // SEQUENTIALLY, not with Promise.all. Firing SAMPLE_COUNT (12) concurrent

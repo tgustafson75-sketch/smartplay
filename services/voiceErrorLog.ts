@@ -55,6 +55,49 @@ function snapshotContext(): IssueLogEntry['context'] {
   }
 }
 
+/**
+ * 2026-08-19 (Tim — "make sure we have some special logic in the issue catching and issue log. They
+ * can catch the first turn logic").
+ *
+ * THE FIRST TURN IS A DIFFERENT FAILURE FROM THE FIFTH, and the log could not tell them apart.
+ * Every cold-start defect this app has had — the 22s cold budget, the dual-host failover, today's
+ * pipecat path that ran blind to cold start and then went silent — is a FIRST-TURN failure. They read
+ * in the log exactly like a mid-conversation blip, so the one number that would have identified the
+ * class instantly was the one number missing.
+ *
+ * Stamped HERE, at the single choke point every voice log passes through, rather than at ~20 call
+ * sites. A call site that forgets is a call site that hides the class again, and this file already
+ * owns "what context does a voice failure carry".
+ *
+ * `first_turn` is the actionable one: true means the connection was never proven warm when this
+ * failed, so it is a cold-start problem and not a network blip. `turn` gives the position in the
+ * session, so "always the 1st" versus "the 1st and the 9th" are distinguishable at a glance.
+ */
+let voiceTurnCounter = 0;
+/** Called by the voice paths when a turn STARTS, so the log can say which turn failed. */
+export function noteVoiceTurnStarted(): number {
+  voiceTurnCounter += 1;
+  return voiceTurnCounter;
+}
+/** Reset per session/round start — a fresh conversation starts counting again. */
+export function resetVoiceTurnCounter(): void { voiceTurnCounter = 0; }
+
+function turnContext(): Record<string, unknown> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isConnectionWarmed } = require('./apiBase') as typeof import('./apiBase');
+    const warmed = isConnectionWarmed();
+    return {
+      // The whole point: was the connection ever proven warm when this failed?
+      first_turn: !warmed,
+      warmed,
+      turn: voiceTurnCounter || null,
+    };
+  } catch {
+    return { first_turn: null, warmed: null, turn: voiceTurnCounter || null };
+  }
+}
+
 function write(
   kind: Exclude<IssueLogKind, 'user'>,
   stage: string,
@@ -63,7 +106,8 @@ function write(
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
-    useIssueLogStore.getState().addVoiceEvent(kind, stage, snapshotContext(), details);
+    // Turn context first so an explicit detail from the call site always wins.
+    useIssueLogStore.getState().addVoiceEvent(kind, stage, snapshotContext(), { ...turnContext(), ...details });
   } catch (e) {
     // Logging the log failure to console only — by design we never
     // recurse or throw from this path.

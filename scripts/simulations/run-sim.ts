@@ -1054,10 +1054,21 @@ check('Club trace extracts during playback (no stale isPlaying gate) + private-c
     const effect = d.slice(d.indexOf('const shotArc = shot?.club_arc'), d.indexOf('clubArcRunKeyRef.current === runKey'));
     return (
       effect.length > 0 && !/if \(isPlaying\) return;/.test(effect) &&
-      /if \(!tempCopy\) return null;/.test(cp) // copy-safety invariant that makes this safe
+      // 2026-08-19 — was pinning the literal `if (!tempCopy) return null;`. The INVARIANT is that a
+      // failed private copy REFUSES rather than falling back to decoding the file ExoPlayer is
+      // playing (the SIGSEGV vector) — not the exact shape of the early return. The refusal now logs
+      // first (a silently-missing clubhead arc is how it went unnoticed for a week), so assert the
+      // refusal AND that it is observable, and assert the thing that must never come back: a fallback
+      // to the original URI.
+      // The refusal itself, and that it is now observable. (An earlier draft of this guard also
+      // asserted `!workUri = videoUri` as a "no fallback" check — wrong: that line is the variable's
+      // ordinary initialiser, declared long before the refusal. Assert what the refusal DOES, not
+      // incidental text near it.)
+      /if \(!tempCopy\) \{[\s\S]{0,240}?return null;\s*\}/.test(cp) &&
+      /logCapabilityLost\('clubpath_no_private_copy'/.test(cp)
     );
   })(),
-  'the swing trace can extract while the clip plays (private-copy makes it collision-safe); a swing without a stored arc finally draws its trace');
+  'the swing trace can extract while the clip plays (private-copy makes it collision-safe), a failed copy REFUSES rather than decoding the playing original, and that refusal is logged instead of losing the arc silently');
 
 // 2026-08-08 (Tim photographed the OFFICIAL Berlin CC scorecard). LOCK the card-sourced data: official
 // men's yardages + rating/slope in the bundle, and the local rules (OB stone walls, the No.9 brook

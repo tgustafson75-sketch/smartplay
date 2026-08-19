@@ -104,6 +104,23 @@ function cropToFullNorm(pos: { x: number; y: number }, box: CropBox): { x: numbe
  * when we can't run it honestly (no server, no impact time, no ball spot, or
  * a frame/crop/network failure).
  */
+/**
+ * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently so we can adjust… includes the shot
+ * tracing and the body mechanics as well").
+ *
+ * When the private clip copy can't be made, this capability is GONE for the swing — and it used to go
+ * without a word. That is how the clubhead trace could be missing for a WEEK before anyone noticed:
+ * a console line on a tester's phone is invisible, so the issue log read as healthy while the feature
+ * simply wasn't there. Refusing the copy is CORRECT (decoding the file ExoPlayer is playing is the
+ * SIGSEGV vector); refusing it silently is not.
+ */
+function logCapabilityLost(stage: string, details: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, 'analysis_error');
+  } catch { /* best-effort — never throw from a failure path */ }
+}
+
 export async function detectBallDeparture(args: {
   videoUri: string;
   impactMs: number | null;
@@ -123,7 +140,12 @@ export async function detectBallDeparture(args: {
     const { acquireClipCopy } = await import('./sharedClipCopy');
     sharedCopy = await acquireClipCopy(args.videoUri);
   } catch { /* acquire failed — refusal below */ }
-  if (!sharedCopy) { console.warn('[ballDeparture] private copy failed — skipping to avoid a native crash'); return null; }
+  if (!sharedCopy) {
+    console.warn('[ballDeparture] private copy failed — skipping to avoid a native crash');
+    // No strike cross-check for this swing: contact honesty silently downgrades to "couldn't see".
+    logCapabilityLost('balldeparture_no_private_copy', { impactMs: args.impactMs ?? null });
+    return null;
+  }
   depWorkUri = sharedCopy.uri;
   let before: { uri: string; width: number; height: number } | null;
   let after: { uri: string; width: number; height: number } | null;
