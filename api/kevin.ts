@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
 import { selfReferenceBlock, perspectiveBlock, mentalGameBlock } from './_brain';
+import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
@@ -34,232 +35,13 @@ const VOICE_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fab
   harry:  'fable',
 };
 
-const AI_TOOLS: AiToolDef[] = [
-  {
-    name: 'open_smartvision',
-    description: 'Open the SmartVision tool — a visual hole layout / overhead view / hole map showing the green, fairway, hazards, and yardages. Trigger this when the player says ANY of: "show me the hole", "let me see the layout", "what does the hole look like", "show the green", "pull up the map", "see the layout", "show me what I\'m looking at", "what am I looking at", "give me a look at this", or any phrasing meaning they want the visual map of the hole.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'open_smartfinder',
-    description: 'Open the SmartFinder — a precise distance-locking tool / rangefinder / yardage finder. Trigger this when the player says ANY of: "rangefinder", "use the rangefinder", "let me see the rangefinder", "lock the distance", "find the yardage", "how far is it" (when used with "let me see" or "show me"), "give me a precise distance", "let me lock that", or any phrasing meaning they want to use a rangefinder-style tool. THIS TOOL IS THE RANGEFINDER. The word "rangefinder" should always trigger this.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'open_swinglab',
-    description: 'Open the GENERIC SwingLab hub. Call this ONLY when the player wants the hub itself ("open swinglab"/"swing lab") with NO specific destination. If they name a specific feature or drill (Smart Tempo, the tempo drill, Open Range, Setup Check, Drills, the Library, etc.) DO NOT use this — use the `navigate` tool so they lands ON that feature, not the hub. For a VAGUE "I want to practice", ASK what they want, then navigate once they picks.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'navigate',
-    description: 'Take the player DIRECTLY to a specific app feature / screen / drill by name. Use this WHENEVER they ask to open, go to, pull up, or "take me to" a named destination — e.g. "the tempo drill", "Smart Tempo", "Drills", "Open Range", "Setup Check", "the library", "my scorecard", "the dashboard", "Fit Profile", "Pre-Round Warm Up". Pass `feature` as the feature NAME (or one of its "say:" aliases) exactly as it appears in the APP FEATURES list in your context. ALWAYS prefer this over open_swinglab when the player names a destination — open_swinglab only drops them on the generic hub and makes them hunt. If you are unsure which feature they mean, ask a one-line clarifying question first.',
-    parameters: {
-      type: 'object',
-      properties: {
-        feature: { type: 'string', description: 'The destination feature NAME (or a listed alias) from the APP FEATURES list, e.g. "Smart Tempo", "Drills", "Open Range", "Setup Check", "Swing Library".' },
-      },
-      required: ['feature'],
-    },
-  },
-  {
-    name: 'log_score',
-    description: 'Log the score for a specific hole. Trigger when the player names a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here", "triple on 7"). Pass `hole` ONLY if the player names a specific hole; otherwise omit it (the client uses currentHole).',
-    parameters: {
-      type: 'object',
-      properties: {
-        hole:  { type: 'number', description: 'Hole number (1-18). Omit when the player is talking about the hole they are currently on.' },
-        score: { type: 'number', description: 'Strokes taken on the hole' },
-      },
-      required: ['score'],
-    },
-  },
-  {
-    name: 'log_shot',
-    description: 'Log a shot the player just hit, capturing EVERY detail they mentioned — never drop one: club, hole, which shot on the hole, how far it went, direction, contact quality, where it ended up, and how it felt. Use whenever the player describes a shot they made ("I hit 7-iron 150 to the green", "pulled it left, in the trees", "striped it", "my second shot on 3 came up short", "felt rushed"). Pass only the fields the player mentioned — omit anything they did not say.',
-    parameters: {
-      type: 'object',
-      properties: {
-        club: {
-          type: 'string',
-          description: "Club the player used for this shot (e.g. '7I', 'Driver', 'PW'). Include if player mentioned it or if Kevin recommended it.",
-        },
-        hole:           { type: 'number', description: 'Hole number IF the player named one (e.g. "on hole 3" -> 3). Omit to use the current hole.' },
-        shot_number:    { type: 'number', description: 'Which shot on the hole IF he said it (e.g. "my second shot" -> 2).' },
-        distance_yards: { type: 'number', description: 'How far the shot went / the yardage he gave for it, in yards.' },
-        direction: {
-          type: 'string',
-          enum: ['left', 'straight', 'right', 'pull', 'push', 'hook', 'slice', 'fade', 'draw'],
-          description: 'Shot direction or shape if the player mentioned it',
-        },
-        contactQuality: {
-          type: 'string',
-          enum: ['fat', 'thin', 'pure', 'toe', 'heel', 'topped'],
-          description: 'Contact quality if the player mentioned it',
-        },
-        outcome: {
-          type: 'string',
-          description: 'Free-text where the ball ended up — "in the bunker", "in the water", "on the green", "in the trees", "just past the green", "playable rough"',
-        },
-        feel: {
-          type: 'string',
-          description: 'How the swing felt — free text such as "rushed", "smooth", "decelerated", "powerful", "lost balance", "came over the top"',
-        },
-      },
-    },
-  },
-  {
-    name: 'log_emotional_state',
-    description: 'Note the player\'s emotional or mental state when they express it ("I\'m pissed", "feeling locked in", "pressure\'s getting to me", "this is fun"). Pass valence as positive/neutral/negative. Use only when the player actually voices a feeling, not on every sentence.',
-    parameters: {
-      type: 'object',
-      properties: {
-        state: {
-          type: 'string',
-          description: 'Free text describing the emotional state the player expressed',
-        },
-        valence: {
-          type: 'string',
-          enum: ['positive', 'neutral', 'negative'],
-          description: 'Overall positive, neutral, or negative state',
-        },
-      },
-      required: ['state', 'valence'],
-    },
-  },
-  {
-    name: 'log_issue',
-    description: 'Capture an app issue / bug / feedback into the in-app ISSUE LOG when the player explicitly asks you to record it. Trigger on: "log this", "log an issue", "log a bug", "report a bug", "note this", "make a note", "save this for later", "I have feedback", "remember this issue", "this is broken", "this doesn\'t work" — followed by what to log. Pass `note` = the issue description with the wake phrase stripped (e.g. "log an issue: the first response lags" → note:"the first response lags"). This is NOT a conversational "noted" — it writes a real, reviewable issue-log entry. Use whenever they want something logged for later review.',
-    parameters: {
-      type: 'object',
-      properties: {
-        note: { type: 'string', description: 'The issue / bug / feedback description, wake phrase stripped.' },
-      },
-      required: ['note'],
-    },
-  },
-  // 2026-07-06 (voice-parity F5) — the kevin fallback brain was missing 7 tools the
-  // primary pipecat brain has, so on a degraded turn these voice commands silently
-  // did nothing. Mirrored from api/pipecat-turn.ts so the fallback reaches parity.
-  {
-    name: 'plan_shot',
-    description: 'The player states their PLAN for a shot they are ABOUT to hit — the club, the yardage, and/or which shot on the hole. Examples: "I am going to use a 5 wood for my second shot on hole 3 with 210 yards to go", "hitting 7 iron here", "I have 150 to the pin, going with a smooth 8". This SETS the club + yardage context — it does NOT log a completed shot (use log_shot for a shot already hit). Capture EVERY detail they gave.',
-    parameters: {
-      type: 'object',
-      properties: {
-        club:           { type: 'string', description: 'Club he plans to hit (e.g. "5 wood", "7 iron").' },
-        distance_yards: { type: 'number', description: 'Yardage he stated (e.g. "210 yards to go" -> 210).' },
-        shot_number:    { type: 'number', description: 'Which shot on the hole (e.g. "my second shot" -> 2).' },
-        hole:           { type: 'number', description: 'Hole number IF he named one.' },
-        target:         { type: 'string', description: 'What he is aiming at IF mentioned (e.g. "the green", "lay up short of the water").' },
-      },
-    },
-  },
-  {
-    name: 'set_reminder',
-    description: 'Set a reminder the player asks for by voice — "remind me to work on my putting", "remind me to hit the range before Saturday", "note that I want to work on my speed this week". Capture WHAT to be reminded of, and if they said WHEN, the natural when-phrase. Saved to their SmartPlan reminders.',
-    parameters: {
-      type: 'object',
-      properties: {
-        text: { type: 'string', description: 'What to be reminded of / the activity (wake phrase + "remind me to" stripped).' },
-        when: { type: 'string', description: 'Natural-language WHEN if he said it ("Thursday", "tomorrow morning", "before Saturday", "this week"). Omit if not mentioned.' },
-      },
-      required: ['text'],
-    },
-  },
-  {
-    name: 'configure_drill',
-    description: 'Configure the SmartMotion drill session the player just described — set the club and number of swings. Call this whenever they say what they want to work on in SmartMotion (e.g. "7 iron, 3 swings", "driver, 5 balls", "irons today").',
-    parameters: {
-      type: 'object',
-      properties: {
-        club:       { type: 'string', description: 'Club ID (e.g. "7I", "DR", "PW", "PT"). Omit if not mentioned.' },
-        shot_count: { type: 'number', enum: [1, 3, 5], description: 'Number of swings. Default 3 if not specified.' },
-      },
-    },
-  },
-  {
-    name: 'close_swinglab',
-    description: 'Close SmartMotion / SwingLab and return to the caddie screen. Use when the player says "close", "done", "go back", or "that\'s enough" while SmartMotion is open.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'set_angle',
-    description: 'Set the SmartMotion camera angle when the player says how they want to film their swing: "down the line" / "DTL", "face on" / "face-on", or "putting" / "putt". Use ONLY when SmartMotion is open (they are at the capture screen).',
-    parameters: {
-      type: 'object',
-      properties: { angle: { type: 'string', enum: ['down_the_line', 'face_on', 'putt'], description: 'The camera angle to set.' } },
-      required: ['angle'],
-    },
-  },
-  {
-    name: 'set_golfer',
-    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when the player says they are filming someone else, or themselves again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
-    parameters: {
-      type: 'object',
-      properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or "me" for the user themselves.' } },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'switch_caddie',
-    description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
-    parameters: {
-      type: 'object',
-      properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry', 'tank'], description: 'The caddie to switch to.' } },
-      required: ['personality'],
-    },
-  },
-  {
-    name: 'record_swing',
-    description: 'Open SwingLab in record mode to capture a swing on camera. Trigger this when the player says ANY of: "watch this", "record this", "record my swing", "watch my swing", "film this", "video this", "get this on camera", or any phrasing meaning they want the camera to capture their next swing.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'mark_tee',
-    description: 'Mark the tee box position for the current hole in SmartVision. Trigger when user says "mark tee", "mark the tee box", "mark my position at the tee", "save the tee", or similar. User must be standing at the tee when they say this.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'mark_green',
-    description: 'Mark the green / pin position for the current hole in SmartVision. Trigger when user says "mark the green", "mark the pin", "mark the hole", "save pin position", "mark position at the green", or similar. User must be standing at or near the green when they say this.',
-    parameters: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'lookup_course',
-    description: 'Search the EXTERNAL course database by name or location. Use ONLY for a course you do NOT already have. FIRST check the "COURSES IN APP DATA" list in your context — if the course is there, you already have it: use it directly and do NOT call this tool. This tool queries an external API that does NOT include the app\'s bundled/local courses, so a "not found" from it means nothing for a course already in your context — never report "not in the database" for one of those.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Course name, club name, or "name in city" (e.g. "Pebble Beach" or "Riverside in Phoenix")' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'search_web',
-    description: 'Search the live web for a FACTUAL, real-world answer you do not already have — course details (record, signature hole, dress code, rates, tee-time policy, conditions), local knowledge, golf rules, equipment facts, anything current. Use it whenever the honest answer is "I would need to look that up" instead of guessing. NOT for the player\'s own data (scores/bag/swing — already in your context) or app navigation. After it returns, speak the result naturally as your own knowledge.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'The factual question to look up, phrased for a search.' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'lookup_hole',
-    description: 'Get detailed info about a specific hole at a known course. Use when the user is on or asking about a particular hole. Returns par and yardage from each tee box.',
-    parameters: {
-      type: 'object',
-      properties: {
-        course_id: { type: 'string' },
-        hole_number: { type: 'number', minimum: 1, maximum: 18 },
-        tee_name: { type: 'string', description: 'Optional. Defaults to first available tee if not specified.' },
-      },
-      required: ['course_id', 'hole_number'],
-    },
-  },
-];
+// ── Brain tools ──────────────────────────────────────────────────────────────
+// 2026-08-19 (lockstep reconciliation) — this array used to be a hand-maintained copy of
+// pipecat-turn.ts. It drifted: kevin.ts was missing recommend_club + register_bag, and its tool
+// DESCRIPTIONS predated the 2026-08-06 over-sensitivity tightening. Since kevin.ts owns the
+// FOLLOW-UP turn, that made turn 2 of a conversation both less capable and more screen-happy than
+// turn 1. Single owner now — see api/_brainTools.ts.
+const AI_TOOLS = BRAIN_TOOLS;
 
 // ─── Server-side course lookups (golfcourseapi.com, key stays server-side) ────
 
@@ -1494,6 +1276,26 @@ ${onCourseContextBlock}${baseMessage}`
           capture.action = { type: 'switch_caddie', personality: String(input.personality ?? '') };
           break;
         }
+        // 2026-08-19 (lockstep reconciliation) — THE DROP GUARD. This switch had no `default`,
+        // so any tool in BRAIN_TOOLS without an explicit case above returned the bare
+        // 'Action triggered.' with NOTHING captured: the model said it had done the thing and
+        // the client never received an action. That is exactly how recommend_club and
+        // register_bag were lost on the follow-up turn. A hand-written case list is a drift
+        // machine — every new tool is one forgotten case away from a silent drop.
+        //
+        // Now: any UI tool without a bespoke case passes its input through verbatim, the same
+        // way pipecat-turn's UI_TOOLS branch always has. The explicit cases above are kept
+        // because they field-filter (dropping keys the client dispatcher does not read), but
+        // they are an optimization, not the contract. Server-executed tools returned earlier
+        // and never reach here.
+        default: {
+          if (UI_TOOLS.has(name)) {
+            capture.action = { type: name, ...input };
+          } else if (!SERVER_TOOLS.has(name)) {
+            console.warn(`[kevin] unknown tool "${name}" — not in UI_TOOLS or SERVER_TOOLS; dropped`);
+          }
+          break;
+        }
       }
       // Accumulate every distinct action (audit V3) — a new object means this call set one.
       // Dedup by value so a model that emits the same tool twice doesn't double-dispatch.
@@ -1502,6 +1304,15 @@ ${onCourseContextBlock}${baseMessage}`
         if (!capture.actions.some(a => JSON.stringify(a) === j)) capture.actions.push(capture.action);
       }
       if (name === 'log_issue') return 'Logged it to the issue log.';
+      // 2026-08-19 (lockstep reconciliation) — parity with pipecat-turn: register_bag gets a
+      // truthful, speakable result because the model echoes tool results back to the player.
+      // The DEVICE does the actual store writes and confirms what it could parse; the brain must
+      // not claim more than that.
+      if (name === 'register_bag') {
+        const n = Array.isArray(input.clubs) ? input.clubs.length : 0;
+        const d = input.distances && typeof input.distances === 'object' ? Object.keys(input.distances).length : 0;
+        return `Bag registration sent to the device (${n} clubs, ${d} distances). It will confirm what it recorded.`;
+      }
       return 'Action triggered.';
     };
 

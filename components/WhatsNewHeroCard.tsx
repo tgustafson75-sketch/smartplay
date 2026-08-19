@@ -33,7 +33,7 @@ export default function WhatsNewHeroCard() {
       <View style={styles.headerRow}>
         <View style={styles.titleWrap}>
           <Ionicons name="sparkles" size={18} color={colors.accent} />
-          <Text style={[styles.title, { color: colors.text_primary }]}>What's New</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>What&apos;s New</Text>
           <View style={[styles.countPill, { backgroundColor: colors.accent }]}>
             <Text style={styles.countText}>{unseen.length}</Text>
           </View>
@@ -50,7 +50,7 @@ export default function WhatsNewHeroCard() {
         </View>
       ))}
       {extra > 0 ? (
-        <Text style={[styles.more, { color: colors.text_muted }]}>+{extra} more — ask your caddie "what's new?"</Text>
+        <Text style={[styles.more, { color: colors.text_muted }]}>+{extra} more — ask your caddie &ldquo;what&apos;s new?&rdquo;</Text>
       ) : null}
 
       <TouchableOpacity onPress={markAllSeen} style={[styles.gotIt, { borderColor: colors.accent }]} accessibilityRole="button">

@@ -1126,6 +1126,7 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
   (() => {
     const reg = read('services/bagVoiceRegistration.ts');
     const turn = read('api/pipecat-turn.ts');
+    const tools = read('api/_brainTools.ts');
     const disp = read('services/voice/conversationalToolDispatch.ts');
     const pre = read('services/localIntentPrecheck.ts');
     const idx = read('services/intents/index.ts');
@@ -1134,12 +1135,17 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
       /registerClub\(parsed\.club_id, \{ source: 'voice' \}\)/.test(reg) &&        // bag membership
       /stats\.setManual\(name, yds\)/.test(reg) &&                                  // honest stated carry
       /yds < 30 \|\| yds > 400/.test(reg) &&                                        // plausibility clamp
-      /name: 'register_bag'/.test(turn) &&                                          // brain tool declared
+      // 2026-08-19 (lockstep reconciliation) — tool declarations moved OUT of api/pipecat-turn.ts into
+      // api/_brainTools.ts, the single owner both brains import. This guard used to grep the brain file
+      // and would have gone RED on the fix while the behaviour it protects got STRICTLY better — the
+      // same "guard pins the old location" trap that hid the practice-swing gate siblings. Assert the
+      // CONTRACT (declared once, routed to the client) rather than which file the literal sits in.
+      /name: 'register_bag'/.test(tools) &&                                          // brain tool declared (one owner)
       // 2026-08-08 (verification wave) — REACHABILITY, not just presence: the tool was declared and the
       // client case existed while the server dispatch fell through to bare 'Done.' (no toolActions.push)
       // → the caddie verbally confirmed a bag it never recorded and THIS guard stayed green. Require
       // register_bag in the UI_TOOLS dispatch set so the action actually reaches the client.
-      /UI_TOOLS = new Set\(\[[\s\S]*?'register_bag'[\s\S]*?\]\)/.test(turn) &&    // server DISPATCHES it
+      /UI_TOOLS = new Set\(\[[\s\S]*?'register_bag'[\s\S]*?\]\)/.test(tools) &&   // server DISPATCHES it
       /register_bag stays ON/.test(turn) &&                                         // interview exemption
       /case 'register_bag':/.test(disp) &&                                          // client dispatch
       !/NAV_OPEN_ACTIONS = new Set\(\[[^\]]*register_bag/.test(disp) &&             // not suppressed in interview
@@ -8204,11 +8210,19 @@ check('Club rec stamped on the DEFAULT (pipecat) shot-strategy path, not only th
 // LOCK: tool declared + in UI_TOOLS (server dispatches) + client case exists (reachable, not dead).
 check('recommend_club: brain tool declared, server-dispatched, client-stamped (exact spoken-club attribution)',
   (() => {
-    const turn = read('api/pipecat-turn.ts');
+    const tools = read('api/_brainTools.ts');
     const disp = read('services/voice/conversationalToolDispatch.ts');
+    const kevin = read('api/kevin.ts');
     return (
-      /name: 'recommend_club'/.test(turn) &&
-      /UI_TOOLS = new Set\(\[[\s\S]*?'recommend_club'[\s\S]*?\]\)/.test(turn) &&
+      // 2026-08-19 (lockstep reconciliation) — declarations now live in the single owner.
+      /name: 'recommend_club'/.test(tools) &&
+      /UI_TOOLS = new Set\(\[[\s\S]*?'recommend_club'[\s\S]*?\]\)/.test(tools) &&
+      // AND the reason this whole pass happened: recommend_club existed ONLY on pipecat-turn, so the
+      // FOLLOW-UP turn (useVoiceCaddie.processFollowUp → sendToBrain → /api/kevin) could not call it
+      // and the advice→outcome pairing died on turn 2. Both brains must source the same list, and
+      // kevin's dispatch must not silently swallow a tool it has no bespoke case for.
+      /BRAIN_TOOLS/.test(kevin) &&
+      /default: \{[\s\S]*?UI_TOOLS\.has\(name\)/.test(kevin) &&
       /case 'recommend_club':/.test(disp) &&
       /setPendingKevinRec\(\{ club: a\.club\.trim\(\)/.test(disp)
     );
@@ -8568,12 +8582,17 @@ check('Caddie web search: grounded search_web tool wired on BOTH brain paths (un
     const helper = read('api/_webSearch.ts');
     const turn = read('api/pipecat-turn.ts');
     const kevin = read('api/kevin.ts');
+    const tools = read('api/_brainTools.ts');
     return (
       /export async function groundedSearch/.test(helper) &&
       /tools: \[\{ googleSearch: \{\} \}\]/.test(helper) &&                       // real Google Search grounding
       /GOOGLE_API_KEY \|\| process\.env\.GEMINI_API_KEY/.test(helper) &&           // accepts either key name Tim set
-      /name: 'search_web'/.test(turn) && /toolName === 'search_web'/.test(turn) &&   // pipecat: declared + dispatched
-      /name: 'search_web'/.test(kevin) && /name === 'search_web'/.test(kevin)        // kevin: declared + dispatched
+      // 2026-08-19 (lockstep reconciliation) — ONE declaration, imported by both brains; each brain
+      // still has to EXECUTE it server-side (it is a SERVER_TOOL, not forwarded to the device).
+      /name: 'search_web'/.test(tools) &&                                            // declared once
+      /SERVER_TOOLS = new Set\(\[[^\]]*'search_web'/.test(tools) &&                  // classified server-executed
+      /toolName === 'search_web'/.test(turn) &&                                      // pipecat executes it
+      /name === 'search_web'/.test(kevin)                                            // kevin executes it
     );
   })(),
   'ask the caddie a real-world course/fact question and it searches the web (grounded, cited) on whichever brain answers — never a hallucinated fact');

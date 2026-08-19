@@ -1,11 +1,36 @@
-// CRITICAL: LOCKSTEP TWIN
-// This file has an identical twin:
-// - api/voice-intent.ts (Vercel serverless)
-// - app/api/voice-intent+api.ts (Expo Router)
+// ── THE INTENT VOCABULARY — ONE OWNER ────────────────────────────────────────
 //
-// Any change to intent mappings, prompts, or types MUST be made in BOTH files.
-// If they drift, voice breaks in production. You will debug for hours.
-// Before committing, diff both files: git diff api/voice-intent.ts app/api/voice-intent+api.ts
+// 2026-08-19 (reconciliation pass). This file used to open with a LOCKSTEP TWIN
+// warning naming `app/api/voice-intent+api.ts`. That twin was deleted on
+// 2026-08-13 along with the other 10 Expo Router dev twins (commit 59281f61).
+// The warning outlived it by six days and told every reader to go diff a file
+// that does not exist. A stale instruction is worse than no instruction: it
+// spends attention and returns nothing.
+//
+// There is no twin. INTENT_TYPE_ENUM below is the single source of truth for
+// what the cloud classifier may emit.
+//
+// WHAT DOES STILL DRIFT, AND WHERE TO LOOK
+// ----------------------------------------
+// The enum is one of four vocabularies that have to agree. They are checked by
+// `__tests__/logic/voice-intent-parity.test.ts`; the map is in
+// `docs/voice-intent-parity.md`. The recurring failure has its own shape:
+//
+//   A handler + a narrow precheck regex ship together, and nobody adds the
+//   intent to THIS enum. The regex catches the phrasings its author imagined;
+//   everything else reaches the cloud classifier, which cannot emit an intent
+//   that is not in its enum, so it falls to `conversational` — the caddie
+//   chats warmly instead of doing the thing.
+//
+// That has now happened four times: `undo` / `find_my_data` / `open_course`
+// (found 2026-07-25), `correct_last_shot` (found 2026-08-08), and
+// `set_club_distance` (found 2026-08-19 — a handler and a regex since
+// 2026-08-08, never in the enum, so "set my 7 iron to 165" was small talk while
+// "my 7 iron goes 165" worked).
+//
+// So: adding a handler under services/intents/ is not done until the intent is
+// in this enum AND has a numbered prompt section below. The parity test fails
+// otherwise.
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
@@ -34,6 +59,13 @@ const INTENT_TYPE_ENUM = [
   // here, so phrasings the narrow regex missed ("that was a 3 hybrid, not a 5 iron") classified as
   // log_shot and appended a DUPLICATE shot instead of correcting the last one.
   'correct_last_shot',
+  // 2026-08-19 (lockstep reconciliation) — set_club_distance had a handler
+  // (services/intents/setClubDistanceHandler.ts) and a precheck regex since 2026-08-08 but was
+  // never added here. The regex only matches the GOES/CARRIES form ("my 7-iron goes 165"), so
+  // every other way of saying the same thing — "set my 7 iron to 165", "my pitching wedge is
+  // 130", "put my driver at 250" — reached the cloud classifier, which had no such intent to
+  // emit, and fell to conversational. The caddie agreed pleasantly and stored nothing.
+  'set_club_distance',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -382,6 +414,21 @@ Available intents:
    parameters: {}
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
+
+15c. set_club_distance — User is TELLING the caddie how far a club of theirs goes, as a standing
+   fact about their bag. Declarative, present tense, one club, one number. This REGISTERS the
+   yardage; it is not a shot report and not a question.
+   parameters: { club_phrase: string, yards: integer }
+   Examples:
+   - "my 7 iron goes 165" -> { club_phrase: "7 iron", yards: 165 }
+   - "set my pitching wedge to 130" -> { club_phrase: "pitching wedge", yards: 130 }
+   - "my driver carries about 250" -> { club_phrase: "driver", yards: 250 }
+   - "put my 5 wood at 210" -> { club_phrase: "5 wood", yards: 210 }
+   - "my 52 degree is 105" -> { club_phrase: "52 degree", yards: 105 }
+   Boundaries: a PAST-TENSE report of one shot is log_shot (#16) — "I hit my 7-iron 165" is one
+   swing, "my 7-iron goes 165" is the club's number. A QUESTION with no number is club_query or
+   query_status — "what's my 7 iron". SEVERAL clubs in one breath ("I carry driver, 3-wood, 5
+   through PW") is conversational: the brain's register_bag tool takes the whole bag at once.
 
 15b. declare_hole — User is telling the caddie which hole they are starting / on. NOT a relative move (next/previous), NOT a score report. Use this when the user says they're TEEING OFF on a specific hole or just declares the absolute hole number.
    parameters: { hole_number: integer 1..18 }

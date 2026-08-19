@@ -36,22 +36,55 @@ Every `IntentResult.voice_response` follows one of these shapes:
 
 | Intent | Handler file | Notes |
 |---|---|---|
-| `open_tool` | `services/intents/openToolHandler.ts` | Launches tool screens |
+| `open_tool` | `services/intents/openToolHandler.ts` | Launches tool screens (SmartVision, SmartFinder, SwingLab, TightLie…) |
 | `query_status` | `services/intents/queryStatusHandler.ts` | Reads state (score, hole, ghost, weather, pattern, lie, swing) |
 | `change_setting` | `services/intents/changeSettingHandler.ts` | All settings + ghost on/off + caddie persona |
-| `acknowledge` | `services/intents/acknowledgeHandler.ts` | Filler ("thanks", "got it") |
-| `navigate` | `services/intents/navigateHandler.ts` | Back / home / next/prev hole |
+| `navigate` | `services/intents/navigateHandler.ts` | Back / home / next / previous hole |
 | `help` | `services/intents/helpHandler.ts` | "What can I say" |
+| `acknowledge` | `services/intents/acknowledgeHandler.ts` | Filler ("thanks", "got it") |
 | `rules_query` | `services/intents/rulesQueryHandler.ts` | USGA rules questions |
 | `handicap_query` | `services/intents/handicapQueryHandler.ts` | Index / differential lookup |
-| `set_trust_quiet/companion` | `services/intents/setTrustQuietHandler.ts` | Trust level toggle |
-| `club_change/query/menu` | `services/intents/clubHandler.ts` | "Switching to 7-iron" |
-| `log_shot` | `services/intents/logShotHandler.ts` | Conversational shot log |
+| `set_trust_quiet` | `services/intents/setTrustQuietHandler.ts` | Trust level → L1 Quiet |
+| `set_trust_companion` | `services/intents/setTrustQuietHandler.ts` | Trust level → L2 Companion |
+| `in_round_diagnostic` | `services/intents/inRoundDiagnosticHandler.ts` | Mid-round "what am I doing wrong" read |
+| `club_change` | `services/intents/clubHandler.ts` | "Switching to 7-iron" — sets the working club |
+| `club_query` | `services/intents/clubHandler.ts` | "What club am I on" (cage session) |
+| `club_menu` | `services/intents/clubHandler.ts` | Opens the manual club picker |
+| `set_club_distance` | `services/intents/setClubDistanceHandler.ts` | **Added to the enum 2026-08-19.** "my 7 iron goes 165" — registers a standing bag yardage |
+| `log_shot` | `services/intents/logShotHandler.ts` | Conversational shot log (past tense) |
+| `correct_last_shot` | `services/intents/correctLastShotHandler.ts` | Amends the last shot instead of appending a duplicate |
 | `log_score` | `services/intents/logScoreHandler.ts` | "I made a five" |
-| `media_capture/playback/putt_watch` | `services/intents/mediaHandlers.ts` | Video clips |
-| `at_ball` | `services/intents/atBallHandler.ts` | "I'm at my ball" |
+| `log_putts` | `services/intents/logPuttsHandler.ts` | "Two putts" — putts for the hole |
 | `log_issue` | `services/intents/logIssueHandler.ts` | "Remember this — bug X" |
-| `sequence` | `services/intents/sequenceHandler.ts` | Chained commands |
+| `media_capture` | `services/intents/mediaHandlers.ts` | Video clip capture |
+| `media_playback` | `services/intents/mediaHandlers.ts` | Play back a captured clip |
+| `putt_watch` | `services/intents/mediaHandlers.ts` | Putt-watch capture mode |
+| `at_my_ball` | `services/intents/atBallHandler.ts` | "I'm at my ball" — position fix |
+| `position_declaration` | `services/intents/positionDeclareHandler.ts` | Declaring where on the hole you are (tee / fairway / green) |
+| `confirm_position` | `services/intents/confirmPositionHandler.ts` | Confirms a position the caddie proposed |
+| `declare_hole` | `services/intents/declareHoleHandler.ts` | Absolute hole declaration ("teeing off on 4") |
+| `set_hole_note` | `services/intents/setHoleNoteHandler.ts` | Per-hole note for the course book |
+| `state_yardage` | `services/intents/stateYardageHandler.ts` | Player states the yardage themselves |
+| `refresh_gps` | `services/intents/refreshGpsHandler.ts` | Forces a fresh GPS fix |
+| `open_course` | `services/intents/openCourseHandler.ts` | Opens a named course |
+| `quick_round` | `services/intents/quickRoundHandler.ts` | Starts a round with minimal setup |
+| `end_round` | `services/intents/endRoundHandler.ts` | Ends the round → scorecard + recap |
+| `coach_refine` | `services/intents/coachRefineHandler.ts` | Refines a coaching read after a drill |
+| `set_session_focus` | `services/intents/sessionFocusHandler.ts` | "I want to work on X this session" — orients the session |
+| `ask_golf_father` | `services/intents/askGolfFatherHandler.ts` | Strategic course-management ask |
+| `find_my_data` | `services/intents/findMyDataHandler.ts` | Universal recall ("pull up my last scorecard") |
+| `undo` | `services/intents/undoHandler.ts` | Reverses the last logged action |
+| `open_external` | `services/intents/openExternalHandler.ts` | Opens an external URL / app |
+| `social_greeting` | `services/intents/socialGreetingHandler.ts` | "Morning Kevin" — greeting, not a command |
+| `sequence` | `services/intents/sequenceHandler.ts` | Chained commands in one utterance |
+| `conversational` | *(none — routing sentinel)* | Hands the turn to the brain (`api/pipecat-turn.ts`). Not an action. |
+| `unknown` | *(none — routing sentinel)* | Parser fallback (`services/voiceCommandParser.ts`) when nothing matched. |
+
+**This table is complete as of 2026-08-19 and is now enforced.** It previously listed 18 of 42
+intents — the 24 shipped after it was written were never added, so a "living doc" was 57% behind
+the code and reviewers checking it against a new intent got a false read.
+`__tests__/logic/voice-intent-parity.test.ts` asserts the enum, the handlers, and the brain tools
+agree; keep this table in step when you add an intent (checklist §12, step 7).
 
 ---
 
@@ -181,10 +214,34 @@ The persona system prompt already encodes this. The `intentAck()` helper accepts
 
 ## 12. Adding a new voice intent — checklist
 
-1. Add to the `intent_type` union in `app/api/voice-intent+api.ts`.
-2. Add at least 3 example utterances to the system prompt.
+> **Corrected 2026-08-19.** Step 1 used to read *"Add to the `intent_type` union in
+> `app/api/voice-intent+api.ts`."* That file was deleted on 2026-08-13 with the other ten Expo
+> Router dev twins (commit `59281f61`), so for six days this document's first instruction sent
+> every author to a path that does not exist. There is no twin. `api/voice-intent.ts` is the only
+> classifier.
+
+**Order matters.** Steps 1 and 2 are the ones that get skipped, and skipping them is invisible:
+the handler works when the precheck regex happens to match and the caddie makes friendly
+conversation the rest of the time. This has now happened four times (`undo`, `find_my_data`,
+`open_course`, `correct_last_shot`, `set_club_distance`). `__tests__/logic/voice-intent-parity.test.ts`
+fails if you skip either one.
+
+1. Add the intent to `INTENT_TYPE_ENUM` in **`api/voice-intent.ts`**. If it is not in the enum the
+   cloud classifier physically cannot emit it, no matter what your prompt says.
+2. Add a numbered section to the classifier prompt in that same file: parameters, at least three
+   example utterances, and — most important — the **boundaries** against the intents it is easiest
+   to confuse with. Most misclassification is a boundary problem, not a coverage problem.
 3. Create the handler in `services/intents/<name>Handler.ts`.
 4. Register it in `services/intents/index.ts`.
-5. Every code path MUST set `voice_response` to a non-empty acknowledgment.
-6. If the intent has a UI equivalent, link the same store action from the UI button so both surfaces share one truth.
-7. Add a row to the appropriate section of THIS document.
+5. Every code path MUST set `voice_response` to a non-empty acknowledgment (see §2 — silent success
+   is a bug).
+6. If the intent has a UI equivalent, link the same store action from the UI button so both surfaces
+   share one truth.
+7. Add a row to §3 of THIS document.
+8. Optional but recommended: a precheck regex in `services/localIntentPrecheck.ts` for the common
+   phrasing, so the offline/instant path catches it. This is an **optimization on top of** steps 1–2,
+   never a substitute for them. A precheck regex without an enum entry is the exact defect above.
+
+**`api/voice-intent.ts` classifies. It does not act.** Brain *tools* are a separate vocabulary
+declared once in `api/_brainTools.ts` — see `docs/voice-intent-parity.md` for how the four
+vocabularies relate and which guard covers each.
