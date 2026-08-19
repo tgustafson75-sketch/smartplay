@@ -18,7 +18,7 @@ import { buildPipecatContext } from '../services/pipecatContext';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
-import { getApiBaseUrl } from '../services/apiBase';
+import { getApiBaseUrl, isConnectionWarmed, markConnectionWarmed } from '../services/apiBase';
 import { screenContextForPrompt } from '../services/screenContext';
 import { devLog } from '../services/devLog';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
@@ -452,6 +452,45 @@ export function usePipecatVoice({
    * Phase 2 full pipeline: audio URI → Whisper STT → processTurn → speak.
    * Drop-in for useVoiceCaddie's processAudioUri when voiceOrchestrator === 'pipecat'.
    */
+  /**
+   * 2026-08-19 — the same cold-vs-warm budget the tap path uses (useVoiceCaddie's 12s/22s), so the two
+   * audio entries can no longer disagree about how long a first turn is allowed to take. The cold
+   * number is the one that matters: it is what lets a first turn wait out a cold Lambda instead of
+   * aborting into a failure the player reads as "the app is broken".
+   */
+  const PIPECAT_WARM_TRANSCRIBE_MS = 12_000;
+  const PIPECAT_COLD_TRANSCRIBE_MS = 22_000;
+
+  /**
+   * 2026-08-19 — never go mute. Every failure on this path used to end in `onVoiceStateChange('idle')`
+   * with nothing said and nothing shown, which is exactly what Tim hit: "going straight to failure
+   * state… not seeing any text when he talks."
+   *
+   * The tap path already had the right answer — localStatusResponder.deadEndLine() speaks to what the
+   * app ALWAYS knows locally (the shot in front of you, or the practice nudge off-course) rather than
+   * announcing a network problem. Routed through the same responder so both paths degrade identically
+   * and the caddie stays a person about it. The line goes through onKevinSpoke too, so the TEXT
+   * appears alongside the speech instead of only audio.
+   */
+  const speakDeadEnd = useCallback((reason: string) => {
+    devLog('[pipecat] degrading to local line:', reason);
+    let line = "Let's stay on this one — what are you working with?";
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
+      const lang = useSettingsStore.getState().language;
+      const langSafe = (['en', 'es', 'zh'] as const).includes(lang as 'en' | 'es' | 'zh')
+        ? (lang as 'en' | 'es' | 'zh') : 'en';
+      line = responder.deadEndLine(langSafe);
+    } catch { /* keep the neutral fallback */ }
+    try { onKevinSpoke?.(line); } catch { /* non-fatal */ }
+    try {
+      const s = useSettingsStore.getState();
+      if (s.voiceEnabled) void speak(line, s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
+    } catch { /* speech is best-effort; the text is already out */ }
+    onVoiceStateChange?.('idle');
+  }, [onKevinSpoke, onVoiceStateChange]);
+
   const processAudioUri = useCallback(async (
     uri: string,
     opts?: { apiUrl?: string; language?: string },
@@ -469,8 +508,38 @@ export function usePipecatVoice({
       formData.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
       formData.append('language', opts?.language ?? useSettingsStore.getState().language ?? 'en');
 
+      /**
+       * 2026-08-19 (Tim, testing live: "Kevin's not answering correctly, it's going straight to
+       * failure state… I'm also not seeing any text when he talks" — then, once it warmed up,
+       * "eventually it did work… you know what a stable thing this needs to be and to make sure it
+       * works the FIRST time").
+       *
+       * THIS PATH HAD THREE GAPS THE TAP PATH DOES NOT, and they compound on exactly the turn that
+       * matters most — the first one after opening the app.
+       *
+       * 1. THE BUDGET WAS BLIND TO COLD START. A flat 20s, while useVoiceCaddie runs 12s warm and 22s
+       *    COLD, gated on isConnectionWarmed(). The first turn is the one that has to wait out a cold
+       *    Lambda, and it was the one given the least patience relative to its need. Now both paths
+       *    read the same gate, so there is one answer in the app to "how long do we wait".
+       *
+       * 2. IT NEVER MARKED THE CONNECTION WARM. Even after a transcribe SUCCEEDED — proof the host is
+       *    up and warm — this path never called markConnectionWarmed(). So every turn through it kept
+       *    paying cold-path costs, and the tap path could not benefit from a warm connection this one
+       *    had already established. The two paths were not sharing what they had each learned.
+       *
+       * 3. IT FAILED SILENTLY — the one Tim actually saw. A failed transcribe, an empty transcript or
+       *    any thrown error all did `onVoiceStateChange('idle')` and returned: no speech, no text, no
+       *    explanation. That IS the "failure state with no text". The tap path degrades gracefully
+       *    into localStatusResponder.deadEndLine() — the caddie says something true about the shot in
+       *    front of you instead of going mute. Silence is the most robotic possible failure, and this
+       *    path chose it three times over. [[caddie-failsafe-no-walls]] [[feels-like-a-real-caddie]]
+       */
+      const coldFirstTurn = !isConnectionWarmed();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20_000);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        coldFirstTurn ? PIPECAT_COLD_TRANSCRIBE_MS : PIPECAT_WARM_TRANSCRIBE_MS,
+      );
 
       const transcribeRes = await fetch(whisperUrl, {
         method: 'POST',
@@ -480,14 +549,21 @@ export function usePipecatVoice({
 
       if (!transcribeRes.ok) {
         devLog('[pipecat] transcribe failed:', transcribeRes.status);
-        onVoiceStateChange?.('idle');
+        speakDeadEnd(`transcribe_${transcribeRes.status}`);
         return;
       }
 
       const { text: transcript = '' } = await transcribeRes.json() as { text?: string };
+
+      // A transcribe that came back at all proves the host is up and warm — tell the shared gate, so
+      // the NEXT turn (on either path) takes the fast budget instead of re-paying cold patience.
+      markConnectionWarmed();
+
       if (!transcript.trim()) {
+        // Heard nothing intelligible. Not an error — answer like a person and invite another go,
+        // rather than going silent and leaving the player wondering if the app is broken.
         devLog('[pipecat] empty transcript');
-        onVoiceStateChange?.('idle');
+        speakDeadEnd('empty_transcript');
         return;
       }
 
@@ -495,9 +571,9 @@ export function usePipecatVoice({
       await processTurn(transcript);
     } catch (e) {
       devLog('[pipecat] processAudioUri error:', e);
-      onVoiceStateChange?.('idle');
+      speakDeadEnd(e instanceof Error && e.name === 'AbortError' ? 'transcribe_timeout' : 'transcribe_error');
     }
-  }, [processTurn, onVoiceStateChange]);
+  }, [processTurn, onVoiceStateChange, speakDeadEnd]);
 
   return {
     // Phase 2 — text brain

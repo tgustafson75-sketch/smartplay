@@ -10059,6 +10059,33 @@ check('LOCK: the glasses consent round trip can actually come home',
   })(),
   'the DAT callback URL reaches the SDK on both cold start and warm launch, iOS can resolve the module at all, and the app claims the universal-link domain Meta is registered against');
 
+check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
+  (() => {
+    const pipe = read('hooks/usePipecatVoice.ts');
+    const tap = read('hooks/useVoiceCaddie.ts');
+    // 2026-08-19 (Tim, testing live: "it's going straight to failure state… I'm also not seeing any
+    // text when he talks", then "eventually it did work"). Two audio entries existed and only ONE
+    // knew about cold start. The pipecat path ran a flat 20s while the tap path ran 12s warm / 22s
+    // cold, and — the part Tim actually saw — every pipecat failure ended in onVoiceStateChange
+    // ('idle') with no speech and no text. Silence is the most robotic failure available.
+    const bothColdAware = /isConnectionWarmed\(\)/.test(pipe) && /isConnectionWarmed\(\)/.test(tap);
+    const pipeUsesGate = /const coldFirstTurn = !isConnectionWarmed\(\);/.test(pipe)
+      && /coldFirstTurn \? PIPECAT_COLD_TRANSCRIBE_MS : PIPECAT_WARM_TRANSCRIBE_MS/.test(pipe);
+    const noFlat20s = !/abort\(\), 20_000\)/.test(pipe);
+    // A successful transcribe PROVES the host is warm — both paths must say so, or one keeps paying
+    // cold costs the other already retired.
+    const bothMarkWarm = /markConnectionWarmed\(\)/.test(pipe) && /markConnectionWarmed\(\)/.test(tap);
+    // Every pipecat failure route degrades into a spoken+shown local line instead of going mute.
+    const degrades = /const speakDeadEnd = useCallback/.test(pipe)
+      && /responder\.deadEndLine\(langSafe\)/.test(pipe)
+      && /onKevinSpoke\?\.\(line\)/.test(pipe);           // the TEXT, not just audio
+    const allFailuresCovered = /speakDeadEnd\(`transcribe_\$\{transcribeRes\.status\}`\)/.test(pipe)
+      && /speakDeadEnd\('empty_transcript'\)/.test(pipe)
+      && /speakDeadEnd\(e instanceof Error && e\.name === 'AbortError'/.test(pipe);
+    return bothColdAware && pipeUsesGate && noFlat20s && bothMarkWarm && degrades && allFailuresCovered;
+  })(),
+  'the pipecat audio path uses the same cold/warm transcribe budget as the tap path, marks the connection warm on success, and speaks AND shows a local line on every failure instead of going silent');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
