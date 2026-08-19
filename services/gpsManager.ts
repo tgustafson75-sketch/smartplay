@@ -357,6 +357,9 @@ function confidenceFromAccuracy(accuracy_m: number | null): 'high' | 'medium' | 
  *
  * Returns true when the fix was accepted (not rejected as an outlier).
  */
+/** PATH 5 marker latch — see the first_fix log at the end of processFix. */
+let firstFixLogged = false;
+
 function processFix(raw: GpsFix): boolean {
   // 2026-05-20 — Day 1 / Fix 4: drop incoming real GPS while the
   // simulator owns the cache. Without this, watchPositionAsync would
@@ -505,6 +508,15 @@ function processFix(raw: GpsFix): boolean {
   try {
     useRoundStore.getState().setLocationContext({ lat: fix.lat, lng: fix.lng });
   } catch (e) { ownerSentinel('gps.setLocationContext', e); }
+  // 2026-08-19 (critical-path audit) — PATH 5 GPS. FIRST accepted fix only. This is the single
+  // most useful line in a Path 5 trace: it is the moment GPS goes from "permission granted" to
+  // "actually producing usable positions", and it is the difference the existing failure-only
+  // logging could not show. Deliberately once-per-session — a per-tick line at the watch cadence
+  // would bury every other marker in the grep.
+  if (!firstFixLogged) {
+    firstFixLogged = true;
+    console.log(`[path5:gps] first_fix accuracy_m=${fix.accuracy_m ?? 'null'} source=${fix.source ?? 'live'}`);
+  }
   return true;
 }
 
@@ -663,6 +675,11 @@ async function restartWatch() {
 async function startWatchInternal() {
   try {
     const { granted } = await Location.requestForegroundPermissionsAsync();
+    // 2026-08-19 (critical-path audit) — PATH 5 GPS. GPS had rich [gps] logging for FAILURES
+    // (stale, hard-clear, outlier-rejected) but no marker for the happy path, so a logcat grep
+    // could not distinguish "GPS working" from "GPS never started". A path is only verifiable if
+    // success is as legible as failure.
+    console.log(`[path5:gps] permission granted=${granted}`);
     if (!granted) {
       // 2026-05-17 — Audit C "E" / "L" P1 fix: surface permission
       // denial as an owner toast AND a user-facing toast. Previously
@@ -729,6 +746,7 @@ async function startWatchInternal() {
           },
           onLocationUpdate,
         );
+        console.log(`[path5:gps] watch_started accuracy=${accuracy} wanted=${cfg.accuracy} interval_ms=${cfg.intervalMs}`);
         if (accuracy !== cfg.accuracy) {
           // Made it on a fallback rung — tell the breadcrumbs so we
           // can see the device class fingerprint in Sentry later.

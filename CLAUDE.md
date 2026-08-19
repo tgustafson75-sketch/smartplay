@@ -15,16 +15,26 @@ declared shipped:
    targeted fix. Fix is scoped to the failure (not bundled with other work).
    Re-verify after fix. Only then proceed with other phase work.
 
-The four paths:
-- **PATH 1 ONBOARD** — cold install → onboarding → Caddie home with profile
+The six paths (four originally; GPS and SCORECARD promoted out of Path 2 on 2026-08-19):
+- **PATH 1 ONBOARD** — cold install → welcome (name/caddie/consent) → Caddie home
 - **PATH 2 ROUND** — open app → find course → start round → log shots → end → recap
 - **PATH 3 CAGE** — SwingLab → Cage Mode setup → record → analysis → drill
 - **PATH 4 VOICE** — earbud/badge tap → Kevin engages → response → continuation/close
+- **PATH 5 GPS** — permission → first fix → live yardage → hole advance → background
+- **PATH 6 SCORECARD** — score on any surface → persists → survives the round → recap agrees
 
 Each path has path-specific log markers (`[path1:onboard]`, `[path2:round]`,
-`[path3:cage]`, `[path4:voice]`) instrumented at flow boundaries, plus
-existing `[V6-DIAG]` and `[ttfa]` lines for finer detail. Tim greps logcat
-on the path marker during the MIN VERIFY scenario for that path.
+`path3:cage` *(no closing bracket — the stage is inside: `[path3:cage:STAGE]`)*,
+`[path4:voice]`, `[path5:gps]`, `[path6:scorecard]`), plus existing `[V6-DIAG]`,
+`[gps]` and `[ttfa]` lines for finer detail. Tim greps logcat on the path marker
+during the MIN VERIFY scenario for that path.
+
+**A gate that cannot fail is not a gate.** The 2026-08-19 audit found Path 1
+documented seven markers of which exactly one existed anywhere in the app — and
+not on that flow — so its MIN VERIFY grep returned nothing whether the path was
+healthy or broken, and had done since the `app/onboarding/` subtree was deleted in
+May. Path 3's documented grep string matched nothing while 61 live call sites
+logged. Before citing a path as a gate, confirm its markers are actually emitted.
 
 External beta-readiness requires all four paths verified working end-to-end
 on a real device within the last 7 days, on a real round (not just simulated).

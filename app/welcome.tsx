@@ -89,6 +89,13 @@ export default function WelcomeScreen() {
   // wakes up at the moment the user checks the box (and dims back if
   // they uncheck). Easing matches the standard onboarding feel.
   const ctaOpacity = useRef(new Animated.Value(termsAccepted ? 1 : 0.45)).current;
+  // 2026-08-19 (critical-path audit) — PATH 1 instrumentation; see app/index.tsx for why this
+  // flow had none. `returning` distinguishes a fresh install from Settings -> Edit Profile, which
+  // routes to this same screen: without it a re-entry looks identical to a first launch in the log.
+  useEffect(() => {
+    console.log(`[path1:onboard] welcome shown returning=${(existingName ?? '').trim().length > 0}`);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     Animated.timing(ctaOpacity, {
       toValue: termsAccepted ? 1 : 0.45,
@@ -109,6 +116,9 @@ export default function WelcomeScreen() {
     // surfaces a clear nudge instead of silently no-op'ing if the
     // visual gate is ever bypassed (accessibility services, etc.).
     if (!termsAccepted) {
+      // A blocked CTA is a legitimate Path 1 outcome, not a crash — but it is indistinguishable
+      // from a dead button unless it says so.
+      console.log('[path1:onboard] blocked reason=terms_not_accepted');
       Alert.alert(
         'Acceptance required',
         'Please review the Terms & Acceptance section and tick the agreement checkbox before continuing.',
@@ -143,6 +153,22 @@ export default function WelcomeScreen() {
     // Signal completion here so the caddie greets immediately on arrival.
     signalGreetingComplete();
 
+    // The Path 1 pass criteria are "profile saved BEFORE navigating" and "lands on the caddie tab".
+    // Read the persisted state back rather than echoing the local form values — the point is to
+    // prove the write landed, which is exactly what echoing the inputs would fail to show.
+    {
+      const saved = usePlayerProfileStore.getState();
+      // persona lives in settingsStore, not the profile store — read it from its real owner.
+      const savedPersona = useSettingsStore.getState().caddiePersonality;
+      console.log(
+        `[path1:onboard] complete name_set=${(saved.name ?? '').trim().length > 0}` +
+        ` handicap_set=${saved.handicap_index != null}` +
+        ` persona=${savedPersona ?? 'kevin'}` +
+        ` terms_at=${saved.termsAcceptedAt != null}` +
+        ` first_opened=${saved.first_opened_at != null}` +
+        ` -> /(tabs)/caddie`,
+      );
+    }
     router.replace('/(tabs)/caddie' as never);
   };
 

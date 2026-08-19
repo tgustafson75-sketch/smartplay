@@ -137,6 +137,14 @@ export default function Index() {
   const profileSnap = usePlayerProfileStore.getState();
   const hasAcceptedTerms = profileSnap.termsAcceptedAt != null;
   const hasName = (profileSnap.name ?? '').trim().length > 0;
+  // 2026-08-19 (critical-path audit) — PATH 1 instrumentation. docs/critical-paths.md documented
+  // seven [path1:onboard] markers across an app/onboarding/ subtree; that subtree was deleted in
+  // 2026-05-17 and exactly ONE marker existed anywhere in the app, in contextSynthesizer, not on
+  // this flow at all. So the Path 1 MIN VERIFY — grep logcat for [path1:onboard] — returned
+  // nothing on a healthy run and nothing on a broken one. The gate was unrunnable. These markers
+  // trace the flow that actually exists: this routing decision, the single welcome screen, and the
+  // handoff to the caddie tab.
+  console.log(`[path1:onboard] route_decision terms_accepted=${hasAcceptedTerms} name_set=${hasName} -> ${(!hasAcceptedTerms && !hasName) ? 'welcome' : 'caddie'}`);
   if (!hasAcceptedTerms && !hasName) {
     return <Redirect href={'/welcome' as never} />;
   }

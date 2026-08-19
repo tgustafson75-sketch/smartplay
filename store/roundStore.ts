@@ -1943,6 +1943,12 @@ export const useRoundStore = create<RoundState>()(
         const total = scoredEntries.reduce((a, [, score]) => a + score, 0);
         const holesPlayed = scoredEntries.length;
         console.log(`[path2:round] end totalScore=${total} holesPlayed=${holesPlayed}`);
+        // 2026-08-19 (critical-path audit) — PATH 6 SCORECARD handoff. The round is over; what the
+        // scorecard renders from here is the PERSISTED record, not live round state. Logging the
+        // counts at the boundary makes a "scorecard shows fewer holes than I played" report
+        // answerable from one grep: either the record was written short, or the scorecard read it
+        // wrong. Those are different bugs and previously looked the same.
+        console.log(`[path6:scorecard] round_persisted holes_with_scores=${Object.keys(get().scores).length} shots=${persistedShots.length} total=${total}`);
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
         try {
@@ -2488,6 +2494,13 @@ export const useRoundStore = create<RoundState>()(
             .trace('shot', 'score', { hole, score });
         } catch { /* non-fatal */ }
         const prevScore = get().scores[hole] ?? 0; // snapshot BEFORE overwrite (first-score test)
+        // 2026-08-19 (critical-path audit) — PATH 6 SCORECARD. logScore is the ONE seam every score
+        // path funnels through (scorecard tap, cockpit stepper, voice, brain tool dispatch), which
+        // makes it the only place a marker can prove "the score the player entered is the score that
+        // was stored" regardless of which surface they used. `src` distinguishes a correction from a
+        // first entry — the wrong-hole scoring class Tim has fought repeatedly looks identical to a
+        // normal write without it.
+        console.log(`[path6:scorecard] score_write hole=${hole} score=${score} prev=${prevScore} kind=${prevScore > 0 ? 'correction' : 'first'}`);
         // 2026-07-25 — capture the undo snapshot BEFORE the write + any auto-advance, so
         // "scratch that" restores both the prior score and the hole we were on.
         set({ lastMutation: { kind: 'score', hole, prevScore, prevCurrentHole: get().currentHole, at: Date.now() } });
