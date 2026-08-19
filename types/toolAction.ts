@@ -52,6 +52,31 @@ export type ToolAction =
   | { type: 'switch_caddie'; personality: 'kevin' | 'serena' | 'harry' | 'tank' }
   // 2026-06-29 (Tim) — voice sets the SmartMotion camera angle ("down the line"/"face on"/"putting").
   | { type: 'set_angle'; angle: 'down_the_line' | 'face_on' | 'putt' }
-  | { type: 'set_golfer'; name: string };
+  | { type: 'set_golfer'; name: string }
+  /**
+   * 2026-08-19 — THE TWO THAT KEPT GETTING DROPPED, finally typed.
+   *
+   * `recommend_club` and `register_bag` were the ONLY members of api/_brainTools.UI_TOOLS with no
+   * entry in this union, and they are the only two tools this app has silently lost — three times,
+   * at three different seams:
+   *   • 2026-08-08 — register_bag declared and prompted but missing from the service dispatcher:
+   *     the caddie confirmed the bag out loud and nothing was written.
+   *   • 2026-08-17 — the Caddie tab's unknown-tool `default:` logged and dropped both, killing
+   *     advice→outcome pairing for every round played through that tab.
+   *   • 2026-08-19 — both existed only in api/pipecat-turn, so turn 1 of a conversation could
+   *     record a club recommendation and the FOLLOW-UP turn could not: the tool did not exist on
+   *     the brain that answers it.
+   *
+   * Every one of those was invisible to the compiler for the same reason — the payload had no type,
+   * so `raw as ToolAction` in usePipecatVoice cast an unknown shape into the union and every
+   * consumer read `a.club` off a member that did not exist. A missing case in a switch over an
+   * untyped member is not an error anyone can see.
+   *
+   * Typing them does not by itself force a handler, but it ends the silence: the fields are now
+   * declared where consumers read them, and the parity test alongside this file asserts that every
+   * UI_TOOL has a member here — so the next tool cannot join the brain without one.
+   */
+  | { type: 'recommend_club'; club: string; shape?: string }
+  | { type: 'register_bag'; clubs?: unknown[]; distances?: unknown[] };
 
 // ── POST handler ──────────────────────────────────────────────────────────────

@@ -34,6 +34,11 @@ module.exports = {
         // relied on for real behavior and hung quick-round-disambiguation. Only the modules pure
         // services actually pull in transitively are stubbed.
         '^expo-location$': '<rootDir>/__tests__/mocks/expoGeneric.js',
+        // 2026-08-19 — expo-router ships JSX and cannot load under the plain ts-jest transform, so
+        // every module importing `router` at top level was untestable — including
+        // services/voice/conversationalToolDispatch, the single switch every voice tool runs through
+        // on every mic path. That is how recommend_club could be dropped at three seams unnoticed.
+        '^expo-router$': '<rootDir>/__tests__/mocks/expoRouter.js',
       },
     },
     {
