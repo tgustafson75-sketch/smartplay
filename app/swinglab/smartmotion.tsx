@@ -119,6 +119,7 @@ import {
   deriveBodyItems,
   type BodyItem,
   type SmTone,
+  SwingBreakdownCard,
 } from '../../components/smartmotion/SmartMotionHud';
 import { CaddieStatusStrip } from '../../components/caddie/CaddieStatusStrip';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
@@ -151,6 +152,15 @@ const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-
 // find the ball) is to snap the box onto the detected ball so the user doesn't hand-
 // move it. x stays 0.5 (center line).
 const DEFAULT_BALL_BOX = { x: 0.5, y: 0.62, r: 0.08 };
+
+/** 2026-08-19 — the four review cards (Tim: "we have 4 cards for a reason"). */
+type ReviewCardKey = 'breakdown' | 'speed' | 'body' | 'contact';
+const REVIEW_CARD_TITLES: Record<ReviewCardKey, string> = {
+  breakdown: 'SWING BREAKDOWN',
+  speed: 'SPEED · TEMPO',
+  body: 'BODY',
+  contact: 'CONTACT',
+};
 // 2026-06-11 — chip/short-game strike threshold (dB above the noise floor). A chip's
 // impact is ~half a full strike's energy, so the default ~30dB misses it; ~18dB lets
 // the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
@@ -818,6 +828,9 @@ export default function SmartMotion() {
   const clubRef = useRef<ClubId | null>(club);
   useEffect(() => { clubRef.current = club; }, [club]);
   useEffect(() => { angleRef.current = angle; }, [angle]);
+  // 2026-08-19 — collapse the open review card whenever the swing or phase changes; otherwise an
+  // expanded panel would keep showing the previous swing's detail after a reel tap.
+  useEffect(() => { setExpandedCard(null); }, [phase, selectedSwing]);
 
   // Ball box — a DEFAULT reference box is shown automatically so the user just
   // lines their ball up to it and never has to think about it. It's purely
@@ -1090,6 +1103,8 @@ export default function SmartMotion() {
   // player can grab a CLEAN frame (off) or an annotated one (on) for screenshot/share
   // (Tim's Smart Capture), and to declutter the center video. Video + controls stay.
   const [showResults, setShowResults] = useState(true);
+  // 2026-08-19 — which of the four review cards is opened in place (null = the 2x2 grid).
+  const [expandedCard, setExpandedCard] = useState<ReviewCardKey | null>(null);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
   // Cage targeting (ball + movable target) — reactive mirror of the
@@ -1748,6 +1763,68 @@ export default function SmartMotion() {
   // omitted, never faked. Surfaced as the "Swing Breakdown" in review (additive to the vision read,
   // which stays for contact/clubface narrative). [[pose-first-analysis-rearchitecture]]
   const poseRead = useMemo(() => buildPoseSwingRead(biomech, tempo), [biomech, tempo]);
+
+  /**
+   * 2026-08-19 — the four review cards. Each summarises one measured source; the expanded view below
+   * shows that source in full. Deliberately built from the SAME values the expanded panels render, so
+   * a summary can never claim something its own detail view disagrees with.
+   */
+  const reviewCards = useMemo((): { key: ReviewCardKey; title: string; value: string | null; note: string; tone?: string }[] => {
+    const worst = poseRead.usable
+      ? poseRead.dimensions.find((d) => d.verdict === 'needs_work') ?? poseRead.dimensions.find((d) => d.verdict === 'watch')
+      : undefined;
+    const toneFor = (v?: string) => (v === 'needs_work' ? '#ef4444' : v === 'watch' ? '#f59e0b' : v === 'strength' ? '#88F700' : '#7ED3A3');
+    const carry = isSwingDerived(metrics.carry_yards.source) ? metrics.carry_yards.value : null;
+    const clubSpeed = isSwingDerived(metrics.club_speed.source) ? metrics.club_speed.value : null;
+    const bad = bodyItems.filter((b) => b.tone === 'bad');
+    const warn = bodyItems.filter((b) => b.tone === 'warn');
+    const measuredBody = bodyItems.filter((b) => b.tone !== 'neutral');
+    return [
+      {
+        key: 'breakdown',
+        title: 'SWING BREAKDOWN',
+        value: poseRead.usable ? (worst ? worst.label : 'Clean') : null,
+        note: poseRead.usable
+          ? (worst?.note ?? `${poseRead.dimensions.length} dimensions measured — nothing flagged.`)
+          : 'No measured pose read for this swing.',
+        tone: poseRead.usable ? toneFor(worst?.verdict ?? 'solid') : undefined,
+      },
+      {
+        key: 'speed',
+        title: 'SPEED · TEMPO',
+        value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}:1` : carry != null ? `${carry} yds` : clubSpeed != null ? `${clubSpeed} mph` : null,
+        note: tempo?.ratio != null
+          ? `Tempo${carry != null ? ` · ${carry} yds carry` : ''}${tempo.sequencingScore != null ? ` · ${transitionLabel(tempo.sequencingScore)}` : ''}`
+          : carry != null || clubSpeed != null
+            ? 'Speed measured; no readable tempo on this swing.'
+            : 'No speed or tempo measured from this swing.',
+      },
+      {
+        key: 'body',
+        title: 'BODY',
+        value: measuredBody.length === 0 ? null : bad.length > 0 ? bad[0]!.label : warn.length > 0 ? warn[0]!.label : 'Good',
+        note: measuredBody.length === 0
+          ? 'Sway, tilt, posture and weight were not readable.'
+          : bad.length + warn.length === 0
+            ? 'Sway, tilt, posture and weight all read clean.'
+            : `${[...bad, ...warn].map((b) => b.label).join(' · ')} to look at.`,
+        tone: measuredBody.length === 0 ? undefined : bad.length > 0 ? '#ef4444' : warn.length > 0 ? '#f59e0b' : '#88F700',
+      },
+      {
+        key: 'contact',
+        title: 'CONTACT',
+        value: ballDeparture ? (ballDeparture.departed ? 'Struck' : ballDeparture.ball_present_before ? 'No launch' : null) : null,
+        note: ballDeparture
+          ? ballDeparture.departed
+            ? `Ball strike confirmed${ballDeparture.direction !== 'unknown' ? ` · launch ${ballDeparture.direction}` : ''}.`
+            : ballDeparture.ball_present_before
+              ? 'Sound only — the ball did not leave its spot.'
+              : 'Could not see the ball to confirm the strike.'
+          : 'Strike not cross-checked on this swing.',
+        tone: ballDeparture ? (ballDeparture.departed ? '#88F700' : '#f59e0b') : undefined,
+      },
+    ];
+  }, [poseRead, tempo, metrics, bodyItems, ballDeparture]);
 
   // 2026-07-07 (Tim — chunk-shot honesty) — the CONTACT signals the motion read
   // can't see: the camera strike check (did the ball actually leave?) and the
@@ -4972,97 +5049,104 @@ export default function SmartMotion() {
             and captureRoot now shrinks by this pane's height — feeding it back in would be a layout
             loop (pane sizes from box, box sizes from pane).
           */}
+          {/**
+            * 2026-08-19 (Tim — "it's supposed to be a four-card layout… it shouldn't have to be, like,
+            * so much scrolling… I think we've regressed in terms of the layouts"; and earlier, "we have
+            * 4 cards for a reason").
+            *
+            * The review read used to be one tall scrolling stack — breakdown, then speeds, then tempo,
+            * then body — which is how it grew tall enough to cover the clip in the first place, and why
+            * every fix so far has been about CONTAINING it (translucent, then a 36% cap and its own
+            * scrollbar) rather than shaping it. Four fixed cards in a 2×2 grid: the whole read is
+            * visible at a glance with nothing to scroll, and tapping a card opens just that one in
+            * place, so the detail is one tap deep instead of one swipe long.
+            *
+            * The four are the four questions a player actually asks after a swing — what did my body
+            * do, how fast/what rhythm, how did I move, did I strike it — and each is backed by an
+            * existing measured source. A card with nothing measured behind it renders as a muted "—"
+            * rather than being hidden, so the grid never reflows under your thumb and never implies a
+            * reading it doesn't have. [[illustration-data-points]]
+            */}
           {isReview && showResults ? (
-            <ScrollView
-              style={{ maxHeight: Math.round(windowHeight * 0.36) }}
-              contentContainerStyle={{ gap: 8 }}
-              showsVerticalScrollIndicator
-              nestedScrollEnabled
-            >
-              {engaged ? (
-                <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
-                  <Ionicons name="locate" size={13} color={colors.accent} />
-                  <Text style={[styles.engageText, { color: colors.accent }]}>
-                    RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
-                  </Text>
-                </View>
-              ) : null}
-              {skeletonRow}
-              {/* 2026-07-21 (pose-first re-architecture P2) — the MEASURED swing breakdown: each
-                  dimension (tempo, hip/shoulder turn, weight shift, posture, sway, sequence) with an
-                  honest verdict + the number it's based on. This is the primary, always-honest read
-                  (thresholds on real kinematics); the vision read below adds contact/clubface. */}
-              {poseRead.usable ? (
-                // 2026-07-25 (Tim — "analysis blocks most of the video") — the SWING BREAKDOWN was a
-                // SOLID card; with 6 dimensions it grew tall and covered the bottom of the clip. Made it
-                // a DARK TRANSLUCENT card with light text (matching the metric rails + the redesign's
-                // "camera shows through") so the read overlays the video instead of hiding it.
-                <View style={[styles.insightCard, { backgroundColor: 'rgba(6,15,9,0.78)', borderColor: 'rgba(124,224,79,0.28)', gap: 8 }]}>
-                  <Text style={[styles.insightLabel, { color: 'rgba(255,255,255,0.55)' }]}>SWING BREAKDOWN</Text>
-                  {poseRead.dimensions.map((d) => {
-                    const vc = d.verdict === 'strength' ? '#88F700' : d.verdict === 'solid' ? '#7ED3A3' : d.verdict === 'watch' ? '#f59e0b' : '#ef4444';
-                    return (
-                      <View key={d.key} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: vc, marginTop: 5 }} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: '#F1F5F9', fontSize: 13, fontWeight: '800' }}>
-                            {d.label}{d.display ? `  ${d.display}` : ''}
-                          </Text>
-                          <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 12, lineHeight: 16 }}>{d.note}</Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-              {/* MOTION DATA (step 2) — speed / tempo / body only render when the
-                  Motion overlay is on, so the default review keeps a clean video
-                  with just Kevin's read. Translucent cards, fewer at a glance. */}
-              {showSkeleton ? (
-                <>
-                  <View style={styles.speedRow}>
-                    {/* 2026-07-07 (audit M1) — show a number only when it's DERIVED
-                        from this swing (pose/acoustic/sensor). A 'profile'/'placeholder'
-                        handicap-table lookup is identical for every swing and carries no
-                        signal from the rep — render "—" instead of a constant dressed up
-                        as a per-swing read. */}
-                    <SpeedStat
-                      label="CLUB"
-                      value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null}
-                      unit="mph"
-                      estimate={!isTruthGrade(metrics.club_speed.source)}
-                      style={{ flex: 1 }}
-                    />
-                    <SpeedStat
-                      label="BALL"
-                      value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null}
-                      unit="mph"
-                      estimate={!isTruthGrade(metrics.ball_speed.source)}
-                      style={{ flex: 1 }}
-                    />
-                    <SpeedStat
-                      label="CARRY"
-                      value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null}
-                      unit="yds"
-                      estimate={!isTruthGrade(metrics.carry_yards.source)}
-                      style={{ flex: 1 }}
-                    />
-                  </View>
-                  <TempoBar ratio={tempo?.ratio ?? null} />
-                  {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
-                    <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
-                      Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
-                      {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
+            <View style={styles.cardGridWrap}>
+              {expandedCard ? (
+                <View style={styles.cardExpanded}>
+                  <Pressable
+                    onPress={() => setExpandedCard(null)}
+                    style={styles.cardExpandedHeader}
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to all four cards"
+                  >
+                    <Ionicons name="chevron-back" size={16} color={colors.accent} />
+                    <Text style={[styles.cardExpandedTitle, { color: colors.accent }]}>
+                      {REVIEW_CARD_TITLES[expandedCard]}
                     </Text>
-                  ) : null}
-                  {/* 2026-08-06 (Tim — HUD declutter) — the body read was drawn TWICE when the skeleton was
-                      on: the richer measured SWING BREAKDOWN (poseRead.dimensions) above AND this
-                      BodyAnalysisRow. Show this row only as a FALLBACK when the pose read isn't usable, so
-                      they never duplicate. */}
-                  {!poseRead.usable ? <BodyAnalysisRow items={bodyItems} /> : null}
-                </>
-              ) : null}
-            </ScrollView>
+                  </Pressable>
+                  <ScrollView
+                    style={{ maxHeight: Math.round(windowHeight * 0.3) }}
+                    contentContainerStyle={{ gap: 8 }}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    {expandedCard === 'breakdown' ? (
+                      poseRead.usable
+                        ? <SwingBreakdownCard read={poseRead} variant="overlay" />
+                        : <Text style={[styles.cardEmptyNote, { color: colors.text_muted }]}>No measured pose read for this swing.</Text>
+                    ) : null}
+                    {expandedCard === 'speed' ? (
+                      <>
+                        <View style={styles.speedRow}>
+                          {/* 2026-07-07 (audit M1) — a number only when DERIVED from THIS swing; a
+                              handicap-table lookup is identical for every swing and carries no signal. */}
+                          <SpeedStat label="CLUB" value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} style={{ flex: 1 }} />
+                          <SpeedStat label="BALL" value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} style={{ flex: 1 }} />
+                          <SpeedStat label="CARRY" value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null} unit="yds" estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
+                        </View>
+                        <TempoBar ratio={tempo?.ratio ?? null} />
+                        {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
+                          <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
+                            Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
+                            {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {expandedCard === 'body' ? <BodyAnalysisRow items={bodyItems} /> : null}
+                    {expandedCard === 'contact' ? (
+                      <View style={{ gap: 8 }}>
+                        {engaged ? (
+                          <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
+                            <Ionicons name="locate" size={13} color={colors.accent} />
+                            <Text style={[styles.engageText, { color: colors.accent }]}>
+                              RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {skeletonRow}
+                      </View>
+                    ) : null}
+                  </ScrollView>
+                </View>
+              ) : (
+                <View style={styles.cardGrid}>
+                  {reviewCards.map((c) => (
+                    <Pressable
+                      key={c.key}
+                      onPress={() => setExpandedCard(c.key)}
+                      style={[styles.gridCard, { borderColor: c.tone ?? 'rgba(124,224,79,0.28)' }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${c.title}: ${c.value ?? 'not measured'}. Tap for detail.`}
+                    >
+                      <Text style={[styles.gridCardLabel, { color: 'rgba(255,255,255,0.55)' }]} numberOfLines={1}>{c.title}</Text>
+                      <Text style={[styles.gridCardValue, { color: c.tone ?? '#F1F5F9' }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {c.value ?? '—'}
+                      </Text>
+                      <Text style={[styles.gridCardNote, { color: 'rgba(255,255,255,0.62)' }]} numberOfLines={2}>{c.note}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
           ) : null}
 
           {reel}
@@ -5248,7 +5332,16 @@ export default function SmartMotion() {
   );
 
   // ── the analysis page (swipe right) ──
+  /**
+   * 2026-08-19 — the status-bar backdrop. This screen draws BEHIND a translucent status bar (the
+   * camera page wants the full bleed), and the analysis page is a plain scroll: contentContainer
+   * padding only offsets where the content STARTS, so as soon as you scrolled, drill text and card
+   * headings slid up under the clock and carrier and interleaved with them — clearly visible in Tim's
+   * 08-18 capture, where "Practice with a chair behind your…" runs straight through the system icons.
+   * An opaque strip pinned over the inset area is the fix; it sits above the scroll and below nothing.
+   */
   const analysisPage = (
+    <View style={{ width: windowWidth, flex: 1, backgroundColor: colors.background }}>
     <ScrollView
       style={{ width: windowWidth, backgroundColor: colors.background }}
       contentContainerStyle={{ padding: 14, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 24, gap: 10 }}
@@ -5485,6 +5578,15 @@ export default function SmartMotion() {
         </View>
       ) : null}
     </ScrollView>
+    {/* Opaque strip over the status-bar inset — see the note above. pointerEvents none so it can
+        never swallow a tap meant for the card underneath it. */}
+    {insets.top > 0 ? (
+      <View
+        style={{ position: 'absolute', left: 0, right: 0, top: 0, height: insets.top, backgroundColor: colors.background }}
+        pointerEvents="none"
+      />
+    ) : null}
+    </View>
   );
 
   // 2026-06-12 (Tim) — PAGE 3: the SHOT MAP (full swing → vertical course; cage →
@@ -5793,6 +5895,20 @@ const styles = StyleSheet.create({
   muted: { fontSize: 13, lineHeight: 19, fontWeight: '500' },
   // 2026-06-12 — soft shadow so page-2 cards separate from a LIGHT-mode near-white
   // background (Tim: cards washed out). Invisible on the dark theme.
+  // 2026-08-19 — the 2x2 review grid. Fixed rows, no scrolling: the whole read at a glance.
+  cardGridWrap: { gap: 6 },
+  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  gridCard: {
+    width: '48.6%', flexGrow: 1, borderWidth: 1, borderRadius: 12, padding: 10, gap: 2,
+    backgroundColor: 'rgba(6,15,9,0.78)', minHeight: 74, justifyContent: 'center',
+  },
+  gridCardLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.7 },
+  gridCardValue: { fontSize: 16, fontWeight: '900' },
+  gridCardNote: { fontSize: 10, lineHeight: 13 },
+  cardExpanded: { gap: 6 },
+  cardExpandedHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
+  cardExpandedTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  cardEmptyNote: { fontSize: 12, fontStyle: 'italic' },
   insightCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   insightLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   comingCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, borderStyle: 'dashed', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },

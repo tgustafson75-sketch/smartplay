@@ -28,6 +28,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { SwingComparison, MetricDelta } from '../../services/swingComparisonEngine';
+import { unreadableMetrics } from '../../services/swingComparisonEngine';
 import type { ReferenceSwing } from '../../services/swingDatabase';
 
 export interface ComparisonResultSheetProps {
@@ -98,6 +99,17 @@ export default function ComparisonResultSheet({
   // a confident "0% MATCH" ring in that case — that's a fabricated
   // negative. Show a muted "—" / "Not enough data to compare" instead.
   const hasMatch = result?.overall_match != null;
+  /**
+   * 2026-08-19 — name what could NOT be read. Tim's 08-18 comparison showed a confident scarlet
+   * "0 MATCH" built from a single readable dimension out of eight, and the sheet said nothing about
+   * the other seven — so a swing the engine had barely been able to look at read as a swing that was
+   * comprehensively wrong. The engine now refuses to average fewer than two dimensions; this makes
+   * the refusal SPECIFIC, because "not enough data" on its own tells the player nothing they can act
+   * on, whereas "hip turn, shoulder turn and weight shift weren't readable on this swing" tells them
+   * to get their whole body in frame. [[illustration-data-points]]
+   */
+  const unreadable = useMemo(() => (result ? unreadableMetrics(result) : []), [result]);
+  const readableCount = (result?.metrics.length ?? 0) - unreadable.length;
 
   const matchColor = useMemo(() => {
     const m = result?.overall_match;
@@ -155,7 +167,7 @@ export default function ComparisonResultSheet({
             </View>
             <View style={styles.headerText}>
               <Text style={[styles.headerHint, { color: colors.text_muted }]}>
-                {hasMatch ? 'vs reference' : 'Not enough data to compare'}
+                {hasMatch ? 'vs reference' : unreadable.length > 0 ? `${readableCount} of ${result.metrics.length} measured` : 'Not enough data to compare'}
               </Text>
               <Text style={[styles.headerLabel, { color: colors.text_primary }]} numberOfLines={2}>
                 {reference.label}
@@ -240,6 +252,27 @@ export default function ComparisonResultSheet({
                 />
               ))
             )}
+
+            {/* What we could NOT read, and on which swing. Without this the sheet silently presents a
+                one-metric comparison as if it were the whole picture. */}
+            {unreadable.length > 0 ? (
+              <View style={[styles.unreadCard, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
+                <Text style={[styles.unreadTitle, { color: colors.text_muted }]}>
+                  NOT MEASURED ON {unreadable.every((u) => u.missing === 'reference') ? 'THE REFERENCE' : unreadable.every((u) => u.missing === 'yours') ? 'THIS SWING' : 'ONE OR BOTH SWINGS'}
+                </Text>
+                <Text style={[styles.unreadBody, { color: colors.text_secondary }]}>
+                  {unreadable.map((u) => u.label).join(' · ')}
+                </Text>
+                <Text style={[styles.unreadHint, { color: colors.text_muted }]}>
+                  {readableCount === 0
+                    ? 'Nothing lined up between these two swings yet.'
+                    : readableCount < 2
+                      ? 'One dimension alone is too thin to score a match — the reading above is that single metric, not a verdict on the swing.'
+                      : 'Scored on what both swings could be read for.'}
+                  {' '}A full-body view with the whole swing in frame reads more of them.
+                </Text>
+              </View>
+            ) : null}
 
             {/* Voice summary read-aloud */}
             {result.voice_summary ? (
@@ -435,6 +468,11 @@ const styles = StyleSheet.create({
 
   sectionLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4, marginTop: 6 },
   emptyHint: { fontSize: 12, fontStyle: 'italic', lineHeight: 17 },
+  // 2026-08-19 — the "what we couldn't read" card.
+  unreadCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 5, marginTop: 8 },
+  unreadTitle: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  unreadBody: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
+  unreadHint: { fontSize: 11, lineHeight: 16 },
 
   metricRow: { gap: 4 },
   metricHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

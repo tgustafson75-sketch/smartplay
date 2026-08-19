@@ -65,7 +65,8 @@ import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
 import SwingBodyOverlay, { faultJointsFor } from '../../../components/swinglab/SwingBodyOverlay';
 import { useRestSuppress } from '../../../hooks/useRestSuppress';
 import { useSwingStillCapture } from '../../../components/swinglab/SwingStillComposite';
-import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem } from '../../../components/smartmotion/SmartMotionHud';
+import { buildPoseSwingRead } from '../../../services/swing/poseSwingRead';
+import { BodyAnalysisRow, TempoBar, deriveBodyItems, type BodyItem, SwingBreakdownCard } from '../../../components/smartmotion/SmartMotionHud';
 import type { SwingAnalysis } from '../../../services/poseDetection';
 import VideoWatermark from '../../../components/swinglab/VideoWatermark';
 import CompareReferencePickerSheet from '../../../components/swinglab/CompareReferencePickerSheet';
@@ -3437,6 +3438,29 @@ export default function SwingDetail() {
                 return items.length > 0
                   ? <BodyAnalysisRow items={items} style={{ marginTop: 12 }} />
                   : null;
+              })()}
+              {/*
+                2026-08-19 (Tim: the SmartMotion read "looks different" in the session versus the swing
+                library). It did, and this is the half that was missing. The live review renders six
+                MEASURED dimensions — tempo, hip turn, shoulder turn, weight shift, posture, sequence —
+                each with its number and a plain-English note, built by the pure
+                buildPoseSwingRead(bio, tempo). This screen rendered four icon tiles and a handful of
+                verdict bullets off the same session, so a swing looked materially thinner once saved.
+                buildPoseSwingRead was sitting right there, used by the live screen AND the upload
+                pipeline, and never imported here.
+
+                Same module, same component, so the two screens cannot drift. Tempo comes from the
+                persisted shot map (the same snapshot the TempoBar below already reads); a null tempo
+                simply drops the tempo row — the card renders whatever was genuinely measured and
+                nothing when the pose read isn't usable.
+              */}
+              {(() => {
+                const t = session.smart_motion_shot_map?.tempo ?? null;
+                const tempoForRead = t
+                  ? { ratio: t.ratio, backswingMs: t.backswingMs, downswingMs: t.downswingMs, topMs: null, sequencingScore: t.sequencingScore }
+                  : null;
+                const read = buildPoseSwingRead(activeBiomech ?? null, tempoForRead as never);
+                return read.usable ? <SwingBreakdownCard read={read} variant="card" style={{ marginTop: 12 }} /> : null;
               })()}
               {session.smart_motion_shot_map?.tempo?.ratio != null ? (
                 <View style={{ marginTop: 12 }}>

@@ -509,6 +509,57 @@ export function CaptureGuides({
   );
 }
 
+/**
+ * The MEASURED swing breakdown — one dimension per row, each with its verdict colour, the number it is
+ * based on, and a plain-English note.
+ *
+ * 2026-08-19 (Tim: the SmartMotion read "looks different" from the swing library). It DID: this card
+ * existed only inside app/swinglab/smartmotion.tsx, so the live review showed six measured dimensions
+ * with their numbers while the saved swing showed four icon tiles and a few verdict bullets — two
+ * renderers over one set of numbers, drifting apart with every change to either. Lifted here, beside
+ * BodyAnalysisRow, and consumed by BOTH screens off the SAME pure buildPoseSwingRead(bio, tempo). Two
+ * derivations of "what this swing did" would eventually disagree and the player would be told one
+ * thing on the range and another in the library — the drift this codebase keeps paying for.
+ *
+ * `variant` is presentation only: 'overlay' is the dark translucent treatment that sits in the review
+ * deck, 'card' is the themed surface used on the library detail screen. The ROWS are identical.
+ */
+export function SwingBreakdownCard({
+  read, variant = 'card', style,
+}: {
+  read: { usable: boolean; dimensions: { key: string; label: string; display?: string | null; note: string; verdict: string }[] };
+  variant?: 'overlay' | 'card';
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  if (!read.usable || read.dimensions.length === 0) return null;
+  const overlay = variant === 'overlay';
+  const bg = overlay ? 'rgba(6,15,9,0.78)' : colors.surface;
+  const border = overlay ? 'rgba(124,224,79,0.28)' : colors.border;
+  const labelColor = overlay ? 'rgba(255,255,255,0.55)' : colors.accent;
+  const titleColor = overlay ? '#F1F5F9' : colors.text_primary;
+  const noteColor = overlay ? 'rgba(255,255,255,0.78)' : colors.text_secondary;
+  return (
+    <View style={[styles.breakdownCard, { backgroundColor: bg, borderColor: border }, style]}>
+      <Text style={[styles.metricLabel, { color: labelColor }]}>SWING BREAKDOWN</Text>
+      {read.dimensions.map((d) => {
+        const vc = d.verdict === 'strength' ? '#88F700' : d.verdict === 'solid' ? '#7ED3A3' : d.verdict === 'watch' ? '#f59e0b' : '#ef4444';
+        return (
+          <View key={d.key} style={styles.breakdownRow}>
+            <View style={[styles.breakdownDot, { backgroundColor: vc }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.breakdownTitle, { color: titleColor }]}>
+                {d.label}{d.display ? `  ${d.display}` : ''}
+              </Text>
+              <Text style={[styles.breakdownNote, { color: noteColor }]}>{d.note}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Verdict badge ───────────────────────────────────────────────────
 
 export function VerdictBadge({
@@ -552,20 +603,26 @@ export function FooterChips({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
+  // 2026-08-19 — every chip text can SHRINK and is capped at one line. Each chip is flex:1 (a third of
+  // the bar), but nothing inside was allowed to give way, so the longest value — "DIST · est 128 YDS" —
+  // overflowed its third and was clipped clean off the screen edge by the panel's overflow:hidden
+  // (Tim's 08-18 capture). Same class as the fit-profile ladder column and the strike-confirmed line.
   const Chip = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
     <View style={styles.chip}>
-      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]}>
+      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]} numberOfLines={1}>
         {label}{sub ? <Text style={{ fontWeight: '600' }}> · {sub}</Text> : null}
       </Text>
-      <Text style={[styles.chipValue, { color: '#88F700' }]}>{value}</Text>
+      <Text style={[styles.chipValue, { color: '#88F700' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+        {value}
+      </Text>
     </View>
   );
   return (
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {onClubPress ? (
         <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel="Set club">
-          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]}>CLUB</Text>
-          <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]}>{club ?? 'Tag ▾'}</Text>
+          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]} numberOfLines={1}>CLUB</Text>
+          <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{club ?? 'Tag ▾'}</Text>
         </Pressable>
       ) : (
         <Chip label="CLUB" value={club ?? '—'} />
@@ -579,6 +636,11 @@ export function FooterChips({
 // ─── Styles ──────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  breakdownCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  breakdownRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  breakdownDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
+  breakdownTitle: { fontSize: 13, fontWeight: '800' },
+  breakdownNote: { fontSize: 12, lineHeight: 16 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -654,8 +716,8 @@ const styles = StyleSheet.create({
   guideBallArea: { position: 'absolute', bottom: '14%', alignItems: 'center', gap: 4 },
   guideBallBox: { width: 54, height: 30, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 6, opacity: 0.7 },
 
-  footer: { flexDirection: 'row', borderWidth: 1, borderRadius: 10, paddingVertical: 8 },
-  chip: { flex: 1, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
-  chipLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  chipValue: { fontSize: 13, fontWeight: '900' },
+  footer: { flexDirection: 'row', borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 6 },
+  chip: { flex: 1, minWidth: 0, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  chipLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, flexShrink: 1 },
+  chipValue: { fontSize: 13, fontWeight: '900', flexShrink: 1 },
 });

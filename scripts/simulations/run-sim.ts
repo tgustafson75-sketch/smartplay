@@ -9907,12 +9907,13 @@ check('LOCK: the analysis deck sits BELOW the clip in review, and the eye truly 
     // shrinking the box would misalign the skeleton on the golfer.
     const sharedGeometry = /onLayout=\{\(e\) => setRootSize\(/.test(sm)
       && /const containerAR = rootSize\.w > 0 && rootSize\.h > 0/.test(sm);
-    // The stats pane must size off the WINDOW, never rootSize — captureRoot now shrinks by this
-    // pane's height, so measuring against it would be a layout feedback loop.
-    const noFeedbackLoop = /maxHeight: Math\.round\(windowHeight \* 0\.36\)/.test(sm)
-      && !/maxHeight: Math\.round\(\(rootSize\.h > 0/.test(sm);
+    // Nothing in the deck may size off rootSize — captureRoot now shrinks by the deck's height, so
+    // measuring against it is a layout feedback loop (pane sizes from box, box sizes from pane). The
+    // 2x2 grid is fixed-height by design; only the EXPANDED panel scrolls, and it measures the window.
+    const noFeedbackLoop = !/maxHeight: Math\.round\(\(?rootSize\.h/.test(sm)
+      && /maxHeight: Math\.round\(windowHeight \* 0\.3\)/.test(sm);
     // And the eye clears the stats too — it cleared every other overlay but not the tallest thing.
-    const eyeMaximizes = /\{isReview && showResults \? \(\n\s*<ScrollView/.test(sm);
+    const eyeMaximizes = /\{isReview && showResults \? \(\n\s*<View style=\{styles\.cardGridWrap\}>/.test(sm);
     return inFlowStyle && appliedInReview && deckIsSibling && sharedGeometry && noFeedbackLoop && eyeMaximizes;
   })(),
   'in review the data deck is an in-flow sibling below the video container (never an overlay), sized off the window, and hiding results returns its height to the clip');
@@ -9940,6 +9941,71 @@ check('LOCK: the smarter ball box can only ever improve on the feet proxy, never
     return proxyFirst && oneShot && dragWins && clientHonest && serverHonest;
   })(),
   'the ball box keeps its feet-derived placement unless a real ball is confidently seen; a manual drag always wins, and every failure path leaves today behaviour exactly as it was');
+
+check('LOCK: one renderer for the swing read — the library cannot show a thinner swing than the range',
+  (() => {
+    const hud = read('components/smartmotion/SmartMotionHud.tsx');
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const detail = read('app/swinglab/swing/[swing_id].tsx');
+    // 2026-08-19 (Tim: the SmartMotion read "looks different" in-session vs the swing library). It did:
+    // the measured breakdown lived INLINE in smartmotion only, so a saved swing fell back to four icon
+    // tiles and a few verdict bullets over the very same numbers. The card is shared now and BOTH
+    // screens must build it from the same pure module — asserting both halves, because a producer with
+    // one reachable consumer is exactly the shape this codebase keeps re-growing.
+    const shared = /export function SwingBreakdownCard\(/.test(hud);
+    const inlineGone = !/<Text style=\{\[styles\.insightLabel[\s\S]{0,80}SWING BREAKDOWN<\/Text>/.test(sm);
+    const liveUses = /<SwingBreakdownCard read=\{poseRead\} variant="overlay" \/>/.test(sm);
+    const libraryUses = /<SwingBreakdownCard read=\{read\} variant="card"/.test(detail)
+      && /buildPoseSwingRead\(activeBiomech \?\? null/.test(detail);
+    const sameSource = /from '\.\.\/\.\.\/\.\.\/services\/swing\/poseSwingRead'/.test(detail)
+      && /buildPoseSwingRead\(biomech, tempo\)/.test(sm);
+    return shared && inlineGone && liveUses && libraryUses && sameSource;
+  })(),
+  'the measured swing breakdown is ONE component fed by ONE pure module, rendered by both the live review and the swing-library detail');
+
+check('LOCK: a match score is never asserted from a sample too thin to average',
+  (() => {
+    const eng = read('services/swingComparisonEngine.ts');
+    const sheet = read('components/swinglab/ComparisonResultSheet.tsx');
+    // 2026-08-19 (Tim's 08-18 screenshot: a confident scarlet "0 MATCH"). The guard stopped at ZERO
+    // usable metrics while its own comment — "a 0 would render as a confident 0% match… a fabricated
+    // negative" — applies just as well to ONE of eight, which is exactly what he was shown.
+    const floor = /const MIN_METRICS_FOR_OVERALL = 2;/.test(eng)
+      && /if \(usable\.length < MIN_METRICS_FOR_OVERALL\) return null;/.test(eng)
+      && !/if \(usable\.length === 0\) return null;/.test(eng);
+    // ...and the refusal must be SPECIFIC: name the dimensions that couldn't be read, on which swing.
+    const namesGaps = /export function unreadableMetrics\(/.test(eng)
+      && /unreadableMetrics\(result\)/.test(sheet)
+      && /NOT MEASURED ON/.test(sheet);
+    // The ring still never renders a number it doesn't have.
+    const noFakeZero = /\{hasMatch \? result\.overall_match : '—'\}/.test(sheet);
+    return floor && namesGaps && noFakeZero;
+  })(),
+  'fewer than two readable dimensions yields null (never 0), and the sheet names which dimensions went unmeasured and on which swing');
+
+check('LOCK: the review read is four fixed cards, not a scrolling stack',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // 2026-08-19 (Tim: "it's supposed to be a four-card layout… it shouldn't have to be so much
+    // scrolling… we've regressed in terms of the layouts"). The stack is what grew tall enough to
+    // cover the clip; containing it was treating the symptom.
+    const four = /type ReviewCardKey = 'breakdown' \| 'speed' \| 'body' \| 'contact';/.test(sm);
+    const grid = /cardGrid: \{ flexDirection: 'row', flexWrap: 'wrap'/.test(sm)
+      && /reviewCards\.map\(\(c\) => \(/.test(sm);
+    // Exactly four cards are built — a fifth would silently reflow the 2x2 into a ragged 3 rows.
+    const exactlyFour = (() => {
+      const i = sm.indexOf('const reviewCards = useMemo(');
+      if (i < 0) return false;
+      const body = sm.slice(i, sm.indexOf('}, [poseRead, tempo, metrics, bodyItems, ballDeparture]);', i));
+      return (body.match(/^\s*key: '/gm) ?? []).length === 4;
+    })();
+    // A card with nothing behind it shows "—" rather than vanishing, so the grid never reflows.
+    const honestEmpty = /\{c\.value \?\? '—'\}/.test(sm);
+    // Opening a card can't leave it open over the next swing's numbers.
+    const resets = /useEffect\(\(\) => \{ setExpandedCard\(null\); \}, \[phase, selectedSwing\]\);/.test(sm);
+    return four && grid && exactlyFour && honestEmpty && resets;
+  })(),
+  'the review shows four fixed cards in a 2x2 grid with tap-to-expand; an unmeasured card shows a dash instead of disappearing, and the open card resets per swing');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

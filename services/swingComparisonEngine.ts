@@ -365,15 +365,39 @@ function renderVerdict(label: string, dir: MetricDirection, distance: number, un
 
 // ─── Overall + hotspots + takeaways ──────────────────────────────────────
 
+/**
+ * Minimum dimensions that must be readable on BOTH swings before an aggregate score means anything.
+ *
+ * 2026-08-19 (Tim's 08-18 comparison screenshot: a red "0 MATCH" ring). The guard below used to stop
+ * at zero, and its own comment explains why that was not far enough — "a 0 would render as a confident
+ * 0% match, telling the player their swing is the polar opposite of the reference, which is a
+ * fabricated negative." Everything in that sentence is just as true of ONE metric out of eight.
+ *
+ * That is exactly what happened: only kinematic sequencing was readable on both swings (50 vs 100 →
+ * match 0), so the screen showed a confident scarlet 0% for a swing the engine had barely looked at,
+ * with no hint that seven of eight dimensions were never measured. Two is the honest floor for an
+ * AVERAGE; below it we report the metric itself and refuse the aggregate.
+ */
+const MIN_METRICS_FOR_OVERALL = 2;
+
 function computeOverall(metrics: MetricDelta[]): number | null {
   const usable = metrics.filter((m) => m.current != null && m.reference != null);
-  // No usable biomechanics → there is nothing to compare. Return null
-  // (insufficient data), NOT 0 — a 0 would render as a confident "0%
-  // match", telling the player their swing is the polar opposite of the
-  // reference, which is a fabricated negative.
-  if (usable.length === 0) return null;
+  // Nothing to compare, or too thin a sample to average honestly → null (insufficient data), NEVER 0.
+  // Callers render an "insufficient data" state for null; the per-metric rows still show what WAS read.
+  if (usable.length < MIN_METRICS_FOR_OVERALL) return null;
   const sum = usable.reduce((a, m) => a + m.match_score, 0);
   return Math.round(sum / usable.length);
+}
+
+/** Dimensions the engine tried to compare but could not read on one or both swings. The UI names
+ *  these so "not enough data" is a specific, actionable statement rather than a shrug. */
+export function unreadableMetrics(result: SwingComparison): { label: string; missing: 'yours' | 'reference' | 'both' }[] {
+  return result.metrics
+    .filter((m) => m.current == null || m.reference == null)
+    .map((m) => ({
+      label: m.label,
+      missing: m.current == null && m.reference == null ? 'both' : m.current == null ? 'yours' : 'reference',
+    }));
 }
 
 /**
