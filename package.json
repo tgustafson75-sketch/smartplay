@@ -28,7 +28,8 @@
     "android:build:production": "eas build --profile production --platform android",
     "test": "jest",
     "test:logic": "jest --selectProjects logic",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "user-sim": "tsx scripts/simulations/user-sim.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",

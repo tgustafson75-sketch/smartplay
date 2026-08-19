@@ -217,10 +217,48 @@ const PF_ONLY_DISPLAY: Record<string, { name: string; category: PrimaryIssue['ca
   },
 };
 
+/**
+ * 2026-08-19 (virtual market test, 100-player sim) — resolve an issue id SAFELY.
+ *
+ * Three tables are keyed on `detected_issue` and every lookup was raw. One id outside the canonical
+ * set produced two different failures from the same line of data: `ISSUE_COACH_VOICE[id].feel` THREW
+ * (taking the whole swing review down with it), while `ISSUE_DISPLAY_NAME[id]` quietly rendered the
+ * literal word "undefined" into a coaching sentence the player reads.
+ *
+ * The server does constrain this field with a schema enum, so this is not a live crash today — it is
+ * the absence of a floor. The realistic way an unknown id arrives is PERSISTED DATA: every tester is
+ * carrying months of saved sessions, and an id written by an older build (a fault since renamed or
+ * retired) is re-read here with nothing in between to re-validate it. A stored swing must never be
+ * able to take down the screen that opens it.
+ *
+ * Degrade and flag, never go dark: an unrecognised id keeps the player's own words (humanised) and
+ * loses only the canned coaching voice, which we genuinely do not have for it.
+ */
+function resolveIssue(id: string | null | undefined): {
+  id: CanonicalIssue;
+  name: string;
+  category: PrimaryIssue['category'];
+  voice: { mechanical: string; feel: string };
+} {
+  const known = id != null && id in ISSUE_COACH_VOICE;
+  if (known) {
+    const c = id as CanonicalIssue;
+    return { id: c, name: ISSUE_DISPLAY_NAME[c], category: ISSUE_CATEGORY[c], voice: ISSUE_COACH_VOICE[c] };
+  }
+  if (id) console.log('[classifier] unrecognised issue id (older saved swing?): ' + id);
+  return {
+    id: 'none' as CanonicalIssue,
+    name: id ? String(id).replace(/_/g, ' ') : 'Swing read',
+    category: 'other' as PrimaryIssue['category'],
+    voice: { mechanical: '', feel: '' },
+  };
+}
+
 function displayForPrimaryFault(pf: DiagnosticFault): { name: string; category: PrimaryIssue['category']; feel: string } {
   if (pf in ISSUE_DISPLAY_NAME) {
     const c = pf as CanonicalIssue;
-    return { name: ISSUE_DISPLAY_NAME[c], category: ISSUE_CATEGORY[c], feel: ISSUE_COACH_VOICE[c].feel };
+    const r = resolveIssue(c);
+    return { name: r.name, category: r.category, feel: r.voice.feel };
   }
   return PF_ONLY_DISPLAY[pf] ?? { name: pf.replace(/_/g, ' '), category: 'other', feel: '' };
 }
@@ -344,12 +382,13 @@ export function classifySession(
     // evidence-gated primary_fault is the real headline. Fall through to it
     // before giving up (see classifyByPrimaryFault).
     if (only.analysis.detected_issue === 'none') return classifyByPrimaryFault(swingAnalyses);
-    const voice = ISSUE_COACH_VOICE[only.analysis.detected_issue];
+    const resolved = resolveIssue(only.analysis.detected_issue);
+    const voice = resolved.voice;
     const observationText = (only.analysis.observation ?? '').trim();
     return {
       issue_id: only.analysis.detected_issue,
-      name: ISSUE_DISPLAY_NAME[only.analysis.detected_issue],
-      category: ISSUE_CATEGORY[only.analysis.detected_issue],
+      name: resolved.name,
+      category: resolved.category,
       severity: only.analysis.severity === 'none' ? 'minor' : only.analysis.severity,
       occurrence_count: 1,
       visual_reference_path: null,
@@ -434,9 +473,9 @@ export function classifySession(
       if (rootEntry) {
         const downstreamIssues = ranked
           .filter((r) => r.issue !== rootEntry.issue && CANONICAL_TO_FAULT[r.issue] != null)
-          .map((r) => ISSUE_DISPLAY_NAME[r.issue]);
+          .map((r) => resolveIssue(r.issue).name);
         causal = {
-          rootCause: ISSUE_DISPLAY_NAME[rootEntry.issue],
+          rootCause: resolveIssue(rootEntry.issue).name,
           downstreamSymptoms: downstreamIssues,
           causalRationale: ranking.rationale,
         };
@@ -449,7 +488,8 @@ export function classifySession(
   }
 
   if (top && swingAnalyses.length >= MIN_SESSION_SWINGS_FOR_PRIMARY && top.count >= MIN_OCCURRENCES_FOR_PRIMARY) {
-    const voice = ISSUE_COACH_VOICE[top.issue];
+    const resolvedTop = resolveIssue(top.issue);
+    const voice = resolvedTop.voice;
     // 2026-05-16 — pick the most diagnostic observation from the swings
     // that detected the consensus issue. Highest-confidence first; falls
     // back to canonical only if no swing produced a usable observation.
@@ -462,8 +502,8 @@ export function classifySession(
     const best = pickBestStructured(swingAnalyses, top.issue);
     return {
       issue_id: top.issue,
-      name: ISSUE_DISPLAY_NAME[top.issue],
-      category: ISSUE_CATEGORY[top.issue],
+      name: resolvedTop.name,
+      category: resolvedTop.category,
       severity: top.severity === 'none' ? 'minor' : top.severity,
       occurrence_count: top.count,
       visual_reference_path: null,
@@ -506,12 +546,13 @@ export function classifySession(
   }
   const fallback = usable[0];
   console.log('[classifier] tentative fallback: ' + fallback.analysis.detected_issue);
-  const voice = ISSUE_COACH_VOICE[fallback.analysis.detected_issue];
+  const resolvedFallback = resolveIssue(fallback.analysis.detected_issue);
+  const voice = resolvedFallback.voice;
   const fallbackObservation = (fallback.analysis.observation ?? '').trim();
   return {
     issue_id: fallback.analysis.detected_issue,
-    name: ISSUE_DISPLAY_NAME[fallback.analysis.detected_issue],
-    category: ISSUE_CATEGORY[fallback.analysis.detected_issue],
+    name: resolvedFallback.name,
+    category: resolvedFallback.category,
     severity: fallback.analysis.severity === 'none' ? 'minor' : fallback.analysis.severity,
     occurrence_count: 1,
     visual_reference_path: null,

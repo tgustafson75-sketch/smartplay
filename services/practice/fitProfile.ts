@@ -13,6 +13,8 @@
  * fit metrics stay parked until capture supports them ([[face-smash-fps-future]]).
  */
 
+import { normalizeClub } from '../clubNormalize';
+
 export interface FitClubInput {
   club: string;
   yards: number;
@@ -62,9 +64,35 @@ const DISCLAIMER =
   'A data-grown starting point from your tracked distances — not a launch-monitor fit. Bring it to a fitter to dial the specs.';
 
 export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
-  const ladder = (clubs ?? [])
-    .filter((c) => c && typeof c.yards === 'number' && c.yards > 0)
-    .sort((a, b) => b.yards - a.yards);
+  /**
+   * 2026-08-19 (virtual market test, 100-player sim) — two ways a real bag broke this ladder.
+   *
+   * 1. THE PUTTER. This function's own type says "Putter / 0-yd excluded", but the only filter was
+   *    `yards > 0` — the putter was excluded by ACCIDENT, because a putter usually carries 0. Any
+   *    player who has ever put a number on their putter (a lag distance, a stray entry, a voice log)
+   *    got it ranked in the full-swing ladder and generating gap/overlap advice against their irons.
+   *    Exclude it by IDENTITY, which is what the comment always claimed.
+   *
+   * 2. DUPLICATES. Nothing deduped, so a bag holding the same club twice — routine once a club can
+   *    arrive by voice, by scan and by hand — produced two rows for it, and then a 0-yard "overlap"
+   *    between a club and itself: the app telling the player two of their clubs are too close
+   *    together when it is looking at one club. Keep the best-evidenced entry per club
+   *    (measured > stated > chart), since that is the one every other surface should agree with.
+   */
+  const isPutter = (name: string | null | undefined) => {
+    const n = (name ?? '').trim().toLowerCase();
+    return n === 'putter' || n === 'pt' || normalizeClub(name) === 'Putter';
+  };
+  const evidenceRank = (c: FitClubInput) => (c.measured ? 2 : c.stated ? 1 : 0);
+  const byClub = new Map<string, FitClubInput>();
+  for (const c of clubs ?? []) {
+    if (!c || typeof c.yards !== 'number' || !Number.isFinite(c.yards) || c.yards <= 0) continue;
+    if (isPutter(c.club)) continue;
+    const key = normalizeClub(c.club) ?? c.club;
+    const held = byClub.get(key);
+    if (!held || evidenceRank(c) > evidenceRank(held)) byClub.set(key, c);
+  }
+  const ladder = [...byClub.values()].sort((a, b) => b.yards - a.yards);
 
   const gaps: FitGap[] = [];
   const overlaps: FitOverlap[] = [];

@@ -134,7 +134,36 @@ export function segmentsFromStrikes(
   const clamp = (v: number) => Math.max(0, Math.min(durationMs, v));
 
   // Strikes come time-ordered from the detector, but sort defensively.
-  const ordered = [...strikes].sort((a, b) => a.timeMs - b.timeMs);
+  const sorted = [...strikes].sort((a, b) => a.timeMs - b.timeMs);
+  /**
+   * 2026-08-19 (virtual market test, 100-player sim) — COLLAPSE COINCIDENT DETECTIONS.
+   *
+   * Two detections at (or within a few ms of) the same instant are one event — a duplicate from the
+   * video locator rounding two frames of the same swing to the same time, or an acoustic echo. Left
+   * in, they destroy each other's window: the shared boundary is placed inside the gap between them,
+   * so a zero gap puts it exactly ON the strike. The sim found `[500..3000..3000]` — a window that
+   * ENDS at impact, i.e. a swing analysed with no follow-through at all — and its neighbour
+   * `[3000..3000..4500]`, which has no backswing. Both would sample frames that miss the very moments
+   * the read depends on.
+   *
+   * 250ms is deliberately far below a physical swing interval (MIN_SWING_SEP_SEC is 2.5s for the range
+   * locator; even a rapid cage rep is seconds apart), so this can only ever merge a duplicate, never
+   * two real swings. Keep the EARLIEST, matching filterReboundStrikes' discipline: physics is
+   * impact-then-echo, so the first event is the true impact.
+   */
+  const COINCIDENT_MS = 250;
+  const ordered: DetectedStrike[] = [];
+  for (const s of sorted) {
+    const prev = ordered[ordered.length - 1];
+    if (prev && s.timeMs - prev.timeMs < COINCIDENT_MS) {
+      // Same event: keep the earlier time, but don't lose a stronger confidence reading of it.
+      const rank = { low: 1, medium: 2, high: 3 } as const;
+      if (rank[s.confidence] > rank[prev.confidence]) prev.confidence = s.confidence;
+      if (Math.abs(s.peakDb) > Math.abs(prev.peakDb)) prev.peakDb = s.peakDb;
+      continue;
+    }
+    ordered.push({ ...s });
+  }
 
   return ordered.map((s, i) => {
     const prevStrike = ordered[i - 1];
@@ -147,8 +176,16 @@ export function segmentsFromStrikes(
     const BACKSWING_BIAS = 0.35; // fraction of the gap the earlier swing keeps as follow-through
     const floorMs = prevStrike ? prevStrike.timeMs + (s.timeMs - prevStrike.timeMs) * BACKSWING_BIAS : 0;
     const ceilMs = nextStrike ? s.timeMs + (nextStrike.timeMs - s.timeMs) * BACKSWING_BIAS : durationMs;
-    const startMs = clamp(Math.max(s.timeMs - pre, floorMs));
-    const endMs = clamp(Math.min(s.timeMs + post, ceilMs));
+    /**
+     * 2026-08-19 — and a floor on each side, so a segment can never be degenerate even if the
+     * collapse above is ever loosened or a caller supplies its own pre/post. A window must contain
+     * some backswing AND some follow-through to be worth analysing; without this a boundary pushed
+     * onto the strike yields a window the frame sampler reads as an empty span. Rounded, because
+     * these are millisecond offsets handed to frame extraction and video seeks.
+     */
+    const MIN_SIDE_MS = 120;
+    const startMs = Math.round(clamp(Math.min(Math.max(s.timeMs - pre, floorMs), s.timeMs - MIN_SIDE_MS)));
+    const endMs = Math.round(clamp(Math.max(Math.min(s.timeMs + post, ceilMs), s.timeMs + MIN_SIDE_MS)));
     return {
       index: i + 1,
       strikeMs: s.timeMs,
