@@ -1590,11 +1590,18 @@ export default function Settings() {
               </Text>
             </View>
           </View>
-          {/* 2026-07-11 — Ray-Ban Meta glasses LIVE stream (DAT v0.8). Android only
-              (the DAT SDK is Android here) + only when the native module is present.
-              Pair the glasses in the Meta AI app, then toggle on to stream your POV
-              into the caddie brain (SmartVision / green reads / Kevin multimodal). */}
-          {Platform.OS === 'android' && isMetaWearablesAvailable() ? (
+          {/* 2026-07-11 — Ray-Ban Meta glasses LIVE stream (DAT v0.8). Pair the glasses in the Meta AI
+              app, then toggle on to stream your POV into the caddie brain (SmartVision / green reads /
+              multimodal).
+              2026-08-19 — dropped the `Platform.OS === 'android' &&` half of this gate. It dated from
+              when the DAT SDK was wired on Android only; the iOS module has since been finished and the
+              JS bridge un-gated the same day, so this line was the last thing keeping the control
+              hidden on the platform a glasses build actually targets — the bridge would have worked and
+              nothing would have offered the toggle.
+              isMetaWearablesAvailable() is the correct and sufficient test on its own: it is true only
+              when the native module is really present in this binary, which a normal TestFlight/APK
+              build (DAT plugin no-op'd) never is. So this stays hidden exactly where it always was. */}
+          {isMetaWearablesAvailable() ? (
             <ToggleRow
               label="Connect Ray-Ban Glasses"
               sub={

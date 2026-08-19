@@ -5069,6 +5069,16 @@ export default function SmartMotion() {
             */}
           {isReview && showResults ? (
             <View style={styles.cardGridWrap}>
+              {/*
+                2026-08-19 (self-review of the four-card change, same day). This is the MOTION toggle —
+                the control that draws the pose skeleton and the swing-position chips over the clip. The
+                first pass at the grid swept it into the CONTACT card's expanded view, which was wrong
+                twice over: it put a primary control three taps deep, and it filed a control about BODY
+                MOTION under a card about whether the ball was struck.
+                It belongs outside the cards entirely — it changes what the VIDEO shows, not what a card
+                says — so it sits above the grid and stays reachable whichever card is open.
+              */}
+              {skeletonRow}
               {expandedCard ? (
                 <View style={styles.cardExpanded}>
                   <Pressable
@@ -5112,17 +5122,12 @@ export default function SmartMotion() {
                       </>
                     ) : null}
                     {expandedCard === 'body' ? <BodyAnalysisRow items={bodyItems} /> : null}
-                    {expandedCard === 'contact' ? (
-                      <View style={{ gap: 8 }}>
-                        {engaged ? (
-                          <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
-                            <Ionicons name="locate" size={13} color={colors.accent} />
-                            <Text style={[styles.engageText, { color: colors.accent }]}>
-                              RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {skeletonRow}
+                    {expandedCard === 'contact' && engaged ? (
+                      <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
+                        <Ionicons name="locate" size={13} color={colors.accent} />
+                        <Text style={[styles.engageText, { color: colors.accent }]}>
+                          RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
+                        </Text>
                       </View>
                     ) : null}
                   </ScrollView>
