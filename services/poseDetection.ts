@@ -636,10 +636,27 @@ async function extractCoarseFrames(clipUri: string, durationMs: number, count: n
 // the swing, miss it, or fail to extract coarse frames? This is the thing that,
 // when it silently fell back (e.g. during the API-base spine outage), caused the
 // analyzer to spread frames across setup/walk-up and read the address.
+/**
+ * 2026-08-19 — locator breadcrumbs, classified.
+ *
+ * These lines were all landing as 'analysis_error' (addAppEvent's default kind) and therefore being
+ * MAILED to the owner as problems. A tester's report of "analysis_error: swing_located" was a swing
+ * the locator had found correctly — the success line itself, forwarded as a failure. Normal operation
+ * is not an issue: a release inbox is only useful if every line in it is worth reading.
+ *
+ * SUCCESS ('*_located') and BY-DESIGN skips (a clip too short to be worth a locate pass — the
+ * deliberate speed path) are 'diag': kept on the device for owner-log review, never exported.
+ * Genuine degradation — a server error, a missing timestamp, an exception, frames that failed to
+ * extract, a missing API URL — stays reportable, because those are the ones worth waking up to.
+ */
 function logLocate(stage: string, details: Record<string, unknown>): void {
   try {
+    const reason = typeof details.reason === 'string' ? details.reason : '';
+    const expected = stage.endsWith('_located')
+      || reason === 'clip_under_12s' || reason === 'clip_too_short';
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details);
+    require('../store/issueLogStore').useIssueLogStore.getState()
+      .addAppEvent(stage, details, expected ? 'diag' : 'analysis_error');
   } catch { /* best-effort */ }
 }
 

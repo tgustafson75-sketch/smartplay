@@ -47,6 +47,8 @@ function kindLabel(kind: IssueLogKind): string {
     case 'transcribe_error':  return 'TRANSCRIBE';
     case 'gps_error':         return 'GPS';
     case 'analysis_error':    return 'ANALYSIS';
+    // 2026-08-19 — normal operation kept for owner review but never exported as an issue.
+    case 'diag':              return 'DIAG';
     case 'voice_miss':        return 'MISS';
     case 'app_error':         return 'APP';
     case 'voice_turn':        return 'VOICE';
@@ -63,6 +65,7 @@ function kindColor(kind: IssueLogKind): string {
     case 'transcribe_error':  return '#8b5cf6'; // purple — Whisper failed
     case 'gps_error':         return '#06b6d4'; // cyan — GPS/location failure
     case 'analysis_error':    return '#10b981'; // green — swing/frame analysis failure
+    case 'diag':              return '#64748b'; // slate — expected-path breadcrumb, not a problem
     case 'voice_miss':        return '#eab308'; // yellow — command not understood/handled
     case 'app_error':         return '#f97316'; // orange — other app failure
     case 'voice_turn':        return '#22c55e'; // green — a full voice turn (his words → reply)

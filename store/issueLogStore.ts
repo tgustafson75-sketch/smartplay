@@ -36,6 +36,21 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 // show speak/transcribe/kevin errors without an ADB cable.
 export type IssueLogKind =
   | 'user'
+  /**
+   * 2026-08-19 (beta tester report — Tim received an "analysis_error: swing_located" email for a
+   * swing the app had located PERFECTLY WELL: 5.1s, window 2.6–8.1, confidence low).
+   *
+   * `addAppEvent` defaults its kind to 'analysis_error', and the pose locator's breadcrumbs pass no
+   * kind — so its SUCCESS lines were classified as errors and, because 'analysis_error' is
+   * reportable, auto-forwarded to the owner inbox. The 08-10 note on REPORTABLE_KINDS says exactly
+   * what that list is for: "what we SEND/EXPORT as an issue report is real problems only."
+   *
+   * 'diag' is the kind for an event worth KEEPING on the device and worth nothing in an inbox: the
+   * happy path, and paths deliberately skipped by design. Everything stays in the store for owner-log
+   * review; it simply stops being mailed out as a problem. A release inbox is only useful if every
+   * line in it is a line worth reading — successes buried the real errors this week.
+   */
+  | 'diag'
   // 2026-07-04 (Tim — "when I run the sim round, does it go to a log so you can
   // review the output?") — every sim-round event (start, narrated moves, tee
   // jumps, end) persists here so the post-run export carries the full trace.
@@ -123,7 +138,7 @@ interface IssueLogState {
   addAppEvent: (
     stage: string,
     details?: Record<string, unknown>,
-    kind?: 'analysis_error' | 'app_error' | 'sim_round',
+    kind?: 'analysis_error' | 'app_error' | 'sim_round' | 'diag',
   ) => void;
   /** Voice "log this issue" → a real user entry (ANY tester; un-gated 2026-07-30). Self-builds
    *  context + schedules the consented auto-send so the brain tool handler can call it directly. */
