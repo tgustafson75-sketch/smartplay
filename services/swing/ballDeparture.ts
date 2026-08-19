@@ -180,3 +180,43 @@ export async function detectBallDeparture(args: {
     void FileSystem.deleteAsync(after.uri, { idempotent: true }).catch(() => undefined);
   }
 }
+
+/**
+ * 2026-08-19 (Tim — "we strengthen the ball detection and the ball detection area in the video, and we
+ * make this smarter. How smart can we be without breaking anything?").
+ *
+ * Locate the ACTUAL ball in a setup still, so the ball box stops being a guess.
+ *
+ * Until now the box was placed under the golfer's detected FEET (smartmotion's framing loop) — a
+ * proxy that is usually about right and silently wrong the rest of the time. It matters more than it
+ * looks: the departure verifier CROPS to that box, and the shot trace STARTS from it, so a proxy at
+ * the root travels all the way to "couldn't see the ball to confirm" on a swing that was struck
+ * perfectly well.
+ *
+ * "Without breaking anything" is the whole design here:
+ *   • the caller keeps its feet proxy until this RESOLVES — nothing waits on the network;
+ *   • a null return (not configured / offline / no ball seen / low confidence) simply leaves the
+ *     proxy in place, so the worst case is exactly today's behaviour;
+ *   • the server refuses rather than guesses, and is told a refusal is expected.
+ *
+ * Returns FULL-frame normalized coords — the caller's box is in the same space, so it is a
+ * drop-in replacement for the feet-derived centre.
+ */
+export async function locateBallInSetupFrame(base64Jpeg: string): Promise<{ x: number; y: number } | null> {
+  if (!base64Jpeg) return null;
+  try {
+    const res = await fetch(apiUrl() + '/api/ball-departure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'locate', setup_frame: base64Jpeg, media_type: 'image/jpeg' }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { found?: boolean; ball_norm?: { x: number; y: number } | null; configured?: boolean };
+    if (data.configured === false || data.found !== true || !data.ball_norm) return null;
+    const { x, y } = data.ball_norm;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  } catch {
+    return null; // offline / blocked host — the feet proxy stands
+  }
+}

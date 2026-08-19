@@ -660,13 +660,10 @@ export default function SmartMotion() {
   // reset() can restore it. A putt forces 'down_the_line'; without this, that
   // forced DTL bled into the next full swing's capture guides + analysis prior.
   const lastChosenAngleRef = useRef<Angle>(initialAngle);
-  // 2026-07-27 (Tim — "do an AI pass to auto-detect orientation") — did the user EXPLICITLY choose the
-  // angle (a toggle tap, or a voice/route param like "face on")? If NOT, the pose biomech read defers to
-  // inferCameraAngle(frames) rather than assuming the DTL default — so a face-on swing opened/captured
-  // without touching the toggle isn't read as down-the-line. The visible overlay still follows the toggle.
-  const userSetAngleRef = useRef<boolean>(
-    angleParam === 'face_on' || angleParam === 'face-on' || angleParam === 'down_the_line',
-  );
+  // 2026-08-19 — the live preview's rolling keypoint buffer + a mirror of the current angle, so the
+  // setup loop can infer without re-subscribing (it runs inside a long-lived effect closure).
+  const liveAngleFramesRef = useRef<unknown[]>([]);
+  const angleRef = useRef<Angle>(initialAngle);
   // 2026-06-11 (audit H1) — the auto-window-end timeout is armed inside
   // startRecording's closure (deps [micPerm, requestMicPerm]) and would otherwise
   // capture a STALE stopRecording (stale appliedCalibration + stale runAnalysis,
@@ -797,17 +794,30 @@ export default function SmartMotion() {
   // One golfer badge you tap to cycle DTL → FACE-ON → PUTTING (then back), with a
   // quick fade-away label. Putt forces down-the-line under the hood (same as the old
   // PUTT chip). Keeps lastChosenAngleRef in sync so reset() restores the real angle.
+  /**
+   * 2026-08-19 (Tim — "having to add face on versus down the line is going to mess people up… is it
+   * viable to just make it auto detect every time and take out the settings?").
+   *
+   * It was a THREE-way cycler: down-the-line → face-on → putting. The two camera angles are gone from
+   * it. They were never a preference — they are a fact about where the phone is standing, the pose
+   * geometry reads that fact directly, and the analysis engine has been OVERRIDING the player's answer
+   * with the geometry since 2026-07-30 anyway. Keeping the control only gave a tester a way to
+   * mislabel their own swing (Tim, 08-18: filmed down-the-line, screen said FACE-ON, and the shot map
+   * disappeared because it is gated on the label).
+   *
+   * PUTTING stays, because it is not a camera angle — it is a different shot with a different
+   * pipeline, and no pose geometry can tell you the player MEANT to putt. So this is now a two-way
+   * Full swing ⇄ Putting, and `angle` is derived state everywhere else.
+   */
   const cycleMode = () => {
-    userSetAngleRef.current = true; // 2026-07-27 — an explicit tap means "use THIS angle", not auto-detect
-    const cur = isPutt ? 'putt' : angle;
-    if (cur === 'down_the_line') { setAngle('face_on'); setPuttMode(false); lastChosenAngleRef.current = 'face_on'; showModeFade('FACE-ON'); }
-    else if (cur === 'face_on') { setPuttMode(true); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('PUTTING'); }
-    else { setPuttMode(false); setAngle('down_the_line'); lastChosenAngleRef.current = 'down_the_line'; showModeFade('DOWN THE LINE'); }
+    if (isPutt) { setPuttMode(false); showModeFade('FULL SWING'); }
+    else { setPuttMode(true); showModeFade('PUTTING'); }
   };
   // A club value is needed by detectBallSpeed (server key) at stop time;
   // keep a ref so the async stop path reads the current selection.
   const clubRef = useRef<ClubId | null>(club);
   useEffect(() => { clubRef.current = club; }, [club]);
+  useEffect(() => { angleRef.current = angle; }, [angle]);
 
   // Ball box — a DEFAULT reference box is shown automatically so the user just
   // lines their ball up to it and never has to think about it. It's purely
@@ -827,6 +837,7 @@ export default function SmartMotion() {
   // when you're in frame" idea, now buildable with MediaPipe. Null = not yet checked.
   const [framing, setFraming] = useState<import('../../services/swing/framingCheck').FramingResult | null>(null);
   const framingSpokeRef = useRef(false);   // spoke the "framed" cue once per setup
+  const ballLocateTriedRef = useRef(false); // ran the real-ball locate once per setup (proxy stands otherwise)
   const userMovedBallRef = useRef(false);   // don't auto-place the box once the user drags it
 
   // 2026-06-13 (Tim) — setup tool rail collapses to a chevron by default so the
@@ -895,7 +906,7 @@ export default function SmartMotion() {
   // recording. Stops the instant we leave setup. (If a device plays a shutter sound
   // on takePictureAsync, widen the cadence / gate behind a toggle — confirm in cage.)
   useEffect(() => {
-    if (phase !== 'setup') { setFraming(null); framingSpokeRef.current = false; return; }
+    if (phase !== 'setup') { setFraming(null); framingSpokeRef.current = false; liveAngleFramesRef.current = []; ballLocateTriedRef.current = false; return; }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tick = async () => {
@@ -920,6 +931,32 @@ export default function SmartMotion() {
           if (b64 && !cancelled) {
             const frame = await mp.detectPoseFromBase64(b64).catch(() => null);
             if (frame && !cancelled) {
+              /**
+               * 2026-08-19 (Tim — "we're supposed to have an auto detection for orientation… so that
+               * shouldn't be a viable excuse", then: "is it viable to just make it auto detect every
+               * time and take out the settings?").
+               *
+               * It is, and the hard part turned out to already be running. This loop has been doing
+               * on-device pose on the LIVE PREVIEW since the framing coach shipped — a real keypoint
+               * frame every 0.9–2.6s while the player lines up. inferCameraAngle is a pure function
+               * over exactly those keypoints (shoulder x-span ÷ torso height), so the camera angle can
+               * be known BEFORE the first swing with no new capture, no new model and no new network
+               * call. The toggle existed only because nobody had joined these two halves.
+               *
+               * Rolling buffer because the detector honestly refuses to judge on one frame (`sampled
+               * < 2 → null`), and it stays CONSERVATIVE: outside 0.35/0.60 it returns null and we
+               * simply keep the current angle rather than flip-flopping while the player walks in.
+               * The recorded swing re-runs the same detector over far more frames afterwards and wins
+               * — this is the early read, not the final word.
+               */
+              try {
+                const { inferCameraAngle } = await import('../../services/cameraAngleInference');
+                liveAngleFramesRef.current = [...liveAngleFramesRef.current, frame].slice(-4);
+                const live = inferCameraAngle(liveAngleFramesRef.current as never);
+                if (live && !cancelled && live !== angleRef.current) {
+                  setAngle(live); // angle only — the Full/Putt choice stays the player's
+                }
+              } catch { /* advisory — framing below is the loop's real job */ }
               const { evaluateFraming } = await import('../../services/swing/framingCheck');
               const res = evaluateFraming(frame.keypoints as { name: string; x: number; y: number; score: number }[]);
               if (!cancelled) {
@@ -934,6 +971,34 @@ export default function SmartMotion() {
                   const isDefault = !userMovedBallRef.current;
                   if (isDefault) {
                     setDraftBall({ x: res.feetCenter.x, y: Math.min(0.92, res.feetCenter.y + 0.04), r: DEFAULT_BALL_BOX.r });
+                    /**
+                     * 2026-08-19 (Tim — "strengthen the ball detection and the ball detection area").
+                     * The line above is a PROXY: it puts the box under the detected FEET, which is
+                     * where a ball usually sits relative to a stance and silently isn't the rest of
+                     * the time. That proxy propagates — the departure verifier CROPS to this box and
+                     * the shot trace STARTS from it, so "couldn't see the ball to confirm" on a
+                     * cleanly struck swing can just mean the box was 20cm off.
+                     *
+                     * So: look for the real ball, ONCE per setup, only now that the player is framed
+                     * and standing still. Fire-and-forget — the proxy above is already applied and
+                     * stands unless this comes back with something better, so nothing waits on the
+                     * network and a failure is exactly today's behaviour. Re-checks userMovedBallRef
+                     * on arrival too: the call takes a second or two and the player may have dragged
+                     * the box in the meantime, which must always win.
+                     */
+                    if (!ballLocateTriedRef.current) {
+                      ballLocateTriedRef.current = true;
+                      void (async () => {
+                        try {
+                          const { locateBallInSetupFrame } = await import('../../services/swing/ballDeparture');
+                          const found = await locateBallInSetupFrame(b64);
+                          if (found && !cancelled && !userMovedBallRef.current) {
+                            setDraftBall({ x: found.x, y: found.y, r: DEFAULT_BALL_BOX.r });
+                            console.log('[smartmotion] ball located from setup frame', JSON.stringify(found));
+                          }
+                        } catch { /* proxy stands */ }
+                      })();
+                    }
                   }
                   if (!framingSpokeRef.current) {
                     framingSpokeRef.current = true;
@@ -2269,10 +2334,22 @@ export default function SmartMotion() {
         // so computeBiomechanics runs inferCameraAngle(frames) (conservative pose-geometry detector); an
         // explicit toggle/param wins. Then sync the visible toggle to the inferred angle so the overlay
         // matches the read.
-        const angleForBiomech = userSetAngleRef.current ? angle : null;
-        const bio = frames ? computeBiomechanicsFromFrames(frames, angleForBiomech, swingerHandedness === 'left' ? 'left' : 'right') : null;
+        // 2026-08-19 — pass null: there is no user-chosen angle to defer to any more, so
+        // computeBiomechanics runs inferCameraAngle over the swing's own frames and that read is the
+        // single source of truth for both the metrics and the screen.
+        const bio = frames ? computeBiomechanicsFromFrames(frames, null, swingerHandedness === 'left' ? 'left' : 'right') : null;
         if (!cancelled && bio) {
-          if (!userSetAngleRef.current && (bio.angle === 'face_on' || bio.angle === 'down_the_line') && bio.angle !== angle) {
+          /**
+           * 2026-08-19 — the UI now FOLLOWS the geometry, always. This used to be gated on
+           * `!userSetAngleRef.current`: if the player had touched the toggle we kept their label and
+           * threw `bio.angle` away — precisely when the label was most likely to be the stale one.
+           * poseAnalysisApi had already self-corrected the ANALYSIS to the frames (added 07-30 for
+           * Tim's "my videos recorded DTL but were face-on; I couldn't see the toggle in daylight"),
+           * so the numbers and the screen disagreed: header said FACE-ON, the read was down-the-line,
+           * and showShotMap — gated on the header's version — hid the shot map. Same half-fix shape as
+           * the swing gate: engine corrected, surface didn't. [[no-half-fixes-enforce-every-surface]]
+           */
+          if ((bio.angle === 'face_on' || bio.angle === 'down_the_line') && bio.angle !== angle) {
             setAngle(bio.angle); lastChosenAngleRef.current = bio.angle;
           }
           setBiomech(bio);
@@ -3969,9 +4046,19 @@ export default function SmartMotion() {
     // Voice club change set putt mode (parity with the picker / club scan).
     if (cmd === 'puttOn') { setPuttMode(true); setAngle('down_the_line'); return; }
     if (cmd === 'puttOff') { setPuttMode(false); return; }
-    // 2026-06-29 (Tim) — voice camera-angle set ("down the line" / "face on").
-    if (cmd === 'angleDtl') { setAngle('down_the_line'); setPuttMode(false); showModeFade('DOWN THE LINE'); return; }
-    if (cmd === 'angleFaceOn') { setAngle('face_on'); setPuttMode(false); showModeFade('FACE-ON'); return; }
+    /**
+     * 2026-08-19 — the VOICE angle commands were the fourth surface that could set a camera angle, and
+     * the easiest one to miss: the toggle, the route param and the analysis label were all obvious,
+     * this one sat in a command switch. Left alone it would quietly re-introduce exactly the bug the
+     * rest of this change removes — a player saying "face on" while the camera plainly sees
+     * down-the-line, and the shot map vanishing again.
+     *
+     * The commands still ANSWER (silently swallowing a phrase the player deliberately said is the
+     * robotic failure this app treats as a defect) — they just tell the truth: it's automatic now.
+     * They still drop putt mode, because "down the line" after a putt is a real intent to go back to
+     * a full swing. [[no-half-fixes-enforce-every-surface]] [[feels-like-a-real-caddie]]
+     */
+    if (cmd === 'angleDtl' || cmd === 'angleFaceOn') { setPuttMode(false); showModeFade('ANGLE IS AUTOMATIC'); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
@@ -4221,7 +4308,19 @@ export default function SmartMotion() {
 
   // 2026-06-12 (Tim) — PAGE 3 (SHOT MAP) only exists for down-the-line modes, so the
   // page/dot count is dynamic. Declared before hudPage because the dots read pageCount.
-  const showShotMap = !isPutt && angle === 'down_the_line';
+  /**
+   * 2026-08-19 (Tim — "we're still missing the shot maps"). It was gated on the camera angle, so his
+   * 08-18 swing — filmed down-the-line but LABELLED face-on by a stale toggle — lost the page
+   * entirely, silently, right down to the pager showing two dots instead of three.
+   *
+   * The label bug is fixed above (geometry decides now), but the gate itself was also wrong. Only the
+   * LATERAL half of the map needs a down-the-line view: left/right comes from the DTL ball trace.
+   * Downrange carry comes from effort + club, which the camera angle has nothing to do with. So a
+   * face-on swing gets the map with its lateral in the honest empty state ShotMapPage already
+   * renders for a DTL swing whose trace didn't resolve — a page that says what it knows, instead of
+   * a page that isn't there.
+   */
+  const showShotMap = !isPutt;
   const pageCount = showShotMap ? 3 : 2;
 
   // ── the HUD page (full-bleed camera/replay + floating data) ──
@@ -4475,10 +4574,20 @@ export default function SmartMotion() {
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents={targetingVisible ? 'box-none' : 'none'}>
             <EditableCageTargets
               ballArea={draftBall}
-              // Putt sets angle to down_the_line too, so this enables BOTH the DTL aim
-              // target and the putt CUP flag; face-on has no on-floor target. The effort
-              // clamp is DTL-only (putt has no "effort" — the flag goes wherever the cup is).
-              target={angle === 'down_the_line' ? draftTarget : null}
+              /**
+               * 2026-08-19 (Tim — "the target line probably needs to be invisible… they could set
+               * their effort level and the club still, but those guidelines could be hidden").
+               *
+               * The aim target is no longer DRAWN for a full swing. It was the last thing in setup
+               * that needed the camera angle before a swing existed — a down-the-line-only rig the
+               * player had to drag — and dragging it was never the point: effort and club are what
+               * they actually set. The stored target still rides the session, so the launch-direction
+               * and divergence maths downstream are untouched; only the on-screen guideline is gone.
+               *
+               * The PUTT cup stays visible: there the flag IS the task (you are aiming at a hole you
+               * can see), not a setup chore standing between the player and the swing.
+               */
+              target={isPutt ? draftTarget : null}
               targetKind={isPutt ? 'cup' : 'aim'}
               onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
               onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
@@ -4490,7 +4599,7 @@ export default function SmartMotion() {
         ) : phase === 'recording' && draftBall ? (
           // RECORDING — display only (you're swinging; no dragging mid-record).
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: targetingOpacity }]} pointerEvents="none">
-            <CageTargetingOverlay ballArea={draftBall} target={angle === 'down_the_line' ? draftTarget : null} launchDir={null} targetKind={isPutt ? 'cup' : 'aim'} />
+            <CageTargetingOverlay ballArea={draftBall} target={isPutt ? draftTarget : null} launchDir={null} targetKind={isPutt ? 'cup' : 'aim'} />
           </Animated.View>
         ) : null}
         {phase === 'setup' && placeBallMode ? (
@@ -4509,13 +4618,21 @@ export default function SmartMotion() {
           />
         ) : null}
 
-        {/* Framing guides for BOTH angles during line-up/recording:
-              • DTL  → center target line (ball straight up to target)
-              • FO   → the two stance lines (TARGET LINE + BALL LINE), mirrored
-                       for lefties — restored here; gating to DTL-only had left
-                       face-on with no side guides at all.
-            Suppressed in review and while analyzing. */}
-        {phase !== 'analyzing' && !isReview
+        {/*
+          2026-08-19 — the stance guidelines are GONE from the full-swing setup (Tim: "those guidelines
+          could be hidden"). Face-on drew a TARGET LINE and a BALL LINE column; down-the-line already
+          drew nothing. Both existed to tell the player how to stand for an angle they had to declare
+          first — and the angle is now read off them instead of asked of them, so the guides were
+          instructing the player to match a label that no longer exists.
+
+          What replaced them is better and was already running: the framing coach reads the live
+          preview and says "you're framed up" when the whole body is in shot, which is the only thing
+          the lines were really policing. The ball box stays (it anchors contact detection and
+          auto-places under the detected feet).
+
+          Kept for PUTTING, where the guides frame a genuinely different, tighter task.
+        */}
+        {phase !== 'analyzing' && !isReview && isPutt
           ? <CaptureGuides mode={angle} handedness={swingerHandedness} ball={draftBall} aspect={rootSize.h > 0 ? rootSize.w / rootSize.h : null} />
           : null}
 
@@ -4796,6 +4913,7 @@ export default function SmartMotion() {
             PiP overlapped the ACOUSTIC PICKUP card at the bottom. Removed from the results view to declutter
             and match the mockup (the read/verdict stands on its own). */}
 
+      </View>
         {/* BOTTOM PANEL — floating data + controls. While placing the ball box
             it's hidden so the full floor is visible + tappable; otherwise it's
             a soft translucent fade (not an opaque block) so the camera shows
@@ -4806,12 +4924,36 @@ export default function SmartMotion() {
             <Text style={[styles.placeHintText, { color: colors.accent }]}>Tap the floor where your ball is</Text>
           </View>
         ) : (
-        <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 6 }]}>
-          <LinearGradient
-            colors={['rgba(6,15,9,0)', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.85)']}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
+        /**
+         * 2026-08-19 (Tim, 3rd report — "when it comes out with the analysis, it goes right over the
+         * video screen"). Twice before this was treated as a LOOK problem: 07-25 made the card
+         * translucent, 07-29 capped the stats stack at 36% and gave it its own scroll. Both left it
+         * ON TOP of the clip, so a tall read still covered the golfer — as it does in his 08-18 shot,
+         * head to foot. This time the deck MOVES.
+         *
+         * In REVIEW the panel leaves the absolute layer and sits IN FLOW below the video container.
+         * captureRoot is flex:1, so it gives up exactly the height the deck takes and the clip
+         * letterboxes into what's left. Nothing needed re-mapping: the skeleton, club arc and ball
+         * trace all derive from `rootSize`, which is captureRoot's own onLayout — shrink the box and
+         * every overlay follows it in lockstep. That is why the deck moved rather than the video.
+         *
+         * SETUP/RECORDING keep the absolute translucent overlay exactly as signed off on 07-29 — the
+         * camera must stay full-bleed while you frame a shot. Only review re-flows.
+         */
+        <View style={[
+          styles.bottomPanel,
+          isReview ? [styles.bottomPanelInFlow, { backgroundColor: colors.background }] : null,
+          { paddingBottom: insets.bottom + 6 },
+        ]}>
+          {/* The fade exists to blend the floating deck INTO the camera behind it. In review the deck
+              is opaque and in flow with nothing behind it, so the gradient would only tint the panel. */}
+          {!isReview ? (
+            <LinearGradient
+              colors={['rgba(6,15,9,0)', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.85)']}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          ) : null}
           {/* REVIEW STATS — speed cards, tempo, body analysis (matches redesign).
               2026-07-29 (Tim — "data doesn't show over the video, those can be scrollable") — the stats
               stack (swing breakdown + speed/tempo/body) grew tall enough to cover the clip. Bound it to
@@ -4820,9 +4962,19 @@ export default function SmartMotion() {
               (scrubber, verdict, action, footer chips) stay pinned BELOW this scroll, untouched. Only
               the review stats moved — live capture + the tracked skeleton/trace overlays are unchanged.
               nestedScrollEnabled so the vertical swipe doesn't fight the horizontal page pager. */}
-          {isReview ? (
+          {/*
+            2026-08-19 — gated on showResults so the EYE genuinely maximizes the clip. It already
+            cleared every overlay (skeleton, trace, rails) but NOT this stack, which was the tallest
+            thing on the screen — so "hide results" still left the video boxed in. Dropping the pane
+            returns its height to captureRoot and the clip grows back to full-bleed.
+
+            maxHeight measures the WINDOW, not rootSize. rootSize is captureRoot's measured height,
+            and captureRoot now shrinks by this pane's height — feeding it back in would be a layout
+            loop (pane sizes from box, box sizes from pane).
+          */}
+          {isReview && showResults ? (
             <ScrollView
-              style={{ maxHeight: Math.round((rootSize.h > 0 ? rootSize.h : windowHeight) * 0.36) }}
+              style={{ maxHeight: Math.round(windowHeight * 0.36) }}
               contentContainerStyle={{ gap: 8 }}
               showsVerticalScrollIndicator
               nestedScrollEnabled
@@ -4930,7 +5082,11 @@ export default function SmartMotion() {
           {/* 2026-06-29 (Tim) — PLAN TRIO in the deck: EFFORT · CARRY · AIM. The honest
               pre-shot plan, same sources as the old floating readout (effortRaw /
               estCarry / aimRead). DTL setup only, and only while targeting is shown. */}
-          {phase === 'setup' && angle === 'down_the_line' && !isPutt && targetingVisible && (effortRaw != null || aimRead) ? (
+          {/* 2026-08-19 — no longer gated on the camera angle (there is no angle to gate on before the
+            swing) nor on the targeting rig being visible, since the aim guideline is hidden now.
+            EFFORT and CARRY are what the player actually sets; AIM needed the draggable target and
+            drops out below for a full swing. */}
+        {phase === 'setup' && !isPutt && effortRaw != null ? (
             <View style={styles.planRow}>
               <View style={styles.planCard}>
                 <Text style={styles.planLabel}>EFFORT</Text>
@@ -4947,16 +5103,23 @@ export default function SmartMotion() {
                 <Text style={styles.planValue} numberOfLines={1}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
                 <Text style={styles.planUnit}>{estCarry != null ? 'yds' : ''}</Text>
               </View>
-              <View style={styles.planCard}>
-                <Text style={styles.planLabel}>AIM</Text>
-                <Text
-                  style={[styles.planValue, styles.planValueText, { color: aimRead ? (aimRead === 'STRAIGHT' ? colors.accent : '#f5c451') : '#88F700' }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                >
-                  {aimRead ?? '—'}
-                </Text>
-              </View>
+              {/* 2026-08-19 — AIM read the angle between the ball box and the target the player
+                  dragged. That guideline is hidden now, so the only aim it could report is the
+                  default straight-ahead one: a card that says STRAIGHT every time, which is a
+                  fabricated reading, not a measurement. Shown only when a real target exists (putts).
+                  [[illustration-data-points]] */}
+              {aimRead && isPutt ? (
+                <View style={styles.planCard}>
+                  <Text style={styles.planLabel}>AIM</Text>
+                  <Text
+                    style={[styles.planValue, styles.planValueText, { color: aimRead === 'STRAIGHT' ? colors.accent : '#f5c451' }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {aimRead}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -5081,7 +5244,6 @@ export default function SmartMotion() {
           />
         </View>
         )}
-      </View>
     </View>
   );
 
@@ -5535,6 +5697,10 @@ const styles = StyleSheet.create({
   analyzeOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 10, zIndex: 6 },
   analyzeText: { color: '#fff', fontWeight: '700' },
 
+  // 2026-08-19 — REVIEW variant: the deck leaves the absolute layer and takes part in the column
+  // layout, so captureRoot (flex:1) shrinks by exactly this height and the clip is never covered.
+  // Opaque, because it is no longer sitting over a camera that should show through.
+  bottomPanelInFlow: { position: 'relative', zIndex: 0 },
   bottomPanel: {
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
     backgroundColor: 'transparent', // translucent gradient fade renders behind
@@ -5588,8 +5754,12 @@ const styles = StyleSheet.create({
   speedRow: { flexDirection: 'row', gap: 8 },
   dataRow: { flexDirection: 'row', gap: 8 },
   controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  verifyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 2 },
-  verifyText: { fontSize: 12, fontWeight: '700' },
+  verifyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 2, paddingHorizontal: 8 },
+  // 2026-08-19 — the Text had no flexShrink, so in a centered row a long line ("Ball strike confirmed
+  // · launch toward the target") ran straight off both screen edges instead of wrapping: Tim's 08-18
+  // shot shows it cut mid-word. Same fix as the fit-profile ladder column (6b539a0e) — let the text
+  // shrink inside the row rather than overflow it.
+  verifyText: { fontSize: 12, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
   ballNudge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 },
   ballNudgeText: { fontSize: 12, fontWeight: '700' },
 

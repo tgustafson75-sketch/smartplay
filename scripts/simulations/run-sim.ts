@@ -2826,7 +2826,10 @@ check('Speed pass: skip the pose reprobe on a trusted duration + on-device telem
       // swing (2026-07-06 H3) — and 2026-07-07 (biomech #8): extracts ONCE, computes
       // biomech from the SAME frames (skeleton + numbers can't diverge, half the poses).
       /extractPoseFramesFromVideo\(clipUri, videoDurationMs, true, poseWindow, acousticImpactMs\)/.test(sm) &&
-      /computeBiomechanicsFromFrames\(frames, angle/.test(sm)
+      // 2026-08-19 — was /computeBiomechanicsFromFrames\(frames, angle/. The camera angle is no longer
+      // a value the screen holds and passes down; null makes the engine infer it from these very frames,
+      // which is now the single source of truth. This guard is about the SHARED extraction, not the angle.
+      /computeBiomechanicsFromFrames\(frames, null/.test(sm)
     );
   })(),
   'trusted real duration skips the reprobe (2-8s saved on Motion); acoustic strike anchors the phase frames; one extraction feeds both skeleton and biomech; on-device pose latency is measurable');
@@ -4977,10 +4980,14 @@ check('Face-on: NO launch/trace line on review (false from the front); framing g
     // No launch line during live capture either (declutter line-up). 2026-06-12 — putt
     // now also shows a target (the CUP flag), so the gate dropped `&& !isPutt` and adds
     // targetKind; still launchDir={null} (no false launch line in any mode).
-    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{angle === 'down_the_line' \? draftTarget : null\} launchDir=\{null\} targetKind=/.test(smSrc) &&
-    // Framing guides (incl. FO side lines) render for BOTH angles.
-    /!isReview\n\s*\? <CaptureGuides/.test(smSrc),
-  'face-on review shows the vertical target alignment only (no false launch line — EditableCageTargets passes launchDir null); live capture shows framing guides for both DTL and FO');
+    // 2026-08-19 — the aim target is no longer drawn for a FULL SWING (Tim: "the target line probably
+    // needs to be invisible"), so the rig keys off isPutt, not the camera angle. launchDir stays null:
+    // the no-false-launch-line invariant this guard exists for is unchanged.
+    /<CageTargetingOverlay ballArea=\{draftBall\} target=\{isPutt \? draftTarget : null\} launchDir=\{null\} targetKind=/.test(smSrc) &&
+    // ...and the stance guides now render for PUTTING only. They existed to tell the player how to
+    // stand for an angle they had to declare first; the angle is read off them now, not asked of them.
+    /!isReview && isPutt\n\s*\? <CaptureGuides/.test(smSrc),
+  'no false launch line in any mode (launchDir null); the aim guideline and stance guides are hidden for full swings and kept for putts');
 
 // ─── 2026-06-09: acoustics-free swing localizer + honest networking ──────────
 const poseSrc = read('services/poseDetection.ts');
@@ -6010,8 +6017,16 @@ check('Pose/biomech pipeline is angle-aware (DTL vs FO)',
     /if \(angle === 'face_on'\) \{\s*\n\s*shoulderTiltDeg = null;/.test(poseApiSrc) &&
     /if \(angle === 'glasses_pov'\)/.test(poseApiSrc) &&
     /pelvisImpact - pelvisAddr/.test(poseApiSrc) &&
-    /computeBiomechanicsFromFrames\(frames, angle/.test(smSrc),
-  'down-the-line nulls turn/weight/sequencing/hip-slide (invalid from behind), face-on nulls the projected tilt, glasses nulls all angular reads; weight shift measures the pelvis-in-stance move; angle threaded end-to-end');
+    // 2026-08-19 — the pipeline is still angle-aware; what changed is WHERE the angle comes from.
+    // It used to be threaded down from a screen toggle the player could get wrong in daylight. Now the
+    // caller passes null and the engine infers it from the swing's own frames, so assert exactly that:
+    // the screen hands over nothing, and the engine's inference path is reachable.
+    /computeBiomechanicsFromFrames\(frames, null/.test(smSrc) &&
+    /angle = inferCameraAngle\(frames\);/.test(poseApiSrc) &&
+    // ...and a confident disagreement still overrides an explicitly-supplied label (uploads, coach
+    // lesson), which is the invariant that made the toggle redundant in the first place.
+    /if \(inferred && inferred !== angle\) angle = inferred;/.test(poseApiSrc),
+  'down-the-line nulls turn/weight/sequencing/hip-slide, face-on nulls the projected tilt, glasses nulls all angular reads; the angle is INFERRED from the frames rather than threaded from a toggle');
 
 // 2026-06-10 — Caddie CNS Phase 1: memory store + writers (additive, honest).
 const memSrc = read('store/caddieMemoryStore.ts');
@@ -6725,10 +6740,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'COACH NOTES + HOW\'D IT FEEL? on page 2 each have a mic that records → transcribes → appends the text per-swing (no fabricated text on failure)');
 
   check('SmartMotion: PAGE 3 shot map — DTL course + cage bullseye, honest (no fabricated dots)',
-    // 2026-06-12 (Tim) — a third page gated to down-the-line modes (putt/face-on get
-    // none). Full-swing plots from REAL effort→carry + the ball-trace direction; cage
-    // shows a bullseye + user-CONFIRMED geometry (canvas + camera-behind, persisted).
-    /const showShotMap = !isPutt && angle === 'down_the_line'/.test(smSrc2) &&
+    // 2026-08-19 (Tim — "we're still missing the shot maps"). The page used to be gated on the camera
+    // ANGLE as well, so a swing filmed down-the-line but mislabelled face-on by a stale toggle lost the
+    // whole page silently — down to the pager rendering two dots instead of three. Only the LATERAL
+    // half of this map needs a DTL view (left/right comes from the ball trace); downrange carry comes
+    // from effort + club, which the camera position has nothing to do with. Putts still have no map.
+    /const showShotMap = !isPutt;/.test(smSrc2) &&
+      !/showShotMap = !isPutt && angle/.test(smSrc2) &&
       /const pageCount = showShotMap \? 3 : 2/.test(smSrc2) &&
       /\{shotMapPage\}/.test(smSrc2) &&
       /Array\.from\(\{ length: pageCount \}\)/.test(smSrc2) &&            // dots are dynamic
@@ -6737,7 +6755,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // honest: course marker only when an effort-carry estimate exists; cage impact is preview-labeled.
       /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /est · preview/.test(read('components/smartmotion/ShotMapPage.tsx')),
-    'page 3 is a DTL-only shot map: full-swing course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
+    'page 3 is a shot map for every full swing (never gated on a camera-angle label): course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
 
   check('SmartMotion spine fixes: thumbnails, ball-speed honesty, feel-on-save (2026-06-12)',
     // Every library card gets a thumbnail — fall back past the analysis fault frame to a
@@ -7045,11 +7063,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('SmartMotion: cycling mode badge + custom icon set wired',
     /const cycleMode = \(\) => \{/.test(smSrc2) &&
       /ICON_ANGLE\[isPutt \? 'putt' : angle\]/.test(smSrc2) &&        // current-stance icon on the badge
-      /showModeFade\('FACE-ON'\)/.test(smSrc2) &&                      // fade-away label on cycle
+      // 2026-08-19 — was showModeFade('FACE-ON'). The badge no longer cycles camera angles at all;
+      // it is Full swing ⇄ Putting, and the angle is detected. The fade-away label itself is the
+      // behaviour this line is guarding, so it now checks the label that actually exists.
+      /showModeFade\('FULL SWING'\)/.test(smSrc2) &&
+      /showModeFade\('PUTTING'\)/.test(smSrc2) &&
       /source=\{ICON_ENV\[effectiveMode\]\}/.test(smSrc2) &&          // env scene icon on the toggle
       /source=\{ICON_CLUB\}/.test(smSrc2) &&                          // club glyph on the scan button
       !/ModeToggle/.test(smSrc2),                                     // old 3-chip toggle removed
-    'one golfer badge cycles DTL → Face-On → Putting with a fade-away label (replacing the 3-chip ModeToggle); the environment toggle shows the cage/range/course scene badge; the club-scan button shows the club-bag glyph instead of a plain box (assets are cropped + black-knocked-out from Tim\'s art)');
+    'one golfer badge toggles Full swing ⇄ Putting with a fade-away label (camera angle is detected, not cycled); the environment toggle shows the cage/range/course scene badge; the club-scan button shows the club-bag glyph instead of a plain box');
 
   check('SmartMotion: chip sensitivity — lower threshold + mode-aware acoustics + clear toggle',
     /chipSensitivity: boolean/.test(read('store/settingsStore.ts')) &&
@@ -7091,9 +7113,28 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /void stopRecordingRef\.current\(\)/.test(smSrc2) && /stopRecordingRef\.current = stopRecording/.test(smSrc2),
     'the hands-free "let the 60s run out" stop routes through a ref, so it uses current calibration/angle instead of a stale closure');
 
-  check('SmartMotion: reset() restores the user\'s explicit angle after a putt (audit H3)',
-    /lastChosenAngleRef\.current = 'face_on'/.test(smSrc2) && /setAngle\(lastChosenAngleRef\.current\)/.test(smSrc2),
-    'a putt forces down-the-line; reset() restores the last explicit angle so it does not bleed into the next full swing');
+  check('SmartMotion: the camera angle is DETECTED, never asked for (2026-08-19)',
+    // Replaces "reset() restores the user's explicit angle after a putt" (audit H3, 2026-06-11). There
+    // is no explicit angle to restore: the 3-way DTL → face-on → putting cycler is now a two-way
+    // Full swing ⇄ Putting, because the two camera angles were never a preference — they are a fact
+    // the pose geometry reads directly, and the analysis engine had been overriding the player's
+    // answer with that geometry since 07-30 regardless. Tim, 08-18: filmed down-the-line, screen said
+    // FACE-ON, shot map gone.
+    (() => {
+      // The cycler offers exactly Full swing / Putting — no angle in it.
+      const twoWay = /if \(isPutt\) \{ setPuttMode\(false\); showModeFade\('FULL SWING'\); \}/.test(smSrc2)
+        && !/showModeFade\('FACE-ON'\)/.test(smSrc2)
+        && !/showModeFade\('DOWN THE LINE'\)/.test(smSrc2);
+      // The "did the player choose?" flag is gone, so nothing can suppress the correction.
+      const noExplicitFlag = !/userSetAngleRef\.current \?/.test(smSrc2);
+      // The LIVE preview infers while framing, off the pose the framing coach already runs.
+      const liveInfer = /inferCameraAngle\(liveAngleFramesRef\.current as never\)/.test(smSrc2)
+        && /liveAngleFramesRef\.current = \[\.\.\.liveAngleFramesRef\.current, frame\]\.slice\(-4\)/.test(smSrc2);
+      // ...and the recorded swing's own frames get the final word, ungated.
+      const swingWins = /if \(\(bio\.angle === 'face_on' \|\| bio\.angle === 'down_the_line'\) && bio\.angle !== angle\) \{/.test(smSrc2);
+      return twoWay && noExplicitFlag && liveInfer && swingWins;
+    })(),
+    'the mode control is Full swing / Putting only; the angle is inferred live from the framing pose and finally from the swing frames, with no user flag able to suppress the correction');
 
   const settingsSrc2 = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
   check('Voice: persona handoff plays the bundled opener (never silent) (audit)',
@@ -9840,6 +9881,65 @@ check('LOCK: NO surface drops a located swing before the evidence for it has arr
       && reanalyzeNoGate && uploadNoGate && shownAsUnconfirmed && locatorIsBinary;
   })(),
   'range + cage gate only AFTER fusion and never below the acoustic count; the two video-only surfaces do not gate at all and show the swing as unconfirmed; every surface logs');
+
+check('LOCK: the analysis deck sits BELOW the clip in review, and the eye truly maximizes',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    // Tim reported this THREE times (2026-07-25, 07-29, 08-19). The first two fixes were cosmetic —
+    // make the card translucent, then cap it at 36% with its own scroll — and both left it in the
+    // ABSOLUTE layer on top of the clip, so a tall read still covered the golfer head to foot. The
+    // invariant is structural, so guard it structurally: in review the deck leaves the absolute layer.
+    const inFlowStyle = /bottomPanelInFlow: \{ position: 'relative', zIndex: 0 \}/.test(sm);
+    const appliedInReview = /isReview \? \[styles\.bottomPanelInFlow, \{ backgroundColor: colors\.background \}\] : null/.test(sm);
+    // It must be a SIBLING of the video container, not a child — a child cannot push it smaller.
+    const deckIsSibling = (() => {
+      // captureRoot's onLayout opens the video container; the deck must appear AFTER that container
+      // has closed (a </View> between them), i.e. as a sibling the flex layout can size against —
+      // not nested inside it, where it could only ever float on top.
+      const iRoot = sm.indexOf('onLayout={(e) => setRootSize(');
+      const iDeck = sm.indexOf('{/* BOTTOM PANEL');
+      if (iRoot < 0 || iDeck < iRoot) return false;
+      const between = sm.slice(iRoot, iDeck);
+      return /\n\s*<\/View>\s*\n\s*$/.test(between);
+    })();
+    // Every overlay maps through rootSize (captureRoot's own onLayout), which is WHY moving the deck
+    // re-letterboxes the clip and the skeleton together. If that measurement ever stops driving them,
+    // shrinking the box would misalign the skeleton on the golfer.
+    const sharedGeometry = /onLayout=\{\(e\) => setRootSize\(/.test(sm)
+      && /const containerAR = rootSize\.w > 0 && rootSize\.h > 0/.test(sm);
+    // The stats pane must size off the WINDOW, never rootSize — captureRoot now shrinks by this
+    // pane's height, so measuring against it would be a layout feedback loop.
+    const noFeedbackLoop = /maxHeight: Math\.round\(windowHeight \* 0\.36\)/.test(sm)
+      && !/maxHeight: Math\.round\(\(rootSize\.h > 0/.test(sm);
+    // And the eye clears the stats too — it cleared every other overlay but not the tallest thing.
+    const eyeMaximizes = /\{isReview && showResults \? \(\n\s*<ScrollView/.test(sm);
+    return inFlowStyle && appliedInReview && deckIsSibling && sharedGeometry && noFeedbackLoop && eyeMaximizes;
+  })(),
+  'in review the data deck is an in-flow sibling below the video container (never an overlay), sized off the window, and hiding results returns its height to the clip');
+
+check('LOCK: the smarter ball box can only ever improve on the feet proxy, never replace it with nothing',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const bd = read('services/swing/ballDeparture.ts');
+    const api = read('api/ball-departure.ts');
+    // The proxy is applied FIRST and unconditionally; the real locate is fire-and-forget on top.
+    const proxyFirst = (() => {
+      const iProxy = sm.indexOf("setDraftBall({ x: res.feetCenter.x");
+      const iLocate = sm.indexOf('locateBallInSetupFrame');
+      return iProxy > -1 && iLocate > iProxy;
+    })();
+    const oneShot = /if \(!ballLocateTriedRef\.current\) \{\s*\n\s*ballLocateTriedRef\.current = true;/.test(sm);
+    // A drag ALWAYS wins — re-checked on arrival, because the call outlives the gesture.
+    const dragWins = /if \(found && !cancelled && !userMovedBallRef\.current\)/.test(sm);
+    // Client refuses rather than guesses: unconfigured, offline, not found, or out of frame → null.
+    const clientHonest = /if \(data\.configured === false \|\| data\.found !== true \|\| !data\.ball_norm\) return null;/.test(bd)
+      && /catch \{\s*\n\s*return null; \/\/ offline \/ blocked host — the feet proxy stands/.test(bd);
+    // Server refuses rather than guesses, and low confidence is a refusal.
+    const serverHonest = /if \(!q\.found \|\| !okConf \|\| !inFrame\) return res\.status\(200\)\.json\(\{ found: false \}\);/.test(api)
+      && /A refusal is CORRECT and expected/.test(api);
+    return proxyFirst && oneShot && dragWins && clientHonest && serverHonest;
+  })(),
+  'the ball box keeps its feet-derived placement unless a real ball is confidently seen; a manual drag always wins, and every failure path leaves today behaviour exactly as it was');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
