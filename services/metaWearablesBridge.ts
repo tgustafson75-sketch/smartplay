@@ -28,7 +28,7 @@
  * collapses to no-op without throwing.
  */
 
-import { NativeModules, NativeEventEmitter, Platform, AppState, type AppStateStatus } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, AppState, Linking, type AppStateStatus } from 'react-native';
 import { submitVisionFrame, type VisionFrame } from './glassesVisionInput';
 import { devLog } from './devLog';
 import { recordNativeModuleHealth } from './nativeModuleHealth';
@@ -46,6 +46,9 @@ interface MetaWearablesFrameNativeModule {
     streaming: boolean;
     device: string;
   }>;
+  /** 2026-08-19 — hands an inbound deep link to the DAT SDK so the consent round trip completes.
+   *  iOS only today (Android's SDK finishes authorization in-process); absent on older builds. */
+  handleAppLink?(url: string): Promise<{ handled: boolean; reason?: string }>;
 }
 
 // Resolve safely — on iOS / web / older builds without the module,
@@ -54,8 +57,23 @@ interface MetaWearablesFrameNativeModule {
 // Records BEFORE assignment so the probe runs even on the iOS path
 // where NativeMod is forced to null.
 const _mwHealth = recordNativeModuleHealth('MetaWearablesFrame');
+/**
+ * 2026-08-19 (Tim — "make sure my glasses are gonna connect the next time").
+ *
+ * This was `Platform.OS === 'android' && _mwHealth.loaded`, which hard-disabled the glasses on iOS —
+ * the Swift module ships in a `glasses`-profile build (MWDAT_IOS_ENABLED=1 compiles the SDK in and
+ * writes the MWDAT attestation dict), but JS refused to resolve it, so iOS could never see a headset
+ * no matter how the pairing went on Meta's side. The Android-only gate predates the iOS module being
+ * finished and was never lifted.
+ *
+ * `_mwHealth.loaded` is the honest test on its own: it is TRUE only when the native module is really
+ * present in this binary. A normal TestFlight/APK build has the DAT plugin no-op'd, so the module is
+ * absent, this stays null, and every helper below collapses to the same no-op it always did — the
+ * Connect-Glasses UI simply doesn't appear. Nothing changes for the shipped build; the difference is
+ * that a glasses build now works on both platforms instead of one.
+ */
 const NativeMod: MetaWearablesFrameNativeModule | null =
-  Platform.OS === 'android' && _mwHealth.loaded
+  (Platform.OS === 'android' || Platform.OS === 'ios') && _mwHealth.loaded
     ? ((NativeModules as Record<string, unknown>).MetaWearablesFrame as MetaWearablesFrameNativeModule)
     : null;
 
@@ -431,4 +449,48 @@ function ensureAppStateListener(): void {
     devLog(`[mwdat-bridge] app state → ${next}`);
     if (currentStatus.streaming) void applyStreamConfig();
   });
+}
+
+/**
+ * 2026-08-19 — forward an inbound deep link to the DAT SDK so pairing can finish.
+ *
+ * DAT's handshake is a ROUND TRIP: we deeplink into the Meta AI app, the wearer consents there, and
+ * the Meta AI app calls back into us. Until that callback URL reaches the SDK, registration stays in
+ * `.registering` and no device session can ever be created — the exact shape of "I consented and the
+ * glasses still don't connect". Nothing in this app was forwarding it.
+ *
+ * Safe to call with EVERY inbound link: the SDK self-detects its own URLs and declines the rest, so
+ * our own `smartplay://` routes pass straight through untouched. Never throws — a failure here must
+ * not break normal deep-link routing.
+ *
+ * Returns whether the SDK claimed the URL, and logs it, because a silent no-op is precisely how the
+ * missing callback stayed invisible.
+ */
+export async function handleGlassesAppLink(url: string | null | undefined): Promise<boolean> {
+  if (!url || !NativeMod?.handleAppLink) return false;
+  try {
+    const res = await NativeMod.handleAppLink(url);
+    devLog(`[mwdat-bridge] app link ${res?.handled ? 'CLAIMED by DAT' : 'not a DAT link'} → ${url}`);
+    return !!res?.handled;
+  } catch (e) {
+    devLog('[mwdat-bridge] app-link forward failed (non-fatal): ' + String(e));
+    return false;
+  }
+}
+
+/**
+ * Attach the inbound-link listener. Call once from the app root. Handles BOTH legs:
+ * the cold-start URL (the app was killed while the wearer was consenting in the Meta AI app — the
+ * common case, since consent leaves our process) and links delivered while we're already running.
+ */
+export function startGlassesLinkListener(): () => void {
+  if (!NativeMod?.handleAppLink) return () => {};
+  let cancelled = false;
+  // Cold start: the app was launched BY the callback, so the URL is waiting rather than arriving.
+  void Linking.getInitialURL()
+    .then((initial) => { if (!cancelled) void handleGlassesAppLink(initial); })
+    .catch(() => undefined);
+  const sub = Linking.addEventListener('url', ({ url }) => { void handleGlassesAppLink(url); });
+  devLog('[mwdat-bridge] glasses app-link listener attached');
+  return () => { cancelled = true; sub.remove(); };
 }

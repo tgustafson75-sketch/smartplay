@@ -98,6 +98,50 @@ class MetaWearablesFrame: RCTEventEmitter {
         return allowed.min(by: { abs($0 - candidate) < abs($1 - candidate) }) ?? 24
     }
 
+    // MARK: - DAT consent callback
+
+    /**
+     * 2026-08-19 (Tim — "make sure my glasses are gonna connect the next time").
+     *
+     * THE MISSING HALF OF REGISTRATION. DAT's pairing handshake is a round trip: our app deeplinks
+     * into the Meta AI app, the wearer consents there, and the Meta AI app then calls BACK into us
+     * with a URL that has to be handed to the SDK. Until that URL reaches `Wearables.handleUrl`, the
+     * registration sits in `.registering` forever — the app never becomes `.registered`, so no device
+     * session can be created and the glasses never appear as connected.
+     *
+     * Nothing in this repo was doing that. `Wearables.configure()` was called (the one-time init) and
+     * `createSession()` was called, but the return leg of the consent flow was simply dropped on the
+     * floor. That is consistent with every symptom seen so far: the toggle appears, consent is granted
+     * in the Meta AI app, and the app still reports no glasses.
+     *
+     * The SDK self-detects its own URLs, so forwarding every inbound link is safe — a non-DAT deep
+     * link (our own `smartplay://` routes) is simply not claimed. Resolves `handled` so the JS side
+     * can log which links the SDK took, because a silent no-op here is exactly how this stayed
+     * invisible for three weeks.
+     */
+    @objc(handleAppLink:resolver:rejecter:)
+    func handleAppLink(url: NSString, resolver: @escaping RCTPromiseResolveBlock, rejecter: @escaping RCTPromiseRejectBlock) {
+        guard let parsed = URL(string: url as String) else {
+            rejecter("DAT_BAD_URL", "Not a URL: \(url)", nil)
+            return
+        }
+        do {
+            try ensureInitialized()
+            Task {
+                do {
+                    try await Wearables.shared.handleUrl(parsed)
+                    resolver(["handled": true])
+                } catch {
+                    // Not a DAT URL, or the SDK declined it. NOT an error for the caller: we forward
+                    // every inbound link and most of them are our own routes.
+                    resolver(["handled": false, "reason": String(describing: error)])
+                }
+            }
+        } catch {
+            rejecter("DAT_INIT_FAILED", "Wearables.configure() failed: \(error)", error)
+        }
+    }
+
     // MARK: - Exposed methods
 
     @objc(startStreaming:fps:resolver:rejecter:)

@@ -186,6 +186,28 @@ function AppNavigator() {
     try { require('../services/routeBreadcrumb').setRoute(pathname); } catch { /* non-fatal */ }
   }, [pathname]);
   /**
+   * 2026-08-19 (Tim — "make sure my glasses are gonna connect the next time").
+   *
+   * The DAT pairing handshake is a ROUND TRIP: the app deeplinks into the Meta AI app, the wearer
+   * consents there, and the Meta AI app calls BACK into us with a URL that must reach the SDK. Until
+   * it does, registration sits in `.registering` forever and no device session can be created — which
+   * is exactly what "I consented and the glasses still don't connect" looks like. Nothing in this app
+   * was forwarding that URL.
+   *
+   * Mounted at the ROOT, and not behind any glasses screen, because consent happens in ANOTHER APP:
+   * ours is usually backgrounded and often killed, so the callback frequently arrives as a cold-start
+   * URL before any glasses screen could exist. The listener handles both legs.
+   *
+   * A build without the DAT SDK has no native module, so this is a no-op there — nothing changes for
+   * the shipped TestFlight build.
+   */
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    try { stop = require('../services/metaWearablesBridge').startGlassesLinkListener(); }
+    catch { /* module absent in non-glasses builds — expected */ }
+    return () => { try { stop?.(); } catch { /* non-fatal */ } };
+  }, []);
+  /**
    * 2026-08-10 (Tim — "need something in the app to prevent racing and prevent cache buildup that can
    * clean up and refresh back to no bad content as needed").
    *

@@ -40,6 +40,7 @@ const {
   withAppBuildGradle,
   withMainApplication,
   withInfoPlist,
+  withEntitlementsPlist,
   withDangerousMod,
   withXcodeProject,
   AndroidConfig,
@@ -448,6 +449,20 @@ function withIOSInfoPlist(config, { appId, clientToken }) {
     // secret + a dead MWDAT dict in its Info.plist even though the SDK isn't in the binary.
     // The Bluetooth/camera usage strings above stay unconditional (harmless, may be reused).
     if (process.env.MWDAT_IOS_ENABLED === '1') {
+      /**
+       * 2026-08-19 — the universal link Meta is actually registered against.
+       *
+       * The Meta developer console registration uses `https://api.smartplaycaddie.com/glasses` as the
+       * app-link callback, and we already SERVE a correct apple-app-site-association for it. But iOS
+       * only routes a universal link into an app that CLAIMS the domain, and nothing here claimed it —
+       * so the AASA was being served to a callback iOS would hand to Safari instead of to us. Keeping
+       * the custom scheme alongside it deliberately: `smartplay://` is what Developer Mode has been
+       * using, and removing a working path to add an unproven one is how you turn one broken flow into
+       * two. The SDK self-detects its own URLs either way.
+       *
+       * Scoped to MWDAT_IOS_ENABLED like the attestation dict below, so a normal TestFlight build is
+       * byte-for-byte unchanged.
+       */
       plist['MWDAT'] = {
         MetaAppID: appId,
         ClientToken: clientToken,
@@ -464,6 +479,33 @@ function withIOSInfoPlist(config, { appId, clientToken }) {
     delete plist['MetaWearablesClientToken'];
 
     return infoConfig;
+  });
+}
+
+// ─── 4b. iOS entitlements — claim the universal link Meta calls back into ──
+//
+// 2026-08-19 (Tim — "make sure my glasses are gonna connect the next time").
+//
+// The Meta developer-console registration uses `https://api.smartplaycaddie.com/glasses` as the
+// app-link callback, and we already serve a correct apple-app-site-association for that path. But iOS
+// will only route a universal link into an app that CLAIMS the domain via the associated-domains
+// entitlement — and nothing claimed it. So the AASA was being served for a callback iOS would hand to
+// Safari instead of to us: the consent round trip could never come home.
+//
+// The custom scheme in the MWDAT dict stays alongside this on purpose. `smartplay://` is the path
+// Developer Mode has been exercising, and replacing a working leg with an unproven one is how you turn
+// one broken flow into two. The SDK self-detects its own URLs on either path.
+//
+// Scoped to MWDAT_IOS_ENABLED (see the composition below) so a normal TestFlight build is unchanged.
+function withIOSAssociatedDomains(config) {
+  return withEntitlementsPlist(config, (entConfig) => {
+    const KEY = 'com.apple.developer.associated-domains';
+    const want = 'applinks:api.smartplaycaddie.com';
+    const existing = Array.isArray(entConfig.modResults[KEY]) ? entConfig.modResults[KEY] : [];
+    if (!existing.includes(want)) {
+      entConfig.modResults[KEY] = [...existing, want];
+    }
+    return entConfig;
   });
 }
 
@@ -633,6 +675,8 @@ function withMetaWearablesDAT(config) {
   if (process.env.MWDAT_IOS_ENABLED === '1') {
     next = withIOSSwiftPackage(next);
     next = withSwiftSourceCopy(next);
+    // Claim api.smartplaycaddie.com so the universal-link callback reaches the app (see note above).
+    next = withIOSAssociatedDomains(next);
   }
   return next;
 }

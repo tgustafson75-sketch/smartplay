@@ -28,4 +28,10 @@ RCT_EXTERN_METHOD(stopStreaming:(RCTPromiseResolveBlock)resolver
 RCT_EXTERN_METHOD(getStatus:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)rejecter)
 
+// 2026-08-19 — the DAT consent callback. Without this export the Swift method is invisible to JS and
+// the registration round trip can never complete (see the note on handleAppLink in the .swift file).
+RCT_EXTERN_METHOD(handleAppLink:(NSString *)url
+                  resolver:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+
 @end
