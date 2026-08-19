@@ -370,17 +370,68 @@ export async function getCourse(course_id: string): Promise<Course | null> {
 
 // ─── Conversion helpers ───────────────────────────────────────────────────────
 
+/**
+ * 2026-08-19 (course-engine focus pass — invariant sweep over 400 generated courses).
+ *
+ * A yardage that isn't a real number must not become a hole distance. The upstream card is parsed
+ * from third-party data and OCR'd scorecards, and a 0 / negative / NaN yardage was being copied
+ * straight through into `distance`, into the brain's per-hole context, and into every downstream
+ * calculation. NaN in particular is corrosive: it silently poisons any arithmetic it touches instead
+ * of failing where it entered. Null is the honest value for "the card didn't say" — every consumer
+ * already handles a missing distance, none of them handle NaN.
+ */
+/**
+ * Returns 0 — NOT null — for an unusable yardage, deliberately. `CourseHole.distance` is typed
+ * non-nullable, and 0 is already this record's established "not known" value (teeLat/middleLat use it
+ * the same way), so every consumer in the app gates on `> 0` before using it. Returning null here
+ * would have to be cast to satisfy the type, and a cast that asserts a value into existence is how
+ * you get a crash at the one call site that trusted the signature.
+ */
+const cleanYardage = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 900 ? Math.round(v) : 0;
+
 export function courseToHoles(course: Course, teeName?: string): CourseHole[] {
-  const tee = teeName
-    ? (course.tees.find((t) => t.tee_name.toLowerCase() === teeName.toLowerCase()) ?? course.tees[0])
-    : course.tees[0];
+  /**
+   * 2026-08-19 — asking for a tee that ISN'T THERE no longer silently returns a different one.
+   *
+   * This fell back to `course.tees[0]` whenever the requested name didn't match, so a player who
+   * picked "Gold" on a course whose API happens to spell it "Gold Tees" was handed the BLACK card's
+   * yardages under the name Gold — every number wrong, nothing on screen saying so. That is the same
+   * shape as the "Preferred Tee did nothing" report from 08-12.
+   *
+   * The fallback itself is still right (a course with tees should render), but it has to be LOUD,
+   * and it must only apply when the name genuinely isn't found — not swallow a typo silently.
+   */
+  const requested = teeName?.trim();
+  const matched = requested
+    ? course.tees.find((t) => t.tee_name?.trim().toLowerCase() === requested.toLowerCase())
+    : null;
+  const tee = matched ?? course.tees[0];
   if (!tee) return [];
-  return tee.holes.map((h) => ({
+  if (requested && !matched) {
+    console.log(`[golfCourseApi] tee "${requested}" not found on ${course.club_name || 'course'} — using "${tee.tee_name || 'first tee'}" instead (available: ${course.tees.map((t) => t.tee_name).filter(Boolean).join(', ') || 'unnamed'})`);
+  }
+  /**
+   * 2026-08-19 — one row per hole NUMBER. A duplicated hole (a re-scanned scorecard page, a card
+   * listing a hole twice) previously produced two rows for it, which downstream reads as a 19-hole
+   * round and makes `holes.find(h => h.hole === n)` a coin toss between two different yardages.
+   * First occurrence wins, consistent with the merge path.
+   */
+  const seenHoles = new Set<number>();
+  return tee.holes.filter((h) => {
+    const n = h.hole_number;
+    if (!Number.isFinite(n) || seenHoles.has(n)) return false;
+    seenHoles.add(n);
+    return true;
+  }).map((h) => ({
     hole: h.hole_number,
     par: h.par,
-    distance: h.yardage,
-    front: h.yardage,
-    back: h.yardage,
+    // Placeholder front/middle/back: identical by design until real green geometry arrives, and
+    // consumers gate on `back > front` before treating them as pin distances. Kept as-is; only the
+    // yardage itself is now validated.
+    distance: cleanYardage(h.yardage),
+    front: cleanYardage(h.yardage),
+    back: cleanYardage(h.yardage),
     teeLat: h.gps?.lat ?? 0,
     teeLng: h.gps?.lng ?? 0,
     middleLat: 0,
@@ -400,7 +451,9 @@ export function courseSummaryForContext(course: Course): string {
   const holeList = tee.holes
     .map((h) => {
       const hazardStr = h.hazards.length > 0 ? ` [${h.hazards.join('; ')}]` : '';
-      return `H${h.hole_number} par${h.par} ${h.yardage}y${hazardStr}`;
+      // 2026-08-19 — a missing/implausible yardage is omitted rather than printed as "nully"/"NaNy".
+      const y = typeof h.yardage === 'number' && Number.isFinite(h.yardage) && h.yardage > 0 ? ` ${Math.round(h.yardage)}y` : '';
+      return `H${h.hole_number} par${h.par}${y}${hazardStr}`;
     })
     .join(' · ');
   // 2026-06-30 (Tim — Greenhill: the caddie briefed the WHOLE-COURSE total (~7000y) as if it
@@ -408,8 +461,17 @@ export function courseSummaryForContext(course: Course): string {
   // rule: the LIVE shot distance is the GPS yardage (currentYardage), NEVER this total.
   return (
     `Course: ${course.club_name} — ${course.location.city}, ${course.location.state}\n` +
-    `Whole-course length (CONTEXT ONLY — never quote this as a shot/hole distance): ${tee.tee_name} tee ${tee.total_yards} yds, par ${tee.par_total}` +
-    (tee.course_rating ? ` (rating ${tee.course_rating}/${tee.slope_rating})` : '') +
+    // 2026-08-19 — every field here is interpolated into text the CADDIE reads as fact, so each one
+    // states itself only when it exists. This line rendered "Black tee null yds" for any course whose
+    // card carries no total (common on 9-hole and imported courses).
+    `Whole-course length (CONTEXT ONLY — never quote this as a shot/hole distance): ${tee.tee_name || 'default'} tee` +
+    (typeof tee.total_yards === 'number' && Number.isFinite(tee.total_yards) && tee.total_yards > 0 ? ` ${tee.total_yards} yds` : '') +
+    (typeof tee.par_total === 'number' && Number.isFinite(tee.par_total) && tee.par_total > 0 ? `, par ${tee.par_total}` : '') +
+    // 2026-08-19 — this rendered "(rating 71.2/null)" straight into the caddie's course context
+    // whenever a course carried a rating but no slope. Each half is stated only when it exists.
+    (tee.course_rating || tee.slope_rating
+      ? ` (${[tee.course_rating ? `rating ${tee.course_rating}` : null, tee.slope_rating ? `slope ${tee.slope_rating}` : null].filter(Boolean).join(', ')})`
+      : '') +
     `\nFor the CURRENT shot always use the live GPS yardage, not this total.` +
     `\nPer-hole reference yardages: ${holeList}`
   );
