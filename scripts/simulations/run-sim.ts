@@ -9776,6 +9776,35 @@ check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the bra
   })(),
   'club tendencies derive per-club from logged shots, ride the context, reach the system prompt, and the bag screen reads the SAME module');
 
+check('LOCK: a range swing is only dropped when NEITHER camera nor mic could confirm it',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const seg = read('services/swing/swingSegmentation.ts');
+    const range = sm.slice(sm.indexOf("if (stopMode === 'range')"), sm.indexOf('if (segsForAnalysis.length > 0)'));
+    // ORDER is the whole invariant. The gate previously ran on the video list BEFORE
+    // correlateStrikesWithVideo, so a swing the microphone heard was already deleted by the time the
+    // acoustic evidence arrived — and 'low' means "couldn't SEE the ball leave" (net / out of frame),
+    // not "practice swing", which the locator prompt excludes on its own.
+    const iCorrelate = range.indexOf('correlateStrikesWithVideo(');
+    const iGate = range.indexOf("filter((s) => s.confidence !== 'low')");
+    const gateAfterFusion = iCorrelate > -1 && iGate > iCorrelate;
+    // The pre-gate filter must be gone FROM THE RANGE BRANCH. Two sibling copies still exist and are
+    // deliberately out of this guard's scope: the CAGE branch (~3434, where acoustics already
+    // segment and the video pass may only ADD swings) and the swing-library RE-ANALYZE path (~2543).
+    // Both are the same shape and are tracked separately — scoping this to the range slice keeps the
+    // guard honest about what it actually proves rather than silently passing on the others.
+    const noPreGate = !/const conf = swings\.filter\(\(sw\) => sw\.confidence !== 'low'\)/.test(range);
+    // Fusion must still UPGRADE a matched low swing, or moving the gate changes nothing.
+    const fusionUpgrades = /rank\[best\.confidence\] >= rank\[sw\.confidence\] \? best\.confidence : sw\.confidence/.test(seg);
+    // All-low keeps all — an empty session is never the answer.
+    const allLowKeepsAll = /confirmed\.length >= 1 && dropped > 0/.test(range);
+    // And the drop is observable: the old one was silent, so two deleted swings looked exactly like
+    // a detection failure. That silence is why it survived to a live range session.
+    const logged = /\[smartmotion\] range segmentation/.test(range) && /unconfirmed_dropped/.test(range);
+    return gateAfterFusion && noPreGate && fusionUpgrades && allLowKeepsAll && logged;
+  })(),
+  'the confidence gate runs after strike/video fusion, keeps everything when all are low, and logs what it dropped');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

@@ -3323,13 +3323,31 @@ export default function SmartMotion() {
           if (swings.length === 0 && acousticStrikes.length === 0) {
             swings = await pose.locateSwings(recorded.uri, durMs).catch(() => []);
           }
-          // 2026-08-09 (swing-analysis audit #2) — same practice-swing gate as the upload paths: when at
-          // least one CONFIDENT swing exists, drop the low-confidence ones (waggles/practice motion) so
-          // the live reel isn't inflated with junk segments. All-low keeps all (honest maybe > empty).
-          {
-            const conf = swings.filter((sw) => sw.confidence !== 'low');
-            if (conf.length >= 1 && conf.length < swings.length) swings = conf;
-          }
+          /**
+           * 2026-08-18 (Tim, range session: "each time I recorded tonight, each time got one swing out
+           * of using the open setting"). THE GATE RAN BEFORE THE EVIDENCE ARRIVED.
+           *
+           * A 2026-08-09 gate dropped every low-confidence video swing here, calling them
+           * "waggles/practice motion". They are not. The locator prompt EXCLUDES practice swings
+           * outright, and defines low as something else entirely: "lean permissive — if you genuinely
+           * CANNOT tell whether a ball was struck (e.g. a NET catches it instantly, or the ball is out
+           * of frame), INCLUDE that swing with confidence low rather than dropping it."
+           *
+           * So low means "I couldn't see the ball leave" — the normal reading of a thin or topped
+           * strike, and of any range with a net. The gate deleted precisely the swings the prompt had
+           * gone out of its way to preserve. Because it only fired when a high-confidence swing
+           * existed, it never emptied a session; it trimmed one down to its best swing. Tim's set was
+           * "first one good, two crappy" and he got exactly one back, every time.
+           *
+           * The fix is not a second filter — correlateStrikesWithVideo ALREADY resolves this: when a
+           * strike matches a video swing it upgrades that swing to the stronger of the two signals
+           * (swingSegmentation.ts:227). A low swing that was HEARD is therefore no longer low once the
+           * signals are fused. The gate simply ran first, on video alone, and threw the evidence away
+           * before the microphone could vouch for it. Moved below, after fusion, so a swing is only
+           * dropped when NEITHER camera nor microphone could confirm a ball was struck.
+           * [[illustration-data-points]] [[overstrict-gate-lens]]
+           */
+          const preGateSwings = swings.length;
           if (swings.length > 0 && acousticStrikes.length > 0) {
             // 2026-08-01 (marquee audit — range under-count). Video is the spine (neighbour-proof), but
             // recover a HIGH-confidence strike the locator missed in your own frame so a partial vision
@@ -3341,6 +3359,29 @@ export default function SmartMotion() {
           } else if (acousticStrikes.length > 0) {
             // vision empty — best effort, rebounds filtered (segmentation audit #3)
             segsForAnalysis = segmentsFromStrikes(filterReboundStrikes(acousticStrikes), durMs);
+          }
+          /**
+           * 2026-08-18 — the confidence gate, now AFTER both signals have been fused (see the note
+           * above). A segment is dropped only when neither the camera nor the microphone could
+           * confirm a ball was struck. All-low keeps all: an honest maybe beats an empty session.
+           *
+           * Logged either way. The pre-fusion version of this drop was SILENT on the live range path
+           * (the upload path logs its equivalent), so two deleted swings looked identical to a
+           * detection failure — which is exactly how it was reported, and why it survived so long.
+           */
+          {
+            const confirmed = segsForAnalysis.filter((s) => s.confidence !== 'low');
+            const dropped = segsForAnalysis.length - confirmed.length;
+            if (confirmed.length >= 1 && dropped > 0) {
+              segsForAnalysis = confirmed.map((s, i) => ({ ...s, index: i + 1 }));
+            }
+            console.log('[smartmotion] range segmentation', JSON.stringify({
+              video_swings: preGateSwings,
+              acoustic_strikes: acousticStrikes.length,
+              segments: segsForAnalysis.length,
+              unconfirmed_dropped: confirmed.length >= 1 ? dropped : 0,
+              unconfirmed_kept: confirmed.length === 0 ? segsForAnalysis.length : 0,
+            }));
           }
           if (segsForAnalysis.length > 0) {
             setSegments(segsForAnalysis);
