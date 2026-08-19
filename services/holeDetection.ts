@@ -44,6 +44,10 @@ const MAX_TRANSITION_LOOKAHEAD   = 2;             // only consider current+1 and
 // is genuinely AT the next tee (tight radius), not merely closer-to-it (the loose rule stays score-gated
 // so the Dudley Hills premature jump can't return). 25y ≈ standing on the tee box.
 const AT_NEXT_TEE_CONFIRM_YD     = 25;
+// 2026-08-19 — how close the next tee has to be for "near the next tee" to be a true statement.
+// Generous enough to cover the whole walk from a green to the following tee; small enough that it
+// can no longer shadow the loop-back safeguard from the far side of the course.
+const NEAR_NEXT_TEE_YD           = 100;
 const POLL_INTERVAL_MS           = 4_000;         // 4s poll cadence (cheap)
 
 type LatLng = { lat: number; lng: number };
@@ -264,7 +268,25 @@ export function detectCurrentHole(
       reason: `AT hole ${bestNextHole} tee (${Math.round(bestNextDist)}y) with hole ${currentHole} unscored — market-model advance (score nag to follow)`,
     };
   }
-  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen && !currentHoleScored) {
+  /**
+   * 2026-08-19 (course-engine sweep) — this branch means "you are NEAR the next tee but haven't
+   * scored yet", and it had no idea what near meant. Its only test was `bestNextDist <
+   * distFromCurrentGreen`, which on a long hole is satisfied from anywhere on the property: the sweep
+   * caught it reporting `near hole 11 tee` from ELEVEN HUNDRED YARDS away, purely because that tee
+   * happened to be marginally closer than the green being walked to.
+   *
+   * It returns transition_recommended:false, so it never moved anyone — but it RETURNS, and
+   * everything below it is therefore skipped. The thing below it is the loop-back safeguard. So a
+   * player who walked back to a hole they had already played could be standing on that tee and be
+   * told, in effect, "stay where you are, you're near the next tee" — the one case the safeguard
+   * exists to catch, shadowed by a branch that had wandered outside its own meaning.
+   *
+   * Bounded to a distance at which "near" is true. The Dudley premature-jump protection this branch
+   * was written for is entirely within that radius (it is about a tee a few paces off the green), so
+   * that behaviour is unchanged; only the far-field case falls through to the checks it was hiding.
+   */
+  if (bestNextHole !== currentHole && bestNextDist < distFromCurrentGreen
+      && bestNextDist <= NEAR_NEXT_TEE_YD && !currentHoleScored) {
     return {
       hole_number: currentHole, confidence: 'high', transition_recommended: false,
       reason: `near hole ${bestNextHole} tee but hole ${currentHole} not yet scored — advances when you're ON the tee (≤${AT_NEXT_TEE_CONFIRM_YD}y)`,
