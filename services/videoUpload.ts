@@ -474,20 +474,23 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         : await pose.probeDurationMs(swings[0].clipUri).catch(() => 0);
       if (durMs >= MULTI_SWING_UPLOAD_MIN_MS) {
         const found = await pose.locateSwings(swings[0].clipUri, durMs);
-        // 2026-08-09 (verification wave C4 — "gets caught up on practice swings") — the plural locator
-        // leans permissive by design ("include with confidence low" when it can't see a ball), and the
-        // segment 'confirmed' flag it produced had ZERO consumers — every low-confidence practice swing
-        // became a fully analyzed swing. Consume it here: when at least one confident swing exists, the
-        // low-confidence ones don't auto-expand (logged, never silent). If ALL are low we keep them all —
-        // an honest maybe beats an empty result.
-        const confident = found.filter(f => f.confidence !== 'low');
-        const kept = confident.length >= 1 ? confident : found;
-        if (kept.length < found.length) {
-          uploadLog('upload-practice-swings-dropped', { found: found.length, kept: kept.length }, sessionId);
-        }
+        // 2026-08-19 — the practice-swing gate that stood here is REMOVED (see the long note on the
+        // same removal in app/swinglab/smartmotion.tsx, re-analyze path). Short version: it read the
+        // locator's 'low' as "practice swing", but the prompt EXCLUDES practice swings outright and has
+        // since 2026-07-01 — five weeks before this gate — while defining low as the opposite thing,
+        // "I cannot tell whether a ball was struck (a net catches it, the ball is out of frame)". An
+        // upload carries no acoustics, so nothing arrives later to vouch for the swing and there was
+        // nothing to reorder; the gate simply deleted thin, topped and net-caught strikes. Its stated
+        // reason was that the 'confirmed' flag had zero consumers. It has one now, and it is not
+        // deletion: segmentsFromVideoSwings stamps confirmed:false and the reel renders that swing
+        // amber, so an uncertain swing is SHOWN as uncertain instead of silently discarded.
         const { segmentsFromVideoSwings } = await import('./swing/swingSegmentation');
-        const segs = segmentsFromVideoSwings(kept, durMs);
-        if (kept.length > 1) {
+        const segs = segmentsFromVideoSwings(found, durMs);
+        uploadLog('upload-swings-located', {
+          found: found.length,
+          unconfirmed: segs.filter(sg => sg.confidence === 'low').length,
+        }, sessionId);
+        if (found.length > 1) {
           store.expandUploadIntoSwings(sessionId, segs.map(seg => ({
             startSec: seg.startMs / 1000,
             endSec: seg.endMs / 1000,
@@ -495,9 +498,9 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           })));
           const fresh = useCageStore.getState().sessionHistory.find(x => x.id === sessionId);
           if (fresh) { session = fresh; swings = session.shots.filter(s => s.clipUri); }
-          uploadLog('upload-multi-swing-expand', { swings_found: kept.length, shots: swings.length }, sessionId);
-          V6('STAGE 0 — upload expanded into multi-swing', { found: kept.length, shots: swings.length });
-        } else if (kept.length === 1 && segs.length === 1) {
+          uploadLog('upload-multi-swing-expand', { swings_found: found.length, shots: swings.length }, sessionId);
+          V6('STAGE 0 — upload expanded into multi-swing', { found: found.length, shots: swings.length });
+        } else if (found.length === 1 && segs.length === 1) {
           // 2026-08-09 (verification wave speed #1) — the single-swing result used to be DISCARDED and the
           // clip re-located from scratch inside analyzeSwing (second coarse extraction + second model call
           // + re-probe: ~15-40s wasted on the most common upload). Persist the located window + impact on

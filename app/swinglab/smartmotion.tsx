@@ -2536,16 +2536,34 @@ export default function SmartMotion() {
         // as before), but reusing the window we already paid for. swings.length
         // === 0 still falls through to analyzeSwing's own locate (no regression).
         if (!cancelled && swings.length >= 1) {
-          // 2026-08-09 (verification wave C4, every-surface pass) — same practice-swing gate as the
-          // upload ingest path: when at least one CONFIDENT swing exists, low-confidence video-located
-          // ones (the practice-swing class) don't become analyzed segments here either. All-low keeps
-          // all (honest maybe beats an empty reel).
-          const confident = swings.filter(sw => sw.confidence !== 'low');
-          const kept = confident.length >= 1 ? confident : swings;
-          if (kept.length < swings.length) {
-            console.log('[smartmotion] re-analyze: dropped low-confidence swings', { found: swings.length, kept: kept.length });
-          }
-          const segs = segmentsFromVideoSwings(kept, durMs);
+          /**
+           * 2026-08-19 — the gate that used to stand here is GONE, not reordered.
+           *
+           * On the range and in the cage it could be moved below strike/video fusion, because a
+           * microphone was there to vouch for a swing the camera was unsure about. A library or
+           * uploaded clip carries NO acoustics at all (that is the whole reason this path segments
+           * from video), so there is no second signal arriving later and nothing to reorder. The gate
+           * had to be judged on its own premise — and the premise is false.
+           *
+           * It called low-confidence swings "the practice-swing class". The locator prompt excludes
+           * practice swings outright and has since 8feb0076 (2026-07-01) — FIVE WEEKS before this gate
+           * was added — and in the same breath defines low as the opposite thing: "if you genuinely
+           * CANNOT tell whether a ball was struck (e.g. a net catches it instantly, or the ball is out
+           * of frame), INCLUDE that swing with confidence low rather than dropping it." Low is a thin
+           * strike, a topped one, a net, a ball out of frame. The gate deleted precisely the swings the
+           * prompt had gone out of its way to preserve, to solve a problem already solved upstream.
+           *
+           * It came from an audit agent reading code, not from a session — 72b83436 justifies it as
+           * "the low-confidence escape valve had zero consumers". The valve did need a consumer; the
+           * consumer is HONESTY, not deletion. segmentsFromVideoSwings already stamps confirmed:false
+           * on a low swing and the reel already tints that chip amber, so an uncertain swing can be
+           * SHOWN as uncertain. Deleting it was never the only way to consume the flag — and the only
+           * field evidence we have (Tim, 2026-08-18 range session) says deleting loses real swings.
+           * [[overstrict-gate-lens]] [[illustration-data-points]]
+           */
+          const segs = segmentsFromVideoSwings(swings, durMs);
+          const unconfirmed = segs.filter(sg => sg.confidence === 'low').length;
+          console.log('[smartmotion] re-analyze segmentation', JSON.stringify({ found: swings.length, segments: segs.length, unconfirmed }));
           setSegments(segs);
           setSelectedSwing(0);
           // Sync the ref SYNCHRONOUSLY (mirrors the cage path) so runAnalysis's
@@ -3428,12 +3446,31 @@ export default function SmartMotion() {
           // collapse the fast path into locateSwings + an unbounded re-locate (30-70s).
           const worthVideo = durMs > 12_000 && (detectedSegments.length === 0 || durMs > 20_000);
           if (worthVideo) {
-            let swings = await pose.locateSwings(recorded.uri, durMs);
-            // 2026-08-09 (swing-analysis audit #2) — practice-swing gate, matching range + uploads.
-            {
-              const conf = swings.filter((sw) => sw.confidence !== 'low');
-              if (conf.length >= 1 && conf.length < swings.length) swings = conf;
-            }
+            const swings = await pose.locateSwings(recorded.uri, durMs);
+            /**
+             * 2026-08-19 — the CAGE copy of the range gate fixed in b6ee9b8b. Same order bug, and here
+             * it did MORE damage than at the range.
+             *
+             * The 2026-08-09 gate filtered `swings` twelve lines ABOVE the fusion that resolves them,
+             * so the microphone never got to vouch. But the cage branch also uses the video count as a
+             * GO/NO-GO — video is only adopted when it finds more swings than acoustics did — and the
+             * gate shrank exactly that number. Acoustics 1, video 3 (one high, two low): the gate cut
+             * video to 1, `1 > 1` was false, and the entire video pass was discarded rather than
+             * trimmed. Two swings vanished with no filter appearing to have run.
+             *
+             * A cage is the worst possible home for this. `low` is the locator's word for "I could not
+             * see the ball leave" — and its prompt names a net catching the ball as the example. In a
+             * net, low is the NORMAL reading, not the exception, so the gate quietly kept only whichever
+             * swings the model happened to be certain about (locateSwings is binary high|low —
+             * poseDetection.ts:793 — so `!== 'low'` means "high only", never a middle grade).
+             *
+             * Fixed the same way as the range branch: adopt on the RAW video count, fuse first, and gate
+             * the fused segments — so a swing is dropped only when neither camera nor microphone could
+             * confirm a ball was struck. Indoors the mic is the stronger signal, so that test is if
+             * anything more trustworthy here than at the range. All-low keeps all, the drop can never
+             * pull the count below what acoustics already had, and it is logged either way.
+             * [[overstrict-gate-lens]] [[no-half-fixes-enforce-every-surface]]
+             */
             // Use the video segments only if they found MORE swings than acoustics
             // — never reduce the count, just recover missed ones.
             if (swings.length > segsForAnalysis.length) {
@@ -3443,9 +3480,28 @@ export default function SmartMotion() {
               // departure went dark for EVERY swing including the clean one. The range
               // branch already merges via correlateStrikesWithVideo — do the same here
               // whenever we actually heard something.
-              segsForAnalysis = acousticStrikes.length > 0
+              const acousticCount = segsForAnalysis.length;
+              const fused = acousticStrikes.length > 0
                 ? correlateStrikesWithVideo(acousticStrikes, swings, durMs)
                 : segmentsFromVideoSwings(swings, durMs);
+              // The gate, now AFTER fusion (see the note above). A heard strike upgrades its video
+              // swing out of 'low' (swingSegmentation.ts:227), so what remains unconfirmed here is a
+              // motion neither signal could tie to a ball.
+              const confirmed = fused.filter((s) => s.confidence !== 'low');
+              const dropped = fused.length - confirmed.length;
+              const gated = confirmed.length >= 1 && dropped > 0
+                ? confirmed.map((s, i) => ({ ...s, index: i + 1 }))
+                : fused;
+              // Never REDUCE below what acoustics already had — this branch exists to ADD swings the
+              // mic missed, so a gate that undercuts the acoustic count has failed its own purpose.
+              segsForAnalysis = gated.length >= acousticCount ? gated : fused;
+              console.log('[smartmotion] cage segmentation', JSON.stringify({
+                video_swings: swings.length,
+                acoustic_segments: acousticCount,
+                segments: segsForAnalysis.length,
+                unconfirmed_dropped: segsForAnalysis === gated ? dropped : 0,
+                unconfirmed_kept: segsForAnalysis.length - segsForAnalysis.filter((s) => s.confidence !== 'low').length,
+              }));
               setSegments(segsForAnalysis);
               setSelectedSwing(0);
             }

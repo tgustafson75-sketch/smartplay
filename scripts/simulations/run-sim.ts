@@ -8040,7 +8040,12 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
       !/setShotIssueTimestamps\(sessionId, swing\.id, r\.frame_timestamps_sec\)/.test(up) && // raw sample times DEAD
       /tempoFromPoseFrames\(biomech\.frames, poseImpactMs, 'video'\)/.test(up) &&  // honest tempo in the verdict
       !/tempoFromBiomechanics\(biomech\)/.test(up) &&                              // fabricated-constant path DEAD
-      /const confident = found\.filter\(f => f\.confidence !== 'low'\)/.test(up) && // practice-swing gate
+      // 2026-08-19 — this line used to assert the practice-swing gate's SOURCE TEXT was PRESENT, so it
+      // went green on the defect and would have gone red on the fix. Removing the gate is the fix (the
+      // locator prompt has excluded practice swings since 2026-07-01; 'low' means "couldn't see the
+      // ball leave"), so the assertion is inverted: the gate must be GONE and the locate still logged.
+      !/const confident = found\.filter\(f => f\.confidence !== 'low'\)/.test(up) &&
+      /upload-swings-located/.test(up) &&
       /export function tempoFromPoseFrames/.test(pose) &&
       // 2026-08-09 (verifier round 2 — every-surface): the SIBLING producers were half-fixed. Cage
       // summary persisted raw sample times (then the legacy guard hid cage sessions' real moment
@@ -8051,12 +8056,13 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
         return (
           !/setShotIssueTimestamps\(session\.id, swing\.id, r\.frame_timestamps_sec\)/.test(cage) &&
           /const faultTs = faultIdx != null && faultIdx >= 0/.test(cage) &&
-          /const confident = swings\.filter\(sw => sw\.confidence !== 'low'\)/.test(sm)
+          !/const confident = swings\.filter\(sw => sw\.confidence !== 'low'\)/.test(sm) &&
+          /\[smartmotion\] re-analyze segmentation/.test(sm)
         );
       })()
     );
   })(),
-  'stage points anchor on the REAL located impact; fault moment only (ALL producers); wrist-series tempo; low-confidence swings gated on BOTH upload surfaces');
+  'stage points anchor on the REAL located impact; fault moment only (ALL producers); wrist-series tempo; NO practice-swing gate on either video-only upload surface (locate is logged instead)');
 
 // 2026-08-09 (Tim — "UNUSED COURSE DOWNLOAD ENGINE NOT WIRED? WTF") — REACHABILITY lock: every export
 // of the download engine must have a real caller. The engine shipped 08-06 with downloadCourse +
@@ -9776,10 +9782,12 @@ check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the bra
   })(),
   'club tendencies derive per-club from logged shots, ride the context, reach the system prompt, and the bag screen reads the SAME module');
 
-check('LOCK: a range swing is only dropped when NEITHER camera nor mic could confirm it',
+check('LOCK: NO surface drops a located swing before the evidence for it has arrived',
   (() => {
     const sm = read('app/swinglab/smartmotion.tsx');
     const seg = read('services/swing/swingSegmentation.ts');
+    const up = read('services/videoUpload.ts');
+    const det = read('services/poseDetection.ts');
     const range = sm.slice(sm.indexOf("if (stopMode === 'range')"), sm.indexOf('if (segsForAnalysis.length > 0)'));
     // ORDER is the whole invariant. The gate previously ran on the video list BEFORE
     // correlateStrikesWithVideo, so a swing the microphone heard was already deleted by the time the
@@ -9788,12 +9796,38 @@ check('LOCK: a range swing is only dropped when NEITHER camera nor mic could con
     const iCorrelate = range.indexOf('correlateStrikesWithVideo(');
     const iGate = range.indexOf("filter((s) => s.confidence !== 'low')");
     const gateAfterFusion = iCorrelate > -1 && iGate > iCorrelate;
-    // The pre-gate filter must be gone FROM THE RANGE BRANCH. Two sibling copies still exist and are
-    // deliberately out of this guard's scope: the CAGE branch (~3434, where acoustics already
-    // segment and the video pass may only ADD swings) and the swing-library RE-ANALYZE path (~2543).
-    // Both are the same shape and are tracked separately — scoping this to the range slice keeps the
-    // guard honest about what it actually proves rather than silently passing on the others.
     const noPreGate = !/const conf = swings\.filter\(\(sw\) => sw\.confidence !== 'low'\)/.test(range);
+    // 2026-08-19 — this guard used to be SCOPED TO THE RANGE SLICE while three sibling copies of the
+    // same gate lived on (cage, swing-library re-analyze, upload ingest). It proved the instance and
+    // said nothing about the class, which is exactly how the other three survived the fix that named
+    // them. It now forbids the SHAPE everywhere. [[run-the-second-pass-yourself]]
+    //
+    // CAGE: adopt on the RAW video count (the gate used to shrink the number the go/no-go compared, so
+    // the whole video pass was discarded rather than trimmed), fuse, then gate the fused segments.
+    const cage = sm.slice(sm.indexOf("stopMode === 'cage'"), sm.indexOf('// 2026-06-12 (analysis speed) — NEVER send a short clip'));
+    const cageNoPreGate = !/const conf = swings\.filter\(\(sw\) => sw\.confidence !== 'low'\)/.test(cage);
+    const cageRawCountGate = /if \(swings\.length > segsForAnalysis\.length\)/.test(cage);
+    const cageGateAfterFusion = (() => {
+      const iF = cage.indexOf('correlateStrikesWithVideo(');
+      const iG = cage.indexOf("fused.filter((s) => s.confidence !== 'low')");
+      return iF > -1 && iG > iF;
+    })();
+    const cageNeverReduces = /gated\.length >= acousticCount \? gated : fused/.test(cage);
+    const cageLogged = /\[smartmotion\] cage segmentation/.test(cage);
+    // VIDEO-ONLY surfaces (library re-analyze + upload ingest): no mic ever arrives, so there is no
+    // later evidence to wait for — the gate is removed outright, and the low swing is KEPT and shown
+    // as unconfirmed rather than deleted. Both must still log what the locator found.
+    const reanalyzeNoGate = !/const confident = swings\.filter\(sw => sw\.confidence !== 'low'\)/.test(sm)
+      && /\[smartmotion\] re-analyze segmentation/.test(sm);
+    const uploadNoGate = !/const confident = found\.filter\(f => f\.confidence !== 'low'\)/.test(up)
+      && /upload-swings-located/.test(up);
+    // The honest-maybe surface is what REPLACES deletion, so it is part of this invariant: a low swing
+    // becomes confirmed:false and the reel tints that chip with the warning colour.
+    const shownAsUnconfirmed = /confirmed: s\.confidence !== 'low'/.test(seg)
+      && /const tone = s\.confidence === 'low' \? colors\.warning : colors\.accent/.test(sm);
+    // And the reason all of this matters: locateSwings is BINARY. `!== 'low'` is "high only", never a
+    // middle grade, so any such filter on locator output is far harsher than it reads.
+    const locatorIsBinary = /confidence: \(s\.confidence === 'high' \? 'high' : 'low'\)/.test(det);
     // Fusion must still UPGRADE a matched low swing, or moving the gate changes nothing.
     const fusionUpgrades = /rank\[best\.confidence\] >= rank\[sw\.confidence\] \? best\.confidence : sw\.confidence/.test(seg);
     // All-low keeps all — an empty session is never the answer.
@@ -9801,9 +9835,11 @@ check('LOCK: a range swing is only dropped when NEITHER camera nor mic could con
     // And the drop is observable: the old one was silent, so two deleted swings looked exactly like
     // a detection failure. That silence is why it survived to a live range session.
     const logged = /\[smartmotion\] range segmentation/.test(range) && /unconfirmed_dropped/.test(range);
-    return gateAfterFusion && noPreGate && fusionUpgrades && allLowKeepsAll && logged;
+    return gateAfterFusion && noPreGate && fusionUpgrades && allLowKeepsAll && logged
+      && cageNoPreGate && cageRawCountGate && cageGateAfterFusion && cageNeverReduces && cageLogged
+      && reanalyzeNoGate && uploadNoGate && shownAsUnconfirmed && locatorIsBinary;
   })(),
-  'the confidence gate runs after strike/video fusion, keeps everything when all are low, and logs what it dropped');
+  'range + cage gate only AFTER fusion and never below the acoustic count; the two video-only surfaces do not gate at all and show the swing as unconfirmed; every surface logs');
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
