@@ -989,7 +989,33 @@ async function openSession() {
         setSessionStateMirror('idle');
         return;
       }
-      intent = await parseRes.json() as VoiceIntent;
+      /**
+       * 2026-08-20 (JSON-cast audit) — VALIDATE, don't assert.
+       *
+       * This cast told TypeScript the classifier had returned a VoiceIntent. It had not necessarily
+       * returned anything of the sort: an error body, a proxy page, a truncated response, or a shape
+       * change all land here as "a VoiceIntent" with an undefined intent_type. Downstream, dispatch()
+       * tests for 'conversational' and for 'unknown' — undefined matches NEITHER, so a malformed
+       * response slipped past both and fell into handler lookup carrying nothing usable.
+       *
+       * The honest reading of "the classifier gave us something we don't recognise" is exactly the
+       * one the system already has a good answer for: unknown / low confidence. That routes to the
+       * local status responder first and then the brain, which is what should happen when we do not
+       * understand the player — instead of walking into the handler table with an undefined type.
+       *
+       * This is the class behind three separate defects this month (recommend_club twice,
+       * courseToHoles yesterday): a cast asserting network data into a shape the compiler then
+       * believes. Casting is not parsing.
+       */
+      const parsedIntent = await parseRes.json() as Partial<VoiceIntent> | null;
+      const knownType = typeof parsedIntent?.intent_type === 'string' && parsedIntent.intent_type.length > 0;
+      if (!knownType) {
+        console.log('[path4:voice] classifier returned an unrecognisable shape — treating as unknown');
+        logVoiceSilentFail('intent_shape_invalid', { source: 'listeningSession', got: Object.keys(parsedIntent ?? {}).slice(0, 6).join(',') });
+      }
+      intent = (knownType
+        ? parsedIntent
+        : { ...(parsedIntent ?? {}), intent_type: 'unknown', confidence: 'low' }) as VoiceIntent;
       // 2026-08-08 (2-week audit V2 — earbud "open settings" dead-ended). The cloud classifier returns
       // NO raw_text (the VoiceIntent typing masked it), and the 08-07 EXPLICIT_OPEN gate in
       // openToolHandler reads intent.raw_text to find the open/show verb — so every classifier-routed
