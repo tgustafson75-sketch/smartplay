@@ -785,6 +785,29 @@ export default function SmartMotion() {
   const isPutt = puttMode;
   const puttModeRef = useRef(false);
   useEffect(() => { puttModeRef.current = puttMode; }, [puttMode]);
+  /**
+   * 2026-08-20 (Tim, after a round: "it's set to down the line and putt, not full swing like it
+   * should be in terms of the toggle settings").
+   *
+   * WHO set putt mode, not just whether it is on. The silent auto club scan was ADDITIVE by design —
+   * a confident putter turned putt mode ON, and it deliberately never cleared a mode "the user set
+   * deliberately". The protection is right; the implementation had no way to tell a user's choice
+   * from its OWN earlier guess, so it applied that protection to both. The result is a one-way
+   * ratchet: the auto scan may SET a mode it is forbidden to UNSET, so a single misread of an iron
+   * as a putter pins putting mode on, and every following full swing is routed to the putt analyzer.
+   * The per-recording reset does not save it either — the auto scan re-fires after that reset, in
+   * setup, and immediately re-applies its own stale verdict.
+   *
+   * Provenance fixes it without weakening the original intent: AUTO may override AUTO, only the
+   * USER may override the USER. A deliberate PUTT toggle, club pick, guided scan or voice command
+   * is still untouchable by a silent guess.
+   */
+  const puttModeSourceRef = useRef<'user' | 'auto' | null>(null);
+  const applyPuttMode = useCallback((next: boolean, source: 'user' | 'auto') => {
+    if (source === 'auto' && puttModeSourceRef.current === 'user') return;
+    puttModeSourceRef.current = source;
+    setPuttMode(next);
+  }, []);
   const [puttAnalysis, setPuttAnalysis] = useState<PuttingAnalysis | null>(null);
   // Feels engine — the player tells the caddie how the swing FELT; the caddie
   // reconciles it with the real read and coaches back.
@@ -820,8 +843,8 @@ export default function SmartMotion() {
    * Full swing ⇄ Putting, and `angle` is derived state everywhere else.
    */
   const cycleMode = () => {
-    if (isPutt) { setPuttMode(false); showModeFade('FULL SWING'); }
-    else { setPuttMode(true); showModeFade('PUTTING'); }
+    if (isPutt) { applyPuttMode(false, 'user'); showModeFade('FULL SWING'); }
+    else { applyPuttMode(true, 'user'); showModeFade('PUTTING'); }
   };
   // A club value is needed by detectBallSpeed (server key) at stop time;
   // keep a ref so the async stop path reads the current selection.
@@ -2832,6 +2855,9 @@ export default function SmartMotion() {
     // clip. Re-arm putt mode per recording via the PUTT toggle, picking the
     // putter, a club scan, or a voice "switch to putter".)
     setPuttMode(false);
+    // Provenance resets with the mode: a fresh recording is nobody's deliberate choice yet, and
+    // leaving a stale 'user' here would lock the auto scan out of the very next clip.
+    puttModeSourceRef.current = null;
     // Restore the user's last explicit angle — a putt forces down-the-line, and
     // that must not carry into the next full swing's guides/analysis. (audit H3)
     setAngle(lastChosenAngleRef.current);
@@ -3860,8 +3886,9 @@ export default function SmartMotion() {
         // Manual/voice scan owns putt mode both ways; the SILENT auto scan only sets
         // it ADDITIVELY (a confident putter → putt mode) and never CLEARS a putt mode
         // the user set deliberately (audit 2026-06-11 — explicit per-recording intent).
-        if (auto) { if (res.club_id === 'PT') setPuttMode(true); }
-        else setPuttMode(res.club_id === 'PT');
+        // Auto may correct its OWN earlier verdict (both directions); a deliberate user choice
+        // still wins and is never cleared by a silent scan.
+        applyPuttMode(res.club_id === 'PT', auto ? 'auto' : 'user');
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
@@ -3905,7 +3932,7 @@ export default function SmartMotion() {
       const res = await recognizeClubFromBase64(b64, apiUrl);
       if (res.kind === 'ok' && res.club_id !== 'unknown' && res.confidence !== 'low') {
         setClub(res.club_id);
-        setPuttMode(res.club_id === 'PT');
+        applyPuttMode(res.club_id === 'PT', 'user');
         // 2026-07-01 (Tim) — a scanned club also REGISTERS to the bag, so "look at my club /
         // add this club" builds the player's real roster the caddie recommends from.
         const alreadyInBag = !!useClubBagStore.getState().clubs[res.club_id];
@@ -4193,8 +4220,8 @@ export default function SmartMotion() {
   recordCmdRef.current = (cmd) => {
     if (cmd === 'scanClub') { void startClubScan(); return; }
     // Voice club change set putt mode (parity with the picker / club scan).
-    if (cmd === 'puttOn') { setPuttMode(true); setAngle('down_the_line'); return; }
-    if (cmd === 'puttOff') { setPuttMode(false); return; }
+    if (cmd === 'puttOn') { applyPuttMode(true, 'user'); setAngle('down_the_line'); return; }
+    if (cmd === 'puttOff') { applyPuttMode(false, 'user'); return; }
     /**
      * 2026-08-19 — the VOICE angle commands were the fourth surface that could set a camera angle, and
      * the easiest one to miss: the toggle, the route param and the analysis label were all obvious,
@@ -4207,7 +4234,7 @@ export default function SmartMotion() {
      * They still drop putt mode, because "down the line" after a putt is a real intent to go back to
      * a full swing. [[no-half-fixes-enforce-every-surface]] [[feels-like-a-real-caddie]]
      */
-    if (cmd === 'angleDtl' || cmd === 'angleFaceOn') { setPuttMode(false); showModeFade('ANGLE IS AUTOMATIC'); return; }
+    if (cmd === 'angleDtl' || cmd === 'angleFaceOn') { applyPuttMode(false, 'user'); showModeFade('ANGLE IS AUTOMATIC'); return; }
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
@@ -5757,7 +5784,7 @@ export default function SmartMotion() {
         open={clubMenuOpen}
         onClose={() => setClubMenuOpen(false)}
         selected={club}
-        onPick={(c) => { setClub(c); setLastClub(c); setPuttMode(c === 'PT'); setClubMenuOpen(false); }}
+        onPick={(c) => { setClub(c); setLastClub(c); applyPuttMode(c === 'PT', 'user'); setClubMenuOpen(false); }}
       />
 
       {/* 2026-07-18 (beta audit) — first-run help for SmartMotion. SCREEN_HELP.smartmotion was

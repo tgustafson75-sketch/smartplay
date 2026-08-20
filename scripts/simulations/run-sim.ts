@@ -7169,7 +7169,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // FACE-ON, shot map gone.
     (() => {
       // The cycler offers exactly Full swing / Putting — no angle in it.
-      const twoWay = /if \(isPutt\) \{ setPuttMode\(false\); showModeFade\('FULL SWING'\); \}/.test(smSrc2)
+      // 2026-08-20 — was pinned to the literal `setPuttMode(false)` inside the cycler, which made it
+      // fail the moment putt mode gained provenance (applyPuttMode(false, 'user')) — a change that
+      // did not touch this property at all. The property is that the cycler is a TWO-WAY Full swing
+      // ⇄ Putting control with no angle in it; which function flips the state is incidental, so the
+      // assertion no longer quotes it.
+      const twoWay = /if \(isPutt\) \{ \w+\((?:false|false, '\w+')\); showModeFade\('FULL SWING'\); \}/.test(smSrc2)
+        && /showModeFade\('PUTTING'\)/.test(smSrc2)
         && !/showModeFade\('FACE-ON'\)/.test(smSrc2)
         && !/showModeFade\('DOWN THE LINE'\)/.test(smSrc2);
       // The "did the player choose?" flag is gone, so nothing can suppress the correction.
@@ -10161,6 +10167,38 @@ check('LOCK: no capture path may discard the player\'s audio on the level meter 
     return vetoGone && measured && transcribesAnyway && sharedPathClean;
   })(),
   'a capture of real length always reaches Whisper on every path; the meter endpoints but never vetoes, and when it disagrees with the transcript that disagreement is logged');
+
+check('LOCK: a silent club scan may correct itself but may never overrule the player',
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    /**
+     * 2026-08-20 (Tim, after a round: "it's set to down the line and putt, not full swing like it
+     * should be in terms of the toggle settings").
+     *
+     * The silent auto club scan was ADDITIVE by design — a confident putter turned putt mode ON and
+     * it never cleared a mode "the user set deliberately". That protection is correct, but the code
+     * could not tell a user's choice from its OWN earlier guess, so it protected both. That is a
+     * ONE-WAY RATCHET: the scan may SET a mode it is forbidden to UNSET, so one misread of an iron
+     * as a putter pins putting mode on and every later full swing is routed to the putt analyzer —
+     * silently, because the swing still records fine. The per-recording reset does not save it: the
+     * auto scan re-fires after that reset and re-applies its own stale verdict.
+     *
+     * Invariant: AUTO may override AUTO, only the USER may override the USER. Asserted structurally,
+     * because the failure mode is a raw setPuttMode call at some new site quietly bypassing the rule.
+     */
+    const hasGate = /if \(source === 'auto' && puttModeSourceRef\.current === 'user'\) return;/.test(sm);
+    // Auto is symmetric within its own provenance — it can turn putt mode back OFF, which is the
+    // whole fix; a one-directional call here would restore the ratchet.
+    const autoSymmetric = /applyPuttMode\(res\.club_id === 'PT', auto \? 'auto' : 'user'\)/.test(sm);
+    // Provenance clears with the per-recording reset, or a stale 'user' locks the scan out forever.
+    const resetClears = /puttModeSourceRef\.current = null;/.test(sm);
+    // EVERY other writer goes through applyPuttMode. Exactly two raw calls may survive: the one
+    // inside applyPuttMode itself, and the per-recording reset.
+    const rawWrites = (sm.match(/setPuttMode\(/g) ?? []).length;
+    const noBypass = rawWrites === 2 && /applyPuttMode\(c === 'PT', 'user'\)/.test(sm);
+    return hasGate && autoSymmetric && resetClears && noBypass;
+  })(),
+  'putt mode records WHO set it: a silent auto scan can correct its own earlier verdict in both directions but can never clear a deliberate toggle/pick/voice choice, and every writer routes through the one gate');
 
 check('LOCK: knowing WHERE WE ARE is never gated on which course is selected',
   (() => {
