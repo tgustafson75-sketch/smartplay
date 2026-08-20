@@ -1738,7 +1738,19 @@ export const useVoiceCaddie = ({
       // on perfect Wi-Fi, and because it stopped trying it could never clear.
       // The transcribe fetch has its own timeout; a genuine failure below
       // gives a brief haptic, not a sticky wall.)
-      const doTranscribeFetch = async (timeoutMs: number, externalSignal?: AbortSignal) => {
+      /**
+       * 2026-08-20 — the `externalSignal` parameter is GONE, not merely unused.
+       *
+       * It existed so the cold-turn reachability guard could cancel a "doomed" fetch early. That
+       * guard is what discarded Tim's audio on a working connection (probes timed out at 5018 +
+       * 6016 = 11034ms and killed an upload with ~11s of budget left). Leaving the parameter behind
+       * would leave the door open: the next person to add a probe has a ready-made way to hand it
+       * authority over the real request, and the only thing standing in the way would be a comment.
+       *
+       * The budget is still fully enforced — this fetch has always aborted itself on its own
+       * timeout. What it no longer accepts is an OUTSIDE opinion about whether it should give up.
+       */
+      const doTranscribeFetch = async (timeoutMs: number) => {
         // Rebuild the multipart body per attempt — a consumed FormData stream
         // can't be safely re-sent on a retry.
         const fd = new FormData();
@@ -1746,18 +1758,11 @@ export const useVoiceCaddie = ({
         fd.append('language', language);
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeoutMs);
-        // 2026-07-23 — an EXTERNAL signal (the cold-turn reachability guard below) can abort the
-        // doomed fetch early when the host is proven unreachable, so we don't burn the full budget.
-        const onExt = () => { try { ctrl.abort(); } catch { /* no-op */ } };
-        if (externalSignal) {
-          if (externalSignal.aborted) ctrl.abort();
-          else externalSignal.addEventListener('abort', onExt);
-        }
         return fetch(apiUrl + '/api/transcribe', {
           method: 'POST',
           body: fd,
           signal: ctrl.signal,
-        }).finally(() => { clearTimeout(t); externalSignal?.removeEventListener('abort', onExt); });
+        }).finally(() => { clearTimeout(t); });
       };
 
       let transcribeRes: Response;

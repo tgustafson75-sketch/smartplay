@@ -10279,6 +10279,14 @@ check('LOCK: nothing but the real request may decide the real request failed',
     // 1. No probe-owned controller exists, and the transcribe call site takes NO external signal
     //    (the trailing `);` with no second argument is the whole point — a comma here is the bug).
     const noProbeAbort = !/coldAbort|coldUnreachable|probeAbort/.test(vc);
+    // Stronger than "no caller passes a signal": the fetch cannot ACCEPT one. The parameter was the
+    // mechanism by which a probe held authority over the real request, so it is gone rather than
+    // merely unused — otherwise the next probe author finds a ready-made hook and only a comment
+    // standing in the way.
+    const takesNoSignal = /const doTranscribeFetch = async \(timeoutMs: number\) =>/.test(vc)
+      // Match CODE use only (`externalSignal?:`, `.addEventListener`, `, externalSignal)`), never the
+      // prose above it that explains the removal — a bare /externalSignal/ matches its own tombstone.
+      && !/externalSignal\s*[?.,)]/.test(vc);
     const uncancellable = /transcribeRes = await doTranscribeFetch\(coldFirstTurn \? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS\);/.test(vc);
     // 2. ORDER, not presence: the diagnostic probes must appear AFTER the real attempt, inside its
     //    catch. If they ever migrate back above it, they are racing the upload again.
@@ -10299,7 +10307,7 @@ check('LOCK: nothing but the real request may decide the real request failed',
     // And the CDN verdict still reaches the log, where it discriminates "our functions were cold"
     // from "this device cannot reach the host" — advising us, deciding nothing.
     const decisiveLog = /cdnOk/.test(vc) && /cdnMs/.test(vc) && /const staticReachable = async/.test(vc);
-    return noProbeAbort && uncancellable && probesAfterFailureOnly && transportFirst && rearms && decisiveLog;
+    return noProbeAbort && takesNoSignal && uncancellable && probesAfterFailureOnly && transportFirst && rearms && decisiveLog;
   })(),
   'no probe can cancel the real upload, diagnostics run only after it genuinely fails, transport is warmed before the function, the mic tap re-arms a cold-pinned session, and the CDN verdict informs the log without holding authority');
 
