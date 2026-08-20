@@ -1157,9 +1157,23 @@ export default function PlayTab() {
       const merged = [...localMatches, ...ranked];
       setResults(merged);
       const err = found.find(r => r._error);
-      // Only surface the connectivity error when we have NOTHING to show — a bundled match makes
-      // "check your connection" both wrong and unhelpful (the course is right there).
+      /**
+       * 2026-08-19 (Tim — "it seems to only find prepopulated course at first").
+       *
+       * The old rule was: suppress the error entirely whenever a bundled course matched, because
+       * "check your connection" is wrong and unhelpful when a course is right there on screen. That
+       * reasoning was sound about the MESSAGE and wrong about the SILENCE. The list the player is
+       * looking at is INCOMPLETE — the online catalogue never answered — and nothing said so, so the
+       * only available conclusion was "search only knows the built-in courses".
+       *
+       * Two different true statements now, instead of one wrong one and one silence:
+       *   nothing found at all → the connectivity error, as before
+       *   bundled matched but the online search failed → say exactly that, and that it can be retried
+       * (searchCourses already retried a transient once before it got here, so this means it genuinely
+       * could not be reached — worth telling the player rather than hiding.)
+       */
       if (err && merged.length === 0) setSearchError(err._error ?? 'Search unavailable.');
+      else if (err) setSearchError('Showing your saved courses — the full course search didn’t respond. Search again to retry.');
       // 2026-06-30 — the DB responded but had NO match (not a network error): fall back
       // to the AI identifier so a real course off the DB still resolves. Keeps the main
       // spinner up while it runs (~2-4s) so there's no empty-state flicker. Skip when a bundled

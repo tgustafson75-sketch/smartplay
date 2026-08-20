@@ -252,34 +252,95 @@ function normalizeSearchResult(raw: RawSearchResult): { id: string; club_name: s
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * 2026-08-19 (Tim — "play tab search… it seems to only find prepopulated course at first").
+ *
+ * ROOT CAUSE, and it is the same cold-start class as the voice first turn and course discovery.
+ *
+ * The Play tab shows BUNDLED matches instantly (a local filter, no network) and merges the API
+ * results in when they land. That is the right design. But this function had NO RETRY: one cold or
+ * flaky request and it returned an `_error` sentinel — and the caller suppresses that error whenever
+ * a bundled course already matched, on the reasonable grounds that "check your connection" is wrong
+ * when a course is right there on screen.
+ *
+ * Put together: type a name, the bundled course appears, the online search quietly dies, and the
+ * player is looking at a list that is silently INCOMPLETE with nothing to tell them so. Search again
+ * a minute later and the now-warm API answers — hence "only finds prepopulated at first".
+ *
+ * ONE retry, on transient failures only (timeout / network / 5xx — the cold-Lambda shapes). A 4xx is
+ * the server giving a real answer and is not retried. Every failure is logged with its reason, since
+ * a failure the UI is designed to hide had better be visible somewhere.
+ */
 export async function searchCourses(
   query: string,
 ): Promise<{ id: string; club_name: string; course_name: string; location: string; _error?: string }[]> {
   console.log('[golfcourseapi] searchCourses:', query);
-  try {
-    const res = await fetch(proxyUrl({ action: 'search', q: query }), {
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({})) as { error?: string };
-      console.error('[golfcourseapi] search error:', res.status, err);
-      // Surface API errors as a sentinel result so UI can show a meaningful message
-      return [{ id: '', club_name: '', course_name: '', location: '', _error: err.error ?? `Search unavailable (${res.status})` }];
+
+  // `transient` and `message` are present on BOTH branches on purpose. A discriminated union would be
+  // tidier, but narrowing it across an awaited reassignment compiles under the app's tsconfig and NOT
+  // under the test project's looser one — a difference no production code should be sensitive to.
+  type Attempt = {
+    ok: boolean;
+    list: RawSearchResult[];
+    transient: boolean;
+    message: string;
+  };
+
+  // The retry is deliberately SHORTER than the first attempt. The spinner stays up across both, and
+  // 12s + 12s is 24 seconds of a player staring at a wheel — long enough to feel broken even when it
+  // eventually works. A cold Lambda woken by the first request answers the second quickly or not at
+  // all, so 6s is the honest budget for it: total worst case 18s, and the bundled matches have been
+  // on screen since the first keystroke.
+  const attempt = async (timeoutMs: number): Promise<Attempt> => {
+    try {
+      const res = await fetch(proxyUrl({ action: 'search', q: query }), {
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        console.error('[golfcourseapi] search error:', res.status, err);
+        return {
+          ok: false,
+          list: [],
+          // 5xx = the server fell over (often a cold start); 4xx = a real answer we must not re-ask.
+          transient: res.status >= 500,
+          message: err.error ?? `Search unavailable (${res.status})`,
+        };
+      }
+      const data = await res.json() as Record<string, unknown>;
+      console.log('[golfcourseapi] search raw keys:', Object.keys(data));
+      // Handle various shapes: { courses: [...] } | { data: [...] } | [...]
+      const list: RawSearchResult[] =
+        (data.courses as RawSearchResult[] | undefined) ??
+        (data.data as RawSearchResult[] | undefined) ??
+        (Array.isArray(data) ? data as RawSearchResult[] : []);
+      return { ok: true, list, transient: false, message: '' };
+    } catch (e) {
+      console.error('[golfcourseapi] searchCourses exception:', e);
+      return { ok: false, list: [], transient: true, message: 'Course search unavailable — check connection' };
     }
-    const data = await res.json() as Record<string, unknown>;
-    console.log('[golfcourseapi] search raw keys:', Object.keys(data));
+  };
 
-    // Handle various shapes: { courses: [...] } | { data: [...] } | [...]
-    const list: RawSearchResult[] =
-      (data.courses as RawSearchResult[] | undefined) ??
-      (data.data as RawSearchResult[] | undefined) ??
-      (Array.isArray(data) ? data as RawSearchResult[] : []);
-
-    return list.slice(0, 10).map(normalizeSearchResult);
-  } catch (e) {
-    console.error('[golfcourseapi] searchCourses exception:', e);
-    return [{ id: '', club_name: '', course_name: '', location: '', _error: 'Course search unavailable — check connection' }];
+  // Written without relying on narrowing across a reassigned `let` — that compiles under the app's
+  // tsconfig and NOT under the test project's looser one, which is a difference worth never depending on.
+  let final = await attempt(12_000);
+  if (!final.ok && final.transient) {
+    logSearch('course_search_retry', { query: query.slice(0, 60) }, 'diag');
+    final = await attempt(6_000);
   }
+
+  if (final.ok) return final.list.slice(0, 10).map(normalizeSearchResult);
+  logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120) });
+  return [{ id: '', club_name: '', course_name: '', location: '', _error: final.message }];
+}
+
+/** Best-effort breadcrumb. A search failure the UI deliberately hides (because a bundled course
+ *  matched) must still be visible somewhere, or "search is broken" is unfalsifiable. Never throws. */
+function logSearch(stage: string, details: Record<string, unknown>, kind: 'analysis_error' | 'diag' = 'analysis_error'): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, kind);
+  } catch { /* best-effort */ }
 }
 
 /**
