@@ -10106,6 +10106,41 @@ check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
   })(),
   'the pipecat audio path uses the same cold/warm transcribe budget as the tap path, marks the connection warm on success, and speaks AND shows a local line on every failure instead of going silent');
 
+check('LOCK: no capture path may discard the player\'s audio on the level meter alone',
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const vs = read('services/voiceService.ts');
+    /**
+     * 2026-08-19. Tim, after a round demoing to real golfers: "got ignored most of the round for
+     * maybe the first time since I started building the app six months ago" — and the detail that
+     * settles it, "TEXT INPUT STILL WORKED when they did not". Text bypasses capture entirely, so the
+     * brain, the network and every path downstream were fine. The break was audio capture, alone.
+     *
+     * His log named the path: five `tap_ended_silent_capture` from `handleMicPress`, durationMs 2493
+     * to 4902. Those recordings were thrown away without ever reaching Whisper because a FIXED
+     * -30 dBFS meter said no speech — on Android, outdoors, in wind. The shared captureUtterance path
+     * in voiceService never had that veto; only this one did, and unifying the avatar and mic routed
+     * him through it.
+     *
+     * The invariant, which is what actually matters and is why this is a LOCK and not a tuned number:
+     * the meter may decide when to STOP listening. It may never decide whether words were said.
+     * Whisper decides that. A threshold can be wrong on a device, in wind, or with a quiet voice —
+     * and when it is wrong, the cost must be one wasted transcribe, never a discarded utterance.
+     */
+    const vetoGone = !/logVoiceSilentFail\('tap_ended_silent_capture'/.test(vc)
+      && !/if \(!micHasSpokenRef\.current\) \{[\s\S]{0,400}?restartFresh = true;/.test(vc);
+    // The disagreement is still measured — that is how we learn which devices the meter lies on.
+    const measured = /logVoiceSilentFail\('meter_silent_transcribing_anyway'/.test(vc);
+    // ...and the audio goes to the transcriber regardless of what the meter concluded.
+    const transcribesAnyway = /meter is not the judge/.test(vc) && /await processAudioUri\(uri\);/.test(vc);
+    // The OTHER capture path must stay veto-free too: it may skip only on physical impossibility
+    // (too short / too small / too large), never on hasSpoken.
+    const sharedPathClean = !/if \(!hasSpoken\)[\s\S]{0,120}?return done\(/.test(vs)
+      && /return done\('too_short'\)/.test(vs);
+    return vetoGone && measured && transcribesAnyway && sharedPathClean;
+  })(),
+  'a capture of real length always reaches Whisper on every path; the meter endpoints but never vetoes, and when it disagrees with the transcript that disagreement is logged');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
