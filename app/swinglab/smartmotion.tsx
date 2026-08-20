@@ -1765,6 +1765,78 @@ export default function SmartMotion() {
   const poseRead = useMemo(() => buildPoseSwingRead(biomech, tempo), [biomech, tempo]);
 
   /**
+   * 2026-08-19 (Tim: "video does not auto zoom to player" — and, looking at his own capture, he is
+   * right: the golfer is maybe a fifth of the frame with sky above and empty fairway below).
+   *
+   * The clip is filmed to get the whole swing safely in shot, so the player is small on purpose. But
+   * REVIEW is not capture: at review the only thing that matters is the body, and CONTAIN mode was
+   * faithfully showing the parked cars and the tree line at the same size as the golfer.
+   *
+   * The pose keypoints already know exactly where he is. Take the bounding box of every tracked joint
+   * across the whole swing — not one frame, or the zoom would jitter as he moves — and scale that box
+   * up to fill the view.
+   *
+   * The padding is the part that has to be right for GOLF specifically. A person-shaped crop cuts the
+   * two things a golfer actually looks for: the club above the head at the top, and the ball and turf
+   * below the hands. So the box is padded hard vertically (60% up, 35% down) and moderately across,
+   * then the scale is capped at 2.2x — a clip already framed tight must not be zoomed into mush.
+   *
+   * Returns null when there is no usable pose, and the view stays exactly as it is today.
+   */
+  const playerZoom = useMemo((): { scale: number; tx: number; ty: number } | null => {
+    const frames = poseFrames;
+    if (!frames || frames.length === 0 || rootSize.w <= 0 || rootSize.h <= 0) return null;
+    // Keypoints arrive either normalized 0–1 or pixel-absolute; decide by magnitude, the same way
+    // SwingBodyOverlay does, so the two never disagree about the space they are in.
+    let maxCoord = 0;
+    for (const f of frames) for (const k of f.keypoints) { if (k.score > 0.2) maxCoord = Math.max(maxCoord, k.x, k.y); }
+    if (maxCoord <= 0) return null;
+    const norm = maxCoord <= 1.5;
+    const fw = frames.find(f => f.frameW)?.frameW ?? 0;
+    const fh = frames.find(f => f.frameH)?.frameH ?? 0;
+    if (!norm && (!fw || !fh)) return null; // pixel coords with no frame size — cannot normalize honestly
+
+    let minX = 1, maxX = 0, minY = 1, maxY = 0, seen = 0;
+    for (const f of frames) {
+      for (const k of f.keypoints) {
+        if (k.score <= 0.2) continue;
+        const x = norm ? k.x : k.x / fw;
+        const y = norm ? k.y : k.y / fh;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        seen++;
+      }
+    }
+    if (seen < 8 || maxX <= minX || maxY <= minY) return null;
+
+    // Golf padding: room for the club over the head and the ball under the hands.
+    const h = maxY - minY, w = maxX - minX;
+    const padTop = h * 0.60, padBottom = h * 0.35, padSide = w * 0.35;
+    const bx0 = Math.max(0, minX - padSide), bx1 = Math.min(1, maxX + padSide);
+    const by0 = Math.max(0, minY - padTop),  by1 = Math.min(1, maxY + padBottom);
+    const bw = bx1 - bx0, bh = by1 - by0;
+    if (bw <= 0.02 || bh <= 0.02) return null;
+
+    // Scale so the padded box fills the smaller dimension; never crop content away on the other axis.
+    const scale = Math.min(2.2, Math.max(1, Math.min(1 / bw, 1 / bh)));
+    if (scale <= 1.05) return null; // already filling the frame — leave it alone
+
+    // Move the box centre to the view centre, in post-scale pixels.
+    const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2;
+    const tx = (0.5 - cx) * rootSize.w * scale;
+    const ty = (0.5 - cy) * rootSize.h * scale;
+    return { scale, tx, ty };
+  }, [poseFrames, rootSize.w, rootSize.h]);
+
+  /** One transform for the clip AND every frame-space overlay, so the skeleton, club arc and ball
+   *  trace stay welded to the body they were computed against. Applying it to the video alone is how
+   *  you get a zoomed golfer with his skeleton standing beside him. */
+  const zoomStyle = playerZoom
+    ? { transform: [{ translateX: playerZoom.tx }, { translateY: playerZoom.ty }, { scale: playerZoom.scale }] }
+    : null;
+
+  /**
    * 2026-08-19 — the four review cards. Each summarises one measured source; the expanded view below
    * shows that source in full. Deliberately built from the SAME values the expanded panels render, so
    * a summary can never claim something its own detail view disagrees with.
@@ -4412,7 +4484,11 @@ export default function SmartMotion() {
           <Video
             ref={attachVideoRef}
             source={clipSource}
-            style={StyleSheet.absoluteFill}
+            // 2026-08-19 (Tim — "video does not auto zoom to player"). CONTAIN keeps the whole frame,
+            // which at review means the parked cars and the tree line render at the same size as the
+            // golfer. zoomStyle scales the clip to the pose bounding box; it is applied identically to
+            // every frame-space overlay below so the skeleton, club arc and ball trace move with him.
+            style={[StyleSheet.absoluteFill, zoomStyle]}
             // 2026-08-06 (Tim — "couldn't see the golfer"). CONTAIN (was COVER) shows the WHOLE recorded
             // swing instead of cropping the sides edge-to-edge (the Samsung side-crop). The pose overlay +
             // CV trace mapping are switched to 'contain' in lockstep so the skeleton, club, and ball trace
@@ -4580,7 +4656,7 @@ export default function SmartMotion() {
           (showSkeleton && poseFrames && poseFrames.length > 0) ||
           (clubArcPoints != null && clubArcPoints.length >= 3)
         ) ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, zoomStyle]} pointerEvents="none">
             <SwingBodyOverlay
               frames={poseFrames ?? []}
               currentTimeMs={playbackMs}
@@ -4633,9 +4709,13 @@ export default function SmartMotion() {
             resolve. Both honest: solid = measured only, dashed = labelled estimate.
             Down-the-line + non-putt only. */}
         {isReview && showResults && shotTrace && shotTrace.tier !== 'none' ? (
-          <MultiPointTraceOverlay trace={shotTrace} color={shotTraceColor} />
+          <View style={[StyleSheet.absoluteFill, zoomStyle]} pointerEvents="none">
+            <MultiPointTraceOverlay trace={shotTrace} color={shotTraceColor} />
+          </View>
         ) : isReview && showResults && ballTrace ? (
-          <BallTraceOverlay trace={ballTrace} color={ballTraceColor} />
+          <View style={[StyleSheet.absoluteFill, zoomStyle]} pointerEvents="none">
+            <BallTraceOverlay trace={ballTrace} color={ballTraceColor} />
+          </View>
         ) : null}
 
         {/* SETUP / RECORDING — the ball box is the SINGLE target origin: the

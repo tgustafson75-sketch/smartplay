@@ -1422,13 +1422,39 @@ function TargetCameraOverlay({
     const geodesicYards = Math.max(1, Math.round(haversineYards(fix.location, target)));
     const gpsMiddleYards = yards.reason === 'ok' ? yards.middle : null;
     if (gpsMiddleYards != null) {
-      // ON-COURSE: gate the camera-tilt read against the honest GPS green-middle baseline (SF-1).
-      // A tilt read >60yd off the baseline is horizon-noise → keep the GPS distance, drop to Low.
-      if (Math.abs(geodesicYards - gpsMiddleYards) >= 60) {
+      /**
+       * 2026-08-19 (Tim: "when you move the reticle in smartfinder the yardage should adjust" — and
+       * separately, "the math for smartfinder 6 months later is still not adjusting").
+       *
+       * IT COULD NOT ADJUST. This gate compared the aimed read against the GPS distance to the GREEN
+       * MIDDLE and returned early — keeping the previous number — whenever they differed by 60 yards.
+       * But the reticle exists precisely to aim at things that are NOT the green middle: a layup, a
+       * bunker to carry, a front pin, a tree to go over. Every one of those is a correct read that
+       * sits well outside 60 yards of the green, so the gate rejected the right answers and froze the
+       * display. Aim anywhere interesting and the number stopped moving.
+       *
+       * The gate's ORIGINAL purpose is real and is kept: near the horizon a degree of pitch error
+       * explodes the projected point to 250+ or collapses it to ~10 (Tim, 2026-06-23). But that is a
+       * question of PHYSICAL PLAUSIBILITY, not of agreement with the green. A read is horizon noise
+       * when it is absurd — not when the player is aiming somewhere else on the hole.
+       *
+       * So the baseline now bounds an ENVELOPE instead of demanding equality: anything from just in
+       * front of the player out to well past the green is a legitimate target and the number follows
+       * the reticle. Beyond that envelope it is the old garbage signature, and we keep the GPS
+       * distance and drop to Low exactly as before.
+       */
+      const MIN_PLAUSIBLE_YDS = 5;
+      // Past the green is legitimate (over-the-green bailout, the next tee, a range target), but not
+      // by a fairway's worth — beyond this it is the projected-to-infinity failure, not an aim point.
+      const maxPlausible = Math.max(gpsMiddleYards + 120, gpsMiddleYards * 1.6, 60);
+      if (geodesicYards < MIN_PLAUSIBLE_YDS || geodesicYards > maxPlausible) {
         setReticleConfidence('low');
         return;
       }
-      setReticleConfidence(result.confidence);
+      // Trust falls off with distance from the surveyed baseline — the read still SHOWS, it is just
+      // honest about being a tilt estimate rather than a GPS-anchored one.
+      const drift = Math.abs(geodesicYards - gpsMiddleYards);
+      setReticleConfidence(drift < 60 ? result.confidence : (result.confidence === 'high' ? 'medium' : 'low'));
     } else {
       // 2026-07-14 (Tim — range / off-course POINT-FINDER) — not in a round, so there's no GPS
       // green to gate against; the camera-tilt read is the only signal. Accept it as the measured
