@@ -30,12 +30,22 @@ interface Props {
   // Tim's pain: every tap on the camera moved the target, making
   // screenshots impossible. Lock = "Top Gun" reticle hold.
   locked?: boolean;
+  /**
+   * 2026-08-20 (Tim: "Should be able to tap or ask to zoom the pin flag and get a tight read. We
+   * could be so much more connected and intelligent with the structure we have built.")
+   *
+   * A DOUBLE-tap asks for a precision read on the point tapped. Single tap keeps its existing
+   * meaning — place the reticle — so nothing a player already does changes; the second tap is the
+   * new instruction, and it carries the point so the parent can aim AND magnify in one gesture.
+   */
+  onPrecisionRead?: (point: { xNorm: number; yNorm: number }) => void;
 }
 
 export default function TargetingOverlay({
   targetYards,
   onTargetPointNormalized,
   locked = false,
+  onPrecisionRead,
 }: Props) {
   const { width, height } = useWindowDimensions();
 
@@ -88,8 +98,15 @@ export default function TargetingOverlay({
   // reportThrottled/reportPoint. After orientation changes, width/height/callback
   // identity change but PanResponder never re-creates. Fix: stable ref that the
   // PanResponder reads through — always gets the latest values.
-  const cbRef = useRef({ reportThrottled, reportPoint });
-  useEffect(() => { cbRef.current = { reportThrottled, reportPoint }; }, [reportThrottled, reportPoint]);
+  const cbRef = useRef({ reportThrottled, reportPoint, onPrecisionRead });
+  useEffect(() => { cbRef.current = { reportThrottled, reportPoint, onPrecisionRead }; }, [reportThrottled, reportPoint, onPrecisionRead]);
+  // The PanResponder is created ONCE, so it must read dimensions through refs for the same reason
+  // it reads callbacks through one — a fold/rotate changes width/height and it would otherwise
+  // normalise the tap against the dimensions the screen had at mount.
+  const widthRef = useRef(width);
+  const heightRef = useRef(height);
+  useEffect(() => { widthRef.current = width; heightRef.current = height; }, [width, height]);
+  const lastTapRef = useRef<{ at: number; x: number; y: number } | null>(null);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -108,6 +125,21 @@ export default function TargetingOverlay({
         tx.value = x;
         ty.value = y;
         cbRef.current.reportPoint(x, y);
+        // DOUBLE-TAP = "read that tightly". Detected here rather than with a competing gesture
+        // recogniser so it cannot steal drags from the reticle: a second release within 300ms and
+        // 44px of the first is a double tap, anything else is an ordinary aim. 44px is a fingertip —
+        // tight enough that a deliberate re-aim is never mistaken for a request to zoom.
+        const now = Date.now();
+        const prev = lastTapRef.current;
+        if (prev && now - prev.at < 300 && Math.hypot(x - prev.x, y - prev.y) < 44) {
+          lastTapRef.current = null;
+          cbRef.current.onPrecisionRead?.({
+            xNorm: Math.max(0, Math.min(1, x / Math.max(1, widthRef.current))),
+            yNorm: Math.max(0, Math.min(1, y / Math.max(1, heightRef.current))),
+          });
+        } else {
+          lastTapRef.current = { at: now, x, y };
+        }
       },
     }),
   ).current;

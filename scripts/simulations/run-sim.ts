@@ -10234,6 +10234,42 @@ check('LOCK: knowing WHERE WE ARE is never gated on which course is selected',
   })(),
   'location is acquired regardless of previewCourseId/active round, falls back to the OS cached fix when a fresh one is slow, retries on a bounded schedule, and still feeds nearby-course discovery');
 
+check('SmartFinder: a double-tap magnifies the aim point without stealing reticle drags',
+  (() => {
+    const ov = read('components/smartfinder/TargetingOverlay.tsx');
+    const sf = read('app/smartfinder.tsx');
+    /**
+     * 2026-08-20 (Tim: "when you move the reticle in smartfinder the yardage should adjust. Should
+     * be able to tap or ask to zoom the pin flag and get a tight read. We could be so much more
+     * connected and intelligent with the structure we have built.")
+     *
+     * Both halves already existed and had never been joined: the camera has had continuous zoom, and
+     * the reticle has always reported a normalised aim point to the yardage engine. The double-tap
+     * is the join.
+     *
+     * The risk this guard exists for is REGRESSION IN THE PRIMARY GESTURE. Aiming the reticle is the
+     * thing players do constantly; zooming is occasional. Detecting the second tap inside the
+     * existing PanResponder release — rather than adding a competing recogniser — is what keeps a
+     * drag from ever being swallowed by a gesture arbiter, so that mechanism is asserted, not just
+     * the feature's presence.
+     */
+    // Detected in the release handler, with BOTH a time and a distance bound (a time-only rule turns
+    // a fast deliberate re-aim across the screen into an accidental zoom).
+    const inReleaseHandler = /onPanResponderRelease/.test(ov)
+      && /now - prev\.at < 300 && Math\.hypot\(x - prev\.x, y - prev\.y\) < 44/.test(ov);
+    // No competing gesture recogniser was introduced on the overlay to do it.
+    const noRivalRecogniser = !/Gesture\.Tap\(\)/.test(ov);
+    // The single tap still reports the aim point, so yardage follows the FIRST tap as it always has.
+    const aimStillReports = /cbRef\.current\.reportPoint\(x, y\);/.test(ov);
+    // Parent steps the zoom and returns to 1x at the ceiling, rather than jumping to max — the
+    // camera's digital zoom is centre-anchored, so a hard jump throws an off-centre flag out of view.
+    const stepsAndResets = /prev >= PRECISION_ZOOM_MAX - 0\.001 \? 0 : Math\.min\(PRECISION_ZOOM_MAX, prev \+ PRECISION_ZOOM_STEP\)/.test(sf);
+    // Pinch resumes from wherever the tap left off instead of snapping back.
+    const pinchStaysInSync = /baseZoomRef\.current = next; \/\/ keep pinch continuing/.test(sf);
+    return inReleaseHandler && noRivalRecogniser && aimStillReports && stepsAndResets && pinchStaysInSync;
+  })(),
+  'double-tapping the scene steps the camera zoom for a tight read and resets at the ceiling, detected inside the existing pan release so ordinary reticle aiming is never stolen by a gesture arbiter');
+
 check('LOCK: every path that uploads audio gets a SECOND attempt before it gives up',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');

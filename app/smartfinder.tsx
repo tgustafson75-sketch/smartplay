@@ -53,6 +53,7 @@ import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../serv
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
+import * as Haptics from 'expo-haptics';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -415,6 +416,14 @@ export default function SmartFinder() {
  * pinch-to-zoom (matches native camera apps).
  */
 // 2026-05-24 — Bumped from 0.4 → 1.0 (native camera ratio). User reported
+/**
+ * Double-tap precision zoom. Two taps reach PRECISION_ZOOM_MAX; a tap at the ceiling drops back to
+ * 1×. Kept well below the device maximum on purpose — past roughly half of the digital range the
+ * image is mostly interpolation, and a rangefinder that shows a mushy flag reads as broken even
+ * though the YARDAGE (which comes from GPS geometry, not from pixels) is exactly as accurate.
+ */
+const PRECISION_ZOOM_STEP = 0.25;
+const PRECISION_ZOOM_MAX = 0.5;
 // "I can't zoom" on Z Fold — at 0.4 sensitivity a 3.5x finger spread was
 // needed to reach max zoom (zoom=1.0), which is well outside ergonomic
 // pinch range. 1.0 means a 2x finger spread covers the full range, same
@@ -583,6 +592,35 @@ function CameraSmartFinder({
   const commitBaseZoom = useCallback((next: number) => {
     baseZoomRef.current = next;
   }, []);
+  /**
+   * 2026-08-20 (Tim: "when you move the reticle in smartfinder the yardage should adjust. Should be
+   * able to tap or ask to zoom the pin flag and get a tight read. We could be so much more connected
+   * and intelligent with the structure we have built.")
+   *
+   * Double-tap the flag → magnify, the way you would raise a rangefinder to your eye. Everything
+   * needed for this already existed and had simply never been connected: continuous zoom is here on
+   * the camera, and the reticle already reports a normalised aim point to the yardage engine. The
+   * gesture just joins them.
+   *
+   * WHY IT STEPS RATHER THAN JUMPING TO MAX: the camera's digital zoom is anchored on the CENTRE of
+   * the frame, not on the point tapped, so a hard jump to full magnification throws an off-centre
+   * flag straight out of view — the player taps the pin and loses it. Stepping ~2 taps to a usable
+   * magnification keeps the flag in frame while the player naturally re-aims the phone, which is
+   * exactly the motion a rangefinder asks for. A third tap at the ceiling returns to 1× so the same
+   * finger that zoomed in gets back out without hunting for a control.
+   *
+   * The tapped point is still reported as the aim point by the overlay's normal path, so the yardage
+   * follows the tap on the FIRST of the two taps and the read is already correct when the zoom lands.
+   */
+  const handlePrecisionRead = useCallback((_point: { xNorm: number; yNorm: number }) => {
+    setZoom(prev => {
+      const next = prev >= PRECISION_ZOOM_MAX - 0.001 ? 0 : Math.min(PRECISION_ZOOM_MAX, prev + PRECISION_ZOOM_STEP);
+      baseZoomRef.current = next; // keep pinch continuing from where the tap left off, not from 0
+      return next;
+    });
+    try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* haptics optional */ }
+  }, []);
+
   const pinchGesture = useMemo(() => {
     return Gesture.Pinch()
       .onUpdate((e) => {
@@ -774,6 +812,7 @@ function CameraSmartFinder({
               onTargetYardsChange={setSceneTargetYards}
               onHeadingUpdate={onHeadingUpdate}
               captureFrameBase64={captureFrameBase64}
+              onPrecisionRead={handlePrecisionRead}
             />
           ) : (
             <PuttCameraOverlay locationGranted={locationGranted} />
@@ -1168,6 +1207,7 @@ function TargetCameraOverlay({
   onTargetYardsChange,
   onHeadingUpdate,
   captureFrameBase64,
+  onPrecisionRead,
 }: {
   yards: GreenYardages;
   gps: GPSQualityReading;
@@ -1180,6 +1220,8 @@ function TargetCameraOverlay({
   onHeadingUpdate?: (h: number) => void;
   /** Grab a still from the live camera as base64 — the parent owns the CameraView ref. */
   captureFrameBase64?: () => Promise<string | null>;
+  /** Double-tap on the scene: aim there AND magnify. The camera + its zoom live in the parent. */
+  onPrecisionRead?: (point: { xNorm: number; yNorm: number }) => void;
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -1616,6 +1658,7 @@ function TargetCameraOverlay({
         targetYards={targetYards}
         onTargetPointNormalized={onTargetPointNormalized}
         locked={locked}
+        onPrecisionRead={onPrecisionRead}
       />
 
       {/* Bottom F/M/B strip — port of V3's TO TARGET row.
