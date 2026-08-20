@@ -18,6 +18,10 @@
 export type ToolAction =
   | { type: 'open_smartvision' }
   | { type: 'open_smartfinder' }
+  // 2026-08-20 (Tim — "tap OR ASK to zoom the pin flag and get a tight read"). Magnify the
+  // rangefinder scene by voice. Typed here from the start: the ONLY two UI tools ever silently
+  // dropped were the two that lacked a ToolAction member, so an untyped payload is the drop class.
+  | { type: 'zoom_target'; level?: 'in' | 'out' | 'reset' }
   | { type: 'open_swinglab' }
   | { type: 'log_score'; hole?: number; score: number }
   | { type: 'record_swing' }

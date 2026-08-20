@@ -54,6 +54,7 @@ import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
 import * as Haptics from 'expo-haptics';
+import { subscribeSmartFinderCommand, setSmartFinderActive } from '../services/smartFinderCommandBus';
 import GPSQuality from '../components/smartfinder/GPSQuality';
 import TargetingOverlay from '../components/smartfinder/TargetingOverlay';
 import { useCurrentWeather } from '../hooks/useCurrentWeather';
@@ -620,6 +621,39 @@ function CameraSmartFinder({
     });
     try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* haptics optional */ }
   }, []);
+
+  /**
+   * 2026-08-20 — the ASK half of "tap or ask to zoom the pin flag".
+   *
+   * The screen owns the behaviour and the voice command is only a nudge, exactly as SmartMotion's
+   * record bus works — so the brain never has to know the current zoom level, whether the reticle is
+   * locked, or what this device's maximum magnification happens to be.
+   *
+   * 'in' deliberately reuses handlePrecisionRead, so saying "zoom in on the pin" and double-tapping
+   * it are the SAME code path. Two ways to ask for one thing must not be two implementations that
+   * can drift — that drift is what put SmartMotion's angle label and its engine on different answers
+   * for weeks.
+   */
+  useEffect(() => {
+    setSmartFinderActive(true);
+    const unsub = subscribeSmartFinderCommand((cmd) => {
+      if (cmd === 'zoomReset') {
+        setZoom(0);
+        baseZoomRef.current = 0;
+        return;
+      }
+      if (cmd === 'zoomOut') {
+        setZoom(prev => {
+          const next = Math.max(0, prev - PRECISION_ZOOM_STEP);
+          baseZoomRef.current = next;
+          return next;
+        });
+        return;
+      }
+      handlePrecisionRead({ xNorm: 0.5, yNorm: 0.5 });
+    });
+    return () => { unsub(); setSmartFinderActive(false); };
+  }, [handlePrecisionRead]);
 
   const pinchGesture = useMemo(() => {
     return Gesture.Pinch()

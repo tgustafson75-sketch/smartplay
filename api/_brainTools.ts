@@ -68,6 +68,10 @@ export const UI_TOOLS = new Set([
   // client dispatch case never fired and nothing was written. The passthrough spread carries the
   // clubs/distances arrays intact to the client registrar.
   'register_bag',
+  // 2026-08-20 (Tim — "tap or ask to zoom the pin flag and get a tight read"). Declared here, in
+  // UI_TOOLS, in ToolAction and in the dispatcher in the SAME change — the parity guard checks all
+  // three, and the two tools ever dropped were dropped because one of those was missed.
+  'zoom_target',
 ]);
 
 export const BRAIN_TOOLS: AiToolDef[] = [
@@ -80,6 +84,17 @@ export const BRAIN_TOOLS: AiToolDef[] = [
     name: 'open_smartfinder',
     description: 'Open SmartFinder — the rangefinder / distance-lock tool for measuring distance to a specific target on the current hole. Trigger ONLY on explicit rangefinder requests: "rangefinder", "lock the distance", "pin distance", "give me a precise distance". Do NOT use for course search, course selection, or "what course are we playing" — use lookup_course for those.',
     parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'zoom_target',
+    description: 'Magnify the SmartFinder rangefinder view for a tighter read on a distant target ("zoom in on the pin", "zoom in on the flag", "get me a tighter read", "zoom out", "reset the zoom"). Opens SmartFinder first if it is not already up. This changes the CAMERA magnification only — it does not change the measured yardage, which comes from GPS geometry. For "how far is the pin" answer with the distance instead; only use this when they ask to zoom or for a closer/tighter look.',
+    parameters: {
+      type: 'object',
+      properties: {
+        level: { type: 'string', enum: ['in', 'out', 'reset'], description: 'Direction of magnification. Defaults to "in".' },
+      },
+      required: [],
+    },
   },
   {
     name: 'open_swinglab',

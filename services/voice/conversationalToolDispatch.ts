@@ -107,6 +107,8 @@ type AnyAction = {
   // configure_drill / set_angle
   shot_count?: number;
   angle?: string;
+  // zoom_target (2026-08-20 — voice magnification of the rangefinder scene)
+  level?: 'in' | 'out' | 'reset';
 };
 
 function toast(msg: string): void {
@@ -163,6 +165,29 @@ function dispatchOne(a: AnyAction): void {
     case 'open_swinglab':
       router.push('/(tabs)/swinglab' as never);
       break;
+    case 'zoom_target': {
+      /**
+       * 2026-08-20 (Tim — "tap OR ASK to zoom the pin flag and get a tight read").
+       *
+       * Mirrors record_swing: if the screen is up, nudge it; if it is not, OPEN it and then nudge.
+       * Asking to zoom while looking at something else should land you on the rangefinder already
+       * magnified, not silently do nothing — that gap is the difference between a tool that exists
+       * and a tool that feels connected.
+       *
+       * The command is emitted after the push because the screen has to mount and subscribe first;
+       * an emit into an empty listener set is simply lost, and the player would have to ask twice.
+       */
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const bus = require('../smartFinderCommandBus') as typeof import('../smartFinderCommandBus');
+      const level = a.level === 'out' ? 'zoomOut' : a.level === 'reset' ? 'zoomReset' : 'zoomIn';
+      if (bus.isSmartFinderActive()) {
+        bus.emitSmartFinderCommand(level);
+      } else {
+        gatedOpen('smartfinder', '/smartfinder');
+        setTimeout(() => { try { bus.emitSmartFinderCommand(level); } catch { /* screen may have closed */ } }, 900);
+      }
+      break;
+    }
     case 'record_swing': {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
