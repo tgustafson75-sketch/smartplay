@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, extractAdvisedClub } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState } from './_brain';
 import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
@@ -648,6 +648,8 @@ ${mentalGameBlock()}
 - Never bring up a mistake unless the player mentions it first.
 
 ${clubAdviceBlock()}
+
+${caddieRosterBlock(caddieName)}
 
 
 ${caddieName === 'Harry' && (firstName === 'Tim' || firstName === 'Timothy') ? `Note: Harry calls Tim "Timmy" specifically — that's the analog older-caddie cadence between them. Other personas use "Tim". ` : ''}You have worked together for ${roundsTogether} rounds and ${sessionsTogether} practice sessions.
@@ -1416,6 +1418,17 @@ ${onCourseContextBlock}${baseMessage}`
       const advised = extractAdvisedClub(text);
       if (advised) {
         const action = { type: 'recommend_club', ...advised } as typeof capture.action & object;
+        capture.actions.push(action);
+        if (!toolAction) toolAction = action;
+      }
+    }
+    // NOTE the source: `text` has been reassigned to the caddie's REPLY by this point, so the mood
+    // must be read from `userMessage` — the player's own words. Reading `text` here would classify
+    // the caddie's empathy as the player's feelings, which is a real trap in this function.
+    if (!capture.actions.some(a => (a as { type?: string })?.type === 'log_emotional_state')) {
+      const mood = detectEmotionalState(userMessage);
+      if (mood) {
+        const action = { type: 'log_emotional_state', ...mood } as typeof capture.action & object;
         capture.actions.push(action);
         if (!toolAction) toolAction = action;
       }

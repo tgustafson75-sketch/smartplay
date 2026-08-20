@@ -19,7 +19,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText } from './_aiProvider';
 import { BRAIN_TOOLS, UI_TOOLS } from './_brainTools';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, extractAdvisedClub } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState } from './_brain';
 // 2026-07-28 (audit — BRAIN-F1/F3, CONFIRMED HIGH) — pipecat-turn is the DEFAULT brain since v15, but
 // it carried persona only as a NAME while the kevin fallback injected the full character voice
 // (getCharacterSpec). So Serena/Tank sounded generic on the primary path and only got their real voice
@@ -268,6 +268,8 @@ ${mentalGameBlock()}
 - Never bring up a mistake unless the player mentions it first.
 
 ${clubAdviceBlock()}
+
+${caddieRosterBlock(caddieName)}
 
 ${spiralBlock}
 
@@ -623,6 +625,13 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     if (!toolActions.some(a => a.type === 'recommend_club')) {
       const advised = extractAdvisedClub(result.text ?? '');
       if (advised) toolActions.push({ type: 'recommend_club', ...advised });
+    }
+    // Same fallback shape, opposite direction: the emotional signal is in what the PLAYER said, not
+    // in the caddie's reply. The caddie answers these turns warmly and correctly — it just never
+    // recorded them ([[detectEmotionalState]]).
+    if (!toolActions.some(a => a.type === 'log_emotional_state')) {
+      const mood = detectEmotionalState(text);
+      if (mood) toolActions.push({ type: 'log_emotional_state', ...mood });
     }
 
     return res.status(200).json({

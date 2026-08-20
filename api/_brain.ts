@@ -25,6 +25,24 @@ export function selfReferenceBlock(name: string): string {
   return `SELF-REFERENCE: when ${name} says "you" or "your", they mean YOU, the caddie/app — not themselves. "Log that for you", "did you get my score?", "you have my shot?" are all the player telling YOU to record/track/confirm it. Treat "you"-directed statements as commands to you (fire the matching tool), never as the player describing their own action.`;
 }
 
+/**
+ * 2026-08-20 (QA sweep of every UI tool). The caddie was REFUSING valid personas with invented
+ * reasons: "switch to Tank" → "Tank isn't available right now", "switch to Harry" → "Harry's
+ * retired." Both are real, selectable caddies. Serena worked, so the tool and its enum were fine.
+ *
+ * This is a KNOWLEDGE gap, not the compliance problem that broke recommend_club. The system prompt
+ * says "You are Kevin" and never mentions that other caddies exist; the roster lived only in the
+ * switch_caddie tool description, and a tool description is consulted when choosing between tools,
+ * not when answering "can I have Harry?" — so the model improvised an excuse. Prompts are good at
+ * knowledge, which is exactly why this one is worth fixing with prompt text when the last one wasn't.
+ *
+ * The invented-unavailability failure is worse than a plain miss: the player is told a feature they
+ * paid for does not exist, and they have no reason to ask twice.
+ */
+export function caddieRosterBlock(current: string): string {
+  return `CADDIE ROSTER — Kevin, Serena, Harry and Tank are ALL available, always, plus the player's own custom caddie if they made one. You are currently ${current}. If they ask for a different one BY NAME, call switch_caddie with that name and confirm warmly. NEVER say a caddie is retired, unavailable, busy, or does not exist — every one of them can be switched to at any time. If you did not catch which caddie they meant, ask.`;
+}
+
 /** Whose perspective "I/me/my" and "you/your" carry, and how to take feedback about the caddie itself. */
 export function perspectiveBlock(name: string): string {
   return `PERSPECTIVE + BEHAVIOR FEEDBACK: "I/me/my" = ${name} (the player); "you/your" = YOU (the caddie). When ${name} comments on YOUR behavior ("you keep repeating", "you said the same thing", "you're cutting me off", "you're too sensitive"), that is FEEDBACK about you — acknowledge it briefly and ADJUST; never echo the words back or restate them as if they were a new request. When ${name} talks about the PRODUCT in the third person ("we need the user to…", "the app should…", "users should be able to…"), that is design feedback FROM ${name}, the person building this — acknowledge it in one short line; do NOT act it out literally, do NOT narrate it back, and do NOT treat "the user" as a third party who isn't present.`;
@@ -162,6 +180,53 @@ export function extractAdvisedClub(text: string): { club: string; shape?: string
     if (!club) continue;
     const shape = SHAPE.exec(sentence)?.[1]?.toLowerCase();
     return shape ? { club, shape } : { club };
+  }
+  return null;
+}
+
+
+/**
+ * 2026-08-20 (QA sweep) — the SAME compliance failure as recommend_club, on the tool the prompt
+ * itself calls "the core of the app".
+ *
+ * Probed live: "I am so damn frustrated, I have topped three in a row" → the caddie answered
+ * beautifully ("That one stung. Breathe — it happens to the best of us.") and logged NOTHING.
+ * "I am really pissed off right now" → warm reply, no tool. "Honestly I feel great today,
+ * everything is clicking" → no tool. It fired exactly once across the sweep, as a side effect of a
+ * turn that was already calling log_shot.
+ *
+ * Same root cause as recommend_club: on the 'fast' tier the model treats the empathetic reply as a
+ * complete turn and never emits tool_calls alongside it. Emotional tracking that only records when
+ * the model happens to feel like it is not tracking.
+ *
+ * Difference from recommend_club: the signal is in the PLAYER's words, not the caddie's, so this
+ * reads the player's utterance. The cues are deliberately the ones mentalGameBlock already names to
+ * the model — profanity, "I can't", repeated misses, positive self-talk — so the deterministic path
+ * and the prompted path are looking for the same thing rather than drifting apart.
+ *
+ * Conservative by design, but the asymmetry is gentler here than for club advice: a wrong emotional
+ * note nudges tone, it does not poison a distance ladder. So this errs slightly toward recording,
+ * while still requiring the player to be talking about THEMSELVES right now.
+ */
+const EMOTION_PATTERNS: Array<{ re: RegExp; state: string; valence: 'positive' | 'neutral' | 'negative' }> = [
+  // Resignation reads as frustration's end state — check it FIRST, since "I'm done with this" also
+  // trips several frustration cues and the more specific state is the more useful one to record.
+  { re: /\b(?:i (?:give up|quit)|i'?m done with (?:this|it|golf)|what'?s the point|hopeless|why do i (?:even )?bother)\b/i, state: 'resigned', valence: 'negative' },
+  { re: /\b(?:nervous|anxious|worried|scared|tense|tight|first[- ]tee jitters|shaky)\b/i, state: 'anxious', valence: 'negative' },
+  { re: /\b(?:fuck\w*|shit\w*|goddamn|damn it|dammit|pissed|furious|so frustrat\w+|frustrated|sick of (?:this|it)|i can'?t (?:do|hit|stand)|terrible|awful|horrible|disaster)\b/i, state: 'frustrated', valence: 'negative' },
+  { re: /\b(?:feel(?:ing)? (?:great|good|amazing)|locked in|dialed in|clicking|on fire|striping it|crushing it|loving (?:this|it)|so good today|best i'?ve (?:felt|hit))\b/i, state: 'confident', valence: 'positive' },
+];
+/** The speaker must be talking about THEMSELVES, now — not quoting, not asking. */
+const FIRST_PERSON = /\b(?:i|i'?m|im|my|me|we)\b/i;
+
+export function detectEmotionalState(playerText: string): { state: string; valence: 'positive' | 'neutral' | 'negative' } | null {
+  if (!playerText) return null;
+  const t = playerText.trim();
+  // A question is the player asking something, not reporting how they feel.
+  if (/^\s*(?:how|what|where|when|which|who|why|do|does|did|are|is|can|could|would|should)\b/i.test(t)) return null;
+  if (!FIRST_PERSON.test(t)) return null;
+  for (const { re, state, valence } of EMOTION_PATTERNS) {
+    if (re.test(t)) return { state, valence };
   }
   return null;
 }
