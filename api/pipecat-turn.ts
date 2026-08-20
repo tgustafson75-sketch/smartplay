@@ -601,9 +601,23 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       console.error('[pipecat-turn] all providers failed:', lastErr instanceof Error ? lastErr.message : String(lastErr));
       // 2026-07-23 (V1 fix) — self-identify the degrade so the client can fall back to the local
       // brain instead of treating this canned dead-air as a real answer (scoring/logging it).
+      /**
+       * 2026-08-20 (QA) — THE DEGRADE PATH STILL KNOWS HOW THE PLAYER FEELS.
+       *
+       * Found while verifying the emotional-state fix: two probes came back "Give me one sec and
+       * ask me again", which is this line — every provider missed. The fix worked on retry, but the
+       * stalled turn had thrown away something we never needed the model for. "I am so damn
+       * frustrated, I have topped three in a row" is frustration whether or not OpenAI answered.
+       *
+       * Emotional state is read from the PLAYER's own words, so it survives a total provider
+       * outage. Losing it here would mean the moments most worth recording — a bad stretch, rising
+       * frustration — are exactly the ones a flaky connection erases. Club advice is NOT recovered
+       * here on purpose: there is no advice to record when the caddie never gave any.
+       */
+      const degradedMood = detectEmotionalState(text);
       return res.status(200).json({
         response_text: 'Give me one sec and ask me again.',
-        tool_actions: [],
+        tool_actions: degradedMood ? [{ type: 'log_emotional_state', ...degradedMood }] : [],
         updated_history: history,
         degraded: true,
         error: lastErr instanceof Error ? lastErr.message : 'all_providers_failed',
