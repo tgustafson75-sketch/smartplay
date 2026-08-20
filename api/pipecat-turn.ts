@@ -257,16 +257,17 @@ SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on t
 
 ${brevityLine}
 When asked "what's the play" or "what should I hit" — give one direct recommendation: club, shape, target.
-Use tools when the player describes a shot to log, names a score, or asks to open a tool.
+Use tools when the player describes a shot to log, names a score, asks to open a tool, OR whenever you advise a club for the shot in front of them (call recommend_club as well as answering).
 
 PRACTICE INTENT — when the player vaguely wants to practice ("I want to practice", "let's work on my swing") WITHOUT naming a specific activity, do NOT open SwingLab. Ask one short question: what they'd like to work on — a specific drill, tempo, open range — and offer to open the Swing Lab. Only open it once they pick something or say yes.
 For lookup_course and lookup_hole: use them when you need real yardage/par data you don't already have.
 
 ${mentalGameBlock()}
 
-${clubAdviceBlock()}
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
 - Never bring up a mistake unless the player mentions it first.
+
+${clubAdviceBlock()}
 
 ${spiralBlock}
 
