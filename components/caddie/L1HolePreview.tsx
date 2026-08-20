@@ -111,6 +111,21 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   const W = dims.w;
   const H = dims.h;
   const wrapDims = { width: W, height: H };
+  /**
+   * 2026-08-19 (Tim's caddie-screen capture: the mini card printing "436y", "WACHUS…" and "LE" over
+   * one another in a single corner).
+   *
+   * This component renders at two very different sizes — a full-width hole panel, and a 120×86
+   * picture-in-picture on the caddie tab — with ONE set of fixed-size chrome. At full width the
+   * yardage badge (top-left), the brand/course badge (top-right) and the hole label sit comfortably
+   * apart. At 120px they are all inside the same thumbnail and collide into unreadable mush.
+   *
+   * COMPACT is not a smaller font; it is a decision about what a 120px card is FOR. At that size the
+   * card exists to show WHERE YOU ARE on the hole and HOW FAR — the map and one number. The course
+   * name is already on screen elsewhere, and the hole number is in the pager right below it, so both
+   * are redundant here and were only ever costing legibility.
+   */
+  const compact = W < 200;
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -380,7 +395,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
           {/* 2026-07-28 (Tim — "branded badge not showing") — the Course/Hole/Distance badge was only on
               the in-round branches, so browsing the Caddie tab pre-round showed no badge. Add it here too
               (previewing hole 1 of the selected course), frame-level so it clears the ••• tools pill. */}
-          <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />
+          {compact ? null : <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />}
         </HoleFrame>
       );
     }
@@ -399,7 +414,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
             </View>
           </ImageBackground>
-          <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />
+          {compact ? null : <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />}
         </HoleFrame>
       );
     }
@@ -473,7 +488,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
         </ImageBackground>
         {/* Branded badge is a FRAME child (full width), not inside the centered/narrower image box —
             so it pins to the card's true top-right and clears the ••• tools pill (badgeTop). */}
-        <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />
+        {compact ? null : <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />}
       </HoleFrame>
     );
   }
@@ -514,7 +529,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               </>
             ) : null}
           </ImageBackground>
-          <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />
+          {compact ? null : <HoleBrandBadge course={activeCourse} hole={currentHole} distanceYds={holeRecord?.distance ?? null} style={{ top: badgeTop, right: 8 }} />}
         </HoleFrame>
       );
     }
