@@ -55,9 +55,24 @@ export interface FitProfile {
   disclaimer: string;
 }
 
-// A gap wider than this between two adjacent clubs is a real hole (~a club-and-a-
-// half). Two clubs closer than the overlap are doing the same job.
-const GAP_YARDS = 20;
+/**
+ * A gap wider than this between two adjacent clubs is a real hole in the set (~a club-and-a-half).
+ * Two clubs closer than the overlap threshold are doing the same job.
+ *
+ * 2026-08-20 (constant-drift audit) — ONE OWNER, and it lives here.
+ *
+ * This was 20 here and 25 in services/bagRecommendation, with both files carrying a comment saying
+ * the same words — "about a club-and-a-half". That is not two deliberate thresholds for two
+ * questions; it is one idea that drifted into two numbers. The player felt it as two screens
+ * disagreeing: a 22-yard gap was a hole in your set on the Fit Profile ladder and was not a hole in
+ * the bag recommendation, from the same bag, on the same day.
+ *
+ * Unified at 25 — the MORE CONSERVATIVE of the two — because both surfaces turn this into "you have
+ * a hole here, consider a club". Over-flagging gaps invents a purchase the player does not need,
+ * which is the fabrication this codebase refuses everywhere else. Moving to 25 only ever REMOVES a
+ * gap claim; it can never add one.
+ */
+export const GAP_YARDS = 25;
 const OVERLAP_YARDS = 7;
 
 const DISCLAIMER =

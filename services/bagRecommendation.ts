@@ -47,9 +47,11 @@ const STANDARD_YARDS: Record<ClubName, number> = STANDARD_CARRY_YARDS;
 /** Fewer than this many rounds at a course → the read is still "forming"; we
  *  surface it as an early estimate rather than a confident recommendation. */
 export const MIN_ROUNDS_FOR_CONFIDENCE = 2;
-/** A carry gap wider than this (yds) between two adjacent clubs you use is a
- *  real hole in your set — about a club-and-a-half. */
-const GAP_YARDS = 25;
+/** A carry gap wider than this (yds) between two adjacent clubs you use is a real hole in your set —
+ *  about a club-and-a-half. 2026-08-20: single owner is services/practice/fitProfile, so the Fit
+ *  Profile ladder and this recommendation can no longer disagree about what a gap IS. They had
+ *  drifted to 20 and 25 with identical comments. */
+import { GAP_YARDS } from './practice/fitProfile';
 
 export interface ClubUse {
   club: string;

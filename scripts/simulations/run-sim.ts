@@ -10188,6 +10188,28 @@ check('LOCK: the first voice turn cannot be killed by our own cold backend',
   })(),
   'the reachability guard trusts a no-cold-start CDN probe over two cold Lambdas, transport is warmed before the function, the mic tap re-arms a session that missed the boot window, and the CDN verdict reaches the log');
 
+check('LOCK: the Fit Profile and the bag recommendation cannot disagree about what a gap IS',
+  (() => {
+    const fit = read('services/practice/fitProfile.ts');
+    const bag = read('services/bagRecommendation.ts');
+    /**
+     * 2026-08-20 (constant-drift audit). GAP_YARDS was 20 in fitProfile and 25 in bagRecommendation,
+     * and BOTH files carried a comment describing it in the same words — "about a club-and-a-half".
+     * Not two deliberate thresholds for two questions: one idea that drifted into two numbers. The
+     * player met it as two screens disagreeing — a 22-yard gap was a hole in your set on the Fit
+     * Profile ladder and was not a hole in the bag recommendation, same bag, same day.
+     *
+     * One owner now. Asserted structurally so a future edit cannot re-fork it by adding a local
+     * const back: fitProfile EXPORTS it, bagRecommendation IMPORTS it, and neither may declare a
+     * second local copy.
+     */
+    const oneOwner = /export const GAP_YARDS = \d+;/.test(fit);
+    const imported = /import \{ GAP_YARDS \} from '\.\/practice\/fitProfile';/.test(bag);
+    const noLocalRefork = !/^const GAP_YARDS/m.test(bag) && (fit.match(/GAP_YARDS =/g) ?? []).length === 1;
+    return oneOwner && imported && noLocalRefork;
+  })(),
+  'GAP_YARDS has a single owner that both the ladder and the bag recommendation read, so the two surfaces cannot answer "is this a gap?" differently');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
