@@ -628,7 +628,29 @@ const exists = (rel: string) => fs.existsSync(path.resolve(__dirname, '../../', 
 // Crash-safe: a MISSING file returns '' so the check FAILS gracefully instead of
 // aborting the whole suite (a single missing/renamed file used to halt the run and
 // silently skip every check after it). 2026-06-27.
-const read = (rel: string) => { try { return fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8'); } catch { return ''; } };
+/**
+ * 2026-08-20 (stale-guard sweep) — A MISSING FILE MUST NOT READ AS A PASSING GUARD.
+ *
+ * This returned '' for any unreadable path. Positive assertions then fail and we notice — but every
+ * assertion of ABSENCE (`!/x/.test(src)`, of which this harness has six, all of the "X was removed"
+ * kind) passes VACUOUSLY against an empty string. Rename or move a file and those guards go green
+ * while proving nothing at all, which is the exact shape of "grep guards can't see dead code": a
+ * green suite that has quietly stopped looking.
+ *
+ * All 266 paths this harness reads currently exist, so nothing changes today. What changes is the
+ * future: a rename now fails LOUDLY at the end of the run instead of being absorbed. The read still
+ * returns '' so a single missing file cannot mask the rest of the results behind a thrown error —
+ * we want the whole picture AND the alarm.
+ */
+const missingReads: string[] = [];
+const read = (rel: string) => {
+  try {
+    return fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+  } catch {
+    if (!missingReads.includes(rel)) missingReads.push(rel);
+    return '';
+  }
+};
 
 // Tempo / transition (vision-derived, acoustic-verified)
 check('poseAnalysisApi exports deriveSwingTempo',
@@ -10213,6 +10235,13 @@ check('LOCK: the Fit Profile and the bag recommendation cannot disagree about wh
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
+if (missingReads.length > 0) {
+  // Reported as a hard failure, not a warning: every guard that read one of these was asserting
+  // against an empty string, and any absence-check among them passed without looking at anything.
+  console.log(`\n✗ ${missingReads.length} guard source file(s) COULD NOT BE READ — guards touching them proved nothing:`);
+  for (const m of missingReads) console.log(`    ${m}`);
+  results.push({ name: 'LOCK: every file the guards read actually exists', passed: false, detail: missingReads.join(', ') });
+}
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
