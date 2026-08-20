@@ -72,3 +72,23 @@ describe('the false positives that would poison adherence', () => {
     expect(extractAdvisedClub("Let's go with something smooth. Your 9 iron has been flying lately.")).toBeNull();
   });
 });
+
+describe('found by the live probe, not by any unit test', () => {
+  /**
+   * `npm run probe-tools` caught this on its FIRST run against kevin, with 1139 unit tests green.
+   * It depends on a sentence the MODEL chose to write, which is why no static test could reach it.
+   */
+  it('does not record advice from a hypothetical asking the player for the number', () => {
+    const reply = "I don't have your distances yet. If you tell me how far you hit your 7 iron, I can remember it.";
+    expect(extractAdvisedClub(reply)).toBeNull();
+  });
+
+  it('does not treat distance talk as a recommendation', () => {
+    expect(extractAdvisedClub('How far you hit your 7 iron depends on the wind.')).toBeNull();
+  });
+
+  it('but a real conditional recommendation still counts', () => {
+    // The narrow exclusion must not swallow advice that happens to start with a condition.
+    expect(extractAdvisedClub("If it's into the wind, I'd go with a 6 iron.")?.club).toBe('6 iron');
+  });
+});

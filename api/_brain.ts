@@ -165,6 +165,21 @@ export function extractAdvisedClub(text: string): { club: string; shape?: string
     // trailing '?', so a recommendation with a tag question ("I'd go with the 8, sound right?") is
     // still captured.
     if (INTERROGATIVE_OPENER.test(sentence)) continue;
+    /**
+     * 2026-08-20 — caught by `npm run probe-tools` on its FIRST run, on kevin, after 1139 unit tests
+     * had passed. Asked "how far does my 7 iron normally go", the caddie replied:
+     *     "I don't have your distances yet. If you tell me how far you hit your 7 iron, I can…"
+     * "hit your" + "7 iron" tripped the advice cue, and we recorded a recommendation the caddie
+     * never made — on a turn where it explicitly said it had no numbers. Exactly the false positive
+     * that poisons adherence, and precisely the class no static test could have found, because it
+     * depends on a sentence the MODEL chose to write.
+     *
+     * Both exclusions are narrow on purpose. A blanket "skip any sentence containing if" would drop
+     * real advice ("If it's into the wind, I'd go 6 iron"), so this only skips the hypothetical
+     * where the player is being asked to SUPPLY the number, and distance talk about a club.
+     */
+    if (/\bif (?:you|we)\s+(?:tell|share|let me know|give|say|know)\b/i.test(sentence)) continue;
+    if (/\bhow far\b/i.test(sentence)) continue;
     if (!ADVICE_CUE.test(sentence)) continue;
     let club: string | null = null;
     const iron = NUMBERED_IRON.exec(sentence);
