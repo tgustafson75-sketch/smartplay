@@ -219,10 +219,37 @@ export function markConnectionWarmed(): void {
   noteRoundTripOk();
 }
 
+/**
+ * 2026-08-20 — PRIME THE TRANSPORT BEFORE WAKING THE FUNCTION.
+ *
+ * A first request to a cold host pays two separate costs that everyone here has been treating as
+ * one: establishing the TRANSPORT (DNS lookup, TCP, TLS handshake) and waking the FUNCTION (Lambda
+ * cold start). Every warm attempt so far paid them together by pinging /api/kevin — so when the
+ * combined cost blew the budget, we learned nothing about which half was slow and warmed neither.
+ *
+ * A static CDN file needs the identical DNS + TLS to the identical host, and has NO cold start. So
+ * fetching it first buys the whole transport for ~250ms and leaves a pooled, TLS-negotiated socket
+ * behind. The Lambda ping that follows reuses that socket and is then only paying for the function.
+ *
+ * Cheap, and it cannot make anything worse: if the CDN is unreachable the ping was never going to
+ * succeed either, and we fall through to it unchanged.
+ */
+async function primeTransport(timeoutMs = 2500): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(`${activeBase}/.well-known/assetlinks.json`, { method: 'GET', signal: ctrl.signal })
+      .finally(() => clearTimeout(t));
+    return res.ok;
+  } catch { return false; }
+}
+
 export function warmBackendConnection(): Promise<void> {
   if (isExplicitOverride() || connectionWarmed) return Promise.resolve();
   if (warmInFlight) return warmInFlight;
   warmInFlight = (async () => {
+    // Transport first — see primeTransport. Costs ~250ms and makes every ping below cheaper.
+    await primeTransport();
     // Backoff schedule (ms before each attempt) — ~20s total, covering the gap between
     // cold launch and the user reaching the Caddie tab + tapping the mic.
     const delays = [0, 1500, 3000, 4000, 5500, 6000];

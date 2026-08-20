@@ -10141,6 +10141,53 @@ check('LOCK: no capture path may discard the player\'s audio on the level meter 
   })(),
   'a capture of real length always reaches Whisper on every path; the meter endpoints but never vetoes, and when it disagrees with the transcript that disagreement is logged');
 
+check('LOCK: the first voice turn cannot be killed by our own cold backend',
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const api = read('services/apiBase.ts');
+    /**
+     * 2026-08-20. Tim: "We cannot afford any more band aids. We need to once and for all concrete
+     * lock tight tune the voice path right."
+     *
+     * Every prior fix moved a TIMEOUT — wait longer, or detect failure faster. This locks the three
+     * STRUCTURAL properties that made the first turn fail regardless of any number:
+     *
+     * 1. THE GUARD MUST NOT INFER "no network" FROM A COLD LAMBDA. It probed /api/kevin and
+     *    /api/health — two separate functions, each needing its own cold start, neither being the
+     *    one doing the work — and read their slowness as a dead network, then aborted a transcribe
+     *    that had not failed. Tim's logs are all identical: ping ~5010ms, get ~6015ms, elapsed
+     *    ~11040 = 5000 + 6000. Clean timeouts at exactly the budgets. A STATIC CDN file has no cold
+     *    start, so it answers the only question that was actually being asked.
+     *
+     * 2. TRANSPORT IS WARMED BEFORE THE FUNCTION. A first request pays DNS + TCP + TLS *and* the
+     *    cold start; pinging a Lambda pays both together and learns nothing about which was slow.
+     *    The CDN file needs identical DNS/TLS to the identical host and no cold start, so it buys
+     *    the transport for ~250ms and leaves a pooled socket the ping then reuses.
+     *
+     * 3. A SESSION CANNOT BE PINNED COLD. The warm ran once at boot over a fixed window, and the
+     *    only other thing that could mark warm was a successful transcribe — the very thing the cold
+     *    path aborted. Cold blocked the success that would clear cold, which is why Tim saw
+     *    `first_turn: true` on turn 1 AND turn 2 a minute apart. The mic tap re-arms it.
+     *
+     * Break any one of these and the first turn is fragile again no matter what the timeouts say.
+     */
+    const cdnProbe = /assetlinks\.json/.test(vc) && /const staticReachable = async/.test(vc);
+    const cdnOutranks = /if \(cdn\.ok\) \{[\s\S]{0,320}?return;/.test(vc);
+    const transportFirst = /async function primeTransport/.test(api)
+      && /assetlinks\.json/.test(api)
+      && (() => {
+        const w = api.slice(api.indexOf('export function warmBackendConnection'));
+        const iPrime = w.indexOf('await primeTransport()');
+        const iPing = w.indexOf('pingHost(');
+        return iPrime > -1 && iPing > -1 && iPrime < iPing; // transport BEFORE the function
+      })();
+    const rearms = /warmBackendConnection\(\)/.test(vc);
+    // And the evidence field that makes a future report decisive instead of suggestive.
+    const decisiveLog = /cdnOk/.test(vc) && /cdnMs/.test(vc);
+    return cdnProbe && cdnOutranks && transportFirst && rearms && decisiveLog;
+  })(),
+  'the reachability guard trusts a no-cold-start CDN probe over two cold Lambdas, transport is warmed before the function, the mic tap re-arms a session that missed the boot window, and the CDN verdict reaches the log');
+
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');

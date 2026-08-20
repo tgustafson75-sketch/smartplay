@@ -2993,6 +2993,23 @@ export const useVoiceCaddie = ({
       // backstop.
       let micHasSpoken = false;
       micHasSpokenRef.current = false; // fresh capture — nothing heard yet
+      /**
+       * 2026-08-20 — RE-ARM THE WARM, because the old design could pin a session cold forever.
+       *
+       * warmBackendConnection runs ONCE, at boot, over a fixed ~50s window. Miss that window — launch
+       * on a weak link, background the app, or simply exhaust the six attempts — and connectionWarmed
+       * stays false for the ENTIRE session. And the only other thing that can set it is a SUCCESSFUL
+       * transcribe, which is precisely what the cold path was aborting. Cold blocks the success that
+       * would clear cold: Tim's log shows `first_turn: true` on turn 1 AND turn 2, a minute apart,
+       * which is that loop closing.
+       *
+       * The mic tap is the right moment to break it: the user is about to speak, so there are seconds
+       * of recording time to spend warming, and it costs the user nothing. It no-ops instantly when
+       * already warm or already in flight, so a warm session pays literally nothing.
+       */
+      try {
+        void (require('../services/apiBase') as typeof import('../services/apiBase')).warmBackendConnection();
+      } catch { /* advisory */ }
       // 2026-08-19 — Tim's log showed `turn: null` on every entry from this path: the turn counter
       // was only being incremented on the pipecat entry, so "always the first turn" vs "the 1st and
       // the 9th" was unanswerable for the tap path — the exact question the stamp exists to answer.
