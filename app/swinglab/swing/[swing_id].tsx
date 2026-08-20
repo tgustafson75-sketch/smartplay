@@ -419,6 +419,35 @@ export default function SwingDetail() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(session?.upload?.duration_sec ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
+  /**
+   * 2026-08-19 (Tim, reviewing his round: "play button does not fade out").
+   *
+   * It never did. The control was `opacity: isPlaying ? 0.55 : 1` — it DIMMED while playing and then
+   * sat there, a 64px disc parked dead centre of the frame, which on a swing clip is exactly where
+   * the golfer is. Half-opacity over the player's chest is still over the player's chest, and the
+   * whole point of this screen is watching the body move.
+   *
+   * It fades OUT now once playback settles, and comes straight back the moment it is useful again —
+   * on pause, on scrub, and on a tap anywhere on the frame. pointerEvents flips with it so an
+   * invisible disc can never swallow a tap meant for the video.
+   */
+  const playBtnOpacity = useRef(new Animated.Value(1)).current;
+  const [playBtnVisible, setPlayBtnVisible] = useState(true);
+  useEffect(() => {
+    const showIt = !isPlaying;
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    const animateTo = (to: number, cb?: () => void) => {
+      Animated.timing(playBtnOpacity, { toValue: to, duration: 260, useNativeDriver: true }).start(cb);
+    };
+    if (showIt) {
+      setPlayBtnVisible(true);
+      animateTo(1);
+    } else {
+      // Linger briefly so the tap that STARTED playback still shows its own state change.
+      hideTimer = setTimeout(() => animateTo(0, () => setPlayBtnVisible(false)), 1100);
+    }
+    return () => { if (hideTimer) clearTimeout(hideTimer); };
+  }, [isPlaying, playBtnOpacity]);
   // Synchronous "last emitted" tracker so onPlaybackStatusUpdate commits only REAL changes (kills the
   // 25×/s redundant-setState cascade behind the "Maximum update depth" white screen). See the callback.
   const playbackEmitRef = useRef<{ pos: number; dur: number; playing: boolean | null; lastPosAt: number }>({ pos: -1, dur: -1, playing: null, lastPosAt: 0 });
@@ -2532,14 +2561,19 @@ export default function SwingDetail() {
                   live state (pause while playing, play while paused) and is itself
                   tappable, so there's an obvious control even during auto-play.
                   Semi-transparent while playing so it doesn't bury the swing. */}
-              <TouchableOpacity
-                onPress={togglePlayPause}
-                style={{ position: 'absolute', alignSelf: 'center', top: '50%', marginTop: -32, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)', opacity: isPlaying ? 0.55 : 1 }}
-                accessibilityRole="button"
-                accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              <Animated.View
+                style={{ position: 'absolute', alignSelf: 'center', top: '50%', marginTop: -32, opacity: playBtnOpacity }}
+                pointerEvents={playBtnVisible ? 'auto' : 'none'}
               >
-                <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#ffffff" />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={togglePlayPause}
+                  style={{ width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}
+                  accessibilityRole="button"
+                  accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+                >
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={32} color="#ffffff" />
+                </TouchableOpacity>
+              </Animated.View>
               {/* Tap-to-seek bar — replaces the native scrubber. Tap anywhere on it
                   to jump to that fraction of the clip. Thin, bottom edge, clear of
                   the watermark; doesn't interfere with the tap-to-pause on the frame. */}
