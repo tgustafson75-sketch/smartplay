@@ -125,7 +125,24 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
    * name is already on screen elsewhere, and the hole number is in the pager right below it, so both
    * are redundant here and were only ever costing legibility.
    */
-  const compact = W < 200;
+  /**
+   * 150, not 200, and the difference matters on a Fold.
+   *
+   * The collision Tim photographed was the 120x86 picture-in-picture. Measured width — not a device
+   * check — is the right test, because this same component is laid out at four sizes and a Fold
+   * changes its own width mid-session; anything keyed to "phone vs tablet" is wrong the moment the
+   * hinge moves.
+   *
+   * But the threshold has to be chosen against the REAL widths, not a round number:
+   *     PiP                       120  → compact
+   *     Fold COVER, two-up cell   ~152  → not compact
+   *     normal phone, two-up cell ~177  → not compact
+   *     Fold OPEN / tablet        ~327+ → not compact
+   * A 200 threshold would have stripped the badge from every two-up grid cell on ordinary phones and
+   * on the Fold's cover screen — a formatting change nobody asked for, on the device Tim actually
+   * carries. 150 sits in the gap and touches only the card that was broken.
+   */
+  const compact = W < 150;
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
