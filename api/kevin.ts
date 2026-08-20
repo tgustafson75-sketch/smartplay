@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState, extractShotReport } from './_brain';
 import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
@@ -1429,6 +1429,15 @@ ${onCourseContextBlock}${baseMessage}`
       const mood = detectEmotionalState(userMessage);
       if (mood) {
         const action = { type: 'log_emotional_state', ...mood } as typeof capture.action & object;
+        capture.actions.push(action);
+        if (!toolAction) toolAction = action;
+      }
+    }
+    // Same source rule as the mood above: the PLAYER's words, never the reply in `text`.
+    if (!capture.actions.some(a => (a as { type?: string })?.type === 'log_shot')) {
+      const shot = extractShotReport(userMessage);
+      if (shot) {
+        const action = { type: 'log_shot', ...shot } as typeof capture.action & object;
         capture.actions.push(action);
         if (!toolAction) toolAction = action;
       }

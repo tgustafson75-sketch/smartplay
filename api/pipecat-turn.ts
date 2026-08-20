@@ -19,7 +19,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText } from './_aiProvider';
 import { BRAIN_TOOLS, UI_TOOLS } from './_brainTools';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState, extractShotReport } from './_brain';
 // 2026-07-28 (audit — BRAIN-F1/F3, CONFIRMED HIGH) — pipecat-turn is the DEFAULT brain since v15, but
 // it carried persona only as a NAME while the kevin fallback injected the full character voice
 // (getCharacterSpec). So Serena/Tank sounded generic on the primary path and only got their real voice
@@ -646,6 +646,12 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
     if (!toolActions.some(a => a.type === 'log_emotional_state')) {
       const mood = detectEmotionalState(text);
       if (mood) toolActions.push({ type: 'log_emotional_state', ...mood });
+    }
+    // Strictest of the three: a wrong shot record corrupts the history the caddie learns distances
+    // and tendencies FROM, and that stays invisible until it gives bad advice on the course.
+    if (!toolActions.some(a => a.type === 'log_shot')) {
+      const shot = extractShotReport(text);
+      if (shot) toolActions.push({ type: 'log_shot', ...shot });
     }
 
     return res.status(200).json({

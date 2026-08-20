@@ -230,3 +230,75 @@ export function detectEmotionalState(playerText: string): { state: string; valen
   }
   return null;
 }
+
+
+/**
+ * 2026-08-20 (Tim: "clean and surgical. We can't keep hitting these stupid ass breaks.")
+ *
+ * The third and last tool in the alongside-an-answer class. log_shot was INTERMITTENT, not dead:
+ * live it fired on "I hit my 7 iron and pulled it left of the green" and missed on "I striped my
+ * drive right down the middle" and "I chunked my wedge, came up 20 yards short".
+ *
+ * This one carries more risk than the other two, so it is deliberately the strictest. A wrong shot
+ * record does not just miss data — it CORRUPTS the history the caddie learns distances and tendencies
+ * from, and a corrupted ladder is invisible until it gives bad advice on the course. So the bar is:
+ * the player must be REPORTING A SHOT THEY ALREADY HIT — a past-tense strike verb, a named club, and
+ * first person. Anything less records nothing.
+ *
+ * Three things it must never mistake for a shot report, each proven by a test:
+ *   - ADVICE: "I'd go with a 7 iron here" — the caddie's own recommendation, no strike happened.
+ *   - A PLAN: "I'm going to lay up with my 7 iron" — that is plan_shot, and it is in the FUTURE.
+ *   - CLUB TALK: "my 7 iron goes about 165" — a fact about a club, not a swing.
+ */
+const STRIKE_VERB = /\b(hit|hooked|sliced|pushed|pulled|striped|stripped|chunked|topped|thinned|blocked|duffed|flushed|smoked|bladed|skulled|shanked|drew|faded|punched|pured|caught|dumped|missed)\b/i;
+/** Future/intent markers — a plan is not a shot. */
+const FUTURE_MARKER = /\b(?:i'?m going to|going to|i'?ll|i will|gonna|i plan to|thinking of|should i|i'?d)\b/i;
+const DIRECTION = /\b(left|right|long|short|middle|straight|fat|thin|high|low)\b/i;
+const OUTCOME_PLACE = /\b(fairway|green|rough|trees|bunker|sand|water|hazard|o\.?b\.?|out of bounds|fringe|cart path|middle)\b/i;
+const CONTACT = /\b(striped|stripped|flushed|smoked|pured|solid|clean|chunked|fat|topped|thinned|bladed|skulled|duffed|shanked)\b/i;
+/** "my drive" / "off the tee" mean the driver even though the word never appears. */
+const DRIVE_SYNONYM = /\b(?:my )?(?:drive|tee shot)\b|\boff the tee\b/i;
+const GENERIC_WEDGE = /\bwedge\b/i;
+
+export function extractShotReport(playerText: string): {
+  club?: string; direction?: string; contactQuality?: string; outcome?: string;
+} | null {
+  if (!playerText) return null;
+  const t = playerText.trim();
+  if (/^\s*(?:how|what|where|when|which|who|why|do|does|did|are|is|can|could|would|should)\b/i.test(t)) return null;
+  if (!FIRST_PERSON.test(t)) return null;
+  // A plan or a recommendation is not a shot, even when it names a club and a target.
+  if (FUTURE_MARKER.test(t)) return null;
+  if (!STRIKE_VERB.test(t)) return null;
+
+  let club: string | undefined;
+  const iron = NUMBERED_IRON.exec(t);
+  if (iron) {
+    const digit = iron[1] ?? WORD_TO_DIGIT[(iron[2] ?? '').toLowerCase()];
+    if (digit) club = `${digit} iron`;
+  }
+  if (!club) {
+    for (const [re, name] of CLUB_PATTERNS) {
+      if (re.test(t)) { club = name; break; }
+    }
+  }
+  if (!club && DRIVE_SYNONYM.test(t)) club = 'driver';
+  if (!club && GENERIC_WEDGE.test(t)) club = 'wedge';
+  // No club = nothing worth attributing. A shot record without a club teaches the ladder nothing and
+  // still costs a row in the history.
+  if (!club) return null;
+
+  const direction = DIRECTION.exec(t)?.[1]?.toLowerCase();
+  const contactQuality = CONTACT.exec(t)?.[1]?.toLowerCase();
+  const outcome = OUTCOME_PLACE.exec(t)?.[0]?.toLowerCase();
+  // Require at least ONE descriptive signal beyond "I hit a club" — otherwise we are recording that
+  // a swing happened, with nothing about it, which is noise in the history rather than data.
+  if (!direction && !contactQuality && !outcome) return null;
+
+  return {
+    club,
+    ...(direction ? { direction } : {}),
+    ...(contactQuality ? { contactQuality } : {}),
+    ...(outcome ? { outcome } : {}),
+  };
+}
