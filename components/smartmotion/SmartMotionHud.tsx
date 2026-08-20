@@ -89,7 +89,22 @@ export function SmartMotionHeader({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const subtitle = isPutt ? 'PUTT ANALYSIS' : mode === 'down_the_line' ? 'DOWN THE LINE ANALYSIS' : 'FACE-ON ANALYSIS';
+  /**
+   * 2026-08-19 (Tim, from a round: "it's set to down the line and putt, not full and putt like it
+   * should be in terms of the toggle settings").
+   *
+   * A HALF-FIX OF MY OWN, and the same shape I have been correcting all week. On 08-19 the mode
+   * control stopped being a three-way camera-angle cycler and became Full swing ⇄ Putting, because
+   * the camera angle is now DETECTED from the pose geometry rather than declared. The control
+   * changed; every label describing it did not. So the toggle switched between full and putt while
+   * this header kept announcing "DOWN THE LINE ANALYSIS" — naming a setting the player no longer
+   * has, and directly contradicting the control they just used.
+   *
+   * The subtitle now says what the player CHOSE (the shot type). The detected angle is a measurement,
+   * not a setting, and belongs where measurements go — it already rides the analysis itself.
+   */
+  const subtitle = isPutt ? 'PUTT ANALYSIS' : 'FULL SWING ANALYSIS';
+  void mode; // retained in the props contract; no longer a user-facing label
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>

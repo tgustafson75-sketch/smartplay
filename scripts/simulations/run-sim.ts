@@ -7085,7 +7085,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   check('SmartMotion: cycling mode badge + custom icon set wired',
     /const cycleMode = \(\) => \{/.test(smSrc2) &&
-      /ICON_ANGLE\[isPutt \? 'putt' : angle\]/.test(smSrc2) &&        // current-stance icon on the badge
+      // 2026-08-19 — the badge icon follows the CHOICE (full swing vs putting), not a detected camera
+      // angle. Keying it on `angle` is what made the control read as "set to down the line" in the
+      // field even though it no longer selects an angle.
+      /ICON_ANGLE\[isPutt \? 'putt' : 'down_the_line'\]/.test(smSrc2) &&
       // 2026-08-19 — was showModeFade('FACE-ON'). The badge no longer cycles camera angles at all;
       // it is Full swing ⇄ Putting, and the angle is detected. The fade-away label itself is the
       // behaviour this line is guarding, so it now checks the label that actually exists.

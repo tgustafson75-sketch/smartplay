@@ -64,7 +64,7 @@ import { getCourse as getApiCourse, courseSummaryForContext } from '../services/
 import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
-import { logVoiceError, logTranscribeError, logVoiceSilentFail } from '../services/voiceErrorLog';
+import { logVoiceError, logTranscribeError, logVoiceSilentFail, noteVoiceTurnStarted } from '../services/voiceErrorLog';
 import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed, getConnectionEvidence } from '../services/apiBase';
 import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -2784,16 +2784,46 @@ export const useVoiceCaddie = ({
           return;
         }
 
+        /**
+         * 2026-08-19 (Tim's issue log, five of these in one round: `tap_ended_silent_capture`,
+         * durationMs 2493 / 3075 / 4326 / 4458 / 4902 — and his note, "Caddie ignored me when I
+         * talked most of the round").
+         *
+         * THIS WAS THE IGNORING. The recording was DISCARDED and never sent to Whisper, on the word
+         * of a local energy heuristic, after the mic had been open for two to five seconds. Nobody
+         * taps the mic and holds it open for 4.9 seconds in silence — he was talking, and the audio
+         * was thrown away.
+         *
+         * The log settles what it was NOT: two of those fired on `first_turn: false, warmed: true`,
+         * mid-round on hole 17 and hole 10. So it is not cold start, not the network, not the brain.
+         * It is `micHasSpokenRef`, set only when Expo metering crosses a FIXED -30 dBFS. His device is
+         * Android, where the metering scale is not the one that threshold was tuned against, and he
+         * was outdoors at arm's length with wind — a combination that can sit under -30 all day while
+         * a person is speaking normally into it.
+         *
+         * THE FIX IS NOT A NEW NUMBER. Tuning -30 to -40 moves the cliff; it does not remove it, and
+         * the next report is the same report from a quieter voice or a windier day. The defect is
+         * that a heuristic gets a VETO over the transcriber. VAD's real job is ENDPOINTING — deciding
+         * when to stop listening. Whisper is the ground truth for whether words were said, and it was
+         * never asked.
+         *
+         * So a capture of meaningful length now always goes to Whisper, whatever the meter thought.
+         * If it really was silence, Whisper returns empty and the existing honest path speaks ("Say
+         * that again? Wind took it.") — which is TRUE at that point, because the actual transcriber
+         * found nothing. The cost is one wasted transcribe on a genuinely silent capture; the thing it
+         * buys is that the player is never ignored while speaking.
+         *
+         * The short-capture case below (<300ms, the double-tap signature) still never ships, and the
+         * auto-opened-and-ignored case still resolves correctly — via Whisper returning empty rather
+         * than via a guess made before asking. [[feels-like-a-real-caddie]]
+         */
         if (!micHasSpokenRef.current) {
-          // The mic was open a real length of time and heard NO speech — this is the auto-opened
-          // capture the user never answered. Their tap means "start listening", so don't ship
-          // silence to Whisper and report a failure for it.
-          console.log('[voice] tap ended a capture that heard nothing (', durationMs, 'ms) — starting a fresh one');
-          logVoiceSilentFail('tap_ended_silent_capture', { source: 'handleMicPress', durationMs });
-          restartFresh = true;
-        } else {
-          await processAudioUri(uri);
+          // Kept as a diag breadcrumb: when this fires but the transcript comes back with words, the
+          // meter was wrong — which is the measurement that tells us how badly, on which devices.
+          console.log('[voice] meter heard nothing in', durationMs, 'ms — transcribing anyway (meter is not the judge)');
+          logVoiceSilentFail('meter_silent_transcribing_anyway', { source: 'handleMicPress', durationMs });
         }
+        await processAudioUri(uri);
 
       } catch (err) {
         console.log('[voice] stop error:', err);
@@ -2902,6 +2932,10 @@ export const useVoiceCaddie = ({
       // backstop.
       let micHasSpoken = false;
       micHasSpokenRef.current = false; // fresh capture — nothing heard yet
+      // 2026-08-19 — Tim's log showed `turn: null` on every entry from this path: the turn counter
+      // was only being incremented on the pipecat entry, so "always the first turn" vs "the 1st and
+      // the 9th" was unanswerable for the tap path — the exact question the stamp exists to answer.
+      try { noteVoiceTurnStarted(); } catch { /* advisory */ }
       let micLastLoudAt = Date.now();
       // 2026-07-30 — when the user FIRST crossed the speech threshold, so the poll below can tell a
       // quick command (short silence window) from a mid-sentence pause (long window) — the adaptive VAD.

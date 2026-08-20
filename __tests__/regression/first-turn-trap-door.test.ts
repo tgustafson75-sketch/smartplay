@@ -176,9 +176,31 @@ describe('a tap that ends a capture which heard nothing means "start listening"'
     expect(src).toContain('micHasSpokenRef.current = false; // fresh capture — nothing heard yet');
   });
 
-  it('silence is discarded and a fresh capture starts, instead of being transcribed as a failure', () => {
-    expect(src).toContain('if (!micHasSpokenRef.current) {');
-    expect(src).toContain("logVoiceSilentFail('tap_ended_silent_capture'");
+  /**
+   * 2026-08-19 — THIS TEST ASSERTED THE OPPOSITE UNTIL THE FIELD SETTLED IT.
+   *
+   * It used to require that a capture the METER thought was silent be discarded and a fresh one
+   * started, instead of transcribed. That was a considered design decision — don't ship silence to
+   * Whisper — and it was wrong in a way only a round could show. Tim's issue log, five in one round:
+   * `tap_ended_silent_capture` at durationMs 2493 / 3075 / 4326 / 4458 / 4902, alongside his note
+   * "Caddie ignored me when I talked most of the round". Nobody holds the mic open for 4.9 seconds
+   * in silence. He was speaking and the audio was thrown away unheard.
+   *
+   * Two of those fired warm and mid-round (hole 17, hole 10), which rules out cold start, network and
+   * the brain. What remained was `micHasSpokenRef`, set only when Expo metering crosses a FIXED
+   * -30 dBFS — on Android, outdoors, at arm's length, in wind.
+   *
+   * The contract is now: the meter may decide when to STOP listening; it may not decide whether words
+   * were said. Whisper decides that, because Whisper is the only thing that actually knows.
+   */
+  it('a capture is transcribed even when the meter heard nothing — the meter is not the judge', () => {
+    // The veto is gone: no branch discards the audio before Whisper sees it.
+    expect(src).not.toContain("logVoiceSilentFail('tap_ended_silent_capture'");
+    expect(src).toContain('await processAudioUri(uri);');
+    // The disagreement is still MEASURED — when this fires and a transcript comes back with words,
+    // that is the meter being wrong, and we want to know how often and on which devices.
+    expect(src).toContain("logVoiceSilentFail('meter_silent_transcribing_anyway'");
+    // And the restart path survives for the case it was really for: a DEAD recording.
     expect(src).toContain('restartFresh = true;');
     expect(src).toContain('if (!restartFresh) return;');
   });

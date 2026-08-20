@@ -5300,9 +5300,14 @@ export default function SmartMotion() {
                   onPress={cycleMode}
                   style={styles.modeCycleBtn}
                   accessibilityRole="button"
-                  accessibilityLabel={`Camera mode: ${isPutt ? 'putting' : angle === 'face_on' ? 'face-on' : 'down the line'}. Tap to change.`}
+                  // 2026-08-19 — describes the control as it now behaves (Full swing ⇄ Putting).
+                  // It used to read out a camera angle, which is no longer a setting the player picks.
+                  accessibilityLabel={`Mode: ${isPutt ? 'putting' : 'full swing'}. Tap to switch.`}
                 >
-                  <Image source={ICON_ANGLE[isPutt ? 'putt' : angle]} style={styles.modeCycleImg} resizeMode="contain" />
+                  {/* 2026-08-19 — the icon follows the CHOICE (full swing vs putting), not the
+                      detected camera angle. Showing a down-the-line glyph on a control that no longer
+                      selects an angle is what made the toggle read as "set to down the line". */}
+                  <Image source={ICON_ANGLE[isPutt ? 'putt' : 'down_the_line']} style={styles.modeCycleImg} resizeMode="contain" />
                 </TactilePressable>
               </View>
               {actionBtn}
