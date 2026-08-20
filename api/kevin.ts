@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, extractAdvisedClub } from './_brain';
 import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
@@ -1398,10 +1398,28 @@ ${onCourseContextBlock}${baseMessage}`
     text = loopResult.text;
     const providerUsed = loopResult.provider;
     const toolRounds = loopResult.rounds;
-    const toolAction = capture.action;
+    let toolAction = capture.action;
     const dataToolCalls = capture.dataToolCalls;
 
     text = text.trim();
+
+    /**
+     * 2026-08-20 (QA) — FALLBACK, not a replacement. If the model called recommend_club itself it
+     * wins and this does nothing. It exists because the model announces the call ("Now, let me log
+     * that for you") without emitting one — see extractAdvisedClub in _brain.ts.
+     *
+     * Pushed into capture.actions AND into the single `toolAction` field when that is still empty:
+     * clients that read only the singular field are the ones this tool has historically been dropped
+     * by, so filling just the array would recreate the same silent miss on the follow-up turn.
+     */
+    if (!capture.actions.some(a => (a as { type?: string })?.type === 'recommend_club')) {
+      const advised = extractAdvisedClub(text);
+      if (advised) {
+        const action = { type: 'recommend_club', ...advised } as typeof capture.action & object;
+        capture.actions.push(action);
+        if (!toolAction) toolAction = action;
+      }
+    }
 
     if (toolAction && !text) {
       const defaults: Record<string, string> = {

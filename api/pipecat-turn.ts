@@ -19,7 +19,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText } from './_aiProvider';
 import { BRAIN_TOOLS, UI_TOOLS } from './_brainTools';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, extractAdvisedClub } from './_brain';
 // 2026-07-28 (audit — BRAIN-F1/F3, CONFIRMED HIGH) — pipecat-turn is the DEFAULT brain since v15, but
 // it carried persona only as a NAME while the kevin fallback injected the full character voice
 // (getCharacterSpec). So Serena/Tank sounded generic on the primary path and only got their real voice
@@ -614,6 +614,16 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
       { role: 'user' as const, content: text },
       { role: 'assistant' as const, content: result.text },
     ].slice(-MAX_HISTORY_PAIRS * 2);
+
+    /**
+     * 2026-08-20 (QA) — FALLBACK, not a replacement. If the model called recommend_club itself, that
+     * wins and this does nothing. It only fills the gap left by the 'fast' tier announcing a tool
+     * call ("Now, let me log that for you") without emitting one — see extractAdvisedClub.
+     */
+    if (!toolActions.some(a => a.type === 'recommend_club')) {
+      const advised = extractAdvisedClub(result.text ?? '');
+      if (advised) toolActions.push({ type: 'recommend_club', ...advised });
+    }
 
     return res.status(200).json({
       response_text: result.text,

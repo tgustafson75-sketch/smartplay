@@ -83,3 +83,85 @@ export function mentalGameBlock(): string {
 - The tone of WHAT they say matters as much as the words. Read the emotional subtext.
 - Use log_emotional_state when you detect a meaningful emotional shift (frustrated, confident, anxious, resigned).`;
 }
+
+
+/**
+ * 2026-08-20 (QA pass) — EXTRACT THE ADVICE THE CADDIE ACTUALLY GAVE, rather than asking the model
+ * to remember to report it.
+ *
+ * `recommend_club` fired ZERO times on the live brain. Three fixes were tried in order, and the
+ * order matters because each one ruled something out:
+ *   1. The tool description already said "call this WHENEVER you advise a club, IN ADDITION to
+ *      speaking". Not enough — a tool description is read as "what this is FOR", not as a rule about
+ *      answering.
+ *   2. A system-prompt block saying the same thing. Deployed, probed: still zero.
+ *   3. Found the real conflict — the prompt listed WHEN to use tools ("describes a shot to log,
+ *      names a score, asks to open a tool") and club advice was not on that closed list. Fixed and
+ *      deployed. STILL zero.
+ *
+ * Then the decisive probe. Told explicitly, in the user turn, to call the tool:
+ *      "I'd go with a smooth 8-iron here.  Now, let me log that for you."   tool_actions: []
+ * It ANNOUNCED the tool call and did not make one. The conversational turn runs on the 'fast' tier
+ * (gpt-4o-mini), which is weak at emitting content AND tool_calls in one message; the agentic loop
+ * then ends because the message carried no tool_calls. No amount of prompt wording fixes a model
+ * that says "let me log that" instead of logging it.
+ *
+ * So this stops depending on compliance. The caddie's spoken answer IS the recommendation — parsing
+ * the club out of it is not a guess about what the player might do, it is reading back what the
+ * caddie just said. That is exactly `kind: 'spoken'` advice, the same thing the tool would have
+ * carried, and it works identically on every provider and tier.
+ *
+ * DELIBERATELY CONSERVATIVE. A false positive here is worse than a miss: it would score adherence
+ * against a recommendation that was never made, poisoning the club ladder the caddie recommends
+ * FROM. So it fires only on an explicit advice cue attached to a named club, and never on general
+ * club talk ("your 7-iron goes 165") or on a question back to the player ("what's the distance?").
+ */
+const CLUB_PATTERNS: Array<[RegExp, string]> = [
+  [/\bdriver\b/i, 'driver'],
+  [/\b(?:3|three)[ -]?wood\b/i, '3 wood'],
+  [/\b(?:5|five)[ -]?wood\b/i, '5 wood'],
+  [/\bhybrid\b/i, 'hybrid'],
+  [/\b(?:pitching[ -]?wedge|pw)\b/i, 'pitching wedge'],
+  [/\b(?:gap[ -]?wedge|gw)\b/i, 'gap wedge'],
+  [/\b(?:sand[ -]?wedge|sw)\b/i, 'sand wedge'],
+  [/\b(?:lob[ -]?wedge|lw)\b/i, 'lob wedge'],
+  [/\bputter\b/i, 'putter'],
+];
+const NUMBERED_IRON = /\b(?:(\d)|(two|three|four|five|six|seven|eight|nine))[ -]?iron\b/i;
+const WORD_TO_DIGIT: Record<string, string> = {
+  two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9',
+};
+/** Phrases that mark a sentence as ADVICE for the shot at hand, not commentary about a club. */
+const ADVICE_CUE = /\b(?:I'?d (?:go|hit|play|take|club)|go with|let'?s go|I like|sounds like|that'?s (?:a|your)|this is a|take (?:the|your)|hit (?:the|your|a)|lay up with|club (?:up|down) to|stick with|smooth|easy|stock)\b/i;
+const SHAPE = /\b(draw|fade|cut|punch|hook|knock[ -]?down)\b/i;
+/** A sentence that OPENS like a question is the caddie asking, not advising. */
+const INTERROGATIVE_OPENER = /^\s*(?:how|what|where|when|which|who|why|do|does|did|are|is|was|can|could|would|will|should|have|has)\b/i;
+
+export function extractAdvisedClub(text: string): { club: string; shape?: string } | null {
+  if (!text) return null;
+  // Work sentence by sentence so a cue in one clause cannot vouch for a club in an unrelated one.
+  for (const sentence of text.split(/(?<=[.!?])\s+|\n+/)) {
+    // A QUESTION is never advice. "How far do you normally hit your 7 iron?" carries both an advice
+    // cue ("hit your") and a club, and would otherwise record a recommendation the caddie never made
+    // — the exact false positive that poisons adherence. Keyed on the sentence OPENING rather than a
+    // trailing '?', so a recommendation with a tag question ("I'd go with the 8, sound right?") is
+    // still captured.
+    if (INTERROGATIVE_OPENER.test(sentence)) continue;
+    if (!ADVICE_CUE.test(sentence)) continue;
+    let club: string | null = null;
+    const iron = NUMBERED_IRON.exec(sentence);
+    if (iron) {
+      const digit = iron[1] ?? WORD_TO_DIGIT[(iron[2] ?? '').toLowerCase()];
+      if (digit) club = `${digit} iron`;
+    }
+    if (!club) {
+      for (const [re, name] of CLUB_PATTERNS) {
+        if (re.test(sentence)) { club = name; break; }
+      }
+    }
+    if (!club) continue;
+    const shape = SHAPE.exec(sentence)?.[1]?.toLowerCase();
+    return shape ? { club, shape } : { club };
+  }
+  return null;
+}
