@@ -86,3 +86,49 @@ describe('type parity — the guard that ends the class', () => {
     expect(untyped).toEqual([]);
   });
 });
+
+/**
+ * 2026-08-20 (Tim's OK on the prompt change; QA pass). The tool was reachable on both brains and
+ * fired ZERO times — probed live before the fix, on the deployed brain:
+ *     "I'm 150 out, what should I hit"    → "I'd go with a smooth 8-iron here."   tool_actions: []
+ *     "165 to the pin into a little wind" → "Sounds like a solid 7 iron."          tool_actions: []
+ * Explicit advice every time, nothing recorded. Reachability was never the problem; INSTRUCTION was.
+ */
+describe('the caddie is told to record the club it advises', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const readApi = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+
+  it('the instruction lives in ONE shared block, not hand-copied per brain', () => {
+    const brain = readApi('api/_brain.ts');
+    expect(brain).toMatch(/export function clubAdviceBlock\(\): string/);
+    // kevin.ts and pipecat-turn.ts drifted by 2 tools and ~255 description lines while each
+    // hand-maintained its own prompt copy — and the FOLLOW-UP turn is exactly where this tool went
+    // missing before. Shared construction is what makes that drift impossible rather than unlikely.
+    for (const f of ['api/kevin.ts', 'api/pipecat-turn.ts']) {
+      expect(readApi(f)).toMatch(/\$\{clubAdviceBlock\(\)\}/);
+    }
+  });
+
+  it('the instruction says to call it IN ADDITION to answering, and names the tool', () => {
+    const brain = readApi('api/_brain.ts');
+    const block = brain.slice(brain.indexOf('export function clubAdviceBlock'));
+    const body = block.slice(0, block.indexOf('\n}'));
+    expect(body).toMatch(/recommend_club/);
+    // The failure mode is the model treating a spoken answer as a complete turn. The prompt has to
+    // say the tool is ADDITIONAL, or the tool description's own "IN ADDITION" keeps losing.
+    expect(body).toMatch(/never\s+replaces|IN ADDITION|additional/i);
+    // ...and it must NOT tell the caddie to change what it says out loud. A prompt that alters the
+    // spoken answer to satisfy a data tool would trade the thing players hear for telemetry.
+    expect(body).toMatch(/exactly as you normally would|does NOT change what you say/i);
+  });
+
+  it('still tells the caddie when NOT to call it', () => {
+    const brain = readApi('api/_brain.ts');
+    const block = brain.slice(brain.indexOf('export function clubAdviceBlock'));
+    const body = block.slice(0, block.indexOf('\n}'));
+    // Over-firing is its own defect: "how far does my 7 go" is club TALK, not advice on a shot, and
+    // recording it as advice would poison adherence with recommendations never actually made.
+    expect(body).toMatch(/how far does my 7 go|general club talk/i);
+  });
+});

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock } from './_brain';
 import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
@@ -643,6 +643,8 @@ ${TRANSLATION_OVERRIDE}
 You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
 ${mentalGameBlock()}
+
+${clubAdviceBlock()}
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
 - Never bring up a mistake unless the player mentions it first.
 
