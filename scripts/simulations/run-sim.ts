@@ -643,7 +643,9 @@ const exists = (rel: string) => fs.existsSync(path.resolve(__dirname, '../../', 
  * we want the whole picture AND the alarm.
  */
 const missingReads: string[] = [];
+const readPaths = new Set<string>();
 const read = (rel: string) => {
+  readPaths.add(rel);
   try {
     return fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
   } catch {
@@ -3199,24 +3201,24 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
   })(),
   'a 4-min heartbeat keeps endpoints warm; caddie warms on focus; ADAPTIVE silence endpoint on BOTH the follow-up loop AND the first-turn mic (800ms quick command / 2000ms mid-sentence) — 07-30 rebalanced so it is snappy on commands but never clips a sentence ("cuts me off")');
 
-check('Voice: cold transcribe fails FAST on a proven-unreachable host (no 25s hang → canned line)',
-  // 2026-07-30 (Tim field log: elapsedMs 25030, pingMs 3012 — a 25s hang then the off-course line). The
-  // old min<2500ms fast-abort missed Tim's ~3s active refusal (sat in the "slow handshake, keep waiting"
-  // band). Now: both probes failing by ACTIVELY erroring before the probe budget → abort the doomed
-  // transcribe immediately; a reachable-but-slow cold handshake (both time out near the budget) keeps
-  // its full patience.
-  // 2026-08-05 (Tim — "the on-course/off-course determination is part of the slow first response") — the
-  // guard now runs on EVERY turn (dynamic budget: 5s cold / 3s warm), so a warm on-course turn on a weak
-  // network also aborts a doomed transcribe in ~3s instead of burning the full 12s timeout first.
+check('Voice: an offline turn degrades on a DEADLINE, not on a probe\'s opinion',
+  // 2026-07-30 → 2026-08-20. This guard used to assert the fast-abort: both probes actively failing
+  // meant "kill the transcribe now". Tim's 08-20 log showed that abort firing on a WORKING
+  // connection (elapsedMs 11045 = probes 5018 + 6016, upload cancelled with ~11s of budget left),
+  // so the veto is gone. The legitimate half of the old concern — never hang forever and then emit
+  // a canned line — survives here, moved onto the clock where it cannot be wrong about the network.
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
-    return (
-      /const probeBudgetMs = coldFirstTurn \? 5000 : 3000;/.test(vc) &&
-      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < probeBudgetMs - 500;/.test(vc) &&
-      /if \(bothActivelyFailed\)/.test(vc)
-    );
+    const budget = /const VOICE_TOTAL_BUDGET_MS = (\d+);/.exec(vc);
+    const bounded = /const retryBudgetMs = Math\.max\(8000, VOICE_TOTAL_BUDGET_MS - spentMs\);/.test(vc)
+      && /doTranscribeFetch\(probeSaysDown \? retryBudgetMs/.test(vc);
+    // A real attempt, not a token one, and a ceiling a person will actually wait through.
+    const sane = !!budget && Number(budget[1]) >= 30000 && Number(budget[1]) <= 45000;
+    // The old veto must not creep back in under any name.
+    const noVeto = !/bothActivelyFailed/.test(vc);
+    return bounded && sane && noVeto;
   })(),
-  'a proven-unreachable host (both probes actively refuse in ~3s) aborts the transcribe fast so the caddie degrades in ~3s, not after a hang — now on WARM on-course turns too (dynamic 5s cold / 3s warm budget), not just the cold first turn');
+  'a turn that cannot reach the host degrades on a total wall-clock budget (~35s) with the retry floored at a genuine 8s attempt, instead of a probe cancelling an upload that may still be about to succeed');
 
 check('Voice: speakFromBase64 never goes silent on a dead audio load (device-TTS fallback, parity with speak)',
   // 2026-07-30 (audit MED) — the brain's INLINE-audio path (speakFromBase64) had no dead-load recovery,
@@ -6481,13 +6483,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('LOCK voice: cold first-turn gets the long transcribe budget (22s)',
     /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isConnectionWarmed\(\)/.test(vcSrc),
     'a cold (unwarmed) first turn uses the 22s transcribe budget so a slow cold handshake still lands a real transcript');
-  check('LOCK voice: cold abort ONLY when both probes ACTIVELY fail before the budget (never a slow timeout)',
-    // 2026-07-30 — the discriminator moved from min<2500 (missed Tim's ~3s active refusal → 25s hang) to
-    // "both failed AND both erdored before the probe budget" (max < budget-500). A slow cold handshake
-    // times out AT the budget → max≈budget → NOT aborted → keeps full cold patience.
-    /const probeBudgetMs = coldFirstTurn \? 5000 : 3000;/.test(vcSrc) &&
-      /const bothActivelyFailed = !ping\.ok && !get\.ok && Math\.max\(ping\.ms, get\.ms\) < probeBudgetMs - 500;/.test(vcSrc),
-    'the concurrent probe aborts the transcribe when BOTH probes ACTIVELY fail before the budget (a real refusal/DNS block returns in ~3s), while a slow-but-reachable cold handshake (times out at the budget) is never misjudged as offline — guard now runs on every turn (5s cold / 3s warm)');
+  // 2026-08-20 — the "cold abort ONLY when both probes ACTIVELY fail" LOCK was deleted here, not
+  // relaxed. It pinned the discriminator that decided WHEN a probe may cancel a live upload; the
+  // field log proved no probe may. Its replacement is the deadline guard above plus
+  // 'LOCK: nothing but the real request may decide the real request failed'.
   check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
     /markConnectionWarmed\(\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
@@ -10163,52 +10162,74 @@ check('LOCK: no capture path may discard the player\'s audio on the level meter 
   })(),
   'a capture of real length always reaches Whisper on every path; the meter endpoints but never vetoes, and when it disagrees with the transcript that disagreement is logged');
 
-check('LOCK: the first voice turn cannot be killed by our own cold backend',
+check('LOCK: nothing but the real request may decide the real request failed',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
     const api = read('services/apiBase.ts');
     /**
-     * 2026-08-20. Tim: "We cannot afford any more band aids. We need to once and for all concrete
-     * lock tight tune the voice path right."
+     * 2026-08-20. This guard previously locked the WRONG invariant, and Tim's field log is what
+     * proved it. It asserted that the reachability guard should trust a no-cold-start CDN probe
+     * over two cold Lambdas — i.e. it accepted that a probe may abort a running upload, and only
+     * argued about WHICH probe was trustworthy enough to do it. That is a band-aid with a lock
+     * around it.
      *
-     * Every prior fix moved a TIMEOUT — wait longer, or detect failure faster. This locks the three
-     * STRUCTURAL properties that made the first turn fail regardless of any number:
+     * The log, four entries, identical to the millisecond:
+     *     elapsedMs 11045 · pingOk false pingMs 5018 · getOk false getMs 6016 · first_turn true
+     * 5018 + 6016 = 11034. The upload did not fail. The probes timed out and CANCELLED an upload
+     * that still had ~11s of its 22s cold budget remaining. Recorded, encoded, discarded — by us —
+     * while he was standing on a course with signal.
      *
-     * 1. THE GUARD MUST NOT INFER "no network" FROM A COLD LAMBDA. It probed /api/kevin and
-     *    /api/health — two separate functions, each needing its own cold start, neither being the
-     *    one doing the work — and read their slowness as a dead network, then aborted a transcribe
-     *    that had not failed. Tim's logs are all identical: ping ~5010ms, get ~6015ms, elapsed
-     *    ~11040 = 5000 + 6000. Clean timeouts at exactly the budgets. A STATIC CDN file has no cold
-     *    start, so it answers the only question that was actually being asked.
+     * THE REAL INVARIANT, which is why this is now a LOCK and not a tuned probe:
      *
-     * 2. TRANSPORT IS WARMED BEFORE THE FUNCTION. A first request pays DNS + TCP + TLS *and* the
-     *    cold start; pinging a Lambda pays both together and learns nothing about which was slow.
-     *    The CDN file needs identical DNS/TLS to the identical host and no cold start, so it buys
-     *    the transport for ~250ms and leaves a pooled socket the ping then reuses.
+     * 1. NOTHING CANCELS THE REAL UPLOAD. The request itself is the only honest test of
+     *    reachability; every probe is a guess about it. A timeout is not a refusal — a rural
+     *    tower, a congested cell or a cold Lambda all blow past any budget on a working
+     *    connection. This is the meter veto's exact shape: the meter may not decide whether words
+     *    were said, and a probe may not decide whether the network works. Both must be observers.
      *
-     * 3. A SESSION CANNOT BE PINNED COLD. The warm ran once at boot over a fixed window, and the
-     *    only other thing that could mark warm was a successful transcribe — the very thing the cold
-     *    path aborted. Cold blocked the success that would clear cold, which is why Tim saw
+     * 2. PROBES RUN AFTER A FAILURE, NEVER ALONGSIDE THE UPLOAD. Fired concurrently they compete
+     *    with the upload for the very DNS/TLS handshake they claim to measure — on a cold first
+     *    turn that was four simultaneous connections on the most contended radio moment there is.
+     *    They were not observing the problem, they were part of it. After a real failure they cost
+     *    the happy path nothing and are pure diagnostics.
+     *
+     * 3. TRANSPORT IS WARMED BEFORE THE FUNCTION. A first request pays DNS + TCP + TLS *and* the
+     *    cold start together; pinging a Lambda pays both and learns which was slow. A static CDN
+     *    file needs identical DNS/TLS to the identical host and no cold start, so it buys the
+     *    transport and leaves a pooled socket behind. (Warming is legitimate — it only ever makes
+     *    the real request faster. It is authority over the request that was the bug.)
+     *
+     * 4. A SESSION CANNOT BE PINNED COLD. Warm ran once at boot over a fixed window, and the only
+     *    other thing that could mark warm was a successful transcribe — the very thing the abort
+     *    killed. Cold blocked the success that would clear cold, which is why the log shows
      *    `first_turn: true` on turn 1 AND turn 2 a minute apart. The mic tap re-arms it.
-     *
-     * Break any one of these and the first turn is fragile again no matter what the timeouts say.
      */
-    const cdnProbe = /assetlinks\.json/.test(vc) && /const staticReachable = async/.test(vc);
-    const cdnOutranks = /if \(cdn\.ok\) \{[\s\S]{0,320}?return;/.test(vc);
+    // 1. No probe-owned controller exists, and the transcribe call site takes NO external signal
+    //    (the trailing `);` with no second argument is the whole point — a comma here is the bug).
+    const noProbeAbort = !/coldAbort|coldUnreachable|probeAbort/.test(vc);
+    const uncancellable = /transcribeRes = await doTranscribeFetch\(coldFirstTurn \? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS\);/.test(vc);
+    // 2. ORDER, not presence: the diagnostic probes must appear AFTER the real attempt, inside its
+    //    catch. If they ever migrate back above it, they are racing the upload again.
+    const iAttempt = vc.indexOf('transcribeRes = await doTranscribeFetch(coldFirstTurn');
+    const iProbe = vc.indexOf('staticReachable(3000)');
+    const probesAfterFailureOnly = iAttempt > -1 && iProbe > iAttempt;
+    // 3. Warming still happens, and still buys transport before waking the function.
     const transportFirst = /async function primeTransport/.test(api)
       && /assetlinks\.json/.test(api)
       && (() => {
         const w = api.slice(api.indexOf('export function warmBackendConnection'));
         const iPrime = w.indexOf('await primeTransport()');
         const iPing = w.indexOf('pingHost(');
-        return iPrime > -1 && iPing > -1 && iPrime < iPing; // transport BEFORE the function
+        return iPrime > -1 && iPing > -1 && iPrime < iPing;
       })();
+    // 4. The tap re-arms a session that missed the boot window.
     const rearms = /warmBackendConnection\(\)/.test(vc);
-    // And the evidence field that makes a future report decisive instead of suggestive.
-    const decisiveLog = /cdnOk/.test(vc) && /cdnMs/.test(vc);
-    return cdnProbe && cdnOutranks && transportFirst && rearms && decisiveLog;
+    // And the CDN verdict still reaches the log, where it discriminates "our functions were cold"
+    // from "this device cannot reach the host" — advising us, deciding nothing.
+    const decisiveLog = /cdnOk/.test(vc) && /cdnMs/.test(vc) && /const staticReachable = async/.test(vc);
+    return noProbeAbort && uncancellable && probesAfterFailureOnly && transportFirst && rearms && decisiveLog;
   })(),
-  'the reachability guard trusts a no-cold-start CDN probe over two cold Lambdas, transport is warmed before the function, the mic tap re-arms a session that missed the boot window, and the CDN verdict reaches the log');
+  'no probe can cancel the real upload, diagnostics run only after it genuinely fails, transport is warmed before the function, the mic tap re-arms a cold-pinned session, and the CDN verdict informs the log without holding authority');
 
 check('LOCK: the Fit Profile and the bag recommendation cannot disagree about what a gap IS',
   (() => {
@@ -10235,13 +10256,16 @@ check('LOCK: the Fit Profile and the bag recommendation cannot disagree about wh
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== SYNTHESIS ===');
-if (missingReads.length > 0) {
-  // Reported as a hard failure, not a warning: every guard that read one of these was asserting
-  // against an empty string, and any absence-check among them passed without looking at anything.
-  console.log(`\n✗ ${missingReads.length} guard source file(s) COULD NOT BE READ — guards touching them proved nothing:`);
-  for (const m of missingReads) console.log(`    ${m}`);
-  results.push({ name: 'LOCK: every file the guards read actually exists', passed: false, detail: missingReads.join(', ') });
-}
+// Emitted UNCONDITIONALLY, so this is a standing guard in the suite rather than an error path that
+// only exists once something is already broken. Every guard that reads a missing file is asserting
+// against an empty string, and any absence-check among them passes without looking at anything.
+check(
+  'LOCK: every source file the guards read actually exists',
+  missingReads.length === 0,
+  missingReads.length === 0
+    ? `all ${readPaths.size} guard source paths resolved`
+    : `UNREADABLE (guards touching these proved nothing): ${missingReads.join(', ')}`,
+);
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

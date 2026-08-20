@@ -124,6 +124,13 @@ const TRANSCRIBE_TIMEOUT_MS = 12000;
 // instead of aborting at 12s and dropping to a garbage on-device STT result (the "error reply,
 // then it's fine" symptom). Once warmed, the 12s fast-fail (below) resumes for genuine dead zones.
 const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
+/**
+ * 2026-08-20 — the wall-clock ceiling on ONE voice turn, across every attempt and probe.
+ * Nothing may cancel the real upload (see the transcribe path), so this is what stops a genuinely
+ * offline phone from waiting on two full cold budgets back to back. It bounds the turn without
+ * ever second-guessing a request that might still be about to succeed.
+ */
+const VOICE_TOTAL_BUDGET_MS = 35000;
 // 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
 // step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
 // BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
@@ -1943,72 +1950,44 @@ export const useVoiceCaddie = ({
       // never gets aborted (the probe resolves ok and does nothing), preserving the cold-boot patience
       // ([[voice-first-try-failure-timeout-root-cause]]). Fast/warm turns pay ZERO added latency (the
       // guard runs concurrently and is only consulted if the transcribe itself throws).
-      const coldAbort = new AbortController();
-      let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number }; cdn?: { ok: boolean; ms: number } } | null = null;
-      // 2026-08-05 (Tim — "the on-course/off-course determination is part of the slow first response").
-      // Run this reachability guard on EVERY turn, not just the cold first one. The WARM on-course path
-      // had NO concurrent guard, so a failed turn on a weak course network burned the FULL 12s transcribe
-      // timeout before it even probed — ~15s before the caddie degraded (matches the field logs:
-      // elapsedMs 15036, pingMs ~3s). Now a PROVEN-unreachable host (both probes ACTIVELY refuse, fast)
-      // aborts the doomed transcribe in ~3s on warm turns too. A reachable-but-slow host is NEVER aborted
-      // (probes resolve ok, or time out near budget), so cold-boot patience is preserved
-      // ([[voice-first-try-failure-timeout-root-cause]]) and fast/reachable turns pay ZERO added latency.
-      {
-        // Cold first turn keeps the 5s budget to absorb a slow DNS/TLS handshake; warm turns probe at 3s.
-        const probeBudgetMs = coldFirstTurn ? 5000 : 3000;
-        void (async () => {
-          // Abort ONLY on a CONFIDENT-FAST double failure: a genuine refusal / DNS block returns fast,
-          // while a reachable-but-slow host TIMES OUT near the full budget. GET /api/health answering =
-          // host reachable (POST may just be slow) → never abort. `max(ms) < budget - margin` = both
-          // actively refused = truly offline → abort now and degrade (was cold-only; the discriminator is
-          // the 2026-07-30 field fix for a network that REFUSES both probes at ~3s rather than timing out).
-          const [ping, get, cdn] = await Promise.all([
-            reachabilityPing(probeBudgetMs),
-            healthGet(probeBudgetMs),
-            staticReachable(probeBudgetMs),
-          ]);
-          /**
-           * 2026-08-20 — the CDN answering is PROOF the network is up, and it outranks both Lambda
-           * probes. A cold backend is exactly what the long transcribe budget exists to wait out;
-           * killing the request because our own functions were still booting is the bug being fixed.
-           */
-          if (cdn.ok) {
-            console.log(`[voice] backend cold but network UP (cdn ${cdn.ms}ms, ping ${ping.ms}ms, get ${get.ms}ms) — letting the transcribe run`);
-            return;
-          }
-          const bothActivelyFailed = !ping.ok && !get.ok && Math.max(ping.ms, get.ms) < probeBudgetMs - 500;
-          if (bothActivelyFailed) {
-            coldUnreachable = { ping, get, cdn };
-            try { coldAbort.abort(); } catch { /* no-op */ }
-            return;
-          }
-          // 2026-08-08 (Tim's log: AbortError elapsedMs 25033, both probes dead at ~3s) — the BLACK-HOLE
-          // case: fetches HANG (no refusal), both probes TIME OUT at budget, the confident-fast rule
-          // correctly declines… and the transcribe burns the full 22s cold budget anyway. Second-stage
-          // verdict: when BOTH probes failed (however slowly), give the host ONE longer GET (6s) to show
-          // life. Still silent by ~11s total → it will never complete a 25s audio POST → abort + degrade
-          // to the on-device caddie. A slow-but-ALIVE network answers the GET and is never aborted, so
-          // the cold-boot-patience invariant holds ([[voice-first-try-failure-timeout-root-cause]]).
-          if (!ping.ok && !get.ok) {
-            const retry = await healthGet(6000);
-            if (!retry.ok) {
-              coldUnreachable = { ping, get: retry, cdn };
-              try { coldAbort.abort(); } catch { /* no-op */ }
-            }
-          }
-        })();
-      }
+      /**
+       * 2026-08-20 — THE PROBE IS NOT THE JUDGE.
+       *
+       * Tim's log, four entries, identical to the millisecond:
+       *     elapsedMs 11045 · pingOk false pingMs 5018 · getOk false getMs 6016 · first_turn true
+       * 5018 + 6016 = 11034. That is not the upload failing. That is this guard timing out its own
+       * probes and then ABORTING a healthy in-flight upload that still had ~11s of its 22s cold
+       * budget left. The audio was recorded, encoded, and then thrown away — by us — while he stood
+       * on a course with signal. Four times. "Got ignored most of the round."
+       *
+       * This is the meter veto wearing a different hat. That bug discarded audio before Whisper
+       * because a dBFS meter said the user had been silent; the fix was that the meter is not the
+       * judge — send it and let Whisper decide. Then this guard was added, and a synthetic probe
+       * became the new judge with the same authority to discard the same audio.
+       *
+       * Why probes cannot hold that authority, ever:
+       *   - They fire immediately after a recording, when the radio is at its most contended, and
+       *     they compete with the upload for the very DNS/TLS handshake they are trying to measure.
+       *     On a cold first turn this fired FOUR simultaneous connections. The probes were not
+       *     observing the problem; they were part of it.
+       *   - A timeout is not a refusal. A rural tower, a congested cell, or a cold Lambda blows past
+       *     5s on a perfectly usable connection. Every layered heuristic here — fast-vs-slow,
+       *     both-actively-failed, the 6s second-stage GET — was an attempt to infer reachability
+       *     from the shape of a failure, and each one manufactured false negatives in the field.
+       *   - staticReachable was supposed to be the independent tiebreaker, but it GETs
+       *     `${apiUrl}/.well-known/assetlinks.json` — the SAME host. It cannot corroborate anything
+       *     about DNS or TLS to that host, because it needs them first. It was never independent.
+       *
+       * The real request is the only honest test of reachability, so it now runs to its full budget
+       * and nothing cancels it. Probes still run — but AFTER a genuine failure, in the catch below,
+       * where they are pure diagnostics and cost the happy path nothing. On a working connection
+       * this removes three competing sockets from every cold turn; on a broken one we degrade one
+       * attempt later than before, which is the correct side to err on.
+       * ([[caddie-failsafe-no-walls]], [[voice-first-try-failure-timeout-root-cause]])
+       */
       try {
-        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS, coldAbort.signal);
+        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS);
       } catch {
-        // Concurrent guard already proved the host unreachable → straight to offline, no extra probe.
-        // (Cast defeats TS's closure-assignment narrowing: coldUnreachable is set inside the async IIFE.)
-        const u = coldUnreachable as { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number }; cdn?: { ok: boolean; ms: number } } | null;
-        if (u) {
-          void ensureBackendReachable({ force: true });
-          await failTranscribeOffline('AbortError', u.ping.ok, u.ping.ms, u.get.ok, u.get.ms, u.cdn?.ok ?? null, u.cdn?.ms ?? -1);
-          return;
-        }
         // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
         // 27643) showed the old blind retry was a dead 15s wait on top of the
         // first 12s. Probe reachability (3s) FIRST: only retry when the host is
@@ -2018,7 +1997,11 @@ export const useVoiceCaddie = ({
         // Probe POST (ping) + GET (health) in PARALLEL so the log can tell
         // "GET works, POST stalls" (device/proxy POST path) from "host blocked".
         // No added latency — both share the 3s window.
-        const [ping, get] = await Promise.all([reachabilityPing(3000), healthGet(3000)]);
+        // cdn joins the pair as a pure DIAGNOSTIC — it decides nothing, it only makes the next field
+        // report legible. Static assets are served from the edge without invoking a Lambda, so
+        // cdnOk true + pingOk false = "our functions were cold, the network was fine", while all
+        // three false = the device truly could not reach the host. Same 3s window, no added latency.
+        const [ping, get, cdn] = await Promise.all([reachabilityPing(3000), healthGet(3000), staticReachable(3000)]);
         /**
          * 2026-08-10 (Tim, mid-round — "we have five Gs signal, but you're giving me an error
          * about connection").
@@ -2049,13 +2032,29 @@ export const useVoiceCaddie = ({
           await new Promise(r => setTimeout(r, 300));
           // When the probe said down, give the retry the COLD budget — if the host is merely slow
           // to wake, 15s is exactly the window that was already too tight to catch it.
-          transcribeRes = await doTranscribeFetch(probeSaysDown ? COLD_TRANSCRIBE_TIMEOUT_MS : 15000);
+          /**
+           * 2026-08-20 — bounded by a DEADLINE, not by a veto.
+           *
+           * Removing the probe-abort removed the only thing that used to cap total time, and the
+           * concern it was reaching for is real: a genuinely offline phone must not sit there. But
+           * the cap belongs on the CLOCK, not on a guess about the network. First attempt (22s
+           * cold) + probes (3s) already spent ~25s, so a second full cold budget would mean ~47s
+           * before the caddie says anything.
+           *
+           * The retry now gets whatever remains of VOICE_TOTAL_BUDGET_MS, floored at 8s so it is
+           * always a genuine attempt rather than a token one. Offline degrades in ~35s worst case;
+           * a phone with signal is never cut off early, because time — not a probe — is what ends
+           * it. That is the correct trade: we would rather be slow once than wrong on the course.
+           */
+          const spentMs = Date.now() - txStart;
+          const retryBudgetMs = Math.max(8000, VOICE_TOTAL_BUDGET_MS - spentMs);
+          transcribeRes = await doTranscribeFetch(probeSaysDown ? retryBudgetMs : Math.min(15000, retryBudgetMs));
           if (probeSaysDown) console.log('[voice] probe was WRONG — retry succeeded; the connection was fine');
         } catch (retryErr) {
           const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
           // Two genuine attempts have now failed. Log the probe's real verdict so "probe wrong,
           // upload fine" stays distinguishable from "genuinely down" in the field data.
-          await failTranscribeOffline(name, ping.ok, ping.ms, get.ok, get.ms);
+          await failTranscribeOffline(name, ping.ok, ping.ms, get.ok, get.ms, cdn.ok, cdn.ms);
           return;
         }
       }

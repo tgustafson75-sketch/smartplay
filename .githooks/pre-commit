@@ -1,0 +1,25 @@
+#!/bin/sh
+# SmartPlay Caddie — typecheck gate (added 2026-08-20)
+#
+# WHY THIS EXISTS: the standing delivery workflow is ts-check + jest + sim + commit + push, but it
+# was enforced only by remembering to do it. On 2026-08-20 a commit ran as
+#     npx tsc --noEmit | head -3 ; npx jest ; git commit
+# and the `;` meant the commit did not care that tsc had failed. `tsx` and `jest` do not typecheck,
+# so sim (777) and jest (1083) both stayed green over a real type error and it reached main AND the
+# remote. Discipline is not a gate. This is.
+#
+# Scope is tsc only — 8s, cheap enough to pay on every commit. jest (~90s) and the simulation suite
+# stay manual so this hook never becomes something worth bypassing out of impatience.
+#
+# Genuine emergency: git commit --no-verify
+
+if git diff --cached --name-only | grep -qE '\.(ts|tsx)$'; then
+  printf 'pre-commit: typechecking... '
+  if OUT=$(npx tsc --noEmit 2>&1); then
+    printf 'clean\n'
+  else
+    printf 'FAILED\n\n%s\n\n' "$OUT"
+    echo 'Commit blocked: fix the type errors above, or --no-verify if this is a genuine emergency.'
+    exit 1
+  fi
+fi
