@@ -10162,6 +10162,40 @@ check('LOCK: no capture path may discard the player\'s audio on the level meter 
   })(),
   'a capture of real length always reaches Whisper on every path; the meter endpoints but never vetoes, and when it disagrees with the transcript that disagreement is logged');
 
+check('LOCK: knowing WHERE WE ARE is never gated on which course is selected',
+  (() => {
+    const pl = read('app/(tabs)/play.tsx');
+    /**
+     * 2026-08-20 (Tim, Wachusett: "only found local courses in the app… this function is key for
+     * launching", with "GPS and location was spotty").
+     *
+     * refreshLocation is the ONLY writer of userPosition, and every discovery path opens with
+     * `if (!userPosition) return` — including the nearby-courses effect and its careful 3-attempt
+     * retry, which therefore never STARTED. Two independent things then guaranteed the failure Tim
+     * saw:
+     *   - the auto-locate effect bailed on `previewCourseId || isRoundActive`, so a player MID-ROUND
+     *     — standing on a course, the exact moment discovery matters — never had location requested
+     *     at all. A gate meant to protect course SELECTION was suppressing POSITION.
+     *   - a single getCurrentPositionAsync with no cached fallback and no retry left userPosition
+     *     null for the whole session the moment one fix failed under tree cover.
+     *
+     * The invariant: position acquisition must be independent of selection state, and must never be
+     * left with NOTHING merely because a fresh fix was slow.
+     */
+    const notGatedOnSelection = (() => {
+      const i = pl.indexOf('hasAutoLocatedRef.current = true;');
+      if (i < 0) return false;
+      // The 400 chars before the latch is where the old bail-out lived.
+      return !/if \(previewCourseId \|\| isRoundActive\) return;/.test(pl.slice(Math.max(0, i - 400), i));
+    })();
+    const cachedFallback = /getLastKnownPositionAsync/.test(pl);
+    const bounded = /gps_timeout/.test(pl) && /attempt <= maxAttempts/.test(pl);
+    // And the thing all of it exists to feed still runs off it.
+    const feedsDiscovery = /locateNearbyCourses\(userPosition\.lat, userPosition\.lng/.test(pl);
+    return notGatedOnSelection && cachedFallback && bounded && feedsDiscovery;
+  })(),
+  'location is acquired regardless of previewCourseId/active round, falls back to the OS cached fix when a fresh one is slow, retries on a bounded schedule, and still feeds nearby-course discovery');
+
 check('LOCK: nothing but the real request may decide the real request failed',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');

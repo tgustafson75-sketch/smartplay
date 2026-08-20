@@ -743,13 +743,62 @@ export default function PlayTab() {
   // userPosition null and the list falls back to last-pick → home → catalog.
   // (Replaces the Phase 407 focus-effect that fired GPS on every Play visit.)
   const [locating, setLocating] = useState(false);
-  const refreshLocation = useCallback(async () => {
+  /**
+   * 2026-08-20 (Tim, from Wachusett: "looking for a feature to find courses near their location but
+   * only found local courses… this function is key for launching", alongside "GPS and location for
+   * Wachusett was spotty").
+   *
+   * ROOT CAUSE of "only local courses": this function is the ONLY writer of userPosition, and every
+   * discovery path is gated behind it — the nearby-courses effect opens with `if (!userPosition)
+   * return`, so its careful 3-attempt retry never even STARTED. One `getCurrentPositionAsync` that
+   * failed left userPosition null for the entire session, and the whole Play tab silently collapsed
+   * to bundled catalog order. The retry logic I added on 08-19 was downstream of the thing that
+   * actually broke.
+   *
+   * Three fixes, all about never being left with NO position when a fix is merely slow:
+   *
+   * 1. LAST-KNOWN FIRST. The OS already has a cached fix; asking for it is instant and cannot fail
+   *    for sky reasons. A 30-minute-old position is wrong by metres for the purpose of "what golf
+   *    courses am I standing near", and metres do not matter at a 8-course/limit radius. This alone
+   *    is the difference between discovery working and not working under trees.
+   * 2. A FRESH FIX RACES A TIMEOUT. Balanced accuracy can hang indefinitely on a bad sky; whatever
+   *    it eventually returns replaces the cached value, but it can no longer be the reason we have
+   *    nothing to show.
+   * 3. IT RETRIES. A one-shot at mount is exactly wrong for a player who opens the app under tree
+   *    cover and walks to the first tee thirty seconds later.
+   */
+  const refreshLocation = useCallback(async (opts?: { retries?: number }) => {
+    const maxAttempts = opts?.retries ?? 3;
     setLocating(true);
     try {
       const { granted } = await Location.requestForegroundPermissionsAsync();
       if (!granted) return;
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+
+      // 1. Cached fix first — instant, and good enough to unblock discovery immediately.
+      let haveAny = false;
+      try {
+        const last = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 });
+        if (last) {
+          haveAny = true;
+          setUserPosition({ lat: last.coords.latitude, lng: last.coords.longitude });
+        }
+      } catch { /* cached fix is a bonus, never a requirement */ }
+
+      // 2 + 3. Then chase a real fix, bounded, with backoff.
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const pos = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('gps_timeout')), 12000)),
+          ]);
+          setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          return;
+        } catch (e) {
+          console.log('[play] location attempt', attempt, 'of', maxAttempts, 'failed:', e);
+          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 4000));
+        }
+      }
+      if (!haveAny) console.log('[play] no position after', maxAttempts, 'attempts — discovery stays catalog-only');
     } catch (e) {
       console.log('[play] manual location refresh failed:', e);
     } finally {
@@ -766,7 +815,15 @@ export default function PlayTab() {
   const hasAutoLocatedRef = useRef(false);
   useEffect(() => {
     if (hasAutoLocatedRef.current) return;
-    if (previewCourseId || isRoundActive) return;
+    /**
+     * 2026-08-20 — `if (previewCourseId || isRoundActive) return;` used to sit here, and it meant a
+     * player WITH A ROUND IN PROGRESS never had their location requested at all. That gate exists to
+     * stop GPS from overriding an already-chosen default course, which is a question about SELECTION;
+     * it was being used to suppress KNOWING WHERE WE ARE. Those are different concerns, and conflating
+     * them is why discovery was deadest in exactly the situation it matters most — standing on a
+     * course, mid-round. Selection stays guarded downstream (the seeding effect still honours
+     * previewCourseId/isRoundActive); position is now always acquired.
+     */
     hasAutoLocatedRef.current = true;
     void refreshLocation();
     // refreshLocation is stable (useCallback with no deps that change) —
@@ -1081,7 +1138,22 @@ export default function PlayTab() {
     const previewMatch = previewCourseId
       ? LOCAL_COURSES.find(l => l.id === previewCourseId) ?? null
       : null;
-    const defaultPick = gpsNearest ?? previewMatch ?? homeMatch ?? LOCAL_COURSES[0];
+    /**
+     * 2026-08-20 — precedence made EXPLICIT rather than decided by a race.
+     *
+     * The comment above says "live GPS-nearest → last picked", but that is not what shipped. The
+     * auto-locate effect used to bail out entirely when previewCourseId existed, so userPosition was
+     * null here and previewMatch always won; and even without that gate, location is async while this
+     * effect runs synchronously at mount, so previewMatch won the race anyway. Now that a cached fix
+     * can arrive almost instantly, that race would start flipping — and the observable result would
+     * be the Play tab quietly changing which course it defaults to, which is a PRODUCT decision and
+     * nothing to do with fixing discovery.
+     *
+     * So: an explicit prior pick beats GPS, which is the behaviour that has actually been shipping.
+     * (Worth revisiting with Tim — driving to a new course arguably should re-default to it — but
+     * that is a deliberate change to make on purpose, not a side effect of a location fix.)
+     */
+    const defaultPick = previewMatch ?? gpsNearest ?? homeMatch ?? LOCAL_COURSES[0];
     if (defaultPick) void selectSummary(defaultPick);
     // selectSummary is intentionally not in deps — it'd retrigger on every
     // closure refresh. We only want this once per mount + once GPS resolves.
