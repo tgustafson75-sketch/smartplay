@@ -496,13 +496,11 @@ function CameraSmartFinder({
   const [zoom, setZoom] = useState(0);
   const baseZoomRef = useRef(0);
   // 2026-06-23 (Tim) — collapse the right-side controls into a SmartMotion-style
-  // TOOLS pop-out (sliders chevron → labeled themed rows) so the camera view
-  // stays clear and the icons are learnable.
-  // 2026-06-25 (Tim — "crowded ass dog shit") — the PHOTO/VIDEO pill + the big
-  // floating shutter also move INTO this pop-out as rows, so the ONLY persistent
-  // floating control in target mode is the single TOOLS button. Capture logic is
-  // unchanged — it's just one tap deeper (TOOLS → Photo / Video).
-  const [toolsOpen, setToolsOpen] = useState(false);
+  // 2026-08-19 — the TOOLS pop-out is gone (Tim: "the drop down in smartfinder needs to go away,
+  // we just need to have icons overlaid"), and with it `toolsOpen`. The 2026-06-25 note that lived
+  // here said the pop-out existed so the camera view stayed clear — but the card opened ON TOP of the
+  // scene you were aiming at, and it put a tap in front of every action. Four icons on the camera
+  // keep the view clear AND cost nothing to reach; capture logic is untouched.
 
   // 2026-06-25 — Capture handler lifted out of the (now-removed) floating shutter's
   // inline onPress so it can be driven from the TOOLS pop-out rows. takePictureAsync /
@@ -807,108 +805,64 @@ function CameraSmartFinder({
         style={{ position: 'absolute', right: 16, top: insets.top + 64, gap: 12, alignItems: 'center' }}
         pointerEvents="box-none"
       >
-        {/* 2026-06-23 (Tim) — TOOLS pop-out (SmartMotion SETUP TOOLS style): a
-            single sliders chevron collapses the scene-read + lock controls into a
-            labeled themed card, keeping the camera view clear. */}
+        {/**
+          * 2026-08-19 (Tim, twice: "The drop down in smartfinder needs to go away. We just need to
+          * have icons overlaid").
+          *
+          * This was a chevron that opened a labelled card of four rows. On a rangefinder that is one
+          * tap of overhead in front of every action, and the card itself covered the very thing you
+          * are aiming at — you opened it to read the scene, and it sat on top of the scene.
+          *
+          * The four actions are now four icons on the camera, always reachable, one tap each. Every
+          * handler below is the one from the row it replaces, unchanged: same scene read, same lock
+          * toggle, same capture-mode arming before photo and video. Nothing about WHAT they do moved;
+          * only the tap that used to stand in front of them is gone.
+          *
+          * The label each row carried lives on as the accessibility label, so the actions are still
+          * named for screen readers even though the face is now an icon.
+          */}
         {mode === 'target' && (
           <>
-            {toolsOpen && (
-              <View style={sfStyles.toolsCard}>
-                <Text style={sfStyles.toolsHeader}>TOOLS</Text>
-                <TouchableOpacity
-                  style={sfStyles.toolRow}
-                  onPress={() => { setToolsOpen(false); void runSceneRead(); }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Smart Play — read the scene"
-                >
-                  <View style={sfStyles.toolIcon}>
-                    <Ionicons name={sceneReading ? 'sync' : 'eye'} size={20} color="#88F700" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sfStyles.toolTitle}>AI Read</Text>
-                    <Text style={sfStyles.toolDesc}>Snap → how to play this shot</Text>
-                  </View>
-                </TouchableOpacity>
-                {mode === 'target' && (
-                  <TouchableOpacity
-                    style={sfStyles.toolRow}
-                    onPress={() => { setLocked(v => !v); setToolsOpen(false); }}
-                    accessibilityRole="button"
-                    accessibilityLabel={locked ? 'Unlock target' : 'Lock target'}
-                  >
-                    <View style={[sfStyles.toolIcon, locked && { backgroundColor: 'rgba(240,192,48,0.18)', borderColor: '#F0C030' }]}>
-                      <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={20} color={locked ? '#F0C030' : '#88F700'} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={sfStyles.toolTitle}>{locked ? 'Locked' : 'Lock target'}</Text>
-                      <Text style={sfStyles.toolDesc}>Hold the distance reading</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
-                {/* 2026-06-25 (Tim — declutter) — capture moved off the floating
-                    shutter into these two rows. Photo: snap immediately. Video:
-                    first tap arms video mode + starts recording, second tap (label
-                    flips to "Stop recording") stops + shares. Same takePictureAsync /
-                    recordAsync / ingestCapture path as before, just relocated. */}
-                <View style={sfStyles.toolDivider} />
-                <TouchableOpacity
-                  style={sfStyles.toolRow}
-                  disabled={recording || capturing}
-                  onPress={() => {
-                    if (captureMode !== 'picture') setCaptureMode('picture');
-                    setToolsOpen(false);
-                    void runCapture('picture');
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Take a photo"
-                >
-                  <View style={[sfStyles.toolIcon, (recording || capturing) && { opacity: 0.4 }]}>
-                    <Ionicons name={capturing ? 'sync' : 'camera'} size={20} color="#88F700" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sfStyles.toolTitle}>Photo</Text>
-                    <Text style={sfStyles.toolDesc}>Snap + add to this hole</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={sfStyles.toolRow}
-                  disabled={capturing}
-                  onPress={() => {
-                    // Arm video mode so CameraView is in the recording pipeline,
-                    // then start/stop. The mode prop is bound to captureMode. Keep
-                    // the pop-out OPEN while recording so the row (now "Stop
-                    // recording") stays reachable for the second tap.
-                    if (captureMode !== 'video') setCaptureMode('video');
-                    void runCapture('video');
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={recording ? 'Stop video recording' : 'Record video or pano'}
-                >
-                  <View style={[sfStyles.toolIcon, recording && { backgroundColor: 'rgba(239,68,68,0.18)', borderColor: '#ef4444' }]}>
-                    <Ionicons name={recording ? 'stop' : 'videocam'} size={20} color={recording ? '#ef4444' : '#88F700'} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sfStyles.toolTitle}>{recording ? 'Stop recording' : 'Video / Pano'}</Text>
-                    <Text style={sfStyles.toolDesc}>{recording ? 'Tap to finish + share' : 'Record this hole · turn to pan'}</Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            )}
             <TouchableOpacity
-              onPress={() => setToolsOpen(v => !v)}
+              onPress={() => { void runSceneRead(); }}
+              style={[sfStyles.toolOrb, sceneReading && sfStyles.toolOrbBusy]}
               accessibilityRole="button"
-              accessibilityLabel={toolsOpen ? 'Hide tools' : 'Show tools'}
-              style={{
-                flexDirection: 'row', alignItems: 'center', gap: 2,
-                paddingHorizontal: 12, height: 44, borderRadius: 22,
-                backgroundColor: 'rgba(0,0,0,0.6)',
-                // Subtle live-recording tint so the single TOOLS button signals an
-                // active recording even when the pop-out is the thing being looked at.
-                borderWidth: 1.5, borderColor: recording ? '#ef4444' : '#88F700',
-              }}
+              accessibilityLabel="AI Read — snap and read how to play this shot"
             >
-              <Ionicons name="options-outline" size={18} color={recording ? '#ef4444' : '#88F700'} />
-              <Ionicons name={toolsOpen ? 'chevron-down' : 'chevron-up'} size={14} color={recording ? '#ef4444' : '#88F700'} />
+              <Ionicons name={sceneReading ? 'sync' : 'eye'} size={22} color="#88F700" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setLocked(v => !v)}
+              style={[sfStyles.toolOrb, locked && { borderColor: '#F0C030' }]}
+              accessibilityRole="button"
+              accessibilityLabel={locked ? 'Target locked — tap to unlock' : 'Lock target'}
+            >
+              <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={22} color={locked ? '#F0C030' : '#88F700'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={recording || capturing}
+              onPress={() => {
+                if (captureMode !== 'picture') setCaptureMode('picture');
+                void runCapture('picture');
+              }}
+              style={[sfStyles.toolOrb, (recording || capturing) && { opacity: 0.4 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Take a photo and add it to this hole"
+            >
+              <Ionicons name={capturing ? 'sync' : 'camera'} size={22} color="#88F700" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={capturing}
+              onPress={() => {
+                // Arm video mode so CameraView is in the recording pipeline, then start/stop.
+                if (captureMode !== 'video') setCaptureMode('video');
+                void runCapture('video');
+              }}
+              style={[sfStyles.toolOrb, recording && { backgroundColor: 'rgba(239,68,68,0.18)', borderColor: '#ef4444' }]}
+              accessibilityRole="button"
+              accessibilityLabel={recording ? 'Stop video recording' : 'Record video or pano'}
+            >
+              <Ionicons name={recording ? 'stop' : 'videocam'} size={22} color={recording ? '#ef4444' : '#88F700'} />
             </TouchableOpacity>
           </>
         )}
@@ -2603,37 +2557,17 @@ return StyleSheet.create({
 // 2026-06-23 (Tim) — SmartMotion SETUP-TOOLS-style pop-out for the SmartFinder
 // right-side controls. Themed green-on-dark, icon + title + description rows.
 const sfStyles = StyleSheet.create({
-  toolsCard: {
-    width: 248,
-    backgroundColor: 'rgba(8,20,12,0.96)',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'rgba(136,247,0,0.45)',
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    marginBottom: 4,
-  },
-  toolsHeader: {
-    color: '#9ca3af', fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
-    paddingHorizontal: 8, paddingTop: 4, paddingBottom: 6,
-  },
-  toolRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 9, paddingHorizontal: 8, borderRadius: 12,
-  },
-  toolIcon: {
-    width: 40, height: 40, borderRadius: 20,
+  /**
+   * 2026-08-19 — the always-visible tool button that replaced the drop-down's rows. Same 44pt touch
+   * target the chevron had, and a darker fill than toolIcon because these now sit directly on the
+   * CAMERA rather than inside a card: the pop-out gave its icons a backdrop, and without one a
+   * translucent green orb disappears against sunlit fairway.
+   */
+  toolOrb: {
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.55)',
-    backgroundColor: 'rgba(136,247,0,0.10)',
+    borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  toolTitle: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
-  toolDesc: { color: '#9ca3af', fontSize: 12, fontWeight: '600', marginTop: 1 },
-  // 2026-06-25 — thin separator between the read/lock tools and the capture rows.
-  toolDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginVertical: 4,
-    marginHorizontal: 8,
-  },
+  toolOrbBusy: { borderColor: '#F0C030' },
 });
