@@ -1741,7 +1741,14 @@ export default function PlayTab() {
               tap; no auto-pull on focus. */}
           <TouchableOpacity
             style={styles.scopeBtn}
-            onPress={() => void refreshLocation()}
+            /**
+             * 2026-08-20 — ONE retry here, not the default three. This is an explicit tap expecting
+             * quick feedback, and the button is `disabled={locating}` with a spinning icon for the
+             * whole call: under bad GPS the new retry ladder (12s + 4s + 12s + 8s + 12s) would leave
+             * it dead and spinning for ~48 seconds. The cached-fix fallback already gives this tap an
+             * instant position, so the long ladder buys nothing a user is watching for.
+             */
+            onPress={() => void refreshLocation({ retries: 1 })}
             disabled={locating}
             accessibilityRole="button"
             accessibilityLabel="Refresh nearby courses from your current location"

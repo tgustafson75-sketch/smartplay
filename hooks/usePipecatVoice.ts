@@ -559,17 +559,44 @@ export function usePipecatVoice({
        *    path chose it three times over. [[caddie-failsafe-no-walls]] [[feels-like-a-real-caddie]]
        */
       const coldFirstTurn = !isConnectionWarmed();
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        coldFirstTurn ? PIPECAT_COLD_TRANSCRIBE_MS : PIPECAT_WARM_TRANSCRIBE_MS,
-      );
+      /**
+       * 2026-08-20 (adversarial audit of the 08-19/08-20 voice work) — THIS PATH HAD NO RETRY.
+       *
+       * The other two uploaders both get a second attempt: useVoiceCaddie retries the real upload
+       * after a failure, and captureUtterance does 25s then 15s. This one fired a single fetch and,
+       * on the first AbortError, went straight to speakDeadEnd('transcribe_timeout') — which is
+       * exactly the "goes straight to failure state" Tim reported, on exactly the turn (the first,
+       * cold one) where a single attempt is least likely to land.
+       *
+       * A retry is the correct shape here for the same reason it is elsewhere: a request that would
+       * have succeeded is completely unaffected, and only a genuinely failed first attempt pays for
+       * it. Bounded at cold + 12s so the worst case stays inside what a person will wait through
+       * before the caddie says something honest instead.
+       */
+      const doPipecatFetch = (timeoutMs: number) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        return fetch(whisperUrl, {
+          method: 'POST',
+          // Rebuild per attempt — a consumed multipart stream cannot be safely re-sent.
+          body: (() => {
+            const fd = new FormData();
+            fd.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+            fd.append('language', opts?.language ?? useSettingsStore.getState().language ?? 'en');
+            return fd;
+          })(),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
+      };
 
-      const transcribeRes = await fetch(whisperUrl, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+      let transcribeRes: Response;
+      try {
+        transcribeRes = await doPipecatFetch(coldFirstTurn ? PIPECAT_COLD_TRANSCRIBE_MS : PIPECAT_WARM_TRANSCRIBE_MS);
+      } catch {
+        devLog('[pipecat] first transcribe attempt failed — retrying once before degrading');
+        await new Promise(r => setTimeout(r, 600));
+        transcribeRes = await doPipecatFetch(12_000);
+      }
 
       if (!transcribeRes.ok) {
         devLog('[pipecat] transcribe failed:', transcribeRes.status);

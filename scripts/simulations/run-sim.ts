@@ -10234,6 +10234,37 @@ check('LOCK: knowing WHERE WE ARE is never gated on which course is selected',
   })(),
   'location is acquired regardless of previewCourseId/active round, falls back to the OS cached fix when a fresh one is slow, retries on a bounded schedule, and still feeds nearby-course discovery');
 
+check('LOCK: every path that uploads audio gets a SECOND attempt before it gives up',
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const pc = read('hooks/usePipecatVoice.ts');
+    const vs = read('services/voiceService.ts');
+    /**
+     * 2026-08-20 (adversarial audit of the same day's voice work — "check work", assume the fix is
+     * FALSE and look for the surface it missed).
+     *
+     * Three separate places upload recorded audio to /api/transcribe: the tap path
+     * (useVoiceCaddie), the earbud/hands-free path (voiceService.captureUtterance) and the pipecat
+     * brain path (usePipecatVoice). Two of them retried a failed attempt. The pipecat path fired a
+     * SINGLE fetch and, on the first AbortError, went straight to speakDeadEnd('transcribe_timeout')
+     * — which is precisely the "goes straight to failure state" Tim reported, on precisely the turn
+     * (first, cold) where one attempt is least likely to land.
+     *
+     * That is the half-fix shape: the probe-veto work fixed the path the field log happened to name
+     * and left a sibling with its own way of failing the same first turn. The invariant is a
+     * property of the CLASS — any path that can lose a real recording retries before degrading —
+     * so it is asserted across all three, and a new uploader has to satisfy it too.
+     */
+    const tapRetries = /transcribeRes = await doTranscribeFetch\(probeSaysDown \? retryBudgetMs/.test(vc);
+    const earbudRetries = /res = await doFetch\(25_000\);/.test(vs) && /res = await doFetch\(15_000\);/.test(vs);
+    const pipecatRetries = /transcribeRes = await doPipecatFetch\(12_000\);/.test(pc)
+      && /first transcribe attempt failed — retrying once before degrading/.test(pc);
+    // ...and none of them may be cancelled by anything other than their own budget.
+    const noneCancellable = !/externalSignal\s*[?.,)]/.test(vc) && !/externalSignal\s*[?.,)]/.test(pc);
+    return tapRetries && earbudRetries && pipecatRetries && noneCancellable;
+  })(),
+  'the tap, earbud and pipecat upload paths all get a genuine second attempt before degrading, and none can be cancelled by anything but its own timeout');
+
 check('LOCK: nothing but the real request may decide the real request failed',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
