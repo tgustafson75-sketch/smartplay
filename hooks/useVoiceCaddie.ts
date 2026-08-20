@@ -1777,6 +1777,42 @@ export const useVoiceCaddie = ({
         } catch { return { ok: false, ms: Date.now() - pStart }; }
       };
 
+      /**
+       * 2026-08-20 (Tim: "first turns of the voice path are broken, go to error state on GOOD SIGNAL
+       * at first 3 tries… this MUST be fixed correctly, root cause immediately").
+       *
+       * THE GUARD WAS MEASURING THE WRONG THING. Both existing probes hit our own serverless
+       * functions — /api/kevin and /api/health — and each one needs its OWN cold start. On a fresh app
+       * launch that is two cold boots, neither of which is the function actually doing the work, and
+       * the guard read their slowness as "the network is dead" and ABORTED a transcribe that would
+       * have completed.
+       *
+       * His log decodes exactly: pingMs 5014, then a 6019ms retry, elapsedMs 11044 = 5000 + 6000. The
+       * app spent eleven seconds proving its own backend was cold and then killed its own request,
+       * on a good connection, three times in a row.
+       *
+       * A STATIC file has no cold start. /.well-known/assetlinks.json is served from the CDN and
+       * answers in ~250ms whether or not a single Lambda is warm, so it separates the two questions
+       * that were being conflated:
+       *     CDN answers  → the NETWORK is fine. The backend may be cold, which is what patience is
+       *                    for. NEVER abort.
+       *     CDN silent   → the device genuinely cannot reach us. Abort and degrade, as before.
+       *
+       * This is the discriminator the previous fixes were reaching for with fast-vs-slow timing
+       * heuristics. Those tried to infer reachability from how a cold Lambda failed; this just asks
+       * something that is never cold.
+       */
+      const staticReachable = async (timeoutMs: number): Promise<{ ok: boolean; ms: number }> => {
+        const sStart = Date.now();
+        try {
+          const sc = new AbortController();
+          const st = setTimeout(() => sc.abort(), timeoutMs);
+          const sr = await fetch(`${apiUrl}/.well-known/assetlinks.json`, { method: 'GET', signal: sc.signal })
+            .finally(() => clearTimeout(st));
+          return { ok: sr.ok, ms: Date.now() - sStart };
+        } catch { return { ok: false, ms: Date.now() - sStart }; }
+      };
+
       // 2026-06-28 (Tim) — DIAGNOSTIC GET probe alongside the POST ping. Backend is
       // healthy globally + POSTs work from elsewhere, yet the field shows POSTs
       // stalling on Tim's device across networks. Firing a GET (/api/health) next to
@@ -1798,16 +1834,28 @@ export const useVoiceCaddie = ({
       // Honest offline dead-end — log the diagnostic, then degrade as far as the
       // device allows: (Phase B) on-device STT → on-device caddie answer, else
       // (A2) a typed question routed to the same offline caddie, else a nudge.
-      const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number, getOk = false, getMs = -1) => {
+      /**
+       * 2026-08-20 — `cdnOk`/`cdnMs` are the fields that make the next report decisive rather than
+       * suggestive. Every entry so far reads identically — pingMs ~5010, getMs ~6015, elapsed ~11040 —
+       * which proves the two probes TIMED OUT but cannot say why. Two very different worlds produce
+       * that same line:
+       *   cdnOk true  → the host IS reachable; our Lambdas were just cold. The abort was wrong, and
+       *                 the fix above (never abort when the CDN answers) is the whole story.
+       *   cdnOk false → the device cannot reach api.smartplaycaddie.com AT ALL — DNS, TLS or a
+       *                 filter — and no amount of backend patience will help. That is a different
+       *                 problem with a different fix, and we would stop guessing at it.
+       * One field separates them.
+       */
+      const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number, getOk = false, getMs = -1, cdnOk: boolean | null = null, cdnMs = -1) => {
         const elapsedMs = Date.now() - txStart;
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../services/roundTrace') as typeof import('../services/roundTrace')).trace('error', 'transcribe_fail', {
-            reason: name, elapsedMs, pingOk, pingMs, getOk, getMs,
+            reason: name, elapsedMs, pingOk, pingMs, getOk, getMs, cdnOk, cdnMs,
           });
         } catch { /* non-fatal */ }
         console.log('[voice] transcribe failed — offline path:', name, 'elapsedMs', elapsedMs, 'pingOk', pingOk, 'pingMs', pingMs, 'getOk', getOk, 'getMs', getMs);
-        logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs, getOk, getMs });
+        logTranscribeError(null, name, { source: 'processAudioUri_fastfail', apiUrl, elapsedMs, pingOk, pingMs, getOk, getMs, cdnOk, cdnMs });
         try { Vibration.vibrate(120); } catch {}
 
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
@@ -1896,7 +1944,7 @@ export const useVoiceCaddie = ({
       // ([[voice-first-try-failure-timeout-root-cause]]). Fast/warm turns pay ZERO added latency (the
       // guard runs concurrently and is only consulted if the transcribe itself throws).
       const coldAbort = new AbortController();
-      let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null = null;
+      let coldUnreachable: { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number }; cdn?: { ok: boolean; ms: number } } | null = null;
       // 2026-08-05 (Tim — "the on-course/off-course determination is part of the slow first response").
       // Run this reachability guard on EVERY turn, not just the cold first one. The WARM on-course path
       // had NO concurrent guard, so a failed turn on a weak course network burned the FULL 12s transcribe
@@ -1914,10 +1962,23 @@ export const useVoiceCaddie = ({
           // host reachable (POST may just be slow) → never abort. `max(ms) < budget - margin` = both
           // actively refused = truly offline → abort now and degrade (was cold-only; the discriminator is
           // the 2026-07-30 field fix for a network that REFUSES both probes at ~3s rather than timing out).
-          const [ping, get] = await Promise.all([reachabilityPing(probeBudgetMs), healthGet(probeBudgetMs)]);
+          const [ping, get, cdn] = await Promise.all([
+            reachabilityPing(probeBudgetMs),
+            healthGet(probeBudgetMs),
+            staticReachable(probeBudgetMs),
+          ]);
+          /**
+           * 2026-08-20 — the CDN answering is PROOF the network is up, and it outranks both Lambda
+           * probes. A cold backend is exactly what the long transcribe budget exists to wait out;
+           * killing the request because our own functions were still booting is the bug being fixed.
+           */
+          if (cdn.ok) {
+            console.log(`[voice] backend cold but network UP (cdn ${cdn.ms}ms, ping ${ping.ms}ms, get ${get.ms}ms) — letting the transcribe run`);
+            return;
+          }
           const bothActivelyFailed = !ping.ok && !get.ok && Math.max(ping.ms, get.ms) < probeBudgetMs - 500;
           if (bothActivelyFailed) {
-            coldUnreachable = { ping, get };
+            coldUnreachable = { ping, get, cdn };
             try { coldAbort.abort(); } catch { /* no-op */ }
             return;
           }
@@ -1931,7 +1992,7 @@ export const useVoiceCaddie = ({
           if (!ping.ok && !get.ok) {
             const retry = await healthGet(6000);
             if (!retry.ok) {
-              coldUnreachable = { ping, get: retry };
+              coldUnreachable = { ping, get: retry, cdn };
               try { coldAbort.abort(); } catch { /* no-op */ }
             }
           }
@@ -1942,10 +2003,10 @@ export const useVoiceCaddie = ({
       } catch {
         // Concurrent guard already proved the host unreachable → straight to offline, no extra probe.
         // (Cast defeats TS's closure-assignment narrowing: coldUnreachable is set inside the async IIFE.)
-        const u = coldUnreachable as { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number } } | null;
+        const u = coldUnreachable as { ping: { ok: boolean; ms: number }; get: { ok: boolean; ms: number }; cdn?: { ok: boolean; ms: number } } | null;
         if (u) {
           void ensureBackendReachable({ force: true });
-          await failTranscribeOffline('AbortError', u.ping.ok, u.ping.ms, u.get.ok, u.get.ms);
+          await failTranscribeOffline('AbortError', u.ping.ok, u.ping.ms, u.get.ok, u.get.ms, u.cdn?.ok ?? null, u.cdn?.ms ?? -1);
           return;
         }
         // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
