@@ -32,27 +32,87 @@ export interface NearbyCourse {
   open_now: boolean | null;
 }
 
-/** GPS → the golf courses at/near this location (nearest first). Best-effort; [] on any failure. */
+/** Why discovery came back empty. `null` = it genuinely succeeded and there are no courses nearby. */
+export type LocateFailure = 'bad_input' | 'timeout' | 'http' | 'network' | null;
+
+export interface LocateResult {
+  courses: NearbyCourse[];
+  /** null when the call SUCCEEDED. Non-null means we do not know what is nearby. */
+  failure: LocateFailure;
+}
+
+/**
+ * GPS → the golf courses at/near this location (nearest first).
+ *
+ * 2026-08-19 (Tim, from a round: "when I went for the local course engine — course discovery, it
+ * didn't load, and that's bullshit… no more superficial fixes, root cause only").
+ *
+ * ROOT CAUSE: this returned a bare `NearbyCourse[]` and `[]` on EVERY failure — bad input, non-2xx,
+ * timeout, and any thrown error, all silently. So "the network dropped for nine seconds on a course
+ * with one bar" produced exactly the same value as "there are genuinely no golf courses near you",
+ * and the caller could not tell them apart: it does `if (!near.length) return;` and the section
+ * simply never appears. Nothing was logged either, so the failure left no trace anywhere. That is why
+ * it read as "it didn't load" with nothing to point at.
+ *
+ * The endpoint itself is healthy (verified live against the Berlin coordinates — it returns real
+ * courses). The defect was entirely in how this function reports not getting an answer.
+ *
+ * THREE THINGS, none of them cosmetic:
+ *   1. The result now DISTINGUISHES failure from empty, so a caller can say the true thing instead of
+ *      rendering silence that means two opposite things.
+ *   2. ONE retry on a transient failure (timeout / network). This is the same cold-start class as the
+ *      voice first turn: the first request pays the cold Lambda and the second lands on a warm one.
+ *      Not retried for `http` (the server answered — retrying an answer is just noise) or bad input.
+ *   3. Every failure is LOGGED with its reason, so the next round says which of these fires in the
+ *      field rather than leaving it to be reasoned about.
+ */
 export async function locateNearbyCourses(
   lat: number,
   lng: number,
   opts?: { radiusM?: number; limit?: number },
-): Promise<NearbyCourse[]> {
+): Promise<LocateResult> {
   const base = getApiBaseUrl();
-  if (!base || !Number.isFinite(lat) || !Number.isFinite(lng)) return [];
-  try {
-    const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-locate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat, lng, radius_m: opts?.radiusM, limit: opts?.limit }),
-      signal: AbortSignal.timeout(9_000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { courses?: NearbyCourse[] };
-    return Array.isArray(data.courses) ? data.courses : [];
-  } catch {
-    return [];
+  if (!base || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    logLocate('course_locate_bad_input', { hasBase: !!base, lat, lng });
+    return { courses: [], failure: 'bad_input' };
   }
+
+  const attempt = async (): Promise<LocateResult> => {
+    try {
+      const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-locate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, radius_m: opts?.radiusM, limit: opts?.limit }),
+        signal: AbortSignal.timeout(9_000),
+      });
+      if (!res.ok) return { courses: [], failure: 'http' };
+      const data = (await res.json()) as { courses?: NearbyCourse[] };
+      return { courses: Array.isArray(data.courses) ? data.courses : [], failure: null };
+    } catch (e) {
+      // AbortSignal.timeout throws a TimeoutError; everything else is a transport failure.
+      const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      return { courses: [], failure: timedOut ? 'timeout' : 'network' };
+    }
+  };
+
+  let out = await attempt();
+  if (out.failure === 'timeout' || out.failure === 'network') {
+    logLocate('course_locate_retry', { first_failure: out.failure });
+    out = await attempt();
+  }
+  if (out.failure) {
+    logLocate('course_locate_failed', { reason: out.failure, lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
+  }
+  return out;
+}
+
+/** Best-effort issue-log breadcrumb — discovery failures were previously invisible. Never throws. */
+function logLocate(stage: string, details: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('../store/issueLogStore').useIssueLogStore.getState()
+      .addAppEvent(stage, details, stage === 'course_locate_retry' ? 'diag' : 'analysis_error');
+  } catch { /* best-effort */ }
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\b(golf|course|club|country|the|and|&|cc|gc|g\.c\.)\b/g, '').replace(/[^a-z0-9]/g, '').trim();

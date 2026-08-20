@@ -3645,7 +3645,13 @@ check('Earbud tap-again ENDS + submits the utterance (not cancel), with a distin
     // the 'listening' endpoint handling must appear BEFORE the sessionInFlight guard, and be gated by the
     // open-echo window so the OPEN tap's own ~350ms second fire can't prematurely end the capture.
     const endpointIdx = ls.search(/if \(state === 'listening'\) \{[\s\S]*?endCaptureEarly\(\)/);
-    const inFlightGuardIdx = ls.search(/if \(sessionInFlight\) return;/);
+    // 2026-08-19 — the guard now acknowledges + logs the swallow before returning (a tap that vanishes
+    // is what "I got ignored on the course" felt like), so match the bail however it returns rather
+    // than pinning `return;`. REACHABILITY is the invariant this scenario exists for, not the syntax.
+    // Match the STATEMENT, not the prose: a comment a few lines above quotes the old
+    // `if (sessionInFlight) return` verbatim, so a loose pattern matches the explanation instead of
+    // the code and reports the endpoint as unreachable. The live guard now opens a block.
+    const inFlightGuardIdx = ls.search(/if \(sessionInFlight\) \{/);
     return (
       /LISTENING_EARCON[\s\S]*?tock\.mp3/.test(ls) &&
       /GOTIT_EARCON[\s\S]*?tick\.mp3/.test(ls) &&

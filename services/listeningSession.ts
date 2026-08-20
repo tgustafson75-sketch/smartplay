@@ -345,6 +345,35 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 /**
+ * 2026-08-19 (Tim, after a round: "I got ignored most of the time on the course today").
+ *
+ * A TAP THAT VANISHES IS THE WORST THING THIS SESSION CAN DO. toggle() has seven guards that return
+ * early — echo swallows, cooldowns, and the in-flight lock — and every one of them returned in
+ * complete silence: no earcon, no haptic, no log line. On a phone in your pocket with earbuds in,
+ * silence is the ONLY channel the player has, so "swallowed on purpose" and "the app is dead" are
+ * indistinguishable. You tap again, that is swallowed too, and the honest report is exactly the one
+ * Tim gave: ignored.
+ *
+ * The worst offender is the in-flight lock. `sessionInFlight` is true through 'opening' AND
+ * 'thinking' — the whole brain round-trip, which on a cold first turn is several seconds. During that
+ * window the caddie has heard you, is working, and says nothing at all; a second tap is discarded
+ * without acknowledgement. The player has no way to tell that from a mic that never opened.
+ *
+ * So: every swallow now (a) acknowledges with a short haptic, so a pocketed phone confirms the tap
+ * registered, and (b) logs WHICH guard ate it, so the next round says definitively which of these
+ * fires in the field instead of leaving us to reason about it. Deliberately NOT changing what the
+ * guards decide — the dedupe/echo logic is load-bearing and was each written for a real double-fire.
+ * What changes is that a swallow is no longer invisible. [[feels-like-a-real-caddie]]
+ */
+function swallowedTap(guard: string, extra?: Record<string, unknown>): void {
+  try { Vibration.vibrate(18); } catch { /* haptics optional */ }
+  console.log(`[path4:voice] tap_swallowed guard=${guard} state=${state}`);
+  try {
+    logVoiceSilentFail('tap_swallowed', { source: 'listeningSession', guard, sessionState: state, ...extra });
+  } catch { /* never throw from a guard */ }
+}
+
+/**
  * Start listening for earbud taps (called once on app boot or by the first
  * surface that wants to receive them).
  */
@@ -383,14 +412,14 @@ export async function toggle(): Promise<void> {
   // recording already stopped and open listening right over the just-freed mic.
   // Swallow toggles for a short window after a tap-stop (covers the pattern
   // follow-up + the camera's audio-session release).
-  if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) return;
+  if (Date.now() - recordingStopTapAt < RECORDING_STOP_TAP_COOLDOWN_MS) { swallowedTap('recording_stop_cooldown'); return; }
   // 2026-08-07 (regression audit — the endpoint branch below was DEAD: sessionInFlight is true for the
   // whole 'listening' window, so `if (sessionInFlight) return` swallowed the tap-again endpoint before it
   // could run). Handle the endpoint HERE, before that guard. A tap while the mic is OPEN means "I'm done,
   // submit" — end the capture early (transcribe what we have) + play the distinct got-it earcon.
   if (state === 'listening') {
     // Swallow the OPEN tap's own ~350ms echo (it lands in 'listening' but isn't a real "done" tap)...
-    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) return;
+    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) { swallowedTap('open_tap_echo'); return; }
     // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
     if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
     sessionCloseTapAt = Date.now();
@@ -405,7 +434,7 @@ export async function toggle(): Promise<void> {
   }
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
   // See sessionInFlight comment above for rationale.
-  if (sessionInFlight) return;
+  if (sessionInFlight) { swallowedTap('session_in_flight'); return; }
   // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
   // branch, on the CLOSE side: one physical tap reaches toggle() twice (legacy sub
   // immediately + pattern sub ~350ms later). During 'responding' sessionInFlight is
@@ -414,7 +443,7 @@ export async function toggle(): Promise<void> {
   // short window after any close — the ECHO window only (600ms): reusing the 1.5s camera-release
   // constant here meant a genuine shush tap at a fast-responding caddie was eaten for a full 1.5s
   // after every "I'm done" endpoint tap.
-  if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
+  if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo'); return; }
   if (state === 'idle') {
     sessionInFlight = true;
     // A deliberate tap starts a fresh conversation — clear any auto-reopen chain the caddie's own

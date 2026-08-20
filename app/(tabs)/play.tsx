@@ -849,13 +849,41 @@ export default function PlayTab() {
   // 2026-08-07 (Tim) — GPS auto-detect for the golfcourseapi/search section: when we have a fix, pull the
   // golf courses physically near the player from the course engine and drop any that are already in the
   // bundled/custom catalog (those show in "Courses near you" above). Best-effort; silent on failure/offline.
+  /**
+   * 2026-08-19 (Tim, from a round: "course discovery, it didn't load, and that's bullshit… root cause
+   * only"). THIS EFFECT ONLY RE-RAN WHEN THE POSITION CHANGED. A player standing at the course — the
+   * exact moment discovery matters most — has a position that barely moves, so a single failed lookup
+   * was FINAL for the whole visit. Combined with the service returning a bare [] on every failure
+   * (indistinguishable from "no courses nearby"), the section just never appeared and nothing
+   * anywhere recorded why.
+   *
+   * The service now says WHY it failed and retries a transient once. This adds the other half: when
+   * it still fails, try again on a timer instead of waiting for the player to walk somewhere. Bounded
+   * (3 attempts, backing off) so a genuinely offline round doesn't poll forever, and cancelled on
+   * unmount / position change like everything else here.
+   */
   useEffect(() => {
     if (!userPosition) return;
     let cancelled = false;
-    void (async () => {
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const run = async (): Promise<void> => {
+      attempt += 1;
       try {
-        const near = await locateNearbyCourses(userPosition.lat, userPosition.lng, { limit: 8 });
-        if (cancelled || !near.length) return;
+        const res = await locateNearbyCourses(userPosition.lat, userPosition.lng, { limit: 8 });
+        if (cancelled) return;
+        const near = res.courses;
+        if (res.failure) {
+          // We do NOT know what is nearby — that is different from knowing there is nothing. Leave any
+          // previously-found list untouched and come back to it rather than rendering a confident empty.
+          if (attempt < 3) {
+            retryTimer = setTimeout(() => { void run(); }, attempt * 8000);
+          } else {
+            console.log('[play] course discovery gave up after', attempt, 'attempts —', res.failure);
+          }
+          return;
+        }
+        if (!near.length) return;
         const bundledNames = new Set([
           ...LOCAL_COURSES.map(c => c.club_name.toLowerCase()),
           ...customSummaries.map(c => c.club_name.toLowerCase()),
@@ -901,8 +929,12 @@ export default function PlayTab() {
           })();
         }
       } catch { /* best-effort — offline / no key just shows the manual search */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    void run();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [userPosition, customSummaries]);
 
   const closestLocal: CourseSummary[] = useMemo(() => {
