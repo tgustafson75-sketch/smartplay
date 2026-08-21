@@ -30,6 +30,13 @@
  */
 const BASE = process.env.PROBE_API ?? 'https://api.smartplaycaddie.com';
 const useKevin = process.argv.includes('--kevin');
+/**
+ * 2026-08-21 — probe the CONSOLIDATION shim: same pipecat contract, kevin answering behind it.
+ * `npm run probe-tools -- --shim` must match the plain run case for case before the shim is
+ * promoted to the default. Comparing the two on the SAME deployment is the whole point — it removes
+ * "maybe the model was having an off minute" as an explanation for a difference.
+ */
+const useShim = process.argv.includes('--shim');
 
 /** Each case is a sentence a golfer would actually say, and the tool that MUST result from it. */
 const CASES: Array<{ expect: string | null; say: string }> = [
@@ -57,7 +64,7 @@ const CASES: Array<{ expect: string | null; say: string }> = [
 ];
 
 async function ask(say: string): Promise<{ tools: string[]; said: string; stalled: boolean }> {
-  const url = useKevin ? `${BASE}/api/kevin` : `${BASE}/api/pipecat-turn`;
+  const url = useKevin ? `${BASE}/api/kevin` : `${BASE}/api/pipecat-turn${useShim ? '?via=kevin' : ''}`;
   const body = useKevin ? { message: say, history: [] } : { text: say, history: [] };
   const res = await fetch(url, {
     method: 'POST',
@@ -75,7 +82,8 @@ async function ask(say: string): Promise<{ tools: string[]; said: string; stalle
 }
 
 (async () => {
-  console.log(`\nProbing ${useKevin ? 'KEVIN (follow-up turn)' : 'PIPECAT (turn 1)'} at ${BASE}\n`);
+  const label = useKevin ? 'KEVIN (follow-up turn)' : useShim ? 'SHIM (pipecat contract → kevin)' : 'PIPECAT (turn 1, native)';
+  console.log(`\nProbing ${label} at ${BASE}\n`);
   let missed = 0, stalls = 0;
   for (const c of CASES) {
     let r = await ask(c.say);
