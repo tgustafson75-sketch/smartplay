@@ -1882,14 +1882,35 @@ export const useVoiceCaddie = ({
         // locally — the shot in front of you (yardage + club), or off-course the
         // practice tools — never "I can't reach the network". True by construction;
         // natural, not an error state. (Pace/timing/listen-loop untouched.)
+        /**
+         * 2026-08-21 (Tim) — "not continue to tap into [the local brain] and break things."
+         *
+         * This used to return deadEndLine(), which off-round is "Good moment to sharpen your tempo
+         * or short game" — offered through device TTS as though it answered the question actually
+         * asked. Tim has quoted that line back at me twice as the sound of the app failing.
+         *
+         * cloudFailureLine keeps the genuinely useful local read WHILE ON A ROUND (a measured
+         * yardage, a club from his own logged bag) and, off a round with nothing real to say,
+         * replaces invented small talk with the truth plus an offer to turn Local Mode on.
+         */
+        const localModeOn = (() => { try { return useSettingsStore.getState().localMode === true; } catch { return false; } })();
         const deadEnd = (): string => {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
-            return responder.deadEndLine(langSafe);
+            return responder.cloudFailureLine(langSafe, localModeOn);
           } catch {
             return "Let's stay on this one — what are you working with?";
           }
+        };
+        /** Surface the toggle where they can actually reach it, not just in speech. */
+        const offerLocalMode = () => {
+          if (localModeOn) return;
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState()
+              .show('Signal trouble — turn on Local Mode in Settings to keep going without it.');
+          } catch { /* toast is additive */ }
         };
 
         // Host UP but the upload failed twice — a transient blip. Stay natural and
@@ -1897,6 +1918,7 @@ export const useVoiceCaddie = ({
         if (pingOk) {
           const line = deadEnd();
           onResponseReceived(line);
+          offerLocalMode();
           if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
@@ -1910,7 +1932,7 @@ export const useVoiceCaddie = ({
         // opted into Local Mode. Now: only ONLINE-first players (localMode off) skip straight to the
         // seamless deadEnd line; the on-device re-prompt path runs only when the user has turned Local
         // Mode ON (they've explicitly chosen the offline caddie). [[offline-caddie-plan]]
-        const localModeOn = (() => { try { return useSettingsStore.getState().localMode === true; } catch { return false; } })();
+        // (localModeOn is resolved once above — the on-device STT path reads the same value.)
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
