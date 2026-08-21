@@ -163,6 +163,7 @@ export function getCaddieContext(input: {
      * Capped at three lines: kevin caps the whole block at 2000 chars, so an unbounded list here
      * would silently push out the learned bag and course memory.
      */
+    let calibrationLine: string | null = null;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ao = require('./adviceOutcome') as typeof import('./adviceOutcome');
@@ -184,7 +185,7 @@ export function getCaddieContext(input: {
         // The framing matters as much as the data: this is measured ONLY on clean strikes of clubs
         // you called, so it is evidence about YOUR selection, not about his swing. Told to correct
         // the call silently — narrating a golfer's misses back at him is not the job.
-        lines.push(`YOUR OWN CALLING — measured on his CLEAN strikes when he took your club. Silently correct for this in what you recommend; never read it back to him as something he did wrong: ${calib.join('; ')}.`);
+        calibrationLine = `YOUR OWN CALLING (clean strikes on clubs you called) — correct for this silently; never read it back to him: ${calib.join('; ')}.`;
       }
     } catch { /* calibration is additive — no learning yet just means no line */ }
     if (course) {
@@ -262,6 +263,19 @@ export function getCaddieContext(input: {
         lines.push(`Key takeaways: ${keyTakeaways.slice(0, 2).map((t) => t.trim().replace(/\.?$/, '.')).join(' ')}`);
       }
     }
+
+    /**
+     * 2026-08-21 — EMITTED LAST, ON PURPOSE.
+     *
+     * kevin hard-caps this block at 2000 chars with a raw slice(0, 2000), so anything past the cut
+     * is silently lost — mid-sentence. Whatever sits at the END is what gets sacrificed first.
+     *
+     * I originally inserted this line ahead of course memory, hole notes, tendencies and the
+     * player's own words, which meant a long block would drop COURSE KNOWLEDGE to make room for the
+     * caddie's self-calibration. Standing on a tee, hole notes matter more than a note about the
+     * caddie's own club bias. So it goes last: if something has to be cut, cut this.
+     */
+    if (calibrationLine) lines.push(calibrationLine);
 
     const promptBlock = lines.length > 0
       ? `CADDIE MEMORY (learned over time — treat as strong priors; live GPS still wins on the working distance):\n${lines.join('\n')}`
