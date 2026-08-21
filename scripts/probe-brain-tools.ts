@@ -37,6 +37,54 @@ const useKevin = process.argv.includes('--kevin');
  * "maybe the model was having an off minute" as an explanation for a difference.
  */
 const useShim = process.argv.includes('--shim');
+/**
+ * 2026-08-21 — probe the CLASSIFIER, not just the brain. Tim: "you've never gotten the 'tap the ear
+ * button and say record'… supposedly it works now, it's worked a few times, but I don't use it
+ * because I don't trust it."
+ *
+ * The earbud path does not reach the brain first — it transcribes, runs /api/voice-intent, and acts
+ * on THAT. So every brain probe in this file could pass while the hands-free commands he actually
+ * uses were broken. And until today that classify waited 22 SECONDS on a cold socket, which is
+ * almost certainly why it felt unreliable enough to abandon.
+ *
+ * Distrust is what unverifiable earns. This makes the hands-free path checkable in one command.
+ */
+const useIntent = process.argv.includes('--intent');
+
+/** Utterances a player actually says hands-free, and the intent each MUST produce. */
+const INTENT_CASES: Array<{ say: string; expect: string; param?: [string, string] }> = [
+  { say: 'record my swing',                                 expect: 'open_tool', param: ['tool_name', 'smartmotion'] },
+  { say: 'mark the green',                                  expect: 'open_tool', param: ['tool_name', 'mark_green'] },
+  { say: 'log an issue, the yardage on three looked wrong',  expect: 'log_issue' },
+  { say: 'put me down for a five',                          expect: 'log_score' },
+];
+
+async function probeIntents(): Promise<void> {
+  console.log(`\nProbing the VOICE CLASSIFIER at ${BASE} — the hands-free / earbud path\n`);
+  let bad = 0;
+  for (const c of INTENT_CASES) {
+    const started = Date.now();
+    let got = '(error)';
+    let params: Record<string, unknown> = {};
+    try {
+      const res = await fetch(`${BASE}/api/voice-intent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: c.say }),
+      });
+      const d = await res.json() as { intent_type?: string; parameters?: Record<string, unknown> };
+      got = String(d.intent_type ?? '(none)');
+      params = d.parameters ?? {};
+    } catch { /* counted as a miss below */ }
+    const ms = Date.now() - started;
+    const paramOk = !c.param || String(params[c.param[0]] ?? '').includes(c.param[1]);
+    const ok = got === c.expect && paramOk;
+    if (!ok) bad += 1;
+    console.log(`[${ok ? 'PASS ' : 'MISS '}] ${String(ms).padStart(5)}ms ${c.expect.padEnd(12)} "${c.say}"`);
+    if (!ok) console.log(`          got ${got} ${JSON.stringify(params)}`);
+  }
+  console.log(`\n${INTENT_CASES.length - bad}/${INTENT_CASES.length} classified correctly.`);
+  if (bad > 0) process.exit(1);
+}
 
 /** Each case is a sentence a golfer would actually say, and the tool that MUST result from it. */
 /**
@@ -115,6 +163,7 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
 }
 
 (async () => {
+  if (useIntent) { await probeIntents(); return; }
   const label = useKevin ? 'KEVIN (follow-up turn)' : useShim ? 'SHIM (pipecat contract → kevin)' : 'PIPECAT (turn 1, native)';
   console.log(`\nProbing ${label} at ${BASE}\n`);
   let missed = 0, stalls = 0;
