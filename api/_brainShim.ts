@@ -137,7 +137,27 @@ export async function callKevin(
     setHeader() { return captured; },
     end() { return captured; },
   };
-  const synthetic = { ...req, body: kevinBody, method: 'POST' } as unknown as VercelRequest;
+  /**
+   * 2026-08-21 — CARRY THE REQUEST PROPERTIES EXPLICITLY. `{ ...req }` is not enough and cost a
+   * whole verification cycle.
+   *
+   * A VercelRequest is a Node IncomingMessage, where `headers` is a PROTOTYPE GETTER rather than an
+   * own property — so object spread silently drops it. The synthetic request arrived at kevin with
+   * `headers` undefined, applyCors read `req.headers.origin`, and the shim threw
+   * "Cannot read properties of undefined (reading 'origin')" on its very first line of real work.
+   *
+   * Spread copies what an object OWNS, not what it INHERITS. Anything kevin reads off the request
+   * has to be named here.
+   */
+  const synthetic = {
+    ...req,
+    headers: req.headers ?? {},
+    query: req.query ?? {},
+    cookies: (req as unknown as { cookies?: unknown }).cookies ?? {},
+    url: req.url,
+    method: 'POST',
+    body: kevinBody,
+  } as unknown as VercelRequest;
   await kevinHandler(synthetic, captured as unknown as VercelResponse);
   return { status, json };
 }
