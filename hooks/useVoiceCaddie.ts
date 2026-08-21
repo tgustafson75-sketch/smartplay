@@ -138,6 +138,13 @@ const VOICE_TOTAL_BUDGET_MS = 35000;
  * seconds" into an answer.
  */
 const HEDGE_AFTER_MS = 2_500;
+/**
+ * 2026-08-21 — how many VERIFIED consecutive cloud failures before the app is allowed to suggest a
+ * degraded mode. Tim's rule: assume the signal is there, because it almost always is, and a player
+ * with no signal is not opening the app anyway. One failed turn proves nothing; three in a row on a
+ * phone that is otherwise working is a real pattern. Any success resets it to zero.
+ */
+const CLOUD_FAILURES_BEFORE_OFFER = 3;
 // 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
 // step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
 // BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
@@ -178,9 +185,25 @@ export { endsAsQuestion };
 // clips a real thought. Resolves both "listens too long" (short commands snap) and "cuts me off"
 // (sentences get 2s of patience). Metering-only (iOS always reports it); metering-less OEMs fall back
 // to the MAX_RECORD_MS cap.
-const MIC_SILENCE_SHORT_MS = 800;   // quick command: end promptly after a short pause
-const MIC_SILENCE_LONG_MS = 2000;   // mid-sentence: ride out a natural word-search pause (never clip)
-const MIC_SPEECH_LONG_MS = 1100;    // once speech has run this long, treat it as a sentence → LONG window
+/**
+ * 2026-08-21 (Tim) — "I counted to five, then said 'hi Serena'. I was gonna say 'how are you?' and
+ * she cut me off right after 'hi Serena' and went straight to thinking."
+ *
+ * "Hi, Serena" is about 900ms of speech, which fell UNDER the 1100ms sentence threshold — so it was
+ * classed a one-word command and given the 800ms window. He drew breath to continue and the capture
+ * closed on him.
+ *
+ * The classifier was backwards for exactly the most common opener there is. A short burst is not
+ * evidence of a complete thought; a greeting or a name is usually the START of one. And the risks
+ * are not symmetric: being cut off is a HARD failure — the caddie answers the wrong question, or
+ * half of one — while waiting an extra second is a soft cost nobody notices. Err long.
+ *
+ * The sentence threshold drops so that almost any real utterance earns the patient window, and both
+ * windows widen. A true one-word command ("stop") is ~300ms and still snaps shut.
+ */
+const MIC_SILENCE_SHORT_MS = 1500;  // one-word command: still prompt, no longer clips a breath
+const MIC_SILENCE_LONG_MS = 2400;   // mid-sentence: ride out a natural word-search pause (never clip)
+const MIC_SPEECH_LONG_MS = 700;     // anything past a single word counts as a sentence → LONG window
 
 // 2026-05-26 — Fix BA: client-side close-intent matcher for the
 // follow-up listen loop. The brain handles most "no thanks" well, but
@@ -554,6 +577,13 @@ export const useVoiceCaddie = ({
   // 2026-06-06 — Silence-VAD polling timer for handleMicPress.
   // Cleared in clearAutoStop() alongside autoStopTimer.
   const silenceVadTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * 2026-08-21 — consecutive VERIFIED cloud failures this session. Gates any suggestion of a
+   * degraded mode: the default assumption is that the signal is there, so one bad turn earns
+   * nothing. Reset by ANY success, because a single good turn proves the network was never the
+   * problem — which is exactly what happened to Tim, whose second attempt worked fine.
+   */
+  const consecutiveCloudFailuresRef = useRef(0);
   // 2026-06-06 — User interrupted caddie mid-speech by tapping. Set in
   // handleMicPress's isSpeaking() branch; checked by processAudioUri
   // (and intent-router success branch) after awaiting speak so the
@@ -1910,9 +1940,26 @@ export const useVoiceCaddie = ({
             return "Let's stay on this one — what are you working with?";
           }
         };
-        /** Surface the toggle where they can actually reach it, not just in speech. */
+        /**
+         * 2026-08-21 (Tim, and he is right) — "you have all these easy slides right into error modes
+         * that don't exist. Nobody's gonna even try to use the app when they have no signal. The
+         * signal's gonna be there, period. No gating on failure. Only after you get verified,
+         * double-checked, VERIFIED failure does it even attempt any other mode."
+         *
+         * I shipped this offer an hour before he hit it, and it fired on ONE failed turn — on a
+         * phone with full signal. That is the failure mode he is describing: the app deciding it is
+         * offline because a single request did not land, and inviting him into a lesser mode he
+         * never needed.
+         *
+         * The correct default assumption is THE SIGNAL IS THERE. A failed turn is a failed turn, not
+         * evidence of an outage. So this now requires REPEATED verified failure within one session
+         * before it will even mention Local Mode — and a single success anywhere resets it, because
+         * one good turn proves the network was never the problem.
+         */
         const offerLocalMode = () => {
           if (localModeOn) return;
+          consecutiveCloudFailuresRef.current += 1;
+          if (consecutiveCloudFailuresRef.current < CLOUD_FAILURES_BEFORE_OFFER) return;
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState()
@@ -2207,6 +2254,9 @@ export const useVoiceCaddie = ({
       // A successful cloud transcribe proves the connection is warm — flip the flag so the NEXT
       // turn takes the 12s fast path even if the background warm ping hadn't landed yet.
       markEndpointWarmed('/api/transcribe');
+      // A turn landed — whatever went wrong before was not the network. Clear the failure streak so
+      // a later blip cannot accumulate onto it and trip a degraded-mode offer.
+      consecutiveCloudFailuresRef.current = 0;
 
       devLog('[voice] transcript:', transcript);
 

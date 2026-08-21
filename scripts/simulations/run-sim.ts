@@ -3189,17 +3189,29 @@ check('Voice flow: keep-warm heartbeat + caddie-focus warm + snappier endpoint',
       /if \(next === 'active'\) \{ warmIfVoice\(\); startHeartbeat\(\); \}/.test(vc) &&
       /else stopHeartbeat\(\)/.test(vc) &&
       /voiceEnabled\) \{[\s\S]*?prewarmVoice\(\);/.test(caddie) &&
-      /const SILENCE_TIMEOUT_SHORT_MS = 800;/.test(vs) &&
-      /const SILENCE_TIMEOUT_LONG_MS = 2000;/.test(vs) &&
+      /**
+       * 2026-08-21 — re-aimed. This pinned the literal 800/2000, which is what CUT TIM OFF: "hi,
+       * Serena" is ~900ms, fell under the sentence threshold, got the 800ms window, and closed while
+       * he drew breath to ask how she was. The guard was protecting the numbers that broke it.
+       *
+       * The PROPERTY is what matters: the endpoint is adaptive, and BOTH windows are long enough
+       * that a natural breath cannot clip a sentence. Asserted as floors, so the numbers can be tuned
+       * without the guard either breaking or silently permitting a regression back to clipping.
+       */
+      (() => { const m = /const SILENCE_TIMEOUT_SHORT_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 1200; })() &&
+      (() => { const m = /const SILENCE_TIMEOUT_LONG_MS = (\d+);/.exec(vs); return !!m && Number(m[1]) >= 2000; })() &&
       // adaptive selection: long window once speech has run past SPEECH_LONG_MS
       /speakingForMs >= SPEECH_LONG_MS \? SILENCE_TIMEOUT_LONG_MS : SILENCE_TIMEOUT_SHORT_MS/.test(vs) &&
       // the FIRST-turn mic path also runs the adaptive window (was a single fixed gap that clipped)
-      /const MIC_SILENCE_SHORT_MS = 800;/.test(vc) &&
-      /const MIC_SILENCE_LONG_MS = 2000;/.test(vc) &&
+      (() => { const m = /const MIC_SILENCE_SHORT_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 1200; })() &&
+      (() => { const m = /const MIC_SILENCE_LONG_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) >= 2000; })() &&
+      // And a greeting must reach the PATIENT window: "hi Serena" is ~900ms, so the sentence
+      // threshold has to sit below that or the most common opener gets the short one.
+      (() => { const m = /const MIC_SPEECH_LONG_MS = (\d+);/.exec(vc); return !!m && Number(m[1]) <= 900; })() &&
       /speakingForMs >= MIC_SPEECH_LONG_MS \? MIC_SILENCE_LONG_MS : MIC_SILENCE_SHORT_MS/.test(vc)
     );
   })(),
-  'a 4-min heartbeat keeps endpoints warm; caddie warms on focus; ADAPTIVE silence endpoint on BOTH the follow-up loop AND the first-turn mic (800ms quick command / 2000ms mid-sentence) — 07-30 rebalanced so it is snappy on commands but never clips a sentence ("cuts me off")');
+  'a 4-min heartbeat keeps endpoints warm; caddie warms on focus; ADAPTIVE silence endpoint on BOTH the follow-up loop AND the first-turn mic windows floored so a natural breath never clips a sentence, and the sentence threshold sits BELOW a ~900ms greeting so "hi Serena" earns the patient window');
 
 check('Voice: an offline turn degrades on a DEADLINE, not on a probe\'s opinion',
   // 2026-07-30 → 2026-08-20. This guard used to assert the fast-abort: both probes actively failing

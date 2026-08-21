@@ -162,9 +162,15 @@ const SILENCE_DB_THRESHOLD = -40;
 // command still ends fast (SHORT 800ms), but the moment the user is into a sentence (>1.1s of speech)
 // the window opens to a patient LONG 2000ms that comfortably rides out a 1.5s word-search pause. Snappy
 // where it can be, patient where it must be — resolves both "listens too long" AND "cuts me off".
-const SILENCE_TIMEOUT_SHORT_MS = 800;   // quick command: end promptly after a short pause
-const SILENCE_TIMEOUT_LONG_MS = 2000;   // mid-sentence: wait out a natural word-search pause (never clip)
-const SPEECH_LONG_MS = 1100;            // once speech has run this long, treat it as a sentence → LONG window
+const SILENCE_TIMEOUT_SHORT_MS = 1500;   // quick command: end promptly after a short pause
+const SILENCE_TIMEOUT_LONG_MS = 2400;   // mid-sentence: wait out a natural word-search pause (never clip)
+/**
+ * 2026-08-21 — matched to the tap path. "Hi, Serena" is ~900ms and was falling under this threshold,
+ * so the most common opener there is got the SHORT window and closed on the player mid-breath.
+ * A short burst is not evidence of a complete thought — a greeting or a name usually STARTS one.
+ * Being cut off is a hard failure; waiting an extra second is a soft cost. Err long.
+ */
+const SPEECH_LONG_MS = 700;             // anything past a single word counts as a sentence → LONG window
 const SPEECH_DETECT_DB = -30; // higher bar to confirm "they spoke at least once"
 
 // 2026-06-16 (Tim — "first tap to talk in background noise fails") — adaptive
