@@ -334,14 +334,38 @@ function setSessionStateMirror(next: SessionState): void {
   }
 }
 
+/**
+ * 2026-08-21 — HEDGED, and found by sweeping guards rather than by another field report.
+ *
+ * Today's first-turn work hedged the TRANSCRIBE on both mic owners. It did not touch this — and the
+ * earbud/hands-free path also runs an INTENT CLASSIFY, which on an unwarmed session waits
+ * COLD_INTENT_FETCH_TIMEOUT_MS = 22 SECONDS on a single socket. So the entry point Tim uses most
+ * still had a 22-second hang in it, one call away from the thing I had just fixed.
+ *
+ * A guard was even asserting that 22s as if it were a feature ("earbud/hands-free classify is
+ * cold-aware"). It was pinning the wait.
+ *
+ * Same reasoning as everywhere else today: a hung socket and a slow one are indistinguishable while
+ * you wait, so race a second connection instead of betting the budget on the first. A healthy
+ * classify answers in well under a second and never hedges.
+ */
+const CLASSIFY_HEDGE_MS = 2_500;
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const once = (budget: number) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), budget);
+    return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
+  };
+  const primary = once(timeoutMs);
+  primary.catch(() => {});
+  const hedged = (async () => {
+    await new Promise(r => setTimeout(r, CLASSIFY_HEDGE_MS));
+    const alt = once(Math.max(5_000, timeoutMs - CLASSIFY_HEDGE_MS));
+    alt.catch(() => {});
+    return alt;
+  })();
+  return Promise.any([primary, hedged]);
 }
 
 /**

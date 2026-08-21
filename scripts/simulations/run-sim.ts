@@ -6495,9 +6495,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // 2026-08-20 — these assert the BUDGET RULE, not which boolean carries it. Warmth is now tracked
   // per Lambda (kevin answering says nothing about transcribe being awake), which is the fix for
   // "fails the first time"; the invariant that a COLD transcribe gets the long budget is unchanged.
-  check('LOCK voice: cold first-turn gets the long transcribe budget (22s)',
-    /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
-    'a cold (unwarmed) first turn uses the 22s transcribe budget so a slow cold handshake still lands a real transcript');
+  check('LOCK voice: no single transcribe attempt may exceed the cold ceiling',
+    (() => {
+      // 2026-08-21 — was "cold first-turn gets the long 22s budget", which pinned exactly the
+      // single long bet that made a hung socket cost the whole turn. The ceiling still matters as a
+      // BOUND; what changed is that no one attempt is allowed to spend it.
+      const ceiling = /const COLD_TRANSCRIBE_TIMEOUT_MS = (\d+);/.exec(vcSrc);
+      const budgets = /const attemptBudgets = coldFirstTurn \? \[([\d_,\s]+)\]/.exec(vcSrc);
+      if (!ceiling || !budgets) return false;
+      const max = Math.max(...budgets[1].split(',').map(x => Number(x.replace(/_/g, '').trim())));
+      return max < Number(ceiling[1]) && /const coldFirstTurn = !isEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc);
+    })(),
+    'every individual transcribe attempt stays under the cold ceiling, so a hung socket costs one short attempt instead of the entire turn');
   // 2026-08-20 — the "cold abort ONLY when both probes ACTIVELY fail" LOCK was deleted here, not
   // relaxed. It pinned the discriminator that decided WHEN a probe may cancel a live upload; the
   // field log proved no probe may. Its replacement is the deadline guard above plus
@@ -6506,9 +6515,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /markEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
   const lsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
-  check('LOCK voice: earbud/hands-free classify is cold-aware (22s)',
-    /COLD_INTENT_FETCH_TIMEOUT_MS = 22_000/.test(lsSrc) && /isConnectionWarmed\(\)/.test(lsSrc),
-    'the earbud/hands-free intent classify uses a 22s cold budget so the first hands-free ask lands too');
+  check('LOCK voice: the earbud classify races a hedge — a 22s wait is not "cold-aware"',
+    /const CLASSIFY_HEDGE_MS = 2_500;/.test(lsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(lsSrc),
+    'the intent classify opens a second connection after 2.5s rather than betting 22 seconds on the first — the old guard asserted that 22s wait as if it were the feature, and it was the hang');
   const vsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
   check('LOCK voice: the earbud transcribe races a hedge instead of waiting out a hung socket',
     /const raceOnce = async \(budgetMs: number\)/.test(vsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(vsSrc)

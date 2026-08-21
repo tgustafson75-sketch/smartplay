@@ -123,6 +123,12 @@ const TRANSCRIBE_TIMEOUT_MS = 12000;
 // confirmed warm, give that first transcribe a longer budget so it lands a REAL cloud transcript
 // instead of aborting at 12s and dropping to a garbage on-device STT result (the "error reply,
 // then it's fine" symptom). Once warmed, the 12s fast-fail (below) resumes for genuine dead zones.
+/**
+ * 2026-08-21 — RETAINED ONLY AS THE COLD CEILING REFERENCE. The single 22s attempt it used to drive
+ * was replaced by hedged escalating budgets; leaving the constant unused while a guard still
+ * asserted its value made that guard vacuous. Kept and referenced so the relationship is explicit:
+ * no single attempt may exceed this.
+ */
 const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
 /**
  * 2026-08-20 — the wall-clock ceiling on ONE voice turn, across every attempt and probe.
