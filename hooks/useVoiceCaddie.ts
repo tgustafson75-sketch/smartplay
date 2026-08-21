@@ -1769,7 +1769,7 @@ export const useVoiceCaddie = ({
         }).finally(() => { clearTimeout(t); });
       };
 
-      let transcribeRes: Response;
+      let transcribeRes: Response | undefined;
       const txStart = Date.now();
 
       // 2026-06-27 (A2) — a tiny JSON ping to the SAME host. Used to DECIDE,
@@ -2004,7 +2004,48 @@ export const useVoiceCaddie = ({
        * ([[caddie-failsafe-no-walls]], [[voice-first-try-failure-timeout-root-cause]])
        */
       try {
-        transcribeRes = await doTranscribeFetch(coldFirstTurn ? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS);
+        /**
+         * 2026-08-21 — STOP BETTING THE WHOLE BUDGET ON ONE CONNECTION.
+         *
+         * Tim's log, four entries, identical: elapsedMs 35012, and every probe dead at its own
+         * timeout — pingMs 3014, getMs 3018, and crucially cdnMs 3017. That CDN probe is a STATIC
+         * EDGE FILE. No Lambda, no cold start. If it times out, the backend being cold was never
+         * the problem: the CONNECTION ITSELF IS HANGING.
+         *
+         * A hanging connection does not refuse — it sits there. So the old shape committed 22
+         * seconds to a single socket that was never going to answer, spent 3s proving it, then
+         * retried once with what was left. One real attempt in 35 seconds, on the assumption that
+         * waiting longer helps. Against a hung socket, waiting is the one thing that does not.
+         *
+         * That is why it works on the third ask: the player is doing the retrying, by hand, and
+         * each fresh tap gets a fresh connection. "No other app needs you to try three times" is
+         * exactly right — the app should be doing those tries, in the time the player is already
+         * waiting, not asking them to.
+         *
+         * So the same ~35s now buys THREE attempts on THREE connections instead of one long wait.
+         * Escalating, because a genuinely slow-but-alive network deserves more patience on the
+         * later tries; short first, because a hung socket should cost 8 seconds to discover, not 22.
+         *
+         * A warm connection is unaffected: it answers in ~1.2s and never reaches attempt two.
+         */
+        const attemptBudgets = coldFirstTurn ? [8_000, 12_000, 15_000] : [6_000, 10_000, 12_000];
+        let lastErr: unknown = null;
+        for (let i = 0; i < attemptBudgets.length; i += 1) {
+          try {
+            transcribeRes = await doTranscribeFetch(attemptBudgets[i]);
+            if (i > 0) console.log('[voice] transcribe recovered on attempt', i + 1, '— the first connection was hung, not slow');
+            break;
+          } catch (e) {
+            lastErr = e;
+            transcribeRes = undefined;
+            const spent = Date.now() - txStart;
+            if (i === attemptBudgets.length - 1 || spent >= VOICE_TOTAL_BUDGET_MS) break;
+            // No delay between attempts. The point is a NEW socket, and waiting only spends the
+            // budget that buys the next try.
+            console.log('[voice] transcribe attempt', i + 1, 'timed out after', attemptBudgets[i], 'ms — retrying on a fresh connection');
+          }
+        }
+        if (!transcribeRes) throw lastErr ?? new Error('transcribe_failed');
       } catch {
         // 2026-06-27 (A2 fast-fail) — the field data (pingOk:false, elapsedMs
         // 27643) showed the old blind retry was a dead 15s wait on top of the

@@ -288,7 +288,22 @@ export function warmBackendConnection(): Promise<void> {
     await primeTransport();
     // Backoff schedule (ms before each attempt) — ~20s total, covering the gap between
     // cold launch and the user reaching the Caddie tab + tapping the mic.
-    const delays = [0, 1500, 3000, 4000, 5500, 6000];
+    /**
+     * 2026-08-21 — CUT FROM SIX ATTEMPTS TO TWO.
+     *
+     * This laddered pings across ~20 seconds to guarantee a pooled connection before the first mic
+     * tap. On a good network the first ping succeeds and the rest never run — but on the network
+     * where it MATTERS, it keeps a socket busy for twenty seconds against a five-per-host ceiling,
+     * while voice warmup holds two more and the offline-clip renderer held another. The player taps
+     * into that and queues behind our own housekeeping.
+     *
+     * Tim's log is the proof: a STATIC CDN file timing out at 3s on full-bars 5G. Not a network
+     * failure — a socket we never got. Warming that costs the player their first turn is not warming.
+     *
+     * Two attempts. If the host has not answered by then, the real request will find out for itself,
+     * and it now escalates across three fresh connections instead of betting everything on one.
+     */
+    const delays = [0, 2000];
     for (const d of delays) {
       if (connectionWarmed) return;
       if (d) await new Promise((r) => setTimeout(r, d));

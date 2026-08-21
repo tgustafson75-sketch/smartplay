@@ -10508,10 +10508,24 @@ check('LOCK: nothing but the real request may decide the real request failed',
       // Match CODE use only (`externalSignal?:`, `.addEventListener`, `, externalSignal)`), never the
       // prose above it that explains the removal — a bare /externalSignal/ matches its own tombstone.
       && !/externalSignal\s*[?.,)]/.test(vc);
-    const uncancellable = /transcribeRes = await doTranscribeFetch\(coldFirstTurn \? COLD_TRANSCRIBE_TIMEOUT_MS : TRANSCRIBE_TIMEOUT_MS\);/.test(vc);
+    /**
+     * 2026-08-21 — re-aimed. This pinned the literal single-attempt call site, which the escalating
+     * retry replaced. The PROPERTY is unchanged and is what gets asserted now: every attempt is
+     * given a timeout and NOTHING ELSE, so no probe, guard or signal can cancel a live upload.
+     *
+     * It also asserts the new shape, because that shape is the fix for the field failure: one long
+     * bet on a single socket became THREE escalating attempts on FRESH sockets. A hung connection
+     * has to cost seconds to discover, not the whole budget.
+     */
+    const uncancellable = /transcribeRes = await doTranscribeFetch\(attemptBudgets\[i\]\);/.test(vc)
+      && /const attemptBudgets = coldFirstTurn \? \[8_000, 12_000, 15_000\]/.test(vc)
+      && !/doTranscribeFetch\([^)]*signal/.test(vc);
     // 2. ORDER, not presence: the diagnostic probes must appear AFTER the real attempt, inside its
     //    catch. If they ever migrate back above it, they are racing the upload again.
-    const iAttempt = vc.indexOf('transcribeRes = await doTranscribeFetch(coldFirstTurn');
+    // 2026-08-21 — anchored on the attempt LOOP, not the old single-attempt call site. The property
+    // is unchanged (diagnostics may only run after the real request has genuinely failed); only the
+    // shape of "the real request" changed when one long bet became three escalating attempts.
+    const iAttempt = vc.indexOf('const attemptBudgets = coldFirstTurn');
     const iProbe = vc.indexOf('staticReachable(3000)');
     const probesAfterFailureOnly = iAttempt > -1 && iProbe > iAttempt;
     // 3. Warming still happens, and still buys transport before waking the function.

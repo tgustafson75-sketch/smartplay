@@ -87,6 +87,9 @@ async function getProvider(): Promise<'gemini' | 'openai'> {
  * YIELD — a real user turn aborts warmups in flight to hand their connection slots straight back.
  */
 const WARMUP_CONCURRENCY = 2;
+/** Offline-clip rendering is housekeeping for a future outage. It must never compete with the
+ *  player's first tap, so it waits until well past the cold-start window. */
+const OFFLINE_CLIP_WARM_DELAY_MS = 45_000;
 const WARMUP_TIMEOUT_MS = 8_000;
 let warmupAbort: AbortController | null = null;
 
@@ -129,10 +132,27 @@ export function prewarmVoice(force = false): void {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl) return;
 
-  // [[feels-like-a-real-caddie]] — while we're online, cache the fixed offline lines in the persona's
-  // real voice so the offline path never falls to the robotic device TTS. Idempotent + self-adapting to
-  // persona/voice changes; a no-op once all clips are cached. Dynamic import avoids an import cycle.
-  void import('./voiceService').then((m) => m.prewarmOfflineVoiceClips()).catch(() => {});
+  /**
+   * 2026-08-21 — THIS NO LONGER RUNS AT BOOT, AND THAT IS THE POINT.
+   *
+   * Tim, on 5G with full bars: "every fucking time I'm on four bars at 4G at the worst… I think
+   * you're stuck in error loop scaffolding at the front." He is right, and his log proves it: a
+   * STATIC CDN file timed out at 3s. That cannot happen on 5G because of the network. It happens
+   * because we cannot get a usable socket.
+   *
+   * Count what we aimed at one host before he ever tapped: five warmup endpoints (plus the retries
+   * I added on 08-20), up to seven connection pings, AND this — a SERIAL loop that renders every
+   * uncached fixed line as TTS through /api/voice, seconds per clip. I added four new lines to that
+   * list on 08-20, so they were all uncached and all rendering at boot. Against OkHttp's five
+   * connections per host, the player's transcribe queues behind our own housekeeping.
+   *
+   * These clips exist for going OFFLINE. There is no reason to build them in the first thirty
+   * seconds of a launch — the one window where the player is most likely to tap the mic. Deferred
+   * well past the cold-start window, and skipped entirely if a real turn is in progress.
+   */
+  setTimeout(() => {
+    void import('./voiceService').then((m) => m.prewarmOfflineVoiceClips()).catch(() => {});
+  }, OFFLINE_CLIP_WARM_DELAY_MS);
 
   // Wait for hydration so we read the user's actual persisted provider,
   // not the in-memory default that exists before AsyncStorage loads.
@@ -150,8 +170,16 @@ export function prewarmVoice(force = false): void {
      * A failed warmup here is invisible and costs the USER the retry instead: they tap the mic and
      * pay the cold start themselves, which is the "fails the first time" symptom.
      */
-    const CRITICAL: ReadonlyArray<string> = ['/api/transcribe', '/api/pipecat-turn'];
-    const attemptDelays = (path: string) => (CRITICAL.includes(path) ? [0, 2_000, 5_000] : [0]);
+    /**
+     * 2026-08-21 — RETRIES REMOVED. I added them on 08-20 to make warmup more reliable, and they
+     * made the thing they were protecting worse: three attempts each on two endpoints is four extra
+     * connections against a five-per-host ceiling, during the exact window the player taps.
+     *
+     * A warmup that has to fight the user for a socket is not a warmup. One attempt each; if it
+     * misses, the real request pays its own way — and that path is now three escalating attempts on
+     * fresh connections, which is the honest place for retry logic to live.
+     */
+    const attemptDelays = (_path: string) => [0];
 
     const warmup = async (path: string): Promise<void> => {
       for (const delay of attemptDelays(path)) {
