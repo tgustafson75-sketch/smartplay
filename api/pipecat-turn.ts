@@ -375,11 +375,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           tool_actions: [], updated_history: history, degraded: true, error: `kevin_${out.status}`,
         });
       }
+      // Positive proof the shim answered. Without this, its output is indistinguishable from the
+      // native path's — which is precisely how a fall-through read as a passing test.
+      res.setHeader('X-Brain-Shim', 'kevin');
       return res.status(200).json(shim.kevinResponseToPipecat(out.json, text, history));
     } catch (e) {
-      // The shim must never be able to take the turn down — fall THROUGH to the original
-      // implementation below, which is still fully intact.
-      console.error('[pipecat-turn] shim failed, falling through to native path:', e instanceof Error ? e.message : String(e));
+      /**
+       * 2026-08-21 — THE CATCH THAT HID THE BUG.
+       *
+       * Falling through to the intact native path is right: the shim must never be able to take a
+       * turn down. But it did it SILENTLY, so `?via=kevin` returned a perfectly good answer from the
+       * path it was supposed to be replacing — and a 19/19 probe "through the shim" was really 19/19
+       * through native pipecat. I reported that as verification. It was the exact silent-failure
+       * shape this codebase has been bitten by all week, written by me, one commit after fixing the
+       * last one.
+       *
+       * So the fall-through stays, and it now TELLS. An EXPLICIT `?via=kevin` is a test request, and
+       * a test that cannot fail is worthless: it returns the error in `shim_error`, and the probe
+       * asserts the shim actually ran. The env-var path stays silent-but-safe for real traffic.
+       */
+      const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      console.error('[pipecat-turn] shim failed, falling through to native path:', msg);
+      if (String((req.query?.via ?? '')) === 'kevin') {
+        res.setHeader('X-Brain-Shim', `failed: ${msg.slice(0, 200)}`);
+      }
     }
   }
 
