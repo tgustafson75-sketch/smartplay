@@ -1,31 +1,38 @@
 /**
- * Phase O.5 → Phase AC reality check.
+ * ⚠️ SUPERSEDED — DO NOT TRUST THE OLD NOTES BELOW. Corrected 2026-08-21.
  *
- * STATE TODAY: NO-OP. react-native-track-player was removed (Kotlin /
- * New-Arch incompatibility with reanimated v4 — see commit 9865fef). The
- * package isn't in node_modules, so `loadTrackPlayer()` always returns
- * false and `activateMediaSession()` / `deactivateMediaSession()` silently
- * exit. No native media-key listener exists in the build.
+ * EARBUD TAPS WORK. This file's previous header said the opposite in bold terms — "NO-OP",
+ * "tapping a Bluetooth earbud DOES NOT fire notifyEarbudTap()" — and that was true for exactly
+ * three weeks. It described the react-native-track-player approach removed on 2026-05-02
+ * (commit 9865fef8, New Arch conflict). The REPLACEMENT landed on 2026-05-24 and nobody came
+ * back to correct this text.
  *
- * Consequence: tapping a Bluetooth earbud DOES NOT fire `notifyEarbudTap()`.
- * The settings toggle is disabled (see app/settings.tsx) and labelled
- * "Coming soon" until a native listener lands. On-screen tap (Kevin badge
- * on the Caddie tab → handleMicPress in useVoiceCaddie) is the working
- * fallback.
+ * THE LIVE PATH TODAY:
+ *     BT button ──► native BluetoothMediaButton module (plugins/withBluetoothMediaButton.js,
+ *                   registered in app.json → SHIPS IN THE BUILD, no external deps: Android
+ *                   MediaSession, iOS MediaPlayer/AVFoundation)
+ *               ──► DeviceEventEmitter 'onRemoteControl'
+ *               ──► services/voiceTriggers.ts
+ *               ──► notifyEarbudTap() ──► listeningSession.toggle()
  *
- * The orchestration layer (listeningSession.ts) is fully wired — it just
- * needs a real source. When we ship the native listener (separate phase),
- * the only required change is calling `notifyEarbudTap()` from its
- * callback. No consumer-site changes.
+ * Enabled by `earbudTapToTalk`, which DEFAULTS TO TRUE and is synced at boot from
+ * app/_layout.tsx. So it is on unless the player turned it off.
  *
- * Path forward (deferred to its own phase):
- *   - Android: write a small Kotlin module that subscribes to MediaSession
- *     transport controls or registers a MediaButtonReceiver, and call into
- *     a JS bridge that fires notifyEarbudTap().
- *   - iOS: MPRemoteCommandCenter.shared().togglePlayPauseCommand
- *   - Or: revisit react-native-track-player once it ships New-Arch
- *     support; then this file's loadTrackPlayer() body becomes the wire.
+ * WHY THIS CORRECTION EXISTS AT ALL: on 2026-08-21 I read the old header, believed it, and told
+ * Tim earbud tap "needs a native build" — a feature he has been chasing since the app's second
+ * day and which had been working for months. He corrected me in one sentence: "I can tap the ear
+ * button, the app reacts."
+ *
+ * A stale comment is not a harmless comment. This one asserted a capability was missing, and it
+ * was believed over the running code. That is the same failure as a guard that pins a defect:
+ * a confident claim, never re-verified, outliving the thing it described.
+ *
+ * WHAT GENUINELY DOES NOT EXIST YET: knowing whether a headset is CONNECTED (as opposed to
+ * tapped). BluetoothMediaButtonModule.kt imports android.media.AudioManager and never uses it;
+ * exposing isHeadsetConnected() is ~10 lines of Kotlin plus an AVAudioSession equivalent on iOS,
+ * and THAT would need a new build. Everything about tapping already ships.
  */
+
 
 // 2026-05-21 — Consolidation 4: track-player-loader notes gated.
 import { devLog } from './devLog';
