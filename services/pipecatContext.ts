@@ -199,6 +199,33 @@ export function buildPipecatContext() {
       // brainSettings resolves personaIntensity[activePersona] — matching the persona actually spoken.
       ...brainSettings({ ...settings, caddiePersonality: getActiveCaddie() }),
     },
+    /**
+     * 2026-08-21 (context audit, before Tim's round) — THE NUMBER HE JUST MEASURED.
+     *
+     * The SmartFinder lock reached kevin (`smartFinderContext`) and NOT this path. So a player who
+     * ranged the pin at 152 and then asked "what should I hit" got an answer built from the GPS
+     * green-middle instead of the number they had just taken — on the DEFAULT conversational brain.
+     * The rangefinder is the number players trust most, and the caddie was ignoring it.
+     *
+     * Same unconnected-halves shape as everything else this week: the lock existed, the brain
+     * already accepted a field for it, and nothing joined them on this route.
+     *
+     * Confidence comes from the lock itself rather than being re-derived here — SmartFinder's bands
+     * were corrected today, and a second copy of that logic would be the next thing to drift.
+     */
+    smartFinderLock: (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sf = require('../store/smartFinderStore').useSmartFinderStore.getState();
+        const lock = sf.currentLock;
+        if (!lock) return undefined;
+        return {
+          distance_yards: lock.distance_yards,
+          compass_heading: Math.round(lock.compass_heading),
+          confidence: lock.confidence ?? null,
+        };
+      } catch { return undefined; }
+    })(),
     gps: {
       lat: getLastFix()?.lat ?? undefined,
       lng: getLastFix()?.lng ?? undefined,

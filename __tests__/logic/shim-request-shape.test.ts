@@ -60,3 +60,27 @@ describe('the shim never pays for audio it discards', () => {
     expect(guard).toBeLessThan(call);
   });
 });
+
+describe('the number the player just measured reaches the brain', () => {
+  const { pipecatRequestToKevinBody } = require('../../api/_brainShim');
+
+  it('translates a SmartFinder lock into the field kevin already understands', () => {
+    // 2026-08-21 context audit: kevin has accepted smartFinderContext for months, and pipecat had
+    // no way to send it — so "I ranged it at 152, what do I hit?" was answered from the GPS
+    // green-middle on the DEFAULT brain, ignoring the number the player trusts most.
+    const body = pipecatRequestToKevinBody({
+      text: 'what should I hit', history: [],
+      context: { smartFinderLock: { distance_yards: 152, compass_heading: 271, confidence: 'high' } },
+    });
+    expect(body.smartFinderContext).toMatch(/152 yards/);
+    expect(body.smartFinderContext).toMatch(/271/);
+    // It must say the measured number OUTRANKS the GPS middle, or the brain has two numbers and
+    // no rule for choosing between them.
+    expect(body.smartFinderContext).toMatch(/beats the GPS green-middle/);
+  });
+
+  it('sends nothing when there is no lock — never a phantom distance', () => {
+    const body = pipecatRequestToKevinBody({ text: 'hi', history: [], context: {} });
+    expect(body.smartFinderContext).toBeNull();
+  });
+});

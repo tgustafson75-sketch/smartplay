@@ -85,6 +85,19 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
     clubDistances: bag.club_distances ?? {},
     club_tendencies: bag.tendencies ?? [],
 
+    /**
+     * 2026-08-21 — the rangefinder lock, translated into the field kevin already understands.
+     * kevin has accepted `smartFinderContext` for months; pipecat had no way to send it, so the
+     * number the player just measured never reached the default conversational brain. Building the
+     * sentence HERE (rather than on the device) keeps one wording for both routes.
+     */
+    smartFinderContext: (() => {
+      const lock = context.smartFinderLock as { distance_yards?: number; compass_heading?: number; confidence?: string | null } | undefined;
+      if (!lock || typeof lock.distance_yards !== 'number') return null;
+      const conf = lock.confidence ? ` Confidence: ${lock.confidence}.` : '';
+      return `SMARTFINDER ACTIVE: the player has LOCKED a measured distance of ${lock.distance_yards} yards at compass heading ${lock.compass_heading ?? 0}°.${conf} Treat the locked distance as the working number — they measured it themselves and it beats the GPS green-middle.`;
+    })(),
+
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two
     // names for one thing, which is its own small argument for having one brain.
     unified_context_block: context.memory ?? null,
