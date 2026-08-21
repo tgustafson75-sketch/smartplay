@@ -365,11 +365,39 @@ const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
 
 /** Extract a JPEG keyframe from a video at the given time and run pose
  *  detection on it. Returns null on any failure. */
+/**
+ * 2026-08-21 — WHY a frame failed, not just that it did.
+ *
+ * An iOS tester reported pose_zero_frames four times in 75 seconds: five frames requested from a
+ * 10-second clip, zero returned. The private copy had SUCCEEDED, so every frame died in here — and
+ * this function only console.warn'd, which is invisible on a tester's phone. Four reports, no cause.
+ *
+ * Worse, the two failure modes are indistinguishable and need OPPOSITE fixes:
+ *   • getThumbnailAsync threw     → we cannot read the video at all. A platform/code problem.
+ *   • pose came back null         → the frame was read fine and no body was found. A FRAMING problem
+ *                                   (too far away, out of shot) — or the native module is not linked,
+ *                                   in which case it silently returns null for every frame forever.
+ *
+ * The reason from the FIRST failure is now carried out so the zero-frames report can name it.
+ */
+let lastFrameFailure: string | null = null;
+
 async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame['position']): Promise<PoseFrame | null> {
   try {
-    const { uri, width, height } = await VideoThumbnails.getThumbnailAsync(videoUri, { time: timeMs, quality: 0.8 });
+    let uri: string; let width: number | undefined; let height: number | undefined;
+    try {
+      const thumb = await VideoThumbnails.getThumbnailAsync(videoUri, { time: timeMs, quality: 0.8 });
+      uri = thumb.uri; width = thumb.width; height = thumb.height;
+    } catch (te) {
+      if (!lastFrameFailure) lastFrameFailure = `thumbnail_failed: ${te instanceof Error ? te.message.slice(0, 90) : String(te).slice(0, 90)}`;
+      throw te;
+    }
     const frame = await analyzePoseFromUri(uri, timeMs);
-    if (!frame) return null;
+    if (!frame) {
+      // Read the image fine, found no body. Distinct from being unable to read it at all.
+      if (!lastFrameFailure) lastFrameFailure = 'no_pose_in_frame';
+      return null;
+    }
     // Carry the true frame dimensions so the overlay can align the skeleton
     // to the body (correct aspect ratio + resize mode) rather than bbox-fit.
     return { ...frame, position, frameW: width || undefined, frameH: height || undefined };
@@ -1048,11 +1076,33 @@ export async function extractPoseFramesFromVideo(
   } finally {
     sharedCopy.release();
   }
+  if (frames.length > 0) lastFrameFailure = null;
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) {
     // Asked for N frames and got none: the swing has no measured read at all. Console-only until now,
     // so a device failing EVERY extraction looked identical to a device that was never asked.
-    logPose('pose_zero_frames', { requested: sampleTimes.length, windowed: !!(window && window.endMs - window.startMs >= 500), durationMs: Math.round(durationMs) });
+    /**
+     * The fields that make the next report decisive instead of another blind repeat:
+     *   nativePose false → the MediaPipe module is not linked in this build, so EVERY frame returns
+     *                      null and no amount of re-recording will help. A build problem.
+     *   reason 'no_pose_in_frame' with nativePose true → we read the video and found no body:
+     *                      framing, distance, or the player out of shot. A coaching problem.
+     *   reason 'thumbnail_failed: …' → we could not read the video at all. A platform problem.
+     * One field separates three fixes that have nothing to do with each other.
+     */
+    let nativePose: boolean | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      nativePose = (require('./mediaPipePoseService') as typeof import('./mediaPipePoseService')).isMediaPipeAvailable();
+    } catch { nativePose = null; }
+    logPose('pose_zero_frames', {
+      requested: sampleTimes.length,
+      windowed: !!(window && window.endMs - window.startMs >= 500),
+      durationMs: Math.round(durationMs),
+      reason: lastFrameFailure ?? 'unknown',
+      nativePose,
+    });
+    lastFrameFailure = null;
     return null;
   }
   return frames;
