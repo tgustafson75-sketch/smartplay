@@ -1076,6 +1076,48 @@ export async function extractPoseFramesFromVideo(
   } finally {
     sharedCopy.release();
   }
+  /**
+   * 2026-08-21 (Tim) — FIND HIM, DON'T GIVE UP. "It's gonna be very rare that someone's not gonna
+   * be in the frame… if you're recording yourself there's gonna be initial empty time as I walk
+   * into the frame, because I have to hit record."
+   *
+   * That is the normal way a golfer films himself, and it was being treated as a failure. When the
+   * swing window is unknown (windowed: false) the sampler spreads evenly across the WHOLE clip — so
+   * on a 10s recording where he hits record, walks in around 4s and swings near 7s, most samples
+   * land on an empty tee box. Zero frames, "analysis_error", nothing learned.
+   *
+   * A body that appears late is not an error, it is the recording. So before reporting failure,
+   * SEARCH: probe the back half of the clip, where a self-filmed swing always is, and if a body
+   * turns up, sample around it properly. Bounded to a handful of probes so a genuinely empty clip
+   * still fails fast.
+   *
+   * This runs ONLY after the planned pass found nothing, so a normal swing pays nothing for it.
+   */
+  if (frames.length === 0 && !(window && window.endMs - window.startMs >= 500) && durationMs >= 2000) {
+    const scanAt = [0.55, 0.7, 0.85, 0.95].map(f => Math.round(durationMs * f));
+    let anchorMs: number | null = null;
+    for (const t of scanAt) {
+      if (shouldAbort?.()) break;
+      const probe = await poseAtTime(workUri, t, 'P6_impact');
+      if (probe) { anchorMs = t; frames.push(probe); break; }
+    }
+    if (anchorMs != null) {
+      console.log('[pose] recovery scan found a body at', anchorMs, 'ms — the earlier frames were the walk-in');
+      // Sample around the body we actually found, rather than around the whole clip.
+      const around: { key: PoseFrame['position']; timeMs: number }[] = [
+        { key: 'P1_address', timeMs: Math.max(0, anchorMs - 1200) },
+        { key: 'P4_top', timeMs: Math.max(0, anchorMs - 500) },
+        { key: 'P10_finish', timeMs: Math.min(durationMs - 50, anchorMs + 600) },
+      ];
+      for (const { key, timeMs } of around) {
+        if (shouldAbort?.()) break;
+        const f = await poseAtTime(workUri, timeMs, key);
+        if (f) frames.push(f);
+      }
+      frames.sort((a, b) => (a.timestampMs ?? 0) - (b.timestampMs ?? 0));
+      logPose('pose_recovered_after_walk_in', { anchorMs, got: frames.length }, 'diag');
+    }
+  }
   if (frames.length > 0) lastFrameFailure = null;
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
   if (frames.length === 0) {
