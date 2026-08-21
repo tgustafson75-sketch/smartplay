@@ -355,6 +355,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // kevin a context that knows the player's distances but not what each club DOES, and the
       // follow-up turn would quietly give worse advice than turn 1.
       club_tendencies = [],
+      /**
+       * 2026-08-21 — SKIP THE AUDIO NOBODY IS GOING TO PLAY.
+       *
+       * kevin synthesises TTS on EVERY turn. That is right for kevin's own clients, which play
+       * audioBase64 directly. It is pure cost for a caller that discards it — and the consolidation
+       * shim discards it, because pipecat's clients do their own speech.
+       *
+       * Left unguarded this added a full OpenAI audio round-trip to every voice turn the moment the
+       * shim went live, and on a COLD first turn that extra latency is exactly what pushes past the
+       * client budget into the offline degrade — the failure Tim hit within minutes of promotion,
+       * heard as the robotic device voice.
+       */
+      skip_tts = false,
       // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
@@ -1516,6 +1529,8 @@ ${onCourseContextBlock}${baseMessage}`
     // null → client speaks via device TTS. Real answer preserved.
     let audioBase64: string | null = null;
     try {
+      // A caller that will not play the audio must not pay to generate it.
+      if (skip_tts) throw new Error('skip_tts');
       const ttsResponse = await openai.audio.speech.create({
         model: 'gpt-4o-mini-tts',
         voice: ttsVoice,
@@ -1526,7 +1541,8 @@ ${onCourseContextBlock}${baseMessage}`
       const arrayBuffer = await ttsResponse.arrayBuffer();
       audioBase64 = Buffer.from(arrayBuffer).toString('base64');
     } catch (ttsErr) {
-      console.error('[kevin] TTS failed — returning text-only:', ttsErr instanceof Error ? ttsErr.message : String(ttsErr));
+      const m = ttsErr instanceof Error ? ttsErr.message : String(ttsErr);
+      if (m !== 'skip_tts') console.error('[kevin] TTS failed — returning text-only:', m);
     }
 
     // 2026-05-26 — Fix BT/BW: _debug surfaces provider + telemetry.

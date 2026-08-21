@@ -88,6 +88,17 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two
     // names for one thing, which is its own small argument for having one brain.
     unified_context_block: context.memory ?? null,
+
+    /**
+     * 2026-08-21 — DO NOT SYNTHESISE AUDIO FOR THIS CALLER.
+     *
+     * kevin does TTS on every turn for its own clients, which play audioBase64. Pipecat's clients
+     * speak the text themselves and this adapter has never carried audioBase64 across — so without
+     * this flag the shim pays for a full OpenAI audio round-trip on every turn and discards the
+     * result. On a cold first turn that latency is the difference between a real answer and the
+     * offline degrade, which is exactly what shipped the moment the shim went live.
+     */
+    skip_tts: true,
   };
 }
 

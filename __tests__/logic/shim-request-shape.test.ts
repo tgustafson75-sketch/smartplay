@@ -37,3 +37,26 @@ describe('the request handed to kevin is complete', () => {
     expect(seen.method).toBe('POST');
   });
 });
+
+describe('the shim never pays for audio it discards', () => {
+  it('asks kevin to skip TTS', async () => {
+    // kevin synthesises speech on every turn for its own clients. This adapter has never carried
+    // audioBase64 across, so generating it is a full OpenAI round-trip thrown away — and on a COLD
+    // first turn that latency is the difference between an answer and the offline degrade.
+    const { pipecatRequestToKevinBody } = require('../../api/_brainShim');
+    expect(pipecatRequestToKevinBody({ text: 'hi', history: [], context: {} }).skip_tts).toBe(true);
+  });
+
+  it('kevin honours the flag rather than ignoring an unknown field', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const kevin = fs.readFileSync(path.resolve(__dirname, '../../api/kevin.ts'), 'utf-8');
+    expect(kevin).toMatch(/skip_tts = false,/);
+    // Gated BEFORE the network call, not after — skipping it afterwards would save nothing.
+    const tts = kevin.slice(kevin.indexOf('let audioBase64: string | null = null;'));
+    const guard = tts.indexOf('skip_tts');
+    const call = tts.indexOf('openai.audio.speech.create');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(call);
+  });
+});
