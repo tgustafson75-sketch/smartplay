@@ -989,13 +989,26 @@ export default function PlayTab() {
                * Selecting a course by hand is unaffected: that is the player asking, and asking is
                * consent.
                */
+              /**
+               * 2026-08-21 — THE GATE DOES NOT APPLY HERE, and shipping it here was my mistake.
+               *
+               * I gated this on a measured-fast connection to protect a data allowance. Backwards:
+               * ARRIVING AT A COURSE IS EXACTLY WHEN THE PLAYER NEEDS THE DATA AND IS LEAST LIKELY
+               * TO HAVE WI-FI. Held here, a player who drove to a course on cellular would reach the
+               * first tee with no geometry, no imagery, no hole book — a broken round, caused by a
+               * gate meant to be considerate.
+               *
+               * The gate belongs on SPECULATIVE pre-downloads (pulling Saturday's course from the
+               * sofa), where waiting for a better connection costs nothing. It does not belong on
+               * the one download the round actually depends on.
+               *
+               * A slow connection here means it takes longer, which is strictly better than not
+               * having it. The engine is idempotent, so a partial pull resumes.
+               */
               const gate = await import('../../services/connectionClass');
-              const { ok, reading } = await gate.mayPullCourseNow();
-              if (!ok) {
-                console.log('[play] arrival download held —', reading.reason);
-                autoDownloadFiredRef.current.delete(nearest.name); // let a better connection retry
-                return;
-              }
+              void gate.measureConnection().then(r => {
+                if (!r.goodForBulk) console.log('[play] arrival download on a', r.klass, 'link —', r.reason, '(proceeding: the round needs this)');
+              }).catch(() => {});
               const eng = await import('../../services/courseDownloadEngine');
               const r = await eng.downloadCourse({ name: nearest.name, lat: nearest.lat, lng: nearest.lng });
               // 2026-08-09 (stores audit P2) — toast ONLY on a genuinely fresh download (r.fresh),
