@@ -75,7 +75,18 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: null,                  say: 'the wind is really picking up out here' },
 ];
 
-async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools: string[]; said: string; stalled: boolean }> {
+/**
+ * 2026-08-21 — MEASURE THE CLOCK, NOT JUST THE ANSWER.
+ *
+ * Promoting the consolidation shim added a full OpenAI TTS round-trip to every turn — kevin
+ * synthesises speech for its own clients, and the shim discarded it. Correctness never changed:
+ * this probe stayed 19/19 throughout. But turns got ~1.2s slower, and on a COLD first turn that is
+ * the difference between an answer and the offline caddie. Tim hit it within minutes.
+ *
+ * A suite that only checks WHAT the caddie said cannot see a caddie that got too slow to be heard.
+ * So every turn is timed, and the slowest are reported — latency is a correctness property here.
+ */
+async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools: string[]; said: string; stalled: boolean; ms: number }> {
   const url = useKevin ? `${BASE}/api/kevin` : `${BASE}/api/pipecat-turn${useShim ? '?via=kevin' : ''}`;
   // kevin takes a flat body; pipecat takes a nested context. Send each what it understands, so the
   // same scenario is genuinely the same scenario on both.
@@ -86,11 +97,13 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
         ...(ctx ? { isRoundActive: round.active, currentHole: round.currentHole, activeCourse: round.courseName, currentPar: round.holePar, currentYardage: round.holeYardage } : {}),
       }
     : { text: say, history: [], ...(ctx ? { context: ctx } : {}) };
+  const started = Date.now();
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  const ms = Date.now() - started;
   const d = await res.json() as Record<string, unknown>;
   const said = String((useKevin ? d.text : d.response_text) ?? '');
   // kevin answers with a singular toolAction plus an array only when there is more than one.
@@ -98,13 +111,14 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
     ? [d.toolAction, ...((d.toolActions as unknown[]) ?? [])]
     : ((d.tool_actions as unknown[]) ?? []);
   const tools = raw.filter(Boolean).map(a => String((a as { type?: string }).type ?? ''));
-  return { tools: [...new Set(tools)], said, stalled: /ask me again/i.test(said) };
+  return { tools: [...new Set(tools)], said, stalled: /ask me again/i.test(said), ms };
 }
 
 (async () => {
   const label = useKevin ? 'KEVIN (follow-up turn)' : useShim ? 'SHIM (pipecat contract → kevin)' : 'PIPECAT (turn 1, native)';
   console.log(`\nProbing ${label} at ${BASE}\n`);
   let missed = 0, stalls = 0;
+  const timings: number[] = [];
   for (const c of CASES) {
     let r = await ask(c.say, c.ctx);
     // A provider stall is not a tool defect — give it exactly one more go before judging.
@@ -114,10 +128,17 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
     const tag = pass ? 'PASS' : r.stalled ? 'STALL' : c.expect === null ? 'OVER' : 'MISS';
     if (tag === 'MISS' || tag === 'OVER') missed += 1;
     if (tag === 'STALL') stalls += 1;
-    console.log(`[${tag.padEnd(5)}] ${String(c.expect ?? '(nothing)').padEnd(20)} "${c.say}"`);
+    timings.push(r.ms);
+    console.log(`[${tag.padEnd(5)}] ${String(r.ms).padStart(5)}ms ${String(c.expect ?? '(nothing)').padEnd(20)} "${c.say}"`);
     if (!pass) console.log(`          got ${JSON.stringify(r.tools)} — "${r.said.slice(0, 70)}"`);
   }
+  const sorted = [...timings].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+  const slowest = sorted[sorted.length - 1] ?? 0;
   console.log(`\n${CASES.length - missed - stalls}/${CASES.length} behaved. ${missed} defect(s), ${stalls} provider stall(s).`);
+  // The first call absorbs the cold start, so the MEDIAN is the honest number to watch turn to turn.
+  console.log(`Latency: median ${median}ms, slowest ${slowest}ms. A jump here is a regression even at 19/19 —`);
+  console.log(`a caddie that answers correctly but too slowly degrades to the offline voice on a cold turn.`);
   if (missed > 0) {
     console.log('A MISS means a real player sentence produced no tool. An OVER means we recorded something that never happened.');
     process.exit(1);
