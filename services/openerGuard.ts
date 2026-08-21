@@ -21,3 +21,4 @@ export function claimOpenerSlot(): void {
 export function isOpenerClaimed(): boolean {
   return openerClaimed;
 }
+

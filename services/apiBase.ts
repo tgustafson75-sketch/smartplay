@@ -211,6 +211,42 @@ export function getConnectionEvidence(): ConnectionEvidence {
   };
 }
 
+/**
+ * 2026-08-20 (Tim: "I still test and get a failure at first most times… why are we leaving things
+ * there") — WARMTH IS PER-LAMBDA, AND WE HAD ONE BOOLEAN FOR ALL OF THEM.
+ *
+ * warmBackendConnection pings `/api/kevin`. A voice turn calls `/api/transcribe`. On Vercel those
+ * are SEPARATE functions with SEPARATE cold starts, so kevin answering says nothing about whether
+ * transcribe is awake. But the voice path asked `isConnectionWarmed()` to choose its budget:
+ *
+ *     const coldFirstTurn = !isConnectionWarmed();
+ *     doTranscribeFetch(coldFirstTurn ? 22s : 12s)
+ *
+ * So the boot ping warmed kevin, flipped the single flag, and the first real transcribe — against a
+ * function that had never been touched — was handed the 12s WARM budget instead of 22s. A cold
+ * Lambda plus an audio upload does not reliably finish in 12s, so it failed, and by the retry the
+ * function was awake: "fails the first time, works on the third ask."
+ *
+ * The perverse part, and why this survived so many passes: the MORE successfully we warmed the
+ * backend, the LESS patience the first voice turn got. Every previous fix made the boot ping more
+ * reliable, which made this worse.
+ *
+ * So warmth is now tracked per endpoint. Marking one warm still implies the NETWORK is warm — a
+ * round trip completed — but it no longer claims anything about the other functions.
+ */
+const warmedEndpoints = new Set<string>();
+
+/** Record that a specific serverless function answered — it is awake, not just reachable. */
+export function markEndpointWarmed(path: string): void {
+  warmedEndpoints.add(path);
+  markConnectionWarmed();
+}
+
+/** Has THIS function answered this session? Budgets for a given call must ask about THAT call. */
+export function isEndpointWarmed(path: string): boolean {
+  return warmedEndpoints.has(path);
+}
+
 /** Flip the warmed flag after any successful cloud round-trip (transcribe/brain), so subsequent
  *  turns take the fast path even if the background warm ping hadn't landed yet. */
 export function markConnectionWarmed(): void {
@@ -264,6 +300,9 @@ export function warmBackendConnection(): Promise<void> {
         if (await pingHost(activeBase, 5000)) {
           connectionWarmed = true;
           healedThisSession = true;
+          // This ping proves /api/kevin is awake — and ONLY that. Recording which function answered
+          // is what stops the voice path inferring that transcribe is warm too.
+          warmedEndpoints.add('/api/kevin');
           noteRoundTripOk(Date.now() - t0);
           return;
         }

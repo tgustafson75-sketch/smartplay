@@ -65,7 +65,7 @@ import { generatePatternInsights } from '../services/patternDetection';
 import { useGhostStore } from '../store/ghostStore';
 import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, noteVoiceTurnStarted } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed, getConnectionEvidence } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
 import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
@@ -1947,7 +1947,16 @@ export const useVoiceCaddie = ({
 
       // Cold-boot patience: a longer budget on the first unwarmed turn so it lands a real cloud
       // transcript rather than racing the warmup and failing to on-device STT.
-      const coldFirstTurn = !isConnectionWarmed();
+      /**
+       * 2026-08-20 — ask about THIS function, not "the backend".
+       *
+       * This read `!isConnectionWarmed()`, a single boolean that the boot ping to /api/kevin flips.
+       * kevin and transcribe are separate Lambdas with separate cold starts, so a warm kevin was
+       * handing the first REAL transcribe the 12s warm budget against a function that had never
+       * been touched. Cold Lambda + audio upload does not reliably fit in 12s — hence "fails the
+       * first time, works on the third ask". The better the boot ping worked, the worse this got.
+       */
+      const coldFirstTurn = !isEndpointWarmed('/api/transcribe');
       // 2026-07-23 (field log: AbortError elapsedMs 25026, pingOk:false) — on a COLD turn the budget is
       // long (~25s). Run a fast reachability probe CONCURRENTLY: the moment it PROVES the host
       // unreachable (~3.5s), abort the doomed transcribe so we degrade fast instead of burning the full
@@ -2094,7 +2103,7 @@ export const useVoiceCaddie = ({
       recordVoiceEndpointSuccess('transcribe');
       // A successful cloud transcribe proves the connection is warm — flip the flag so the NEXT
       // turn takes the 12s fast path even if the background warm ping hadn't landed yet.
-      markConnectionWarmed();
+      markEndpointWarmed('/api/transcribe');
 
       devLog('[voice] transcript:', transcript);
 

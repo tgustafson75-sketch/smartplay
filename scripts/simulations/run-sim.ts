@@ -6480,15 +6480,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   // 3) FIRST-VOICE cold invariants — the first turn must land, never fast-fail on a slow cold handshake.
   const vcSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf-8');
+  // 2026-08-20 — these assert the BUDGET RULE, not which boolean carries it. Warmth is now tracked
+  // per Lambda (kevin answering says nothing about transcribe being awake), which is the fix for
+  // "fails the first time"; the invariant that a COLD transcribe gets the long budget is unchanged.
   check('LOCK voice: cold first-turn gets the long transcribe budget (22s)',
-    /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isConnectionWarmed\(\)/.test(vcSrc),
+    /COLD_TRANSCRIBE_TIMEOUT_MS = 22000/.test(vcSrc) && /const coldFirstTurn = !isEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
     'a cold (unwarmed) first turn uses the 22s transcribe budget so a slow cold handshake still lands a real transcript');
   // 2026-08-20 — the "cold abort ONLY when both probes ACTIVELY fail" LOCK was deleted here, not
   // relaxed. It pinned the discriminator that decided WHEN a probe may cancel a live upload; the
   // field log proved no probe may. Its replacement is the deadline guard above plus
   // 'LOCK: nothing but the real request may decide the real request failed'.
   check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
-    /markConnectionWarmed\(\)/.test(vcSrc),
+    /markEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
   const lsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
   check('LOCK voice: earbud/hands-free classify is cold-aware (22s)',
@@ -7190,10 +7193,35 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the mode control is Full swing / Putting only; the angle is inferred live from the framing pose and finally from the swing frames, with no user flag able to suppress the correction');
 
   const settingsSrc2 = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
-  check('Voice: persona handoff plays the bundled opener (never silent) (audit)',
-    /getOpenerAssetForPersona/.test(settingsSrc2) && /playLocalFile/.test(settingsSrc2) &&
-      /flashCaption/.test(settingsSrc2) && !/voiceMod\.speak\?\.\(text/.test(settingsSrc2),
-    'the handoff plays the zero-network bundled opener clip (with a flashed caption) instead of network TTS, so a cold Lambda no longer leaves the switch silent');
+  check('LOCK: the persona handoff SAYS the words it SHOWS',
+    (() => {
+      /**
+       * 2026-08-20 (Tim: "the text will say 'Kevin back on the bag' but what he SAYS is 'Kevin here,
+       * I'm here to help'… there's still canned speech clashing").
+       *
+       * THIS GUARD USED TO ASSERT THE DEFECT. It required getOpenerAssetForPersona + playLocalFile
+       * and explicitly FORBADE speaking the caption text (`!/voiceMod\.speak\?\.\(text/`) — so it was
+       * green precisely because the screen and the caddie said different things, and it would have
+       * turned red on the fix. Its stated goal (never silent on a cold Lambda) was reasonable; it
+       * locked one IMPLEMENTATION of that goal and made the divergence permanent.
+       *
+       * The real invariant is that one moment has one script. Never-silent is preserved by the
+       * cached persona clip + speak()'s own fallback, not by playing a different recording.
+       */
+      const sameTextBothWays = /const cached = cacheMod\.resolveCachedOfflineClipUri\?\.\(text, gender, p\)/.test(settingsSrc2)
+        && /voiceMod\.flashCaption\?\.\(text\)/.test(settingsSrc2)
+        && /voiceMod\.speak\?\.\(text,/.test(settingsSrc2);
+      // The retired "just tap to chat" opener can never be the handoff audio again.
+      // Match a CALL, never the prose above it that records why this was removed — a bare
+      // /getOpenerAssetForPersona/ matches its own tombstone (same trap as the externalSignal guard).
+      const retiredOpenerGone = !/getOpenerAssetForPersona\??\.?\(/.test(settingsSrc2)
+        && !/export function getOpenerAssetForPersona/.test(read('services/kevinGreetingManifest.ts'));
+      // One owner for the words, so the caption and the recording cannot drift apart again.
+      const oneOwner = /PERSONA_HANDOFF_INTROS/.test(read('services/offlineVoiceCache.ts'))
+        && /PERSONA_HANDOFF_INTROS/.test(settingsSrc2);
+      return sameTextBothWays && retiredOpenerGone && oneOwner;
+    })(),
+    'a caddie switch speaks the same line it captions, from one owned source, and can never play the retired app-open opener clip under a different caption');
 
   check('Voice: persona handoff skips the CUSTOM caddie (no Kevin-voice intro)',
     /if \(prev !== p && p !== 'custom'\)/.test(settingsSrc2),
@@ -10115,13 +10143,19 @@ check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
     // knew about cold start. The pipecat path ran a flat 20s while the tap path ran 12s warm / 22s
     // cold, and — the part Tim actually saw — every pipecat failure ended in onVoiceStateChange
     // ('idle') with no speech and no text. Silence is the most robotic failure available.
-    const bothColdAware = /isConnectionWarmed\(\)/.test(pipe) && /isConnectionWarmed\(\)/.test(tap);
-    const pipeUsesGate = /const coldFirstTurn = !isConnectionWarmed\(\);/.test(pipe)
+    // 2026-08-20 — was /isConnectionWarmed()/ in both. That single boolean is flipped by the boot
+    // ping to /api/kevin, a DIFFERENT Lambda, so a warm kevin handed the first real transcribe the
+    // short budget against a function that had never been touched. Both paths must now ask about
+    // the function they are actually calling.
+    const bothColdAware = /isEndpointWarmed\('\/api\/transcribe'\)/.test(pipe)
+      && /isEndpointWarmed\('\/api\/transcribe'\)/.test(tap);
+    const pipeUsesGate = /const coldFirstTurn = !isEndpointWarmed\('\/api\/transcribe'\);/.test(pipe)
       && /coldFirstTurn \? PIPECAT_COLD_TRANSCRIBE_MS : PIPECAT_WARM_TRANSCRIBE_MS/.test(pipe);
     const noFlat20s = !/abort\(\), 20_000\)/.test(pipe);
     // A successful transcribe PROVES the host is warm — both paths must say so, or one keeps paying
     // cold costs the other already retired.
-    const bothMarkWarm = /markConnectionWarmed\(\)/.test(pipe) && /markConnectionWarmed\(\)/.test(tap);
+    const bothMarkWarm = /markEndpointWarmed\('\/api\/transcribe'\)/.test(pipe)
+      && /markEndpointWarmed\('\/api\/transcribe'\)/.test(tap);
     // Every pipecat failure route degrades into a spoken+shown local line instead of going mute.
     const degrades = /const speakDeadEnd = useCallback/.test(pipe)
       && /responder\.deadEndLine\(langSafe\)/.test(pipe)

@@ -1631,7 +1631,13 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           // 2026-07-30 (voice/brain audit H5) — brain returned EMPTY (timeout / flaky signal). Don't leave
           // a dead turn on the watch/earbud: speak the honest "trouble connecting" line, or caption it muted.
           if (ttsAllowed) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
-          else { try { flashCaption?.('Having trouble connecting — try again in a moment.', 6000); } catch { /* non-fatal */ } }
+          // 2026-08-20 — caption the SAME line the caddie would have spoken. This was a hardcoded
+          // third wording ("Having trouble connecting — try again in a moment"), so a voice-off user
+          // read different words than a voice-on user heard — and it ALWAYS blamed the connection,
+          // even when getConnectionEvidence proves the host answered seconds ago. That is the line
+          // Tim had removed from the spoken path on 2026-08-12; it survived here because the muted
+          // branch was written separately and nothing tied the two to one source.
+          else { try { flashCaption?.(failureFallbackFor(settings.language), 6000); } catch { /* non-fatal */ } }
         }
       } catch (e) {
         console.log('[handsFree-route] conversational fallback failed:', e);
@@ -1698,7 +1704,8 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
           const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
           if (ttsAllowed2) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
-          else { try { flashCaption?.('Having trouble connecting — try again in a moment.', 6000); } catch { /* non-fatal */ } }
+          // Same one-source rule as the sibling branch above.
+          else { try { flashCaption?.(failureFallbackFor(settings.language), 6000); } catch { /* non-fatal */ } }
         }
       } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }
       return;

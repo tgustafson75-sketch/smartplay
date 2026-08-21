@@ -634,9 +634,9 @@ export const useSettingsStore = create<SettingsState>()(
         // silent. flashCaption keeps the on-screen line (speak() used to set
         // the caption; the bundled clip doesn't, so we set it explicitly).
         // 500ms delay lets the prior caddie's stopSpeaking settle first.
-        // 2026-06-11 (audit) — skip the bundled-opener handoff for 'custom': there
-        // is no custom opener clip (getOpenerAssetForPersona falls back to Kevin)
-        // and no intro line, so it would announce the user's custom caddie in
+        // 2026-06-11 (audit) — skip the handoff intro for 'custom': there is no custom opener
+        // clip (the accessor fell back to Kevin) and no intro line, so it would announce the
+        // user's custom caddie in
         // KEVIN's voice and flash a literal "custom stepping in." The custom
         // caddie has its own recorded clips; don't override with Kevin's.
         // 2026-07-30 (Tim — "the old 'here when you're ready, just tap to chat' needs to go for all
@@ -649,28 +649,60 @@ export const useSettingsStore = create<SettingsState>()(
             (require('../services/openerGuard') as typeof import('../services/openerGuard')).claimOpenerSlot();
           } catch { /* best-effort */ }
         }
+        /**
+         * 2026-08-20 (Tim: "the text will say 'Kevin back on the bag', but what he SAYS is like
+         * 'Kevin here, I'm here to help when you need'… there's still canned speech clashing. I'm
+         * almost certain of it.") — he was right, and it was worse than a clash.
+         *
+         * This flashed an intro line as the caption and then played the bundled per-persona
+         * APP-OPEN opener asset, whose actual recorded words are:
+         *     kevin  "Tap the mic when you're ready to talk."
+         *     serena "I'm here when you're ready. Just tap to chat."
+         *     harry  "Take your time. Tap when you'd like to chat."
+         *     tank   "Hit the mic when you're ready, soldier."
+         * Two entirely different scripts for one moment: the screen said one thing, the caddie said
+         * another. It dates to 2026-06-11, when a network TTS call was swapped for the bundled clip
+         * to stop cold-Lambda silence — the caption was kept and the AUDIO changed underneath it,
+         * and nothing checked they still matched.
+         *
+         * And Serena's clip is the exact line Tim retired on 2026-07-30 — "the old 'here when you're
+         * ready, just tap to chat' needs to go for all caddies". That fix removed it from the
+         * app-open path and never touched this one, so a killed line kept playing on every switch.
+         *
+         * Now the handoff SPEAKS the line it shows. The text is owned by offlineVoiceCache alongside
+         * the other fixed lines, so the words and the recording cannot drift apart again, and it is
+         * pre-rendered in the persona's real voice during warmup — instant, no cold-Lambda risk,
+         * which is the problem the bundled clip existed to solve.
+         */
         if (prev !== p && p !== 'custom') {
-          const intros: Record<string, string> = {
-            kevin: "Hey, Kevin back on the bag. Let's go.",
-            serena: "Hi, Serena here. Let's read this together.",
-            tank: "Tank stepping in. We're locked in.",
-            harry: "Harry here. Show me what you've got.",
-          };
-          const text = intros[p] ?? `${p} stepping in.`;
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const introSrc = (require('../services/offlineVoiceCache') as typeof import('../services/offlineVoiceCache')).PERSONA_HANDOFF_INTROS;
+          const text = introSrc[p] ?? `${p} stepping in.`;
           if (personaHandoffTimer) clearTimeout(personaHandoffTimer);
           personaHandoffTimer = setTimeout(() => {
             personaHandoffTimer = null;
             try {
               const voiceMod = require('../services/voiceService');
-              const greetMod = require('../services/kevinGreetingManifest');
-              voiceMod.flashCaption?.(text);
-              const clip = greetMod.getOpenerAssetForPersona?.(p);
-              if (clip != null) {
-                voiceMod.playLocalFile?.(clip, undefined, { userInitiated: true })
-                  ?.catch?.((e: unknown) => console.log('[persona-handoff] opener play failed', e));
+              const cacheMod = require('../services/offlineVoiceCache');
+              const gender = get().voiceGender === 'female' ? 'female' : 'male';
+              // FAST PATH — the same line, pre-rendered in this persona's voice during warmup.
+              const cached = cacheMod.resolveCachedOfflineClipUri?.(text, gender, p);
+              if (cached) {
+                voiceMod.flashCaption?.(text);
+                voiceMod.playLocalFile?.(cached, undefined, { userInitiated: true })
+                  ?.catch?.((e: unknown) => console.log('[persona-handoff] cached clip failed', e));
+              } else {
+                // Not cached yet (first switch to this persona). speak() renders it AND sets the
+                // caption itself, so the two still cannot disagree; its own device-TTS fallback
+                // keeps the switch from going silent. The retired opener clip is never played here.
+                voiceMod.speak?.(text, gender, get().language ?? 'en', undefined, { userInitiated: true })
+                  ?.catch?.((e: unknown) => {
+                    console.log('[persona-handoff] speak failed — caption only', e);
+                    voiceMod.flashCaption?.(text);
+                  });
               }
             } catch (e) {
-              console.log('[persona-handoff] opener setup failed', e);
+              console.log('[persona-handoff] setup failed', e);
             }
           }, 500);
         }

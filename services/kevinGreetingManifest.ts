@@ -168,17 +168,14 @@ export function getGreetingAssetForPersona(
 // app process after the greeting completes, via awaitGreetingComplete()
 // signal from app/greeting.tsx and playLocalFile() in caddie.tsx.
 
-const OPENER_ASSETS: Record<string, AssetModule> = {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  kevin:  require('../assets/audio/openers/kevin.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  serena: require('../assets/audio/openers/serena.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  harry:  require('../assets/audio/openers/harry.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  tank:   require('../assets/audio/openers/tank.mp3'),
-};
-
-export function getOpenerAssetForPersona(persona: string | null | undefined): AssetModule {
-  return OPENER_ASSETS[persona ?? 'kevin'] ?? OPENER_ASSETS.kevin;
-}
+/**
+ * 2026-08-20 — OPENER_ASSETS + getOpenerAssetForPersona REMOVED.
+ *
+ * Four bundled mp3s ("Tap the mic when you're ready to talk", "I'm here when you're ready. Just tap
+ * to chat", …). Their only consumer was the persona-switch handoff, which played them under a
+ * caption saying something entirely different — and Serena's clip is the exact line Tim retired on
+ * 2026-07-30 for ALL caddies. The handoff now speaks the line it displays, so nothing references
+ * these, and leaving a dead accessor invites the retired lines back.
+ *
+ * The mp3 files stay on disk, unreferenced (so out of the bundle), in case they are ever re-recorded.
+ */

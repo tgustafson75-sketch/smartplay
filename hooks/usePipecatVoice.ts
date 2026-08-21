@@ -18,7 +18,7 @@ import { buildPipecatContext } from '../services/pipecatContext';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
-import { getApiBaseUrl, isConnectionWarmed, markConnectionWarmed } from '../services/apiBase';
+import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
 import { screenContextForPrompt } from '../services/screenContext';
 import { devLog } from '../services/devLog';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
@@ -558,7 +558,8 @@ export function usePipecatVoice({
        *    front of you instead of going mute. Silence is the most robotic possible failure, and this
        *    path chose it three times over. [[caddie-failsafe-no-walls]] [[feels-like-a-real-caddie]]
        */
-      const coldFirstTurn = !isConnectionWarmed();
+      // Same correction as the tap path: transcribe's own warmth, not the backend's in general.
+      const coldFirstTurn = !isEndpointWarmed('/api/transcribe');
       /**
        * 2026-08-20 (adversarial audit of the 08-19/08-20 voice work) — THIS PATH HAD NO RETRY.
        *
@@ -608,7 +609,7 @@ export function usePipecatVoice({
 
       // A transcribe that came back at all proves the host is up and warm — tell the shared gate, so
       // the NEXT turn (on either path) takes the fast budget instead of re-paying cold patience.
-      markConnectionWarmed();
+      markEndpointWarmed('/api/transcribe');
 
       if (!transcript.trim()) {
         // Heard nothing intelligible. Not an error — answer like a person and invite another go,

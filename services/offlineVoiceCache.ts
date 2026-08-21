@@ -31,10 +31,29 @@ type Gender = 'male' | 'female';
 
 /** The fixed lines the offline/degrade path speaks, keyed by a stable slug. The `text` values MUST
  *  match verbatim what the code passes to speakDeviceNotice, so the reverse match lands. */
+/**
+ * The persona-switch handoff lines, owned HERE so the cache and the store cannot drift apart — the
+ * whole defect was two places describing the same moment with different words.
+ */
+export const PERSONA_HANDOFF_INTROS: Record<string, string> = {
+  kevin:  "Hey, Kevin back on the bag. Let's go.",
+  serena: "Hi, Serena here. Let's read this together.",
+  tank:   "Tank stepping in. We're locked in.",
+  harry:  "Harry here. Show me what you've got.",
+};
+const PERSONA_HANDOFF_LINES = Object.values(PERSONA_HANDOFF_INTROS);
+
 export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   { slug: 'didnt_catch_close', language: 'en', text: "Didn't catch that — try once more, a bit closer to the mic." },
   { slug: 'didnt_catch_again', language: 'en', text: "Didn't catch that — say it again?" },
   { slug: 'say_again',          language: 'en', text: 'Say that again for me?' },
+  // 2026-08-20 (Tim — "the text will say 'Kevin back on the bag' but what he SAYS is 'Kevin here,
+  // I'm here to help'… there's still canned speech clashing"). The persona-switch handoff flashed
+  // these lines as a caption while PLAYING the bundled app-open opener clip, which says something
+  // completely different ("Tap the mic when you're ready to talk"). Caching them in the persona's
+  // real voice is what lets the switch SAY the words it shows. Kept here, next to the other fixed
+  // lines, so they render during warmup instead of at the moment of the switch.
+  ...PERSONA_HANDOFF_LINES.map((text, i) => ({ slug: `handoff_en_${i}`, language: 'en' as const, text })),
   // 2026-07-26 (deep audit — robotic device-TTS on the HAPPY PATH) — every captured turn speaks a rotating
   // ack + the bare "Didn't catch that." via speakDeviceNotice; none were cached, so they always played in
   // the robotic OS voice (north-star defect, heard every turn). Pre-render the ENGLISH set in the persona

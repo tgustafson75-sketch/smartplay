@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from './apiBase';
+import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from './apiBase';
 import { useSettingsStore } from '../store/settingsStore';
 /**
  * 2026-06-04 — Pre-warm the FOUR voice-pipeline Vercel functions in
@@ -139,7 +139,37 @@ export function prewarmVoice(force = false): void {
   void getProvider().then(async (aiProvider) => {
     warmupAbort = new AbortController();
     const signal = warmupAbort.signal;
-    const warmup = (path: string): Promise<unknown> =>
+    /**
+     * 2026-08-20 — CRITICAL ENDPOINTS GET RETRIES; THE REST STAY OPPORTUNISTIC.
+     *
+     * warmBackendConnection retries its ping six times over ~20s because a cold launch is exactly
+     * when a first request fails. This function — the ONLY thing that wakes /api/transcribe — took
+     * one shot and swallowed the failure. So the boot path was robust for the endpoint that did not
+     * need it (kevin) and fragile for the one the first voice turn depends on.
+     *
+     * A failed warmup here is invisible and costs the USER the retry instead: they tap the mic and
+     * pay the cold start themselves, which is the "fails the first time" symptom.
+     */
+    const CRITICAL: ReadonlyArray<string> = ['/api/transcribe', '/api/pipecat-turn'];
+    const attemptDelays = (path: string) => (CRITICAL.includes(path) ? [0, 2_000, 5_000] : [0]);
+
+    const warmup = async (path: string): Promise<void> => {
+      for (const delay of attemptDelays(path)) {
+        if (signal.aborted) return;
+        if (delay) await new Promise(r => setTimeout(r, delay));
+        // Already proven awake (another caller, or an earlier attempt) — nothing to do.
+        if (isEndpointWarmed(path)) return;
+        const ok = await warmupOnce(path);
+        if (ok) {
+          // Record WHICH function answered. This is what lets the voice path give a genuinely cold
+          // transcribe its full cold budget instead of inferring warmth from a different Lambda.
+          markEndpointWarmed(path);
+          return;
+        }
+      }
+    };
+
+    const warmupOnce = (path: string): Promise<boolean> =>
       fetch(`${apiUrl}${path}?mode=warmup`, {
         method: 'POST',
         headers: {
@@ -155,9 +185,7 @@ export function prewarmVoice(force = false): void {
         // exactly once, by me, today. The lesson: an API used nowhere else in this codebase is
         // unproven on this engine, however standard it looks.
         signal: linkedTimeoutSignal(signal, WARMUP_TIMEOUT_MS),
-      }).catch(() => {
-        // Silent — warmup is opportunistic.
-      });
+      }).then(r => r.ok).catch(() => false);
 
     // Drain the list at limited concurrency so we can never occupy the whole per-host pool. A
     // Promise.all over all five is what let warmup starve the user's own request.
